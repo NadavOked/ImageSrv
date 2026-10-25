@@ -31,7 +31,8 @@ function capPartRows(parts) {
 function capEta(t, d) {
   if (t.state !== "running") return `<span class="muted">—</span>`;
   if (d.total_used_bytes == null) return `<span class="muted">לא ידוע — לא כל המחיצות נמדדו</span>`;
-  if (d.eta_s == null) return `<span class="muted">עוד לא נמדד</span>`;
+  if (d.eta_s == null) return t.forecast && t.forecast.seconds != null   // #1843: מהקליטות הקודמות של המחשב
+    ? forecastText(t.forecast, null) : `<span class="muted">עוד לא נמדד</span>`;
   return esc(fmtSpan(d.eta_s));
 }
 

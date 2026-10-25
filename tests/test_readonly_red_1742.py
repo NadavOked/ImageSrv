@@ -327,7 +327,7 @@ RO_PROBE = 'smart_probe() { case "$1" in {ro}) _smart_store "$1" fail readonly; 
 @bash
 @pytest.mark.parametrize("probe,said", [
     (RO_PROBE.replace("{ro}", "sda"), READONLY_HE),
-    ('smart_probe() { _smart_store "$1" fail health_failed; echo fail; }; ', SMART_RED + " (health_failed)"),
+    ('smart_probe() { _smart_store "$1" fail health_failed; echo fail; }; ', SMART_RED + " (בדיקת הבריאות נכשלה)"),   # #1861: the reason in words
 ])
 def test_the_round_gate_skips_a_read_only_disk_in_its_words(tmp_path, probe, said):
     from test_smart import preflight

@@ -166,7 +166,8 @@ CAPTURE_TIMEOUT = 90
 
 
 def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
-                disk="sda", env=None, shell_pre="") -> tuple[Path, Path, str]:
+                disk="sda", env=None, shell_pre="", serial=None,
+                raid=False) -> tuple[Path, Path, str]:
     """מריץ את `capture_disk` האמיתי מול דיסק מזויף, ומחזיר (box, run, out).
 
     ‏`node_is_block` מוחלף כמו בכל שאר בדיקות הסוכן: אין דרך ליצור התקן
@@ -185,6 +186,9 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
     run = box / "run"
     dev.mkdir(parents=True)
     run.mkdir(parents=True)
+    # ‏#1808: שער ה-RAID קורא את 16 הסקטורים האחרונים (ראיה חיובית שהדיסק נקרא)
+    # לפי גודלו ב-sysfs — הקופסה מרופדת לפחות לזה, והגודל נחשף כמו בכונן אמיתי.
+    image = image + bytes(max(0, 8192 - len(image)))
     (dev / disk).write_bytes(image)
     # ‏#1130: שער ה-BitLocker קורא את הסקטור הראשון של **צומת המחיצה**, וקריאה
     # שנכשלה היא "לא הצלחנו לבדוק" — סירוב, לא ירוק. בקופסה יש קובץ לדיסק
@@ -198,6 +202,7 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
     queue = box / "sys/block" / disk / "queue"
     queue.mkdir(parents=True)
     (queue / "logical_block_size").write_text("512\n", encoding="utf-8")
+    (box / "sys/block" / disk / "size").write_text(f"{len(image) // 512}\n", encoding="utf-8")
     nodes = box / "nodes"
     nodes.write_text(f"{posix(dev)}/{disk}\n" if present else "",
                      encoding="utf-8", newline="\n")
@@ -211,6 +216,11 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
     stubs.setdefault("curl", CURL_NO_SERVER)
     if shutil.which("jq") is None and "jq" not in stubs:
         stubs["jq"] = JQ_STUB
+    # #1905: a missing blkid is "unreadable" now (the capture refuses), not "unknown".
+    # Where it is missing (Windows), the stub answers what the real one says of the
+    # box's blank partition files: no TYPE, rc 2.
+    if shutil.which("blkid") is None and "blkid" not in stubs:
+        stubs["blkid"] = "#!/bin/sh\nexit 2\n"
     out = run_sh(
         make_stubs(box / "stubs", stubs)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} "
@@ -231,12 +241,17 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         f". {posix(AGENT)}/lib/shrinkplan.sh; . {posix(AGENT)}/lib/shrink.sh; . {posix(AGENT)}/lib/lcsnap.sh; "   # #1466: the RAM view
         f". {posix(AGENT)}/lib/shrinkmem.sh; . {posix(AGENT)}/lib/shrinkoffer.sh; "
         f". {posix(AGENT)}/lib/capturedetail.sh; "   # #1505: the console's partition table, loaded before capture.sh like the agent does
-        f". {posix(AGENT)}/lib/capture.sh; . {posix(AGENT)}/lib/capturesink.sh; "   # #1217
+        f". {posix(AGENT)}/lib/diskfit.sh; . {posix(AGENT)}/lib/capturegate.sh; "   # #1901/#1900 the source gates; #1808 the RAID check (diskfit.sh)
+        f". {posix(AGENT)}/lib/capture.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/capturesink.sh; "   # #1217
+        f". {posix(AGENT)}/lib/readback.sh; . {posix(AGENT)}/lib/readbacklc.sh; "   # #1805: rb_capture_json (a direct send's digest; nothing here)
         f'node_is_block() {{ grep -qxF "$1" {posix(nodes)!r} 2>/dev/null; }}; '
+        # ‏#1808: שער ה-RAID נבדק ב-test_capture_gates.py (‏raid=True); כאן הוא
+        # מוחלף כמו node_is_block — קופסאות רבות מזייפות גודל דיסק ב-sysfs.
+        + ("" if raid else "raid_member_reason() { :; }; ")
         # ‏shell_pre רץ **אחרי** שרשרת הטעינה, ולכן הוא יכול להחליף
         # פונקציה שנטענה — זה מה שמאפשר לבדוק מה קורה כשהיא מתנהגת רע.
         + shell_pre
-        + f"capture_disk {TASK} {disk} > {posix(box)}/capture.out 2>&1; "
+        + f"capture_disk {TASK} {disk}{'' if serial is None else ' ' + repr(serial)} > {posix(box)}/capture.out 2>&1; "
         'echo "rc=$?"; '
         f"build_progress '' {MAC} {TASK} > {posix(box)}/progress.json",
         timeout=CAPTURE_TIMEOUT,
@@ -528,6 +543,9 @@ def test_capture_manifest_uses_source_logical_sector_size(tmp_path):
         stubs={"sgdisk": ONE_PARTITION, "curl": CURL_SINK},
         shell_pre=(
             f"printf '4096\\n' > {posix(logical_size)!r}; "
+            # ‏#1900: מקור 4Kn נדחה עכשיו לפני הבייט הראשון (test_capture_gates).
+            # הטסט הזה שומר על חישוב המניפסט לפי גודל הסקטור, ולכן עוקף את השער.
+            "capture_source_reason() { :; }; "
         ),
     )
 

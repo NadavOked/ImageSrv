@@ -58,7 +58,9 @@ gui_dispatch() {
     # cloner screen, and only the three valid tokens.
     case "$token" in
         shrink-*) gui_shrink_dispatch; return $? ;;   ask-*) gui_ask_dispatch; return $? ;;   # 11/10: askgui.sh
-        end-poweroff) [ -s "$RUN_DIR/end.poweroff" ] && : > "$RUN_DIR/end.now"; return $? ;;   # #1560: "כבה עכשיו" (idle.sh), no session needed
+        end-poweroff) [ -s "$RUN_DIR/end.poweroff" ] && : > "$RUN_DIR/end.now"; return $? ;;
+        idle-poweroff) [ -s "$RUN_DIR/idle.warn" ] && : > "$RUN_DIR/idle.now"; return $? ;;
+        choice-back) [ "${GUI_SCREEN:-}" = cloner ] && [ ! -f "${LC:-$RUN_DIR/lc}/screen" ] && [ "${D_SESSION_STATE:-}" != open ] && mkdir -p "${LC:-$RUN_DIR/lc}" && echo "0|2" > "${LC:-$RUN_DIR/lc}/boot" && echo boot > "${LC:-$RUN_DIR/lc}/screen"; return $? ;;   # #2079 (mockup 02): back to the boot choice, no count (localclone.sh)   # mockup 10: "כבה עכשיו" in the idle window (idle.sh)   # #1560: "כבה עכשיו" (idle.sh), no session needed
         end-hold) case "$(cut -d'|' -f2 "$RUN_DIR/end.poweroff" 2>/dev/null)" in partial|failed) : > "$RUN_DIR/end.hold" ;; *) return 1 ;; esac ;;   # #1560: read the results
         logout) rm -f "$CONSOLE_JAR" "$RUN_DIR/console_login.json"; return $? ;;   # GUI sign-out ends the session here too
         boot-*|lc-*) [ "${GUI_SCREEN:-}" = cloner ] || return 1; lc_gui_dispatch; return $? ;;   # #1322, lcgui.sh
@@ -99,6 +101,7 @@ gui_dispatch() {
         "tool-run|"*) tools_gui_run "$token" ;;                          # #649: guarded in tools.sh; result in $GUI_DIR/tool-result
         back|again) printf 'menu\n' > "$GUI_DIR/mode" ;;
         capture-start) gui_capture ;;   theme-light|theme-dark) gui_theme_save "${token#theme-}" ;;   # #1499: buildmenu.sh
+        "syspart|"*) gui_syspart "$token" ;;   # #1896: C: of an old image, with this session (syspartgui.sh)
         room-open)
             case "$image" in ''|*[!A-Za-z0-9_.-]*) return 1 ;; esac
             case "$target" in ''|*[!0-9]*) return 1 ;; esac
@@ -110,7 +113,7 @@ gui_dispatch() {
             ROOM_OPEN_EXTRA=$_gx room_open "$image" "$target"
             ;;
         direct-open)
-            # #715: the source is this machine's first non-removable disk,
+            # #715: the source is this machine's ONE internal disk (#1832),
             # from the server's fresh inventory (as gui_capture checks it);
             # the targets are the ticked drawers, "<mac>@<port>,<port>/<mac>@
             # <port>" (a MAC has colons of its own). The same POST the console sends;
@@ -118,8 +121,8 @@ gui_dispatch() {
             _gslots=$(room_slots_json "$slots") || return 1
             _gdm=''; [ -z "$drivers" ] || _gdm=",\"driver_models\":$(room_drivers_json "$drivers")" || return 1
             http_get "$SERVER/api/v1/agent/state?mac=$MAC" > "$RUN_DIR/gui-inventory.json" || return 1
-            _gd=$(jq -er '.disks | map(select(.removable == false)) | .[0].dev' \
-                "$RUN_DIR/gui-inventory.json") || { gui_error 'אין דיסק פנימי לשליחה' 'No internal disk to send from'; return 1; }
+            _gd=$(jq -er '.disks | map(select(.removable == false)) | if length == 1 then .[0].dev else empty end' \
+                "$RUN_DIR/gui-inventory.json") || { gui_error 'אין דיסק פנימי אחד בדיוק לשליחה' 'Not exactly one internal disk to send from'; return 1; }   # #1832: never .[0] of several
             printf '{"source":{"kind":"build_disk","mac":"%s","disk":"%s"},"target_slots":%s%s}' \
                 "$MAC" "$_gd" "$_gslots" "$_gdm" > "$RUN_DIR/room_open.json" || return 1
             _gc=$(console_post room "$RUN_DIR/room_open.json" "$RUN_DIR/room_open_resp.json") || return 1
@@ -244,16 +247,17 @@ gui_libs() {
     # nothing imagectl-agent sourced is here unless listed. A lib missing
     # from this list is "<fn>: not found" on the metal, once a second (#834).
     . "$LIB_DIR/common.sh"; . "$LIB_DIR/jsonq.sh"; . "$LIB_DIR/waits.sh"
+    . "$LIB_DIR/roundbeep.sh"   # #2067: the kiosk owns the stream-age samples
     . "$LIB_DIR/buildmenuitems.sh"; . "$LIB_DIR/buildmenu.sh"   # #1073: items + gates, then the menu
     . "$LIB_DIR/buildcapture.sh"
     . "$LIB_DIR/roomflow.sh"   # #418: the room round (open/wake/start)
     . "$LIB_DIR/guistate.sh"
-    . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"   # 11/10: the question dialog
+    . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/syspartgui.sh"   # 11/10: the question dialog; #1896: C: of an old image
     . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/disklink.sh"   # disk_port + disk_link (#432), for the cloner state producer
     . "$LIB_DIR/progress.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
-    . "$LIB_DIR/smart.sh"; . "$LIB_DIR/manifest.sh"     # smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591)
-    . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"   # the server's memory per cdisk (#874); slot names (#704)
-    . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/drawers.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/tools.sh"   # #649: the toolbox (tool-list / tool-run); tools_load pulls toolbins.sh + tools_*.sh itself (#1050)
+    . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/manifest.sh"     # #1921: the tables judge the disk, the hw note per drawer; smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591)
+    . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/writemark.sh"; . "$LIB_DIR/diskused.sh"   # #2030: cused= (size, used) per disk; the server's memory per cdisk (#874); slot names (#704); #1798 the mark per cdisk/lc_disk
+    . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/drawers.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/usbclone.sh"; . "$LIB_DIR/usbset.sh"; . "$LIB_DIR/usbmap.sh"; . "$LIB_DIR/usbmapwin.sh"; . "$LIB_DIR/tools.sh"   # #649: the toolbox (tool-list / tool-run); tools_load pulls toolbins.sh + tools_*.sh itself (#1050)
 }
 
 gui_main() {

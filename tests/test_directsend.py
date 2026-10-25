@@ -174,11 +174,12 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
     box = tmp_path / "box"
     dev, run = box / "dev", box / "run"
     dev.mkdir(parents=True); run.mkdir(parents=True)
-    (dev / "sda").write_bytes(GPT_DISK)
+    (dev / "sda").write_bytes(GPT_DISK + bytes(8192 - len(GPT_DISK)))   # #1808: the RAID gate reads the last 16 sectors
     for n in range(1, partitions + 1):
         (dev / f"sda{n}").write_bytes(bytes(512))
     queue = box / "sys/block/sda/queue"; queue.mkdir(parents=True)
     (queue / "logical_block_size").write_text("512\n")
+    (box / "sys/block/sda/size").write_text("16\n")
     nodes = box / "nodes"
     nodes.write_text("".join(f"{posix(dev)}/sda{s}\n" for s in ["", *range(1, partitions + 1)]),
                      newline="\n")
@@ -196,11 +197,14 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
              "curl": CURL_RECORD, **(extra_stubs or {})}
     if shutil.which("jq") is None:
         stubs["jq"] = JQ_STUB
-    libs = " ".join(f". {posix(AGENT)}/lib/{n}.sh;" for n in (
+    if shutil.which("blkid") is None:   # #1905: a missing blkid is "unreadable"; the real one says rc 2 on these files
+        stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
+    libs =" ".join(f". {posix(AGENT)}/lib/{n}.sh;" for n in (
         "common", "sysinfo", "waits", "jsonq", "progress", "restore", "manifest",
-        "bootca", "hibernation", "shrinkplan", "shrink", "lcsnap", "capture", "capturesink", "directsend", "ui"))   # ‏#87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
+        "bootca", "hibernation", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui"))   # ‏#87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
     out = run_sh(
         make_stubs(box / "stubs", stubs) + exports + libs
+        + "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
         + f' node_is_block() {{ grep -qxF "$1" {posix(nodes)!r} 2>/dev/null; }}; '
         f'send_hello() {{ cp {posix(box / "answer.json")!r} "$RESP"; }}; '
         + pre   # #1171: after the libraries, so it can replace one of their functions

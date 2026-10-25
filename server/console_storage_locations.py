@@ -12,10 +12,12 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from . import auth
 from .api import ServerContext
 from .db import _settle, _write_lock, journal, now_iso, writing
+from . import storage_disks
 from . import storage_locations as sl
 
 log = logging.getLogger("imagectl.storage_locations")
@@ -52,7 +54,7 @@ def create_storage_locations_router(
 
     def _fstab_or_unmount(row: dict) -> None:
         """‏#1123 (4): עיגון בלי שורת fstab אינו `connected` — הוא לא ישרוד reboot."""
-        written = sl.rewrite_fstab(ctx.conn, hooks)
+        written = sl.rewrite_fstab(ctx.conn, hooks, include=row["id"])   # ‏#1993
         if written.status != sl.OK:
             hooks["umount"](row["mount_point"])
             raise HTTPException(
@@ -202,6 +204,31 @@ def create_storage_locations_router(
                 f"{loc_id} {kind} {name}", user[0])
         return sl.public_row(sl.get(ctx.conn, loc_id), ctx.library)
 
+    # ‏#1988: "הוסף כונן" — כוננים ריקים בשרת, ואז חלוקה+ext4+fstab לפי UUID.
+    @router.get("/disks")
+    def disks(user=Depends(admin_only)):
+        del user
+        try:
+            return storage_disks.blank_disks(hooks)
+        except storage_disks.AddDiskError as exc:
+            raise HTTPException(exc.status, exc.message) from None
+
+    @router.post("/add-disk")
+    async def add_disk(request: Request, user=Depends(admin_only)):
+        body = await request.json()
+        if body.get("confirm_erase") is not True:
+            raise HTTPException(422, "נדרש אישור: כל המידע בכונן יימחק")
+        try:
+            row = await run_in_threadpool(
+                storage_disks.add_disk, ctx.conn, hooks, data_dir,
+                device=str(body.get("device") or ""), serial=str(body.get("serial") or ""),
+                size_bytes=body.get("size_bytes"), name=str(body.get("name") or ""),
+                user=user[0])
+        except storage_disks.AddDiskError as exc:
+            raise HTTPException(exc.status, exc.message) from None
+        sl.refresh_catalog(ctx.conn, ctx.library)
+        return sl.public_row(row, ctx.library)
+
     @router.post("/{loc_id}/iscsi-login")
     def iscsi_login(loc_id: str, user=Depends(admin_only)):
         row = _row(loc_id)
@@ -335,7 +362,7 @@ def create_storage_locations_router(
     @router.post("/{loc_id}/check")
     def check(loc_id: str, user=Depends(admin_only)):
         row = _row(loc_id)
-        result = hooks["df"](row["mount_point"])
+        result = sl.measure(row, hooks)
         if result.status == sl.OK:
             sl.save_df(ctx.conn, loc_id, result.payload.get("free_bytes"),
                        result.payload.get("total_bytes"))

@@ -86,9 +86,17 @@ def run(ctx) -> None:
     _close_active(ctx)
 
     print("\n7. סבב כיתה — הפותחת נופלת, הטיימר מתחיל, מאחר נדחה")
+    # #1794: ה-API דוחה פחות מ-30 שניות (כמו הקונסולה), ולכן הסימולציה
+    # מקצרת את הטיימר ישירות במסד -- הקוד שנבדק כאן הוא הטיימר, לא ה-API.
     status, _ = ctx.console.json("POST", "/api/console/settings",
                                  {"session_wait_seconds": "2"})
-    check("טיימר הסבב קוצר לשתי שניות", status == 200, str(status))
+    check("ה-API דוחה טיימר של שתי שניות (#1794)", status == 400, str(status))
+    from server.db import connect, set_setting      # noqa: PLC0415
+    conn = connect(ctx.data_dir / "imagectl.db")
+    try:
+        set_setting(conn, "session_wait_seconds", "2")
+    finally:
+        conn.close()
     ctx.stations[opener].silent_after_join = True
     _open_from_station(ctx, opener)                 # בלי בחירה — כל הכיתה (4)
     wait_until(lambda: ctx.stations[opener].silent,

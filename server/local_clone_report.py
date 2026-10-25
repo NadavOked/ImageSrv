@@ -58,6 +58,19 @@ def _stages(body: dict) -> str:
     return ", ".join(measured)
 
 
+def _note(item: Any) -> str:
+    """#2049: a done drawer's ``ntfs_note`` (#2009) as one journal-sized line; "" = none."""
+    note = item.get("ntfs_note") if isinstance(item, dict) else None
+    return " ".join(note.split())[:ERROR_MAX] if isinstance(note, str) else ""
+
+
+def has_note(body: dict) -> bool:
+    """#2049: a done drawer carries a note -- the journal row is a warning (orange), not info."""
+    targets = body.get("targets")
+    return isinstance(targets, list) and any(
+        isinstance(t, dict) and t.get("state") == "done" and _note(t) for t in targets)
+
+
 def journal_line(body: dict) -> str:
     """The journal's detail for one report, or BadReport."""
     source = _drawer(body.get("source"))
@@ -69,7 +82,8 @@ def journal_line(body: dict) -> str:
         name = _drawer(item)
         state = item.get("state")
         if state == "done":
-            parts.append(f"{name} הצליח")
+            note = _note(item)
+            parts.append(f"{name} הושלם — {note}" if note else f"{name} הצליח")
         elif state == "failed":
             error = item.get("error") if isinstance(item.get("error"), str) else ""
             error = " ".join(error.split())[:ERROR_MAX]
@@ -98,4 +112,7 @@ def journal_line(body: dict) -> str:
     stages = _stages(body)
     if stages:
         line += " · שלבים: " + stages
+    late = body.get("late_s")   # #1913: sent again after the server came back
+    if isinstance(late, int) and not isinstance(late, bool) and late >= 0:
+        line += f" · דוח מאוחר: השרת לא ענה בסוף השיכפול, והדוח נשלח {late // 60}:{late % 60:02d} אחריו"
     return line + " (דיווח המחשב — השיכפול לא עבר דרך השרת)"

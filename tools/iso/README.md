@@ -25,8 +25,16 @@
 sudo tools/iso/make-pool.sh --out /srv/iso/repo                        # פעם אחת; ~600 קבצים, ~400MB
 sudo apt-get install linux-image-amd64                                  # הקרנל שמודולי ה-initramfs נבנים מולו = זה שב-pool
 sudo tools/build_initramfs.sh --installer --with-gui --output /srv/iso/live.img   # המתקין החי (#1190)
-sudo IMAGECTL_ROOT_PASSWORD='...' tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v0.53.0 --live-initrd /srv/iso/live.img
+sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v0.53.0 --live-initrd /srv/iso/live.img
 ```
+
+**סיסמת root אינה חלק מה-ISO** (‏#1632, הכרעת נדב 24/10): המפעיל בוחר אותה
+במסך ההתקנה, במסך חשבון הניהול ליד סיסמת ה-admin (אותם כללים, שדה אימות),
+והמנוע כותב ל-root את גיבוב ה-`$6$` שלה — בלי `chage -d 0`, כי היא כבר של
+המפעיל. ‏`--root-password` ו-`IMAGECTL_ROOT_PASSWORD` **מסורבים** בהודעה
+בשם, ו-`imagectl/root-password.hash` אינו נכתב עוד. התקנה בלי סיסמת root
+מהמסך נכשלת בשם (`[invalid-root-password]` / `[root-password-missing]`) לפני
+שנוגעים בדיסק.
 
 הפלט: `imagectl-<tag>-amd64.iso`, ‏`SHA256SUMS`, ‏`*.el_torito.txt` (הראיה
 ששני קטעי האתחול — BIOS ו-UEFI — נשמרו), ‏`imagectl-iso.json` (כולל

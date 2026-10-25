@@ -127,6 +127,9 @@ DYNAMIC_SITES: dict[tuple[str, str], str] = {
     ("waits.sh", "capped_run"): "it IS the runner: it runs \"$@\"; its callers are resolved through RUNNERS",
     ("smart.sh", "smart_probe"): "capped_run's command is \"$SMARTCTL\", default `smartctl` (smart.sh:20; BINARIES); "
                                  "the variable exists so a test can put a stub there",
+    ("hwissues.sh", "hw_refresh"): "\"$DMESG\", default `dmesg` (hwissues.sh; a busybox applet) -- "
+                                   "the variable exists so a test can put a stub there (#1921)",
+    ("hwissues.sh", "_hw_dmesg_t"): "the same \"$DMESG\" (dmesg), moved here by #1937: the time a drawer was identified at",
     ("tools.sh", "tools_list"): "provider dispatch tools_${domain}_list; reachable() roots every defined provider",
     ("tools.sh", "_tools_find"): "same dispatch, tools_${domain}_list",
     ("tools.sh", "tools_run"): "provider dispatch tools_${domain}_run; reachable() roots every defined provider",
@@ -245,7 +248,9 @@ def test_the_scanner_finds_exactly_the_functions_bash_defines(tmp_path):
     run.mkdir()
     out = sh(f'export RUN_DIR={posix(run)!r} LIB_DIR={posix(LIB)!r} IMAGECTL_TEST=1; '
              f'. {posix(LIB)}/guibridge.sh; gui_libs; tools_load 2>/dev/null; '
-             f'declare -F | while read -r _ _ n; do echo "$n"; done')
+             # usb_offline (usbclone.sh, #1914) only defines this boot's no-server stubs: the
+             # scanner counts them, and bash knows them once it has run
+             f'usb_offline; declare -F | while read -r _ _ n; do echo "$n"; done')
     assert out.returncode == 0, out.stderr
     in_bash = set(out.stdout.split())
     in_scan = set(build_chain().defs)

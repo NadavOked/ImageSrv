@@ -13,6 +13,7 @@
 #include "lcui.h"
 #include "screens_rounds.h"
 #include "smartdlg.h"   /* 16/10 */
+#include "dcui.h"       /* #1914: dcui_token -- the USB settings take the DCUI's keys */
 
 static int lc_split(char *v, char *f[], int max) {
     int n = 0; static char empty[1] = "";
@@ -21,7 +22,14 @@ static int lc_split(char *v, char *f[], int max) {
     for (int i = n; i < max; i++) f[i] = empty;
     return n;
 }
-static void cpy(char *d, size_t n, const char *s) { snprintf(d, n, "%s", s); }
+static void cpy(char *d, size_t n, const char *s) {   /* #2084: a cut never leaves half a letter (it drew a broken character) */
+    snprintf(d, n, "%s", s);
+    size_t len = strlen(d);
+    if (len == strlen(s)) return;
+    while (len && ((unsigned char)d[len - 1] & 0xC0) == 0x80) len--;
+    if (len && ((unsigned char)d[len - 1] & 0xC0) == 0xC0) len--;
+    d[len] = 0;
+}
 static long long ll(const char *s) { return s[0] ? strtoll(s, NULL, 10) : 0; }
 
 static int verdict_of(const char *v) {
@@ -33,17 +41,26 @@ static int verdict_of(const char *v) {
 }
 
 int lc_state_line(State *s, const char *key, char *val) {
-    LcState *l = &s->lc; char *f[16];
+    LcState *l = &s->lc; char *f[18];   /* lc_disk splits into 18 (#1921's hw note, #2001's name) */
     if (strncmp(key, "lc_", 3)) return 0;
     if (!strcmp(key, "lc_round")) l->round_open = !strcmp(val, "open");   /* #1367: anything else draws nothing */
     else if (!strcmp(key, "lc_screen")) l->screen = !strcmp(val, "boot") ? LC_SCREEN_BOOT : !strcmp(val, "local") ? LC_SCREEN_LOCAL
-                                                   : !strcmp(val, "pull") ? LC_SCREEN_PULL : LC_SCREEN_NONE;
+                                                   : !strcmp(val, "pull") ? LC_SCREEN_PULL
+                                                   : !strcmp(val, "usbset") ? LC_SCREEN_USBSET : LC_SCREEN_NONE;
     else if (!strcmp(key, "lc_local")) l->local_ok = !strcmp(val, "1");   /* 16/10: anything else = not offered */
-    else if (!strcmp(key, "lc_boot")) { lc_split(val, f, 3); l->boot_deadline = ll(f[0]); l->boot_paused = atoi(f[1]) == 1; l->boot_now = ll(f[2]); }
+    else if (!strcmp(key, "lc_usb")) l->usb = !strcmp(val, "1");          /* #1914: the clone stick */
+    else if (!strcmp(key, "lc_diag")) cpy(l->diag, sizeof l->diag, val);   /* #1914: diag-<stamp>.txt */
+    else if (!strcmp(key, "lc_ide")) l->ide = !strcmp(val, "ide");        /* #1914: anything else says nothing */
+    else if (!strcmp(key, "lc_survey")) l->survey = !strcmp(val, "1");    /* #1914/#1921: the survey stick */
+    else if (!strcmp(key, "lc_unread")) {   /* Nadav 22/10: dev|n, n > 0 digits only -- anything else says nothing */
+        if (lc_split(val, f, 2) != 2 || !f[0][0] || !f[1][0] || strspn(f[1], "0123456789") != strlen(f[1]) || strlen(f[1]) > 12) return 1;
+        cpy(l->unread_dev, sizeof l->unread_dev, f[0]); l->unread = ll(f[1]);
+    }
+    else if (!strcmp(key, "lc_boot")) { lc_split(val, f, 3); l->boot_deadline = ll(f[0]); l->boot_paused = atoi(f[1]) == 2 ? 2 : atoi(f[1]) == 1; l->boot_now = ll(f[2]); }
     else if (!strcmp(key, "lc_inv")) l->inv_done = !strcmp(val, "done");
     else if (!strcmp(key, "lc_phase")) cpy(l->phase, sizeof l->phase, val);
     else if (!strcmp(key, "lc_disk") && l->ndisks < LC_MAX_DISKS) {
-        int nf = lc_split(val, f, 15);
+        int nf = lc_split(val, f, 18);   /* #1798: the mark is field 16; #1921: the hw note 17; #2001: the name 18 */
         if (nf < 13) return 1;
         LcDisk *d = &l->disks[l->ndisks++];
         d->port = atoi(f[0]); cpy(d->dev, sizeof d->dev, f[1]); cpy(d->model, sizeof d->model, f[2]);
@@ -58,6 +75,10 @@ int lc_state_line(State *s, const char *key, char *val) {
                         drawer >= 1 && drawer <= MAX_DRAWERS ? (int)drawer : -1;
         }
         if (nf >= 15) cpy(d->conn, sizeof d->conn, f[14]);
+        if (nf >= 16 && (!strcmp(f[15], "incomplete") || !strcmp(f[15], "unchecked")))
+            cpy(d->mark, sizeof d->mark, f[15]);   /* #1798: anything else draws nothing */
+        if (nf >= 17) cpy(d->hw, sizeof d->hw, f[16]);
+        if (nf >= 18) cpy(d->name, sizeof d->name, f[17]);
     } else if (!strcmp(key, "lc_src")) {
         int nf = lc_split(val, f, 4); cpy(l->src, sizeof l->src, f[0]); cpy(l->src_measure, sizeof l->src_measure, f[1]);
         l->src_copy = nf >= 3 && f[2][0] ? ll(f[2]) : -2;   /* #1443: empty, or an agent without it = not yet */
@@ -81,11 +102,13 @@ int lc_state_line(State *s, const char *key, char *val) {
         p->idx = atoi(f[0]); cpy(p->label, sizeof p->label, f[1]); cpy(p->fs, sizeof p->fs, f[2]);
         p->bytes = ll(f[3]); p->size = ll(f[4]); cpy(p->state, sizeof p->state, f[5]); p->in = ll(f[6]);
     } else if (!strcmp(key, "lc_tgt") && l->ntgts < LC_MAX_DISKS) {
-        lc_split(val, f, 9);
+        lc_split(val, f, 12);   /* #2009: the 10th, the note; #2017: the 11th, raw,rescued; #2045: the 12th, pulled -- an agent that sends fewer = none */
         LcTgt *t = &l->tgts[l->ntgts++];
         cpy(t->dev, sizeof t->dev, f[0]); cpy(t->state, sizeof t->state, f[1]); t->bytes = ll(f[2]);
-        t->part = atoi(f[3]); t->ok = atoi(f[4]); cpy(t->error, sizeof t->error, f[6]); t->total = ll(f[7]); t->ntfs_boot = atoi(f[8]);
+        t->part = atoi(f[3]); t->ok = atoi(f[4]); cpy(t->error, sizeof t->error, f[6]); t->total = ll(f[7]); t->ntfs_boot = atoi(f[8]); cpy(t->note, sizeof t->note, f[9]);
         t->has_table = sscanf(f[5], "%d,%lld,%lld,%lld", &t->grown_idx, &t->grown_bytes, &t->src_bytes, &t->free_bytes) == 4;
+        t->rescued = -1; if (sscanf(f[10], "%d,%lld", &t->raw_parts, &t->rescued) != 2) { t->raw_parts = 0; t->rescued = -1; }   /* #2017; an older agent: none */
+        t->pulled = !strcmp(f[11], "1");   /* #2045; an older agent: not pulled -- the stricter text */
     }
     return 1;
 }
@@ -196,7 +219,7 @@ static void set_source(App *a, int i) {
 
 /* 16/10 (Nadav): the SMART warning window about drawer i (smartdlg.c). */
 static void smart_ask(App *a, int kind, int i) {
-    const LcDisk *d = &a->st.lc.disks[i]; char label[48];
+    const LcDisk *d = &a->st.lc.disks[i]; char label[LC_LABEL_MAX];
     lc_disk_label(d, label, sizeof label);
     sdlg_open(a, kind, i, d->dev, label, d->smart, d->smart_reason, d->model, d->serial);
 }
@@ -235,7 +258,18 @@ static void default_roles(App *a) {
         for (int i = 0; i < l->ndisks; i++)
             set_stored(a, l->disks[i].dev, i == src ? LCR_SOURCE : smart_skip(&l->disks[i]) ? LCR_SKIP : LCR_TARGET);
     }
-    a->lcu.bay = src >= 0 ? src : 0; a->lcu.focus = LCF_BAY; a->lcu.confirm = a->lcu.stop = 0;
+    a->lcu.bay = src >= 0 ? src : 0; a->lcu.focus = LCF_BAY; a->lcu.confirm = a->lcu.stop = 0; a->lcu.touched = 0;
+}
+
+/* #2008 (Nadav 22/10, the USB stick: "Enter, Enter"): until the person touches the choice, the
+ * focus is on "המשך לאישור" -- the main action below -- as soon as it can go. On the stick the
+ * confirmation that follows opens on the red "מחק והעתק" (open_confirm): Nadav 22/10 turned
+ * #2008's "a destructive dialog keeps its focus on חזרה" around for the stick, so Enter-Enter
+ * starts the copy (Esc is still "חזרה"). The stick only: the cloner's local clone keeps the
+ * focus on the drawers, and its confirmation on "חזרה". */
+static void usb_focus_next(App *a) {
+    if (a->st.lc.usb && !a->lcu.touched && !a->lcu.confirm && !a->lcu.stop && a->lcu.focus == LCF_BAY
+        && lc_view(a) == LCVIEW_SOURCE && lc_can_go(a)) a->lcu.focus = LCF_NEXT;
 }
 
 void lc_after_reload(App *a) {
@@ -247,6 +281,7 @@ void lc_after_reload(App *a) {
     if ((a->sdlg.kind == SDLG_LC_TARGET || a->sdlg.kind == SDLG_LC_SOURCE) &&
         (l->screen != LC_SCREEN_LOCAL || strcmp(l->phase, "idle") || a->sdlg.ref >= l->ndisks ||
          strcmp(l->disks[a->sdlg.ref].dev, a->sdlg.dev))) a->sdlg.kind = SDLG_NONE;
+    if (l->screen == LC_SCREEN_USBSET) return;   /* #1914: the settings keep the source/targets chosen */
     if (l->screen != LC_SCREEN_LOCAL) { a->lcu.nroles = 0; a->lcu.last_phase[0] = 0; a->lcu.start_sent = 0; a->lcu.keep = 0; return; }
     int idle = !strcmp(l->phase, "idle");
     if (l->phase[0] && !idle) a->lcu.ran = 1;     /* #1722: also a run this screen did not start */
@@ -265,6 +300,7 @@ void lc_after_reload(App *a) {
     /* a disk that appeared since the roles were set has none stored: "דלג", never a target by surprise */
     if (a->lcu.bay >= l->ndisks) a->lcu.bay = 0;
     if (!strcmp(l->phase, "idle")) measure_source(a);
+    usb_focus_next(a);   /* #2008 */
 }
 
 /* ---- keys and clicks ---------------------------------------------------------- */
@@ -301,13 +337,15 @@ static void role_click(App *a, int i, int r) {
     set_stored(a, dev, r);
 }
 
-/* "המשך לאישור": 16/10 -- a source with a SMART warning asks the window first
- * (reading a failing disk is allowed, to rescue it), once per source. */
+/* "המשך לאישור": 16/10 -- a source with a SMART warning opens the window first
+ * (reading a failing disk is allowed, to rescue it), once per source. #2017 (Nadav
+ * 22/10): red (F1) is asked as before; orange (warn, failed_last) is only told --
+ * the window is a notice with "המשך" alone (smartdlg.c sdlg_notice). */
 static void open_confirm(App *a) {
     int s = lc_source_index(a);
     if (!lc_can_go(a)) return;
     if (s >= 0 && smart_skip(&a->st.lc.disks[s]) && strcmp(a->lcu.src_ack, a->st.lc.disks[s].dev)) { smart_ask(a, SDLG_LC_SOURCE, s); return; }
-    a->lcu.confirm = 1; a->lcu.focus = LCF_CANCEL;
+    a->lcu.confirm = 1; a->lcu.focus = a->st.lc.usb ? LCF_GO : LCF_CANCEL;   /* Nadav 22/10: the stick on "מחק והעתק"; the cloner on "חזרה" */
 }
 
 /* The window's answer: only its red button changes anything, and only when
@@ -335,7 +373,7 @@ static void cycle_role(App *a, int dir) {
     }
 }
 
-static void back(App *a) { a->lcu.nroles = 0; emit_line("lc-back"); }
+static void back(App *a) { if (a->st.lc.usb) return; a->lcu.nroles = 0; emit_line("lc-back"); }   /* #1914: no back on the stick */
 
 /* 16/10: "שחזור אימג' מהשרת" -- the restore screen starts with nothing chosen */
 static void boot_pull(App *a) {
@@ -433,15 +471,18 @@ static int local_handle(App *a, const Event *e) {
         return 1;
     }
     if (view == LCVIEW_SOURCE) {
+        if (e->type != UIEV_MOVE && id != HIT_LC_USBSET && !(e->type == UIEV_KEY && e->key == KEYSYM_F4)) u->touched = 1;   /* #2008: the person's choice from now on ("הגדרות" is not) */
         if (e->type == UIEV_CHAR && e->ch >= '1' && e->ch <= '9') {
             for (int i = 0; i < a->st.lc.ndisks; i++) if (eff_drawer(a->st.lc.disks[i].drawer, a->st.lc.disks[i].port) == e->ch - '0') { u->bay = i; u->focus = LCF_BAY; set_source(a, i); }
         } else if (e->type == UIEV_KEY) {
             if (e->key == KEYSYM_ESC) back(a);
+            else if (e->key == KEYSYM_F4 && a->st.lc.usb) emit_line("lc-usbset");   /* mockup 01: "הגדרות" in the top bar, F4 */
             else if (e->key == KEYSYM_UP && u->bay > 0) { u->bay--; u->focus = LCF_BAY; }
             else if (e->key == KEYSYM_DOWN && u->bay + 1 < a->st.lc.ndisks) { u->bay++; u->focus = LCF_BAY; }
             else if (u->focus == LCF_BAY && (e->key == KEYSYM_LEFT || e->key == KEYSYM_RIGHT)) cycle_role(a, e->key == KEYSYM_LEFT ? 1 : -1);
             else if (e->key == KEYSYM_TAB || e->key == KEYSYM_BACKTAB) {
-                int stops[3] = { LCF_BAY, LCF_BACK, LCF_NEXT }, n = lc_can_go(a) ? 3 : 2;
+                int usb = a->st.lc.usb;   /* #1914: no "חזרה" stop on the stick */
+                int stops[3] = { LCF_BAY, usb ? LCF_NEXT : LCF_BACK, LCF_NEXT }, n = (lc_can_go(a) ? 3 : 2) - usb;
                 u->confirm = 0; focus_step(a, stops, n, e->key == KEYSYM_TAB ? 1 : -1);
             } else if (e->key == KEYSYM_ENTER) {
                 if (u->focus == LCF_BACK) back(a);
@@ -452,6 +493,7 @@ static int local_handle(App *a, const Event *e) {
             if (id >= HIT_LC_ROLE_BASE && id < HIT_LC_ROLE_BASE + 3 * LC_MAX_DISKS) role_click(a, (id - HIT_LC_ROLE_BASE) / 3, (id - HIT_LC_ROLE_BASE) % 3);
             else if (id >= HIT_LC_BAY_BASE && id < HIT_LC_BAY_BASE + LC_MAX_DISKS) { u->bay = id - HIT_LC_BAY_BASE; u->focus = LCF_BAY; }
             else if (id == HIT_LC_BACK) back(a);
+            else if (id == HIT_LC_USBSET && a->st.lc.usb) emit_line("lc-usbset");   /* #1914 */
             else if (id == HIT_LC_NEXT && lc_can_go(a)) open_confirm(a);
         }
         return 1;
@@ -472,14 +514,32 @@ static int local_handle(App *a, const Event *e) {
         return 1;
     }
     /* LCVIEW_DONE: "כבה את המחשב" is the default */
-    if (u->focus != LCF_OFF && u->focus != LCF_AGAIN) u->focus = LCF_OFF;
-    if (e->type == UIEV_KEY && dir_of(e)) u->focus = u->focus == LCF_OFF ? LCF_AGAIN : LCF_OFF;
+    int usb = a->st.lc.usb;   /* #1914: "הפעל מחדש" only on the USB stick */
+    if (u->focus != LCF_OFF && u->focus != LCF_AGAIN && !(usb && u->focus == LCF_REBOOT)) u->focus = LCF_OFF;
+    if (e->type == UIEV_KEY && dir_of(e))
+        u->focus = u->focus == LCF_OFF ? (usb ? LCF_REBOOT : LCF_AGAIN) : u->focus == LCF_REBOOT ? LCF_AGAIN : LCF_OFF;
     else if ((e->type == UIEV_KEY && e->key == KEYSYM_ENTER && u->focus == LCF_OFF) || id == HIT_LC_OFF) emit_line("lc-poweroff");
+    else if (usb && ((e->type == UIEV_KEY && e->key == KEYSYM_ENTER && u->focus == LCF_REBOOT) || id == HIT_LC_REBOOT)) emit_line("lc-reboot");
     else if ((e->type == UIEV_KEY && e->key == KEYSYM_ENTER) || id == HIT_LC_AGAIN) { u->focus = LCF_BAY; emit_line("lc-again"); }
     return 1;
 }
 
 int lc_handle(App *a, const Event *e) {
+    if (a->screen == SCREEN_LOCAL && a->st.lc.screen == LC_SCREEN_USBSET) {   /* #1914: the DCUI's tokens, its own way */
+        char tok[48], line[64], keys[192];
+        /* #2001: Alt+Shift, or a click on the chip, switches the language of the name field
+         * (#1245's a->lang_he) -- no token: a Hebrew letter is sent as its code point */
+        if (e->type == UIEV_KEY && e->key == KEYSYM_LAYOUT) { a->lang_he = !a->lang_he; return 1; }
+        if (e->type == UIEV_CLICK && dcui_click(e->x, e->y, keys, sizeof keys)) {   /* #1959: the keys it stands for */
+            for (char *k = strtok(keys, "\n"); k; k = strtok(NULL, "\n")) {
+                if (!strcmp(k, "KEY LAYOUT")) { a->lang_he = !a->lang_he; continue; }
+                snprintf(line, sizeof line, "lc-usbset|%s", k); emit_line(line);
+            }
+        } else if (e->type == UIEV_CHAR && a->lang_he && e->he != e->ch && e->he >= 0x20) {
+            snprintf(line, sizeof line, "lc-usbset|CHAR %x", e->he); emit_line(line);   /* SI-1452 (input.c) */
+        } else if (dcui_token(e, 0, tok, sizeof tok)) { snprintf(line, sizeof line, "lc-usbset|%s", tok); emit_line(line); }
+        return 1;
+    }
     if (a->screen == SCREEN_LCBOOT) return boot_handle(a, e);
     if (a->screen == SCREEN_RESTORE && lc_pull_active(a)) return lc_pull_handle(a, e);   /* 16/10 (lc_pull.c) */
     if (a->screen != SCREEN_LOCAL) return 0;

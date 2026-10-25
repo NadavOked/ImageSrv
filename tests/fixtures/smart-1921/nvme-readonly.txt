@@ -1,0 +1,28 @@
+smartctl 7.4 2023-08-01 r5530 [x86_64-linux-6.12.111+deb13-amd64] (local build)
+Copyright (C) 2002-23, Bruce Allen, Christian Franke, www.smartmontools.org
+# #1921: built to nvmeprint.cpp's format, not captured -- there is no NVMe in the lab
+
+=== START OF INFORMATION SECTION ===
+Model Number:                       FIXTURE NVMe 512GB
+Serial Number:                      FIXTURE0103
+Firmware Version:                   1.0
+Warning  Comp. Temp. Threshold:     84 Celsius
+Critical Comp. Temp. Threshold:     88 Celsius
+
+=== START OF SMART DATA SECTION ===
+SMART overall-health self-assessment test result: FAILED!
+- media has been placed in read only mode
+
+SMART/Health Information (NVMe Log 0x02)
+Critical Warning:                   0x08
+Temperature:                        41 Celsius
+Available Spare:                    100%
+Available Spare Threshold:          10%
+Percentage Used:                    7%
+Data Units Read:                    12,345,678 [6.32 TB]
+Data Units Written:                 9,876,543 [5.05 TB]
+Power Cycles:                       784
+Power On Hours:                     5,432
+Unsafe Shutdowns:                   61
+Media and Data Integrity Errors:    0
+Error Information Log Entries:      12

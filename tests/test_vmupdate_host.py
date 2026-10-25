@@ -86,7 +86,8 @@ def test_installs_the_list_and_creates_the_user(tmp_path, bindir):
     apt = [row for row in log if row.startswith("fakeapt ")]
     # ‏#1459: רשימות עדכניות, ואז התקנה של מה ש-dpkg-query אומר שחסר (כאן: הכול)
     assert apt[0].split()[1:3] == ["update", "-qq"] and not any("https" in a for a in apt)
-    assert apt[1].split()[1:4] == ["install", "-y", "-qq"] and apt[1].split()[4:] == packages()
+    # ‏#1987: בלי Recommends — רק הרשימה ומה שהיא חייבת.
+    assert apt[1].split()[1:5] == ["install", "-y", "-qq", "--no-install-recommends"] and apt[1].split()[5:] == packages()
     assert any(row.startswith("fakeuseradd --system") and row.endswith("imagectl-vm") for row in log)
 
 
@@ -178,7 +179,7 @@ def test_only_the_missing_packages_are_installed(tmp_path, bindir):
     proc = run_host(tmp_path, bindir)
     assert proc.returncode == 0, proc.stdout
     install = [row for row in calls(tmp_path) if row.startswith("fakeapt install")]
-    assert len(install) == 1 and install[0].split()[4:] == ["ovmf", "jq"]
+    assert len(install) == 1 and install[0].split()[4:] == ["--no-install-recommends", "ovmf", "jq"]
 
 
 def test_an_iso_server_local_repo_stops_publishing_files_it_does_not_have(tmp_path, bindir):
@@ -266,6 +267,21 @@ def test_a_failed_host_preparation_does_not_fail_the_upgrade_and_is_reported(tmp
     assert status["state"] == "done" and status["stage"] == "done" and status["tag"] == "v0.73.0"
     assert status["warning"].startswith("עדכון ב-VM לא זמין: apt-get install נכשל")
     assert "קוד 3" in status["warning"]
+
+
+def test_a_vm_warning_keeps_an_earlier_upgrade_warning(tmp_path, bindir):
+    """#1755: a later VM warning must append, not replace the package warning."""
+    data = tmp_path / "data"
+    _seed_db(data)
+    repo = upgrade_repo(tmp_path, host_rc=3)
+    (repo / "install" / "security-upgrade.sh").write_text(
+        '#!/usr/bin/env bash\necho "אזהרה: kernel-warning"\nexit 0\n',
+        encoding="utf-8", newline="\n")
+    proc = run_upgrade(tmp_path, bindir, repo, data)
+    status = _status(data)
+    assert proc.returncode == 0, (tmp_path / "upgrade.log").read_text(encoding="utf-8")
+    assert "kernel-warning" in status["warning"]
+    assert "עדכון ב-VM לא זמין" in status["warning"]
 
 
 def test_a_tag_without_the_host_script_is_a_version_without_the_feature(tmp_path, bindir):

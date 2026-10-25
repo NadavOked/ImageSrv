@@ -103,6 +103,11 @@ def test_the_list_includes_5900_and_no_8082_and_no_ssh(ports_server):
     assert rows["tftp"]["port"] == "69"
     assert rows["http_boot"]["port"] == "8080"
     assert rows["multicast"]["port"] == "9000–9001"  # פורט-הפצה-מכוון
+    assert rows["ntp"]["port"] == "123" and rows["ntp"]["proto"] == "udp"
+    assert rows["ntp"]["name"] == "שרת זמן (NTP)"
+    assert rows["ntp"]["off_means"] == "השרת לא מספק שעה"
+    assert rows["ntp"]["enabled"] is False and rows["ntp"]["listening"] is False
+    assert rows["ntp"]["network"] == "per_nic"
 
 
 def test_monitor_switch_off_shows_off_not_green(ports_server):
@@ -214,7 +219,7 @@ def test_every_port_row_names_its_network(ports_server):
     assert rows["http_console"]["network"] == "mgmt"
     assert rows["interserver"]["network"] == "interserver"
     assert rows["firewall"]["network"] is None
-    assert {r["network"] for r in rows.values()} <= {"deploy", "mgmt", "interserver", None}
+    assert {r["network"] for r in rows.values()} <= {"deploy", "mgmt", "interserver", "per_nic", None}
 
 
 def test_cross_network_ports_read_the_server_firewall_per_port(ports_server):

@@ -90,7 +90,7 @@ lc_manifest() {
     # #1662: used_bytes -- the run's total, lc_part -- is the copy's measurement
     # (lcsize.sh), the number the screen said; else df's, all of them, aloud.
     if _mf_uf=$(lc_copy_used "$1" "$2"); then log "local clone: the run counts partclone's used blocks, as shown before the start (#1662)"
-    else log "local clone: the run counts df's used bytes, not the copy's measurement -- $_mf_uf (#1662)"; _mf_uf="$LC/inv/$1.used"; fi
+    else log "local clone: the run counts df's used bytes (approximate), not the copy's measurement -- $_mf_uf (#1662)"; _mf_uf="$LC/inv/$1.used"; fi
     while IFS='|' read -r _mf_i _mf_t _mf_u _mf_f _mf_s; do
         _mf_n=$(partition_node "$1" "$_mf_i"); _mf_fs=$(_fs_of "$_mf_n"); _mf_role=$(lc_role "$1" "$_mf_i" "$_mf_t")   # #1369/#1354: as the inventory checked it
         [ "$_mf_fs" = swap ] && _mf_role=swap
@@ -99,23 +99,12 @@ lc_manifest() {
         _mf_file="\"local:p$_mf_i\""; [ "$_mf_role" = swap ] && _mf_file=null
         _mf_used=$(awk -F'|' -v i="$_mf_i" '$1 == i { print $2; exit }' "$_mf_uf" 2>/dev/null)
         case "$_mf_used" in ''|*[!0-9]*) _mf_used=null ;; esac
-        _mf_j="$_mf_j{\"index\":$_mf_i,\"type_guid\":\"$_mf_t\",\"unique_guid\":\"$_mf_u\",\"attrs\":\"$(lc_entry "$_mf_i" 3)\",\"uuid\":$_mf_uuid,\"role\":\"$_mf_role\",\"fs\":\"$_mf_fs\",\"start_sector\":$_mf_f,\"size_bytes\":$((_mf_s * 512)),\"used_bytes\":$_mf_used,\"file\":$_mf_file,\"sha256\":null,\"expandable\":false$(shrink_json_extra "$_mf_i" "$_mf_f" "$_mf_s" 512)},"
+        _mf_j="$_mf_j{\"index\":$_mf_i,\"type_guid\":\"$_mf_t\",\"unique_guid\":\"$_mf_u\",\"attrs\":\"$(lc_entry "$_mf_i" 3)\",\"uuid\":$_mf_uuid,\"role\":\"$_mf_role\",\"fs\":\"$_mf_fs\",\"start_sector\":$_mf_f,\"size_bytes\":$((_mf_s * 512)),\"used_bytes\":$_mf_used,\"file\":$_mf_file,\"sha256\":null,\"expandable\":false$(shrink_json_extra "$_mf_i" "$_mf_f" "$_mf_s" 512)$(lc_raw_json "$_mf_fs" "$_mf_role" "$_mf_t")},"
     done < "$2"
     _mf_j=$(_mark_expandable "${_mf_j%,}")
     printf '{"schema":1,"scheme":"gpt","sector_size":512,"disk_guid":"%s","source_disk_bytes":%s,"partitions":[%s]}\n' \
         "$_mf_dg" "$((_mf_sec * 512))" "$_mf_j" > "$_mf_r/manifest.json"
-}
-
-lc_set_names() {
-    # $1 = target. The partition names ("Basic data partition", ...): apply_gpt
-    # does not carry them, and a table that is "identical" carries them.
-    # #1714: every name in ONE sgdisk call (a writing sgdisk sleeps 1s). Names
-    # hold spaces, so `set --`, with the target saved first (#1418).
-    _sn_dev="$DEVROOT/$1"; set --
-    while IFS='|' read -r _sn_i _sn_name _sn_a; do
-        [ -z "$_sn_name" ] || set -- "$@" -c "$_sn_i:$_sn_name"
-    done < "$LC/run/entries" || return 1
-    [ "$#" -eq 0 ] || sgdisk "$@" "$_sn_dev" >> "$LOG_FILE" 2>&1
+    lc_raw_fix "$_mf_r/manifest.json" || { LC_ERROR="לא הצלחנו לסמן את המחיצות שמועתקות גולמית"; return 1; }   # #2017: a raw one never grows
 }
 
 _tc_v() { printf '%s\n' "$_tc_info" | awk -F': ' -v k="$1" '$1 == k { print $2; exit }' | awk '{print $1}'; }
@@ -124,7 +113,9 @@ _tc_up() { printf '%s' "$1" | tr 'a-f' 'A-F'; }
 lc_table_check() {
     # $1 = target, $2 = manifest. The table read back from the target, field by
     # field, against the source's: disk GUID, count, and per partition the
-    # type, unique GUID, attributes, name, start and size. Two allowances, both
+    # type, unique GUID, attributes, start and size; the name is still the
+    # incomplete-write mark (#1798 -- finish_grow puts the source's names back
+    # after the grow and reads each one back). Two allowances, both
     # expand_last's and both recorded: the grown partition may be larger, and
     # what sat after it on a target that grew starts later (moved to the
     # tail), at its own size. Writes $RUN_DIR/targets/$1/lc_table:
@@ -133,7 +124,7 @@ lc_table_check() {
     _tc_p=$(sgdisk -p "$_tc_n" 2>> "$LOG_FILE") || { LC_ERROR="sgdisk לא קרא את הטבלה מהיעד"; return 1; }
     _tc_dg=$(printf '%s\n' "$_tc_p" | awk -F': ' '/Disk identifier/ { print $2 }' | awk '{print $1}')
     _tc_want=$(json_get "$2" .disk_guid)
-    [ "$_tc_dg" = "$_tc_want" ] || { LC_ERROR="ה-GUID של הדיסק ביעד הוא ${_tc_dg:-ריק}, לא $_tc_want"; return 1; }
+    [ "$_tc_dg" = "$_tc_want" ] || { log "$1: disk GUID ${_tc_dg:-empty}, want $_tc_want"; LC_ERROR="ה-GUID של הדיסק ביעד אינו של המקור (הערכים ביומן הסוכן)"; return 1; }   # #1924
     manifest_plan "$2" > "$LC/run/check.plan" || { LC_ERROR="לא הצלחנו לקרוא את תוכנית המחיצות"; return 1; }
     _tc_cnt=$(printf '%s\n' "$_tc_p" | awk '/^ *[0-9]+ / { n++ } END { print n + 0 }')
     _tc_wcnt=$(awk 'END { print NR }' "$LC/run/check.plan")
@@ -146,12 +137,13 @@ lc_table_check() {
         _tc_gt=$(_tc_v "Partition GUID code"); _tc_gu=$(_tc_v "Partition unique GUID")
         _tc_ga=$(_tc_v "Attribute flags"); _tc_gf=$(_tc_v "First sector"); _tc_gs=$(_tc_v "Partition size")
         _tc_gn=$(printf '%s\n' "$_tc_info" | sed -n "s/^Partition name: '\(.*\)'.*/\1/p")
-        _tc_ws=$((_tc_sz / 512)); _tc_wn=$(lc_entry "$_tc_i" 2); _tc_wa=$(lc_entry "$_tc_i" 3)
+        _tc_ws=$((_tc_sz / 512)); _tc_wn=$WRITEMARK_NAME; _tc_wa=$(lc_entry "$_tc_i" 3)
         if [ "$(_tc_up "$_tc_gt")" != "$(_tc_up "$_tc_t")" ]; then LC_ERROR="מחיצה $_tc_i: סוג $_tc_gt במקום $_tc_t"
-        elif [ -n "$_tc_u" ] && [ "$(_tc_up "$_tc_gu")" != "$(_tc_up "$_tc_u")" ]; then LC_ERROR="מחיצה $_tc_i: GUID ייחודי $_tc_gu במקום $_tc_u"
+        elif [ -n "$_tc_u" ] && [ "$(_tc_up "$_tc_gu")" != "$(_tc_up "$_tc_u")" ]; then log "$1: partition $_tc_i unique GUID $_tc_gu, want $_tc_u"; LC_ERROR="מחיצה $_tc_i: ה-GUID הייחודי אינו של המקור (הערכים ביומן הסוכן)"
         elif [ "$_tc_ga" != "$_tc_wa" ]; then LC_ERROR="מחיצה $_tc_i: דגלים $_tc_ga במקום $_tc_wa"
-        elif [ "$_tc_gn" != "$_tc_wn" ]; then LC_ERROR="מחיצה $_tc_i: השם '$_tc_gn' במקום '$_tc_wn'"
+        elif [ "$_tc_gn" != "$_tc_wn" ]; then log "$1: partition $_tc_i name '$_tc_gn', want '$_tc_wn'"; LC_ERROR="מחיצה $_tc_i: שם המחיצה אינו הסימן שנכתב (הערכים ביומן הסוכן)"
         elif [ "$_tc_i" = "$_tc_grow" ]; then
+            _tc_st=$(( (_tc_st + 2047) / 2048 * 2048 ))   # #2016: expand_last aligns the grown one's start up to 1MiB
             { [ "$_tc_gf" = "$_tc_st" ] && [ "$_tc_gs" -ge "$_tc_ws" ]; } || LC_ERROR="מחיצה $_tc_i (שהוגדלה): התחלה $_tc_gf/$_tc_st, גודל $_tc_gs/$_tc_ws"
             _tc_gb=$((_tc_gs * 512)); _tc_sb=$((_tc_ws * 512))
         elif [ -n "$_tc_grow" ] && [ "$_tc_st" -gt "${_tc_gstart:-0}" ]; then

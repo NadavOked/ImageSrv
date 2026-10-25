@@ -24,7 +24,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from conftest import hello_body
+from conftest import MANIFEST_256, hello_body, write_image
 from server import cloner_round, room
 from server.db import set_setting
 from test_machine_identity import (BUILD, MAC1, MAC2, identity_server,  # noqa: F401
@@ -32,7 +32,6 @@ from test_machine_identity import (BUILD, MAC1, MAC2, identity_server,  # noqa: 
 
 URL = "/api/v1/agent/cloner-round"
 IMG_256 = "img_7f3a91"     # conftest MANIFEST_256
-IMG_500 = "img_2c8e04"     # conftest MANIFEST_500 -- does not fit a 256 drawer
 DRAWER = 256_060_514_304
 
 
@@ -226,8 +225,10 @@ def test_a_drawer_with_no_serial_is_refused_by_name(identity_server):
     assert no_round(srv)
 
 
-@pytest.mark.parametrize("image", [IMG_500, "img_nothere", ""])
+@pytest.mark.parametrize("image", ["img_nothere", ""])
 def test_an_image_not_allowed_for_this_machine_is_refused(identity_server, image):
+    # #1863: an image too big for the drawers is not "not allowed" -- it is
+    # refused by size, "fit" (test_the_console_and_the_cloner_screen_decide_alike_by_size).
     srv = identity_server
     cloner(srv)
     r = ask(srv, image_id=image)
@@ -362,8 +363,15 @@ def test_drawers_and_images_come_from_the_server_not_the_request(identity_server
     fake = [{"dev": "sdd", "port": 4, "serial": "X4", "size_bytes": 10 ** 13, "removable": False}]
     r = ask(srv, ports=[4], disks=fake, drawer_slots=["sata:4"])
     assert r.status_code == 400 and r.json()["code"] == "bad_round", r.text
-    r = ask(srv, image_id=IMG_500, disks=fake)
-    assert r.status_code == 403 and r.json()["code"] == "image_not_allowed", r.text
+    # #1863: the size is decided against the saved drawers (256 GB), not the body's 10 TB
+    big = {**MANIFEST_256, "id": "img_b16400", "name": "Big", "family": 500,
+           "source_disk_bytes": 500_107_862_016, "min_target_bytes": 500_107_862_016,
+           "partitions": [MANIFEST_256["partitions"][0],
+                          {**MANIFEST_256["partitions"][1], "size_bytes": 400_000_000_000}]}
+    write_image(srv["ctx"].library.root, big)
+    r = ask(srv, image_id=big["id"], disks=fake)
+    assert r.status_code == 409 and r.json()["code"] == "fit", r.text
+    assert r.json()["error"] == "דיסק 1 במחשב 1 הוא 256GB, האימג' צריך 401GB", r.text
     assert no_round(srv)
 
 
@@ -376,3 +384,103 @@ def test_every_attempt_is_journaled(identity_server):
     refused = [d for _u, d in journal_details(srv, "cloner_round_refused")]
     assert len(refused) == 2 and "bad_round" in refused[0] and "bad_nonce" in refused[1], refused
     assert len(journal_details(srv, "room_open_cloner")) == 1
+
+
+# --- #1863: one fit decision, by size, for the console and the cloner screen ---------
+#
+# VCLONE-2 in the lab (20/10): two 64 GiB drawers and one 40 GiB drawer. test2
+# (img_8da804) was captured from a 500 GB disk -- `family` 500 -- and shrunk to
+# a ~60.6 GB layout. The console opened it on the 64 GiB drawers; the cloner
+# screen refused it with "image_not_allowed", because `allowed_for_disks` also
+# filtered by family. Nadav, 20/10: the decision is the real size only
+# (`required_bytes` + min_free against the chosen drawer), as the console does
+# (#953); the family is a display label.
+
+GIB = 1 << 30
+VCLONE2 = (64 * GIB, 64 * GIB, 40 * GIB)
+TEST2 = {
+    **MANIFEST_256, "id": "img_8da804", "name": "test2", "family": 500,
+    "source_disk_bytes": 500_107_862_016, "min_target_bytes": 500_107_862_016,
+    "partitions": [MANIFEST_256["partitions"][0],
+                   {**MANIFEST_256["partitions"][1], "size_bytes": 60_000_000_000,
+                    "used_bytes": 30_000_000_000}],
+}
+
+
+def vclone2(srv, sizes=VCLONE2) -> dict:
+    """test2 in the library, and cloner "1" whose last hello reported these
+    drawers (ports 1..). Returns that hello's answer."""
+    write_image(srv["ctx"].library.root, TEST2)
+    register(srv, MAC1, "grp_CLONERS", "1")
+    body = hello_body(MAC1)
+    body["disks"] = [
+        {"dev": f"sd{chr(ord('a') + i)}", "size_bytes": size, "port": i + 1,
+         "model": "Virtual disk", "serial": f"V{i + 1}", "removable": False,
+         "scheme": "gpt", "has_data": False}
+        for i, size in enumerate(sizes)]
+    r = srv["station"].post("/api/v1/agent/hello", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def console_decides(srv, ports) -> tuple[bool, str | None]:
+    """(opened, reason) from the console's room screen. An opened round is
+    failed at once, so the cloner screen is then asked about the same room."""
+    r = srv["admin"].post("/api/console/room", json={
+        "image_id": TEST2["id"], "target_drives": len(ports),
+        "target_slots": [{"mac": MAC1, "ports": ports}]})
+    if r.status_code != 200:
+        return False, r.json()["detail"]
+    ctx = srv["ctx"]
+    wave = room.active_round(ctx.conn)["wave_session_id"]
+    assert ctx.store.fail(wave, "test", related=lambda: room.fail_wave(
+        ctx.conn, wave, "test", commit=False))
+    return True, None
+
+
+@pytest.mark.parametrize("ports", [[1], [1, 2], [3], [2, 3]])
+def test_the_console_and_the_cloner_screen_decide_alike_by_size(identity_server, ports):
+    srv = identity_server
+    vclone2(srv)
+    console = console_decides(srv, ports)
+    r = ask(srv, image_id=TEST2["id"], ports=ports)
+    screen = (r.status_code == 200, None if r.status_code == 200 else r.json()["error"])
+    assert screen == console, r.text
+    # and it is the size decision: ~60.6 GB goes on 64 GiB, not on 40 GiB
+    assert console[0] is (3 not in ports)
+    if not console[0]:
+        assert r.status_code == 409 and r.json()["code"] == "fit", r.text
+        assert r.json()["error"] == "דיסק 3 במחשב 1 הוא 43GB, האימג' צריך 61GB"
+
+
+def test_an_image_from_a_500_disk_is_offered_where_a_drawer_holds_it(identity_server):
+    """The list the cloner screen and the build machine show: by size, not family."""
+    srv = identity_server
+    assert TEST2["id"] in vclone2(srv)["allowed_images"]
+    state = srv["station"].get("/api/v1/agent/state", params={"mac": MAC1}).json()
+    assert TEST2["id"] in [i["id"] for i in state["allowed_images"]]
+
+
+def test_an_image_that_fits_no_drawer_is_not_offered(identity_server):
+    srv = identity_server
+    assert TEST2["id"] not in vclone2(srv, sizes=(40 * GIB,))["allowed_images"]
+
+
+@pytest.mark.parametrize("used", [50_000_000_000, None], ids=["10GB-free", "unmeasured"])
+def test_the_offered_list_counts_the_minimum_free_space(identity_server, used):
+    """"Fits" in the list is the console's number: the layout AND min_free_gb free
+    on C: (#1354). A 256-family image whose ~60.6 GB layout fits a 64 GiB drawer,
+    with only 10 GB free on C:, needs ~72 GB with the default 20 -- not offered;
+    C: never measured (#1494) cannot be checked -- not offered either (principle
+    5). With the rule off (0) both are."""
+    srv = identity_server
+    tight = {**TEST2, "id": "img_7e1600", "name": "tight", "family": 256,
+             "partitions": [TEST2["partitions"][0],
+                            {**TEST2["partitions"][1], "used_bytes": used}]}
+    write_image(srv["ctx"].library.root, tight)
+    assert tight["id"] not in vclone2(srv, sizes=(64 * GIB,))["allowed_images"]
+    set_setting(srv["ctx"].conn, "min_free_gb", "0")
+    answer = srv["station"].post("/api/v1/agent/hello", json={
+        **hello_body(MAC1), "disks": json.loads(srv["ctx"].conn.execute(
+            "SELECT disks_json FROM net_devices WHERE mac = ?", (MAC1,)).fetchone()["disks_json"])}).json()
+    assert tight["id"] in answer["allowed_images"]

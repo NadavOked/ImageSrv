@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 
@@ -30,6 +31,15 @@ FOLDERS_KEY = "image_folders"
 UPLOAD_PREFIX = ".upload-"
 #: חלון "סבבים לאחרונה" במגירת האימג' (#972, המוקאפ: "ב-30 הימים האחרונים").
 ROUNDS_WINDOW = timedelta(days=30)
+#: ‏#1811: ההעלאה נכתבת בתהליכון באצוות בגודל הזה, כמו הקליטה (‏capture.CHUNK, ‏#1488) —
+#: לא קפיצה לתהליכון על כל מקטע של 64KB מהזרם. הזיכרון תחום לאצווה אחת (‏#15).
+UPLOAD_BATCH = 1024 * 1024
+
+
+def _write_chunk(handle, guard, chunk: bytes) -> None:
+    """‏#1811: אצווה אחת של ההעלאה — רצה בתהליכון (`asyncio.to_thread`)."""
+    handle.write(chunk)
+    guard.wrote(len(chunk))
 
 
 def _aware(stamp: object) -> datetime | None:
@@ -132,6 +142,27 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
                 user[0])
         return {"ok": True}
 
+    @router.post("/images/{image_id}/system-partition")
+    async def mark_system_partition(image_id: str, request: Request, user=Depends(current_user)):
+        """‏#1896 (הכרעת נדב 22/10): איזו מחיצה היא C: באימג' ישן שבו שתי מחיצות
+        windows שוות. גוף ``{"index": N}``. גם ממחשב הבנייה (פורט הסוכן,
+        ‏`kiosk.KIOSK_CONSOLE_ROUTES`): ‏deploy מסמן **רק אימג' שעוד לא סומן** —
+        כמו המשכפל; שינוי סימון — admin. לא באמצע סבב של האימג' (409)."""
+        body = await request.json()
+        index = body.get("index") if isinstance(body, dict) else None
+        if ctx.library.get(image_id) is None:
+            raise HTTPException(404, "אימג' לא קיים")
+        from . import room as room_module  # noqa: PLC0415 — נמנע ממעגל ייבוא
+        active_session, round_row = ctx.store.active(), room_module.active_round(ctx.conn)
+        if (active_session is not None and active_session["image_id"] == image_id) \
+                or (round_row is not None and round_row["image_id"] == image_id):
+            raise HTTPException(409, "האימג' נמצא בשימוש בסבב פעיל — סמנו אחרי שיסתיים")
+        why = ctx.library.record_system_partition(image_id, index, only_unmarked=user[1] != "admin")
+        if why is not None:
+            raise HTTPException(400, why)
+        journal(ctx.conn, "image_system_partition", f"{image_id} system={index} ({user[1]})", user[0])
+        return {"ok": True, "index": index}
+
     @router.post("/images/{image_id}/delete")
     async def delete_image(image_id: str, request: Request, user=Depends(admin_only)):
         # מחיקת אימג' — אישור בהקלדת שם האימג' (סעיף 15 באפיון).
@@ -145,7 +176,8 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
         active_session = ctx.store.active()
         round_row = room_module.active_round(ctx.conn)
         if (active_session is not None and active_session["image_id"] == image_id) \
-                or (round_row is not None and round_row["image_id"] == image_id):
+                or (round_row is not None and round_row["image_id"] == image_id) \
+                or any(p["image_id"] == image_id for p in ctx.store.active_pulls()):   # #1928
             raise HTTPException(409, "האימג' נמצא בשימוש בסשן פעיל")
         ctx.library.delete(image_id)
         forget_scrub(ctx.conn, image_id)
@@ -190,7 +222,8 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
 
         declared = request.headers.get("content-length")
         if declared and declared.isdigit():
-            room_for(2 * int(declared), "העלאת האימג' (הקובץ ועוד החילוץ שלו)")
+            await asyncio.to_thread(
+                room_for, 2 * int(declared), "העלאת האימג' (הקובץ ועוד החילוץ שלו)")
         guard = disk_reserve.StreamGuard(lambda: _library_free(root), "העלאת האימג'")
         # שם שמתחיל בנקודה: אזור עבודה, שהסחיפה היומית (‏`work_areas`) מכירה.
         handle = tempfile.NamedTemporaryFile(
@@ -199,14 +232,22 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
         temp = Path(handle.name)
         try:
             with handle:
+                # ‏#1811: ה-await על כל אצווה הוא הלחץ-החוזר — הזרם אינו נקרא הלאה
+                # לפני שהדיסק (אולי NAS איטי) קיבל את הקודמת, והלולאה פנויה בינתיים.
+                batch = bytearray()
                 async for chunk in request.stream():
-                    handle.write(chunk)
-                    guard.wrote(len(chunk))
-            size = temp.stat().st_size
+                    batch += chunk
+                    if len(batch) >= UPLOAD_BATCH:
+                        await asyncio.to_thread(_write_chunk, handle, guard, bytes(batch))
+                        batch.clear()
+                if batch:
+                    await asyncio.to_thread(_write_chunk, handle, guard, bytes(batch))
+            size = await asyncio.to_thread(lambda: temp.stat().st_size)
             if size == 0:
                 raise ArchiveError("לא התקבל קובץ")
-            room_for(size, "חילוץ האימג' שהועלה")
-            manifest = import_tar(temp, root, set(ctx.library.scan()))
+            await asyncio.to_thread(room_for, size, "חילוץ האימג' שהועלה")
+            manifest = await asyncio.to_thread(
+                import_tar, temp, root, set(await asyncio.to_thread(ctx.library.scan)))
         except disk_reserve.ReserveReached as exc:
             raise HTTPException(507, str(exc))
         except HTTPException:
@@ -216,7 +257,7 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
         except Exception as exc:                       # tar פגום, קלט חתוך
             raise HTTPException(400, unreadable_message(exc))
         finally:
-            temp.unlink(missing_ok=True)
+            await asyncio.to_thread(temp.unlink, missing_ok=True)
         # ‏#138, נקודת הכניסה שה-Issue מסמן כמסוכנת ביותר: השם והתיקייה
         # מגיעים **מקובץ שמישהו העלה**, לא מטופס — זה בדיוק המסלול של
         # ‏#110. הבדיקה כאן ולא ב-`import_tar`, כדי ש-sha256 יאמת קודם

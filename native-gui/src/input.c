@@ -21,7 +21,8 @@
  * device, a tablet, a VM pointer. Position maps 1:1 like touch, but the
  * cursor stays drawn: the person at the screen must see where the remote
  * operator is (owner, again 16/10 in #1475: one shared cursor). */
-enum { DEV_KEYBOARD = 1, DEV_MOUSE = 2, DEV_TOUCH = 4, DEV_ABSPTR = 8 };
+enum { DEV_KEYBOARD = 1, DEV_MOUSE = 2, DEV_TOUCH = 4, DEV_ABSPTR = 8,
+       DEV_POWER = 16 /* #1918: KEY_POWER -- the ACPI "Power Button" (button.ko) is a device of its own */ };
 
 /* #1475: agent/monitor.c's UINPUT_NAME, verbatim. The rescan keeps looking
  * for this device when a monitor serves the screen (input_want_remote). */
@@ -115,6 +116,7 @@ static int probe(Input *in, const char *path) {
         d.remote = 1;
     if (test_bit(EV_KEY, ev) && ioctl(fd, EVIOCGBIT(EV_KEY, sizeof key), key) >= 0) {
         if (test_bit(KEY_A, key) && test_bit(KEY_Z, key)) d.kinds |= DEV_KEYBOARD;
+        if (test_bit(KEY_POWER, key)) d.kinds |= DEV_POWER;   /* #1918 */
         if (test_bit(EV_REL, ev) && ioctl(fd, EVIOCGBIT(EV_REL, sizeof rel), rel) >= 0
             && test_bit(REL_X, rel) && test_bit(BTN_LEFT, key)) d.kinds |= DEV_MOUSE;
         if (test_bit(EV_ABS, ev) && ioctl(fd, EVIOCGBIT(EV_ABS, sizeof abs_), abs_) >= 0
@@ -154,9 +156,10 @@ Input *input_open(int screen_w, int screen_h) {
     }
     int kinds = 0;
     for (int i = 0; i < in->ndev; i++) kinds |= in->dev[i].kinds;
-    fprintf(stderr, "native-gui: input: %d device(s):%s%s%s%s\n", in->ndev,
+    fprintf(stderr, "native-gui: input: %d device(s):%s%s%s%s%s\n", in->ndev,
             kinds & DEV_KEYBOARD ? " keyboard" : "", kinds & DEV_MOUSE ? " mouse" : "",
-            kinds & DEV_TOUCH ? " touch" : "", kinds & DEV_ABSPTR ? " abs-pointer" : "");
+            kinds & DEV_TOUCH ? " touch" : "", kinds & DEV_ABSPTR ? " abs-pointer" : "",
+            kinds & DEV_POWER ? " power-button" : "");   /* #1918: none = a short press is not heard */
     return in;                                     /* ndev may be 0 -- input_rescan grabs a late device */
 }
 
@@ -175,9 +178,10 @@ void input_rescan(Input *in) {
     int kinds = 0, remote = 0;
     for (int i = 0; i < in->ndev; i++) { kinds |= in->dev[i].kinds; remote |= in->dev[i].remote; }
     if (in->ndev > before)
-        fprintf(stderr, "native-gui: input: device appeared, now %d:%s%s%s%s\n", in->ndev,
+        fprintf(stderr, "native-gui: input: device appeared, now %d:%s%s%s%s%s\n", in->ndev,
                 kinds & DEV_KEYBOARD ? " keyboard" : "", kinds & DEV_MOUSE ? " mouse" : "",
-                kinds & DEV_TOUCH ? " touch" : "", kinds & DEV_ABSPTR ? " abs-pointer" : "");
+                kinds & DEV_TOUCH ? " touch" : "", kinds & DEV_ABSPTR ? " abs-pointer" : "",
+                kinds & DEV_POWER ? " power-button" : "");
     /* Owner decision: once a keyboard AND a mouse are both present there is
      * nothing left to find, so stop scanning. A machine missing one (a cloner
      * has neither) keeps scanning, so a device plugged in later is still
@@ -283,6 +287,11 @@ static void read_dev(Input *in, Dev *d) {
                     if (ev[i].value == 1) {
                         Event e = { .type = UIEV_CLICK, .x = in->px, .y = in->py,
                                     .is_touch = (d->kinds & DEV_TOUCH) != 0 };
+                        push(in, e);
+                    }
+                } else if (ev[i].code == KEY_POWER && (d->kinds & DEV_POWER)) {
+                    if (ev[i].value == 1) {          /* #1918: the press; a release or autorepeat is not a second one */
+                        Event e = { .type = UIEV_KEY, .key = KEYSYM_POWER };
                         push(in, e);
                     }
                 } else if (d->kinds & DEV_KEYBOARD) key_event(in, d, ev[i].code, ev[i].value);

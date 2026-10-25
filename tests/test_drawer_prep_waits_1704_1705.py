@@ -34,8 +34,9 @@ from test_timeouts import make_stubs, run_sh
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "waits", "jsonq", "progress", "restore", "expand", "grow", "drawers",
-        "verdict", "failmark", "ntfsboot", "writecheck")
+LIBS = ("common", "waits", "jsonq", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "drawers", "drawerfeed",
+        "verdict", "failmark", "ntfsboot", "writecheck",
+        "writemark")   # #1877: finish_grow -> writemark_release (writemark.sh) -> writemark_clear (stubbed)
 
 
 def _timed(script: str, timeout: int = 90) -> tuple[str, float]:
@@ -60,8 +61,8 @@ def _room(tmp_path: Path, apply_gpt: str, drawers=("sda", "sdb", "sdc"), **env) 
     prelude = (
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev {exports}; "
         + "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in LIBS)
-        + "log() { :; }; disk_fits() { return 0; }; write_check() { return 0; }; "
-        "write_speed_verdict() { return 0; }; grow_expanded() { return 0; }; "
+        + "log() { :; }; disk_fits() { return 0; }; write_check() { return 0; }; boot_hidden_disk() { return 0; }; "   # #2015
+        "write_speed_verdict() { return 0; }; readback_drawers() { :; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
         f"apply_gpt() {{ {apply_gpt} }}; "
         "expand_last() { sleep 1; return 0; }; "
         "manifest_plan() { echo '1|G|win|ntfs|2048|1024|p1.zst|sha|false|UG|'; }; "
@@ -101,11 +102,14 @@ def test_a_drawer_whose_table_is_refused_fails_alone_and_by_its_own_reason(tmp_p
     """Isolation at once as it was one by one: the job of sdb fails sdb, with the
     plan's own reason; sda and sdc are written, the machine is partial."""
     run, prelude = _room(tmp_path, '[ "$1" = sdb ] && { PLAN_ERROR="הסיבה של sdb"; return 1; }; return 0;')
-    out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"')
-    assert out.strip().endswith("rc=0"), out
+    out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"; '
+                 'echo "machine=$(_machine_state "sda sdb sdc")"')
+    assert out.strip().splitlines()[-2] == "rc=0", out
     assert _state(run, "sdb") == "failed" and _error(run, "sdb") == "הסיבה של sdb"
     assert _state(run, "sda") == "done" and _state(run, "sdc") == "done"
-    assert (run / "state").read_text(encoding="utf-8").strip() == "partial"
+    assert out.strip().splitlines()[-1] == "machine=partial", out
+    # #1935: run_restore_drawers leaves 'verifying'; partial is do_restore_drawers' last word
+    assert (run / "state").read_text(encoding="utf-8").strip() == "verifying"
 
 
 def test_a_hung_table_fails_its_drawer_by_name_and_the_others_go_on(tmp_path):
@@ -216,7 +220,7 @@ def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         + "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in
-                  ("common", "waits", "progress", "restore", "drawers", "verdict", "failmark", "ntfsboot"))
+                  ("common", "waits", "progress", "restore", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot"))
         + "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ cat {posix(payload)!r}; }}; "
     )

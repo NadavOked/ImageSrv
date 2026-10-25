@@ -54,7 +54,8 @@ void lc_pull_names(const App *a, char *out, size_t n) {
 }
 
 int lc_pull_ready(App *a) {
-    if (a->restore_image_sel <= 0 || a->restore_image_sel > a->st.nimages) {
+    if (a->restore_image_sel <= 0 || a->restore_image_sel > a->st.nimages
+        || a->st.images[a->restore_image_sel - 1].unchecked) {   /* #1896: mark C: first */
         snprintf(a->st.form_error, sizeof a->st.form_error, "בחרו אימג' לשחזור");
         return 0;
     }
@@ -110,13 +111,15 @@ double lc_pull_drawers(App *a, cairo_t *cr, Rect area, int draw) {
         const IdleDisk *d = &s->idisks[i];
         if (d->port < 1 || d->port > MAX_DRAWERS || idle_for_port(s, d->port) != d) continue;
         int can = lc_pull_selectable(a, d->port);   /* #1732: a red drawer is drawn, dimmed, and takes no click */
+        int inc = !smart_level(d->smart) && !strcmp(d->mark, "incomplete");   /* #1798: orange, still a target */
+        Rgb col_c = inc ? t->warn : smart_color(t, d->smart);
         int row = n / per, col = n % per; n++;
         if (!draw) continue;
         Rect c = { area.x + area.w - cw - col * (cw + gap), area.y + row * (ch + gap), cw, ch };
         int on = can && a->pull_sel[d->port];
         draw_fill_rrect(cr, c, t->radius, on ? t->indigo_soft : t->surface);
         cairo_save(cr); draw_rrect_path(cr, c, t->radius); cairo_clip(cr);
-        cairo_rectangle(cr, c.x, c.y, c.w, 3); draw_set(cr, smart_color(t, d->smart)); cairo_fill(cr);
+        cairo_rectangle(cr, c.x, c.y, c.w, 3); draw_set(cr, col_c); cairo_fill(cr);
         cairo_restore(cr);
         draw_border_rrect(cr, c, t->radius, on ? t->indigo : can && hovered(a, c) ? t->indigo : t->hair, on ? 2 : 1);
         /* sub: RLM (3) + size (<32) + " · " (4) + the longest second half, #1732's
@@ -125,12 +128,12 @@ double lc_pull_drawers(App *a, cairo_t *cr, Rect area, int draw) {
         cloner_slot_label(s, d->port, label, sizeof label);
         disk_size(d->size, size, sizeof size);
         /* #1732: a red drawer says it is not written; #1742: a read-only one says why */
-        snprintf(sub, sizeof sub, RLM "%s · %s", size, can || !strcmp(d->cause, "readonly")
-                 ? smart_he_why(d->smart, d->cause) : "SMART נכשל — לא כותבים עליו");
+        snprintf(sub, sizeof sub, RLM "%s · %s", size, inc ? "כתיבה לא הושלמה — לא שמיש"
+                 : can || !strcmp(d->cause, "readonly") ? smart_he_why(d->smart, d->cause) : "SMART נכשל — לא כותבים עליו");
         Text l1 = rtl_block_make(cr, 14, 600, label, c.w - 20);
         Text l2 = rtl_block_make(cr, 11, 400, sub, c.w - 20);
         text_draw_r(cr, &l1, c.x + c.w - 10, c.y + 9, t->ink);
-        text_draw_r(cr, &l2, c.x + c.w - 10, c.y + 31, smart_level(d->smart) ? smart_color(t, d->smart) : t->muted);
+        text_draw_r(cr, &l2, c.x + c.w - 10, c.y + 31, smart_level(d->smart) || inc ? col_c : t->muted);
         text_free(&l1); text_free(&l2);
         if (can) hit_add(a, c, HIT_PULL_DRAWER_BASE + d->port);
         if (a->pull_focus == d->port && !a->confirm) draw_focus_ring(a, cr, c);

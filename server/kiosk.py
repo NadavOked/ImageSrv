@@ -40,6 +40,8 @@ from .tasks import ORIGIN_BUILD_GUI
 #:  - groups ו-POST sessions — **אין להם היום צרכן בסוכן** (זרימת הכיתה שלו
 #:    עוברת ב-`/api/v1/agent/groups` ו-`/api/v1/agent/sessions`); groups אינו
 #:    מוגש ב-v1 (‏`KIOSK_CLASS_ONLY_ROUTES`), ו-POST sessions מסרב 409 בלי כיתות.
+#:  - POST images/{id}/system-partition — ‏#1896 (נדב 22/10): סימון C: באימג' ישן
+#:    ממסך השחזור (`syspartgui.sh`); ‏deploy — רק אימג' שעוד לא סומן (כמו המשכפל).
 #:  - PUT me/theme — ‏#1499 (נדב 16/10): החלפת ערכה בגואי נשמרת למשתמש עצמו
 #:    (`guibridge.sh`, ‏theme-light|theme-dark) — גם ל-deploy. זו העדפה של
 #:    המשתמש על עצמו, לא הגדרת ניהול; ‏`GET /me` נשאר מחוץ לרשימה.
@@ -55,6 +57,7 @@ KIOSK_CONSOLE_ROUTES = frozenset({
     ("POST", "/api/console/sessions/{session_id}/start"),
     ("POST", "/api/console/sessions/{session_id}/close"),
     ("POST", "/api/console/tasks/capture"),
+    ("POST", "/api/console/images/{image_id}/system-partition"),   # #1896
 })
 
 #: הכרעת נדב 11/10: רשימת הכיתות של מסך התחנה שהוסר. כש-

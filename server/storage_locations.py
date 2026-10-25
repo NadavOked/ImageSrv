@@ -15,14 +15,17 @@ import ipaddress
 import json
 import logging
 import os
+import posixpath
 import re
 import secrets
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .atomicfile import write_atomic
 from .db import _settle, _write_lock, journal, now_iso, writing
 
 
@@ -382,18 +385,25 @@ def disk_probe(device: str) -> HookResult:
     })
 
 
-def _zeros_evidence(device: str) -> bool | str:
-    """True = 1MB בהתחלה ובסוף אפסים. False = יש נתונים. str = לא הצלחנו."""
+def _zeros_evidence(device: str, *, strict_tail: bool = False) -> bool | str:
+    """True = 1MB בהתחלה ובסוף אפסים. False = יש נתונים. str = לא הצלחנו.
+
+    ‏`strict_tail` (#1988): זנב שלא נקרא אינו "אפסים" — שם יושבת טבלת ה-GPT
+    המשנית, ו"הוסף כונן" מחליט לפי זה אם להציע את הכונן למחיקה."""
     try:
         with open(device, "rb") as fh:
             head = fh.read(1 << 20)
             try:
                 fh.seek(-1 << 20, os.SEEK_END)
                 tail = fh.read(1 << 20)
-            except OSError:
+            except OSError as exc:
+                if strict_tail:
+                    return f"סוף הכונן לא נקרא: {exc}"
                 tail = b"\x00" * (1 << 20)
     except OSError as exc:
         return str(exc)
+    if strict_tail and not tail:
+        return "קריאה ריקה מסוף הכונן — לא ראיה לריק"
     if not head:
         return "קריאה ריקה — לא ראיה לריק"
     if head == b"\x00" * len(head) and tail == b"\x00" * len(tail):
@@ -412,6 +422,264 @@ def make_fs(device: str, label: str = "") -> HookResult:
     return _run(cmd, timeout=120)
 
 
+# ---------------------------------------------------------------------------
+# ‏#1988: "הוסף כונן" — כונן ריק בשרת. כאן רק כלי המערכת (hooks); הזרימה
+# עצמה — אימות מול הרשימה, עיגון, קריאה חוזרת, השורה ו-fstab — היא
+# `storage_disks.add_disk`, המשותפת לקונסולה ולמסך השרת.
+# ---------------------------------------------------------------------------
+
+#: העץ המלא (ילדים = מחיצות/מערכים), בבתים.
+LSBLK_COLUMNS = "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,RO,RM,TRAN,FSTYPE,PTTYPE"
+UUID_RE = re.compile(r"^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")
+#: תקרת ההמתנה לצומת המחיצה אחרי sgdisk (udev). בשניות.
+PARTITION_WAIT_S = 10
+
+
+def _flag(value: object) -> bool:
+    return value in (True, 1, "1", "true")
+
+
+def classify_disks(tree: dict) -> tuple[list[dict], list[dict]]:
+    """‏`lsblk -J` → (מועמדים, מוסתרים עם סיבה). לא קורא את הכונן עצמו.
+
+    מועמד = דיסק שלם, כתיב, לא נשלף/USB, בלי ילדים, בלי טבלת מחיצות ובלי
+    חתימה ש-lsblk מכיר. זה תנאי הכרחי בלבד — "ריק" נקבע ב-`probe_blank`."""
+    candidates: list[dict] = []
+    hidden: list[dict] = []
+    for node in tree.get("blockdevices") or []:
+        if not isinstance(node, dict) or node.get("type") != "disk":
+            continue
+        name = str(node.get("name") or "")
+        if not name or name.startswith(("zram", "ram", "loop")):
+            continue
+        try:
+            size = int(node.get("size"))
+        except (TypeError, ValueError):
+            size = None
+        info = {
+            "device": str(node.get("path") or f"/dev/{name}"),
+            "name": name,
+            "size_bytes": size,
+            "model": str(node.get("model") or "").strip(),
+            "serial": str(node.get("serial") or "").strip(),
+            "bus": str(node.get("tran") or "").strip(),
+        }
+        children = node.get("children") or []
+        if _flag(node.get("ro")):
+            reason = "לקריאה בלבד"
+        elif _flag(node.get("rm")) or info["bus"] == "usb":
+            reason = "כונן נשלף או USB"
+        elif children:
+            reason = f"יש עליו {len(children)} מחיצות או מערכים"
+        elif node.get("pttype"):
+            reason = f"יש עליו טבלת מחיצות ({node.get('pttype')})"
+        elif node.get("fstype"):
+            reason = f"יש עליו חתימה ({node.get('fstype')})"
+        elif not size:
+            reason = "הגודל לא נקרא"
+        else:
+            reason = ""
+        if reason:
+            hidden.append({**info, "reason": reason})
+        else:
+            candidates.append(info)
+    return candidates, hidden
+
+
+def _export_fields(text: str) -> dict:
+    fields = {}
+    for line in (text or "").splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            fields[key.strip()] = value.strip()
+    return fields
+
+
+def probe_blank(device: str, run=None, zeros=None) -> tuple[bool, str]:
+    """ראיה חיובית לריק (#1988): ‏`blkid -p` לא מצא שום חתימה — מערכת קבצים,
+    טבלת מחיצות, RAID — (יציאה 2), **וגם** 1MB בראש הכונן ובסופו אפסים.
+
+    כל דבר אחר הוא "לא ריק" עם הסיבה — כולל כשל בקריאה (עיקרון 5): כונן
+    שלא הצלחנו לקרוא לעולם אינו מוצע למחיקה."""
+    run = run or _run
+    zeros = zeros or (lambda dev: _zeros_evidence(dev, strict_tail=True))
+    probed = run(["blkid", "-p", "-o", "export", device], timeout=30)
+    if probed.status == OK:
+        found = _export_fields((probed.payload or {}).get("stdout", ""))
+        what = found.get("TYPE") or found.get("PTTYPE") or "חתימה"
+        return False, f"blkid מצא עליו {what}"
+    if probed.status == UNCHECKED:
+        return False, f"לא נבדק: {probed.reason}"
+    rc = (probed.payload or {}).get("returncode")
+    if rc != 2:
+        return False, f"blkid נכשל (יציאה {rc}): {probed.reason}"
+    evidence = zeros(device)
+    if evidence is True:
+        return True, ""
+    if evidence is False:
+        return False, "יש נתונים בראש הכונן או בסופו"
+    return False, f"קריאת הכונן נכשלה: {evidence}"
+
+
+def list_blank_disks(run=None, probe=None) -> HookResult:
+    """hook ‏`blank_disks`: ‏`items` = כוננים ריקים לפי ראיה, ‏`hidden` = כל
+    השאר עם הסיבה (המפעיל רואה למה כונן חסר — לא רשימה שקטה)."""
+    run = run or _run
+    probe = probe or probe_blank
+    listed = run(["lsblk", "-J", "-b", "-o", LSBLK_COLUMNS], timeout=20)
+    if listed.status != OK:
+        return listed
+    try:
+        tree = json.loads((listed.payload or {}).get("stdout") or "")
+    except ValueError:
+        return HookResult(FAILED, "פלט lsblk אינו JSON")
+    if not isinstance(tree, dict):
+        return HookResult(FAILED, "פלט lsblk אינו עץ התקנים")
+    candidates, hidden = classify_disks(tree)
+    items = []
+    for disk in candidates:
+        blank, why = probe(disk["device"])
+        if blank:
+            items.append(disk)
+        else:
+            hidden.append({**disk, "reason": why})
+    return HookResult(OK, payload={"items": items, "hidden": hidden})
+
+
+def _partitions_of(run, device: str) -> tuple[list[str] | None, str]:
+    """המחיצות הישירות של `device`, או (None, הסיבה שלא נקראו).
+
+    ‏#2102: בלי עמודת NAME, ‏lsblk 2.41 (דביאן 13) מחזיר רשימה **שטוחה**;
+    עם NAME — עץ עם `children`. לא מנחשים צורה: מבקשים PKNAME במפורש,
+    משטחים את שתי הצורות, ובוחרים `type=part` שההורה שלה הוא הכונן.
+    פלט שאי אפשר לפרש הוא סיבה בשם, לא רשימה ריקה (עיקרון 5)."""
+    listed = run(["lsblk", "-J", "-o", "PATH,TYPE,PKNAME", device], timeout=10)
+    if listed.status != OK:
+        return None, f"lsblk נכשל: {listed.reason}"
+    try:
+        tree = json.loads((listed.payload or {}).get("stdout") or "")
+    except ValueError:
+        return None, "פלט lsblk אינו JSON"
+    pending = tree.get("blockdevices") if isinstance(tree, dict) else None
+    if not isinstance(pending, list):
+        return None, "בפלט lsblk אין רשימת blockdevices"
+    nodes = []
+    while pending:
+        node = pending.pop(0)
+        if not isinstance(node, dict) or "pkname" not in node:
+            return None, "בפלט lsblk אין עמודת PKNAME"
+        children = node.get("children") or []
+        if not isinstance(children, list):
+            return None, "בפלט lsblk יש children שאינו רשימה"
+        nodes.append(node)
+        pending.extend(children)
+    if not any(node.get("path") == device for node in nodes):
+        return None, f"lsblk לא החזיר את {device}"
+    name = device.rsplit("/", 1)[-1]
+    found = []
+    for node in nodes:
+        if node.get("type") == "part" and node.get("pkname") == name:
+            if not node.get("path"):
+                return None, "בפלט lsblk יש מחיצה בלי PATH"
+            found.append(str(node["path"]))
+    return found, ""
+
+
+def prepare_disk(device: str, label: str, run=None, sleep=None) -> HookResult:
+    """hook ‏`prepare_disk` (#1988): ‏GPT עם מחיצה אחת על כל הכונן, ‏ext4
+    עליה, ו-UUID שנקרא בחזרה. הפעולה ההרסנית — רק אחרי `probe_blank`.
+
+    הצלחה = ‏`blkid -p` על המחיצה מחזיר ‏TYPE=ext4 ו-UUID תקין (ראיה), לא
+    היעדר שגיאה מ-mkfs."""
+    run = run or _run
+    sleep = sleep or time.sleep
+    if not device:
+        return HookResult(FAILED, "אין כונן")
+    made = run(["sgdisk", "--new=1:1MiB:0", "--typecode=1:8300",
+                f"--change-name=1:{label[:36]}", device], timeout=60)
+    if made.status != OK:
+        return HookResult(made.status, f"יצירת המחיצה נכשלה: {made.reason}")
+    partition = ""
+    for _ in range(PARTITION_WAIT_S):
+        run(["udevadm", "settle", "--timeout=5"], timeout=10)
+        parts, why = _partitions_of(run, device)
+        if parts is None:
+            return HookResult(FAILED, f"לא הצלחנו לקרוא את המחיצות שעל הכונן: {why}")
+        if len(parts) > 1:
+            return HookResult(FAILED, f"על הכונן {len(parts)} מחיצות אחרי החלוקה — עצרנו")
+        if parts and Path(parts[0]).exists():
+            partition = parts[0]
+            break
+        sleep(1)
+    if not partition:
+        return HookResult(FAILED, f"המחיצה לא הופיעה תוך {PARTITION_WAIT_S} שניות")
+    fs = run(["mkfs.ext4", "-F", "-L", label[:16], partition], timeout=900)
+    if fs.status != OK:
+        return HookResult(fs.status, f"יצירת מערכת הקבצים נכשלה: {fs.reason}",
+                          {"partition": partition})
+    probed = run(["blkid", "-p", "-o", "export", partition], timeout=30)
+    fields = _export_fields((probed.payload or {}).get("stdout", "")) if probed.status == OK else {}
+    if fields.get("TYPE") != "ext4" or not UUID_RE.fullmatch(fields.get("UUID", "")):
+        return HookResult(FAILED, "אחרי היצירה blkid לא קרא ext4 עם UUID",
+                          {"partition": partition})
+    return HookResult(OK, payload={"partition": partition, "uuid": fields["UUID"],
+                                   "fs_type": "ext4"})
+
+
+# ‏#2122: ‏imagectl-server (וגם imagectl-dcui) רץ עם `ProtectSystem=strict`, כלומר
+# במרחב עיגון **משלו**. ‏`mount` שרץ משם נשאר שם: ‏PID 1 לא רואה אותו, ‏restart של
+# השירות מוחק אותו, ו-`storage/<שם>` חוזר להיות תיקייה על דיסק המערכת — שאימג'ים
+# נכתבים אליה בשקט. לכן mount/umount רצים במרחב העיגון של PID 1 (המארח), ומשם
+# מתפשטים לשירות (slave). הראיה להצלחה היא שני קובצי mountinfo — לא קוד היציאה.
+HOST_MOUNT_NS = "/proc/1/ns/mnt"
+HOST_MOUNTINFO = "/proc/1/mountinfo"
+OWN_MOUNTINFO = "/proc/self/mountinfo"
+_MOUNTINFO_ESCAPE = re.compile(r"\\([0-7]{3})")
+
+
+def _on_host(cmd: list[str]) -> list[str]:
+    return ["nsenter", f"--mount={HOST_MOUNT_NS}", "--", *cmd]
+
+
+def _mount_points(path: str) -> set[str] | None:
+    """נקודות העיגון בקובץ mountinfo (שדה 5, עם `\\040` וחבריו). ‏None = לא נקרא."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="surrogateescape")
+    except OSError:
+        return None
+    points = set()
+    for line in text.splitlines():
+        fields = line.split(" ")
+        if len(fields) > 4:
+            points.add(_MOUNTINFO_ESCAPE.sub(lambda m: chr(int(m.group(1), 8)), fields[4]))
+    return points
+
+
+def mount_presence(target: str) -> HookResult:
+    """‏ok = מעוגן גם אצל PID 1 וגם אצל השירות; failed = חסר אצל אחד מהם לפחות
+    (‏`payload["missing"]`); unchecked = קובץ mountinfo לא נקרא — אינו "לא מעוגן"."""
+    want = posixpath.normpath(str(target))
+    missing = []
+    for label, path in (("PID 1", HOST_MOUNTINFO), ("השירות", OWN_MOUNTINFO)):
+        points = _mount_points(path)
+        if points is None:
+            return HookResult(UNCHECKED, f"לא הצלחנו לקרוא את {path}")
+        if want not in points:
+            missing.append(label)
+    if missing:
+        return HookResult(FAILED, f"{want} אינו מעוגן אצל {' ואצל '.join(missing)}",
+                          {"missing": missing})
+    return HookResult(OK)
+
+
+def is_mounted(target: str) -> bool:
+    """ה-`is_mount` של ברירת המחדל: מעוגן אצל PID 1 **וגם** אצל השירות."""
+    seen = mount_presence(target)
+    if seen.status == UNCHECKED:
+        log.warning("mount check for %s could not run: %s", target, seen.reason)
+    return seen.status == OK
+
+
 def mount(fstype: str, source: str, target: str, opts: str = "") -> HookResult:
     Path(target).mkdir(parents=True, exist_ok=True)
     cmd = ["mount"]
@@ -420,13 +688,34 @@ def mount(fstype: str, source: str, target: str, opts: str = "") -> HookResult:
     if opts:
         cmd.extend(["-o", opts])
     cmd.extend([source, target])
-    return _run(cmd, timeout=30)
+    result = _run(_on_host(cmd), timeout=30)
+    if result.status != OK:
+        return result
+    seen = mount_presence(target)
+    if seen.status != OK:
+        _run(_on_host(["umount", target]), timeout=20)
+        return HookResult(seen.status, f"mount החזיר 0, אבל {seen.reason}", seen.payload)
+    return result
 
 
 def umount(target: str) -> HookResult:
     if not target:
         return HookResult(FAILED, "חסרה נקודת עיגון")
-    return _run(["umount", target], timeout=20)
+    result = _run(_on_host(["umount", target]), timeout=20)
+    if result.status != OK:
+        return result
+    seen = mount_presence(target)
+    if seen.status == UNCHECKED:
+        return seen
+    if len((seen.payload or {}).get("missing") or []) < 2:
+        return HookResult(FAILED, f"umount החזיר 0, אבל {target} עדיין מעוגן")
+    return result
+
+
+def daemon_reload() -> HookResult:
+    """‏#2122: ‏fstab שהשתנה בלי daemon-reload משאיר ל-PID 1 יחידת mount ישנה; עיגון
+    באותה נקודה עם כונן אחר נקשר אליה — ו-systemd מנתק אותו כשההתקן הישן איננו."""
+    return _run(["systemctl", "daemon-reload"], timeout=60)
 
 
 def fstab_write(entries: list[dict]) -> HookResult:
@@ -457,7 +746,8 @@ def fstab_write(entries: list[dict]) -> HookResult:
     block = [FSTAB_BEGIN + "\n"]
     for entry in entries:
         opts = entry.get("opts") or "defaults"
-        if "_netdev" not in opts:
+        # ‏#1988: כונן מקומי אינו התקן רשת — `_netdev` היה דוחה אותו לאחרי הרשת.
+        if "_netdev" not in opts and not entry.get("local"):
             opts = opts + ",_netdev"
         if "nofail" not in opts:
             opts = opts + ",nofail"
@@ -467,18 +757,14 @@ def fstab_write(entries: list[dict]) -> HookResult:
         )
     block.append(FSTAB_END + "\n")
     new_text = "".join(lines) + ("" if not entries else "".join(block))
-    tmp = path.with_name(path.name + ".imagectl-tmp")
     try:
-        tmp.write_text(new_text, encoding="utf-8")
-        if path.is_file():
-            os.chmod(tmp, path.stat().st_mode & 0o777)
-        os.replace(tmp, path)
+        write_atomic(path, new_text)
     except OSError as exc:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
         return HookResult(FAILED, f"לא הצלחנו לכתוב fstab: {exc}")
+    reloaded = daemon_reload()
+    if reloaded.status != OK:
+        return HookResult(reloaded.status,
+                          f"fstab נכתב, אבל systemctl daemon-reload נכשל: {reloaded.reason}")
     return HookResult(OK, payload={"entries": len(entries)})
 
 
@@ -502,21 +788,12 @@ def smb_creds(params: dict) -> dict:
 def creds_write(path: str, creds: dict) -> HookResult:
     """קובץ credentials ‏0600 (פורמט mount.cifs / smbclient -A), אטומי."""
     target = Path(path)
-    tmp = target.with_name(target.name + ".tmp")
     text = "".join(f"{key}={creds[key]}\n" for key in ("username", "password", "domain")
                    if creds.get(key))
     try:
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, target)
+        write_atomic(target, text, mode=0o600)
     except OSError as exc:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
         return HookResult(FAILED, f"לא הצלחנו לכתוב את קובץ ה-credentials: {exc}")
     return HookResult(OK, payload={"path": str(target)})
 
@@ -560,6 +837,9 @@ def default_hooks() -> dict:
         "creds_remove": creds_remove,
         "df": df,
         "interfaces": lambda: [],
+        "blank_disks": list_blank_disks,     # ‏#1988
+        "prepare_disk": prepare_disk,        # ‏#1988 — ההרסני
+        "is_mount": is_mounted,              # ‏#1988/#2122 — עיגון כראיה, אצל PID 1 ואצל השירות
     }
 
 
@@ -662,9 +942,12 @@ def last_images(row: dict) -> list[dict]:
 
 
 def images_dir(row: dict) -> Path:
-    """איפה האימג'ים חיים: `--images` עצמו, ובשאר — `images/` תחת ה-mount."""
+    """איפה האימג'ים חיים: `--images` עצמו, ובשאר — `images/` תחת ה-mount.
+
+    כונן שנוסף ב"הוסף כונן" (#1988, ‏`uuid` ב-params) הוא mount כמו כל השאר:
+    ‏`images/` תחתיו, כך ש-`lost+found` של ext4 אינו נסרק כאימג'."""
     mount = Path(row["mount_point"])
-    if row["type"] == "local":
+    if row["type"] == "local" and not is_disk(row):
         return mount
     return mount / "images"
 
@@ -688,12 +971,18 @@ def library_roots(conn, images_root: str | Path) -> list[dict]:
     return roots
 
 
+def is_disk(row: dict) -> bool:
+    """מיקום local שהוא כונן שהשרת הכין ומעגן לפי UUID (#1988), לא תיקייה."""
+    return row.get("type") == "local" and bool(params_of(row).get("uuid"))
+
+
 def new_id() -> str:
     return "loc_" + secrets.token_hex(4)
 
 
 def mount_point_for(data_dir: Path, name: str, loc_id: str) -> Path:
-    token = name if SAFE_NAME.fullmatch(name) else loc_id
+    # ‏#1956: שם שמתחיל בנקודה מקבל את ה-id — ‏`storage/.db-backup` הוא נקודת העיגון של גיבוי המסד.
+    token = name if SAFE_NAME.fullmatch(name) and not name.startswith(".") else loc_id
     return Path(data_dir) / "storage" / token
 
 
@@ -713,6 +1002,9 @@ def subtitle_of(row: dict) -> str:
     if row["id"] == LOCAL_ID:
         return "דיסק השרת · ברירת המחדל לקליטה"
     params = params_of(row)
+    if is_disk(row):
+        bits = [params.get("model") or "", params.get("serial") or params.get("device") or ""]
+        return " · ".join(bit for bit in bits if bit) or f"UUID={params['uuid']}"
     if row["type"] == "iscsi":
         bits = []
         if params.get("fs_type"):
@@ -751,7 +1043,7 @@ def public_row(row: dict, library) -> dict:
         "id": row["id"],
         "name": row["name"],
         "type": row["type"],
-        "type_label": TYPE_LABELS.get(row["type"], row["type"]),
+        "type_label": "כונן" if is_disk(row) else TYPE_LABELS.get(row["type"], row["type"]),
         "target": target_display(row),
         "mount_point": row["mount_point"],
         "state": row["state"],
@@ -889,9 +1181,36 @@ def shared_nic_warning(server: str, interfaces: list, server_base: str = "") -> 
 # בדיקת חיבור (test) לפי סוג
 # ---------------------------------------------------------------------------
 
+#: ‏#1812: תקרת הזמן של בקשת NFS תקועה — כתובה כאן ולא נשענת על ברירת
+#: המחדל של הקרנל. ‏`timeo` בעשיריות שנייה; ב-TCP הקרנל מגדיל את ההמתנה
+#: ליניארית אחרי כל ניסיון חוזר, ולכן בקשה מוותרת אחרי 60+120+180 ≈ 6 דקות
+#: (‏nfs(5) — חישוב, לא מדידה) ומחזירה EIO/ETIMEDOUT. אלה **ערכי ברירת
+#: המחדל של הקרנל ל-TCP** — מיקום קיים מתנהג בדיוק כמו קודם; מה שהשתנה
+#: הוא שהתקרה כתובה ונבדקת. ‏NAS שמאותחל (2–5 דקות) עובר בלי כשל.
+NFS_TIMEO_DECISECONDS = 600
+NFS_RETRANS = 2
+
+
 def _nfs_opts(params: dict) -> str:
+    """אפשרויות העיגון של NFS — ‏`soft` נשאר, בהכרעה מנומקת (#1812).
+
+    ‏**הבעיה של `soft`:** אחרי `timeo×retrans` הקרנל מוותר, ו-`write()` שכבר
+    החזיר הצלחה (ל-page cache) מאבד את הבייטים שלו. **אבל הוויתור אינו
+    שקט למי ששואל:** השגיאה נשמרת על הקובץ ומוחזרת ב-`fsync`/`close` של
+    ה-fd שכתב. לכן התיקון הוא בצד הכותב (#1813, ‏`server/atomicfile.py`):
+    כל נתיב שמכניס אימג' לספרייה עושה fsync לכל קובץ לפני הפרסום, וכשל
+    fsync הוא חריגה שהופכת לכשל בשם — לא אימג' "תקין".
+
+    ‏**למה לא `hard`:** בקשה תקועה ב-`hard` לא נגמרת לעולם — התהליכון
+    נתקע ב-D-state, ‏`systemctl stop` ממתין עד SIGKILL (‏SVR-27), והמפעיל
+    רואה קליטה "רצה" בלי סוף ובלי הודעה. תקרת זמן ברמת האפליקציה לא
+    משחררת את התהליכון התקוע ולא את הקובץ שהוא מחזיק. ב-`soft` הקרנל
+    עצמו מחזיר שגיאה אחרי `NFS_TIMEO_DECISECONDS`/`NFS_RETRANS`, והקוד
+    שלנו מכריע כשל בשם — תקיעה הופכת לכשל גלוי עם תקרה.
+    """
     ver = str(params.get("version") or "4.1")
-    opts = [f"vers={ver}", "soft"]
+    opts = [f"vers={ver}", "soft", f"timeo={NFS_TIMEO_DECISECONDS}",
+            f"retrans={NFS_RETRANS}"]
     if params.get("readonly"):
         opts.append("ro")
     return ",".join(opts)
@@ -1037,12 +1356,15 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
     params = params_of(row)
     kind = row["type"]
     target = row["mount_point"]
-    if kind == "local":
+    if kind == "local" and is_disk(row):
+        result = hooks["mount"](params.get("fs_type") or "ext4",
+                                f"UUID={params['uuid']}", target, "")
+    elif kind == "local":
         path = Path(target)
         if not path.is_dir():
             return HookResult(FAILED, f"הנתיב אינו תיקייה: {target}")
         return HookResult(OK)
-    if kind == "nfs":
+    elif kind == "nfs":
         source = f"{params.get('server')}:{params.get('export')}"
         result = hooks["mount"]("nfs", source, target, _nfs_opts(params))
     elif kind == "smb":
@@ -1070,15 +1392,27 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
     return result
 
 
-def fstab_entries(conn) -> list[dict]:
+def fstab_entries(conn, include: str | None = None) -> list[dict]:
+    """‏`include` — מיקום שמחובר עכשיו (#1993): מצבו עוד `disconnected` כשהבלוק
+    נכתב, כי `connected` נקבע רק אחרי ש-fstab נכתב בהצלחה (#1123 (4))."""
     entries = []
     for row in list_rows(conn):
-        if row["id"] == LOCAL_ID or row["type"] == "local":
+        if row["id"] == LOCAL_ID or (row["type"] == "local" and not is_disk(row)):
             continue
-        if row["state"] == "disconnected":
+        if row["state"] == "disconnected" and row["id"] != include:
             continue
         params = params_of(row)
-        if row["type"] == "nfs":
+        if row["type"] == "local":
+            # ‏#1988: לפי UUID (שם ההתקן זז בין אתחולים), ו-nofail — כונן שמת
+            # לא עוצר את עליית השרת; המנטר מסמן אותו "לא נגיש".
+            entries.append({
+                "source": f"UUID={params['uuid']}",
+                "target": row["mount_point"],
+                "fstype": params.get("fs_type") or "ext4",
+                "opts": "defaults,nofail,x-systemd.device-timeout=10s",
+                "local": True,
+            })
+        elif row["type"] == "nfs":
             entries.append({
                 "source": f"{params.get('server')}:{params.get('export')}",
                 "target": row["mount_point"],
@@ -1100,16 +1434,57 @@ def fstab_entries(conn) -> list[dict]:
                 "fstype": params.get("fs_type") or "ext4",
                 "opts": "defaults,_netdev,nofail",
             })
+    # ‏#1956: יעד הגיבוי (SMB/NFS) חי באותו בלוק — כל כתיבה מחדש של fstab שומרת אותו.
+    from .backup_target import fstab_entry   # noqa: PLC0415 — ‏backup_target מייבא את המודול הזה
+    backup = fstab_entry(conn)
+    if backup:
+        entries.append(backup)
     return entries
 
 
-def rewrite_fstab(conn, hooks: dict) -> HookResult:
-    return hooks["fstab_write"](fstab_entries(conn))
+def rewrite_fstab(conn, hooks: dict, include: str | None = None) -> HookResult:
+    return hooks["fstab_write"](fstab_entries(conn, include))
 
 
 # ---------------------------------------------------------------------------
 # מנטר — כל 60ש', רק connected/unreachable
 # ---------------------------------------------------------------------------
+
+#: ‏#1994: סוגים שהם עיגון (תמיד עם `nofail`) — לא תיקייה כמו `loc_local`.
+MOUNTED_TYPES = ("nfs", "smb", "iscsi")
+
+
+def measure(row: dict, hooks: dict) -> HookResult:
+    """‏df של מיקום — רק כשהוא באמת מעוגן: ‏df על נקודת עיגון ריקה מודד את
+    דיסק המערכת ו"מצליח", ומיקום שלא עלה באתחול (nofail) היה נראה "מחובר"
+    עם מספרים של דיסק אחר. כונן (#1988) ומיקום רשת (#1994) כאחד."""
+    disk = is_disk(row)
+    if (disk or row["type"] in MOUNTED_TYPES) and             not hooks.get("is_mount", os.path.ismount)(row["mount_point"]):
+        return HookResult(FAILED, "הכונן אינו מעוגן" if disk else "המיקום אינו מעוגן")
+    return hooks["df"](row["mount_point"])
+
+
+#: ‏#2123: מה שהרשימה מראה בין עליית השרת לבדיקה הראשונה שלו.
+AFTER_START_DETAIL = "לא נבדק מאז הפעלת השרת"
+
+
+def mark_unchecked_after_start(conn) -> int:
+    """‏#2123: מצב שמור של עיגון אינו ראיה אחרי restart או אתחול — העיגון יכול
+    היה להיעלם (#2122) או לחזור (fstab). עד הבדיקה הראשונה של התהליך הזה
+    מיקום-עיגון הוא `unchecked`, לא "מחובר" (ולא "לא נגיש") מהזיכרון; וגם
+    הספרייה אינה כותבת אליו בינתיים (`library_roots`). מחזיר כמה סומנו."""
+    marked = 0
+    for row in list_rows(conn):
+        if row["state"] in ("connected", "unreachable") and \
+                (is_disk(row) or row["type"] in MOUNTED_TYPES):
+            set_state(conn, row["id"], "unchecked", AFTER_START_DETAIL, force_since=True)
+            marked += 1
+    return marked
+
+
+def has_unchecked(conn) -> bool:
+    return any(row["state"] == "unchecked" for row in list_rows(conn))
+
 
 def poll(conn, library, hooks: dict) -> None:
     """df/stat על כל מיקום מחובר/לא-נגיש. disconnected לא נבדק.
@@ -1127,7 +1502,7 @@ def _poll(conn, library, hooks: dict) -> None:
     for row in list_rows(conn):
         if row["state"] == "disconnected":
             continue
-        result = hooks["df"](row["mount_point"])
+        result = measure(row, hooks)
         if result.status == OK:
             payload = result.payload or {}
             save_df(conn, row["id"], payload.get("free_bytes"), payload.get("total_bytes"))

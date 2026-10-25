@@ -62,7 +62,7 @@ def grant_user(path: str | Path, uid: int, perm: int) -> None:
 #: בטעינה מלבד השמות ערכי ברירת מחדל (נבדק ב-`tests/test_agent_shell.py`).
 LIBS = (
     "common.sh", "waits.sh", "jsonq.sh", "progress.sh", "restore.sh",
-    "expand.sh", "grow.sh", "failmark.sh", "diskfit.sh", "manifest.sh",
+    "expand.sh", "grow.sh", "ntfsunhib.sh", "failmark.sh", "diskfit.sh", "manifest.sh",
     "hibernation.sh", "shrinkplan.sh", "shrink.sh", "bootca.sh",
     "lcsnap.sh",    # ‏#1491: ‏`_lc_relocs` — כמה `ntfsresize -n` אומר שיוזז
 )

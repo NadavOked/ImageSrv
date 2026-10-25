@@ -4,6 +4,7 @@
 #
 #   localclone-fixture.sh setup <dir>      source + targets; "<name> <dev>" in <dir>/devs
 #   localclone-fixture.sh setup-tail <dir> <fill MiB>  #1202: a full C:, a 2M-smaller target
+#   localclone-fixture.sh setup-raw <dir>  #2017: partitions a local clone copies raw
 #   localclone-fixture.sh setup-esp <dir>  a disk with one FAT32 ESP (direct send, #1574)
 #   localclone-fixture.sh files <dev> <dir> [idx:fs ...]  sha256 of every file on <dev>, by partition
 #   localclone-fixture.sh teardown <dir>   loops detached, mounts released
@@ -81,6 +82,32 @@ setup-tail)
         && printf 'tail shift\n' > "$dir/m/data/hello.txt" && sync && umount "$dir/m" || exit 1
     mkimg near 398M "$dir" > /dev/null || exit 1
     ;;
+setup-raw)
+    # #2017: what a local clone copies raw -- 1 ESP FAT32 · 2 Linux ext4 (files) ·
+    # 3 Recovery NTFS with its $MFTMirr zeroed (blkid still says ntfs; partclone and
+    # ntfs-3g refuse it) · 4 a Linux partition of random bytes, last on the disk (no
+    # filesystem; without #2017 the candidate that grows). Targets: same, big (+512M).
+    mkdir -p "$dir" && : > "$dir/devs" || exit 1
+    src=$(mkimg src 640M "$dir") || exit 1
+    sgdisk -n 1:2048:+64M -t 1:ef00 -c 1:"EFI system partition" \
+           -n 2:0:+256M -t 2:8300 -c 2:"linux data" \
+           -n 3:0:+128M -t 3:2700 -c 3:"Recovery" \
+           -n 4:0:+160M -t 4:8300 -c 4:"sealed" "$src" > /dev/null || exit 1
+    blockdev --rereadpt "$src"; udevadm settle 2>/dev/null; sleep 1
+    mkfs.vfat -F 32 -s 1 -n EFI "${src}p1" > /dev/null || exit 1
+    mkfs.ext4 -q -L data "${src}p2" || exit 1
+    # -p: the partition's own start in 'hidden sectors', as Windows writes it; a loop
+    # device does not give mkntfs its geometry (0), and #2015 would rewrite it
+    _s3=$(cat "/sys/class/block/${src##*/}p3/start") || exit 1
+    mkntfs -Q -q -p "$_s3" -L Recovery "${src}p3" || exit 1
+    put "${src}p1" vfat esp && put "${src}p2" ext4 data && put "${src}p3" ntfs-3g recovery || exit 1
+    _m=$(od -An -t u8 -j 56 -N 8 "${src}p3" | tr -d ' '); _c=$(od -An -t u1 -j 13 -N 1 "${src}p3" | tr -d ' ')
+    case "$_m:$_c" in *[!0-9:]*|:*|*:) echo "setup-raw: the NTFS boot sector did not read ($_m:$_c)" >&2; exit 1 ;; esac
+    dd if=/dev/zero of="${src}p3" bs=$((_c * 512)) seek="$_m" count=1 conv=notrunc,fsync 2>/dev/null || exit 1
+    head -c 167772160 /dev/urandom > "${src}p4" || exit 1
+    sync
+    mkimg same 640M "$dir" > /dev/null && mkimg big 1152M "$dir" > /dev/null || exit 1
+    ;;
 setup-esp)
     # direct send (#1574): one GPT disk, one FAT32 ESP with files and a boot
     # loader at a BOOTCA_PATHS path -- so boot_ca really mounts it and says so.
@@ -108,8 +135,22 @@ files)
     ;;
 teardown)
     umount "$dir/m" 2>/dev/null
+    # #1934: udev may still be probing the disks the copy just closed (the engine
+    # test holds a lock that turns its re-read into change events) -- let it finish
+    # first. Settle failing is not judged here: the umount below is the evidence.
+    udevadm settle -t 30 2>/dev/null
     [ -f "$dir/devs" ] && while read -r _n _d; do losetup -d "$_d" 2>/dev/null; done < "$dir/devs"
-    umount "$dir/full" 2>/dev/null
+    # #1934: `losetup -d` is lazy -- a device someone still holds keeps its backing
+    # file in the tmpfs open, and the umount fails EBUSY. That was `2>/dev/null`:
+    # a 96M tmpfs left mounted per run, unseen (33 on the testrunner, 21/10).
+    if mountpoint -q "$dir/full"; then
+        _i=0
+        until umount "$dir/full" 2>/dev/null; do
+            _i=$((_i + 1))
+            [ "$_i" -lt 50 ] || { echo "teardown: $dir/full still busy after 10s -- left mounted" >&2; exit 1; }
+            sleep 0.2
+        done
+    fi
     rm -rf "$dir"
     ;;
 *) echo "unknown command: $cmd" >&2; exit 2 ;;

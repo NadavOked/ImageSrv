@@ -1,0 +1,9 @@
+# ImageSrv USB @VERSION@ -- #1914. UEFI: shim -> grubx64.efi, both Debian-signed.
+# One entry, no menu, no timeout. The kernel line carries exactly one imagectl.*
+# word, imagectl.mode=usbclone (CLAUDE.md principle 2): no imagectl.server, no task.
+set timeout=0
+set default=0
+menuentry "ImageSrv USB @VERSION@" {
+    linux /imagesrv/vmlinuz imagectl.mode=usbclone console=tty0 quiet loglevel=3
+    initrd /imagesrv/initrd.img
+}

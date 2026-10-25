@@ -27,11 +27,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from . import auth, disk_reserve, registry, storage_locations
+from . import auth, disk_reserve, registry, server_io, storage_history, storage_locations
+from .atomicfile import fsync_dir, fsync_file, write_atomic
 from .api import ServerContext, identity_gate
 from .images import validate_display_name
 from .db import _write_lock, journal, now_iso, update_one, writing
-from . import capture_detail
+from . import capture_detail, learn_eta
+from . import priority, readbackhash
 from .progress_view import capture_progress
 from .images import (
     ImageLibrary, MACHINE_MAC, carries_a_stream_file, has_disk_guid, has_partition_geometry,
@@ -91,6 +93,12 @@ def _write_and_hash(handle, digest, data: bytes) -> None:
     handle.write(data)
 
 
+def _flush_to_disk(handle) -> None:
+    """הקובץ שהתקבל — מהחוצץ של פייתון ומהמטמון של הקרנל, לדיסק. כשל זורק."""
+    handle.flush()
+    os.fsync(handle.fileno())
+
+
 class _DiskFull(Exception):
     """אזל המקום באזור הביניים תוך כדי זרם. הסיבה נוקבת בשם הקובץ."""
 
@@ -134,12 +142,18 @@ def _bind_machine(conn, manifest: dict, mac: str) -> None:
     manifest[MACHINE_MAC] = mac
 
 
-def _fail(conn, task_id: str, message: str) -> None:
+def _fail(conn, library_root: Path, task_id: str, message: str) -> None:
+    """המשימה נכשלת בשם, ואזור העבודה שלה נמחק — כמו בביטול ובאימות שנכשל.
+
+    ‏#1915: עד כאן האזור נשאר עד הסחיפה הבאה (‏`work_areas`, עד 24 שעות),
+    וכשהסיבה הייתה דיסק מלא (507) — השרת שמר בדיוק את מה שמילא אותו.
+    אזור של משימה במצב סופי הוא שטח של השרת, לא נתונים של אדם."""
     conn.execute(
         "UPDATE tasks SET state = 'failed', error = ?, updated_at = ? WHERE id = ?",
         (message, now_iso(), task_id),
     )
     conn.commit()
+    shutil.rmtree(staging_dir(library_root, task_id), ignore_errors=True)
     journal(conn, "capture_failed", f"{task_id} {message}")
 
 
@@ -189,19 +203,31 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
                 # הלולאה שמשותפת לסוכנים ולקונסולה. ה-await על כל אצווה הוא
                 # הלחץ-החוזר: הזרם אינו נקרא הלאה לפני שהדיסק קיבל את הקודמת,
                 # ולכן הזיכרון תחום לאצווה אחת (‏#15) כמו קודם.
+                # ‏#1974: במאגר המונמך של הקליטה — לא במאגר של `to_thread`,
+                # שהקונסולה חולקת.
+                loop = asyncio.get_running_loop()
                 batch = bytearray()
                 async for chunk in request.stream():
                     batch += chunk
                     if len(batch) >= CHUNK:
-                        await asyncio.to_thread(_write_and_hash, handle, digest, bytes(batch))
+                        await loop.run_in_executor(priority.CAPTURE_IO, _write_and_hash,
+                                                   handle, digest, bytes(batch))
                         guard.wrote(len(batch))
                         batch.clear()
                 if batch:
-                    await asyncio.to_thread(_write_and_hash, handle, digest, bytes(batch))
+                    await loop.run_in_executor(priority.CAPTURE_IO, _write_and_hash,
+                                               handle, digest, bytes(batch))
+                # ‏#1951: הבייטים לדיסק **לפני** "התקבל" — fsync אחד לקובץ, לא לכל
+                # אצווה. בלעדיו כיבוי קשיח אחרי capture_verifying מחק את סוף
+                # המטמון, והאימות שהתחיל מחדש נכשל ב-sha256 (‏QA-G49, 22/10).
+                # ‏#1974: גם הוא במאגר המונמך — כתיבת הקליטה לדיסק.
+                await loop.run_in_executor(priority.CAPTURE_IO, _flush_to_disk, handle)
             # ‏#1470: מה שהתקבל נשמר ליד הקובץ — ‏finish_capture משווה אותו
             # למניפסט, כבדיקה נוספת על הקריאה החוזרת מהדיסק (עיקרון 6).
             try:
                 record.write_text(digest.hexdigest(), encoding="ascii")
+                fsync_file(record)
+                fsync_dir(path.parent)   # ‏#1951: רשומות התיקייה של שני הקבצים
             except FileNotFoundError as exc:
                 raise _StagingGone(f"תיקיית הביניים של {path.name} נמחקה בזמן ההעלאה") from exc
         except disk_reserve.ReserveReached as exc:
@@ -231,6 +257,8 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
             body = await request.json()
         except ValueError:
             raise HTTPException(400, "הגוף אינו JSON תקין")
+        # ‏#1884: מכאן ההעלאה — צילום הדיסק של הספרייה (קצב הכתיבה ולחץ ה-I/O של הקליטה).
+        server_io.begin(ctx.conn, "capture", task_id, ctx.library.root)
         parts = body.get("partitions") if isinstance(body, dict) else None
         if not isinstance(parts, list) or not parts or any(
             not isinstance(p, dict) or type(p.get("index")) is not int
@@ -309,13 +337,13 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         # ‏#1737: גם בלי אורך מוצהר — הזרם לא מתחיל כשהמקום כבר ברזרבה.
         reason = disk_reserve.refusal(free, needed, f"אחסון הקליטה ({filename})")
         if reason is not None:
-            _fail(ctx.conn, task_id, reason)
+            _fail(ctx.conn, ctx.library.root, task_id, reason)
             raise HTTPException(507, reason)
         gone = None
         try:
             got = await stream_to(request, path)
         except _DiskFull as exc:
-            _fail(ctx.conn, task_id, str(exc))
+            _fail(ctx.conn, ctx.library.root, task_id, str(exc))
             raise HTTPException(507, str(exc))
         except _StagingGone as exc:
             gone = str(exc)   # ‏#1470+#532: מצב המשימה למטה מכריע — ביטול = 409
@@ -336,7 +364,7 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         ctx.conn.commit()
         if gone is not None:
             # המשימה פתוחה ובכל זאת התיקייה איננה: אין ראיה לבייטים — כשל בשם, לא "ok".
-            _fail(ctx.conn, task_id, gone)
+            _fail(ctx.conn, ctx.library.root, task_id, gone)
             raise HTTPException(500, gone)
         # ‏#1535: ‏task_id ושם הקובץ באים מה-URL — שבירת שורה אינה מגיעה ליומן,
         # גם אם בדיקה למעלה תשתנה (לא נשען על SAFE_FILE ועל ה-DB לבדם).
@@ -359,9 +387,10 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         # בשני המסלולים שמכניסים אימג' לספרייה, לא רק בזה שקלט מבחוץ
         # (‏#110). אם הוא נכשל, השורה בבסיס הנתונים אינה מה שחשבנו.
         if not valid_image_id(row["image_id"]):
-            _fail(ctx.conn, task_id, f'malformed image id on task: {row["image_id"]!r}')
+            _fail(ctx.conn, ctx.library.root, task_id, f'malformed image id on task: {row["image_id"]!r}')
             raise HTTPException(500, "task carries a malformed image id")
         folder = staging_dir(ctx.library.root, task_id)
+        server_io.end(ctx.conn, "capture", task_id, ctx.library.root)   # ‏#1884: סוף ההעלאה
         raw = await request.body()
         try:
             manifest = json.loads(raw.decode("utf-8"))
@@ -369,15 +398,14 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
             # קטע מהגוף נכנס ליומן: "לא JSON" בלי ראיה השאיר אותנו
             # מגששים מול סוכן שאי אפשר להיכנס אליו (מעבדה, #12).
             snippet = raw[:160].decode("utf-8", "replace")
-            _fail(ctx.conn, task_id, f"manifest is not valid JSON: {snippet}")
+            _fail(ctx.conn, ctx.library.root, task_id, f"manifest is not valid JSON: {snippet}")
             raise HTTPException(400, "manifest is not valid JSON")
 
         # ‏#1470: כאן רק מה שזול — המבנה, שכל קובץ הגיע, ושה-sha256 שחושב
         # בזמן הקבלה תואם את המניפסט. הקריאה החוזרת מהדיסק — ברקע, למטה.
         problem = manifest_problem(manifest, folder) or upload_sha_problem(manifest, folder)
         if problem:
-            _fail(ctx.conn, task_id, problem)
-            shutil.rmtree(folder, ignore_errors=True)
+            _fail(ctx.conn, ctx.library.root, task_id, problem)
             raise HTTPException(400, problem)
 
         # שמות התצוגה נקבעו בקונסולה ולא במחשב הבנייה.
@@ -393,16 +421,16 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         # הדיסק הוא מקור האמת, וסוכן ישן שממשיך לשלוח את גודל המקור
         # אינו מכניס ערך שגוי לתיקייה. ‏_validate כבר ווידא שיש מה לגזור.
         manifest["min_target_bytes"] = required_bytes(manifest)
-        (folder / "manifest.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # ‏#1908: אטומי ועמיד — מניפסט חתוך הוא אימג' שבור (עיקרון 3).
+        write_atomic(folder / "manifest.json",
+                     json.dumps(manifest, ensure_ascii=False, indent=2))
 
         target = inside(ctx.library.root / row["image_id"], ctx.library.root)
         if target is None:
-            _fail(ctx.conn, task_id, "image target falls outside the library root")
+            _fail(ctx.conn, ctx.library.root, task_id, "image target falls outside the library root")
             raise HTTPException(500, "image target falls outside the library root")
         if target.exists():
-            _fail(ctx.conn, task_id, "an image with this id already exists")
+            _fail(ctx.conn, ctx.library.root, task_id, "an image with this id already exists")
             raise HTTPException(409, "image already exists")
 
         # ‏#1370: המכנה של פס ההתקדמות. בזמן הקליטה הגודל הדחוס לא ידוע
@@ -546,6 +574,11 @@ def manifest_problem(manifest: object, folder: Path) -> str | None:
         path = staged_file(folder, name)
         if not path.is_file():
             return f"partition file was never uploaded: {name}"
+        # ‏#1830: קובץ קיים אינו ראיה שהבייטים הגיעו. זרם של partclone (גם
+        # של מערכת קבצים ריקה — כותרת ומפת סיביות) או של partclone.dd אינו
+        # ריק לעולם, ו-sha256 של קובץ ריק "תואם" כשהסוכן גיבב את מה שלא נשלח.
+        if path.stat().st_size == 0:
+            return f"partition file is empty: {name} -- no bytes arrived"
     return None
 
 def _sha256(path: Path, on_bytes=None) -> str:
@@ -592,6 +625,8 @@ def start_verification(conn, library_root: Path, task_id: str) -> threading.Thre
 def run_verification(conn, library_root: Path, task_id: str) -> str:
     """האימות עצמו, סינכרוני. מחזיר `done`, ‏`failed`, או `gone` (המשימה
     כבר אינה `verifying`). כל חריגה היא כישלון בשם — אימות שקרס לא עבר."""
+    # ‏#1974: קריאת האימג' כולו וגיבובו — בעדיפות הרקע, כמו הכתיבה שלפניו.
+    priority.lower_this_thread()
     try:
         return _verify(conn, library_root, task_id)
     except Exception as exc:  # noqa: BLE001 — עיקרון 5: "לא בדקנו" אינו "עבר"
@@ -648,7 +683,14 @@ def _verify(conn, library_root: Path, task_id: str) -> str:
                               "an image with this id already exists")
     for name, _ in files:
         upload_sha_path(staged_file(folder, name)).unlink(missing_ok=True)
+    # ‏#1813: הבייטים לדיסק לפני הפרסום — fsync אחד לכל קובץ (לא לכל chunk),
+    # ואז התיקייה; רק אחריהם ה-rename לספרייה, ו-fsync לשורש שה-rename יחזיק.
+    for name, _ in files:
+        fsync_file(staged_file(folder, name))
+    fsync_file(folder / "manifest.json")
+    fsync_dir(folder)
     folder.rename(target)
+    fsync_dir(library_root)
     # ‏rename ואז UPDATE, כמו קודם: נפילה ביניהם = אימג' מאומת בספרייה עם
     # משימה `verifying`, ו-`reconcile_on_start` סוגר אותה כ-`done` (#411).
     with _write_lock, writing(conn):
@@ -665,6 +707,7 @@ def _verify(conn, library_root: Path, task_id: str) -> str:
     journal(conn, "capture_done",
             f'{row["image_id"]} "{row["name"]}" verified {total} bytes in {seconds:.1f}s',
             row["created_by"])
+    readbackhash.kick()   # #1805: the read-back digest of the new image -- now, not in ten minutes
     return "done"
 
 
@@ -693,10 +736,110 @@ def _verify_failed(conn, library_root: Path, task_id: str, reason: str) -> str:
     return "failed"
 
 
+def _reported_serial(conn, mac: str, disk: str) -> str | None:
+    """‏#1901: המספר הסידורי של `disk` כפי שה-hello האחרון של המכונה דיווח —
+    מה שהמפעיל ראה כשבחר. ``None`` = לא ידוע (הדיסק לא דווח, או דווח בלי
+    serial); הסוכן מכריע אז לפי מספר הדיסקים, ולא לפי השם לבדו."""
+    row = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
+    try:
+        disks = json.loads(row["disks_json"]) if row is not None and row["disks_json"] else []
+    except (TypeError, ValueError):
+        return None
+    for entry in disks if isinstance(disks, list) else []:
+        if isinstance(entry, dict) and isinstance(entry.get("dev"), str) \
+                and entry["dev"].removeprefix("/dev/") == disk:
+            serial = entry.get("serial")
+            return serial if isinstance(serial, str) and serial else None
+    return None
+
+
+def order_capture(ctx: ServerContext, body: dict, created_by: str, origin: str) -> dict:
+    """הזמנת קליטה — הגוף של `POST /api/console/tasks/capture`. ההרשאה
+    נבדקת אצל הקורא; מה שכאן הוא רק מה שהמשימה עצמה דורשת."""
+    mac = registry.normalize_mac(body.get("mac", ""))
+    machine = registry.lookup(ctx.conn, mac) if mac else None
+    if machine is None:
+        raise HTTPException(400, "מכונה לא רשומה")
+    role = machine["role"]
+    if role not in CAPTURE_ROLES:
+        raise HTTPException(
+            400,
+            "קליטת אימג' אינה נעשית ממכונה בתפקיד "
+            f"{role!r} — אין לה מערכת מקומית משלה שיש מה לקלוט ממנה")
+    name = (body.get("name") or "").strip()
+    disk = (body.get("disk") or "").strip()
+    if not name or not disk:
+        raise HTTPException(400, "צריך שם אימג' ודיסק מקור")
+    # ‏#138: השם והתיקייה נבדקים כאן ולא במסך — מסך התחנה הוא קונסולת
+    # טקסט של לינוקס, בלי גליפים עבריים ובלי RTL.
+    # הערכים **הגולמיים** נבדקים, לא המנוקים: רווח בקצה נדחה בשמו.
+    folder = body.get("folder") or ""
+    # ‏#1251 (נדב, 10/10): אימג' חדש נשמר תמיד בתיקייה. האכיפה כאן ולא
+    # רק במסכים — כל לקוח מגיע לנקודה הזו. אימג'ים ישנים בלי תיקייה
+    # ממשיכים להופיע ולשחזר; ההכרעה היא על קליטה חדשה בלבד.
+    if not folder:
+        raise HTTPException(
+            400, "צריך תיקיית יעד — אימג' חדש נשמר תמיד בתיקייה. "
+                 "אם אין תיקייה, צרו אחת (בקונסולה: אימג'ים ← תיקייה חדשה)")
+    try:
+        name = validate_display_name(body.get("name") or "", "שם האימג'")
+        folder = validate_display_name(folder, "שם התיקייה")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if active_task(ctx.conn, mac) is not None:
+        raise HTTPException(409, "כבר יש משימה פתוחה למכונה הזו")
+    loc_id = body.get("location_id") or storage_locations.LOCAL_ID
+    if not storage_locations.location_writable(ctx.conn, loc_id):
+        raise HTTPException(409, "המיקום אינו זמין לקליטה")
+    # ‏#1886: לפני שהמשימה נוצרת — מקום לגרסה הקודמת של האימג' + מרווח + הרזרבה, או סירוב
+    # עכשיו (לא 45 דקות שנכשלות בסוף). בלי גרסה קודמת / בלי מדידה — אזהרה, לא סירוב.
+    try:
+        free = _free_bytes(ctx.library.root)
+    except OSError:
+        free = None
+    storage_history.sample_local(ctx.conn, ctx.library, "capture")
+    space = storage_history.capture_check(ctx.conn, ctx.library, name, folder, mac, free)
+    if space["status"] == "refused":
+        journal(ctx.conn, "capture_space_refused", f'{mac} "{name}" — {space["reason"]}', created_by)
+        raise HTTPException(409, space["reason"])
+    if space["status"] == "warning":
+        journal(ctx.conn, "capture_space_unchecked", f'{mac} "{name}" — {space["reason"]}', created_by)
+
+    # ‏#1901: הזהות של הדיסק שנבחר, לא רק שמו — סדר `sda`/`sdb` מתחלף בין אתחולים.
+    serial = _reported_serial(ctx.conn, mac, disk)
+    task_id = "tsk_" + secrets.token_hex(2)
+    image_id = "img_" + secrets.token_hex(3)
+    now = now_iso()
+    # ‏#54/#1934: הכתיבה בתוך הנעילה + writing(). ה-commit החשוף עבר מ-
+    # ‏create_capture לכאן ב-#1786 ונשאר מחוץ לכלל.
+    with _write_lock, writing(ctx.conn):
+        ctx.conn.execute(
+            "INSERT INTO tasks (id, mac, type, disk, disk_serial, image_id, name, description,"
+            " folder, created_by, created_at, updated_at, token, origin)"
+            " VALUES (?, ?, 'capture', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (task_id, mac, disk, serial, image_id, name,
+             (body.get("description") or "").strip(),
+             folder, created_by, now, now, new_token(), origin),
+        )
+    journal(ctx.conn, "capture_start",
+            f'{task_id} {mac} disk={disk} serial={serial or "-"} "{name}"', created_by)
+    # ‏**האסימון אינו מוחזר כאן.** הוא נמסר רק ב-hello, ורק למכונה
+    # שה-MAC שלה תואם — אחרת הוא היה יוצא לקונסולה, ליומן ולכל
+    # מי שרואה את התשובה.
+    return {"id": task_id, "image_id": image_id}
+
+
 def create_console_capture_router(ctx: ServerContext) -> APIRouter:
     """מה שהקונסולה מדברת איתו — יצירת משימה, מעקב, ביטול."""
     router = APIRouter(prefix="/api/console")
     current_user, admin_only = auth.dependencies(ctx.conn)
+
+    def _capture_forecast(r) -> dict | None:
+        if r["type"] != "capture" or r["state"] != "running":
+            return None
+        detail = capture_detail.view(r) or {}
+        return learn_eta.capture(ctx.conn, ctx.library, r["mac"], detail.get("total_used_bytes"),
+                                 r["started_at"], r["id"])
 
     @router.get("/tasks")
     def tasks(user=Depends(current_user)):
@@ -727,6 +870,9 @@ def create_console_capture_router(ctx: ServerContext) -> APIRouter:
                 "verify_bytes": r["verify_bytes"], "verify_total": r["verify_total"],
                 # ‏#1505: פירוט חי — מחיצות, קצב, ETA; ‏None = הסוכן לא דיווח טבלה.
                 "capture_detail": capture_detail.view(r),
+                # ‏#1843: קליטה שרצה — כמה זמן צפויה לפי הקליטות הקודמות של המכונה.
+                # ‏None = לא קליטה רצה; ‏`seconds: null` + ‏`why` = אין עדיין הערכה.
+                "forecast": _capture_forecast(r),
                 "created_at": r["created_at"], "updated_at": r["updated_at"],
                 # ‏#1255: מי יצר את המשימה (עמודת "יוזם" בפאנל "משימות אחרונות"), ותפקידו —
                 # משתמש הפצה אינו נכנס לקונסולה (#1073), לכן קליטה שלו הופעלה ממחשב הבנייה.
@@ -744,59 +890,7 @@ def create_console_capture_router(ctx: ServerContext) -> APIRouter:
         except ValueError:
             # גוף פגום הוא שגיאת לקוח (400), לא קריסת שרת (500).
             raise HTTPException(400, "הגוף אינו JSON תקין")
-        mac = registry.normalize_mac(body.get("mac", ""))
-        machine = registry.lookup(ctx.conn, mac) if mac else None
-        if machine is None:
-            raise HTTPException(400, "מכונה לא רשומה")
-        role = machine["role"]
-        if role not in CAPTURE_ROLES:
-            raise HTTPException(
-                400,
-                "קליטת אימג' אינה נעשית ממכונה בתפקיד "
-                f"{role!r} — אין לה מערכת מקומית משלה שיש מה לקלוט ממנה")
-        name = (body.get("name") or "").strip()
-        disk = (body.get("disk") or "").strip()
-        if not name or not disk:
-            raise HTTPException(400, "צריך שם אימג' ודיסק מקור")
-        # ‏#138: השם והתיקייה נבדקים כאן ולא במסך — מסך התחנה הוא קונסולת
-        # טקסט של לינוקס, בלי גליפים עבריים ובלי RTL.
-        # הערכים **הגולמיים** נבדקים, לא המנוקים: רווח בקצה נדחה בשמו.
-        folder = body.get("folder") or ""
-        # ‏#1251 (נדב, 10/10): אימג' חדש נשמר תמיד בתיקייה. האכיפה כאן ולא
-        # רק במסכים — כל לקוח מגיע לנקודה הזו. אימג'ים ישנים בלי תיקייה
-        # ממשיכים להופיע ולשחזר; ההכרעה היא על קליטה חדשה בלבד.
-        if not folder:
-            raise HTTPException(
-                400, "צריך תיקיית יעד — אימג' חדש נשמר תמיד בתיקייה. "
-                     "אם אין תיקייה, צרו אחת (בקונסולה: אימג'ים ← תיקייה חדשה)")
-        try:
-            name = validate_display_name(body.get("name") or "", "שם האימג'")
-            folder = validate_display_name(folder, "שם התיקייה")
-        except ValueError as exc:
-            raise HTTPException(400, str(exc))
-        if active_task(ctx.conn, mac) is not None:
-            raise HTTPException(409, "כבר יש משימה פתוחה למכונה הזו")
-        loc_id = body.get("location_id") or storage_locations.LOCAL_ID
-        if not storage_locations.location_writable(ctx.conn, loc_id):
-            raise HTTPException(409, "המיקום אינו זמין לקליטה")
-
-        task_id = "tsk_" + secrets.token_hex(2)
-        image_id = "img_" + secrets.token_hex(3)
-        now = now_iso()
-        ctx.conn.execute(
-            "INSERT INTO tasks (id, mac, type, disk, image_id, name, description,"
-            " folder, created_by, created_at, updated_at, token, origin)"
-            " VALUES (?, ?, 'capture', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (task_id, mac, disk, image_id, name,
-             (body.get("description") or "").strip(),
-             folder, user[0], now, now, new_token(), request_origin(request)),
-        )
-        ctx.conn.commit()
-        journal(ctx.conn, "capture_start", f'{task_id} {mac} disk={disk} "{name}"', user[0])
-        # ‏**האסימון אינו מוחזר כאן.** הוא נמסר רק ב-hello, ורק למכונה
-        # שה-MAC שלה תואם — אחרת הוא היה יוצא לקונסולה, ליומן ולכל
-        # מי שרואה את התשובה.
-        return {"id": task_id, "image_id": image_id}
+        return order_capture(ctx, body, user[0], request_origin(request))
 
     @router.post("/tasks/{task_id}/cancel")
     def cancel(task_id: str, user=Depends(admin_only)):

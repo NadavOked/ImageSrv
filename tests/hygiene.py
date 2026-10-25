@@ -100,6 +100,28 @@ def assign_test_portbase() -> int | None:
     return test_portbase
 
 
+def isolate_sender_log(worker: str | None):
+    """‏#2099: לוג משלו לכל worker של pytest-xdist.
+
+    ‏`sender.SENDER_LOG` הוא `$TMPDIR/imagectl-sender.log` ברמת המודול, ולוג
+    המחיצה נגזר ממנו ומשם הקובץ בלבד (`partition_log`) — כל טסט עם אותו
+    מניפסט כותב **לאותו קובץ**. בריצה סדרתית זה בטוח (טסט אחד בכל רגע);
+    במקביל, worker אחד כתב `Starting transfer` ללוג של טסט ב-worker אחר,
+    וזה ראה "השידור התחיל" ולא הריץ מחדש את מחיצה 1 (נמדד: ‏test_sender,
+    ‏test_sequence_scenarios_17_10, ‏test_sender_lost_receiver_1950).
+    בתוך worker הסדר סדרתי כמו קודם, ולכן הקובץ שלו מתנהג בדיוק כמו פעם.
+    בלי worker (ריצה סדרתית) — לא נוגעים. מחזיר את הנתיב, או `None`."""
+    if not worker:
+        return None
+    try:
+        from server import sender
+    except ImportError:                        # pragma: no cover — עמדה חסרה
+        return None
+    log = sender.SENDER_LOG
+    sender.SENDER_LOG = log.with_name(f"{log.stem}-{worker}{log.suffix}")
+    return sender.SENDER_LOG
+
+
 def scan_supported() -> bool:
     """אפשר בכלל לבדוק? בלי `/proc` אין ראיה — ואומרים זאת, לא מניחים."""
     return Path("/proc").is_dir()

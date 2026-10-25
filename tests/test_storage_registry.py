@@ -113,8 +113,8 @@ def test_node_relabel(server):
     admin, conn = server["admin"], server["ctx"].conn
     _add_node(conn)
     assert admin.put("/api/console/storage-nodes/node1",
-                     json={"label": "חיפה"}).status_code == 200
-    assert admin.get("/api/console/storage-nodes").json()[0]["label"] == "חיפה"
+                     json={"label": "HAIFA"}).status_code == 200
+    assert admin.get("/api/console/storage-nodes").json()[0]["label"] == "HAIFA"
 
 
 def test_node_relabel_missing_is_404(server):
@@ -287,7 +287,7 @@ def test_edit_node_bad_group_leaves_label_unchanged(server):
     admin, conn = server["admin"], server["ctx"].conn
     _add_node(conn, label="סניף א'")
     resp = admin.put("/api/console/storage-nodes/node1",
-                     json={"label": "חיפה", "group_id": "nope"})
+                     json={"label": "HAIFA", "group_id": "nope"})
     assert resp.status_code == 400
     # הטרנזאקציה התגלגלה — השם המקורי נשמר.
     assert admin.get("/api/console/storage-nodes").json()[0]["label"] == "סניף א'"
@@ -300,9 +300,9 @@ def test_edit_node_valid_label_and_group_together(server):
                      json={"label": "צפון"}).json()["id"]
     _add_node(conn, label="סניף א'")
     assert admin.put("/api/console/storage-nodes/node1",
-                     json={"label": "חיפה", "group_id": gid}).status_code == 200
+                     json={"label": "HAIFA", "group_id": gid}).status_code == 200
     node = admin.get("/api/console/storage-nodes").json()[0]
-    assert node["label"] == "חיפה" and node["group_id"] == gid
+    assert node["label"] == "HAIFA" and node["group_id"] == gid
 
 
 # --- #732/#4: פרסור בוליאני קפדני ל-disabled --------------------------------

@@ -217,6 +217,17 @@ def decide(answer: object) -> Decision:
     # known: false → כלום. המחשב עולה מהדיסק כאילו לא קרה דבר.
     # ההתראה על MAC לא מוכר עולה בקונסולה, לא במסך של התלמיד.
     if answer.get("known") is not True:
+        # ‏#1802 (הכרעת נדב 19/10): חריג אחד, ורק כשהשרת אמר אותו במפורש —
+        # מכונה לא רשומה **בווילן ההפצה** מקבלת פעם אחת את הסוכן, שמציג
+        # "המחשב הזה לא רשום" עשר שניות ועולה מהדיסק. השרת מדליק את הדגל
+        # רק על ראיה חיובית שהבקשה הגיעה לכתובת ההפצה, ורק פעם אחת בחלון
+        # (‏`server/unknown_screen.py`) — האתחול הבא של אותו MAC מגיע לכאן
+        # בלי הדגל ועולה מהדיסק. ‏`is True` בכוונה: כל ערך אחר הוא כמו היום.
+        # שורת הקרנל נשארת נקייה (עיקרון 2): ערך רגיל, בלי `imagectl.mode`.
+        if answer.get("unregistered_screen") is True:
+            return Decision(AGENT, "unregistered-screen",
+                            "mac not registered, deploy vlan: the screen once (#1802)",
+                            offer_local=True, gui_screen=True)
         return Decision(LOCAL, "unregistered", "mac not registered")
 
     role = answer.get("role")

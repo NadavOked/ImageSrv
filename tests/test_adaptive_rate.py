@@ -402,7 +402,7 @@ def test_a_known_slow_drawer_still_lowers_a_remembered_machine(conn):
     בשני גלים שונים (50MB/s) מורידה את הגל אליה × 0.9."""
     for n in range(2):
         _kept(conn, f"ses_old{n}", "SLOW", 50 * MB, 75 * MB)
-    _wave(conn, "ses_1", serials=("S1",))
+    _wave(conn, "ses_1")                  # שתי מגירות, כמו הגל הבא (#1842)
     got = _next(conn, serials=("N1", "SLOW"))
     assert got["max_bitrate"] == "360m"
     assert got["basis"] == "learned" and got["by"]["serial"] == "SLOW"

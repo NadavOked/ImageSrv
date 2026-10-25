@@ -26,8 +26,8 @@ function ctxWith(state) {
     pill: (cls, text) => `<pill ${cls}>${text}</pill>`,
   };
   const sheets = [];
-  const ctx = vm.createContext({UI, Date, Math, sheets, sheet: (o) => sheets.push(o), ...state});
-  for (const name of ['esc', 'fmtDate', 'tlsModeHe', 'tlsExpiryHtml', 'tlsRowHtml', 'tlsDetailsSheet', 'tlsReissueSheet', 'settingUnreadHtml', 'isRawTechnical', 'settingsKv', 'ghostBtn']) {
+  const ctx = vm.createContext({UI, Date, Math, sheets, sheet: (o) => sheets.push(o), ME: {timezone: 'UTC'}, TZ_FMT: null, ...state});
+  for (const name of ['esc', 'displayZone', 'tsMs', 'zoneParts', 'fmtDate', 'tlsModeHe', 'tlsExpiryHtml', 'tlsRowHtml', 'tlsDetailsSheet', 'tlsReissueSheet', 'settingUnreadHtml', 'isRawTechnical', 'settingsKv', 'ghostBtn']) {
     vm.runInContext(functionSource(name), ctx);
   }
   vm.runInContext('const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;", "\'": "&#39;", "`": "&#96;" };', ctx);

@@ -497,6 +497,15 @@ function settingsSecondariesTab() {
 
 /* ---------- פעולות על שרת משנה מהטבלה (עריכה/השבתה/הסרה) ---------- */
 
+/* ‏#1997 (נדב, 22/10): שם שרת משנה הוא שם מחשב. הכלל נאכף בשרת (hostname_rule) — כאן רק ההסבר. */
+const NODE_NAME_HELP = "שם מחשב — באנגלית, עד 15 תווים: אותיות, ספרות ומקף, לא בהתחלה ולא בסוף";
+/* ‏"דורש טיפול" בסקירה: שינוי שם של שרת משנה ששמו אינו חוקי ("חיפה"), גם כשדף שרתי המשנה עוד לא נטען. */
+async function renameBranchNode(idEnc) {
+  try { [BRANCH_GROUPS, BRANCH_NODES] = await Promise.all([api("/storage-node-groups"), api("/storage-nodes")]); }
+  catch (e) { toast(e.message); return; }
+  editBranchNode(idEnc);
+}
+
 function editBranchNode(idEnc) {
   let id = idEnc; try { id = decodeURIComponent(id); } catch (e) {}
   const node = BRANCH_NODES.find((n) => n.id === id);
@@ -505,7 +514,7 @@ function editBranchNode(idEnc) {
   sheet({
     title: "עריכת שרת משנה", sub: node.base_url,
     fields: [
-      { id: "label", label: "שם", value: node.label },
+      { id: "label", label: "שם השרת", value: node.label, dir: "ltr", help: NODE_NAME_HELP },
       { id: "group_id", label: "קבוצה", type: "select", value: node.group_id || "", options },
     ],
     onSubmit: async (v) => {
@@ -596,14 +605,14 @@ function openEnrollSheet(prefill = {}) {
     fields: [
       { id: "url", label: "כתובת IP של שרת המשנה", value: prefill.url || "", placeholder: "10.20.0.5", dir: "ltr",
         help: `מספיק ה-IP — הקונסולה מוסיפה https:// ואת הפורט הבין-שרתי (${INTERSERVER_PORT}).` },
-      { id: "label", label: "שם", value: prefill.label || "" },
+      { id: "label", label: "שם השרת", value: prefill.label || "", dir: "ltr", placeholder: "imagesrv-haifa", help: NODE_NAME_HELP },
       { id: "group_id", label: "קבוצה", type: "select", value: prefill.group_id || "", options },
     ],
     submitLabel: "בדוק SPKI",
     onSubmit: async (v) => {
       const url = enrollUrlFromInput(v.url);
       const step1 = { ...v, url, group_id: v.group_id === ENROLL_NEW_GROUP ? "" : v.group_id };
-      const preview = await post("/storage-nodes/enroll/preview", { url });
+      const preview = await post("/storage-nodes/enroll/preview", { url, label: v.label });   // ‏#1997: השם נבדק כבר בשלב 1
       openEnrollConfirmSheet(step1, preview);
     },
   });
@@ -757,7 +766,7 @@ function renderBranchTransfers(nid, target = null, limit = 8) {
       ? `<button class="btn sm" onclick="cancelBranchTransfer('${encodeId(t.id)}')">ביטול</button>` : "";
     return `<div class="member"><b>${esc(t.image_name)}</b> <span class="status ${cls}"><i></i>${esc(label)}</span>
       ${dir ? `<div class="sub">${dir}</div>` : ""}
-      <div class="sub mono" dir="ltr">${esc((t.created_at || "").replace("T", " ").slice(0, 19))}</div>${bar}${err}${cancel}</div>`;
+      <div class="sub mono" dir="ltr">${esc(t.created_at ? fmtWhen(t.created_at) : "")}</div>${bar}${err}${cancel}</div>`;
   }).join("");
 }
 
@@ -847,7 +856,7 @@ async function loadBranchView() {
     return `<tr>
       <td><b>${esc(img.name)}</b> <span class="mono muted" dir="ltr">${esc(img.id)}</span></td>
       <td>${esc(formatGB(img.size_bytes || 0))}</td>
-      <td class="mono" dir="ltr">${esc((img.created_at || "").replace("T", " ").slice(0, 19) || "—")}</td>
+      <td class="mono" dir="ltr">${esc(fmtWhen(img.created_at))}</td>
       <td>${present ? "✓" : "—"}</td>
       <td>${pullBtn}</td>
     </tr>`;

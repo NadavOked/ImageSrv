@@ -34,6 +34,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from . import disk_reserve, interserver_auth, storage_client, storage_nodes, transfer_cap
+from .atomicfile import fsync_dir, fsync_file, write_atomic
 from .db import _write_lock, journal, now_iso, writing
 
 log = logging.getLogger("imagectl.storage_transfer")
@@ -495,9 +496,13 @@ def _pull(ctx, data_dir, transfer_id: str, row, incoming: Path | None) -> None:
             _clear_incoming(incoming)
             raise
         public = {k: v for k, v in manifest.items() if not str(k).startswith("_")}
-        with (incoming / "manifest.json").open("w", encoding="utf-8", newline="\n") as handle:
-            json.dump(public, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
+        # ‏#1813: המחיצות לדיסק, ואז המניפסט (אטומי, עם fsync) והתיקייה —
+        # כל אלה לפני ה-rename שמכניס את האימג' לספרייה.
+        for filename in files:
+            fsync_file(incoming / filename)
+        write_atomic(incoming / "manifest.json",
+                     json.dumps(public, ensure_ascii=False, indent=2) + "\n")
+        fsync_dir(incoming)
         if ctx.library.get(image_id) is not None:
             _clear_incoming(incoming)
             raise RuntimeError(f"האימג' {image_id} כבר קיים בספריית הראשי")
@@ -513,6 +518,7 @@ def _pull(ctx, data_dir, transfer_id: str, row, incoming: Path | None) -> None:
         except OSError as extra:
             _clear_incoming(incoming)
             raise RuntimeError(f"לא ניתן להכניס את האימג' לספרייה: {extra}") from extra
+        fsync_dir(root)
     journal(conn, "storage_transfer_done",
             f'{transfer_id} {image_id} "{name}" <- {node["label"]}', "")
     _set_state(conn, transfer_id, "done", bytes_sent=completed)

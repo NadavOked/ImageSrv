@@ -12,6 +12,55 @@ const root=path.resolve(__dirname,'../server/static');
 const minutesAgo=(n)=>new Date(Date.now()-n*60000).toISOString();
 const GB256=256060514304;
 
+// #2050 (mockup 07, Nadav 24/10): a drawer with a problem -- and one written AND read back -- gets the
+// emphasis class in its own colour; the colour is slotClass's (unchanged), the row keeps its words.
+test('#2050 drawer emphasis: red/orange problems and read-back green get the frame; a healthy, writing or merely "done" disk does not', () => {
+  const {run}=setup();
+  const cls=(render,disk)=>{
+    const h=run(`${render}({mac:'test',drawer_count:1}, {n:1,disk:${JSON.stringify(disk)},live:true}, false)`);
+    const m=h.match(/^<div class="(?:dsk|disk)([^"]*)"/); assert.ok(m,h); return [m[1],h];
+  };
+  const cases=[
+    [{state:'failed',smart:'ok',error:'write failed'},'err'],
+    [{smart:'fail'},'err'],
+    [{state:'waiting',smart:'warn',smart_reason:'pending_sectors'},'warn'],
+    [{state:'done',smart:'ok',error:'SMART: 187 עלה'},'warn'],
+    [{state:'done',smart:'ok',readback:'unverified'},'warn'],
+    [{state:'done',smart:'warn',readback:'verified'},'warn'],      // the severe colour wins
+    [{state:'done',smart:'ok',readback:'verified'},'ok'],
+    [{state:'done',smart:'ok',readback:'sampled'},'ok'],
+    [{state:'done',smart:'ok'},''],                                 // no read-back evidence: not green (principle 5)
+    [{smart:'ok'},''], [{state:'writing',smart:'ok'},''], [{state:'verifying',smart:'ok'},''],
+    [{state:'writing',smart:'warn',cancel:'admin'},''],             // cancelling: grey, as on the GUI
+    [{state:'cancelled',smart:'fail'},''],
+  ];
+  for (const render of ['dskRowHtml','roundDskHtml','slotHtml'])
+    for (const [disk,tone] of cases) {
+      const [c]=cls(render,disk);
+      if (tone) assert.match(c,new RegExp(`(^| )bay-emphasis ${tone}$`),`${render} ${JSON.stringify(disk)}`);
+      else assert.doesNotMatch(c,/bay-emphasis/,`${render} ${JSON.stringify(disk)}`);
+    }
+  // the words stay: the writing orange drawer still says its percent, the failed one "נכשל"
+  assert.match(cls('roundDskHtml',{state:'writing',smart:'warn',bytes_written:37,bytes_total:100})[1],/<b>37%<\/b>/);
+  assert.match(cls('dskRowHtml',{state:'failed',smart:'ok',error:'x'})[1],/<b>נכשל<\/b>/);
+  assert.match(cls('slotHtml',{state:'failed',smart:'ok',error:'x'})[1],/<span class="bay-chip">נכשל<\/span>/);
+  assert.match(cls('slotHtml',{smart:'warn'})[1],/<span class="bay-chip">אזהרה<\/span>/);
+});
+
+test('#2050 drawer emphasis CSS: a 3px frame on all four sides and the soft fill of its colour, no side stripe', () => {
+  const css=fs.readFileSync(path.join(root,'console.css'),'utf8');
+  const rules=[...css.matchAll(/([^{}]*bay-emphasis[^{}]*)\{([^}]*)\}/g)].map(m=>[m[1].trim(),m[2]]);
+  assert.ok(rules.length>=5,'the emphasis rules exist');
+  const frame=rules.find(([sel])=>/\.mach \.dsk\.bay-emphasis,/.test(sel)&&/\.slots \.disk\.bay-emphasis$/.test(sel));
+  assert.ok(frame,'one rule frames both the cloner card rows and the slots');
+  assert.match(frame[1],/(^|;)border:3px solid var\(--bay\)/); assert.match(frame[1],/background:var\(--bay-soft\)/);
+  for (const [tone,tok] of [['err','danger'],['warn','warning'],['ok','success']]) {
+    const r=rules.find(([sel])=>sel.endsWith(`.bay-emphasis.${tone}`)); assert.ok(r,tone);
+    assert.ok(r[1].includes(`--bay:var(--clr-${tok});--bay-soft:var(--clr-${tok}-soft);--bay-fg:var(--clr-${tok}-fg)`),r[1]);
+  }
+  for (const [sel,body] of rules) assert.doesNotMatch(body,/border-(inline|left|right|block)|inset/,`no side tab: ${sel}`);
+});
+
 const B1='c8:d9:d2:0b:fe:32', B2='c8:d9:d2:0b:fe:34', C1='a0:48:1c:8a:18:40', C2='78:ac:c0:9b:11:c2', C3='78:ac:c0:9b:11:c3';
 const drawer=(dev,port,serial,extra={})=>({dev,port,serial,model:'870 EVO',size_bytes:GB256,fresh:true,selected:false,state:null,error:null,bytes_written:0,bytes_total:0,stalled_s:null,crc_delta:null,smart:'unchecked',...extra});
 
@@ -94,7 +143,7 @@ function setup({roundOpen=false}={}) {
     }});
   for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME={username:"admin",role:"admin",server_name:"srv",version:"v0.32.1",capabilities:{}}; current="machines"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; }; selectPageById=(id)=>{ globalThis.selected=id; current=id; }; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; };');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",version:"v0.32.1",capabilities:{}}; current="machines"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; }; selectPageById=(id)=>{ globalThis.selected=id; current=id; }; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; };');
   for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines'],['ROOM','/room'],['ROOM_HISTORY','/room/history'],['CAPTURE_TASKS','/tasks']]) run(name+'='+JSON.stringify(fixtures[key]));
   run('CAPTURE_TASKS_READ=true; ROOM_KEY=JSON.stringify(ROOM);');
   return {run,node,requests,fixtures,ctx,opened};
@@ -407,20 +456,19 @@ function drawerSetup(opts) {
   return env;
 }
 const tab=(html)=>{ const i=html.indexOf('">דיסקים</div>'); assert.ok(i>=0,'no disks section'); const from=html.lastIndexOf('<div class="sec"',i), to=html.indexOf('<div class="sec"',i); return html.slice(from,to<0?undefined:to); };
-test('#1485 panel "דיסקים" tab = the mockup table (דיסק | חיבור | גודל | SMART) with a connection selector per disk, the count by add/remove, and the CD/DVD row', () => {
+test('#1485 panel "דיסקים" tab = the mockup table (דיסק | חיבור | גודל | SMART), the CD/DVD row, and (#2001) one button to the "מיפוי חיבורים" window', () => {
   const {run}=drawerSetup();
   run(`Object.assign(MACHINES.find(m=>m.mac==='${C2}'),{optical:[{dev:'sr0',port:5,model:'HL-DT-ST DVDRAM'}]})`);
   run(`openMachineDetail('${encodeURIComponent(C2)}')`); const html=run('drawerHtml'); balanced(html);
   const t=tab(html);
   assert.match(t,/<div class="sec" data-cnt="3">דיסקים<\/div><table class="n-tbl disk-map"><thead><tr><th>דיסק<\/th><th>חיבור<\/th><th>גודל<\/th><th>SMART<\/th>/);
-  assert.equal((t.match(/<select class="n-in conn-sel"/g)||[]).length,3,'one selector per disk');
-  assert.match(t,/<tr class="" data-slot="1"><td><b>דיסק 1<\/b><\/td><td><select class="n-in conn-sel" aria-label="החיבור של דיסק 1" onchange="slotEditSet\('78%3Aac%3Ac0%3A9b%3A11%3Ac2',0,this.value\)"><option value="sata:1" title="SATA 0" selected>דיסק 1<\/option><option value="sata:2" title="SATA 1">דיסק 2 · תפוס<\/option><option value="sata:3" title="SATA 2">דיסק 3 · תפוס<\/option><option value="sata:4" title="SATA 3">דיסק 4<\/option>/,'#1375: connections 1..8 by drawer number (SATA k-1 in the title), the taken ones say so (choosing one swaps)');
+  assert.doesNotMatch(t,/<select|slotEdit/,'#2001: no editing in the table — the window edits');
+  assert.match(t,/<tr class="" data-slot="1"><td><b>דיסק 1<\/b><\/td><td><span class="mono" title="SATA 0">דיסק 1<\/span><\/td>/,'#1375: the connection by drawer number (SATA k-1 in the title)');
   assert.match(t,/<td><span class="mono"><bdi dir="ltr">256GB<\/bdi><\/span> <span class="cap">870<\/span><\/td><td><span class="n-chip">תקין<\/span><\/td>/);
   assert.match(t,/data-slot="2">[^]*?<span class="n-chip n">לא נבדק<\/span>/,'unchecked is grey');
   assert.match(t,/data-slot="3">[^]*?<span class="n-chip w">נכשל בשיכפול הקודם<\/span>[^]*?clearDiskFailure\(7\)">נקה<\/a>/,'the red disk is cleared here now');
   assert.match(t,/<tr class="opt" data-slot=""><td><b>כונן CD\/DVD<\/b><\/td><td><span class="mono">SATA 4<\/span><\/td><td><span class="muted">HL-DT-ST DVDRAM<\/span><\/td><td><span class="muted">—<\/span><\/td>/,'the CD drive is a row of its own, not a slot, never "empty"');
-  assert.match(t,/<div class="map-tools"><button class="btn sm" type="button" onclick="slotEditAdd\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">\+ הוסף חריץ<\/button><button class="btn sm" type="button" onclick="slotEditRemove\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">הסר חריץ<\/button><\/div>/);
-  assert.doesNotMatch(t,/שמירת החיבורים|חזרה לברירת המחדל/,'nothing to save, nothing custom');
+  assert.match(t,/<div class="map-tools"><button class="btn sm" type="button" onclick="openSlotMap\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">מיפוי חיבורים…<\/button><\/div>/);
   assert.doesNotMatch(html,/editDrawerCount|מספר חריצי SATA/,'the separate count dialog is gone');
 });
 
@@ -430,7 +478,7 @@ test('#1375 disks tab: the connection is "דיסק N" by drawer number, never "S
   run(`Object.assign(MACHINES.find(m=>m.mac==='${C2}'),{optical:[{dev:'sr0',port:5,model:'HL-DT-ST DVDRAM'}]})`);
   run(`openMachineDetail('${encodeURIComponent(C2)}')`); const t=tab(run('drawerHtml'));
   const shown=t.replace(/title="[^"]*"/g,'');   // what the eye reads: no tooltips
-  assert.match(t,/data-slot="1"><td><b>דיסק 1<\/b><\/td><td><select[^>]*><option value="sata:1" title="SATA 0" selected>דיסק 1<\/option>/,'disk 1 sits on connection "דיסק 1"');
+  assert.match(t,/data-slot="1"><td><b>דיסק 1<\/b><\/td><td><span class="mono" title="SATA 0">דיסק 1<\/span>/,'disk 1 sits on connection "דיסק 1"');
   assert.match(t,/<span class="mono"><bdi dir="ltr">500GB<\/bdi><\/span>/,'marketed size');
   assert.doesNotMatch(t,/GiB|465|466/,'never the binary size');
   assert.doesNotMatch(shown.replace(/<tr class="opt"[^]*?<\/tr>/,'').replace(/<p class="map-help">[^]*?<\/p>/,''),/SATA \d/,'no "SATA n" on a mapped row');
@@ -440,45 +488,11 @@ test('#1375 disks tab: the connection is "דיסק N" by drawer number, never "S
   assert.match(tab(run('drawerHtml')),/<tr class="unmapped" data-slot=""><td><b>SATA 0 \(לא ממופה\)<\/b><\/td><td><span class="mono">SATA 0<\/span>/,'an unmapped drive gets no guessed drawer number (#1485)');
 });
 
-test('#1485 mapping editor: choosing a taken connection swaps the two (never a duplicate); add/remove change the count; save PUTs drawer_slots; reset PUTs null; a refused save shows the server message', async () => {
-  const {run,requests,fixtures}=drawerSetup();
-  const enc=encodeURIComponent(C2);
-  run(`openMachineDetail('${enc}')`);
-  run(`slotEditSet('${enc}',0,'sata:3')`);
-  assert.deepEqual(JSON.parse(run('JSON.stringify(SLOT_EDIT.slots)')),['sata:3','sata:2','sata:1'],'disk 1 ↔ disk 3');
-  let t=tab(run('drawerHtml'));
-  assert.match(t,/<div class="map-dirty">3 חריצים · השינוי עוד לא נשמר<\/div>/);
-  assert.match(t,/slotEditCancel\('[^']+'\)">ביטול<\/button><button class="btn sm primary" type="button" onclick="slotEditSave\('[^']+'\)">שמירת החיבורים<\/button>/);
-  assert.match(t,/data-slot="1"><td><b>דיסק 1<\/b>[^]*?<option value="sata:3" title="SATA 2" selected>דיסק 3<\/option>[^]*?S5Y2NX0R12345|data-slot="1"><td><b>דיסק 1<\/b>[^]*?<span class="n-chip w">נכשל בשיכפול הקודם/,'the red disk on SATA 2 is now disk 1');
-  run(`slotEditAdd('${enc}')`); assert.deepEqual(JSON.parse(run('JSON.stringify(SLOT_EDIT.slots)')),['sata:3','sata:2','sata:1','sata:4'],'add = next free SATA port');
-  run(`slotEditRemove('${enc}')`); run(`slotEditRemove('${enc}')`); run(`slotEditRemove('${enc}')`);
-  assert.deepEqual(JSON.parse(run('JSON.stringify(SLOT_EDIT.slots)')),['sata:3']);
-  run(`slotEditRemove('${enc}')`); assert.deepEqual(JSON.parse(run('JSON.stringify(SLOT_EDIT.slots)')),['sata:3'],'never fewer than one slot');
-  assert.doesNotMatch(tab(run('drawerHtml')),/slotEditRemove\(/,'one slot left → no remove button (not a disabled one)');
-  await run(`slotEditSave('${enc}')`);
-  const put=requests.filter(r=>r.url==='/api/console/machines/'+enc && r.options.method==='PUT').pop();
-  assert.ok(put,'PUT /machines/{mac}'); assert.deepEqual(JSON.parse(put.options.body),{drawer_slots:['sata:3']});
-  assert.equal(run('SLOT_EDIT'),null); assert.equal(run('reloaded'),1);
-  run(`Object.assign(MACHINES.find(m=>m.mac==='${C2}'),{drawer_slots:['sata:3'],drawer_slots_custom:true})`);
-  run(`openMachineDetail('${enc}')`); t=tab(run('drawerHtml'));
-  assert.match(t,/<div class="sec" data-cnt="1">דיסקים/);
-  assert.match(t,/<tr class="unmapped" data-slot=""><td><b>SATA 0 \(לא ממופה\)<\/b><\/td><td><span class="mono">SATA 0<\/span>/,'a drive outside the mapping is said, not numbered');
-  assert.match(t,/slotEditReset\('[^']+'\)">חזרה לברירת המחדל<\/button>/);
-  await run(`slotEditReset('${enc}')`);
-  assert.deepEqual(JSON.parse(requests.filter(r=>r.options.method==='PUT').pop().options.body),{drawer_slots:null});
-  // a refused save keeps the edit and shows the reason
-  fixtures['/machines/'+enc]=403;   // the fake server refuses (its message: "admin only")
-  run("document.getElementById('slot-err').textContent=''");
-  run(`slotEditSet('${enc}',0,'sata:2')`); await run(`slotEditSave('${enc}')`);
-  assert.match(run("document.getElementById('slot-err').textContent"),/admin only/,'the server reason is shown, nothing pretends it saved');
-  assert.ok(run('SLOT_EDIT')!==null,'the unsaved edit stays');
-});
-
-test('#1485 NVMe: a controller is chosen by its PCI address (stable), not by nvme0n1; the panel offers every reported NVMe controller', () => {
+test('#1485 NVMe: a controller is shown by its PCI address (stable), not by nvme0n1', () => {
   const {run}=drawerSetup();
   run(`Object.assign(MACHINES.find(m=>m.mac==='${C2}'),{disks:[{dev:'nvme0n1',size_bytes:512110190592,model:'Samsung 980',serial:'NV1',port:null,pci:'0000:03:00.0',smart:'ok'},{dev:'sda',size_bytes:${GB256},model:'870 EVO',serial:'S5Y30',port:1,smart:'ok'}],drawer_slots:['nvme:0000:03:00.0','sata:1'],drawer_slots_custom:true})`);
   run(`openMachineDetail('${encodeURIComponent(C2)}')`); const t=tab(run('drawerHtml'));
-  assert.match(t,/data-slot="1"><td><b>דיסק 1<\/b><\/td><td><select[^>]*>[^]*?<option value="nvme:0000:03:00.0" selected>NVMe 03:00.0<\/option>/);
+  assert.match(t,/data-slot="1"><td><b>דיסק 1<\/b><\/td><td><span class="mono">NVMe 03:00.0<\/span>/);
   assert.match(t,/<bdi dir="ltr">512GB<\/bdi>/);
   assert.doesNotMatch(t,/nvme0n1/,'never the enumeration name');
   assert.equal(run(`diskLabel(MACHINES.find(m=>m.mac==='${C2}'), MACHINES.find(m=>m.mac==='${C2}').disks[0])`),'דיסק 1');

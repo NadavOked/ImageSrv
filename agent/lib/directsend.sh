@@ -112,8 +112,8 @@ direct_send_one() {
     # and a slow drawer is allowed to slow it -- a stopped stream is not.
     # #1444: the counter and the wire hash are inside fanout (-P, -S), not
     # pv | tee | sha256sum of busybox (#1438). One reader and no siblings to
-    # shield, so fanout's own stall eviction (150s, #674) is pushed past the
-    # shell ceiling: waiting for receivers is not a hung drive, and
+    # shield, so both fanout evictions (stall 150s #674, held stdin 45s #1796)
+    # go past the shell ceiling: waiting for receivers is not a hung drive, and
     # wait_progress stays the only ceiling here, exactly as it was with tee.
     # #1497: the quiet clock itself starts at udp-sender's Starting transfer:.
     _do_evict=$(( (STREAM_START_CEILING + WAIT_STREAM_STALL_S + 60) * 1000 ))
@@ -127,7 +127,7 @@ direct_send_one() {
           echo "$?" > "$RUN_DIR/dpcl.$2.rc"; } \
             | { zstd -"$CAPTURE_LEVEL" -T"$CAPTURE_THREADS" -c 2>> "$LOG_FILE"
                 echo "$?" > "$RUN_DIR/dzstd.$2.rc"; } \
-            | { FANOUT_STALL_EVICT_MS="$_do_evict" fanout -S "$RUN_DIR/dsha.$2" \
+            | { FANOUT_STALL_EVICT_MS="$_do_evict" FANOUT_BLOCK_EVICT_MS="$_do_evict" fanout -S "$RUN_DIR/dsha.$2" \
                     -P "$RUN_DIR/targets/$1/bytes.raw" 16777216 "$_do_fifo" \
                     > /dev/null 2>> "$LOG_FILE"
                 echo "$?" > "$RUN_DIR/dfanout.$2.rc"; }
@@ -169,10 +169,10 @@ direct_send_one() {
 }
 
 direct_send_run() {
-    # $1 = task id, $2 = disk. 0 only when every streamed partition went
+    # $1 = task id, $2 = disk, $3 = its serial at ordering (#1955; ""/null = none). 0 only when every streamed partition went
     # out, was received by someone, and hashed to what the manifest says.
     echo "capturing" > "$RUN_DIR/state"
-    CAPTURE_SINK=discard capture_disk "$1" "$2" || return 1
+    CAPTURE_SINK=discard capture_disk "$1" "$2" "${3:-}" || return 1   # #1955: #1901's identity gate, before the first datagram
     _dr_manifest="$RUN_DIR/new-manifest.json"
     direct_manifest_put "$1" "$_dr_manifest" \
         || { _direct_failed "$2" "השרת לא קיבל את המניפסט החי"; return 1; }
@@ -210,7 +210,7 @@ direct_send_run() {
     # swap is described in the manifest and recreated by the receiver; it
     # is never streamed (spec 14) -- exactly streamed_partitions() on the server.
     _dr_expected=$(awk -F'|' '$7 != "" && $7 != "null" { n++ } END { print n + 0 }' "$_dr_plan")
-    _dr_sent=0; STREAMED_PARTITIONS=0
+    _dr_sent=0; _dr_prev=""; STREAMED_PARTITIONS=0
     while IFS='|' read -r _dr_idx _dr_g _dr_role _dr_fs _dr_st _dr_sz _dr_f _dr_sha _dr_e _dr_ug _dr_uu _dr_attrs <&3; do
         case "$_dr_f" in ''|null) continue ;; esac
         # #1432: the hello that opened the wave is only a snapshot. A drawer
@@ -218,7 +218,7 @@ direct_send_run() {
         # --min-receivers. Ask the server immediately before every stream;
         # it also turns zero live targets into a failed session instead of
         # returning a value that would broadcast to nobody.
-        if ! send_hello \
+        if ! direct_hello "$_dr_prev" \
                 || [ "$(json_get "$RESP" ".task.id")" != "$1" ] \
                 || [ "$(json_get "$RESP" ".task.direct.session_state")" != "running" ]; then
             _direct_failed "$2" "השרת עצר את ההפצה הישירה לפני מחיצה $_dr_idx"
@@ -235,7 +235,7 @@ direct_send_run() {
         [ "$_dr_sent" -gt 0 ] && { _dr_w="$_dr_maxw_l"; _dr_t="$_dr_startt_l"; }
         direct_send_one "$2" "$_dr_idx" "$_dr_fs" "$_dr_sha" \
             "$_dr_pb" "$_dr_minr" "$_dr_w" "$_dr_t" "$_dr_retries" "$_dr_bitrate" || return 1
-        _dr_sent=$((_dr_sent + 1))
+        _dr_sent=$((_dr_sent + 1)); _dr_prev=$_dr_idx   # #1952: whose log the next hello reads (directrecv.sh)
     done 3< "$_dr_plan"
     # done is a count against the manifest, never "nothing failed" (#51).
     if [ "$_dr_expected" -lt 1 ] || [ "$_dr_sent" -ne "$_dr_expected" ]; then
@@ -256,7 +256,7 @@ direct_send_task() {
     echo "  Do not power off."
     progress_loop "" "$MAC" "$SERVER" "$1" &
     _dt_ppid=$!
-    direct_send_run "$1" "$_dt_disk"; _dt_rc=$?
+    direct_send_run "$1" "$_dt_disk" "$(json_get "$RESP" ".task.disk_serial")"; _dt_rc=$?
     shrink_restore_source "$_dt_disk" || :   # #1171: the tail's RAM view, after both reads; not released = a warning in error
     if [ "$_dt_rc" -eq 0 ]; then
         echo "done" > "$RUN_DIR/state"

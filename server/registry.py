@@ -11,6 +11,7 @@ import re
 import sqlite3
 from dataclasses import dataclass
 
+from . import hostname_rule
 from .db import _write_lock, journal, now_iso, writing
 from .sessions import HOSTNAME_MAX, NONCLASSROOM_NAME_MAX
 
@@ -31,6 +32,17 @@ _NAME_TOO_LONG = (
     f"שם באורך 1-{NONCLASSROOM_NAME_MAX} תווים — הקידומת והמקף חייבים "
     f"להיכנס יחד לתקרת {HOSTNAME_MAX} התווים של שם מחשב"
 )
+_SUFFIX_BAD = "סיומת חייבת להיות 01-99 או INS"
+
+
+def name_error(role: str, text: object) -> str:
+    """ההודעה לשם ש-`normalize_name` דחה — אותה בכל שלושת מסלולי הרישום.
+    ‏#1997: שם שאינו שם מחשב (עברית, רווח, קו תחתון, מקף בקצה) נוקב בכלל;
+    שם חוקי שארוך מהתקרה של מכונה לא-כיתתית — בתקרה (#405)."""
+    if role == "classroom":
+        return _SUFFIX_BAD
+    name = text.strip() if isinstance(text, str) else text
+    return hostname_rule.refusal(name, "שם המחשב") or _NAME_TOO_LONG
 
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(conn)`` — שני
 #: המנגנונים של `db.py`, מאותה סיבה שבגללה `net_seen` קיבל אותם (#272,
@@ -74,16 +86,17 @@ def normalize_name(role: str, text: str) -> str | None:
     """השם שניתן למכונה, לפי תפקיד הקבוצה.
 
     בכיתה השם הוא הסיומת שתיכנס לשם המחשב — ולכן החוקים נוקשים
-    (01-99 או INS). מחשב בנייה ומחשבי שיכפול מקבלים שם חופשי קצר
-    ("עמדה 3"), אך גם הוא נכנס לשם המחשב אחרי הקידומת והמקף בפתיחת
-    הסבב, ולכן אורכו חסום כאן — ברישום — ולא מאוחר על כל הקבוצה (#405).
+    (01-99 או INS). מחשב בנייה ומחשב שיכפול מקבלים שם מחשב — ‏#1997 (נדב,
+    22/10): שם מחשב הוא hostname באנגלית (`hostname_rule`), לא שם חופשי.
+    גם הוא נכנס לשם המחשב אחרי הקידומת והמקף בפתיחת הסבב, ולכן אורכו חסום
+    כאן — ברישום — ולא מאוחר על כל הקבוצה (#405).
     """
     if role == "classroom":
         return normalize_suffix(text)
     if not isinstance(text, str):
         return None
     s = text.strip()
-    return s if 0 < len(s) <= NONCLASSROOM_NAME_MAX else None
+    return s if hostname_rule.is_valid(s) and len(s) <= NONCLASSROOM_NAME_MAX else None
 
 
 @dataclass
@@ -113,15 +126,12 @@ def parse_paste(text: str, role: str = "classroom") -> list[ImportLine]:
             item.error = "צריך MAC ואחריו שם"
         else:
             item.mac = normalize_mac(parts[0])
-            item.suffix = normalize_name(role, parts[1].strip(" ,\t"))
+            name = parts[1].strip(" ,\t")
+            item.suffix = normalize_name(role, name)
             if item.mac is None:
                 item.error = "MAC לא תקין"
             elif item.suffix is None:
-                item.error = (
-                    "סיומת חייבת להיות 01-99 או INS"
-                    if role == "classroom"
-                    else _NAME_TOO_LONG
-                )
+                item.error = name_error(role, name)
             elif item.mac in seen:
                 item.error = f"כפילות בהדבקה — כבר הופיע בשורה {seen[item.mac]}"
             else:
@@ -186,9 +196,7 @@ def add_machine(
         raise ValueError("MAC לא תקין")
     name = normalize_name(role, name_raw)
     if name is None:
-        raise ValueError(
-            "סיומת חייבת להיות 01-99 או INS" if role == "classroom" else _NAME_TOO_LONG
-        )
+        raise ValueError(name_error(role, name_raw))
     if conn.execute("SELECT 1 FROM machines WHERE mac = ?", (mac,)).fetchone():
         raise ValueError("ה-MAC כבר רשום — ערכו אותו במקום להוסיף שוב")
     with _write_lock, writing(conn):
@@ -218,9 +226,7 @@ def update_machine(
         raise ValueError("קבוצה לא קיימת")
     name = row["suffix"] if name_raw is None else normalize_name(role, name_raw)
     if name is None:
-        raise ValueError(
-            "סיומת חייבת להיות 01-99 או INS" if role == "classroom" else _NAME_TOO_LONG
-        )
+        raise ValueError(name_error(role, name_raw))
     with _write_lock, writing(conn):
         conn.execute(
             "UPDATE machines SET suffix = ?, group_id = ? WHERE mac = ?",

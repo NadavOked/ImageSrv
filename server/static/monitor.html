@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ImageSrv — מוניטור</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg?v=11.82">
-<link rel="icon" href="favicon.ico?v=11.82" sizes="any">
-<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=11.82">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=11.82">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=11.82">
-<link rel="stylesheet" href="design-tokens.css?v=11.82">
-<link rel="stylesheet" href="console.css?v=11.82">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=12.50">
+<link rel="icon" href="favicon.ico?v=12.50" sizes="any">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=12.50">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=12.50">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=12.50">
+<link rel="stylesheet" href="design-tokens.css?v=12.50">
+<link rel="stylesheet" href="console.css?v=12.50">
 <script>
   (function () {
     var choice = localStorage.getItem("imagectl-theme");
@@ -26,9 +26,15 @@
     padding: 0 14px; height: var(--header-height); flex: none;
     background: var(--clr-header); color: var(--clr-header-text);
   }
-  .mon-bar h1 { font-size: 15px; margin: 0; font-weight: 600; color: inherit; }
+  .mon-bar h1 { font-size: 15px; margin: 0; font-weight: 600; color: inherit; flex: none; white-space: nowrap; }
   .mon-bar .spacer { flex: 1; }
-  .status { font-size: 13px; padding: 3px 10px; border-radius: var(--r); }
+  .mon-bar .btn { flex: none; }
+  /* ‏#1852: מי מחזיק / בקשת שליטה — שורה אחת, כמו הסטטוס. */
+  .control { display: flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap; flex: none; }
+  /* ‏#1837: הסטטוס הוא שורה אחת שמתכווצת לפני השם והכפתורים — סיבה ארוכה
+     נקטעת ב-… (המלאה ב-title ובשכבה שעל המסך), ולא גולשת על שם המכונה. */
+  .status { font-size: 13px; padding: 3px 10px; border-radius: var(--r);
+    flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .status.ok { color: #8FE39B; }
   .status.bad { color: #F3A79C; }
   .mon-screen {
@@ -68,6 +74,7 @@
   <div class="mon-bar">
     <h1 id="title">מוניטור</h1>
     <span id="status" class="status">מתחבר…</span>
+    <span id="control" class="control" aria-live="polite"></span>
     <div class="spacer"></div>
     <button class="btn" id="reboot-btn" title="מפעיל מחדש את המחשב המנוטר">הפעלה מחדש</button>
     <button class="btn danger" id="poweroff-btn" title="מכבה את המחשב המנוטר">כיבוי</button>
@@ -96,6 +103,6 @@
     </div>
   </div>
 </div>
-<script src="monitor.js?v=3.36"></script>
+<script src="monitor.js?v=3.40"></script>
 </body>
 </html>

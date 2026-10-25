@@ -14,13 +14,14 @@ let STORAGE = null, storageError = "", STORAGE_TIMER = null;
 /* מצב הדף: view = list | add | local | nfs | smb | iscsi-a | iscsi-b.
    form = ערכי הטופס הנוכחי; scan = תוצאת "סרוק"; test = תוצאת "בדוק חיבור";
    iscsi = {session, loc, disk} של הזרימה הדו-שלבית. */
-const SV = { view: "list", form: {}, scan: null, test: null, iscsi: null, busy: false };
+const SV = { view: "list", form: {}, scan: null, test: null, iscsi: null, disks: null, busy: false };
 const STORAGE_STATE_CLS = { connected: "ok", unreachable: "err", disconnected: "", unchecked: "" };
 const STORAGE_TYPE_ICON = {
   local: '<path d="M3 7h6l2 2h10v10H3z"/>',
   nfs: '<rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/>',
   smb: '<rect x="3" y="4" width="18" height="13" rx="1"/><path d="M8 21h8M12 17v4"/>',
   iscsi: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/>',
+  disk: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 14h.01M11 14h6"/>',
 };
 const storageIcon = (t) => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">${STORAGE_TYPE_ICON[t] || STORAGE_TYPE_ICON.iscsi}</svg>`;
 const SL = "/storage-locations";
@@ -55,13 +56,20 @@ function storageGo(view) {
     SV.scan = null; SV.test = null; SV.iscsi = null;
   }
   if (view === "list") { SV.form = {}; SV.scan = null; SV.test = null; SV.iscsi = null; }
+  if (view === "disk") { SV.form = {}; SV.disks = null; }
   renderCurrent();
   const page = document.querySelector("#content .page");
   if (page) page.scrollTop = 0;
+  if (view === "disk") storageDiskLoad();
 }
 /* שינוי בשדה שנבדק מבטל את תוצאת הבדיקה — "שמור ועגן" נדלק רק על מה שנבדק בפועל. */
 function storageField(key, value) {
   SV.form[key] = value;
+  if (SV.view === "disk") {   // ‏#1988: הכפתור האדום נדלק רק עם כונן נבחר ושם
+    const add = document.getElementById("st-add-disk");
+    if (add) add.disabled = !storageDiskReady();
+    return;
+  }
   if (SV.view === "iscsi-a") {
     if (key === "chap") renderCurrent();   // תיבת סימון — אין פוקוס לאבד
     const login = document.getElementById("st-login");
@@ -80,7 +88,7 @@ function storagePick(key, value) { SV.form[key] = value; SV.test = null; renderC
 /* ---------- הדף ---------- */
 function storagePage() {
   if (STORAGE === null && !storageError && SV.view === "list") return pagePlaceholder();
-  const views = { list: storageListView, add: storageAddView, local: storageLocalView, nfs: storageNfsView, smb: storageSmbView, "iscsi-a": storageIscsiAView, "iscsi-b": storageIscsiBView };
+  const views = { list: storageListView, add: storageAddView, local: storageLocalView, disk: storageDiskView, nfs: storageNfsView, smb: storageSmbView, "iscsi-a": storageIscsiAView, "iscsi-b": storageIscsiBView };
   return (views[SV.view] || storageListView)();
 }
 function storageCrumbs(...tail) {
@@ -150,7 +158,8 @@ function storageListView() {
   const pill = !STORAGE ? UI.pill("err", "לא נקרא")
     : s.unreachable ? UI.pill("err", `${s.unreachable} לא נגיש`) : "";
   const add = (cls) => `<button class="btn primary${cls}" onclick="storageGo('add')">${uiIcon("plus")} מיקום אחסון</button>`;
-  const actions = add("") + `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`;
+  // ‏#1988: "הוסף כונן" — כונן ריק בשרת (בכותרת, ליד "+ מיקום אחסון"; סוגי המיקום נשארים ארבעה)
+  const actions = add("") + `<button class="btn" onclick="storageGo('disk')">${storageIcon("disk")} הוסף כונן</button>` + `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`;
   const header = UI.objHeader({ crumbs: storageCrumbs(), icon: "storage", name: "אחסון", sub, pill, actions, compact: true });
   let body;
   if (!STORAGE) body = UI.note("err", `לא הצלחתי לקרוא את מיקומי האחסון: ${esc(storageError)}`);
@@ -270,6 +279,60 @@ function storageLocalView() {
   const form = `<div class="card-b form1">${storageInput("path", "נתיב בשרת", { mono: true, placeholder: "/mnt/disk2/images" })}${storageInput("name", "שם תצוגה")}${storageFormFoot()}</div>`;
   const result = UI.card({ title: "תוצאת הבדיקה", cls: "c4", body: `<div class="result" id="st-result">${storageTestResultHtml('"לא נבדק" אינו "תקין". הכפתור "שמור ועגן" נדלק רק אחרי ראיה חיובית: התיקייה קיימת והמקום הפנוי נקרא.')}</div>` });
   return `<div class="page">${header}<div class="body"><div class="c8 card"><div class="card-h"><span>פרטי החיבור</span></div>${form}</div>${result}</div></div>`;
+}
+
+/* ---------- #1988: הוסף כונן — כונן ריק בשרת (הכרעת נדב 22/10) ----------
+   הרשימה = רק כוננים ריקים לפי ראיה (blkid -p וראש/סוף הכונן); השאר מוצגים
+   מתחת עם הסיבה, בלי אפשרות בחירה. "לא נקרא" אינו "אין כוננים". האישור הוא
+   הכפתור האדום בחלון — בלי הקלדה (#1270). */
+async function storageDiskLoad() {
+  SV.disks = { status: "loading" };
+  if (current === "storage" && SV.view === "disk") renderCurrent();
+  try {
+    const r = await api(SL + "/disks");
+    SV.disks = { status: "done", items: r.items || [], hidden: r.hidden || [] };
+  } catch (e) { SV.disks = { status: "error", reason: e.message }; }
+  if (SV.form.disk && !(SV.disks.items || []).some((d) => d.device === SV.form.disk)) SV.form.disk = "";
+  if (current === "storage" && SV.view === "disk") renderCurrent();
+}
+function storageDiskSelected() { return ((SV.disks && SV.disks.items) || []).find((d) => d.device === SV.form.disk) || null; }
+function storageDiskReady() { return !!storageDiskSelected() && !!(SV.form.name || "").trim() && !SV.busy; }
+function storageDiskCap(d) { return [d.size_bytes != null ? fmtBytes(d.size_bytes) : "", d.model, d.serial ? `S/N ${d.serial}` : "", d.bus].filter(Boolean).join(" · "); }
+function storageDiskView() {
+  const header = storageFormHeader("disk", "הוסף כונן", "כונן ריק בשרת — השרת מחלק אותו, מכין ext4 ומחבר אותו קבוע לפי UUID", "list");
+  const d = SV.disks;
+  let list;
+  if (!d || d.status === "loading") list = `<div class="empty" style="padding:14px"><span class="st run">קורא את הכוננים…</span></div>`;
+  else if (d.status === "error") list = UI.note("err", `<b>רשימת הכוננים לא נקראה.</b> <span class="mono">${esc(d.reason)}</span> — "לא נקרא" אינו "אין כונן ריק".`) + `<div style="margin-top:8px"><button class="btn" onclick="storageDiskLoad()">נסה שוב</button></div>`;
+  else if (!d.items.length) list = UI.note("", "אין בשרת כונן ריק. כונן שיש עליו מידע אינו מוצג — הסיבה לכל אחד מופיעה למטה.");
+  else list = `<div class="picklist">${d.items.map((it) => `<label><input type="radio" name="st-pick-disk" value="${esc(it.device)}" ${SV.form.disk === it.device ? "checked" : ""} onchange="storagePick('disk',this.value)"><span class="mono">${esc(it.device)}</span><span class="cap">${esc(storageDiskCap(it))}</span></label>`).join("")}</div>`;
+  const hidden = d && d.status === "done" && d.hidden.length
+    ? `<div style="margin-top:12px"><div class="sec">לא מוצגים — יש עליהם מידע או שלא נקראו (${d.hidden.length})</div>${UI.kv(d.hidden.map((h) => [`<span class="mono">${esc(h.device)}</span>`, `${esc(h.reason || "")}${storageDiskCap(h) ? ` <span class="muted">· ${esc(storageDiskCap(h))}</span>` : ""}`]))}</div>` : "";
+  const ready = storageDiskReady();
+  const form = `<div class="card-b form1">${list}${hidden}<div style="margin-top:12px">${storageInput("name", "שם תצוגה")}</div><div class="form-f"><button class="btn" onclick="storageDiskLoad()"${SV.busy ? " disabled" : ""}>קרא את הכוננים שוב</button><span class="sp"></span><button class="btn danger" id="st-add-disk" onclick="storageAddDiskSheet()" ${ready ? "" : 'disabled title="נדלק אחרי בחירת כונן ושם תצוגה"'}>הוסף כונן…</button></div></div>`;
+  const what = UI.card({ title: "מה השרת יעשה", cls: "c4", body: `<div class="cap">${UI.kv([["1", "טבלת GPT ומחיצה אחת על כל הכונן"], ["2", "מערכת קבצים ext4"], ["3", "חיבור קבוע לפי UUID ב-fstab (nofail — כונן שנפל לא עוצר את עליית השרת)"], ["4", "כתיבת קובץ בדיקה וקריאה חוזרת"]])}<div style="margin-top:8px">כשל באמצע מוצג כאן, והמיקום לא נוסף.</div></div>` });
+  return `<div class="page">${header}<div class="body"><div class="c8 card"><div class="card-h"><span>כוננים ריקים בשרת</span><small>נקרא עם lsblk, ‏blkid -p וראש הכונן וסופו · לא שונה דבר</small></div>${form}</div>${what}</div></div>`;
+}
+function storageAddDiskSheet() {
+  const disk = storageDiskSelected(), name = (SV.form.name || "").trim();
+  if (!disk || !name) { toast("בחרו כונן ושם תצוגה"); return; }
+  const note = UI.note("err", `<b>כל המידע בכונן יימחק.</b><br><span class="mono">${esc(disk.device)}</span> · ${esc(storageDiskCap(disk))}`)
+    + `<div style="margin:10px 0">${UI.kv([["שם המיקום", esc(name)], ["מה ייעשה", "GPT + מחיצה אחת, ext4, חיבור קבוע לפי UUID, קריאה חוזרת"]])}</div>`;
+  sheet({
+    title: "להוסיף את הכונן?", sub: "כל המידע בכונן יימחק", danger: true, submitLabel: "מחק את הכונן והוסף", note: `<div class="page drw">${note}</div>`,
+    onSubmit: async () => {
+      SV.busy = true;
+      try {
+        const row = await post(SL + "/add-disk", { device: disk.device, serial: disk.serial || "", size_bytes: disk.size_bytes, name, confirm_erase: true });
+        toast(`הכונן נוסף כמיקום ${row.name}`);
+        SV.busy = false; storageGo("list"); await loadStorage();
+      } catch (e) {
+        SV.busy = false;
+        storageDiskLoad();   // הכונן אולי כבר לא ריק — הרשימה נקראת מחדש
+        throw e;             // החלון נשאר פתוח עם הסיבה (כשל באמצע מוצג בגלוי)
+      }
+    },
+  });
 }
 
 /* ---------- 3. טופס NFS ---------- */

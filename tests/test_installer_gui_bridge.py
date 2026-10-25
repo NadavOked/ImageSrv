@@ -89,7 +89,8 @@ def bridge(m: dict, action: str, form: dict | None = None, **env: str) -> tuple[
 
 FORM = {"disk": "/dev/sda", "role": "standalone", "primary_url": "", "interface": "ens33", "mode": "dhcp",
         "address": "", "netmask": "", "gateway": "", "dns": "", "hostname": "imagectl-ta",
-        "admin_user": "nadav", "password": "Aa123456!", "password_confirm": "Aa123456!"}
+        "admin_user": "nadav", "password": "Aa123456!", "password_confirm": "Aa123456!",
+        "root_password": "R00t!screen", "root_password_confirm": "R00t!screen"}   # #1632
 
 
 def test_inventory_merges_disks_and_nics_with_the_1183_link_words(tmp_path):
@@ -98,10 +99,28 @@ def test_inventory_merges_disks_and_nics_with_the_1183_link_words(tmp_path):
     assert rc == 0, err
     assert out["disk"] == ["/dev/sda|model=VMware Virtual disk|size=64424509440|bus=scsi|removable=0|has=empty|iso=0"]
     rows = {r.split("|")[0]: r.split("|") for r in out["nic"]}
-    assert rows["ens33"][1:6] == ["VMware 0x07b0", "00:50:56:01:02:01", "מחובר", "10.10.10.8/24", "DHCP · שער 10.10.10.1"]
+    assert rows["ens33"][1:6] == ["VMware VMXNET3", "00:50:56:01:02:01", "מחובר", "10.10.10.8/24", "DHCP · שער 10.10.10.1"]
     assert rows["ens33"][6:] == ["10.10.10.8", "255.255.255.0", "10.10.10.1", "10.10.10.1"]
     assert rows["ens34"][3] == "לא מודלק" and rows["ens34"][4] == "—"
     assert out["interface"] == ["ens33"] and out["mode"] == ["dhcp"] and out["admin_user"] == ["admin"]
+
+
+@pytest.mark.parametrize("vendor,device,model", [
+    ("0x15ad", "0x07b0", "VMware VMXNET3"),    # ESXi vmxnet3 -- was "VMware 0x07b0"
+    ("0x1414", "0x3", "Hyper-V"),              # Hyper-V synthetic -- was "0x1414 0x3"
+    ("0x8086", "0x15b8", "Intel"),             # a known maker, an unknown chip
+    ("0x1234", "0x5678", ""),                  # unknown: the screen says "כרטיס רשת N"
+])
+def test_the_nic_model_is_a_name_a_person_reads_not_pci_numbers(tmp_path, vendor, device, model):
+    """#2096 (Hyper-V/ESXi 24/10): the NIC row said 'eth0 · 0x1414 0x3'."""
+    m = _machine(tmp_path)
+    d = m["root"] / "sys/class/net/ens33/device"
+    (d / "vendor").write_text(f"{vendor}\n"); (d / "device").write_text(f"{device}\n")
+    rc, out, err = bridge(m, "inventory")
+    assert rc == 0, err
+    rows = {r.split("|")[0]: r.split("|") for r in out["nic"]}
+    assert rows["ens33"][1] == model
+    assert not any("0x" in r.split("|")[1] for r in out["nic"])
 
 
 def test_apply_writes_the_answers_0600_and_starts_the_engine_with_a_state_file(tmp_path):
@@ -113,6 +132,7 @@ def test_apply_writes_the_answers_0600_and_starts_the_engine_with_a_state_file(t
     assert stat.S_IMODE(answers.stat().st_mode) == 0o600
     text = answers.read_text()
     assert "admin_user=nadav\n" in text and "admin_pass=Aa123456!\n" in text and "servers_mac=00:50:56:01:02:01\n" in text
+    assert "root_pass=R00t!screen\n" in text, "#1632: root's password goes to the engine the way admin's does"
     assert "servers_if=ens33\n" in text and "servers_mode=dhcp\n" in text and "servers_addr=\n" in text
     import time
     for _ in range(40):  # the real run is started in the background; give the shim a moment
@@ -130,7 +150,7 @@ def test_validate_maps_the_engine_failure_code_to_the_field_and_never_touches_a_
     m = _machine(tmp_path)
     rc, out, err = bridge(m, "validate", {**FORM, "hostname": "bad host", "step": "3"})
     assert rc == 0, err
-    assert out["errors.hostname"] == ["שם השרת אינו תקין — אותיות לטיניות, ספרות ומקף, עד 63 תווים, בלי מקף בתחילה או בסוף"]
+    assert out["errors.hostname"] == ["שם השרת אינו תקין — שם מחשב באנגלית: אותיות לטיניות, ספרות ומקף, עד 15 תווים, בלי מקף בתחילה או בסוף"]
     assert "[invalid-hostname] hostname must be an RFC-1123 label" in err, "the engine's English line stays in the log"
     calls = m["calls"].read_text()
     assert "--dry-run" in calls and all("--dry-run" in l for l in calls.splitlines() if "--inventory" not in l)
@@ -439,9 +459,62 @@ def test_validation_before_the_admin_step_does_not_demand_a_password(tmp_path):
     """הגואי מאמת כל מסך בנפרד; לפני מסך 4 הסיסמה ריקה בצדק — המנוע לא אמור
     לענות 'admin_pass must not be empty' על מסך הרשת (נראה ב-ESXi 21/09)."""
     m = _machine(tmp_path)
-    rc, out, err = bridge(m, "validate", {**FORM, "password": "", "password_confirm": "", "step": "2"})
+    rc, out, err = bridge(m, "validate", {**FORM, "password": "", "password_confirm": "", "step": "2",
+                                          "root_password": "", "root_password_confirm": ""})
     assert rc == 0, err
     assert not [k for k in out if k.startswith("errors.")], out
     seen = (tmp_path / "answers.seen").read_text()
     assert "admin_pass=not-yet-asked-1!" in seen, "placeholder for the dry-run, never the real answers"
+    assert "root_pass=not-yet-asked-1!" in seen, "#1632: the same placeholder for root's"
     assert not (m["run"] / "answers").exists()
+
+
+# --- #1632 (Nadav 24/10): root's password is chosen on the admin screen ----------------
+
+@pytest.mark.parametrize(("root", "confirm", "field", "message"), [
+    ("Ab1!", "Ab1!", "errors.root_password", "לפחות 8 תווים"),
+    ("abcdefg!", "abcdefg!", "errors.root_password", "נדרשת לפחות ספרה אחת"),
+    ("abcdefg1", "abcdefg1", "errors.root_password", "נדרש לפחות תו מיוחד אחד"),
+    ("", "", "errors.root_password", "לפחות 8 תווים"),
+    ("R00t!screen", "R00t!screeN", "errors.root_password_confirm", "סיסמאות ה-root שהזנת אינן תואמות"),
+])
+def test_root_password_has_the_admin_rules_and_apply_refuses_without_it(tmp_path, root, confirm, field, message):
+    m = _machine(tmp_path)
+    form = {**FORM, "root_password": root, "root_password_confirm": confirm}
+    rc, out, err = bridge(m, "validate", form)
+    assert rc == 0, err
+    assert message in out.get(field, []), out
+    assert "errors.password" not in out and "errors.password_confirm" not in out, "the admin's is fine"
+    rc, out, err = bridge(m, "apply", form)
+    assert rc == 0, err
+    assert field in out and "job" not in out, out
+    assert not (m["run"] / "answers").exists(), "no answers, no engine, without a valid root password"
+
+
+def test_a_valid_root_password_has_no_error_and_never_leaves_the_answers_file(tmp_path):
+    """The guard against an over-broad rule, and the secrecy: the value is in
+    the 0600 answers file only -- not on the bridge's stdout, stderr, or the
+    engine's argv."""
+    m = _machine(tmp_path)
+    rc, out, err = bridge(m, "validate", FORM)
+    assert rc == 0, err
+    assert not [k for k in out if k.startswith("errors.")], out
+    rc, out, err = bridge(m, "apply", FORM)
+    assert rc == 0 and "job" in out, (out, err)
+    assert "R00t!screen" not in "\n".join(f"{k}={v}" for k, vs in out.items() for v in vs) + err
+    import time
+    for _ in range(40):
+        if (m["run"] / "install.state").exists() and len(m["calls"].read_text().splitlines()) >= 2:
+            break
+        time.sleep(0.05)
+    assert "R00t!screen" not in m["calls"].read_text(), "the engine's argv carries only the answers path"
+    assert stat.S_IMODE((m["run"] / "answers").stat().st_mode) == 0o600
+
+
+def test_an_engine_refusal_of_the_root_password_lands_on_its_field():
+    fe = REPO / "installer" / "lib" / "fielderrors.sh"
+    for code in ("invalid-root-password", "root-password-missing"):
+        got = subprocess.run([SH, "-c", '. "$1"; field_for_code "$2"; printf "|"; he_for_code "$2"', "_", str(fe), code],
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        assert got.returncode == 0, got.stderr
+        assert got.stdout == "root_password|סיסמת ה-root לא יכולה להיות ריקה", got.stdout

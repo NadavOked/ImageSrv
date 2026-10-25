@@ -1,6 +1,7 @@
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "text.h"
 
 /* mockup 10/10: no text below 11px -- the 9-10px labels (SMART cells, drawer
@@ -36,6 +37,23 @@ static Text layout_new(cairo_t *cr, Font font, double px, int weight, Dir dir) {
     return t;
 }
 
+/* IMAGECTL_GUI_TEXTLOG=<file>: every string laid out is appended, one per line -- what a test
+ * asserts on ("what the screen SAYS"), since a PNG cannot be read back. Off unless set. */
+static void textlog_line(const char *line) {
+    static const char *path; static int init;
+    if (!init) { path = getenv("IMAGECTL_GUI_TEXTLOG"); init = 1; }
+    if (!path || !path[0]) return;
+    FILE *f = fopen(path, "a");
+    if (!f) return;
+    fprintf(f, "%s\n", line);
+    fclose(f);
+}
+static void textlog(PangoLayout *l) { textlog_line(pango_layout_get_text(l)); }
+/* --png: "@@ <card>-<theme>" before a card is drawn, so a test reads one card's words */
+void text_log_mark(const char *card, const char *theme) {
+    char line[160]; snprintf(line, sizeof line, "@@ %s-%s", card, theme); textlog_line(line);
+}
+
 static void layout_finish(Text *t, int width_px) {
     if (width_px > 0) {
         pango_layout_set_width(t->layout, width_px * PANGO_SCALE);
@@ -46,6 +64,7 @@ static void layout_finish(Text *t, int width_px) {
         pango_layout_set_alignment(t->layout, PANGO_ALIGN_LEFT);
     }
     pango_layout_get_pixel_size(t->layout, &t->w, &t->h);
+    textlog(t->layout);
 }
 
 Text text_make_markup(cairo_t *cr, Font font, double px, int weight,

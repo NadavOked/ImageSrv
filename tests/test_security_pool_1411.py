@@ -115,14 +115,21 @@ class World:
     tar, and fake apt/dpkg/curl whose "installed" versions live in a file."""
 
     def __init__(self, tmp_path: Path, bindir: Path, *, pool: dict[str, str] | None,
-                 installed: dict[str, str], tamper: bool = False, lock: dict | None = None):
+                 installed: dict[str, str], tamper: bool = False, lock: dict | None = None,
+                 wanted: list[str] | None = None):
         self.tmp, self.bindir = tmp_path, bindir
         self.repo = tmp_path / "repo"
-        (self.repo / "install").mkdir(parents=True)
+        (self.repo / "install").mkdir(parents=True, exist_ok=True)
         shutil.copy(SEC_UP, self.repo / "install" / "security-upgrade.sh")
         shutil.copy(LOCK_PY, self.repo / "install" / "security-pool-lock.py")
+        # #1803: the tag's tools/iso/packages.txt -- by default exactly what is installed.
+        self.packages_txt = self.repo / "tools" / "iso" / "packages.txt"
+        self.packages_txt.parent.mkdir(parents=True, exist_ok=True)
+        names = installed if wanted is None else wanted
+        self.packages_txt.write_text("# packages\n" + "".join(f"{n}   # why\n" for n in names),
+                                     encoding="utf-8", newline="\n")
         self.data = tmp_path / "data"
-        self.data.mkdir()
+        self.data.mkdir(exist_ok=True)
         self.release = tmp_path / "release"
         self.release.mkdir()
         self.lock = lock
@@ -138,6 +145,7 @@ class World:
             self.after = dict(installed)
         self._write("installed", installed)
         self._write("upgraded", self.after)
+        self._write("pool", pool or {})
         self._tools()
 
     def _write(self, name: str, versions: dict[str, str]) -> None:
@@ -146,6 +154,7 @@ class World:
 
     def _tools(self) -> None:
         installed, upgraded = posix(self.tmp / "installed"), posix(self.tmp / "upgraded")
+        pool = posix(self.tmp / "pool")
         fake_tool(self.bindir, "dpkg-query", f'''
 [ -z "${{FAKE_DPKG_QUERY_BROKEN:-}}" ] || {{ echo "dpkg-query: database locked" >&2; exit 2; }}
 for last; do :; done
@@ -181,6 +190,10 @@ case " $* " in
         print $1, v }}' "{installed}" "{upgraded}" > "{installed}.new"
     if [ "$mode" = install ]; then
       for d in ${{FAKE_APT_NEW_DEPS:-}}; do echo "${{d%%=*}} ${{d#*=}}" >> "{installed}.new"; done
+      # #1803: a named package that is not installed yet comes from the pool.
+      awk -v args=" $* " 'NR == FNR {{ have[$1] = 1; next }}
+        !($1 in have) && index(args, " " $1 " ") {{ print $1, $2 }}' "{installed}.new" "{pool}" > "{installed}.add"
+      cat "{installed}.add" >> "{installed}.new"
     fi
     if [ -n "${{FAKE_APT_WANTS_REMOVE:-}}" ]; then
       awk -v r="$FAKE_APT_WANTS_REMOVE" '$1 != r' "{installed}.new" > "{installed}.rm" && mv "{installed}.rm" "{installed}.new"
@@ -194,7 +207,7 @@ out=""; url=""
 while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2 ;; -*) [ "$1" = --max-time ] || [ "$1" = --connect-timeout ] || [ "$1" = --speed-limit ] || [ "$1" = --speed-time ] || [ "$1" = --proto ] || [ "$1" = --proto-redir ] && shift; shift ;; *) url=$1; shift ;; esac; done
 src=${FAKE_CURL_SRC:-${url#file://}}
 cp "$src" "$out" 2>/dev/null || { echo "curl: (22) The requested URL returned error: 404" >&2; exit 22; }''')
-        fake_tool(self.bindir, "git", 'echo "${FAKE_ORIGIN:-https://github.com/NadavOked/ImageCtl.git}"')
+        fake_tool(self.bindir, "git", 'echo "${FAKE_ORIGIN:-https://github.com/NadavOked/ImageSrv.git}"')
 
     def run(self, **env: str) -> subprocess.CompletedProcess:
         full = {"IMAGECTL_DATA_DIR": posix(self.data), "IMAGECTL_PYTHON": sys.executable,
@@ -256,7 +269,7 @@ def test_the_pool_is_installed_only_from_itself_and_recorded(tmp_path, bindir):
     repo = posix(world.data / "security-pool" / "repo")
     assert world.sources().splitlines() == [f"deb [trusted=yes] file:{repo} trixie main"] * 2
     assert world.state() == {"date": DAY, "sha256": world.lock["sha256"], "asset": ASSET,
-                             "tag": "v0.80.0", "upgraded": "2"}
+                             "tag": "v0.80.0", "upgraded": "2", "installed": "0"}
     assert done.stdout.strip().splitlines()[-1] == f"עדכוני מערכת מתאריך {DAY} מותקנים ({ASSET})"
     assert not (world.data / "security-pool").exists(), "the work dir is removed"
     assert "אזהרה" not in done.stdout
@@ -353,7 +366,7 @@ def test_the_pool_is_downloaded_from_the_release_of_the_tag_over_https(tmp_path,
     assert done.returncode == 0, done.stdout + done.stderr
     curl = world.calls("curl")
     assert curl and curl[0].endswith(
-        f"https://github.com/NadavOked/ImageCtl/releases/download/v0.80.0/{ASSET}"), curl
+        f"https://github.com/NadavOked/ImageSrv/releases/download/v0.80.0/{ASSET}"), curl
     assert "--proto-redir =https" in curl[0] and "--max-time 1800" in curl[0]
 
 
@@ -467,7 +480,11 @@ def test_the_real_script_in_a_release_without_a_pool_lets_the_upgrade_finish(tmp
     _seed_db(data)
     repo = _fake_repo(tmp_path, live_ok=True)
     shutil.copy(SEC_UP, repo / "install" / "security-upgrade.sh")
+    # #1803: the tag's package list, everything on it installed
+    (repo / "tools" / "iso").mkdir(parents=True)
+    (repo / "tools" / "iso" / "packages.txt").write_text("dpkg\n", encoding="utf-8", newline="\n")
     _success_tools(bindir)
+    fake_tool(bindir, "dpkg-query", "printf 'install ok installed 1.22.21'")
     done = _run_upgrade(tmp_path, bindir, repo, data)
     assert done.returncode == 0, (tmp_path / "upgrade.log").read_text(encoding="utf-8")
     assert "אינה נושאת מאגר עדכוני אבטחה" in (tmp_path / "upgrade.log").read_text(encoding="utf-8")
@@ -482,6 +499,7 @@ Inst libc6 (2.41-12 Debian:13.1/stable [amd64])
 Inst openssh-client (1:10.0p1-7+deb13u1 Debian:13.1/stable, Debian-Security:13/stable-security [amd64])
 Inst dnsmasq-base [2.90-4] (2.90-4+deb13u1 Debian-Security:13/stable-security [amd64])
 Inst python3-security (1.0-1 Debian:13.1/stable [amd64])
+Inst dnsmasq (2.90-4+deb13u1 Debian:13.1/stable [all])
 Conf libssl3t64 (3.5.1-1+deb13u1 Debian-Security:13/stable-security [amd64])
 """
 POLICY = " 500 http://security.debian.org/debian-security trixie-security/main amd64 Packages\n" \
@@ -527,25 +545,32 @@ def test_make_pool_refuses_a_build_host_without_trixie_security(tmp_path, bindir
 
 
 @POSIX
-def test_make_pool_security_packs_only_trixie_security_with_a_valid_lock(tmp_path, bindir):
+def test_make_pool_security_packs_the_closure_with_a_valid_lock(tmp_path, bindir):
+    """#1803: the whole closure of packages.txt (at the candidate versions -- the security
+    ones where there are), so the update button can install a package new in the list."""
     _pool_tools(tmp_path, bindir)
     out = tmp_path / "out"
     done = _make_pool(tmp_path, bindir, "--security", "--out", posix(out))
     assert done.returncode == 0, done.stdout + done.stderr
     dl = next(row for row in calls(tmp_path) if row.startswith("apt-get download"))
-    assert dl.split()[2:] == ["libssl3t64=3.5.1-1+deb13u1", "openssh-client=1:10.0p1-7+deb13u1",
-                              "dnsmasq-base=2.90-4+deb13u1"], dl
+    assert dl.split()[2:] == ["libssl3t64=3.5.1-1+deb13u1", "libc6=2.41-12",
+                              "openssh-client=1:10.0p1-7+deb13u1", "dnsmasq-base=2.90-4+deb13u1",
+                              "python3-security=1.0-1", "dnsmasq=2.90-4+deb13u1"], dl
     lock = json.loads((out / "security-pool.json").read_text(encoding="utf-8"))
     tar_path = out / lock["asset"]
     raw = tar_path.read_bytes()
     assert lock["sha256"] == hashlib.sha256(raw).hexdigest() and lock["size"] == len(raw)
-    assert lock["packages"] == 3 and lock["asset"] == f"imagectl-security-pool-{lock['date']}.tar"
+    assert lock["packages"] == 6 and lock["security"] == 3, lock
+    assert lock["asset"] == f"imagectl-security-pool-{lock['date']}.tar"
     with tarfile.open(tar_path) as tar:
         names = sorted(tar.getnames())
     debs = [n for n in names if n.endswith(".deb")]
     assert debs == ["pool/main/imagectl/dnsmasq-base_2.90-4+deb13u1_amd64.deb",
+                    "pool/main/imagectl/dnsmasq_2.90-4+deb13u1_amd64.deb",
+                    "pool/main/imagectl/libc6_2.41-12_amd64.deb",
                     "pool/main/imagectl/libssl3t64_3.5.1-1+deb13u1_amd64.deb",
-                    "pool/main/imagectl/openssh-client_1%3a10.0p1-7+deb13u1_amd64.deb"], names
+                    "pool/main/imagectl/openssh-client_1%3a10.0p1-7+deb13u1_amd64.deb",
+                    "pool/main/imagectl/python3-security_1.0-1_amd64.deb"], names
     assert "dists/trixie/main/binary-amd64/Packages.gz" in names and "pool-date" in names
     assert _lock_cli(tmp_path, (out / "security-pool.json").read_text(encoding="utf-8")).returncode == 0
 

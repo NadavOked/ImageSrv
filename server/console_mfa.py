@@ -50,6 +50,12 @@ SELF_DISABLE_FLAGGED_HE = ('למשתמש שלך מסומן "דרוש אימות 
 RESET_SELF_HE = 'את האימות הדו-שלבי שלך מבטלים ב"החשבון שלי" (עם הסיסמה וקוד)'
 
 CHALLENGE_TTL = 5 * 60
+#: ‏#2101: כמה זמן setup שלא אושר מחזיר את אותו סוד ממתין. אחרי זה — סוד חדש.
+PENDING_TTL = 15 * 60
+#: ‏#2101: מתי הוגרל הסוד הממתין של כל משתמש. בזיכרון ולא בעמודה: בלי שינוי
+#: סכמה, ואתחול שרת באמצע הגדרה פשוט מגריל סוד חדש — כמו לפני התיקון.
+_pending_since: dict[str, float] = {}
+_now = time.time
 BACKUP_COUNT = 8
 BACKUP_LEN = 10
 BACKUP_ALPHABET = string.ascii_uppercase + string.digits
@@ -164,13 +170,26 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             raise HTTPException(403, "builtin_no_mfa")
         if role != "admin":
             raise HTTPException(403, "MFA למנהל בלבד")
-        secret = totp.new_secret()
+        # ‏#2101: setup שעוד לא אושר מחזיר את **אותו** סוד ממתין עד `PENDING_TTL` —
+        # רענון הדף אחרי סריקת ה-QR לא ינתק את מה שהטלפון כבר שמר. ההחלטה בתוך
+        # נעילת הכתיבה, כדי ששתי קריאות במקביל לא יגרילו שני סודות.
+        now = _now()
         with _write_lock, writing(ctx.conn):
-            ctx.conn.execute(
-                "UPDATE users SET mfa_secret = ?, mfa_enabled = 0,"
-                " mfa_enrolled_at = NULL WHERE username = ?",
-                (secret, username),
-            )
+            row = ctx.conn.execute(
+                "SELECT mfa_secret, mfa_enabled FROM users WHERE username = ?", (username,),
+            ).fetchone()
+            since = _pending_since.get(username)
+            if (row is not None and not row["mfa_enabled"] and row["mfa_secret"]
+                    and since is not None and 0 <= now - since < PENDING_TTL):
+                secret = row["mfa_secret"]
+            else:
+                secret = totp.new_secret()
+                ctx.conn.execute(
+                    "UPDATE users SET mfa_secret = ?, mfa_enabled = 0,"
+                    " mfa_enrolled_at = NULL WHERE username = ?",
+                    (secret, username),
+                )
+                _pending_since[username] = now
         url = totp.otpauth_url(username, secret)
         svg = _qr_svg(url)
         # ‏#1150: "אין חבילה" נאמר בשם ביומן ובקונסולה — לא נקפל ל"הצלחה"
@@ -214,6 +233,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
                 " WHERE username = ?",
                 (now_iso(), username),
             )
+        _pending_since.pop(username, None)   # #2101: אושר — אין עוד סוד ממתין
         journal(ctx.conn, "mfa_enabled", username, username)
         auth.attach_cookie(response, ctx.conn, username, role, tls)
         return {"mfa_enabled": True, "backup_codes": codes}

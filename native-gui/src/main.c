@@ -35,6 +35,7 @@
  * Without --auth-cmd every login fails (closed by default); --demo accepts
  * any non-empty user name, for looking at the screens only. */
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -42,7 +43,19 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+
+/* #1946: the GUI's own proof of life for its keepers (guiparent.sh gui_keep,
+ * srgui.sh): this file's mtime, set after every presented frame and every turn
+ * of the event loop (which wakes at least every 2 s). A stopped or wedged GUI
+ * still answers kill -0; it does not move this. */
+static void gui_heartbeat(void) {
+    const char *path = getenv("IMAGECTL_GUI_BEAT");
+    if (!path || !*path) path = "/run/imagectl/gui/beat";
+    int fd = open(path, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+    if (fd >= 0) { futimens(fd, NULL); close(fd); }
+}
 #include "backend.h"
 #include "dcui.h"
 #include "input.h"
@@ -89,6 +102,7 @@ static int run_auth(const char *cmd, const char *user, const char *pass, char *r
     pid_t pid = fork();
     if (pid < 0) return -1;
     if (pid == 0) {
+        signal(SIGPIPE, SIG_DFL);                    /* #2108: the GUI ignores it; the command must not inherit that */
         dup2(in_p[0], 0); dup2(out_p[1], 1);
         close(in_p[0]); close(in_p[1]); close(out_p[0]); close(out_p[1]);
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
@@ -162,6 +176,27 @@ static void lcboot_mark_shown(const App *a) {
     unlink(next); failed = 1;
 }
 
+/* #1918: the power button -- a request file next to the state file, as the
+ * local clone's screens leave theirs (lcgui.sh): power.press when it was
+ * pressed, power.answer = <nonce>|stop|keep for the question. A file and not
+ * a stdout record: the restore's and the failure's GUI have no bridge, and
+ * the agent's power_watch (powerbtn.sh) reads the same place under all of
+ * them. Written whole (renamed into place); 0 = not written, and the caller
+ * says so on the screen. */
+static int power_drop(const App *a, const char *name, const char *text) {
+    if (!a->tools_dir[0]) return 0;
+    char path[600], next[620];
+    snprintf(path, sizeof path, "%s/%s", a->tools_dir, name);
+    snprintf(next, sizeof next, "%s.next", path);
+    FILE *f = fopen(next, "w");
+    int ok = f && fprintf(f, "%s\n", text) > 0;
+    if (f && fclose(f) != 0) ok = 0;
+    if (ok && rename(next, path) == 0) return 1;
+    fprintf(stderr, "native-gui: power button: cannot write %s: %s\n", path, strerror(errno));
+    unlink(next);
+    return 0;
+}
+
 /* ---- stdout records --------------------------------------------------------- */
 
 static void emit(const char *token) { printf("%s\n", token); }
@@ -202,13 +237,17 @@ static void emit_ask(App *a, const char *answer) {
 
 /* 11/10: modal like the shrink question. 1 = the primary answer, 2 = the
  * secondary one, Esc = the safe default (leave the disk / power off), Enter
- * nothing. The shrink question, if both are pending, is the one on screen. */
+ * nothing -- except badsect (#2017, Nadav 22/10), whose default is to go on:
+ * Enter is "המשך" (its focus), Esc "עצור". The shrink question, if both are
+ * pending, is the one on screen. */
 static int ask_modal(App *a, const Event *e) {
     if (!a->st.ask_pending || a->st.shrink_pending) return 0;
     const int grow = a->st.ask_kind == ASK_GROWBACK;
-    const char *first = grow ? "restore" : "poweroff";
-    const char *second = grow ? "leave" : "menu";
-    const char *safe = grow ? "leave" : "poweroff";
+    const int drawer = a->st.ask_kind == ASK_RAID || a->st.ask_kind == ASK_SHARE;   /* #1808/#1898: no answer = no write */
+    const int bad = a->st.ask_kind == ASK_BADSECT;   /* #2017: no answer = the copy goes on (Nadav 22/10) */
+    const char *first = grow ? "restore" : a->st.ask_kind == ASK_RAID ? "wipe" : a->st.ask_kind == ASK_SHARE ? "split" : bad ? "continue" : "poweroff";
+    const char *second = grow ? "leave" : drawer ? "skip" : bad ? "stop" : "menu";
+    const char *safe = grow ? "leave" : drawer ? "skip" : bad ? "stop" : "poweroff";
     switch (e->type) {
     case UIEV_CHAR:
         if (e->ch == '1') emit_ask(a, first);
@@ -216,6 +255,7 @@ static int ask_modal(App *a, const Event *e) {
         return 1;
     case UIEV_KEY:
         if (e->key == KEYSYM_ESC) emit_ask(a, safe);
+        else if (e->key == KEYSYM_ENTER && bad) emit_ask(a, first);
         return 1;
     case UIEV_CLICK:
         a->ptr_x = e->x; a->ptr_y = e->y;
@@ -577,7 +617,8 @@ static void start_capture(App *a, int smart_seen) {
 /* #706: write a library image onto THIS machine's disk. The agent rediscovers
  * the internal disk before writing -- the GUI never supplies a device. */
 static int restore_ready(App *a) {
-    if (a->restore_image_sel <= 0 || a->restore_image_sel > a->st.nimages) {
+    if (a->restore_image_sel <= 0 || a->restore_image_sel > a->st.nimages
+        || a->st.images[a->restore_image_sel - 1].unchecked) {   /* #1896: mark C: first */
         snprintf(a->st.form_error, sizeof a->st.form_error, "בחרו אימג' לשחזור");
         return 0;
     }
@@ -940,10 +981,10 @@ static void emit_touch(App *a, int demo) {
 /* #1560: a count to a power-off is on the screen -- the idle warning (#434),
  * the end-of-task count, or an end question (its subject is the epoch). The
  * loop then wakes on every second, so the number goes 20, 19, 18 -- the 2 s
- * wake made it skip. */
+ * wake made it skip. #2017: the bad-sector question counts to its going on. */
 static int counting(const App *a) {
     const int end_ask = a->st.ask_pending && (a->st.ask_kind == ASK_CAPTURE_END ||
-        a->st.ask_kind == ASK_SEND_END || a->st.ask_kind == ASK_ROUND_END);
+        a->st.ask_kind == ASK_SEND_END || a->st.ask_kind == ASK_ROUND_END || a->st.ask_kind == ASK_BADSECT);
     return a->st.idle_poweroff_at > 0 || a->st.end_poweroff_at > 0 || end_ask;
 }
 
@@ -954,7 +995,7 @@ static int counting(const App *a) {
  * the results (held) -- the screen behind it is the screen again, and the
  * bar's one button (or Enter) still powers off. */
 static int end_modal(App *a, const Event *e) {
-    if (a->st.end_poweroff_at <= 0) return 0;
+    if (a->st.end_kind == END_NONE) return 0;     /* #2024: a held end has epoch 0 */
     if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
     if (e->type == UIEV_MOVE) a->ptr_visible = !e->is_touch;
     const int hit = e->type == UIEV_CLICK ? app_hit(a, e->x, e->y) : -1;
@@ -966,15 +1007,56 @@ static int end_modal(App *a, const Event *e) {
     return 1;
 }
 
+/* #1918: the question's answer, once per question (its nonce). */
+static void power_answer(App *a, const char *answer) {
+    char line[64];
+    snprintf(line, sizeof line, "%s|%s", a->st.power_nonce, answer);
+    if (power_drop(a, "power.answer", line)) snprintf(a->power_sent, sizeof a->power_sent, "%s", a->st.power_nonce);
+    else toast(a, "התשובה לא נמסרה למחשב — נסו שוב");
+}
+
+/* #1918: the power button. A press goes to the agent, which decides: off
+ * when nothing writes, else the question (screens_ask.c draw_power_dialog).
+ * The question is modal over every screen, the local clone's included: Esc,
+ * Enter or "המשך" keep the write going; Del or the red "עצור וכבה" stop it
+ * and power off -- only where it has a stop (can_stop). */
+static int power_modal(App *a, const Event *e) {
+    if (e->type == UIEV_KEY && e->key == KEYSYM_POWER) {
+        if (!power_drop(a, "power.press", "pressed")) toast(a, "כפתור ההפעלה: הלחיצה לא נמסרה למחשב");
+        return 1;
+    }
+    if (!power_ask_open(a) || e->type == UIEV_MOVE) return 0;
+    int hit = -1;
+    if (e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; hit = app_hit(a, e->x, e->y); }
+    if ((e->type == UIEV_KEY && (e->key == KEYSYM_ESC || e->key == KEYSYM_ENTER)) || hit == HIT_PWR_KEEP)
+        power_answer(a, "keep");
+    else if (a->st.power_can_stop && ((e->type == UIEV_KEY && e->key == KEYSYM_DELETE) || hit == HIT_PWR_STOP))
+        power_answer(a, "stop");
+    return 1;
+}
+
+/* mockup 10: the idle window (screens.c draw_idle_countdown) -- Enter or "כבה עכשיו" powers off
+ * now (idle-poweroff, idle.sh), and is not a touch; any other key or click keeps it on (touch). */
+static int idle_modal(App *a, const Event *e, int demo) {
+    if (a->st.idle_poweroff_at <= 0 || demo) return 0;
+    int off = e->type == UIEV_KEY && e->key == KEYSYM_ENTER;
+    if (e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; off = app_hit(a, e->x, e->y) == HIT_IDLE_OFF; }
+    if (!off) { if (e->type == UIEV_MOVE) return 0; emit_touch(a, demo); return 1; }   /* the key keeps it on, and does nothing under it */
+    emit1("idle-poweroff");
+    return 1;
+}
+
 static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
+    if (idle_modal(a, e, demo)) return 0;          /* mockup 10: before the touch that would cancel it */
     if (e->type == UIEV_CLICK || e->type == UIEV_CHAR || e->type == UIEV_KEY) emit_touch(a, demo);
     /* #1499: the theme switch first -- every screen has it, modals and the
      * local clone's own key handling included. */
-    if ((e->type == UIEV_KEY && e->key == KEYSYM_F2) ||
+    if ((e->type == UIEV_KEY && e->key == KEYSYM_F2 && !app_usbset_window(a)) ||   /* #2001: F2 saves there */
         (e->type == UIEV_CLICK && app_hit(a, e->x, e->y) == HIT_THEME)) {
         toggle_theme(a);
         return 0;
     }
+    if (power_modal(a, e)) return 0;               /* #1918: before every screen's own keys */
     if (end_modal(a, e)) return 0;                 /* #1560: before the local clone's own keys */
     if (a->screen == SCREEN_LCBOOT || a->screen == SCREEN_LOCAL) {   /* #1322: its own keys and clicks */
         if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
@@ -983,14 +1065,21 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         return 0;
     }
     if (smart_modal(a, e)) return 0;               /* 16/10: the SMART warning window */
-    if (a->screen == SCREEN_FAILURE) {             /* #1569: one thing to do here -- unfold the technical lines */
+    if (!demo && standby_handle(a, e)) return 0;   /* #2079 (mockup 02): back to the boot choice */
+    if (a->screen == SCREEN_FAILURE) {             /* #2068: its buttons -- Enter is the first; the agent acts (hold.sh) */
         if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
         if (e->type == UIEV_MOVE) a->ptr_visible = !e->is_touch;
-        if ((e->type == UIEV_KEY && e->key == KEYSYM_ENTER) ||
-            (e->type == UIEV_CLICK && app_hit(a, e->x, e->y) == HIT_FAIL_DETAILS)) a->fail_open = !a->fail_open;
+        int b = -1, h = e->type == UIEV_CLICK ? app_hit(a, e->x, e->y) : -1;
+        if (e->type == UIEV_KEY && e->key == KEYSYM_ENTER) b = 0;
+        else if (h >= HIT_FAIL_BTN && h <= HIT_FAIL_BTN_LAST) b = h - HIT_FAIL_BTN;   /* HIT_FAIL_BTN_LAST - HIT_FAIL_BTN + 1 == MAX_FAIL_BTNS */
+        if (b >= 0 && b < a->st.nfail_btns && !demo) {
+            if (power_drop(a, "fail.action", a->st.fail_btns[b].action)) toast(a, "בוצע — המחשב מטפל בבקשה");
+            else toast(a, "הבקשה לא נמסרה למחשב — נסו שוב");
+        }
         return 0;
     }
     if (cancel_modal(a, e)) return 0;              /* #1386: "בטל דיסק זה" */
+    if (a->sysp_open && syspart_modal(a, e)) return 0;   /* #1896: the C: picker, over the restore screen */
     /* 16/10: the cloner's restore screen -- its drawers, its way back, its red
      * button; the folders and the images below are the build machine's */
     if (a->screen == SCREEN_RESTORE && lc_pull_active(a)) {
@@ -1040,6 +1129,13 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             cdlg_open(a, a->screen == SCREEN_ROOM, id - HIT_BAY_CANCEL_BASE, 0);
             break;
         }
+        if (id >= HIT_IDENTIFY_BASE && id < HIT_IDENTIFY_BASE + MAX_DRAWERS) {   /* #1966: the agent reads it */
+            int k = id - HIT_IDENTIFY_BASE;
+            if (k < a->st.nidisks && a->st.idisks[k].dev[0])
+                toast(a, power_drop(a, "identify-request", a->st.idisks[k].dev)
+                         ? "נורית המגירה תהבהב כ-15 שניות" : "הבקשה לא נמסרה למחשב — נסו שוב");
+            break;
+        }
         if (id >= HIT_ROOM_POWEROFF_BASE && id < HIT_ROOM_POWEROFF_BASE + MAX_ROOM_NOTES) {
             int i = id - HIT_ROOM_POWEROFF_BASE;
             if (i < a->st.nroom_missing && a->st.room_missing[i].can_poweroff) {
@@ -1067,7 +1163,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             else if (a->dd_open == HIT_ROOM_IMAGE) a->image_sel = i;
             else if (a->dd_open == HIT_RESTORE_IMAGE) a->restore_image_sel = i;
             else if (a->dd_open == HIT_ROOM_DRV_MODEL) room_drv_choose(a, i);   /* #1269 */
-            else if (a->screen == SCREEN_RESTORE && i < a->st.nimages) a->restore_image_sel = i + 1;
+            else if (a->screen == SCREEN_RESTORE && i < a->st.nimages) restore_pick(a, i);   /* #1896: unchecked = the C: picker */
             a->dd_open = 0;
             break;
         }
@@ -1148,7 +1244,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         /* owner, 10/10: folder-first -- 1-9 picks a folder, then an image in it */
         if (a->screen == SCREEN_RESTORE && e->ch >= '1' && e->ch <= '9') {
             int image = pick_digit(a, e->ch - '1');
-            if (image >= 0) a->restore_image_sel = image + 1;
+            if (image >= 0) restore_pick(a, image);   /* #1896 */
             break;
         }
         if (a->screen == SCREEN_ROOM && a->dd_open == HIT_ROOM_IMAGE && e->ch >= '1' && e->ch <= '9') {
@@ -1162,9 +1258,10 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             if (!n) break;
             for (int i = 0; i < n; i++) if (idx[i] + 1 == a->restore_image_sel) at = i;
             if (at < 0) at = 0;
-            else if (e->ch == ']') at = (at + 1) % n;
-            else at = (at + n - 1) % n;
-            a->restore_image_sel = idx[at] + 1;
+            for (int step = 0; step < n; step++) {   /* #1896: an unchecked image is never the one restored */
+                at = e->ch == ']' ? (at + 1) % n : (at + n - 1) % n;
+                if (!a->st.images[idx[at]].unchecked) { a->restore_image_sel = idx[at] + 1; break; }
+            }
             break;
         }
         /* W wakes the picked cloners (Nadav 17/10); N acts on a round -- without one it sends nothing */
@@ -1297,10 +1394,11 @@ static void sample_failure(State *s) {
     snprintf(s->fail_ctx[0].label, 48, "מכונה"); snprintf(s->fail_ctx[0].value, 96, "BUILD-01");
     snprintf(s->fail_ctx[1].label, 48, "אימג׳"); snprintf(s->fail_ctx[1].value, 96, "office365-חדש");
     snprintf(s->fail_ctx[2].label, 48, "יעדים"); snprintf(s->fail_ctx[2].value, 96, "1 מתוך 1 נכשלו או דולגו");
-    s->nfail_steps = 3;
-    snprintf(s->fail_steps[0], 240, "השאירו את המחשב דלוק — השרת עדיין מקבל ממנו דיווחים.");
-    snprintf(s->fail_steps[1], 240, "בדקו שכבל הרשת מחובר ושהשרת פעיל (הסטטוס למטה).");
-    snprintf(s->fail_steps[2], 240, "כבו והדליקו, ובחרו שוב \"קליטת אימג׳ חדש\".");
+    s->nfail_steps = 1;   /* #2068: one sentence, and the buttons that do it */
+    snprintf(s->fail_steps[0], 240, "ההעלאה לשרת נעצרה. הדיסק של המחשב הזה לא שונה.");
+    s->nfail_btns = 2;
+    snprintf(s->fail_btns[0].action, 16, "retry"); snprintf(s->fail_btns[0].label, 64, "נסה שוב");
+    snprintf(s->fail_btns[1].action, 16, "off"); snprintf(s->fail_btns[1].label, 64, "כבה את המחשב");
     s->nfail_code = 4;
     snprintf(s->fail_code[0], 240, "targets/sda/state failed");
     snprintf(s->fail_code[1], 240, "targets/sda/error upload rc=22 (HTTP 503) -> manifest upload failed");
@@ -1317,8 +1415,8 @@ static void sample_state(State *s) {
     snprintf(s->folders[0], sizeof s->folders[0], "Office");
     snprintf(s->folders[1], sizeof s->folders[1], "הנדסאים");
     s->nimages = 2;
-    s->images[0] = (Image){ "img_1", "Office 2024 — סטנדרט", "Office" };
-    s->images[1] = (Image){ "img_2", "SolidWorks 2025", "הנדסאים" };
+    s->images[0] = (Image){ .id = "img_1", .name = "Office 2024 — סטנדרט", .folder = "Office" };
+    s->images[1] = (Image){ .id = "img_2", .name = "SolidWorks 2025", .folder = "הנדסאים" };
     s->nmachines = 3;
     s->machines[0] = (Machine){
         .name = "CLONE-01", .mac = "3C:52:82:A1:00:21", .state = "writing",
@@ -1371,9 +1469,13 @@ static void sample_state(State *s) {
     snprintf(s->sess_group, sizeof s->sess_group, "כיתה 12");
     s->sess_open = 1; s->joined = 3; s->expected = 14; s->starts_in = 272;
     s->ndrawers = 3;
-    s->drawers[0] = (Drawer){ 1, "sda", "writing", "", 44814663680ULL, 85899345920ULL, 98000000, 419, 0, "", "", 0, "", "", "", "", "", "", "", "" };   /* #410 */
-    s->drawers[1] = (Drawer){ 2, "sdb", "failed", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "" };
-    s->drawers[2] = (Drawer){ 3, "sdc", "waiting", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "" };
+    s->drawers[0] = (Drawer){ 1, "sda", "writing", "", 44814663680ULL, 85899345920ULL, 98000000, 419, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0 };   /* #410 */
+    s->drawers[1] = (Drawer){ 2, "sdb", "failed", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0 };
+    s->drawers[2] = (Drawer){ 3, "sdc", "waiting", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0 };
+    s->cuseds[0] = (CUsed){ "sda", 500107862016ULL, 214748364800LL };   /* #2030: size, bytes in use (a failed write: not measured) */
+    s->cuseds[1] = (CUsed){ "sdb", 500107862016ULL, -1 };
+    s->cuseds[2] = (CUsed){ "sdc", 240057409536ULL, 61234567890LL };
+    s->ncuseds = 3;
     snprintf(s->cloner_image, sizeof s->cloner_image, "Office 2024 — סטנדרט");
     s->smart_pending = 1; s->smart_port = 2;
     snprintf(s->smart_nonce, sizeof s->smart_nonce, "1-2");
@@ -1411,11 +1513,46 @@ static const char *PNG_CARDS[] = { "login", "menu", "pick", "progress", "done", 
                                    "room-start-warn", "room-poweroff", "room-poweroff-local-copy",
                                    "room-poweroff-all",
                                    "growback", "capture-end", "send-end", "round-end", "end-countdown",   /* #1560 */
+                                   "cloner-end",   /* #2024 */
                                    "cloner-smart", "restore-smart", "pick-smart",   /* 16/10 */
-                                   "failure", "failure-open",   /* #1569: folded / unfolded technical lines */
-                                   "cloner-cancel", "cloner-canceled", "room-cancel", "room-canceled" };   /* #1386 */
+                                   "failure",   /* #1569; #2068: no technical lines, buttons */
+                                   "cloner-cancel", "cloner-canceled", "room-cancel", "room-canceled",   /* #1386 */
+                                   "cloner-raid", "cloner-share", "cloner-badsect",   /* #1808/#1898; #2017 */
+                                   "restore-syspart" };   /* #1896: the C: picker over the restore screen */
 
 static int png_builtin;   /* #1386: --png on the built-in sample, not a --state file */
+
+/* #1808/#1898: a cloner drawer's question -- the state file's own, or the
+ * sample: drawer 2 orange ("asking") with old Intel RAID metadata; the split
+ * of a dual-boot image whose C: comes before the linux root. */
+static void png_drawer_ask(App *a, const State *base, const char *card) {
+    const int kind = !strcmp(card, "cloner-raid") ? ASK_RAID : !strcmp(card, "cloner-badsect") ? ASK_BADSECT : ASK_SHARE;
+    a->force_cloner = 1; a->st.smart_pending = 0;
+    if (!base->ndrawers && !base->cloner_image[0])
+        snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט");
+    if (base->ask_pending && base->ask_kind == kind) { a->st.ask_pending = 1; return; }
+    a->st.ask_pending = 1; a->st.ask_kind = kind;
+    snprintf(a->st.ask_nonce, sizeof a->st.ask_nonce, "6-0");
+    snprintf(a->st.ask_subject, sizeof a->st.ask_subject, "sdb");
+    memset(a->st.ask, 0, sizeof a->st.ask);
+    if (kind == ASK_BADSECT) {   /* #2017: the source, disk 1, partition 3; going on in 45 s */
+        a->st.nask = 1; a->st.ask[0].port = 1; a->st.ask[0].idx = 3; a->st.ask[0].until = (long long)time(NULL) + 45;
+    } else if (kind == ASK_RAID) {
+        a->st.nask = 1; a->st.ask[0].port = 2;
+        snprintf(a->st.ask[0].word, sizeof a->st.ask[0].word, "isw_raid_member");
+        for (int i = 0; i < a->st.ndrawers; i++)
+            if (!strcmp(a->st.drawers[i].dev, "sdb")) {
+                snprintf(a->st.drawers[i].state, sizeof a->st.drawers[i].state, "asking");
+                snprintf(a->st.drawers[i].error, sizeof a->st.drawers[i].error, "מידע RAID ישן על הדיסק (isw_raid_member) — ממתין לאישור");
+            }
+    } else {
+        a->st.nask = 4;
+        a->st.ask[0].port = 1; a->st.ask[0].idx = 3; a->st.ask[0].now_bytes = 21474836480ULL; a->st.ask[0].orig_bytes = 166429982720ULL;
+        a->st.ask[1].port = 1; a->st.ask[1].idx = 5; a->st.ask[1].now_bytes = 32212254720ULL; a->st.ask[1].orig_bytes = 104152760320ULL;
+        a->st.ask[2].port = 2; a->st.ask[2].idx = 3; a->st.ask[2].now_bytes = 21474836480ULL; a->st.ask[2].orig_bytes = 166429982720ULL;
+        a->st.ask[3].port = 2; a->st.ask[3].idx = 5; a->st.ask[3].now_bytes = 32212254720ULL; a->st.ask[3].orig_bytes = 104152760320ULL;
+    }
+}
 
 /* #1386: the cancel cards -- the state's own writing drawers when it has them
  * (a --state file from a test), else the mockup's: cloner disks 1 and 2 writing
@@ -1450,8 +1587,8 @@ static void png_cancel_sample(App *a, const char *card) {
         snprintf(a->st.machine_name, sizeof a->st.machine_name, "CLONER-02");
         a->st.idisks[0] = (IdleDisk){ .port = 1, .dev = "sda", .model = "Samsung SSD 870 EVO", .size = 500107862016ULL, .smart = "ok" };
         a->st.idisks[1] = (IdleDisk){ .port = 2, .dev = "sdb", .model = "WDC WD5000AAKX", .size = 500107862016ULL, .smart = "ok" };
-        a->st.drawers[0] = (Drawer){ 1, "sda", "writing", "", 12285713408ULL, 19500000000ULL, 68000000, 120, 1, "SATA 0", "", 0, "", "", "", "", "", "", "", "" };
-        a->st.drawers[1] = (Drawer){ 2, "sdb", "writing", "", 7995000000ULL, 19500000000ULL, 68000000, 240, 2, "SATA 1", "", 0, "", "", "", "", "", "", "", "" };
+        a->st.drawers[0] = (Drawer){ 1, "sda", "writing", "", 12285713408ULL, 19500000000ULL, 68000000, 120, 1, "SATA 0", "", 0, "", "", "", "", "", "", "", "", 0, 0 };
+        a->st.drawers[1] = (Drawer){ 2, "sdb", "writing", "", 7995000000ULL, 19500000000ULL, 68000000, 240, 2, "SATA 1", "", 0, "", "", "", "", "", "", "", "", 0, 0 };
     }
     int n = cloner_cancel_picks(a, p, MAX_CANCEL_PICKS);
     if (!strcmp(card, "cloner-canceled")) {
@@ -1471,7 +1608,7 @@ static void png_setup(App *a, const State *base, const char *card) {
     a->st = *base;
     memset(&a->st.lc, 0, sizeof a->st.lc); memset(&a->lcu, 0, sizeof a->lcu);   /* #1322: its own cards below */
     a->st.msg_title[0] = a->st.msg_sub[0] = 0;
-    a->st.fail_title[0] = 0; a->fail_open = 0;   /* #1569: on its two cards only */
+    a->st.fail_title[0] = 0;   /* #1569: on its card only */
     a->st.task = TASK_NONE; a->st.has_round = 0; a->st.has_session = 0;
     a->showing_done = a->watching = a->force_progress = a->force_cloner = a->force_standby = 0;
     a->signed_in = 1; a->admin = 1; a->mode = MODE_MENU; a->logout_confirming = 0; a->menu_focus = -1;
@@ -1485,7 +1622,7 @@ static void png_setup(App *a, const State *base, const char *card) {
     /* 11/10: the question dialog on its two cards only. A state file that
      * carries a question of its own is shown on its card; the sample's
      * grow-back is turned into the end-of-capture question for that card. */
-    a->st.ask_pending = 0; a->ask_sent[0] = 0;
+    a->st.ask_pending = 0; a->ask_sent[0] = 0; a->sysp_open = 0;
     if (!strcmp(card, "growback") && base->ask_pending && base->ask_kind == ASK_GROWBACK) a->st.ask_pending = 1;
     /* #1560: the direct send's and the round's end ask the same way */
     const int end_ask = !strcmp(card, "capture-end") ? ASK_CAPTURE_END : !strcmp(card, "send-end") ? ASK_SEND_END
@@ -1497,12 +1634,30 @@ static void png_setup(App *a, const State *base, const char *card) {
             snprintf(a->st.ask_subject, sizeof a->st.ask_subject, "%lld", (long long)time(NULL) + 300);   /* #1560: the epoch */
         }
     }
-    /* #1560: the end-of-task count on its card only; the sample counts 20 s */
-    a->st.end_poweroff_at = 0;
-    if (!strcmp(card, "end-countdown")) {
-        a->st.end_poweroff_at = base->end_poweroff_at > 0 ? base->end_poweroff_at : (long long)time(NULL) + 20;
+    /* #1560: the end-of-task count on its card only; the sample counts 20 s.
+     * #2024: "cloner-end" -- the end over the cloner's drawers, highlighted: the
+     * state file's record and end_problem=, or held with every failed drawer red. */
+    a->st.end_poweroff_at = 0; a->st.end_kind = END_NONE; a->st.end_held = 0; a->st.nend_prob = 0;
+    if (!strcmp(card, "end-countdown") || !strcmp(card, "cloner-end")) {
+        a->st.end_poweroff_at = base->end_kind ? base->end_poweroff_at : (long long)time(NULL) + 20;
         a->st.end_kind = base->end_kind ? base->end_kind : END_DRAWERS;
         a->st.end_held = base->end_held; a->st.end_done = base->end_done; a->st.end_total = base->end_total;
+        a->st.nend_prob = base->nend_prob;
+    }
+    if (!strcmp(card, "cloner-end")) {
+        a->force_cloner = 1;   /* no cloner data in the state file: the "cloner" card's sample (#1090) */
+        if (!base->ndrawers && !base->cloner_image[0] && !base->smart_pending)
+            snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט");
+        if (!base->end_kind) {
+            a->st.end_kind = END_PARTIAL; a->st.end_held = 1; a->st.end_poweroff_at = 0;
+            for (int i = 0; i < a->st.ndrawers && a->st.nend_prob < MAX_DRAWERS; i++) {
+                if (strcmp(a->st.drawers[i].state, "failed")) continue;
+                snprintf(a->st.end_prob[a->st.nend_prob].dev, sizeof a->st.end_prob[0].dev, "%s", a->st.drawers[i].dev);
+                snprintf(a->st.end_prob[a->st.nend_prob].why, sizeof a->st.end_prob[0].why, "%s",
+                         a->st.drawers[i].error[0] ? a->st.drawers[i].error : "סיבה לא ידועה");
+                a->st.end_prob[a->st.nend_prob++].red = 1;
+            }
+        }
     }
     snprintf(a->signed_user, sizeof a->signed_user, "%s", a->user[0] ? a->user : "admin");
     if (!strcmp(card, "login"))         { a->signed_in = 0; }
@@ -1544,10 +1699,9 @@ static void png_setup(App *a, const State *base, const char *card) {
     else if (!strcmp(card, "standby"))  { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; a->st.smart_pending = 0; }
     else if (!strcmp(card, "message"))  { snprintf(a->st.msg_title, sizeof a->st.msg_title, "%s", base->msg_title);
                                           snprintf(a->st.msg_sub, sizeof a->st.msg_sub, "%s", base->msg_sub); }
-    else if (!strcmp(card, "failure") || !strcmp(card, "failure-open")) {   /* #1569: the state file's block, or the sample */
+    else if (!strcmp(card, "failure")) {   /* #1569: the state file's block, or the sample */
         if (base->fail_title[0]) snprintf(a->st.fail_title, sizeof a->st.fail_title, "%s", base->fail_title);
         else sample_failure(&a->st);   /* a state file without the block still renders the card */
-        a->fail_open = !strcmp(card, "failure-open");
     }
     else if (!strcmp(card, "logout"))   { a->logout_confirming = 1; }   /* mockup 10/10: what Esc opens */
     else if (!strcmp(card, "restore-folder")) { a->mode = MODE_RESTORE; if (base->nimages) a->restore_image_sel = 1;
@@ -1599,6 +1753,22 @@ static void png_setup(App *a, const State *base, const char *card) {
         else { a->mode = MODE_RESTORE; if (base->nimages) a->restore_image_sel = 1; disk_smart_ask(a, SDLG_RESTORE, 0); }
     }
     else if (!strncmp(card, "cloner-cancel", 13) || !strncmp(card, "room-cancel", 11)) png_cancel_sample(a, card);   /* #1386 */
+    else if (!strcmp(card, "cloner-raid") || !strcmp(card, "cloner-share") || !strcmp(card, "cloner-badsect")) png_drawer_ask(a, base, card);   /* #1808/#1898; #2017 */
+    else if (!strcmp(card, "restore-syspart")) {                                  /* #1896 */
+        a->mode = MODE_RESTORE;
+        int at = -1;
+        for (int i = 0; i < a->st.nimages && at < 0; i++) if (a->st.images[i].unchecked) at = i;
+        if (at < 0 && a->st.nimages < MAX_IMAGES) {   /* the sample: Vm, two 223 GB Windows partitions */
+            Image *im = &a->st.images[at = a->st.nimages++];
+            memset(im, 0, sizeof *im);
+            snprintf(im->id, sizeof im->id, "img_5790e4"); snprintf(im->name, sizeof im->name, "Vm");
+            snprintf(im->folder, sizeof im->folder, "%s", a->st.nimages > 1 ? a->st.images[0].folder : "");
+            im->unchecked = 1; im->ncand = 2;
+            im->cand[0].idx = 1; im->cand[0].size = 223392075264ULL; im->cand[0].used = 880222208ULL;
+            im->cand[1].idx = 2; im->cand[1].size = 223392075264ULL; im->cand[1].used = 203075014656ULL;
+        }
+        if (at >= 0) { a->pick_in_folder = 1; snprintf(a->pick_folder, sizeof a->pick_folder, "%s", a->st.images[at].folder); a->sysp_open = at + 1; }
+    }
     else if (!strncmp(card, "tools", 5)) {                                       /* #649 */
         a->mode = MODE_TOOLS; a->tools_view = TOOLS_LIST; a->tool_sel = -1; a->tool_running = 0;
         if (!a->ntools) tools_sample(a);
@@ -1628,6 +1798,7 @@ static int render_png(App *a, const State *base, const char *prefix, int w, int 
         png_setup(a, base, PNG_CARDS[c]);
         cairo_surface_t *sf = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
         cairo_t *cr = cairo_create(sf);
+        text_log_mark(PNG_CARDS[c], themes[t]->id);
         app_draw(a, cr, w, h);
         cairo_destroy(cr);
         char path[512];
@@ -1656,12 +1827,15 @@ static int render_png(App *a, const State *base, const char *prefix, int w, int 
                                        SCREEN_PROGRESS, /* "capture-end" (11/10): the dialog over the capture */
                                        SCREEN_MENU, SCREEN_MENU, /* "send-end", "round-end" (#1560): the same question */
                                        SCREEN_MENU, /* "end-countdown" (#1560): the count to power-off, over any screen */
+                                       SCREEN_CLONER, /* "cloner-end" (#2024): the held end, problem drawers highlighted */
                                        SCREEN_CLONER,  /* "cloner-smart" (16/10): the SMART warning window */
                                        SCREEN_RESTORE, /* "restore-smart" (16/10): the same, before a restore */
                                        SCREEN_PICK,    /* "pick-smart" (16/10): the same, before a capture */
-                                       SCREEN_FAILURE, SCREEN_FAILURE, /* "failure", "failure-open" (#1569) */
+                                       SCREEN_FAILURE, /* "failure" (#1569) */
                                        SCREEN_CLONER, SCREEN_CLONER, /* #1386: the window; a drawer cancelled */
-                                       SCREEN_ROOM, SCREEN_ROOM };   /* #1386: X and its choice; cancelled */
+                                       SCREEN_ROOM, SCREEN_ROOM,   /* #1386: X and its choice; cancelled */
+                                       SCREEN_CLONER, SCREEN_CLONER, SCREEN_CLONER,   /* #1808/#1898: the drawer's question; #2017: badsect */
+                                       SCREEN_RESTORE };   /* #1896: "restore-syspart" */
         /* One entry per card, or want[c] reads past the table -- that is exactly
          * what the lab saw when "direct" was added to PNG_CARDS alone. */
         _Static_assert(sizeof want / sizeof want[0] == sizeof PNG_CARDS / sizeof PNG_CARDS[0],
@@ -1678,6 +1852,7 @@ static int render_png(App *a, const State *base, const char *prefix, int w, int 
         else lc_png_setup(a, LC_PNG_CARDS[c]);
         cairo_surface_t *sf = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
         cairo_t *cr = cairo_create(sf);
+        text_log_mark(LC_PNG_CARDS[c], themes[t]->id);
         app_draw(a, cr, w, h);
         cairo_destroy(cr);
         char path[512];
@@ -1751,6 +1926,7 @@ int main(int argc, char **argv) {
         else { fprintf(stderr, "native-gui: --screen must be progress, class, cloner, standby, install or dcui\n%s", USAGE); return 2; }
     }
     setvbuf(stdout, NULL, _IOLBF, 0);               /* records reach the agent's pipe as they happen */
+    signal(SIGPIPE, SIG_IGN);                       /* #2108: as in dcui.c; before install_start, whose first bridge call is below */
 
     /* The fonts index.html asks for must really be there; a fallback face
      * would render, and nobody would notice the wrong font until a
@@ -1845,6 +2021,7 @@ int main(int argc, char **argv) {
             app_draw_pointer(&a, cr);
             cairo_destroy(cr);
             backend_present(b);
+            gui_heartbeat();
             need_present = 0;
             lcboot_mark_shown(&a);                  /* the boot choice's count starts now */
         }
@@ -1868,6 +2045,7 @@ int main(int argc, char **argv) {
         int n = in ? input_fill_pollfds(in, fds, 32) : 0;
         int r = poll(n ? fds : NULL, n, timeout);
         if (r < 0) { if (errno == EINTR) continue; break; }
+        gui_heartbeat(); /* a static scene still proves the event loop is running */
         if (r > 0 && in) {
             input_pump(in, fds, n);
             Event e; int moved = 0;

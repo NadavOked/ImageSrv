@@ -18,11 +18,11 @@ from __future__ import annotations
 import html
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import actions
-from .data import NicInfo, ServiceState, Snapshot
+from .data import FIRST_BOOT_PENDING, NicInfo, ServiceState, Snapshot
 
 #: A certificate this close to its end is "פגה בקרוב" (orange).  Not a project
 #: constant elsewhere: the console certificate is self-signed for ten years,
@@ -46,6 +46,7 @@ MENU_TEXT = (   # app.MENU_ITEMS, in the same order (#1203: no wizard item -- #1
     ("svc", "הפעלה מחדש של השירותים", "שרת ImageSrv ו־dnsmasq"),
     ("cert", "תעודת אבטחה", "טביעת אצבע, שמות ותוקף"),
     ("net", "הכתובת שהראשי רואה", "לשרת משנה — מאחורי NAT, הכתובת החיצונית"),
+    ("disk", "הוספת כונן", "כונן ריק בשרת הופך למיקום אחסון"),   # #1988
 )
 
 RO_NOTE = "· המסך לקריאה בלבד · רענון אחרון {refreshed} · כל 5 שניות"
@@ -245,6 +246,10 @@ _PATTERNS = (
     (r"Conflict (\d+)", "התנגשות {0}"),
     (r"([A-Za-z0-9@._-]+): restart failed", "{0}: ההפעלה מחדש נכשלה"),
     (r"([A-Za-z0-9@._-]+) did not read back active", "{0} לא חזר למצב פעיל"),
+    # ‏#1988: "הוסף כונן" (actions.py)
+    (r"Disk (\S+) added as storage location (.+)\.", "הכונן {0} נוסף כמיקום האחסון {1}."),
+    (r"Mounted at (\S+) \(UUID in /etc/fstab, nofail\)\.", "מחובר קבוע ב-{0} (‏UUID ב-/etc/fstab, ‏nofail)."),
+    (r"Write/read-back check passed\.", "קובץ בדיקה נכתב ונקרא בחזרה."),
 )
 
 
@@ -393,6 +398,8 @@ def parse_not_after(value: str) -> datetime | None:
 
 def cert_status(snapshot: Snapshot, today: datetime) -> tuple[str, str, str, str, int | None]:
     """(pill kind, pill, sub, tone, days left)."""
+    if snapshot.fingerprint == FIRST_BOOT_PENDING:   # #2148: none yet, not a wrong one
+        return "warn", "ממתינה", "האתחול הראשון עדיין רץ — הטביעה תוצג בסופו", "warn", None
     if not snapshot.fingerprint or snapshot.fingerprint.startswith("unavailable"):
         return "bad", "לא נקראה", "לא הצלחנו לקרוא את התעודה", "bad", None
     end = parse_not_after(snapshot.certificate_not_after)
@@ -524,12 +531,23 @@ def uptime_text(seconds: int) -> str:
     return f"{max(1, rest // 60)} דקות"
 
 
+def _local_hhmm(stamp: str) -> str:
+    """‏#1933: חותמת ה-DB (UTC) → HH:MM בשעון המכונה, כמו שאר המסך — לא חיתוך
+    המחרוזת, שהציג UTC. חותמת בלי היסט היא UTC; מה שאינו חותמת → "" (לא ניחוש)."""
+    try:
+        when = datetime.fromisoformat(stamp.strip())
+    except (AttributeError, TypeError, ValueError):
+        return ""
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return when.astimezone().strftime("%H:%M")
+
+
 def _round_row(snapshot: Snapshot) -> Row:
     item = snapshot.deploy_round
     if item is None:
         return Row("סבב הפצה", "אין סבב פעיל", "", "off", "ממתין")
-    started = item.started[11:16] if len(item.started) >= 16 else ""
-    sub = f"התחיל {started}" if started else ""
+    sub = f"התחיל {started}" if (started := _local_hhmm(item.started)) else ""
     if item.state == "running":
         return Row("סבב הפצה", f"{iso(item.label)} · {item.writing} מתוך {item.targets} מחשבים כותבים",
                    sub, "info", "רץ")
@@ -916,10 +934,59 @@ def _tls_dialog(frame: Frame, snapshot: Snapshot, today: datetime) -> None:
     frame.add("d.btn", "חזרה להגדרות", "Enter", "pri", 1)
 
 
+def _disk_sub(disk: dict) -> str:
+    size = disk.get("size_bytes")
+    bits = [f"{size / 1e9:.0f} GB" if isinstance(size, int) else "",
+            disk.get("model") or "", f"S/N {disk['serial']}" if disk.get("serial") else "",
+            disk.get("bus") or ""]
+    return " · ".join(iso(bit) for bit in bits if bit)
+
+
+def _disk_dialog(frame: Frame, runtime) -> None:
+    """#1988: only empty disks are selectable; the rest are listed with why."""
+    frame.add("dlg", "plain", 680, "הוספת כונן",
+              "רק כוננים ריקים: בלי טבלת מחיצות, בלי חתימה, וראש הכונן וסופו אפסים.")
+    listing = runtime.disks
+    if listing is None:
+        failure = runtime.result
+        frame.add("d.error", (failure.he if failure and failure.he else he(runtime.message))
+                  or "רשימת הכוננים לא נקראה")
+        frame.add("d.note", "\"לא נקרא\" אינו \"אין כונן ריק\". ‏F5 קורא שוב.")
+        frame.add("d.btn", "חזרה", "Esc", "plain", 1)
+        return
+    items = listing.get("items") or []
+    if not items:
+        frame.add("d.alert", "<b>אין בשרת כונן ריק.</b> כונן שיש עליו מידע אינו מוצע.", "warn")
+    for index, disk in enumerate(items[:6]):
+        frame.add("d.radio", disk.get("device", "?"), _disk_sub(disk),
+                  int(index == runtime.disk_index), 1)
+    for disk in (listing.get("hidden") or [])[:3]:
+        frame.add("d.bullet", f"{mono_m(disk.get('device', '?'))} — לא מוצע: "
+                              f"{esc(disk.get('reason') or 'בלי סיבה')}")
+    if runtime.message:
+        frame.add("d.error", he(runtime.message))
+    frame.add("d.note", "שום דבר לא משתנה עד האישור במסך הבא.")
+    frame.add("d.btn", "המשך", "Enter", "pri", int(bool(items)))
+    frame.add("d.btn", "ביטול", "Esc", "plain", 0)
+
+
+def _disk_confirm_dialog(frame: Frame, runtime, disk: dict) -> None:
+    """The red button is the confirmation (#1270) -- nothing is typed; the
+    focus starts on Cancel, as on the power dialog."""
+    frame.add("dlg", "danger", 640, "כל המידע בכונן יימחק",
+              f"{iso(disk.get('device', '?'))} · {_disk_sub(disk)}")
+    frame.add("d.bullet", "טבלת GPT ומחיצה אחת על כל הכונן, ומערכת קבצים ext4.")
+    frame.add("d.bullet", "חיבור קבוע לפי UUID ב־fstab, עם nofail.")
+    frame.add("d.bullet", "קובץ בדיקה נכתב ונקרא בחזרה; כשל באמצע מוצג, ולא נשאר מיקום חלקי.")
+    act = runtime.disk_focus == "act"
+    frame.add("d.btn", "ביטול", "Esc", "plain", int(not act))
+    frame.add("d.btn", "מחק את הכונן והוסף", "", "danger", int(act))
+
+
 def _result_dialog(frame: Frame, runtime) -> None:
     result = runtime.result or actions.ActionResult(False, runtime.message or "No result.")
     frame.add("dlg", "plain", 560, "הפעולה הושלמה" if result.ok else "הפעולה לא הצליחה",
-              he(result.message))
+              result.he or he(result.message))
     for detail in result.details[:8]:
         frame.add("d.kv", "", he(detail), 1)
     frame.add("d.btn", "חזרה להגדרות", "Enter", "pri", 1)
@@ -1053,6 +1120,12 @@ def _settings_body(frame: Frame, runtime, today: datetime) -> None:
             frame.add(*service_row(name, snapshot.services.get(name), snapshot,
                                    extras).record("prow"))
         frame.add("pnote", "מחשבים שבאמצע שיכפול עלולים להיכשל בזמן ההפעלה מחדש.")
+    elif selected == 5:
+        frame.add("pane", "הוספת כונן",
+                  "כונן ריק שהותקן בשרת הופך למיקום אחסון: השרת מחלק אותו, מכין ext4 "
+                  "ומחבר אותו קבוע לפי UUID. מוצעים רק כוננים ריקים לפי ראיה.")
+        frame.add("pnote", "<b>כל המידע בכונן יימחק.</b> האישור הוא הכפתור האדום — בלי הקלדה.")
+        frame.add("pnote", "המיקום החדש מופיע בקונסולה: תשתית ← אחסון.")
     elif selected == 4:
         frame.add("pane", "הכתובת שהראשי רואה",
                   "הכתובת שבה השרת הראשי מגיע לשרת המשנה הזה (פורט 8443). מוצגת במסך "
@@ -1069,7 +1142,14 @@ def _settings_body(frame: Frame, runtime, today: datetime) -> None:
         frame.add("pnote", "משווים את טביעת האצבע למה שהדפדפן מציג בכניסה הראשונה לקונסולה.")
 
 
-SETTINGS_SCREENS = {"menu", "network", "network_confirm", "tls", "result", "advertised"}
+def _chosen(runtime) -> dict | None:
+    items = (getattr(runtime, "disks", None) or {}).get("items") or []
+    index = getattr(runtime, "disk_index", 0)
+    return items[index] if 0 <= index < len(items) else None
+
+
+SETTINGS_SCREENS = {"menu", "network", "network_confirm", "tls", "result", "advertised",
+                    "disk", "disk_confirm"}
 
 
 def render(runtime, now: float, wall: float, clock: str, today: datetime,
@@ -1158,6 +1238,16 @@ def render(runtime, now: float, wall: float, clock: str, today: datetime,
         _advertised_dialog(frame, runtime)
         frame.add("lang", "שדה באנגלית בלבד")
         _keys(frame, (("Enter", "שמירה", 0), ("Esc", "ביטול", 0)))
+    elif screen == "disk":
+        rest = "· הוספת כונן"
+        _disk_dialog(frame, runtime)
+        _keys(frame, (("↑ ↓", "בחירת כונן", 0), ("Enter", "המשך", 0), ("F5", "קריאה מחדש", 0),
+                      ("Esc", "חזרה", 0)))
+    elif screen == "disk_confirm" and _chosen(runtime):
+        rest = "· אישור מחיקת כונן"
+        _disk_confirm_dialog(frame, runtime, _chosen(runtime))
+        _keys(frame, (("Tab", "מעבר בין הכפתורים", 0), ("Enter", "ביצוע הכפתור המסומן", 0),
+                      ("Esc", "ביטול", 0)))
     elif screen == "tls":
         rest = "· תעודת אבטחה"
         _tls_dialog(frame, snapshot, today)

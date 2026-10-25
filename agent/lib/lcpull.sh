@@ -42,6 +42,7 @@ lc_pull_images() {
         .allowed_images[] | "image=" + ([.id, .name, .folder]
           | map((. // "") | tostring | gsub("[\\r\\n|]"; " ")) | join("|")) end' \
         "$LC/pull.state.json" > "$LC/pull.images.next" 2>> "$LOG_FILE" || return 1
+    syspart_records "$LC/pull.state.json" >> "$LC/pull.images.next" 2>> "$LOG_FILE" || return 1   # #1896: "לא נבדק" + C:
     mv "$LC/pull.images.next" "$LC/pull.images"
 }
 
@@ -93,7 +94,7 @@ lc_pull_session() {
     # The restore screen until the person leaves it. Sets LC_END: back (to the
     # choice), opened (the round is open -- go on from the server), quiet, gone.
     LC_END=""
-    rm -f "$LC/pull.req" "$LC/pull.error" "$LC/pull.images" "$LC/end.req"
+    rm -f "$LC/pull.req" "$LC/pull.error" "$LC/pull.images" "$LC/end.req" "$LC/syspart.req"
     lc_pull_images || { log "pull: the allowed images could not be read"
         _lc_req pull.error "לא ניתן לקרוא מהשרת את רשימת האימג׳ים למחשב הזה"; }
     lc_pull_nonce || :   # none = the open is refused, aloud; asked again after each try
@@ -115,6 +116,9 @@ lc_pull_session() {
                 LC_END=opened; return 0
             fi
             lc_pull_nonce || :   # the token is single-use: a fresh one for the next try
+        fi
+        if [ -f "$LC/syspart.req" ]; then   # #1896: C: of an old image (syspartgui.sh)
+            lc_quiet_reset; lc_pull_syspart || :; lc_pull_nonce || :   # the token is single-use
         fi
         if [ -f "$LC/end.req" ]; then
             _ps_e=$(cat "$LC/end.req"); rm -f "$LC/end.req"

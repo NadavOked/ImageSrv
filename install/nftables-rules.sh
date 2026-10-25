@@ -52,7 +52,7 @@ Usage: nftables-rules.sh --servers-if IF [--deploy-if IF] [options]
   --agent-port N          סוכן (ברירת מחדל 8080)
   --interserver-port N    בין-שרתים (ברירת מחדל 8443)
   --per-nic               (#705) כללים לפי כרטיס בלבד — בלי --deploy-if/--servers-if
-  --service IF:LIST       (#705) מה הכרטיס נותן: console,monitor,multicast,netboot,interserver
+  --service IF:LIST       (#705) מה הכרטיס נותן: console,monitor,multicast,netboot,interserver,ntp
                           (חוזר לכל כרטיס; מפעיל --per-nic)
 EOF
 }
@@ -139,13 +139,17 @@ if [ -n "$PER_NIC" ]; then
                     add_rule "iifname \"${nic}\" udp dport 69 accept"
                     add_rule "iifname \"${nic}\" tcp dport ${AGENT_PORT} accept" ;;
                 multicast)
-                    add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} accept" ;;
+                    add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} accept"
+                    # ‏#1972: שאילתות IGMP של querier אחר — בלעדיהן השרת לא שומע אותו.
+                    add_rule "iifname \"${nic}\" ip protocol igmp accept" ;;
                 interserver)
                     if [ -n "$PRIMARY_IP" ]; then
                         add_rule "iifname \"${nic}\" ip saddr ${PRIMARY_IP} tcp dport ${INTERSERVER_PORT} accept"
                     else
                         add_rule "iifname \"${nic}\" tcp dport ${INTERSERVER_PORT} accept"
                     fi ;;
+                ntp)
+                    add_rule "iifname \"${nic}\" udp dport 123 accept" ;;
                 "") ;;
                 *) IFS="$old_ifs"; die "unknown service: $svc" ;;
             esac
@@ -167,6 +171,8 @@ if [ -n "$DEPLOY_IF" ]; then
 		iifname \"${DEPLOY_IF}\" tcp dport ${AGENT_PORT} accept
 		# מולטיקאסט udpcast: portbase ו-portbase+1 (ברירת מחדל 9000-9001, server/sender.py).
 		iifname \"${DEPLOY_IF}\" udp dport ${MCAST_PORTS} accept
+		# IGMP (#1972): השרת הוא ה-querier, ושומע querier אחר לפי השאילתות שלו.
+		iifname \"${DEPLOY_IF}\" ip protocol igmp accept
 		# WoL (UDP 9) הוא יוצא — chain output ב-accept, אין כלל כניסה."
 else
     DEPLOY_RULES="		# --- וילן ההפצה: טרם הוגדר (#1088) ---

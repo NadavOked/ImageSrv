@@ -25,14 +25,17 @@ PHY = ["realtek", "broadcom"]
 NIC = ["e1000e", "r8169", "tg3", "hv_netvsc", "virtio_net"]
 
 
-def _fixture(tmp: Path, *, files: bool = True, gui: bool = False) -> Path:
+CRC = ["crc32c_generic", "crc32c-intel"]   # build_initramfs.sh: both in modules.required
+
+
+def _fixture(tmp: Path, *, files: bool = True, gui: bool = False, crc: bool = False) -> Path:
     mod = tmp / "etc" / "imagectl"
     mod.mkdir(parents=True)
     write = lambda n, items: (mod / n).write_text(  # noqa: E731
         "\n".join(items) + "\n", encoding="utf-8", newline="\n")
-    complete = HEAD + PHY + NIC + (["i915", "amdgpu", "nouveau"] if gui else [])
+    complete = HEAD + PHY + NIC + (["i915", "amdgpu", "nouveau"] if gui else []) + (CRC if crc else [])
     write("modules", complete)
-    write("modules.required", ["ext4"])
+    write("modules.required", ["ext4"] + (CRC if crc else []))
     if files:
         write("modules.phy", PHY)
         write("modules.nic", NIC)
@@ -49,8 +52,11 @@ def _pci(sys: Path, slot: str, cls: str, alias: str) -> None:
 
 
 def run(tmp: Path, *, pci=(), gui=False, files=True, dmi="", hyp=False,
-        makes_nic=E1000E, makes_card=I915, fail=()):
-    mod = _fixture(tmp, files=files, gui=gui)
+        makes_nic=E1000E, makes_card=I915, fail=(), crc=False, crypto=None):
+    mod = _fixture(tmp, files=files, gui=gui, crc=crc)
+    proc = tmp / "proc"; proc.mkdir()
+    if crypto is not None:
+        (proc / "crypto").write_text(crypto, encoding="utf-8", newline="\n")
     sysd = tmp / "sys"
     (sysd / "class" / "net" / "lo").mkdir(parents=True)
     for slot, cls, alias in pci:
@@ -70,7 +76,7 @@ def run(tmp: Path, *, pci=(), gui=False, files=True, dmi="", hyp=False,
     block = block.replace("/usr/lib/imagectl", posix(AGENT / "lib"))
     S = posix(sysd)
     stubs = f"""
-LOG={posix(log)!r}; SYS_DIR={S!r}; RUN_DIR={posix(run_dir)!r}; FAIL="{' '.join(fail)}"
+LOG={posix(log)!r}; SYS_DIR={S!r}; PROC_DIR={posix(proc)!r}; RUN_DIR={posix(run_dir)!r}; FAIL="{' '.join(fail)}"
 fail() {{ echo "FAIL: $1"; exit 3; }}
 poll_tick() {{ _tk=1; }}
 ip() {{ echo "ip $*" >> "$LOG"; }}
@@ -143,6 +149,35 @@ def test_a_required_module_failure_is_still_named(tmp_path):
     assert "ERROR required modules did not load" in out and "ext4" in out
 
 
+#: /proc/crypto on a Core2 / Phenom II (no SSE4.2): crc32c from crc32c_generic only
+CRYPTO_GENERIC = ("name         : crc32c\ndriver       : crc32c-generic\nmodule       : crc32c_generic\npriority     : 100\n\n"
+                  "name         : sha256\ndriver       : sha256-generic\nmodule       : kernel\n\n")
+
+
+def test_crc32c_intel_without_sse42_is_no_error_when_crc32c_is_there(tmp_path):
+    # #1937 (the college, 21/10): "ERROR required modules did not load, restore may corrupt:
+    # crc32c-intel" on every machine without SSE4.2 -- crc32c_generic does the same work
+    _, out = run(tmp_path, pci=NET_DEV, crc=True, fail=["crc32c-intel"], crypto=CRYPTO_GENERIC)
+    assert "ERROR" not in out, out
+    assert "platform modules absent, expected on this hardware: crc32c-intel" in out, out
+    assert not (tmp_path / "run" / "modules.failed").exists()   # the diag's "required modules that did not load"
+
+
+def test_crc32c_intel_is_an_error_when_no_crc32c_is_registered(tmp_path):
+    _, out = run(tmp_path, pci=NET_DEV, crc=True, fail=["crc32c-intel"], crypto=CRYPTO_GENERIC.split("\n\n", 1)[1])
+    assert "ERROR required modules did not load, restore may corrupt: crc32c-intel" in out, out
+
+
+def test_crc32c_intel_is_an_error_when_proc_crypto_cannot_be_read(tmp_path):
+    _, out = run(tmp_path, pci=NET_DEV, crc=True, fail=["crc32c-intel"], crypto=None)   # principle 5
+    assert "ERROR required modules did not load, restore may corrupt: crc32c-intel" in out, out
+
+
+def test_crc32c_generic_failing_stays_an_error(tmp_path):
+    _, out = run(tmp_path, pci=NET_DEV, crc=True, fail=["crc32c_generic", "crc32c-intel"], crypto=CRYPTO_GENERIC)
+    assert "ERROR required modules did not load" in out and "crc32c_generic" in out, out
+
+
 def test_a_failed_platform_nic_is_reported_as_expected_absence(tmp_path):
     calls, out = run(tmp_path, dmi="Microsoft Corporation", pci=NET_DEV, fail=["hv_netvsc"])
     assert "platform modules absent, expected on this hardware: hv_netvsc" in out
@@ -208,4 +243,6 @@ def test_the_builder_writes_gpu_list_only_for_the_gui_image(tmp_path):
     _, d = _build_lists(tmp_path / "a", 0)
     assert not (d / "modules.gpu").exists()
     rd, _ = _build_lists(tmp_path / "b", 1)
-    assert rd("modules.gpu") == ["i915", "amdgpu", "nouveau"]
+    # #1914 (Nadav 20/10, old college hardware): the modern three first, then older/virtual adapters
+    assert rd("modules.gpu") == ["i915", "amdgpu", "nouveau", "radeon", "mgag200", "ast",
+                                 "bochs", "cirrus-qemu", "vmwgfx", "simpledrm"]

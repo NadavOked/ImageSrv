@@ -81,31 +81,39 @@ idle_check() {
     [ "$_idle" -ge "$IDLE_POWEROFF_S" ] || return 0
     # the warning: the GUI reads idle.warn (guistate.sh -> idle_poweroff_at=)
     # and any key press cancels it through idle.touch
-    _at=$((_now + IDLE_WARN_S)); printf '%s\n' "$_at" > "$RUN_DIR/idle.warn"
+    _at=$((_now + IDLE_WARN_S)); rm -f "$RUN_DIR/idle.now"; printf '%s|%s\n' "$_at" "$IDLE_POWEROFF_S" > "$RUN_DIR/idle.warn"   # mockup 10: the window says how long
     log "idle: ${_idle}s without activity -- power-off in ${IDLE_WARN_S}s unless a key is pressed"
     _n=0
     while [ "$_n" -lt "$IDLE_WARN_S" ]; do
         sleep 1; _n=$((_n + 1))
+        if [ -f "$RUN_DIR/idle.now" ]; then rm -f "$RUN_DIR/idle.now"; log "idle: 'כבה עכשיו' pressed"; break; fi   # mockup 10: Enter
         if idle_touched || [ -f "$RUN_DIR/stay_on" ]; then log "idle: cancelled by activity"; idle_reset; return 0; fi
     done
     idle_poweroff
 }
 
-# --- the end of a task (Nadav, 17/10, #1560) ----------------------------------
+# --- the end of a task (Nadav, 17/10, #1560; 22/10, #2024) ---------------------
 # A cloner after any of its tasks -- local clone, a round, restore from the
-# server, a direct send it received -- done or failed: no question. The
-# machine powers off in END_POWEROFF_S, or at once on the GUI's "כבה עכשיו";
-# the power-off is finish_and_stop -> safe_poweroff (WoL armed first, #587).
-# Some or all targets failed (partial|failed): the count can be stopped to
-# read the results on the screen behind it -- then the power-off is
-# END_HOLD_S away, still counted and still one button (no screen without an
-# action, metal 17/10). The build machine's ends ask instead (task.sh).
-#   $RUN_DIR/end.poweroff  <epoch>|<kind>|<done>|<targets>|<held 0/1> while the
-#                          count runs; every GUI screen draws it (gui_hello_state)
+# server, a direct send it received: no question. Every target clean
+# (end_problems): the machine powers off in END_POWEROFF_S, or at once on the
+# GUI's "כבה עכשיו"; the power-off is finish_and_stop -> safe_poweroff (WoL
+# armed first, #587). The build machine's ends ask instead (task.sh).
+# #2024: a target with a problem -- red, orange, or a result that cannot be
+# read (principle 5) -- holds the results on the screen, no count and no
+# ceiling (it replaces END_HOLD_S), until "כבה" (end.now), the local result
+# screen's own button (END_ABORT_FILE), or the console's power-off when a beat
+# runs (the local clone's: attended_keep). The price, accepted by Nadav: a
+# cloner left on does not join the next round by itself. No hello, as the count
+# had none: a hello would make it "seen" to a new wave, and the server's re-wake
+# would then neither wake nor fail the round by name (#1721). #2031: a light
+# "held" report instead (hold.sh held_beat_start) -- the console's "דלוק — מחכה
+# ללחיצה" and its "כבה", which comes back in that report's answer.
+#   $RUN_DIR/end.poweroff  <epoch>|<kind>|<done>|<targets>|<held 0/1>; every GUI
+#                          screen draws it (gui_hello_state). held 1 = epoch 0, no limit
+#   $RUN_DIR/end.problems  <disk>|<r|o>|<reason> a problem target (red/orange), drawn highlighted
 #   $RUN_DIR/end.now       the button: the bridge writes it on end-poweroff
-#   $RUN_DIR/end.hold      "stop the count": the bridge, on end-hold (partial|failed)
+#   $RUN_DIR/end.hold      an older screen's "stop the count" (end-hold): the hold, the same
 END_POWEROFF_S="${END_POWEROFF_S:-20}"
-END_HOLD_S="${END_HOLD_S:-300}"
 
 end_tally() {
     # $@ = target disks. _et_ok = how many ended "done", _et_n = how many.
@@ -116,44 +124,112 @@ end_tally() {
     done
 }
 
+_end_why() { _ep_r="${_ep_r:+$_ep_r · }$2"; [ "$1" = o ] || _ep_c=r; }
+end_problem() {
+    # $1 = a target disk. Prints "ok" -- a clean done, read -- or "<r|o>|<reason>".
+    # Clean = done, no warning (error), read back verified|sampled (#1805), not a
+    # slow write check (#1366), drivers not failed (#1331). A file that is there
+    # and cannot be read is not "no warning".
+    _ep_t="$RUN_DIR/targets/$1"; _ep_r=; _ep_c=o
+    _ep_s=$(cat "$_ep_t/state" 2>/dev/null) || _ep_s=
+    _ep_e=; [ ! -e "$_ep_t/error" ] || _ep_e=$(cat "$_ep_t/error" 2>/dev/null) || _ep_e="תוצאת הדיסק לא נקראה"
+    case "$_ep_s" in
+        done) ;;
+        '') _end_why r "מצב הדיסק לא נקרא — לא ידוע אם נכתב" ;;
+        skipped) _end_why r "${_ep_e:-הדיסק לא נכתב}" ;;
+        *) _end_why r "${_ep_e:-הכתיבה לא הסתיימה ($_ep_s)}" ;;
+    esac
+    if [ "$_ep_s" = "done" ]; then
+        [ -z "$_ep_e" ] || _end_why o "$_ep_e"
+        case "$(cat "$_ep_t/readback" 2>/dev/null)" in
+            verified|sampled) ;;
+            unverified) _ep_x=$(cat "$_ep_t/readback_reason" 2>/dev/null); _end_why o "${_ep_x:-מה שנכתב לא נבדק מול הדיסק}" ;;
+            *) _end_why o "האימות אחרי הכתיבה לא נרשם — לא ידוע אם מה שנכתב תקין" ;;
+        esac
+    fi
+    if [ "$(cat "$_ep_t/write_check_state" 2>/dev/null)" = slow ]; then
+        _ep_x=$(cat "$_ep_t/write_check_reason" 2>/dev/null); _end_why r "${_ep_x:-הדיסק כותב לאט}"
+    fi
+    if [ -e "$_ep_t/drivers.json" ]; then
+        _ep_v=$(jq -r '[(.state // ""), (.boot.state // ""), (.linux.state // "")] | join("|")' "$_ep_t/drivers.json" 2>/dev/null) || _ep_v="?||"
+        case "$_ep_v" in "?||") _end_why o "תוצאת הדרייברים לא נקראה" ;; esac
+        case "$_ep_v" in *"|failed|"*) _end_why r "דרייבר האחסון לא הוגדר לעלייה — הדיסק עלול לא לעלות" ;; esac
+        case "$_ep_v" in failed\|*) _end_why o "דרייברים לא הונחו — המחשב יעלה בלי הדרייברים של הדגם" ;; esac
+        case "$_ep_v" in *\|hostonly|*\|unsupported|*\|failed) _end_why o "לינוקס: לא ידוע אם הדיסק יעלה על בקר אחר" ;; esac
+    fi
+    if [ -z "$_ep_r" ]; then echo ok; else printf '%s|%s\n' "$_ep_c" "$_ep_r"; fi
+}
+
+end_problems() {
+    # $@ = the run's targets. Writes end.problems; 0 = a problem, or no target
+    # named at all (an end with nothing read is no evidence). A write that fails holds.
+    {
+        [ "$#" -gt 0 ] || echo "|r|לא נמצאו יעדים לבדיקה — לא ידוע מה נכתב"
+        for _ep_d in "$@"; do
+            _ep_l=$(end_problem "$_ep_d" | tr '\r\n' '  '); _ep_l=${_ep_l% }
+            case "$_ep_l" in   # a | inside a reason would cut the GUI's record: it becomes /
+                ok) ;;
+                [ro]\|?*) printf '%s|%s|%s\n' "$_ep_d" "${_ep_l%%|*}" "$(printf '%s' "${_ep_l#?|}" | tr '|' '/')" ;;
+                *) printf '%s|r|תוצאת הדיסק לא נקראה\n' "$_ep_d" ;;
+            esac
+        done
+    } > "$RUN_DIR/end.problems" || return 0
+    [ -s "$RUN_DIR/end.problems" ]
+}
+
 end_record() {
-    # $1 = kind, $2/$3 = done/targets. The count's record, its epoch from _ec_lim.
-    printf '%s|%s|%s|%s|%s\n' "$(( $(date +%s) + _ec_lim ))" "$1" "$2" "$3" "$_ec_held" \
-        > "$RUN_DIR/end.poweroff"
+    # $1 = kind, $2/$3 = done/targets. Counting: the epoch of the power-off; held: 0.
+    _er_at=0; [ "$_ec_held" = 1 ] || _er_at=$(( $(date +%s) + END_POWEROFF_S ))
+    printf '%s|%s|%s|%s|%s\n' "$_er_at" "$1" "$2" "$3" "$_ec_held" > "$RUN_DIR/end.poweroff"
+}
+
+end_clear() {
+    if command -v held_beat_stop >/dev/null 2>&1; then held_beat_stop; fi
+    rm -f "$RUN_DIR/end.poweroff" "$RUN_DIR/end.now" "$RUN_DIR/end.hold" "$RUN_DIR/end.problems"
 }
 
 end_countdown() {
     # $1 = kind (drawers|partial|localclone|failed), $2 = what ended (journal),
-    # $3/$4 = targets written / targets ("" = not said). Returns 1 when the
+    # $3/$4 = targets written / targets ("" = not said), $5.. = the target disks,
+    # whose results decide (#2024; none = a problem). Returns 1 when the
     # machine stayed on (the screen says why), 2 when END_ABORT_FILE came.
     # No kiosk: it runs all the same.
+    _ec_k=$1; _ec_w=$2; _ec_d=${3:-}; _ec_t=${4:-}
+    if [ "$#" -ge 4 ]; then shift 4; else set --; fi
     rm -f "$RUN_DIR/end.now" "$RUN_DIR/end.hold"
-    _ec_lim=$END_POWEROFF_S; _ec_held=0
-    end_record "$1" "${3:-}" "${4:-}"
-    log "$2 -- powering off in ${END_POWEROFF_S}s, or at once on 'כבה עכשיו'"
+    _ec_held=0; case "$_ec_k" in partial|failed) _ec_held=1 ;; esac   # the caller's own count says so
+    end_problems "$@" && _ec_held=1
+    end_record "$_ec_k" "$_ec_d" "$_ec_t"
+    if [ "$_ec_held" = 1 ]; then
+        log "$_ec_w -- a disk has a problem: the results stay on the screen until 'כבה', no count (#2024): $(tr '\n' ';' < "$RUN_DIR/end.problems" 2>/dev/null)"
+    else log "$_ec_w -- powering off in ${END_POWEROFF_S}s, or at once on 'כבה עכשיו'"; fi
     _ec_n=0   # counted like idle_check's warning; the screen counts to the epoch
-    while [ "$_ec_n" -lt "$_ec_lim" ]; do
-        if [ -f "$RUN_DIR/end.now" ]; then log "$2 -- 'כבה עכשיו' pressed"; break; fi
+    while [ "$_ec_held" = 1 ] || [ "$_ec_n" -lt "$END_POWEROFF_S" ]; do
+        if [ -f "$RUN_DIR/end.now" ]; then log "$_ec_w -- 'כבה עכשיו' pressed"; break; fi
         # a request of the screen's own (END_ABORT_FILE, lcwait.sh: the local clone's
         # end.req) is the person's: the count gives way to it, its caller acts on it
         if [ -n "${END_ABORT_FILE:-}" ] && [ -s "$END_ABORT_FILE" ]; then
-            log "$2 -- the screen's own request came: the count stops"
-            rm -f "$RUN_DIR/end.poweroff" "$RUN_DIR/end.hold"; return 2
+            log "$_ec_w -- the screen's own request came: the count stops"
+            end_clear; return 2
         fi
         if [ "$_ec_held" = 0 ] && [ -f "$RUN_DIR/end.hold" ]; then
-            _ec_held=1; _ec_lim=$END_HOLD_S; _ec_n=0; end_record "$1" "${3:-}" "${4:-}"
-            log "$2 -- the count was stopped to read the results: power-off in ${END_HOLD_S}s, or on 'כבה עכשיו'"
+            _ec_held=1; end_record "$_ec_k" "$_ec_d" "$_ec_t"; log "$_ec_w -- the count was stopped: the results stay until 'כבה'"
+        fi
+        # held: said to the console (#2031, hold.sh); its power-off or reboot, kept by that beat or a running one (attended_keep)
+        if [ "$_ec_held" = 1 ]; then
+            if command -v held_beat_start >/dev/null 2>&1; then held_beat_start; fi
+            if command -v attended_power_check >/dev/null 2>&1; then attended_power_check; fi
         fi
         if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi
         sleep 1; _ec_n=$((_ec_n + 1))
     done
-    rm -f "$RUN_DIR/end.poweroff" "$RUN_DIR/end.now" "$RUN_DIR/end.hold"
+    end_clear
     finish_and_stop && return 0
     # safe_poweroff refused (#1483): the countdown is gone and the reason stays
     # on every screen (power.fail, gui_hello_state) -- a WoL refusal too.
     [ "${POWEROFF_WHY:-}" != wol ] ||
         echo "המחשב לא כובה: Wake-on-LAN לא נדרך בכרטיס הרשת, ובלעדיו אי אפשר להדליק אותו מרחוק. כבו אותו בכפתור ההפעלה." > "$RUN_DIR/power.fail"
-    log "$2 -- the machine stayed on (${POWEROFF_WHY:-unknown})"
+    log "$_ec_w -- the machine stayed on (${POWEROFF_WHY:-unknown})"
     return 1
 }
 
@@ -163,17 +239,19 @@ end_failed_round() {
     # received) where no drawer completed. Metal 17/10: cloner 2 stayed on after such a failure; its
     # hold beat does not join a wave and WoL wakes nothing that is on, so the
     # next round went on without it. Now the failure is reported -- the
-    # console keeps it -- shown for the count, and the machine powers off.
-    # Metal 17/10 (room_72308383, link down mid-stream): an unconfirmed report
-    # was hold_unheard, which never returns -- lit after the server answered
-    # again. Nadav: a cloner powers off in every state. The report goes on
-    # until then; a wave that wrote nothing fails the round on the server.
+    # console keeps it -- and shown. #2024 (Nadav 22/10): a failed round is a
+    # problem, so the results stay until "כבה" -- no count. Metal 17/10
+    # (room_72308383, link down mid-stream): an unconfirmed report was
+    # hold_unheard, which never returns. The report goes on behind the
+    # results; a wave that wrote nothing fails the round on the server.
     if ! report_final "$3" "$2" "$MAC" "$SERVER"; then
-        log "the failure report was not confirmed -- the count runs all the same, reporting until the power-off"
+        log "the failure report was not confirmed -- reporting on while the results are on the screen"
         progress_loop "$2" "$MAC" "$SERVER" &
     fi
-    # shellcheck disable=SC2086 # the disk list is a word list on purpose
-    end_tally $_disks
-    end_countdown failed "$1" "$_et_ok" "$_et_n" || ui_error_hold "$1" hold_beat
+    agent_log_send "$2"   # #1882: why it failed, kept on the server (best effort)
+    # shellcheck disable=SC2086 # the disk list is a word list on purpose; #2024: _all = the drawers skipped red too, each with its reason
+    end_tally ${_all:-$_disks}
+    # shellcheck disable=SC2086
+    end_countdown failed "$1" "$_et_ok" "$_et_n" ${_all:-$_disks} || ui_error_hold "$1" hold_beat
     return 1
 }

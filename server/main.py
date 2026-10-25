@@ -192,7 +192,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "--console-host על loopback (127.0.0.1) — "
                              "פיתוח/e2e; ברירת מחדל on")
     # ‏#201: הפורט שהשידור תופס בפועל (וגם portbase+1). בייצור לא נוגעים
-    # בו — udpcast של הסוכן מצפה ל-9000, וזה מה שהמתקין והיחידה מריצים.
+    # בו — ‏#1826: הסוכן מקבל אותו ב-`session.portbase`, אבל סוכן ישן מצפה
+    # ל-9000 וחומת האש של המתקין פותחת 9000-9001 בלבד (‏`--mcast-ports`).
     # הדגל קיים בשביל מי שמריץ שרת אמיתי במקום שאסור לו להתנגש בהפצה:
     # ‏`tools/e2e/harness.py`. **בכוונה דגל ולא משתנה סביבה** — משתנה
     # סביבה שנשאר תקוע ב-shell או ביחידה משנה את פורט ההפצה של הייצור
@@ -346,6 +347,40 @@ def _primary_alive(runtime, args, hostname: str):
         config = primary_alive.server_config(app, ident, addr, args.interserver_port)
         return [lambda: uvicorn.Server(config)], [addr]
     return servers
+
+
+def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
+    """‏#1972: ה-querier על כרטיס ההפצה — ותמיד שורה במסך הבריאות. כאן בלבד
+    (כמו `vm_host`): בבדיקות אין סוקט raw ואין תהליכון."""
+    from . import health, ifaddr, igmp_querier, ports
+    hooks = getattr(runtime, "health_hooks", None)
+    if hooks is None:          # בדיקות של main מחליפות את create_runtime
+        return
+    if not (deploy.configured and interface):
+        hooks["igmp_querier"] = lambda: ("not_applicable", health.NOT_APPLICABLE)
+        return
+    nic_services = getattr(runtime.ctx, "nic_services", None)
+    querier = igmp_querier.Querier(
+        runtime.conn, interface, lambda: ifaddr.read_ipv4(interface),
+        gate=nic_services.multicast_refused if nic_services is not None else None,
+        hears=lambda: igmp_querier.firewall_hears(ports.read_nft_ruleset(), interface))
+    hooks["igmp_querier"] = querier.health
+    threading.Thread(target=querier.run_forever, daemon=True, name="igmp-querier").start()
+
+
+def _start_ups_monitor(runtime) -> None:
+    """‏#1973: מנטר ה-UPS — יומן בנפילת חשמל, כיבוי מסודר בסוללה נמוכה. כאן
+    בלבד: בבדיקות אסור שתהליכון יקרא ל-`systemctl poweroff`."""
+    from . import ups
+    hooks = getattr(runtime, "health_hooks", None)
+    if hooks is None:          # בדיקות של main מחליפות את create_runtime
+        return
+    ctx = runtime.ctx
+    monitor = ups.UpsMonitor(runtime.conn,
+                             stop_work=lambda reason: ups.stop_all_work(ctx, reason))
+    ctx.ups = monitor
+    hooks["ups"] = monitor.health
+    threading.Thread(target=monitor.run_forever, daemon=True, name="ups-monitor").start()
 
 
 def main() -> None:
@@ -559,8 +594,10 @@ def main() -> None:
                              vm_host=True,
                              # ‏#1494: used_bytes לאימג'ים ישנים מכותרת partclone.
                              backfill_used_bytes=True,
+                             # ‏#1805: הגיבוב לקריאה החוזרת מהדיסק אחרי כתיבה.
+                             backfill_readback=True,
                              # ‏#1447: אזור הזמן של המערכת = ההגדרה (timedatectl).
-                             apply_timezone=True)
+                             apply_timezone=True, apply_timesync=True)
     # ‏#1372: עדכון מהכפתור רץ בסקריפט של התג **הישן**, ולכן ההכנה של הגרסה
     # הזו אינה תלויה בו: מארח שאינו מוכן — install/vmupdate-host.sh שלנו, ברקע.
     # ‏getattr: בדיקות של main מחליפות את create_runtime ברשומה משלהן.
@@ -573,6 +610,8 @@ def main() -> None:
         journal(runtime.conn, "console_tls_regenerated", console_addr or "127.0.0.1",
                 f"old_sha256={console_tls.previous_fingerprint_sha256} "
                 f"new_sha256={console_tls.fingerprint_sha256}")
+    _start_igmp_querier(runtime, deploy, interface)   # #1972
+    _start_ups_monitor(runtime)   # #1973
     agent_app = create_agent_app(runtime)
     console_app = create_console_app(runtime)
 

@@ -7,11 +7,16 @@
 do_task() {
     _type=$(json_get "$RESP" ".task.type")
     _tid=$(json_get "$RESP" ".task.id")
+    rm -f "$RUN_DIR/power.stop"   # #1918: a power button's stop is for the write it was asked in, never this one
     # ‏#530: האסימון מגיע בתשובת ה-hello, ורק למכונה שה-MAC שלה תואם,
     # וכל כתיבה על המשימה דורשת אותו בחזרה. **בלי `export`**: שני
     # אתרי השימוש ב-`capture.sh` הם הרחבת מעטפת בקובץ שנטען ב-`.`,
     # ותת-מעטפת יורשת משתנה גם בלי ייצוא. אין שם `sh -c`.
     TASK_TOKEN=$(json_get "$RESP" ".task.token")
+    # ‏#1916 (ברזל 20/10): הדיווח הראשון יוצא לפני ש-capture_disk כותב משהו
+    # משלו. בלי הניקוי הוא נשא את `failed` של הקליטה הקודמת, והשרת סגר את
+    # החדשה תוך 3 שניות. לפני ה-case: גם הפצה ישירה (`done` ישן = סגירה כמוצלחת).
+    job_reset
     case "$_type" in
         capture) ;;
         direct_send) direct_send_task "$_tid"; return $? ;;   # #715
@@ -39,7 +44,7 @@ do_task() {
     # path it is the worst of the three: the next step is `poweroff -f` with
     # the drive about to be pulled out, so a capture the server never heard
     # about stays open for ever against a machine that is off.
-    if capture_disk "$_tid" "$_disk"; then
+    if capture_disk "$_tid" "$_disk" "$(json_get "$RESP" ".task.disk_serial")"; then   # #1901: the disk chosen, not its name
         if upload_manifest "$_tid" "$RUN_DIR/new-manifest.json"; then
             echo "done" > "$RUN_DIR/state"
             report_final "$_ppid" "" "$MAC" "$SERVER" "$_tid" \

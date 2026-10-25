@@ -25,10 +25,12 @@ import time
 from typing import Callable
 
 from .db import get_setting, journal, now_iso, update_one, writing
+from . import readbackhash
+from .hostname_rule import HOSTNAME_MAX
 
-#: התקרה של NetBIOS. שם מחשב ארוך ממנה אינו נכתב, ו-`hostname.sh` דוחה
-#: אותו — אבל שם, בקצה, אחרי שהאימג' כבר נכתב על הדיסק (#98).
-HOSTNAME_MAX = 15
+#: ‏``HOSTNAME_MAX`` — התקרה של NetBIOS, מ-`hostname_rule` (#1997: כלל אחד לשם
+#: מחשב). שם מחשב ארוך ממנה אינו נכתב, ו-`hostname.sh` דוחה אותו — אבל שם,
+#: בקצה, אחרי שהאימג' כבר נכתב על הדיסק (#98).
 
 #: הסיומת הקצרה ביותר ש-`registry.normalize_suffix` מייצרת: ‏"5" → "05".
 #: היא הרצפה, ולכן קידומת שאינה מותירה לה מקום פסולה בוודאות — גם
@@ -260,6 +262,7 @@ class SessionStore:
             # בהגדרה, ולכן אין כאן את התנאי של `close`.
             journal(self.conn, "session_close", replaces, opened_by)
             self.on_closed(replaces)
+        readbackhash.kick(image_id)   # #1864: a round's image goes to the head of the read-back digest queue
         if kind == UNICAST:
             journal(self.conn, "pull_open",
                     f"{session_id} {group_id} {image_id} mac={roster[0]}", opened_by)
@@ -488,6 +491,16 @@ class SessionStore:
             " AND state NOT IN ('done', 'failed', 'partial', 'lost')",
             (session_id,),
         ).fetchone()["n"]
+
+    def lost_ips(self, session_id: str) -> list[str | None]:
+        """‏#1950: הכתובת האחרונה שנראתה (‏`net_devices`, מה-hello) של כל חבר
+        `lost` בגל — ‏None כשאינה ידועה. השולח מצליב אותן מול מי שקיבל את
+        המחיצה הקודמת עד סופה (`sender.finished_receivers`)."""
+        return [row["ip"] or None for row in self.conn.execute(
+            "SELECT d.ip FROM session_members m LEFT JOIN net_devices d ON d.mac = m.mac"
+            " WHERE m.session_id = ? AND m.state = 'lost'",
+            (session_id,),
+        ).fetchall()]
 
     def is_member(self, session_id: str, mac: str) -> bool:
         return (

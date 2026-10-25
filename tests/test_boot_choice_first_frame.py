@@ -55,10 +55,12 @@ def took(out: str) -> int:
 
 def first_count(into: str) -> str:
     """A background reader: the first $LC/boot that is not "0|0" (not counting),
-    into $RUN_DIR/<into>; gone = "" -- the choice ended before a count was read.
-    A ceiling of 15 s, so it never outlives the test (#1736)."""
+    into $RUN_DIR/<into>; none within the ceiling = no file, read back as "".
+    An empty read is not an answer (#2099): `echo ... > "$LC/boot"` truncates
+    before it writes, and on a busy host the reader landed in between and took
+    "" for the count. A ceiling of 15 s, so it never outlives the test (#1736)."""
     return ('( n=0; while [ $n -lt 150 ]; do b=$(cat "$LC/boot" 2>/dev/null); '
-            f'case "$b" in "0|0") n=$((n + 1)); sleep 0.1 ;; *) echo "$b" > "$RUN_DIR/{into}"; break ;; esac; done ) '
+            f'case "$b" in "0|0"|"") n=$((n + 1)); sleep 0.1 ;; *) echo "$b" > "$RUN_DIR/{into}"; break ;; esac; done ) '
             '> /dev/null 2>&1 & ')
 
 

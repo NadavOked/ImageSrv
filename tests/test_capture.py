@@ -36,7 +36,7 @@ def sha(data: bytes) -> str:
 def setup_build_machine(server, mac="aa:bb:cc:00:00:10"):
     admin = server["admin"]
     admin.post("/api/console/machines",
-               json={"mac": mac, "name": "מחשב בנייה", "group_id": "grp_BUILD"})
+               json={"mac": mac, "name": "BUILD-PC", "group_id": "grp_BUILD"})
     return mac
 
 
@@ -117,7 +117,7 @@ def test_capture_is_refused_to_a_cloner(server):
     לאימג' שלו נבדק ב-`test_capture_mac_binding.py`.
     """
     server["admin"].post("/api/console/machines",
-                         json={"mac": "aa:bb:cc:00:00:20", "name": "שכפול 1",
+                         json={"mac": "aa:bb:cc:00:00:20", "name": "CLONER1",
                                "group_id": "grp_CLONERS"})
     r = make_task(server, "aa:bb:cc:00:00:20")
     assert r.status_code == 400

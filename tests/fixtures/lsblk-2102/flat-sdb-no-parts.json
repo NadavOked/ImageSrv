@@ -1,0 +1,9 @@
+{
+   "blockdevices": [
+      {
+         "path": "/dev/sdb",
+         "type": "disk",
+         "pkname": null
+      }
+   ]
+}

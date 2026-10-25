@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Iterable
 
 from . import auth, disk_reserve, interserver_auth, storage_nodes
-from .db import journal, now_iso
+from .db import journal, monitor_rekeyed, now_iso
 
 log = logging.getLogger("imagectl.interserver")
 
@@ -718,6 +718,8 @@ CONSOLE_GETS: tuple[tuple[str, type], ...] = (
     (r"/settings", dict), (r"/update", dict), (r"/update/status", dict),
     # מה-gate (11/10): כרטיסי TLS ושם המארח בהגדרות, ומי מחובר לקונסולה (דף הרשת).
     (r"/tls", dict), (r"/hostname", dict), (r"/sessions", list),
+    # ‏#1932: שורת "אזור זמן" בהגדרות של המשני (קריאה; הכתיבה ב-``CONSOLE_WRITES``).
+    (r"/timezone", dict),
     # המשני עונה 409 משלו (אינו מנהל ילדים) — העמוד מקבל את תשובת המשני.
     (r"/storage-nodes", list), (r"/storage-node-groups", list), (r"/storage-transfers", list),
 )
@@ -732,6 +734,8 @@ CONSOLE_WRITES: tuple[tuple[str, str], ...] = (
     ("POST", r"/room"), ("POST", r"/room/close"),
     ("POST", r"/users"), ("PUT", r"/users/[^/]+"), ("DELETE", r"/users/[^/]+"),
     ("POST", r"/settings"),
+    # ‏#1932: אזור הזמן של המשני — הגדרה כמו ``/settings`` (‏timedatectl + ההגדרה במשני עצמו).
+    ("POST", r"/timezone"),
     # רשת: כרטיסים ו-DHCP (‏/net/interfaces) וכתובות (‏/net/config). שינוי כתובת שמנתק
     # את המשני מהראשי חוזר לבד: אישור ההחזרה (‏/net/config/confirm) לא יגיע, וה-rollback
     # של המשני (#1263) מחזיר. ‏…/probe (שולח DHCP לרשת) אינו כאן — הוא GET שאינו ברשימה.
@@ -750,7 +754,9 @@ CONSOLE_WRITES: tuple[tuple[str, str], ...] = (
 #: לאט מטבען. ‏``/update/check`` מריץ אצלו ls-remote (20 ש') + הורדת התג ובדיקת החתימה
 #: (60+60 ש'); ‏``/update/apply`` ממתין ל-systemd-run (15 ש') ולקריאת הגרסה. בלי זה
 #: הראשי היה מכריז "לא ידוע אם בוצעה" על בדיקה תקינה שפשוט לוקחת דקה.
-CONSOLE_WRITE_TIMEOUTS: dict[str, float] = {"/update/check": 180.0, "/update/apply": 60.0}
+#: ‏``/timezone`` (#1932): ‏timedatectl set-timezone (עד 20 ש') ואז קריאה חוזרת (עד 10 ש').
+CONSOLE_WRITE_TIMEOUTS: dict[str, float] = {"/update/check": 180.0, "/update/apply": 60.0,
+                                            "/timezone": 45.0}
 #: תקרה לגוף בקשת כתיבה מהראשי — טופס, לא קובץ.
 MAX_CONSOLE_WRITE_BODY = 64 * 1024
 #: כותרות תשובה שהעמודים קוראים (זמן מדידה, "החיפוש נקטע") — עוברות בשמן.
@@ -961,11 +967,13 @@ def _reason_sync(sock: socket.socket) -> str:
     return _recv_exact(sock, length).decode("utf-8", "replace")[:40]
 
 
-def authenticate_machine_sync(sock: socket.socket, secret: str) -> None:
+def authenticate_machine_sync(sock: socket.socket, secret: str) -> str:
     """‏#839/#1077 על socket חוסם — מראה של ``monitor.authenticate_machine``
     (שהוא asyncio): גרסה, סוג 2 בלבד (None לעולם לא), HMAC על ה-challenge,
-    ‏SecurityResult. אחרי ההצלחה המכונה ממתינה ל-ClientInit — מהאב."""
-    from .monitor import RFB_SECURITY_SECRET, RFB_VERSION, hmac_response
+    ‏SecurityResult. אחרי ההצלחה המכונה ממתינה ל-ClientInit — מהאב.
+    ‏#1837: מחזיר את הסוד הבא, כמו המקור האסינכרוני."""
+    from .monitor import (MACHINE_REJECTED_SECRET, RFB_SECURITY_SECRET,
+                          RFB_VERSION, hmac_response, next_secret)
     banner = _recv_exact(sock, 12)
     if not banner.startswith(b"RFB 003."):
         raise MachineAuthError("על 5900 עונה משהו שאינו RFB")
@@ -983,7 +991,8 @@ def authenticate_machine_sync(sock: socket.socket, secret: str) -> None:
     sock.sendall(hmac_response(secret, challenge))
     result = struct.unpack(">I", _recv_exact(sock, 4))[0]
     if result != 0:
-        raise MachineAuthError(f"המוניטור דחה את סוד השרת: {_reason_sync(sock)}")
+        raise MachineAuthError(MACHINE_REJECTED_SECRET)
+    return next_secret(secret, challenge)
 
 
 def _close_reason(side: str, exc: BaseException) -> str:
@@ -1520,9 +1529,10 @@ class InterserverTLSServer:
                     502, {"detail": f"שירות המוניטור במכונה אינו זמין: {exc}"},
                     close=True))
                 return
+            monitor_module.keep_alive(machine)       # #1850: מכונה שנעלמה בלי FIN
             try:
                 machine.settimeout(5.0)
-                authenticate_machine_sync(machine, secret)
+                rekeyed = authenticate_machine_sync(machine, secret)
             except MachineAuthError as exc:
                 conn.sendall(_http_response(512, {"detail": str(exc)}, close=True))
                 return
@@ -1531,6 +1541,8 @@ class InterserverTLSServer:
                     512, {"detail": "המוניטור לא השלים את לחיצת-היד תוך 5 שניות"},
                     close=True))
                 return
+            # ‏#1837: המכונה כבר עברה לסוד הבא — כמו במוניטור המקומי.
+            monitor_rekeyed(self.ctx.conn, mac, secret, rekeyed)
             conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream"
                          b"\r\nConnection: close\r\n\r\n")
             journal(self.ctx.conn, "storage_monitor_tunnel", mac, "")

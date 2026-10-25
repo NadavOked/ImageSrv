@@ -55,7 +55,7 @@ function setup({search = '', fixtures = {}} = {}) {
   });
   for (const f of ['progress.js', 'console.js', 'update_screen.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
-  run('ME={username:"nadav",role:"admin",server_name:"srv",version:"v0.71.0",capabilities:{}}; globalThis.sheets=[]; globalThis.toasts=[];'
+  run('ME={timezone:"UTC",username:"nadav",role:"admin",server_name:"srv",version:"v0.71.0",capabilities:{}}; globalThis.sheets=[]; globalThis.toasts=[];'
     + ' sheet=o=>{sheets.push(o);}; toast=(m,ms,k)=>{toasts.push([m,k||""]);}; renderCurrent=()=>{};');
   ctx.__clock = clock;
   run('updClock = () => __clock.now;');
@@ -338,7 +338,7 @@ test('sigfail when the signature could not be checked says so — "not checked" 
 
 test('dlfail: firewall and DNS to check, and "try again" re-applies the same tag', async () => {
   const t = await started();
-  t.fixtures['/update/status'] = failed('fetch', 'fetch', {error: "git fetch --tags נכשל: fatal: unable to access 'https://github.com/NadavOked/ImageCtl.git/': Could not resolve host: github.com"});
+  t.fixtures['/update/status'] = failed('fetch', 'fetch', {error: "git fetch --tags נכשל: fatal: unable to access 'https://github.com/NadavOked/ImageSrv.git/': Could not resolve host: github.com"});
   await t.poll();
   const h = t.html();
   assert.equal(t.run('UPD.phase'), 'dlfail');

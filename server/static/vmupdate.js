@@ -97,10 +97,9 @@ function vmuReadyNotice(was, st) {
 
 /* ---------- עזרים ---------- */
 
+/* ‏#1933: HH:MM באזור הזמן של השרת (‏fmtClock של console.js), לא בשעון הדפדפן; ‏null = אין חותמת. */
 function vmuHHMM(iso) {
-  const d = new Date(iso || "");
-  return iso && Number.isFinite(d.getTime())
-    ? String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") : null;
+  return Number.isFinite(tsMs(iso)) ? fmtClock(iso) : null;
 }
 function vmuClock(seconds) {
   const s = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -659,9 +658,9 @@ async function vmuAnswer(approve) { if (await vmuAct(() => vmuCall("POST", "/con
 
 /* --- שמירה (חובה) ומחיקה --- */
 
-function vmuDefaultName() {
-  const d = new Date();
-  return `Windows Updates ${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+function vmuDefaultName(now = Date.now()) {
+  const [y, m, d] = zoneDay(now).split("-");   // #1933: היום של השרת, לא של הדפדפן
+  return `Windows Updates ${d}-${m}-${y}`;
 }
 function vmuSaveDialog(afterCrash = false) {
   const st = VMU.st || {};

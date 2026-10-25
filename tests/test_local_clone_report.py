@@ -136,3 +136,59 @@ def test_a_stage_that_was_not_measured_is_not_a_zero():
 def test_a_long_error_is_cut_in_the_journal():
     line = local_clone_report.journal_line(_report(targets=[{"port": 1, "state": "failed", "error": "x" * 5000}]))
     assert len(line) < 400
+
+
+def test_a_completed_target_with_an_ntfs_note_is_a_warning():
+    note = "Windows במקור לא כובה עד הסוף"
+    line = local_clone_report.journal_line(_report(targets=[
+        {"port": 1, "state": "done", "ntfs_note": note},
+    ]))
+    assert f"דיסק 1 הושלם — {note}" in line
+    assert "הצליח" not in line
+
+
+@pytest.mark.parametrize("extra", [{}, {"ntfs_note": ""}, {"ntfs_note": " \n "},
+                                  {"ntfs_note": None}, {"ntfs_note": 42}])
+def test_a_completed_target_without_an_ntfs_note_is_unchanged(extra):
+    target = {"port": 1, "state": "done"}
+    before = local_clone_report.journal_line(_report(targets=[target]))
+    after = local_clone_report.journal_line(_report(targets=[{**target, **extra}]))
+    assert after == before
+    assert "דיסק 1 הצליח" in after
+
+
+def test_ntfs_notes_are_single_line_and_bounded_like_errors():
+    line = local_clone_report.journal_line(_report(targets=[
+        {"port": 1, "state": "done", "ntfs_note": "אזהרה\r\n" + "x" * 5000},
+    ]))
+    assert "הושלם — אזהרה " in line
+    assert "\n" not in line and "\r" not in line
+    assert len(line) < 400
+
+
+def test_a_report_with_an_ntfs_note_is_an_orange_journal_row(identity_server):
+    """#2049: "כתום בקונסולה" -- the row's colour is the event's severity (journal_he), so a
+    report with a done drawer that carries a note is `local_clone_note` (warn), not
+    `local_clone` (info). A report without one stays `local_clone`."""
+    from server import journal_he
+    setup_classroom(identity_server)
+    noted = _report(targets=[{"dev": "sda", "port": 1, "state": "done", "ntfs_note": "Windows במקור לא כובה עד הסוף"}])
+    assert identity_server["station"].post("/api/v1/agent/local-clone", json=noted).status_code == 200
+    assert identity_server["station"].post("/api/v1/agent/local-clone", json=_report()).status_code == 200
+    warn = [d for _u, d in journal_details(identity_server, "local_clone_note")]
+    plain = [d for _u, d in journal_details(identity_server, "local_clone")]
+    assert len(warn) == 1 and "דיסק 1 הושלם — Windows במקור" in warn[0], warn
+    assert len(plain) == 1 and "דיסק 1 הצליח" in plain[0], plain
+    assert journal_he.severity("local_clone_note") == "warn"
+    assert journal_he.severity("local_clone") == "info"
+
+
+@pytest.mark.parametrize("targets,want", [
+    ([{"state": "done", "ntfs_note": "x"}], True),
+    ([{"state": "done", "ntfs_note": " \n "}], False),
+    ([{"state": "done", "ntfs_note": 7}], False),
+    ([{"state": "failed", "ntfs_note": "x"}], False),   # a failed drawer is not "done with a note"
+    ("not a list", False),
+])
+def test_has_note_only_for_a_done_drawer_with_a_real_note(targets, want):
+    assert local_clone_report.has_note({"targets": targets}) is want

@@ -71,6 +71,8 @@ def pytest_configure(config) -> None:
     # ‏portbase גבוה ואקראי לכל הריצה: יתום של ריצה שנקטעה לא ינקה איש,
     # ולכן ההגנה היא שלא יהיה לו במה להתנגש (#156).
     hygiene.assign_test_portbase()
+    # ‏#2099: תחת xdist — לוג שולח לכל worker; סדרתי — כמו קודם.
+    hygiene.isolate_sender_log(os.environ.get("PYTEST_XDIST_WORKER"))
     hostguard.block_real_host_reads()
     hostguard.detach_host_dev()
 
@@ -113,16 +115,56 @@ def _say(lines: list[str]) -> None:
         print(text.encode("ascii", "backslashreplace").decode())
 
 
+#: ‏#2099: תחת pytest-xdist המנהל (controller) קובע את קוד היציאה, והוא
+#: **מתעלם** מ-`session.exitstatus` של worker (נקרא רק `exitstatus == 2`,
+#: ‏Ctrl-C). תהליך יתום או שולח אמיתי שה-worker מצא היו נעלמים בשקט — ריצה
+#: אדומה שנראית ירוקה (עיקרון 5). לכן ה-worker מוסר את הממצאים דרך
+#: ‏`workeroutput`, והמנהל מוסיף אותם לפסק שלו. הדילוגים וכשלי ווינדוס אינם
+#: עוברים כאן: הדוחות עצמם מגיעים למנהל (`pytest_runtest_logreport`).
+WORKER_PROBLEMS_KEY = "imagectl_problems"
+_worker_problems: list[str] = []
+
+
+def _hygiene_problems() -> list[str]:
+    problems = hygiene.session_verdict(_run["basetemp"], native.native_required())
+    if hygiene.blocked_spawns:
+        problems.append(f"{len(hygiene.blocked_spawns)} ניסיונות להפעיל שולח אמיתי:")
+        problems += [f"    {' '.join(cmd)}" for cmd in hygiene.blocked_spawns]
+    return problems
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node, error) -> None:
+    """הוק של xdist במנהל: worker סיים — ממצאי ההיגיינה שלו נאספים (#2099)."""
+    _worker_problems.extend(getattr(node, "workeroutput", {}).get(WORKER_PROBLEMS_KEY, []))
+
+
+#: ‏#2121: שער המעבדה אינו קורא את קוד היציאה (הוא 1 בכל ריצה על ה-testrunner,
+#: שש שגיאות uinput), ולכן יתום או שולח אמיתי שנמצאו כאן — שאינם טסט ב-junit —
+#: היו נעלמים בו. ‏`IMAGECTL_SESSION_PROBLEMS=<נתיב>`: הרשימה נכתבת תמיד, גם
+#: ריקה — קובץ חסר אומר "לא נרשם", לא "אין בעיות" (עיקרון 5).
+SESSION_PROBLEMS_ENV = "IMAGECTL_SESSION_PROBLEMS"
+
+
+def _record_session_problems(problems: list[str]) -> None:
+    path = os.environ.get(SESSION_PROBLEMS_ENV)
+    if path:
+        Path(path).write_text(json.dumps(problems, ensure_ascii=False), encoding="utf-8")
+
+
 def pytest_sessionfinish(session, exitstatus) -> None:
+    workeroutput = getattr(session.config, "workeroutput", None)
+    if workeroutput is not None:          # worker של xdist — המנהל פוסק (#2099)
+        workeroutput[WORKER_PROBLEMS_KEY] = _hygiene_problems()
+        return
     # דילוג מוצהר אינו כישלון — אבל גם אינו שקט: מספר וסיבה, בכל ריצה (#295).
     notes = _skips.notes()
     if notes:
         _say(notes)
     problems = _skips.verdict()
-    problems += hygiene.session_verdict(_run["basetemp"], native.native_required())
-    if hygiene.blocked_spawns:
-        problems.append(f"{len(hygiene.blocked_spawns)} ניסיונות להפעיל שולח אמיתי:")
-        problems += [f"    {' '.join(cmd)}" for cmd in hygiene.blocked_spawns]
+    session_problems = _hygiene_problems() + _worker_problems
+    _record_session_problems(session_problems)
+    problems += session_problems
     if os.name == "nt":
         extra = [n for n in _win_failed if n not in WINDOWS_ALLOWED_FAILURES]
         if extra:

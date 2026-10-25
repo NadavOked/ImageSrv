@@ -141,6 +141,36 @@ def _setup_as_new_admin(server, name: str):
     return setup.json()
 
 
+def test_mfa_setup_refresh_keeps_the_pending_secret(server):
+    """‏#2101: רענון מסך ההגדרה אחרי שהטלפון סרק את ה-QR קורא שוב ל-setup. כל עוד
+    לא אושר — אותו סוד ממתין, והקוד מהאפליקציה (שסרקה את הראשון) מפעיל MFA."""
+    assert server["admin"].post("/api/console/users", json={
+        "username": "refresh", "password": "Aa12345!", "role": "admin",
+    }).status_code == 200
+    c = _console_client(server)
+    assert c.post("/api/console/login", json={
+        "username": "refresh", "password": "Aa12345!"}).json() == {"mfa_enrollment_required": True}
+    first = c.post("/api/console/me/mfa/setup").json()
+    second = c.post("/api/console/me/mfa/setup").json()
+    assert second["secret"] == first["secret"]
+    assert second["otpauth_url"] == first["otpauth_url"]
+    en = c.post("/api/console/me/mfa/enable", json={"code": totp.totp_code(first["secret"])})
+    assert en.status_code == 200, en.text
+    assert en.json()["mfa_enabled"] is True
+
+
+def test_mfa_pending_secret_expires(server, monkeypatch):
+    """‏#2101: הסוד הממתין מוגבל בזמן — אחרי `PENDING_TTL` בלי אישור, setup מגריל חדש."""
+    from server import console_mfa
+    first = _setup_as_new_admin(server, "stale")
+    later = time.time() + console_mfa.PENDING_TTL + 1
+    monkeypatch.setattr(console_mfa, "_now", lambda: later)
+    c = _console_client(server)
+    c.post("/api/console/login", json={"username": "stale", "password": "Aa12345!"})
+    again = c.post("/api/console/me/mfa/setup").json()
+    assert again["secret"] != first["secret"]
+
+
 def _journal_details(server, event: str) -> list[str]:
     rows = server["ctx"].conn.execute(
         "SELECT detail FROM journal WHERE event = ? ORDER BY id", (event,)
@@ -619,6 +649,33 @@ def test_1120_password_longer_than_128_is_rejected_by_name(server):
     assert server["admin"].post("/api/console/users", json={
         "username": "longpw", "password": "Aa1!" + "x" * 124, "role": "deploy",
     }).status_code == 200
+
+
+def test_1120_a_challenge_issued_before_the_lock_dies_with_the_lock(server, monkeypatch):
+    """#1120: ‏`/login/mfa` בודק את הנעילה בעצמו (`login_guard.check`), ולא
+    סומך על כך ש-`/login` כבר בדק. challenge שהונפק **לפני** הנעילה עדיין
+    תקף בזמן — ובלי הבדיקה, מי שמחזיק אותו נכנס לחשבון נעול עם קוד נכון.
+    עד כאן אף טסט לא הפיל את הסרת הבדיקה (בקרה רטרואקטיבית, 24/10): שאר
+    טסטי #1120 עוברים דרך `/login`, שנועל לפני שה-challenge נוצר."""
+    from server import login_guard
+    t = {"now": 4_000_000.0}
+    monkeypatch.setattr(login_guard, "now", lambda: t["now"])
+    _, secret = _mfa_user(server, "early")
+    holder, r = _challenge(server, "early")
+    assert r.status_code == 200, r.text
+    challenge = r.json()["challenge"]
+    for n in range(10):                       # ננעל מאותה כתובת, בסיסמה שגויה
+        t["now"] += 600                       # מעבר להשהיה — רק הספירה נבדקת
+        bad = _console_client(server).post("/api/console/login", json={
+            "username": "early", "password": "Wrong123!"})
+        assert bad.status_code == 401, (n, bad.text)
+    t["now"] += 1
+    late = holder.post("/api/console/login/mfa", json={
+        "challenge": challenge, "code": totp.totp_code(secret),
+    })
+    assert late.status_code == 403, late.text
+    assert "15 דקות" in late.json()["detail"]
+    assert "imagectl_session" not in late.cookies
 
 
 def test_1243_idle_default_is_600_on_every_login_path(server):

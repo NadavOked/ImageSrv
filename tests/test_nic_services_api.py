@@ -28,7 +28,8 @@ def rig(server):
         "interfaces": lambda: [dict(n) for n in NICS],
         "schedule": lambda s, fn: scheduled.append(fn),
         "listeners": lambda n: applied.append(n.current_plan()["hosts"]) or None,
-        "dnsmasq": lambda n: None, "firewall": lambda n: None})
+        "dnsmasq": lambda n: None, "timesync": lambda n: None,   # #1773: chrony per NIC
+        "firewall": lambda n: None})
 
     def via(address: str) -> TestClient:
         client = TestClient(server["app"], base_url=f"https://{address}:8081")
@@ -49,7 +50,7 @@ def test_admin_only(rig):
 def test_read_shows_todays_defaults_and_who_you_are(rig):
     body = rig["via"]("10.10.10.8").get(URL).json()
     rows = {r["name"]: r for r in body["nics"]}
-    assert body["services"] == ["console", "monitor", "multicast", "netboot", "interserver"]
+    assert body["services"] == ["console", "monitor", "multicast", "netboot", "interserver", "ntp"]   # #1773
     assert body["edited"] is False and body["you"]["interface"] == "ens33"
     assert rows["ens33"]["services"] == ["console", "monitor", "interserver"]
     assert rows["ens34"]["services"] == ["multicast", "netboot"]

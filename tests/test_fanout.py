@@ -11,6 +11,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -885,6 +886,366 @@ def test_sigpipe_does_not_kill_the_whole_machine(fanout, tmp_path):
     assert code in (0, 1), "fanout was killed instead of reporting"
     assert report.get("sda") == "ok"
     assert b"".join(good) == data
+
+
+# --- #1796: מגירה תקועה מחזיקה את ה-stdin (ברזל 19/10, משכפל 2) -------------
+#
+# ‏zstd של מגירה אחת נעצר ב-SIGSTOP באמצע מחיצה 3, ושתי המגירות נכשלו
+# ב"פג הזמן -- הזרם לא הגיע": ‏udp-sender ניתק את המכונה (~190ש' בלי ACK,
+# ‏--retries-until-drop 200) לפני שהזרם חזר. מה שקובע את זה בצד שלנו אינו
+# הפינוי של המגירה אלא **כמה זמן fanout אינו קורא את ה-stdin שלו** -- זה
+# הזמן שבו udp-receiver חסום בכתיבה ואינו עונה לשולח. הטסטים מודדים אותו
+# ישירות: כותב שמזין את fanout ורושם מתי כל כתיבה הסתיימה.
+#
+# התיקון (#1796) הוא שעון נפרד על ה-stdin החסום, ‏FANOUT_BLOCK_EVICT_MS.
+# הטסטים כאן מקצרים **רק** אותו ומרחיקים את שעון ההתקדמות (#674), כדי שמה
+# שמשחרר את ה-stdin יהיה השעון החדש ולא הישן.
+
+EVICT_MS = 2000
+#: עומס של VM, תזמון תהליכונים בפייתון, ‏ROOM_POLL_MS. הסף עצמו הוא EVICT_MS.
+STDIN_SLACK_S = 2.0
+FEED_PIECE = 64 * 1024
+#: השעון החדש קצר, שעון ההתקדמות (#674) רחוק מכל טסט כאן.
+BLOCK_ONLY = {"FANOUT_BLOCK_EVICT_MS": str(EVICT_MS), "FANOUT_STALL_EVICT_MS": "600000"}
+#: הסיבה ש-fanout.c כותבת למגירה שפונתה בשעון החדש.
+HELD_REASON = "failed stalled the stream (too slow to drain)"
+
+
+class StdinFeeder:
+    """מזין את ה-stdin של fanout בכתיבות חוסמות ורושם (זמן, בייטים) אחרי כל
+    אחת. הפער הארוך בין שתי כתיבות = הזמן הארוך ביותר שבו fanout לא קרא את
+    ה-stdin שלו -- המקבילה של udp-receiver שנחסם על הצינור."""
+
+    def __init__(self, fd: int, data: bytes):
+        self.fd, self.data = fd, data
+        self.marks: list[tuple[float, int]] = []
+        self.error: OSError | None = None
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        sent = 0
+        self.marks.append((time.monotonic(), 0))
+        try:
+            while sent < len(self.data):
+                sent += os.write(self.fd, self.data[sent:sent + FEED_PIECE])
+                self.marks.append((time.monotonic(), sent))
+        except OSError as exc:                # EPIPE כשהטסט הורג את fanout
+            self.error = exc
+        finally:
+            os.close(self.fd)
+
+    def start(self):
+        self.thread.start()
+        return self
+
+    def longest_block(self, now: float | None = None) -> tuple[float, float, int]:
+        """(משך, תחילת הפער, בייטים שנשלחו לפניו). כולל פער שעדיין פתוח."""
+        marks = list(self.marks)
+        if now is not None and self.thread.is_alive():
+            marks.append((now, marks[-1][1]))
+        best = (0.0, marks[0][0], 0)
+        for (t0, b0), (t1, _) in zip(marks, marks[1:]):
+            if t1 - t0 > best[0]:
+                best = (t1 - t0, t0, b0)
+        return best
+
+
+def proc_state(pid: int) -> str:
+    """האות של /proc/<pid>/stat: ‏T = נעצר (SIGSTOP)."""
+    stat = Path(f"/proc/{pid}/stat").read_text()
+    return stat.rsplit(")", 1)[1].split()[0]
+
+
+def self_stopping_reader(fifo: Path, stop_after: int) -> subprocess.Popen:
+    """תהליך נפרד -- כי רק תהליך אפשר לעצור ב-SIGSTOP -- שקורא `stop_after`
+    בייטים ואז עוצר את עצמו, בדיוק כמו `kill -STOP` על zstd באמצע מחיצה.
+    עצירה עצמית ולא kill מהטסט: הנקודה נקבעת בבייט, לא בתזמון."""
+    code = (
+        "import os, signal, sys\n"
+        "f = open(sys.argv[1], 'rb', buffering=0)\n"
+        "n, got = int(sys.argv[2]), 0\n"
+        "while got < n:\n"
+        "    b = f.read(min(65536, n - got))\n"
+        "    if not b: sys.exit(3)\n"
+        "    got += len(b)\n"
+        "os.kill(os.getpid(), signal.SIGSTOP)\n"
+        "while f.read(65536): pass\n"
+    )
+    return subprocess.Popen(
+        [sys.executable, "-c", code, str(fifo), str(stop_after)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
+def start_fanout(fanout, tmp_path, fifos, buffer, env):
+    """fanout עם stdin שהטסט מזין בעצמו; הפלט לקבצים, לא ל-PIPE (CLAUDE.md)."""
+    out = open(tmp_path / "fanout.out", "wb")
+    err = open(tmp_path / "fanout.err", "wb")
+    process = subprocess.Popen(
+        [str(fanout), str(buffer), *[str(f) for f in fifos]],
+        stdin=subprocess.PIPE, stdout=out, stderr=err, env={**os.environ, **env},
+    )
+    out.close()
+    err.close()
+    fd = os.dup(process.stdin.fileno())
+    process.stdin.close()
+    return process, fd
+
+
+def fanout_result(process, tmp_path, timeout):
+    process.wait(timeout=timeout)
+    report = {}
+    for line in (tmp_path / "fanout.out").read_text().splitlines():
+        path, _, rest = line.partition(" ")
+        report[Path(path).parent.name] = rest
+    return process.returncode, report, (tmp_path / "fanout.err").read_text()
+
+
+def stop_all(*processes):
+    """הורג כל מה שנשאר -- כולל תהליך עצור (SIGKILL עובד גם עליו) -- ואוסף."""
+    for p in processes:
+        if p is not None and p.poll() is None:
+            p.kill()
+            p.wait(timeout=10)
+
+
+@needs_fanout
+def test_a_sigstopped_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout, tmp_path):
+    """שחזור הניסוי מהברזל (19/10): מגירה sdb נעצרת ב-SIGSTOP אחרי 1MiB,
+    ‏sda קוראת כרגיל. נבדקות שלוש טענות, כל אחת עם מספר:
+
+    1. ‏sdb מפונה בשמה (HELD_REASON) ו-sda מקבלת כל בייט.
+    2. ה-stdin של fanout **אכן** נחסם (הטבעת התמלאה) -- אחרת הטסט לא הוכיח
+       כלום: פער של לפחות חצי EVICT_MS.
+    3. ה-stdin אינו חסום יותר מ-FANOUT_BLOCK_EVICT_MS (+ מרווח), ונפתח לכל
+       המאוחר אז אחרי העצירה. זה האינווריאנט שמול udp-sender (#1796): בברזל
+       ה-stdin נחסם 146ש' מתוך ~190ש' עד הניתוק, והזרם לא התאושש.
+
+    שעון ההתקדמות (#674) מורחק ל-600ש' (BLOCK_ONLY): על הקוד שלפני #1796
+    ה-stdin נשאר חסום והטסט נופל ב"ה-stdin לא נפתח מחדש" אחרי 32ש'.
+    """
+    data = os.urandom(24 * 1024 * 1024)
+    ring = 2 * 1024 * 1024                      # מול 256MiB בברזל: ‏~34ms כאן, ~4.3ש' שם
+    fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
+    good: list[bytes] = []
+    good_thread = reader(fifos[0], good)
+    stopper = self_stopping_reader(fifos[1], stop_after=1024 * 1024)
+    process = None
+    try:
+        process, fd = start_fanout(fanout, tmp_path, fifos, ring, BLOCK_ONLY)
+        feeder = StdinFeeder(fd, data).start()
+
+        deadline = time.monotonic() + 15
+        while proc_state(stopper.pid) != "T":
+            assert time.monotonic() < deadline, "הקורא של sdb לא נעצר -- הטסט לא הגיע לנקודה"
+            time.sleep(0.005)
+        stopped_at = time.monotonic()
+
+        feeder.thread.join(timeout=EVICT_MS / 1000 + 30)
+        assert not feeder.thread.is_alive(), "ה-stdin לא נפתח מחדש -- fanout לא פינה את sdb"
+        assert feeder.error is None, feeder.error
+        code, report, err = fanout_result(process, tmp_path, timeout=30)
+        good_thread.join(timeout=30)
+    finally:
+        stop_all(process, stopper)
+
+    held, began, sent_before = feeder.longest_block()
+    reopened_after = began + held - stopped_at
+    numbers = (f"stdin חסום {held:.2f}s (מ-{sent_before} בייטים), נפתח {reopened_after:.2f}s "
+               f"אחרי העצירה; EVICT_MS={EVICT_MS}; stderr: {err!r}")
+    print(numbers)                              # המספר עצמו, לדוח (pytest -s)
+
+    assert code == 1, (report, numbers)
+    assert report == {"sda": "ok", "sdb": HELD_REASON}, (report, numbers)
+    assert "while stdin was held" in err and "evicting" in err, numbers
+    assert hashlib.sha256(b"".join(good)).hexdigest() == hashlib.sha256(data).hexdigest()
+    assert held >= EVICT_MS / 2000, f"ה-stdin לא נחסם -- הטבעת לא התמלאה, לא הוכח דבר: {numbers}"
+    assert held <= EVICT_MS / 1000 + STDIN_SLACK_S, numbers
+    assert reopened_after <= EVICT_MS / 1000 + STDIN_SLACK_S, numbers
+
+
+def trickling_reader(path: Path, stop: threading.Event, piece: int, every_s: float):
+    """מגירה שמקבלת בייטים בודדים: ‏`piece` כל `every_s` -- הרבה מתחת ל-EVICT_MS,
+    ולכן כל כתיבה של fanout שמצליחה מאפסת את last_progress_ms (flush_target).
+    יוצאת כש-fanout סוגר את ה-fifo (פינוי) או כש-`stop` נדלק."""
+    def run():
+        with open(path, "rb", buffering=0) as handle:
+            while not stop.is_set():
+                if not handle.read(piece):
+                    return
+                time.sleep(every_s)
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread
+
+
+@needs_fanout
+def test_a_trickling_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout, tmp_path):
+    """שאלה 3 של החקירה: מגירה שמקבלת 4KiB כל 500ms (‏8KiB/s) אינה "תקועה"
+    לפי שעון ההתקדמות -- כל כתיבה מצליחה מאפסת אותו -- אבל fanout קורא stdin
+    רק כשיש בטבעת שלה מקום לקריאה שלמה (‏make_room: עד 1MiB = ‏READ_CHUNK).
+    ב-8KiB/s זה ~128ש' לקריאה של 1MiB, ובברזל, מגירה כזו מנתקת את המכונה
+    כולה אצל udp-sender (~190ש') בלי שאף מגירה פונתה.
+
+    עם #1796: ה-stdin אינו חסום יותר מ-EVICT_MS, ‏sdb מפונה בשמה, ו-sda
+    מסיימת כל בייט. על הקוד שלפני #1796 (זה היה xfail strict בענף החקירה)
+    ה-stdin חסום כל 12 השניות של התצפית."""
+    # 12s: גם אם הקריאה הראשונה שחיכתה קטנה (64KiB = ‏~4ש'), הפער הפתוח שאחריה
+    # (‏~8ש') עדיין פי 2 מהסף+המרווח -- והשאר מחכה לקריאה של 1MiB (‏~128ש').
+    observe_s = EVICT_MS / 1000 * 6
+    data = os.urandom(24 * 1024 * 1024)
+    fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
+    good: list[bytes] = []
+    stop = threading.Event()
+    good_thread = reader(fifos[0], good)
+    slow_thread = trickling_reader(fifos[1], stop, piece=4096, every_s=0.5)
+    process = None
+    try:
+        process, fd = start_fanout(fanout, tmp_path, fifos, 2 * 1024 * 1024, BLOCK_ONLY)
+        feeder = StdinFeeder(fd, data).start()
+        feeder.thread.join(timeout=observe_s)
+        held, _, sent_before = feeder.longest_block(now=time.monotonic())
+        numbers = f"stdin חסום {held:.2f}s (מ-{sent_before} בייטים) מתוך {observe_s:.0f}s; EVICT_MS={EVICT_MS}"
+        print(numbers)
+        assert held <= EVICT_MS / 1000 + STDIN_SLACK_S, numbers
+        assert not feeder.thread.is_alive(), f"ה-stdin לא נקרא עד הסוף: {numbers}"
+        code, report, err = fanout_result(process, tmp_path, timeout=30)
+        good_thread.join(timeout=30)
+    finally:
+        stop.set()
+        slow_thread.join(timeout=30)
+        stop_all(process)
+        good_thread.join(timeout=30)
+
+    assert code == 1, (report, err)
+    assert report == {"sda": "ok", "sdb": HELD_REASON}, (report, err)
+    assert "while stdin was held" in err, err
+    assert hashlib.sha256(b"".join(good)).hexdigest() == hashlib.sha256(data).hexdigest()
+
+
+@needs_fanout
+def test_a_slow_but_steady_drawer_is_not_evicted_by_the_block_clock(fanout, tmp_path):
+    """השומר מפני תיקון-יתר של #1796: מגירה של ~2MiB/s (‏64KiB כל ~31ms)
+    מעכבת את הזרם -- היא זו שקובעת את הקצב, וזה בדיוק #660 -- אבל מפנה
+    קריאה שלמה (≤1MiB) בתוך ~0.5ש', הרבה לפני EVICT_MS (2ש'). הסף האפקטיבי
+    בטסט הוא 1MiB/2s = 512KiB/s, פי ~4 מתחתיה (בייצור 1MiB/45s ≈ 23KB/s).
+
+    שתיהן מסיימות זהות לקלט (sha), ואין שום פינוי. הוכחה שהאיטית אכן עיכבה
+    את הזרם, אחרת לא נבדק דבר: חלק מהבייטים שלה עברו בטבעת (‏`through its
+    queue` ב-stderr) והמשך הריצה ≥ 4ש'. על הקוד שלפני #1796 הטסט עובר
+    (אין שעון); הוא נופל על מוטציה שסופרת את זמן החסימה במצטבר ולא לכל
+    המתנה רצופה -- ראו הבקרה השלילית ב-PR."""
+    data = os.urandom(12 * 1024 * 1024)
+    fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
+    fast: list[bytes] = []
+    slow: list[bytes] = []
+    threads = [reader(fifos[0], fast), reader(fifos[1], slow, delay=READER_CHUNK / (2 * 1024 * 1024))]
+    start = time.monotonic()
+    code, report, err = run_fanout(fanout, fifos, data, buffer=str(2 * 1024 * 1024),
+                                   env=BLOCK_ONLY, timeout=120)
+    elapsed = time.monotonic() - start
+    join_readers(threads, 60)
+
+    assert code == 0, (report, err)
+    assert report == {"sda": "ok", "sdb": "ok"}, (report, err)
+    assert "evicting" not in err, err
+    digest = hashlib.sha256(data).hexdigest()
+    assert hashlib.sha256(b"".join(fast)).hexdigest() == digest
+    assert hashlib.sha256(b"".join(slow)).hexdigest() == digest
+    queued = [line for line in err.splitlines() if f"{fifos[1]} took" in line]
+    assert queued and not queued[0].endswith(" 0 of them through its queue"), err
+    assert elapsed >= 4, f"הריצה ({elapsed:.2f}s) מהירה מ-2MiB/s -- האיטית לא עיכבה, לא הוכח דבר"
+
+
+def stopping_reader(path: Path, sink: list, stop_after: int, release: threading.Event):
+    """מגירה שקוראת `stop_after` בייטים ואז מפסיקה לקרוא ומחזיקה את ה-fifo
+    פתוח -- כונן שנתקע באמצע (I/O timeout, לא EIO). משתחררת ב-finally."""
+    def run():
+        total = 0
+        with open(path, "rb") as handle:
+            while total < stop_after:
+                chunk = handle.read(min(READER_CHUNK, stop_after - total))
+                if not chunk:
+                    return
+                total += len(chunk)
+                sink.append(chunk)
+            release.wait()
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread
+
+
+@needs_fanout
+def test_of_two_drawers_one_hangs_the_other_finishes_byte_for_byte(fanout, tmp_path):
+    """הדרישה של CLAUDE.md -- "כשל במגירה אחת לא עוצר את השאר" -- במצב של
+    #1796: sdb נתקעת אחרי 3MiB, **ושעון ההתקדמות נשאר בברירת המחדל** (150ש',
+    כמו בייצור). רק השעון החדש מקוצר. sda חייבת לקבל כל בייט, בייט-בייט,
+    והמונה שלה חייב להיות אורך הקלט; sdb נכשלת בשמה, והמונה שלה הוא מה
+    שהיא באמת לקחה. על הקוד שלפני #1796 ה-stdin נשאר חסום 150ש' והטסט נופל
+    ב"ה-stdin לא נפתח" אחרי 30ש'."""
+    data = os.urandom(16 * 1024 * 1024)
+    fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
+    good: list[bytes] = []
+    stuck: list[bytes] = []
+    release = threading.Event()
+    good_thread = reader(fifos[0], good)
+    stuck_thread = stopping_reader(fifos[1], stuck, 3 * 1024 * 1024, release)
+    process = None
+    try:
+        process, fd = start_fanout(fanout, tmp_path, fifos, 2 * 1024 * 1024,
+                                   {"FANOUT_BLOCK_EVICT_MS": str(EVICT_MS)})
+        feeder = StdinFeeder(fd, data).start()
+        feeder.thread.join(timeout=30)
+        assert not feeder.thread.is_alive(), (
+            f"ה-stdin לא נפתח תוך 30ש' -- sdb לא פונתה: {feeder.longest_block(now=time.monotonic())}")
+        code, report, err = fanout_result(process, tmp_path, timeout=30)
+        good_thread.join(timeout=30)
+    finally:
+        release.set()
+        stop_all(process)
+        stuck_thread.join(timeout=30)
+        good_thread.join(timeout=30)
+
+    assert code == 1, (report, err)
+    assert report == {"sda": "ok", "sdb": HELD_REASON}, (report, err)
+    assert b"".join(good) == data
+    assert counter_of(fifos[0]) == len(data)
+    # מה שנכנס לצינור שלה ולא נקרא נספר גם הוא -- ולכן ≥ ולא ==.
+    assert sum(len(c) for c in stuck) == 3 * 1024 * 1024
+    assert 3 * 1024 * 1024 <= counter_of(fifos[1]) < len(data), counter_of(fifos[1])
+
+
+@needs_fanout
+def test_a_lone_drawer_that_pauses_past_the_block_clock_is_not_evicted(fanout, tmp_path):
+    """השומר על הכלל "פינוי רק כשיש אחות שמרוויחה ממנו" (#1796): מגירה יחידה
+    -- תחנה, קליטה, directsend -- או כל המגירות יחד, אין להן אחות לשחרר.
+    לפנות אותה ב-45ש' לא מציל דבר ורק מכשיל כונן שהיה מתאושש; שם התקרות
+    נשארות שעון ההתקדמות והמעטפת, כמו לפני #1796. המגירה כאן עוצרת 5ש'
+    (פי 2.5 מ-EVICT_MS) ואז קוראת הכול.
+
+    על הקוד שלפני #1796 הוא עובר (אין שעון); הוא נופל על מוטציה שמסירה את
+    התנאי `roomy` ב-make_room -- ראו הבקרה השלילית ב-PR."""
+    pause_s = 5.0
+    data = os.urandom(8 * 1024 * 1024)
+    fifo = make_fifo(tmp_path, "sda")
+    sink: list[bytes] = []
+    thread = pausing_reader(fifo, sink, pause_s=pause_s, pause_after=0)
+    process = None
+    try:
+        process, fd = start_fanout(fanout, tmp_path, [fifo], 2 * 1024 * 1024, BLOCK_ONLY)
+        feeder = StdinFeeder(fd, data).start()
+        feeder.thread.join(timeout=60)
+        code, report, err = fanout_result(process, tmp_path, timeout=30)
+        join_readers([thread], 60)
+    finally:
+        stop_all(process)
+
+    held, _, _ = feeder.longest_block()
+    assert held >= EVICT_MS / 1000 + 1, f"ה-stdin נחסם רק {held:.2f}s -- השעון לא נבחן, לא הוכח דבר"
+    assert code == 0, (report, err)
+    assert report == {"sda": "ok"}, (report, err)
+    assert "evicting" not in err, err
+    assert b"".join(sink) == data
 
 
 def test_every_test_that_compiles_fanout_skips_by_name_without_gcc():

@@ -63,10 +63,16 @@ PRELUDE = (
     f'. {posix(AGENT)}/lib/failmark.sh; '   # disk_failure_cause — זיכרון השרת בשער (#872/#874)
     f'. {posix(AGENT)}/lib/smart.sh; '
     f'. {posix(AGENT)}/lib/smartgate.sh; '   # #1211: השער (smart_preflight/smart_gate) פוצל מ-smart.sh
-    f'. {posix(AGENT)}/lib/clonergui.sh; '   # gui_smart_choice — כמו בסוכן האמיתי
+    f'. {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; '   # gui_smart_choice — כמו בסוכן האמיתי
     # ‏#906: hello בזמן ההמתנה לאדם. **רק אם הקובץ קיים**: הבקרה השלילית
     # מחזירה את main, ושם הטסט חייב ליפול על ההתנהגות ולא על `.` של קובץ חסר.
     + (f'. {posix(AGENT)}/lib/attended.sh; ' if (AGENT / "lib" / "attended.sh").exists() else "")
+    # ‏#1859: every attribute and the orange -- the same "only if it exists", for the same reason.
+    + (f'. {posix(AGENT)}/lib/smartattrs.sh; ' if (AGENT / "lib" / "smartattrs.sh").exists() else "")
+    # #1921: the knowledge tables -- the same "only if it exists": without them smart_probe judges
+    # nothing and says so (unchecked no_table), which is the negative control's failure on behaviour.
+    + (f'export SMART_KB={posix(AGENT)}/lib/data; . {posix(AGENT)}/lib/smartjudge.sh; . {posix(AGENT)}/lib/hwissues.sh; '
+       if (AGENT / "lib" / "smartjudge.sh").exists() else "")
     + 'http_post_json() { return 0; }; '   # אין רשת בבדיקה
 )
 
@@ -131,11 +137,11 @@ CLASSIFY = [
     # (15/09) והם משכפלים מושלם. מונה מצטבר מספר על הכבלים, לא על הדיסק.
     ("PASSED", 0, 0, 0, 0, "ok ok"),
     ("FAILED", 0, 0, 0, 0, "fail health_failed"),
-    # ‏#1366 (נדב 13/10): 198/197 מעל 0 עוצרים BIOS של HP על "press F1" —
-    # ‏`fail`, כתום (שואל, ובלי תשובה כותב). 5 ו-199 עדיין אינם צובעים.
-    ("PASSED", 0, 0, 1, 0, "fail uncorrectable"),
-    ("PASSED", 0, 4, 0, 0, "fail pending_sectors"),
-    ("PASSED", 0, 4, 2, 0, "fail uncorrectable"),   # שניהם: 198 הוא הסיבה שנאמרת
+    # ‏#1921 (נדב 20/10, סופי): אדום = הדיסק עצמו מדווח FAILED. ‏197/198 מעל 0 הם כתום מטבלת
+    # הידע (smartjudge.sh) -- לא כאן: שורת הבריאות לבדה מכריעה את הסיווג הזה.
+    ("PASSED", 0, 0, 1, 0, "ok ok"),
+    ("PASSED", 0, 4, 0, 0, "ok ok"),
+    ("PASSED", 0, 4, 2, 0, "ok ok"),
     ("PASSED", 2, 0, 0, 0, "ok ok"),                # reallocated אינו צובע
     ("PASSED", 0, 0, 0, 55242, "ok ok"),            # CRC — מחשב 2 דיסק 2, 15/09
     ("unknown", 0, 0, 0, 0, "unchecked no_health"), # לא PASSED ולא FAILED
@@ -176,15 +182,40 @@ def test_probe_failed_health_is_fail_even_with_nonzero_exit(tmp_path):
     assert probe(tmp_path, full(HEALTH_FAIL), rc=8) == "fail"
 
 
-def test_probe_pending_sectors_are_the_f1_stop_and_recorded(tmp_path):
-    # ‏#1366: 197 מעל 0 = ה-BIOS יעצור ב-F1 — `fail` (כתום), והערך נשמר במטמון.
-    assert probe(tmp_path, full(HEALTH_OK, pending=4)) == "fail"
-    assert (tmp_path / "run/smart/sda.v").read_text().split() == ["fail", "pending_sectors", "0", "4", "0", "0"]
+def test_smart_cache_is_invalidated_when_device_name_has_a_new_serial(tmp_path):
+    run = tmp_path / "run"; run.mkdir()
+    dev = tmp_path / "dev"; dev.mkdir(); (dev / "sdb").write_bytes(b"\x00")
+    blk = tmp_path / "sysro/sys/block/sdb"; (blk / "device").mkdir(parents=True)
+    (blk / "ro").write_text("0\n", newline="\n")
+    serial = blk / "device/serial"; serial.write_text("SERIAL-A\n", newline="\n")
+    sc = tmp_path / "smartctl"
+    sc.write_text(
+        "#!/bin/sh\n"
+        f'case "$(cat {posix(serial)!r})" in *B*) h=FAILED; rc=8;; *) h=PASSED; rc=0;; esac\n'
+        "printf 'SMART overall-health self-assessment test result: %s\\n" + attrs().replace("'", "'\\''") + "' \"$h\"\n"
+        "exit \"$rc\"\n", newline="\n")
+    subprocess.run([BASH, "-c", f'chmod +x {posix(sc)!r}'], check=True,
+                   stdin=subprocess.DEVNULL)
+    prefix = env(run, dev, sysroot=tmp_path / "sysro", smartctl=posix(sc)) + PRELUDE
+    first = sh(prefix + "smart_probe sdb")
+    assert first.stdout.strip() == "ok", first.stderr
+    serial.write_text("SERIAL-B\n", newline="\n")
+    second = sh(prefix + "smart_probe sdb")
+    assert second.stdout.strip() == "fail", second.stderr
+    assert (run / "smart/sdb.serial").read_text().strip() == "SERIAL-B"
 
 
-def test_probe_reallocated_is_ok_and_recorded(tmp_path):
-    assert probe(tmp_path, full(HEALTH_OK, realloc=8)) == "ok"
-    assert (tmp_path / "run/smart/sda.v").read_text().split()[2] == "8"
+def test_probe_pending_sectors_are_orange_and_recorded(tmp_path):
+    # ‏#1921 (נדב 20/10): 197 מעל 0 = כתום (סימן מוקדם, הדיסק עובד), לא אדום; הערך נשמר במטמון.
+    assert probe(tmp_path, full(HEALTH_OK, pending=4)) == "warn"
+    assert (tmp_path / "run/smart/sda.v").read_text().split() == ["warn", "pending_sectors", "0", "4", "0", "0"]
+
+
+def test_probe_reallocated_is_orange_and_recorded(tmp_path):
+    """#1859 (Nadav 20/10) replaces #872 for 5: over 0 is orange (`warn reallocated`) -- asked,
+    and written without an answer. Not red."""
+    assert probe(tmp_path, full(HEALTH_OK, realloc=8)) == "warn"
+    assert (tmp_path / "run/smart/sda.v").read_text().split()[:3] == ["warn", "reallocated", "8"]
 
 
 def test_probe_high_crc_is_ok_and_recorded(tmp_path):
@@ -307,12 +338,13 @@ def test_nvme_read_only_media_is_fail_and_integrity_errors_are_recorded(tmp_path
     ‏`_smart_int` חיפש אותו כעמודה בטבלה ורשם 0 תמיד. ‏#872: המונה אינו מכריע."""
     assert probe(tmp_path, nvme("0x08", 3), rc=8, dev="nvme0n1") == "fail"
     assert (tmp_path / "run/smart/nvme0n1.v").read_text().split() == \
-        ["fail", "health_failed", "0", "0", "3", "0"]
+        ["fail", "media_readonly", "0", "0", "3", "0"]   # #1921 ס1: read-only is red, and says so
 
 
-def test_nvme_healthy_with_integrity_errors_is_ok_but_the_counter_is_kept(tmp_path):
-    # פסיקי-אלפים (1,234) — כך smartctl מדפיס מונים ב-NVMe.
-    assert probe(tmp_path, nvme("0x00", 1234), dev="nvme0n1") == "ok"
+def test_nvme_healthy_with_integrity_errors_is_orange_and_the_counter_is_kept(tmp_path):
+    # פסיקי-אלפים (1,234) — כך smartctl מדפיס מונים ב-NVMe. ‏#1921 (נדב 20/10, המלצה 10): מעל 0 = כתום.
+    assert probe(tmp_path, nvme("0x00", 1234), dev="nvme0n1") == "warn"
+    assert (tmp_path / "run/smart/nvme0n1.v").read_text().split()[1] == "media_errors"
     assert (tmp_path / "run/smart/nvme0n1.v").read_text().split()[4] == "1234"
 
 
@@ -392,44 +424,46 @@ def asked(run: Path) -> list[str]:
     return f.read_text().split() if f.exists() else []
 
 
-def test_skip_removes_the_disk_from_the_write_list(tmp_path):
-    # ‏#1732: the question is asked on orange only (failed the previous clone)
+def test_skip_from_the_screen_no_longer_removes_an_orange_disk(tmp_path):
+    # ‏#2042 (נדב 23/10): כתום אינו נשאל -- "דלג" של המסך אינו נקרא, והדיסק נכתב.
+    # (עד 23/10: נשאל, ו"דלג" הוריד אותו מהכתיבה.)
     written, run, _ = preflight(tmp_path, full(HEALTH_OK), gui=["skip"], failed=("sda",))
-    assert written == ""
-    assert (run / "targets/sda/state").read_text().strip() == "skipped"
+    assert written == "sda"
+    assert not (run / "targets/sda/state").exists()
+    assert asked(run) == []
 
 
 def test_rescue_keeps_the_disk(tmp_path):
     written, run, _ = preflight(tmp_path, full(HEALTH_OK), gui=["rescue"], failed=("sda",))   # #1732: orange
     assert written == "sda"
-    assert asked(run) == ["sda"]
+    assert asked(run) == []   # #2042: written without asking
 
 
 def test_a_disk_with_bad_cable_counters_but_passed_health_is_written_without_asking(tmp_path):
-    """‏#872: 5 ו-199 אינם עוצרים. הראיה החיובית: לא נשאלה שאלה
-    (‏`asked` ריק) והדיסק ברשימת הכתיבה."""
-    written, run, err = preflight(tmp_path, full(HEALTH_OK, realloc=8, crc=55242))
+    """‏#872: 199 אינו עוצר. הראיה החיובית: לא נשאלה שאלה (‏`asked` ריק) והדיסק
+    ברשימת הכתיבה. (‏5 — מאז #1859 כתום: נשאל, ובלי תשובה נכתב — test_smart_full_1859.)"""
+    written, run, err = preflight(tmp_path, full(HEALTH_OK, crc=55242))
     assert written == "sda"
     assert asked(run) == [], err
 
 
 @pytest.mark.parametrize("pending, uncorr", [(4, 0), (0, 2)])
-def test_the_f1_counters_are_red_never_asked_and_skipped(tmp_path, pending, uncorr):
-    """‏#1366: 197/198 מעל 0 — ה-BIOS יעצור ב-F1 (`fail`) = **אדום**. ‏#1732
-    (נדב 18/10): אדום לעולם אינו יעד — **לא נשאל** ומדולג בגלוי. עד 18/10
-    (#1580) הוא נשאל, ובלי תשובה דולג."""
+def test_197_198_are_orange_and_written_without_a_question(tmp_path, pending, uncorr):
+    """‏#1921 (נדב 20/10, סופי): אדום הוא רק FAILED של הדיסק עצמו (ה-F1). ‏197/198 מעל 0 בדיסק
+    ש-PASSED הם **כתום** — #2042 (נדב 23/10): נכתב בלי שאלה (עד 23/10 נשאל ובלי תשובה נכתב;
+    עד 20/10 -- #1366/#1732 -- אדום ומדולג)."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK, pending=pending, uncorr=uncorr))
-    assert written == "", err
-    assert asked(run) == [], err                   # #1732: no question, no 30-minute wait
-    assert (run / "targets/sda/state").read_text().strip() == "skipped"
-    assert (run / "smart/sda.v").read_text().split()[:2] ==         ["fail", "uncorrectable" if uncorr else "pending_sectors"]
+    assert written == "sda", err
+    assert asked(run) == [], err
+    assert (run / "smart/sda.v").read_text().split()[:2] == ["warn", "uncorrectable" if uncorr else "pending_sectors"]
 
 
-def test_replace_removes_the_disk_and_flags_awaiting(tmp_path):
+def test_replace_from_the_screen_is_never_read_on_orange(tmp_path):
+    # #2042: orange is not asked -- the screen's "replace" is never read, nothing powers off.
     written, run, _ = preflight(tmp_path, full(HEALTH_OK), gui=["replace"], failed=("sda",))   # #1732: orange
-    assert written == ""
-    assert (run / "smart/awaiting_replace").read_text().strip() == "sda"
-    assert (run / "targets/sda/state").read_text().strip() == "replacing"
+    assert written == "sda"
+    assert not (run / "smart/awaiting_replace").exists()
+    assert not (run / "targets/sda/state").exists()
 
 
 def test_without_a_gui_the_keyboard_is_never_read(tmp_path):
@@ -442,33 +476,37 @@ def test_without_a_gui_the_keyboard_is_never_read(tmp_path):
 
 
 def test_a_failing_disk_does_not_stop_a_healthy_sibling(tmp_path):
-    # מגירה אחת מדולגת, השנייה נכתבת -- כשל דיסק אחד לא מפיל את הסבב.
-    written, _, _ = preflight(tmp_path, full(HEALTH_OK), gui=["skip"],
-                              disks="sda sdb", failed=("sda",))
-    assert written == "sdb"
+    # #2042: מגירה כתומה (נכשלה בשיכפול הקודם) נכתבת בלי שאלה, והשכנה איתה -- שום דבר לא עוצר.
+    # (אדום שמדולג ליד שכן שנכתב: test_red_disk_never_target_1732.)
+    written, run, _ = preflight(tmp_path, full(HEALTH_OK), gui=["skip"],
+                                disks="sda sdb", failed=("sda",))
+    assert written == "sda sdb"
+    assert asked(run) == []
 
 
 # --- #872: דיסק אדום (נכשל בשיכפול הקודם) — החלף או המשך (=דלג), לא רק צבע ---
 
-def test_a_disk_that_failed_the_previous_clone_is_asked_replace_or_continue(tmp_path):
+def test_a_disk_that_failed_the_previous_clone_is_written_with_its_note(tmp_path):
     """‏#872 (נדב 16/09): זיכרון השרת (#874: לפי סידורי) גובר על SMART נקי.
-    הדיסק האדום נשאל, "המשך" = מדלג; השכן הבריא נכתב בלי שאלה, והסבב
-    ממשיך. הסיבה שהשרת סיווג (cable) היא ה-reason. ‏sgdisk אינו נקרא."""
+    #2042 (נדב 23/10): הדיסק הכתום נכתב בלי שאלה, וההערה עם הסיבה שהשרת סיווג
+    (cable) נשמרת לסוף; השכן הבריא נכתב בלי הערה. ‏sgdisk אינו נקרא."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), gui=["skip"],
                                   disks="sda sdb", failed=("sda",))
-    assert written == "sdb"
-    assert (run / "targets/sda/state").read_text().strip() == "skipped"
-    assert "failed_last: cable" in (run / "targets/sda/error").read_text()
+    assert written == "sda sdb"
+    assert not (run / "targets/sda/state").exists()
+    assert (run / "targets/sda/smart_note").read_text(encoding="utf-8") == "נכשל בשיכפול הקודם — סיבה: כבל/חריץ"   # #1861: no raw word
+    assert not (run / "targets/sdb/smart_note").exists()
     assert not (tmp_path / "box" / "sgdisk.calls").exists()
-    assert asked(run) == ["sda"], err   # השכן הבריא לא נשאל
+    assert asked(run) == [], err
 
 
-def test_replace_on_a_red_disk_powers_off_for_the_swap(tmp_path):
+def test_a_disk_the_server_blamed_is_written_without_a_swap(tmp_path):
+    # #2042: failed_last (cause: disk) is orange -- not asked, so no "replace" and no power-off.
     written, run, _ = preflight(tmp_path, full(HEALTH_OK), gui=["replace"],
                                 failed={"sda": "disk"})
-    assert written == ""
-    assert (run / "smart/awaiting_replace").read_text().strip() == "sda"
-    assert "ממתין להחלפת הדיסק (failed_last: disk)" in (run / "targets/sda/error").read_text(encoding="utf-8")
+    assert written == "sda"
+    assert not (run / "smart/awaiting_replace").exists()
+    assert (run / "targets/sda/smart_note").read_text(encoding="utf-8") == "נכשל בשיכפול הקודם — סיבה: הדיסק"
 
 
 def test_a_red_disk_by_slot_is_red_even_with_a_new_serial(tmp_path):
@@ -477,9 +515,9 @@ def test_a_red_disk_by_slot_is_red_even_with_a_new_serial(tmp_path):
     written, run, err = preflight(
         tmp_path, full(HEALTH_OK), gui=["skip"],
         extra='disk_port() { printf 1; }; json_get_join() { echo ok; echo "X|1|cable"; }; ')
-    assert written == ""
-    assert "failed_last: cable" in (run / "targets/sda/error").read_text()
-    assert asked(run) == ["sda"], err
+    assert written == "sda"   # #2042: orange, written without asking
+    assert "נכשל בשיכפול הקודם — סיבה: כבל/חריץ" in (run / "targets/sda/smart_note").read_text(encoding="utf-8")   # #1861: no raw word
+    assert asked(run) == [], err
 
 
 def test_the_memory_is_refreshed_from_the_last_hello_before_the_gate(tmp_path):
@@ -505,11 +543,11 @@ def test_rescue_on_a_red_disk_writes_it(tmp_path):
     written, run, err = preflight(tmp_path, full(HEALTH_OK), gui=["rescue"],
                                   disks="sda sdb", failed=("sdb",))
     assert written == "sda sdb", err
-    assert asked(run) == ["sdb"], err              # רק האדום נשאל
+    assert asked(run) == [], err                   # #2042: orange is not asked
     assert not (run / "targets/sdb/state").exists()   # לא "skipped" ולא "replacing"
     ev = event(run)
     assert (ev["disk"], ev["smart"]["verdict"], ev["decision"], ev["write_state"]) == \
-        ("sdb", "failed_last", "rescue", "rescue"), ev
+        ("sdb", "failed_last", None, "pending"), ev   # #2042: nobody decided
 
 
 def test_no_answer_on_a_disk_that_failed_last_time_writes_it(tmp_path):
@@ -518,10 +556,10 @@ def test_no_answer_on_a_disk_that_failed_last_time_writes_it(tmp_path):
     תקין, sdb נכשל בפעם הקודמת. עד 17/10 זה היה אדום שמדלג."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), disks="sda sdb",
                                   failed=("sdb",))
-    assert asked(run) == ["sdb"], err
+    assert asked(run) == [], err   # #2042 (נדב 23/10): not even asked
     assert written == "sda sdb", err
     ev = event(run)
-    assert (ev["disk"], ev["smart"]["verdict"], ev["write_state"]) == ("sdb", "failed_last", "rescue"), ev
+    assert (ev["disk"], ev["smart"]["verdict"], ev["write_state"]) == ("sdb", "failed_last", "pending"), ev
 
 
 def test_rescue_from_the_gui_never_writes_a_smart_failed_disk(tmp_path):
@@ -551,8 +589,8 @@ def test_a_smart_failed_disk_that_also_failed_last_time_is_red(tmp_path):
 def test_no_answer_on_an_orange_disk_writes_it(tmp_path):
     """בלי גואי / בלי תשובה על כתום (‏#1580: נכשל בשיכפול הקודם) = המשך = כותב."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), failed=("sda",))
-    assert asked(run) == ["sda"], err
-    assert "no answer from the GUI" in err, err
+    assert asked(run) == [], err                  # #2042 (נדב 23/10): not even asked
+    assert "written without asking" in err, err
     assert written == "sda"
 
 

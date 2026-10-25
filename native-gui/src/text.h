@@ -55,6 +55,7 @@ void text_draw(cairo_t *cr, Text *t, double x, double y, Rgb c);
 /* Draw with the logical box's top-RIGHT at (x_right, y) -- the RTL default. */
 void text_draw_r(cairo_t *cr, Text *t, double x_right, double y, Rgb c);
 void text_free(Text *t);
+void text_log_mark(const char *card, const char *theme);   /* IMAGECTL_GUI_TEXTLOG (tests): "@@ card-theme" */
 
 /* Height of one line of <font> at <px> -- what CSS calls line-height:normal. */
 double text_line_height(cairo_t *cr, Font font, double px);

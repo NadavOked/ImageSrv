@@ -119,8 +119,15 @@ def _hits(pattern: _re.Pattern, keep=lambda rel, line: True) -> list[str]:
 _CLEANUP = ("server/db.py", ("ssh:stations", "ssh:iface:", "machine_ssh_hostkey", "#1266"))
 
 
+#: ‏#1979: שחזור לינוקס מוחק את מפתחות ה-SSH **של מערכת ההפעלה המשוחזרת** ומתקין בה
+#: יחידה חד-פעמית של `ssh-keygen -A` — כדי שמשוכפלים לא יחלקו מפתחות. זה אינו שרת SSH
+#: של ImageSrv ואינו מתג; המילים מותרות רק בפונקציה הזו (`_linux_id_files`, grow.sh).
+_TARGET_KEYS = ("agent/lib/grow.sh", ("ssh_host_", "ssh-keygen", "sshd refuses", "ssh.service"))
+
+
 def _not_the_cleanup(rel: str, line: str) -> bool:
-    return not (rel == _CLEANUP[0] and any(k in line for k in _CLEANUP[1]))
+    return not ((rel == _CLEANUP[0] and any(k in line for k in _CLEANUP[1]))
+                or (rel == _TARGET_KEYS[0] and any(k in line for k in _TARGET_KEYS[1])))
 
 
 def test_no_ssh_server_or_its_switches_anywhere_in_the_product():

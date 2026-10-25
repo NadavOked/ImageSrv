@@ -47,7 +47,8 @@ static long long layout_bytes(const LcPart *p) { return p->bytes >= 0 ? p->bytes
 
 static void part_box(App *a, cairo_t *cr, Rect r, const LcPart *p) {
     const Theme *t = a->theme; int done = !strcmp(p->state, "done"), now = !strcmp(p->state, "copy"), bad = !strcmp(p->state, "failed");
-    draw_fill_rrect(cr, r, 4, t->surface); draw_border_rrect(cr, r, 4, now ? t->indigo : bad ? t->danger : t->hair, 1);
+    draw_fill_rrect(cr, r, 4, bad ? t->danger_soft : t->surface);
+    draw_border_rrect(cr, r, 4, now ? t->indigo : bad ? t->danger : t->hair, bad ? 3 : 1);
     double share = done ? 1 : now && p->bytes > 0 ? fmin(1, (double)p->in / (double)p->bytes) : 0;
     char head[64], st[48], d[160], b1[48], b2[48];
     snprintf(head, sizeof head, "%d · %s", p->idx, p->label);
@@ -82,11 +83,14 @@ static void tbay(App *a, cairo_t *cr, Rect b, const LcTgt *g) {
     LcBay y; memset(&y, 0, sizeof y);
     y.kind = bad ? BAY_FAILED : ok ? BAY_DONE : BAY_WRITING;
     y.drawer = d ? eff_drawer(d->drawer, d->port) : 0;
-    label_dev(a, g->dev, y.name, sizeof y.name);
+    /* #2030: the connection (the big number is the drawer), the size and model -- never the device name -- and what was written */
+    if (d) lc_disk_card_name(d, y.name, sizeof y.name); else snprintf(y.name, sizeof y.name, "%s", "חיבור לא מזוהה");
     char sz[32];
-    if (d) { disk_size(d->size, sz, sizeof sz); char mi[96]; bidi_isolate(d->model[0] ? d->model : d->dev, mi, sizeof mi); snprintf(y.sub, sizeof y.sub, "%s · %s", sz, mi); }
-    else snprintf(y.sub, sizeof y.sub, "%s", g->dev);
-    y.pill = bad ? "נכשל" : ok ? "זהה למקור" : NULL;
+    if (d) { disk_size(d->size, sz, sizeof sz); char mi[96]; bidi_isolate(d->model[0] ? d->model : "—", mi, sizeof mi); snprintf(y.sub, sizeof y.sub, "%s · %s", sz, mi); }
+    else snprintf(y.sub, sizeof y.sub, "%s", "גודל הדיסק לא נקרא");
+    card_used_text(ok ? USED_WRITTEN : USED_SO_FAR, (long long)g->bytes, y.used, sizeof y.used);
+    y.pill = bad ? "נכשל" : ok ? (g->rescued > 0 ? "לא זהה למקור" : g->note[0] ? "הושלם" : "זהה למקור") : NULL;   /* #2017, #2009 */
+    y.done_warn = ok && (g->note[0] || g->rescued > 0);   /* #2009: orange, not green; #2017: zeros where the source did not read */
     double share = g->total > 0 ? fmin(1, (double)g->bytes / (double)g->total) : 0;
     if (ok) share = 1;
     y.share = share;
@@ -94,6 +98,7 @@ static void tbay(App *a, cairo_t *cr, Rect b, const LcTgt *g) {
     else snprintf(y.pct, sizeof y.pct, "%.1f GB", (double)g->bytes / 1e9);   /* #1440: the total was not measured */
     const LcPart *cp = NULL; for (int i = 0; i < a->st.lc.nparts; i++) if (a->st.lc.parts[i].idx == g->part) cp = &a->st.lc.parts[i];
     if (bad) snprintf(y.line, sizeof y.line, "נכשל: %s", g->error);
+    else if (ok && g->note[0]) snprintf(y.line, sizeof y.line, "%s", g->note);   /* #2009 */
     else if (ok) snprintf(y.line, sizeof y.line, "הושלם · נבדק");
     else if (!strcmp(g->state, "verifying")) snprintf(y.line, sizeof y.line, "בודק את טבלת המחיצות שנכתבה…");
     else if (cp) snprintf(y.line, sizeof y.line, "כותב מחיצה %d · %s · xxh64 תואם ב-%d מתוך %d", cp->idx, cp->label, g->ok, a->st.lc.nparts);
@@ -104,7 +109,7 @@ static void tbay(App *a, cairo_t *cr, Rect b, const LcTgt *g) {
 void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     const Theme *t = a->theme; const LcState *l = &a->st.lc;
     double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + 22;
-    char sl[48], lb[200], h1[200], s2[200]; const LcDisk *src = disk_of(a, l->run_src);
+    char sl[LC_LABEL_MAX], lb[300], h1[200], s2[200]; const LcDisk *src = disk_of(a, l->run_src);
     label_dev(a, l->run_src, sl, sizeof sl);
     char mi[96]; bidi_isolate(src && src->model[0] ? src->model : l->run_src, mi, sizeof mi);
     snprintf(lb, sizeof lb, "שיכפול מקומי · מקור: %s (%s)", sl, mi);
@@ -188,14 +193,18 @@ void lc_draw_stop(App *a, cairo_t *cr, double W, double H) {
 
 static double res_card(App *a, cairo_t *cr, double x, double y, double w, const LcTgt *g, int draw) {
     const Theme *t = a->theme; const LcDisk *d = disk_of(a, g->dev); int bad = tfailed(g);
-    char name[48], h3[300], mono[160], li[6][460]; int mk[6], n = 0;
+    char name[LC_LABEL_MAX], h3[300], mono[160], li[6][460]; int mk[6], n = 0;
     label_dev(a, g->dev, name, sizeof name);
+    int red = 0; const char *why = end_problem_of(&a->st, g->dev, &red);   /* #2024: this target holds the end */
     if (d) { char sata[24]; conn_text(d->conn, d->port, d->dev, sata, sizeof sata);
         snprintf(mono, sizeof mono, "%s · %s", d->model[0] ? d->model : d->dev, sata); } else snprintf(mono, sizeof mono, "%s", g->dev);
     if (!bad) {
         char gb[48]; lc_gb(gb, sizeof gb, (double)g->grown_bytes);
-        if (g->has_table && g->grown_idx > 0) snprintf(h3, sizeof h3, "%s · זהה למקור · המחיצה האחרונה הוגדלה ל-%s", name, gb);
+        if (g->rescued > 0) snprintf(h3, sizeof h3, "%s · הועתק במצב הצלה — לא זהה למקור", name);   /* #2017: zeros where the source did not read */
+        else if (g->has_table && g->grown_idx > 0) snprintf(h3, sizeof h3, "%s · זהה למקור · המחיצה האחרונה הוגדלה ל-%s", name, gb);
         else snprintf(h3, sizeof h3, "%s · זהה למקור", name);
+        if (why) snprintf(h3, sizeof h3, "%s · הושלם, עם בעיה", name);   /* #2024: not "identical" over its reason */
+        if (g->note[0]) { snprintf(li[n], sizeof li[n], "%s", g->note); mk[n++] = 2; }   /* #2009: first -- why it is orange */
         snprintf(li[n], sizeof li[n], "%d מחיצות הועתקו · xxh64 של כל מחיצה תואם למה שנקרא מהמקור", g->ok); mk[n++] = 1;
         snprintf(li[n], sizeof li[n], "טבלת המחיצות נקראה בחזרה מהדיסק — זהה למקור, כולל מזהי GUID"); mk[n++] = 1;
         if (g->ntfs_boot > 0) {   /* #1487: partclone -r does not write it; the agent copies and reads it back */
@@ -208,30 +217,39 @@ static double res_card(App *a, cairo_t *cr, double x, double y, double w, const 
             snprintf(li[n], sizeof li[n], "מחיצה %d הוגדלה מ-%s ל-%s, עד סוף הדיסק; מה שאחריה הועבר לסוף, בגודלו", g->grown_idx, was, gb); mk[n++] = 0;
         } else if (g->has_table && g->free_bytes > 500000000LL) {
             char fr[48]; lc_gb(fr, sizeof fr, (double)g->free_bytes);
-            snprintf(li[n], sizeof li[n], "%s בסוף הדיסק נשארו לא מוקצים (פחות מ-1 GiB מעל המקור — אין הגדלה)", fr); mk[n++] = 0;
+            if (g->note[0]) snprintf(li[n], sizeof li[n], "%s בסוף הדיסק נשארו לא מוקצים — טבלת המחיצות זהה למקור", fr);   /* #2009: why -- the note above */
+            else if (g->raw_parts > 0) snprintf(li[n], sizeof li[n], "%s בסוף הדיסק נשארו לא מוקצים — מחיצה שהועתקה גולמית אינה מוגדלת", fr);   /* #2017 */
+            else snprintf(li[n], sizeof li[n], "%s בסוף הדיסק נשארו לא מוקצים (פחות מ-1 GiB מעל המקור — אין הגדלה)", fr);
+            mk[n++] = 0;
         }
         if (g->error[0]) { snprintf(li[n], sizeof li[n], "%s", g->error); mk[n++] = 2; }   /* the grow was deferred (finish_grow) */
+        if (why && strcmp(why, g->error) && strcmp(why, g->note)) { snprintf(li[n], sizeof li[n], "%s", why); mk[n++] = red ? -1 : 2; }
     } else {
         snprintf(h3, sizeof h3, "%s · נכשל", name);
         if (g->ok > 0) { snprintf(li[n], sizeof li[n], g->ok == 1 ? "מחיצה אחת הועתקה ונבדקה" : "%d מחיצות הועתקו ונבדקו", g->ok); mk[n++] = 1; }
         snprintf(li[n], sizeof li[n], "%s", g->error); mk[n++] = -1;
+        if (why && strcmp(why, g->error)) { snprintf(li[n], sizeof li[n], "%s", why); mk[n++] = -1; }
     }
     double inner = w - 44 - 54 - 18;
     Text th = text_make(cr, FONT_SANS, 20, 600, h3, (int)(inner - 200), DIR_RTL), tm = text_make(cr, FONT_MONO, 13, 500, mono, 0, DIR_LTR);
     Text tl[6]; double h = 18 + fmax(th.h, tm.h) + 8;
     for (int i = 0; i < n; i++) { tl[i] = text_make(cr, FONT_SANS, 13, 400, li[i], (int)(inner - 22), DIR_RTL); h += tl[i].h + (i ? 4 : 0); }
-    const char *todo = !bad ? NULL : g->bytes > 0 || g->part > 0 ? "הדיסק לא יעלה ואינו שמיש. אל תכניסו אותו למחשב בכיתה — בדקו או החליפו אותו ושכפלו שוב."
+    const char *todo = !bad ? NULL : g->pulled ? "הדיסק נשלף באמצע — לא נכתב עד הסוף. אפשר לשכפל אליו שוב."   /* #2045: not "broken" */
+                                 : g->bytes > 0 || g->part > 0 ? "הדיסק לא יעלה ואינו שמיש. אל תכניסו אותו למחשב בכיתה — בדקו או החליפו אותו ושכפלו שוב."
                                                                  : "הדיסק לא נכתב — מה שהיה עליו נשאר.";
     Text tt = todo ? text_make(cr, FONT_SANS, 13, 400, todo, (int)(inner - 24), DIR_RTL) : (Text){ NULL, 0, 0 };
     if (todo) h += 8 + tt.h + 16;
     h += 18;
     if (draw) {
         Rect r = { x, y, w, h };
-        draw_fill_rrect(cr, r, 6, t->surface); draw_border_rrect(cr, r, 6, bad ? t->danger : t->hair, 1);
-        cairo_save(cr); draw_rrect_path(cr, r, 6); cairo_clip(cr); cairo_rectangle(cr, x + w - 4, y, 4, h); draw_set(cr, bad ? t->danger : t->led_ok); cairo_fill(cr); cairo_restore(cr);
+        const int wn = !bad && g->note[0];   /* #2009: done, orange -- never the green of a clean one */
+        Rgb ac = bad ? t->danger : wn ? t->warn : t->led_ok, acs = bad ? t->danger_soft : wn ? t->warning_soft : t->success_soft;
+        Rgb hc = red ? t->danger : t->warn;   /* #2024: a target that holds the end -- tinted, a thick edge */
+        draw_fill_rrect(cr, r, 6, why ? (red ? t->danger_soft : t->warning_soft) : acs);
+        draw_border_rrect(cr, r, 6, why ? hc : ac, 3);   /* #2050: all four edges, no side tab */
         double right = x + w - 22, icx = right - 27, icy = y + 18 + 27;
-        cairo_arc(cr, icx, icy, 27, 0, 2 * M_PI); draw_set(cr, bad ? t->danger_soft : t->success_soft); cairo_fill_preserve(cr);
-        cairo_set_line_width(cr, 1); draw_set(cr, bad ? t->danger : t->led_ok); cairo_stroke(cr);
+        cairo_arc(cr, icx, icy, 27, 0, 2 * M_PI); draw_set(cr, acs); cairo_fill_preserve(cr);
+        cairo_set_line_width(cr, 1); draw_set(cr, ac); cairo_stroke(cr);
         cairo_set_line_width(cr, 3); cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND); cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
         if (bad) { cairo_move_to(cr, icx - 6, icy - 6); cairo_line_to(cr, icx + 6, icy + 6); cairo_move_to(cr, icx + 6, icy - 6); cairo_line_to(cr, icx - 6, icy + 6); }
         else { cairo_move_to(cr, icx - 8, icy + .5); cairo_line_to(cr, icx - 2.5, icy + 6); cairo_line_to(cr, icx + 8, icy - 5); }
@@ -259,9 +277,10 @@ void lc_draw_done(App *a, cairo_t *cr, double W, double H, double head_h) {
     (void)H;
     const Theme *t = a->theme; const LcState *l = &a->st.lc;
     double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + 22;
-    int nf = 0; for (int i = 0; i < l->ntgts; i++) nf += tfailed(tgt_of(a, i));
-    char h1[160], p[300], sl[48], tot[48], el[32], mi[96];
-    if (!nf) snprintf(h1, sizeof h1, "השיכפול הסתיים בהצלחה");
+    int nf = 0, nw = 0; for (int i = 0; i < l->ntgts; i++) { nf += tfailed(tgt_of(a, i)); nw += !tfailed(tgt_of(a, i)) && tgt_of(a, i)->note[0]; }
+    char h1[160], p[400], sl[LC_LABEL_MAX], tot[48], el[32], mi[96];
+    if (!nf && nw) snprintf(h1, sizeof h1, "השיכפול הסתיים — שימו לב להערה בכתום");   /* #2009 */
+    else if (!nf) snprintf(h1, sizeof h1, "השיכפול הסתיים בהצלחה");
     else if (nf == l->ntgts) snprintf(h1, sizeof h1, "השיכפול נכשל — אף יעד לא הושלם");
     else snprintf(h1, sizeof h1, "השיכפול הסתיים — %d מתוך %d הצליחו", l->ntgts - nf, l->ntgts);
     const LcDisk *src = disk_of(a, l->run_src); label_dev(a, l->run_src, sl, sizeof sl);
@@ -273,7 +292,7 @@ void lc_draw_done(App *a, cairo_t *cr, double W, double H, double head_h) {
     text_free(&th); text_free(&tp);
     for (int i = 0; i < l->ntgts; i++) y += res_card(a, cr, x0, y, cw, &l->tgts[i], 1) + 10;
     /* the source: read only, or shrunk for the copy and grown back -- or not, said in red */
-    char sn[500]; int bad = l->src_restore[0] && strcmp(l->src_restore, "ok");
+    char sn[560]; int bad = l->src_restore[0] && strcmp(l->src_restore, "ok");
     if (bad) snprintf(sn, sizeof sn, "%s (המקור): %s", sl, l->src_restore);
     else if (!strcmp(l->shrink_path, "snapshot")) snprintf(sn, sizeof sn, "%s (המקור) נקרא בלבד ולא שונה — הכיווץ נעשה על עותק בזיכרון.", sl);   /* #1477 */
     else if (l->shrunk) snprintf(sn, sizeof sn, "%s (המקור) כווץ זמנית לשיכפול והוחזר לגודלו המקורי.", sl);
@@ -281,11 +300,15 @@ void lc_draw_done(App *a, cairo_t *cr, double W, double H, double head_h) {
     Text ts = text_make(cr, FONT_SANS, 13, bad ? 600 : 400, sn, (int)(cw - 20), DIR_RTL);
     y += 2; sb_led(cr, xr - 5, y + 9, 10, bad ? t->danger : t->led_ok, bad ? t->danger_soft : t->success_soft, 0, 1);
     text_draw_r(cr, &ts, xr - 18, y, bad ? t->danger_fg : t->muted); y += ts.h + 6; text_free(&ts);
-    const char *rp = !strcmp(l->report, "sent") ? "דווח ליומן השרת (דיווח המחשב — השיכפול לא עבר דרך השרת)."
+    const char *rp = !strcmp(l->report, "usb") ? "שיכפול מדיסק-און-קי, בלי שרת. הדוח מוצג כאן ונשמר על הדיסק-און-קי."   /* #1914 (C) */
+                   : !strcmp(l->report, "sent") ? "דווח ליומן השרת (דיווח המחשב — השיכפול לא עבר דרך השרת)."
                    : "לא דווח ליומן השרת — השרת לא ענה. השיכפול עצמו אינו תלוי בשרת.";
     Text tr = text_make(cr, FONT_SANS, 12, 400, rp, (int)(cw - 20), DIR_RTL);
     text_draw_r(cr, &tr, xr - 18, y, t->muted); y += tr.h + 16; text_free(&tr);
     double ow = lc_btn(a, cr, x0 + lc_btn_width(cr, "כבה את המחשב", "Enter"), y, 40, "כבה את המחשב", "Enter", BTN_PRIMARY, HIT_LC_OFF, a->lcu.focus == LCF_OFF);
+    a->end_off_own = 1;   /* #2081: the #2024 bar over this screen draws no second one */
+    /* #1914 (Nadav 20/10): on the USB stick, "הפעל מחדש" next to "כבה את המחשב", in its style */
+    if (l->usb) ow += 10 + lc_btn(a, cr, x0 + ow + 10 + lc_btn_width(cr, "הפעל מחדש", NULL), y, 40, "הפעל מחדש", NULL, BTN_PRIMARY, HIT_LC_REBOOT, a->lcu.focus == LCF_REBOOT);
     lc_btn(a, cr, x0 + ow + 10 + lc_btn_width(cr, "שכפול נוסף", NULL), y, 40, "שכפול נוסף", NULL, BTN_PLAIN, HIT_LC_AGAIN, a->lcu.focus == LCF_AGAIN);
 }
 

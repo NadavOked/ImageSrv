@@ -77,7 +77,7 @@ WAIT_SMART_GUI_S="${WAIT_SMART_GUI_S:-1800}"
 # דקה בלי סיום = דיסק שלא מקבל כתיבה בפועל, והוא נכשל בשמו. המגירות נבדקות
 # בזו אחר זו, ולכן זה גם הגג לכל המכונה כפול מספר המגירות.
 WAIT_WRITECHECK_S="${WAIT_WRITECHECK_S:-30}"
-
+WAIT_READBACK_S="${WAIT_READBACK_S:-7200}"   # #1805 readback.sh, one disk after its write: 500GB used at 70MB/s
 # קוד היציאה שמסמן "פג הזמן" בהמשך הזרימה. אותו 124 של timeout(1) —
 # ‏rc שאינו 0 ואינו קוד אמיתי של אף כלי בצינור.
 WAIT_TIMED_OUT=124

@@ -136,16 +136,19 @@ def test_a_stale_200_is_not_connected(tmp_path):
 @_GUI
 def test_the_drawers_stay_on_screen_when_the_server_is_down(tmp_path):
     """"השרת לא עונה" אינו מסתיר את הכלוב: מגירה 2 (נכשלה בשיכפול הקודם —
-    כתום מאז #1580) עדיין מסומנת בפס הכתום בקצה הימני שלה."""
+    כתום מאז #1580) עדיין מסומנת — מאז #2050 (מוקאפ 07) במסגרת כתומה של 3px
+    מכל הצדדים, לא בפס בקצה אחד."""
     off = _render(tmp_path, "off", "hello_age=6\nhello_rc=\n" + TWO.replace("|fail|", "|failed_last|cable"))
-    # bay 2: y 348..479, x 165..1114; its right edge x 1111..1114 carries the 4px bar (dimmed .72)
-    bar = (1111, 360, 1115, 470)
+    # bay 2: y 348..479, x 165..1114; the frame is x 165..167 / 1112..1114, y 348..350 / 477..479 (dimmed .72)
     w, _h, ch, px = off["light"]
     warn = _token("--clr-warning")
-    i = (415 * w + 1112) * ch
+    i = (415 * w + 1113) * ch
     got = tuple(px[i:i + 3])
     assert got != (255, 255, 255) and abs(got[0] - warn[0]) < 70 and got[2] < 150, got
-    assert _count(off["light"], bar, got, tol=4) >= 4 * 100
+    for edge in ((1112, 360, 1115, 470), (165, 360, 168, 470)):   # right and left: a frame, not a side tab
+        assert _count(off["light"], edge, got, tol=4) >= 3 * 100, edge
+    for edge in ((300, 348, 1000, 351), (300, 477, 1000, 480)):   # top and bottom
+        assert _count(off["light"], edge, got, tol=4) >= 3 * 650, edge
 
 
 @_GUI
@@ -154,8 +157,12 @@ def test_bays_flag_by_the_872_colours_and_the_empty_one_is_hatched(tmp_path):
     for t in ("light", "dark"):
         img = ok[t]
         red = _token("--clr-danger", t)
-        assert _count(img, (1111, 360, 1115, 470), red, tol=6) >= 4 * 100, t   # bay 2: SMART fail = red bar (#1580)
-        assert _count(img, (1111, 218, 1115, 330), red, tol=6) == 0, t          # bay 1: passed, no bar
+        # bay 2: SMART fail = red (#1580) -- #2050: a 3px frame on both sides and the soft red inside it
+        for edge in ((1112, 360, 1115, 470), (165, 360, 168, 470)):
+            assert _count(img, edge, red, tol=6) >= 3 * 100, (t, edge)
+        assert _count(img, (1100, 360, 1112, 470), _token("--clr-danger-soft", t), tol=2) >= 12 * 100, t
+        assert _count(img, (1111, 218, 1115, 330), red, tol=6) == 0, t          # bay 1: passed, no frame
+        assert _count(img, (165, 218, 168, 330), red, tol=6) == 0, t
         # bay 3 (empty): the face is hatched -- two tones, each over a good share of it
         face = (240, 500, 990, 610)
         w, _h, ch, px = img
@@ -220,6 +227,7 @@ def test_the_status_bar_shows_this_machines_ip_and_mac(tmp_path):
     st = _render(tmp_path, "a", "hello_age=4\nhello_rc=200\n" + TWO)
     state = tmp_path / "a.txt"
     env2 = dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf"))
+    os.utime(state)   # the same state, fresh: a slow first render made it "stale" and drew the toast (not the IP)
     run = subprocess.run([str(tmp_path / "gui-bin"), "--png", posix(tmp_path / "b"), "--size", "1280x800",
                           "--mac", "3C:52:82:A1:00:1F", "--ip", "10.99.99.99", "--state", posix(state)],
                          capture_output=True, text=True, timeout=120, env=env2, stdin=subprocess.DEVNULL)

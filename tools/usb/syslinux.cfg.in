@@ -1,0 +1,8 @@
+# ImageSrv USB @VERSION@ -- #1914. Legacy BIOS (syslinux). Same kernel line as grub.cfg.
+DEFAULT imagesrv
+PROMPT 0
+TIMEOUT 0
+LABEL imagesrv
+    KERNEL /imagesrv/vmlinuz
+    INITRD /imagesrv/initrd.img
+    APPEND imagectl.mode=usbclone console=tty0 quiet loglevel=3

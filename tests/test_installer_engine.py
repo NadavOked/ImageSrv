@@ -23,7 +23,9 @@ FP = "3fa3221ea017f9ce3493fe0fe0c180aaa5ea6293a2a399b0f14977280a074915"
 KEYS = (
     "disk", "role", "primary_url", "primary_fingerprint", "servers_if", "servers_mac", "servers_mode",
     "servers_addr", "servers_mask", "servers_gw", "servers_dns", "hostname", "timezone", "admin_user", "admin_pass",
+    "root_pass",
 )
+ROOT_PW = "R00t!chosen-on-screen"   # #1632: what the operator typed on the admin screen
 
 
 def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
@@ -54,7 +56,6 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     (cdrom / "imagectl" / "firstboot.sh").write_text("#!/bin/bash\n", newline="\n")
     (cdrom / "imagectl" / "imagectl-firstboot.service").write_text("[Service]\n", newline="\n")
     (cdrom / "imagectl-iso.json").write_text('{"tag":"test"}\n', newline="\n")
-    (cdrom / "imagectl" / "root-password.hash").write_text("$6$salt$hash\n", newline="\n")
     (cdrom / "pool" / "main" / "imagectl").mkdir(parents=True)
     (cdrom / "pool" / "main" / "imagectl" / "x.deb").touch()
     (cdrom / "dists" / "trixie").mkdir(parents=True)
@@ -77,7 +78,7 @@ def _answers(path: Path, **changes: str) -> Path:
         "servers_if": "ens33", "servers_mac": "00:50:56:01:02:01",
         "servers_mode": "dhcp", "servers_addr": "", "servers_mask": "",
         "servers_gw": "", "servers_dns": "", "hostname": "imagectl-ta", "timezone": "Asia/Jerusalem",
-        "admin_user": "admin", "admin_pass": "correct horse battery staple",
+        "admin_user": "admin", "admin_pass": "correct horse battery staple", "root_pass": ROOT_PW,
     }
     data.update(changes)
     path.write_text("".join(f"{key}={data[key]}\n" for key in KEYS), newline="\n")
@@ -96,6 +97,31 @@ def _run(box, answers: Path | None = None, *args: str, engine: Path = ENGINE):
 def _shim(path: Path, body: str) -> None:
     path.write_text("#!/bin/sh\n" + body, newline="\n")
     path.chmod(0o755)
+
+
+# What chroot answers for grub (#2137): grub-probe names the root, and
+# update-grub writes root= the way Debian's /etc/grub.d/10_linux decides it
+# (grub-common 2.12, trixie) -- UUID= only when /dev/disk/by-uuid/<uuid>
+# exists in the target, else the device name. The recovery entry is ours
+# (41_imagectl_recovery) and always UUID. GRUB_IGNORES_UUID stands for an
+# update-grub that writes the device anyway.
+_FAKE_GRUB = r"""
+fake_grub() {
+    _fg_t=$1; shift
+    _fg_u=${PROBE_UUID-0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d}; _fg_d=${PROBE_DEV-/dev/sda2}
+    case "$*" in
+    "grub-probe --target=fs_uuid /") [ -z "${PROBE_FAIL:-}" ] || return 1; printf '%s\n' "$_fg_u" ;;
+    "grub-probe --target=device /") printf '%s\n' "$_fg_d" ;;
+    update-grub)
+        if [ -L "$_fg_t/dev/disk/by-uuid/$_fg_u" ] && [ -z "${GRUB_IGNORES_UUID:-}" ]; then _fg_r=UUID=$_fg_u
+        else _fg_r=$_fg_d; fi
+        mkdir -p "$_fg_t/boot/grub" || return 1
+        printf 'menuentry "Debian GNU/Linux" {\n\tlinux\t/boot/vmlinuz-6.12.113+deb13-amd64 root=%s ro  quiet\n}\n' "$_fg_r" > "$_fg_t/boot/grub/grub.cfg"
+        printf 'menuentry "ImageSrv recovery (text console)" {\n    linux /vmlinuz root=UUID=%s ro nomodeset\n}\n' "$_fg_u" >> "$_fg_t/boot/grub/grub.cfg" ;;
+    esac
+}
+"""
+ROOT_UUID = "0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d"
 
 
 def _command_shims(tmp_path: Path, env: dict[str, str], *, debootstrap_rc: int = 0) -> Path:
@@ -165,6 +191,7 @@ def test_each_missing_answer_is_named_and_no_disk_command_runs(tmp_path, missing
       "servers_mask": "255.255.255.0", "servers_gw": "10.0.0.1",
       "servers_dns": "10.0.0.2,bad"}, "invalid-dns"),
     ({"admin_pass": ""}, "invalid-admin-password"),
+    ({"root_pass": ""}, "invalid-root-password"),   # #1632: no default, no value from the ISO
     ({"admin_user": "Admin"}, "invalid-admin-user"),
     ({"admin_user": "-x"}, "invalid-admin-user"),
 ])
@@ -268,7 +295,7 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "chroot", "chroot", "cp", "cp", "chmod", "cp", "chroot", "chroot",
         "mkdir", "cp", "cp", "verify-package-pool", "write-target",
         "write-target", "write-target", "write-target", "cp", "printf",
-        "chroot", "chroot", "chroot", "write-target", "write-target", "chroot", "blkid", "blkid",
+        "chroot", "chroot", "write-target", "write-target", "chroot", "chroot", "ln", "chroot", "blkid", "blkid",
         "write-target", "write-target", "write-target", "chroot", "chroot", "write-target", "chroot", "write-target",
         "write-target-secret", "umount", "umount", "umount", "umount",
         "umount", "umount", "sync",
@@ -278,17 +305,22 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
     assert "+ chroot <target> grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --force-extra-removable" in lines
     assert "--removable --force-extra-removable" not in got.stdout
     assert "+ chroot <target> grub-install --target=i386-pc /dev/sda" in lines
-    time_sync = "+ chroot <target> systemctl enable systemd-timesyncd.service"
+    time_sync = "+ chroot <target> systemctl enable chrony.service"
     answers = "+ write-target mode=0600 <target>/etc/imagectl/answers"
     assert lines.index(time_sync) + 1 == lines.index(answers)
     grub_cfg = "+ write-target mode=0644 <target>/etc/default/grub.d/imagectl.cfg"
     recovery = "+ write-target mode=0755 <target>/etc/grub.d/41_imagectl_recovery"
     assert lines.index(grub_cfg) < lines.index(recovery) < lines.index("+ chroot <target> update-grub")
+    # #2137: the by-uuid link update-grub reads is there before it runs
+    link = "+ ln -sf '<root-device>' '<target>/dev/disk/by-uuid/<root-uuid>'"
+    assert lines.index(recovery) < lines.index(link) < lines.index("+ chroot <target> update-grub")
     assert lines[-7:] == [
         "+ umount <target>/cdrom", "+ umount <target>/sys", "+ umount <target>/proc",
         "+ umount <target>/dev", "+ umount <target>/boot/efi", "+ umount <target>", "+ sync",
     ]
     assert "correct horse" not in got.stdout + got.stderr
+    assert ROOT_PW not in got.stdout + got.stderr   # #1632
+    assert "chage" not in got.stdout, "#1632: the operator chose root's password -- nothing to expire"
     assert re.search(r"(?m)^\+\s+reboot(?:\s|$)", got.stdout) is None
     for state in ("partitioning", "bootstrap", "packages", "bootloader", "finishing", "done"):
         assert f"state={state} " in got.stderr
@@ -302,17 +334,17 @@ def test_grub_menu_is_hidden_with_an_esc_window_written_before_update_grub(tmp_p
     for real against stubbed helpers and the content is read back."""
     target = tmp_path / "target"
     target.mkdir()
-    (tmp_path / "imagectl").mkdir()
-    (tmp_path / "imagectl" / "root-password.hash").write_text("$6$salt$hash\n", newline="\n")
     calls = tmp_path / "calls"
     harness = tmp_path / "harness.sh"
     harness.write_text(f"""set -u
-DRY_RUN=0 TARGET='{target.as_posix()}' CDROM='{tmp_path.as_posix()}' ANSWER_DISK=/dev/sda
+DRY_RUN=0 TARGET='{target.as_posix()}' CDROM='{tmp_path.as_posix()}' ANSWER_DISK=/dev/sda ANSWER_ROOT_PASS='{ROOT_PW}'
+SYSROOT='{tmp_path.as_posix()}'   # no efivars here: the NVRAM branch is another test's (#2093)
 log() {{ printf '%s\\n' "$*" >> '{calls.as_posix()}'; }}
 fail() {{ log "fail $1"; exit 2; }}
 progress() {{ :; }}
 must_run() {{ shift 2; "$@" || exit 2; }}
-chroot() {{ log "chroot $*"; }}
+{_FAKE_GRUB}
+chroot() {{ log "chroot $*"; fake_grub "$@"; }}
 mount() {{ return 1; }}
 write_target() {{
     log "write-target $1 $2"
@@ -341,6 +373,101 @@ install_bootloader
     assert log.index("write-target 0755 /etc/grub.d/41_imagectl_recovery") < log.index(
         f"chroot {target.as_posix()} update-grub"
     )
+
+
+# --- #2137: grub.cfg boots the root by UUID, not by the name of a disk --------
+
+def _grub_root_harness(tmp_path: Path, **probe: str):
+    """install_bootloader for real, chroot answering as `_FAKE_GRUB` (10_linux's
+    rule). The target's /dev is a plain directory here, as the live
+    initramfs's devtmpfs is: no udev, no /dev/disk at all (rc3, 24/10)."""
+    target = tmp_path / "target"
+    (target / "dev").mkdir(parents=True)
+    calls = tmp_path / "calls"
+    knobs = "".join(f"{key}='{value}'\nexport {key}\n" for key, value in probe.items())
+    harness = tmp_path / "harness.sh"
+    harness.write_text(f"""set -u
+{knobs}DRY_RUN=0 TARGET='{target.as_posix()}' CDROM='{tmp_path.as_posix()}' ANSWER_DISK=/dev/sda ANSWER_ROOT_PASS='{ROOT_PW}'
+SYSROOT='{tmp_path.as_posix()}'
+log() {{ printf '%s\\n' "$*" >> '{calls.as_posix()}'; }}
+fail() {{ log "fail $1 $*"; exit 2; }}
+progress() {{ :; }}
+must_run() {{ shift 2; "$@" || exit 2; }}
+{_FAKE_GRUB}
+chroot() {{ log "chroot $*"; fake_grub "$@"; }}
+mount() {{ return 1; }}
+write_target() {{ log "write-target $1 $2"; }}
+. '{(INSTALLER / "lib" / "finish.sh").as_posix()}'
+install_bootloader
+log done
+""", newline="\n")
+    got = subprocess.run([SH, str(harness)], text=True, capture_output=True, stdin=subprocess.DEVNULL)
+    log = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    return got, log, target
+
+
+def _kernel_roots(target: Path) -> list[str]:
+    text = (target / "boot" / "grub" / "grub.cfg").read_text(encoding="utf-8")
+    return re.findall(r"(?m)^\s*linux\s.*?\sroot=(\S+)", text)
+
+
+@LINUX_ONLY
+def test_a_fresh_install_boots_its_root_by_uuid_not_by_disk_name(tmp_path):
+    """rc3 (Hyper-V, 24/10): `root=/dev/sda2`, and with a second disk the
+    system disk was sdb -- "ALERT! /dev/sda2 does not exist". update-grub
+    finds /dev/disk/by-uuid/<uuid> for the root it probed, so every kernel
+    line boots root=UUID=."""
+    got, log, target = _grub_root_harness(tmp_path)
+    assert got.returncode == 0 and "done" in log, (got.stderr, log)
+    assert _kernel_roots(target) == [f"UUID={ROOT_UUID}"] * 2
+    link = target / "dev" / "disk" / "by-uuid" / ROOT_UUID
+    assert os.readlink(link) == "/dev/sda2"
+    t = target.as_posix()
+    assert log.index(f"chroot {t} grub-probe --target=device /") < log.index(f"chroot {t} update-grub")
+
+
+@LINUX_ONLY
+def test_a_raid_root_links_the_md_array_grub_probe_names(tmp_path):
+    """#1989: under RAID the root is the md array; the link is to what
+    grub-probe names, not to a member partition."""
+    got, log, target = _grub_root_harness(tmp_path, PROBE_DEV="/dev/md0")
+    assert got.returncode == 0 and "done" in log, (got.stderr, log)
+    assert os.readlink(target / "dev" / "disk" / "by-uuid" / ROOT_UUID) == "/dev/md0"
+    assert _kernel_roots(target) == [f"UUID={ROOT_UUID}"] * 2
+
+
+@LINUX_ONLY
+def test_a_grub_cfg_that_still_boots_a_disk_name_fails_the_install_by_name(tmp_path):
+    """Principle 5: the verdict is grub.cfg read back, not "update-grub said
+    0". An update-grub that wrote the device anyway is a failed install."""
+    got, log, target = _grub_root_harness(tmp_path, GRUB_IGNORES_UUID="1")
+    assert got.returncode == 2, (got.stderr, log)
+    assert "root=/dev/sda2" in (target / "boot" / "grub" / "grub.cfg").read_text(encoding="utf-8")
+    assert any(line.startswith("fail grub-root-not-uuid") for line in log), log
+    assert "done" not in log
+
+
+@LINUX_ONLY
+def test_a_root_uuid_grub_probe_cannot_read_stops_before_update_grub(tmp_path):
+    got, log, target = _grub_root_harness(tmp_path, PROBE_FAIL="1")
+    assert got.returncode == 2, (got.stderr, log)
+    assert any(line.startswith("fail grub-root-uuid") for line in log), log
+    assert not [c for c in log if c.endswith(" update-grub")], log
+
+
+@LINUX_ONLY
+def test_a_grub_cfg_that_was_not_written_is_unchecked_not_passed(tmp_path):
+    """No grub.cfg to read back = "could not check", which fails (principle 5)."""
+    got, log, target = _grub_root_harness(tmp_path, PROBE_DEV="/dev/sda2")
+    assert got.returncode == 0
+    (target / "boot" / "grub" / "grub.cfg").unlink()
+    harness = (tmp_path / "harness.sh").read_text(encoding="utf-8").replace(
+        "install_bootloader\n", "ROOT_FS_UUID=" + ROOT_UUID + "\ngrub_boots_root_by_uuid\n")
+    (tmp_path / "harness.sh").write_text(harness, newline="\n")
+    got = subprocess.run([SH, str(tmp_path / "harness.sh")], text=True, capture_output=True,
+                         stdin=subprocess.DEVNULL)
+    log = (tmp_path / "calls").read_text(encoding="utf-8").splitlines()
+    assert got.returncode == 2 and any(line.startswith("fail grub-root-unchecked") for line in log), log
 
 
 @LINUX_ONLY
@@ -414,9 +541,169 @@ def test_cleanup_unmounts_what_debootstrap_left_under_the_target(tmp_path):
     box["mounts"].write_text(
         f"/dev/sr0 /cdrom iso9660 ro 0 0\nproc {target}/proc proc rw 0 0\n", newline="\n")
     got = _run(box, _answers(tmp_path / "answers"))  # fails at the source copy; cleanup still runs
-    assert f"installer: unmounted leftover {target}/proc" in got.stderr
+    assert f"installer: unmounted {target}/proc" in got.stderr
     assert f"umount {target}/proc\n" in calls.read_text(encoding="utf-8")
     assert "unmount-failed" not in got.stderr
+
+
+# --- #2093: the target is released by the kernel's table, not by flags ---------
+
+_KERNEL_MOUNT = r"""
+printf 'mount %s\n' "$*" >> "{calls}"
+src=; dst=; kind=none; prev=
+for arg in "$@"; do
+    [ "$prev" = -t ] && kind=$arg
+    case "$arg" in --bind) kind=bind ;; esac
+    src=$dst; dst=$arg; prev=$arg
+done
+printf '%s %s %s rw 0 0\n' "$src" "$dst" "$kind" >> "{mounts}"
+"""
+# umount as the kernel answers it: busy while anything is mounted under the
+# point, otherwise the newest mount on that point goes (stacked mounts are lines)
+_KERNEL_UMOUNT = r"""
+printf 'umount %s\n' "$*" >> "{calls}"
+mp=$1
+if [ "$mp" = "${{UMOUNT_STUCK:-}}" ] || awk -v m="$mp" 'index($2, m "/") == 1 {{ f = 1 }} END {{ exit !f }}' "{mounts}"; then
+    echo "umount: $mp: target is busy." >&2; exit 32
+fi
+if ! awk -v m="$mp" '{{ l[NR] = $0; if ($2 == m) last = NR }} END {{ if (!last) exit 1; for (i = 1; i <= NR; i++) if (i != last) print l[i] }}' "{mounts}" > "{mounts}.next"; then
+    echo "umount: $mp: not mounted." >&2; exit 32
+fi
+mv "{mounts}.next" "{mounts}"
+if [ "$mp" = "${{UMOUNT_LOSES_TABLE:-}}" ]; then mv "{mounts}" "{mounts}.lost"; fi
+"""
+
+
+def _full_install_box(tmp_path):
+    """The shimmed box, carried to the end of a real (not dry) run: the
+    target tree the copies need, an apt index, and mount/umount that keep
+    PROC_MOUNTS the way the kernel would. The leftovers of rc1 (24/10, read
+    in the mount table at every step): debootstrap leaves its proc, and the
+    package step leaves an efivarfs -- Debian's mdadm initramfs hook mounts
+    one on an empty efivars when update-initramfs runs in the chroot. A late
+    submount under /target/sys (after update-grub) stands for any other one
+    the engine did not make: only the cleanup can see that one."""
+    import gzip
+    box = _machine(tmp_path)
+    calls = _command_shims(tmp_path, box["env"])
+    target, mounts, bindir = box["target"], box["mounts"], tmp_path / "bin"
+    (box["root"] / "sys" / "firmware" / "efi" / "efivars").mkdir(parents=True)   # a UEFI machine
+    efivars = f"{target}/sys/firmware/efi/efivars"
+    _shim(bindir / "mount", _KERNEL_MOUNT.format(calls=calls, mounts=mounts))
+    _shim(bindir / "umount", _KERNEL_UMOUNT.format(calls=calls, mounts=mounts))
+    _shim(bindir / "debootstrap", f'printf "proc {target}/proc proc rw 0 0\\n" >> {mounts}\nexit 0\n')
+    _shim(bindir / "chroot", _FAKE_GRUB + f'printf "%s %s\\n" chroot "$*" >> {calls}\n'
+          'fake_grub "$@" || exit 1\n'
+          'case "$*" in\n'
+          f'*"apt-get install"*) printf "efivarfs {efivars} efivarfs rw,nosuid,nodev,noexec 0 0\\n" >> {mounts} ;;\n'
+          f'*"--target=x86_64-efi"*) printf "efivarfs-at-grub-efi %s\\n" "$(grep -c " {efivars} " {mounts})" >> {calls} ;;\n'
+          f'*update-grub*) printf "fusectl {target}/sys/fs/fuse/connections fusectl rw 0 0\\n" >> {mounts} ;;\n'
+          'esac\nexit 0\n')
+    for name in ("chown", "sync"):
+        _shim(bindir / name, f'printf "%s %s\\n" {name} "$*" >> {calls}\nexit 0\n')
+    for rel in ("opt", "usr/local/sbin", "etc/systemd/system"):
+        (target / rel).mkdir(parents=True)
+    index = Path(box["env"]["CDROM"]) / "dists" / "trixie" / "main" / "binary-amd64" / "Packages.gz"
+    index.parent.mkdir(parents=True)
+    index.write_bytes(gzip.compress(b"Package: x\nFilename: pool/main/imagectl/x.deb\n\n"))
+    return box, calls
+
+
+def _under(mounts: Path, target: Path) -> list[str]:
+    if not mounts.exists():
+        return ["<table gone>"]
+    points = [line.split()[1] for line in mounts.read_text(encoding="utf-8").splitlines()]
+    return [p for p in points if p == str(target) or p.startswith(f"{target}/")]
+
+
+@LINUX_ONLY
+def test_a_target_released_through_leftovers_completes_the_install(tmp_path):
+    """rc1 (24/10, ESXi + Hyper-V): `umount /target/sys` was busy (a submount
+    the engine did not make under it), the leftover pass then unmounted
+    everything -- and the flag kept saying "mounted": a fully released target
+    failed at 88%. The verdict is what the kernel lists, read again: nothing
+    -> done."""
+    box, calls = _full_install_box(tmp_path)
+    got = _run(box, _answers(tmp_path / "answers"))
+    assert got.returncode == 0, got.stderr[-3000:]
+    assert box["state"].read_text(encoding="utf-8").splitlines()[0] == "state=done"
+    assert _under(box["mounts"], box["target"]) == []
+    seen = calls.read_text(encoding="utf-8").splitlines()
+    umounts = [line.split()[1] for line in seen if line.startswith("umount ")]
+    target = str(box["target"])
+    # every submount before the mount it sits on, all before the root
+    assert umounts.index(f"{target}/sys/fs/fuse/connections") < umounts.index(f"{target}/sys")
+    assert umounts.index(f"{target}/boot/efi") < umounts.index(target) == len(umounts) - 1
+    assert "unmount-failed" not in got.stderr and "target is busy" not in got.stderr
+    assert any(line.startswith("sync") for line in seen)
+
+
+@LINUX_ONLY
+def test_the_whole_engine_leaves_a_grub_cfg_that_boots_the_root_by_uuid(tmp_path):
+    """#2137 through the engine itself (not dry): the shimmed chroot's
+    update-grub decides root= as 10_linux does, against the target's /dev."""
+    box, _calls = _full_install_box(tmp_path)
+    got = _run(box, _answers(tmp_path / "answers"))
+    assert got.returncode == 0, got.stderr[-3000:]
+    assert _kernel_roots(box["target"]) == [f"UUID={ROOT_UUID}"] * 2
+
+
+@LINUX_ONLY
+def test_grub_writes_nvram_through_one_efivarfs_not_one_stacked_on_the_hooks(tmp_path):
+    """The root of rc1 (mount table at each step, ESXi 24/10): before
+    finish.sh mounted efivarfs, one was already there -- mounted during the
+    package step by the mdadm initramfs hook (rw,nosuid,nodev,noexec), never
+    unmounted. Ours stacked on it; the umount after grub-install peeled only
+    ours. The leftover goes first, by name, and after grub-install none stays."""
+    box, calls = _full_install_box(tmp_path)
+    got = _run(box, _answers(tmp_path / "answers"))
+    assert got.returncode == 0, got.stderr[-3000:]
+    seen = calls.read_text(encoding="utf-8").splitlines()
+    assert "efivarfs-at-grub-efi 1" in seen, [c for c in seen if "efivarfs" in c]
+    assert "unmounted an efivarfs left on the target by update-initramfs" in got.stderr
+    efivars = f"{box['target']}/sys/firmware/efi/efivars"
+    grub_bios = next(i for i, c in enumerate(seen) if "--target=i386-pc" in c)
+    assert f"umount {efivars}" in seen[:grub_bios]
+    assert f"umount {efivars}" not in seen[grub_bios:], "nothing left for the cleanup to find"
+
+
+@LINUX_ONLY
+def test_a_mount_that_stays_fails_the_install_by_name_after_sync(tmp_path):
+    """The other side (principle 5): something that really stays mounted is a
+    failed install that names it -- and the data was synced before saying so."""
+    box, calls = _full_install_box(tmp_path)
+    box["env"]["UMOUNT_STUCK"] = f"{box['target']}/cdrom"
+    got = _run(box, _answers(tmp_path / "answers"))
+    assert got.returncode == 2
+    assert f"[unmount-failed] still mounted under {box['target']}: {box['target']}/cdrom" in got.stderr
+    state = box["state"].read_text(encoding="utf-8")
+    assert "state=failed" in state and "unmount-failed" in state
+    seen = calls.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("sync") for line in seen)
+
+
+@LINUX_ONLY
+def test_a_mount_table_that_cannot_be_read_is_not_a_released_target(tmp_path):
+    """"Could not check" is not "nothing mounted" (principle 5): the table is
+    gone after the umounts, and the install fails as unchecked, not done."""
+    box, _calls = _full_install_box(tmp_path)
+    box["env"]["UMOUNT_LOSES_TABLE"] = str(box["target"])
+    got = _run(box, _answers(tmp_path / "answers"))
+    assert got.returncode == 2
+    assert "[unmount-unchecked]" in got.stderr
+    assert "state=done" not in box["state"].read_text(encoding="utf-8")
+
+
+@LINUX_ONLY
+def test_static_network_with_no_gateway_and_no_dns_is_valid(tmp_path):
+    """#2096: both say "(optional)" on the screen; empty blocked the install
+    ("the DNS list is invalid"). A value is still checked (the cases above)."""
+    box = _machine(tmp_path)
+    _command_shims(tmp_path, box["env"])
+    got = _run(box, _answers(tmp_path / "answers", servers_mode="static", servers_addr="10.68.0.61",
+                             servers_mask="255.255.255.0"), "--dry-run")
+    assert got.returncode == 0, got.stderr
+    assert "invalid-dns" not in got.stderr and "invalid-gateway" not in got.stderr
 
 
 @LINUX_ONLY
@@ -531,3 +818,98 @@ def test_installer_packages_and_binaries_are_conditional_and_on_the_iso():
     assert 'rm "$ROOT/bin/$_shadow"' in build
     assert "[debootstrap]=debootstrap" in build and "[mkfs.vfat]=dosfstools" in build
     assert "debootstrap" in packages and "dosfstools" in packages and "dpkg" in packages
+
+
+# --- #1632 (Nadav 24/10): "root's password -- I set it, as part of the install" --------
+
+OPENSSL = shutil.which("openssl")
+DECOY_PW = "Build-time-1!"   # what an old ISO carried in imagectl/root-password.hash
+
+
+def _root_harness(tmp_path: Path, root_pass: str) -> tuple[subprocess.CompletedProcess, dict[str, Path]]:
+    """install_bootloader for real against stubbed helpers. chroot records its
+    argv and, for chpasswd, the line it was fed; openssl is a wrapper that
+    records its own argv and environment and runs the real one. The CD carries
+    an old-style root-password.hash of a DIFFERENT password: the engine must
+    not read it."""
+    target = tmp_path / "target"
+    target.mkdir()
+    cdrom = tmp_path / "cdrom"
+    (cdrom / "imagectl").mkdir(parents=True)
+    decoy = subprocess.run([OPENSSL, "passwd", "-6", "-stdin"], input=DECOY_PW + "\n",
+                           capture_output=True, text=True, check=True).stdout.strip()
+    (cdrom / "imagectl" / "root-password.hash").write_text(decoy + "\n", newline="\n")
+    files = {name: tmp_path / name for name in ("calls", "shadow", "openssl-argv", "openssl-env")}
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _shim(bindir / "openssl", f"""printf '%s\\n' "$*" >> '{files["openssl-argv"].as_posix()}'
+env >> '{files["openssl-env"].as_posix()}'
+exec '{OPENSSL}' "$@"
+""")
+    harness = tmp_path / "harness.sh"
+    harness.write_text(f"""set -u
+PATH='{bindir.as_posix()}':$PATH
+DRY_RUN=0 TARGET='{target.as_posix()}' CDROM='{cdrom.as_posix()}' ANSWER_DISK=/dev/sda
+ANSWER_ROOT_PASS='{root_pass}'
+SYSROOT='{tmp_path.as_posix()}'   # no efivars here: the NVRAM branch is another test's (#2093)
+log() {{ printf '%s\\n' "$*" >> '{files["calls"].as_posix()}'; }}
+fail() {{ log "fail $1"; exit 2; }}
+progress() {{ :; }}
+must_run() {{ shift 2; "$@" || exit 2; }}
+{_FAKE_GRUB}
+chroot() {{ log "chroot $*"; case "$2" in chpasswd) cat > '{files["shadow"].as_posix()}' ;; *) fake_grub "$@" ;; esac; }}
+mount() {{ return 1; }}
+write_target() {{ log "write-target $1 $2"; }}
+. '{(INSTALLER / "lib" / "finish.sh").as_posix()}'
+install_bootloader
+""", newline="\n")
+    got = subprocess.run([SH, str(harness)], text=True, capture_output=True, stdin=subprocess.DEVNULL)
+    return got, files
+
+
+def _crypt(password: str, salt: str) -> str:
+    return subprocess.run([OPENSSL, "passwd", "-6", "-salt", salt, "-stdin"], input=password + "\n",
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+@LINUX_ONLY
+@pytest.mark.skipif(OPENSSL is None, reason="openssl is in the live image; the test hashes with it")
+def test_root_gets_the_hash_of_the_password_chosen_on_the_screen_not_the_isos(tmp_path):
+    got, files = _root_harness(tmp_path, ROOT_PW)
+    assert got.returncode == 0, got.stderr
+    line = files["shadow"].read_text(encoding="utf-8").strip()
+    assert line.startswith("root:$6$"), line
+    hashed = line.split(":", 1)[1]
+    salt = hashed.split("$")[2]
+    assert hashed == _crypt(ROOT_PW, salt), "the hash is not of the password chosen on the screen"
+    assert hashed != _crypt(DECOY_PW, salt), "the hash is of the ISO's build-time password"
+    calls = files["calls"].read_text(encoding="utf-8").splitlines()
+    assert f"chroot {(tmp_path / 'target').as_posix()} chpasswd -e" in calls
+    assert not [c for c in calls if "chage" in c], "#1632: no forced change of a password the operator chose"
+    # never in argv, never in the environment of the hashing process
+    assert files["openssl-argv"].read_text(encoding="utf-8").splitlines() == ["passwd -6 -stdin"]
+    assert ROOT_PW not in files["openssl-env"].read_text(encoding="utf-8")
+    assert ROOT_PW not in got.stdout + got.stderr
+
+
+@LINUX_ONLY
+@pytest.mark.skipif(OPENSSL is None, reason="openssl is in the live image; the test hashes with it")
+def test_no_root_password_from_the_screen_fails_by_name_even_with_an_old_iso_hash(tmp_path):
+    got, files = _root_harness(tmp_path, "")
+    assert got.returncode == 2, (got.stdout, got.stderr)
+    calls = files["calls"].read_text(encoding="utf-8").splitlines()
+    assert "fail root-password-missing" in calls, calls
+    assert not files["shadow"].exists(), "root got a password nobody chose"
+    assert not [c for c in calls if "chpasswd" in c or "grub-install" in c], calls
+
+
+@LINUX_ONLY
+def test_an_empty_root_password_stops_the_engine_before_any_disk_command(tmp_path):
+    """The real engine, not dry-run: the named state is in the state file the
+    GUI reads, and nothing touched the disk."""
+    box = _machine(tmp_path)
+    calls = _command_shims(tmp_path, box["env"])
+    got = _run(box, _answers(tmp_path / "answers", root_pass=""))
+    assert got.returncode == 2 and "[invalid-root-password]" in got.stderr, got.stderr
+    assert not calls.exists(), calls.read_text(encoding="utf-8") if calls.exists() else ""
+    assert "error=invalid-root-password:" in box["state"].read_text(encoding="utf-8")

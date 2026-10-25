@@ -415,7 +415,7 @@ def test_the_one_active_round_rule_holds_from_the_station_too(station):
 def test_the_station_state_feeds_the_build_screen(station):
     """מה שהעמוד הגרפי מציג: זהות, הדיסקים מה-hello האחרון, והמשימה."""
     station["admin"].post("/api/console/machines",
-                          json={"mac": "aa:bb:cc:00:00:10", "name": "מחשב בנייה",
+                          json={"mac": "aa:bb:cc:00:00:10", "name": "BUILD-PC",
                                 "group_id": "grp_BUILD"})
     # ה-hello מדווח דיסקים — הם מה שממלא את "מה מותקן עכשיו".
     station["anon"].post("/api/v1/agent/hello",
@@ -425,7 +425,7 @@ def test_the_station_state_feeds_the_build_screen(station):
         "/api/v1/agent/state?mac=AA-BB-CC-00-00-10").json()
     assert state["known"] is True
     assert state["role"] == "build"
-    assert state["name"] == "מחשב בנייה"
+    assert state["name"] == "BUILD-PC"
     assert state["disks"][0]["dev"] == "sda"
     assert state["disks"][0]["model"] == "Test SSD"
     assert state["task"] is None
@@ -450,7 +450,7 @@ def test_the_station_state_feeds_the_build_screen(station):
 def test_reported_empty_disks_clear_the_build_screen(station):
     mac = "aa:bb:cc:00:00:10"
     assert station["admin"].post("/api/console/machines", json={
-        "mac": mac, "name": "מחשב בנייה", "group_id": "grp_BUILD",
+        "mac": mac, "name": "BUILD-PC", "group_id": "grp_BUILD",
     }).status_code == 200
     disks = [
         {"dev": dev, "size_bytes": 256060514304, "model": f"Disk {dev}",

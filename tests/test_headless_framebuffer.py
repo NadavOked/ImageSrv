@@ -168,7 +168,7 @@ def _monitor_start(tmp_path, fb_dev, role="cloner", mem_file=False, env=""):
         'export IP=10.0.0.9; export MONITOR_BIN=/bin/sh; '
         'export RUN_DIR=' + repr(posix(run_dir)) + '; '
         'export FB_DEV=' + repr(fb_dev) + '; '
-        f'export D_ROLE={role}; ' + env +
+        f'export D_ROLE={role}; ' + 'export MONITOR_FB_WAIT_S=0; ' + env +
         'log() { echo "$*" >> "$LOGF"; }; '
         '. ' + posix(AGENT) + '/lib/monitor.sh; '
         '_monitor_spawn() { echo "$@" > "$OUT"; _monitor_pid=4242; }; '
@@ -216,6 +216,52 @@ def test_monitor_without_a_screen_waits_for_the_gui_file(tmp_path):
     assert args is None, args
     assert log.count("monitor:") == 1, log
     assert FILE_NAME in log
+
+
+@requires_native(("bash", BASH))
+def test_a_round_that_blocks_the_loop_still_gets_its_monitor(tmp_path):
+    """‏#1849 (משכפל 2, ‏19/10): תשובת ה-hello הראשונה היא `restore`, והלולאה
+    נחסמת ב-`do_restore` — אחרי ש-`monitor_start` כבר מצא שאין `fb.mem` ולפני
+    שהגואי יצר אותו. 5900 לא נפתח כל השחזור, גם בזמן שאלת SMART. כאן: הקובץ
+    נוצר שנייה אחרי הקריאה, הלולאה **לא** חוזרת — והמוניטור עולה בכל זאת,
+    פעם אחת; הקריאה הבאה של הלולאה אינה מעלה שני. בקרה שלילית: על הקוד שלפני
+    #1849 אין מי שיקרא שוב, ו-`spawned-while-blocked` אינו נוצר."""
+    out = tmp_path / "spawn-args"
+    seen = tmp_path / "spawned-while-blocked"
+    logf = tmp_path / "log"
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "monitor.secret").write_text("00112233445566778899aabbccddeeff\n")
+    mem = run_dir / FILE_NAME
+    script = (
+        'OUT=' + repr(posix(out)) + '; LOGF=' + repr(posix(logf)) + '; '
+        'export IMAGECTL_MONITOR=1 IMAGECTL_SERVER=http://10.0.0.1:8080; '
+        'export IP=10.0.0.9; export MONITOR_BIN=/bin/sh; '
+        'export RUN_DIR=' + repr(posix(run_dir)) + '; '
+        'export FB_DEV=' + repr(posix(tmp_path / "no-such-fb0")) + '; '
+        'export D_ROLE=cloner MONITOR_FB_WAIT_S=15; '
+        'log() { echo "$*" >> "$LOGF"; }; '
+        '. ' + posix(AGENT) + '/lib/monitor.sh; '
+        # like the real one: the pid file is what the main loop sees
+        '_monitor_spawn() { echo "$@" >> "$OUT"; _monitor_pid=$$; '
+        'echo $$ > "$RUN_DIR/monitor.pid"; }; '
+        'monitor_start; '                                  # hello round 1: no fb.mem yet
+        'sleep 1; printf x > ' + repr(posix(mem)) + '; '   # the GUI comes up inside do_restore
+        'i=0; while [ ! -s "$OUT" ] && [ "$i" -lt 50 ]; do sleep 0.2; i=$((i + 1)); done; '
+        '[ -s "$OUT" ] && : > ' + repr(posix(seen)) + '; '
+        'i=0; while [ -e "$RUN_DIR/monitor.waiter" ] && [ "$i" -lt 50 ]; do '
+        'sleep 0.2; i=$((i + 1)); done; '
+        'monitor_start')                                   # the loop is back: no second one
+    subprocess.run([BASH, "-c", script], capture_output=True, timeout=60,
+                   cwd=str(REPO), stdin=subprocess.DEVNULL)
+    log = logf.read_text(encoding="utf-8") if logf.exists() else ""
+    assert seen.exists(), f"no monitor while the loop was blocked: {log}"
+    lines = out.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1, lines
+    words = lines[0].split()
+    assert "--fb" in words and words[words.index("--fb") + 1].endswith("/run/" + FILE_NAME)
+    assert "waiting in the background" in log, log
+    assert not (run_dir / "monitor.waiter").exists()
 
 
 @requires_native(("bash", BASH))

@@ -57,8 +57,8 @@ const updV = (t) => `<span class="mono">${esc(t || "?")}</span>`;
 function updMmss(s) { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 /* שעון השרת: ‏now של התשובה האחרונה פחות שעון הדפדפן באותו רגע. */
 function updServerNow() { return updClock() + (UPD ? UPD.skew : 0); }
-/* ‏HH:MM:SS כמו fmtClock — חותמות השרת (UTC) כלשונן, לא שעון הדפדפן. */
-function updHms(serverMs) { return Number.isFinite(serverMs) ? new Date(serverMs).toISOString().slice(11, 19) : "—"; }
+/* ‏HH:MM:SS באזור הזמן של השרת (‏fmtHour, ‏#1933) — לא שעון הדפדפן ולא UTC כלשונו. */
+function updHms(serverMs) { return Number.isFinite(serverMs) ? fmtHour(new Date(serverMs).toISOString()) : "—"; }
 function updTs(key) {
   const st = UPD && UPD.status, t = st && st.stages && st.stages[key];
   const ms = Date.parse(t || "");

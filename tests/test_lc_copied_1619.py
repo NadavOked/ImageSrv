@@ -24,7 +24,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_cloner_gui import BASH, posix
-from test_local_clone_agent import STREAM_STUBS, run
+from test_local_clone_agent import REPO, STREAM_STUBS, run
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -43,16 +43,30 @@ def _drive(tmp_path: Path) -> list[tuple[str, int]]:
     t = "\n".join(make) + "\n"
     t += f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH" STUB_BOX={posix(box)!r} DEVROOT={posix(dev)!r}; '
     t += 'mkdir -p "$LC/run"; ata_capture() { :; }; target_init sda 100; target_init sdb 100; '
-    t += f'SAMPLES={posix(samples)!r}; _busy=; '
+    t += f'SAMPLES={posix(samples)!r}; _smp_busy=; _smp_main=$BASHPID; '
+    t += '[ -n "$_smp_main" ] || { echo "no BASHPID: not bash" >&2; exit 97; }; '
     # what the screen's state loop reads, at this very command; the guard keeps the
-    # reader's own commands (and the subshells it forks) from sampling themselves
-    t += ('_sample() { [ -z "$_busy" ] || return 0; _busy=1; '
-          '_c=$(lc_gui_run 2>/dev/null | sed -n "s/^lc_run=//p" | cut -d"|" -f3); '
-          'printf "%s|%s\\n" "$(cat "$LC/run/cur" 2>/dev/null)" "$_c" >> "$SAMPLES"; _busy=; }; ')
+    # reader's own commands (and the subshells it forks) from sampling themselves.
+    # #1748: the sampler's own names only. It runs inside the agent's functions and
+    # sh has no locals: a `_c` here was `_counter_of`'s `_c` (progress.sh) -- a count
+    # landed where a counter path is read, and `ln -s` made a link named 32768 in
+    # the cwd, the repository root.
+    # #2118/#2121: the main shell only. `set -T` hands the trap to every subshell
+    # (the background reader/fanout wrappers, drawer_watch), and two samplers at
+    # once append in the order they reach `>>`, not the order they read: a 0 read
+    # 19-24ms BEFORE a 32768 landed AFTER it -- a "drop" the counter never made
+    # (2/56 under -n 14). The counter's shell writes (`: > bytes.N`, `cur`) are
+    # lc_stream's, in the main shell, so every stop at them is still sampled.
+    t += ('_sample() { [ "$BASHPID" = "$_smp_main" ] || return 0; '
+          '[ -z "$_smp_busy" ] || return 0; _smp_busy=1; '
+          '_smp_c=$(lc_gui_run 2>/dev/null | sed -n "s/^lc_run=//p" | cut -d"|" -f3); '
+          'printf "%s|%s\\n" "$(cat "$LC/run/cur" 2>/dev/null)" "$_smp_c" >> "$SAMPLES"; _smp_busy=; }; ')
     t += 'set -T; trap _sample DEBUG; '
     t += 'lc_stream 1 dd sdc sda sdb; echo "rc1=$?"; lc_stream 2 dd sdc sda sdb; echo "rc2=$?"; trap - DEBUG; set +T'
+    repo_entries = set(REPO.iterdir())       # run()'s cwd, where the stray links landed (#1748)
     out = run(tmp_path, t, timeout=300, WAIT_HELPER_S="20", WAIT_DRAWER_S="20")
     assert out.returncode == 0 and "rc1=0" in out.stdout and "rc2=0" in out.stdout, out.stdout + out.stderr
+    assert set(REPO.iterdir()) == repo_entries, sorted(map(str, set(REPO.iterdir()) - repo_entries))
     rows = []
     for line in samples.read_text().splitlines():
         cur, _, copied = line.rpartition("|")

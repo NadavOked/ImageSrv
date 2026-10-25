@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from . import auth, smart_ask
+from . import auth, learn_waits, smart_ask
 from .db import _write_lock, journal, now_iso, writing
 from .registry import ROOM_GROUPS
 from .room import CLONERS_GROUP, ROOM_OPERATOR_ROLES, round_label, visible_round
@@ -132,6 +132,8 @@ def round_history(ctx, limit: int) -> list[dict]:
         "created_at": r["created_at"],
         "closed_at": r["closed_at"],
         "failed_reason": r["failed_reason"],
+        # ‏#1889: כמה זמן הסבב חיכה לאדם, ועל מה (‏`learn_waits.round_waits`; ‏null = לא נמדד).
+        "waits": learn_waits.round_waits(ctx.conn, r["created_at"], r["closed_at"]),
     } for r in rows]
 
 

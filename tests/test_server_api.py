@@ -69,7 +69,7 @@ def test_cloner_hello_carries_its_configured_drawer_count(server):
     admin = server["admin"]
     # the cloner group is a fixed group that already exists (409 on create)
     assert admin.post("/api/console/machines", json={
-        "mac": "b4:2e:99:07:1a:c1", "name": "Cloner 1", "group_id": "grp_CLONERS",
+        "mac": "b4:2e:99:07:1a:c1", "name": "Cloner1", "group_id": "grp_CLONERS",
     }).status_code == 200
     assert admin.put("/api/console/machines/b4:2e:99:07:1a:c1", json={
         "drawer_count": 2,
@@ -86,7 +86,7 @@ def test_cloner_registration_defaults_drawers_from_last_hello(server):
     assert server["anon"].post("/api/v1/agent/hello", json=body).status_code == 200
 
     response = server["admin"].post("/api/console/machines", json={
-        "mac": mac, "name": "Cloner 2", "group_id": "grp_CLONERS",
+        "mac": mac, "name": "Cloner2", "group_id": "grp_CLONERS",
     })
     assert response.status_code == 200
     assert hello(server, mac)["drawer_count"] == 2
@@ -100,7 +100,7 @@ def test_explicit_cloner_drawer_count_wins_over_last_hello(server):
     server["anon"].post("/api/v1/agent/hello", json=body)
 
     response = server["admin"].post("/api/console/machines", json={
-        "mac": mac, "name": "Cloner 3", "group_id": "grp_CLONERS", "drawer_count": 4,
+        "mac": mac, "name": "Cloner3", "group_id": "grp_CLONERS", "drawer_count": 4,
     })
     assert response.status_code == 200
     assert hello(server, mac)["drawer_count"] == 4
@@ -131,10 +131,12 @@ def test_hello_with_only_unregistered_macs_stays_unknown(server):
 
 
 def test_allowed_images_respect_the_reported_disk(server):
+    # #1863: by the real size, not the family -- both fixtures lay out ~255.4 GB
+    # (MANIFEST_500 is "family 500" only), so both fit a 256 GB disk; 240 GB holds neither.
     setup_classroom(server)
-    small = hello(server, "b4:2e:99:07:1a:c4", disk_bytes=256060514304)
-    big = hello(server, "b4:2e:99:07:1a:c4", disk_bytes=500107862016)
-    assert small["allowed_images"] == ["img_7f3a91"]
+    small = hello(server, "b4:2e:99:07:1a:c4", disk_bytes=240057409536)
+    big = hello(server, "b4:2e:99:07:1a:c4", disk_bytes=256060514304)
+    assert small["allowed_images"] == []
     assert big["allowed_images"] == ["img_2c8e04", "img_7f3a91"]
 
 
@@ -581,7 +583,7 @@ def register_build_machine(server, mac="b4:2e:99:07:1a:aa") -> str:
     """מחשב בנייה בקבוצה הקבועה `grp_BUILD` — היחיד שמקבל את התפריט."""
     assert server["admin"].post(
         "/api/console/machines",
-        json={"mac": mac, "name": "מחשב בנייה", "group_id": "grp_BUILD"},
+        json={"mac": mac, "name": "BUILD-PC", "group_id": "grp_BUILD"},
     ).status_code == 200
     return mac
 

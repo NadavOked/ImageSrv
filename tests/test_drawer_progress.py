@@ -80,7 +80,7 @@ def test_each_drawer_reports_the_bytes_that_were_written_to_it(tmp_path):
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         "target_init sda 131072; target_init sdb 131072; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
@@ -123,7 +123,7 @@ def test_the_compiled_fanout_writes_the_counter_the_agent_reads(tmp_path):
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         "target_init sda 131072; target_init sdb 131072; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
@@ -149,11 +149,12 @@ def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, 
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         f". {posix(AGENT)}/lib/writecheck.sh; "
         "log() { :; }; disk_fits() { return 0; }; apply_gpt() { return 0; }; "
-        "write_check() { return 0; }; write_speed_verdict() { return 0; }; "
-        "expand_last() { return 0; }; grow_expanded() { return 0; }; "
+        "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
+        "expand_last() { return 0; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
+        "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file (test_ntfs_hidden_sectors_2015.py)
         "manifest_plan() { echo '1|G|win|ntfs|2048|1024|p1.zst|sha|false|UG|'; }; "
         f"FAILED={' '.join(failed)!r}; "
         "restore_partition_drawers() { "
@@ -177,11 +178,15 @@ def test_the_machine_state_says_how_many_drawers_survived(tmp_path, failed, stat
     ריק בתוכו. `partial` מסיים את הגל כמו `done` (rc=0) אבל אינו נספר
     כהצלחה מלאה.
     """
+    # ‏#1935: ‏run_restore_drawers משאיר מילה לא-סופית (`verifying`) כשמשהו
+    # שרד — המילה הסופית (`done`/`partial`) נכתבת ב-do_restore_drawers רק אחרי
+    # הדרייברים והסימן; השרת נועל חבר שדיווח מצב סופי. ‏`failed` נכתב כאן.
     run, prelude = drawer_box(tmp_path, failed=failed)
     out = sh(prelude + 'run_restore_drawers multicast http://s img m.json '
-             'sda sdb sdc; echo "rc=$?"')
-    assert out.strip().endswith(f"rc={rc}"), out
-    assert (run / "state").read_text().strip() == state
+             'sda sdb sdc; echo "rc=$?"; echo "machine=$(_machine_state "sda sdb sdc")"')
+    assert out.strip().splitlines()[-2] == f"rc={rc}", out
+    assert out.strip().splitlines()[-1] == f"machine={state}", out
+    assert (run / "state").read_text().strip() == ("failed" if state == "failed" else "verifying")
 
 
 def test_a_partial_machine_still_names_the_drawer_that_failed(tmp_path):
@@ -189,6 +194,7 @@ def test_a_partial_machine_still_names_the_drawer_that_failed(tmp_path):
     אומרת מי ולמה. אחת בלי השנייה אינה כשל גלוי."""
     run, prelude = drawer_box(tmp_path, failed=("sdb",))
     sh(prelude + "run_restore_drawers multicast http://s img m.json sda sdb sdc; "
+       '_machine_state "sda sdb sdc" > "$RUN_DIR/state"; '   # do_restore_drawers' last word (#1935)
        "build_progress ses_1 aa:bb:cc:00:00:21 > $RUN_DIR/progress.json")
 
     report = json.loads((run / "progress.json").read_text(encoding="utf-8"))

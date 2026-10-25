@@ -514,12 +514,21 @@ def tls_exporter_binding(conn, *, label: bytes = EXPORTER_LABEL,
         "לחיבור ה-TLS אין export_keying_material — התקינו pyOpenSSL")
 
 
+#: ‏#2139: כמה אחורה notBefore — מעבר להיסט של RTC בשעון מקומי (עד ‏UTC±14).
+NOT_BEFORE_BACKDATE = timedelta(hours=24)
+
+
 def generate_self_signed(common_name: str, *, ip_sans=(), dns_sans=(),
                          days: int = 3650) -> tuple[bytes, bytes]:
     """‏(cert_pem, key_pem) — תעודת EC P-256 חתומה-עצמית לזהות בין-שרתית.
 
     ‏EC P-256: מפתח קטן, מהיר, ונתמך ב-TLS 1.3. ה-SANs נדרשים כדי
-    שהצד השני יוכל להצמיד SPKI מול חיבור לכתובת הנכונה בבדיקות loopback."""
+    שהצד השני יוכל להצמיד SPKI מול חיבור לכתובת הנכונה בבדיקות loopback.
+
+    ‏notBefore יום אחורה (‏#2139): שעון חומרה בשעון מקומי (‏Hyper-V, ברזל
+    שהיה עליו Windows) מקדים את השעון ב-3 שעות עד ש-chrony מתקן. תעודה
+    שנוצרה בחלון הזה הייתה "עדיין לא בתוקף" לדפדפן, ולשרת שני ששעונו
+    נכון, עד שהשעון מדביק אותה."""
     import datetime
     from ipaddress import ip_address
     from cryptography import x509
@@ -537,7 +546,7 @@ def generate_self_signed(common_name: str, *, ip_sans=(), dns_sans=(),
         .subject_name(name).issuer_name(name)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now - datetime.timedelta(minutes=5))
+        .not_valid_before(now - NOT_BEFORE_BACKDATE)
         .not_valid_after(now + datetime.timedelta(days=days))
     )
     if sans:

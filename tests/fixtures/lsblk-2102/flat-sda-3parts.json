@@ -1,0 +1,21 @@
+{
+   "blockdevices": [
+      {
+         "path": "/dev/sda",
+         "type": "disk",
+         "pkname": null
+      },{
+         "path": "/dev/sda1",
+         "type": "part",
+         "pkname": "sda"
+      },{
+         "path": "/dev/sda14",
+         "type": "part",
+         "pkname": "sda"
+      },{
+         "path": "/dev/sda15",
+         "type": "part",
+         "pkname": "sda"
+      }
+   ]
+}

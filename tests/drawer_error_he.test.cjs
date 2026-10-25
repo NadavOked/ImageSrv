@@ -64,6 +64,7 @@ test('fanout reasons keep their numbers and their wording',()=>{
   assert.equal(he('queue overflow: target lost bytes'),'הדיסק לא עמד בקצב — אבדו בייטים');
   assert.equal(he('write error'),'שגיאת כתיבה לדיסק');
   assert.equal(he('stalled with no write progress'),'הדיסק לא עמד בקצב — הכתיבה נתקעה והוא הוצא מהסבב');
+  assert.equal(he('stalled the stream (too slow to drain)'),'הדיסק לא עמד בקצב — הוא עיכב את הזרם והוצא מהסבב');   // #1796
   assert.equal(he('short stream (got 4096 of 1048576)'),'הזרם קצר מהצפוי — התקבלו 4096 מתוך 1048576 בייט');
   assert.equal(he('long stream (got 2097152 of 1048576)'),'הזרם ארוך מהצפוי — התקבלו 2097152 מתוך 1048576 בייט');
 });
@@ -133,7 +134,7 @@ const AGENT_REASONS=[
   ['lccopy.sh:lc_judge','מחיצה 1: xxh64 של מה שהיעד קיבל (a1b2c3d4e5f6) שונה מהמקור (0f1e2d3c4b5a)'],
   ['lccopy.sh:lc_stream','מחיצה 1: קריאת המקור נכשלה (partclone rc=1) — המקור לא שונה'],
   ['lccopy.sh:lc_stream','מחיצה 1: mkfifo נכשל'],
-  ['lccopy.sh:lc_prepare_target','שמות המחיצות לא נכתבו (sgdisk -c)'],
+  ['grow.sh:finish_grow (#1798)',"הכתיבה הושלמה, אך הסימון 'כתיבה לא הושלמה' לא הוסר מהדיסק"],
   ['lccopy.sh:_lc_gpt_why (שלוש שורות יומן אחרונות)','טבלת המחיצות לא נכתבה: sgdisk: Could not open /dev/sdb Warning! Main partition table overlaps the first partition by 34 blocks!'],
   ['lcplan.sh:lc_target_check','sgdisk לא קרא את הטבלה מהיעד'],
   ['lcplan.sh:lc_target_check','מחיצה 1: sgdisk -i נכשל ביעד'],
@@ -145,6 +146,14 @@ const AGENT_REASONS=[
   ['directsend.sh:_direct_failed','מחיצה 2: השליחה נכשלה (שלב=dsend rc=1)'],
   ['directsend.sh:_direct_failed','מחיצה 2: אף מחשב משכפל לא הצטרף לזרם (udp-sender לא התחיל את ההעברה)'],
   ['directsend.sh:_direct_failed','מחיצה 2: ה-sha256 של מה שנשלח לא חושב — אין ראיה שהזרם תאם למניפסט'],
+  // #1805: the read-back after the write (readback.sh), with fanout --readback's own words in it
+  ['readback.sh:rb_digest (rc 4)',"מחיצה 3: האימות אחרי הכתיבה נכשל — הדיסק לא שמר את מה שנכתב (הקריאה מהדיסק נכשלה: read error on /dev/sdb3 at byte 1048576: Input/output error)"],
+  ['readback.sh:rb_digest (rc 3)','האימות אחרי הכתיבה לא רץ — אין ראיה שהדיסק שמר את מה שנכתב — מחיצה 3: מפת הבלוקים לא נקראה מהדיסק (the bit map failed its CRC)'],
+  ['readback.sh:rb_flush','האימות אחרי הכתיבה לא רץ — אין ראיה שהדיסק שמר את מה שנכתב — ריקון המטמון של מחיצה 3 נכשל (blockdev --flushbufs rc=1)'],
+  ['readback.sh:_rb_judge (map)',"מחיצה 1: האימות אחרי הכתיבה נכשל — הדיסק לא שמר את מה שנכתב (מפת הבלוקים בדיסק: 8192 בייט, באימג': 40960)"],
+  ['readback.sh:_rb_part (a drawn chunk, #1864)','מחיצה 3: האימות אחרי הכתיבה נכשל — הדיסק לא שמר את מה שנכתב (חתיכה 17 של 4MiB מתוך 11000)'],
+  ['readback.sh:_rb_part (fanout gave no list)','האימות אחרי הכתיבה לא רץ — אין ראיה שהדיסק שמר את מה שנכתב — מחיצה 3: fanout --readback לא החזיר רשימה'],
+  ['writecheck.sh:_wc_alias','הדיסק לא מקבל כתיבה — סמן ב-0 MiB נקרא בחזרה שונה — הדיסק מחזיר תוכן של מקום אחר (קיבולת מזויפת?)'],
 ];
 
 test(`the agent's own reasons (${AGENT_REASONS.length} sources with English in them): none is shown in English, and each still says something in Hebrew`,()=>{
@@ -158,7 +167,8 @@ test(`the agent's own reasons (${AGENT_REASONS.length} sources with English in t
 
 test('Hebrew with only tool names is left exactly as the agent wrote it (the old rule hid all of these behind a generic line)',()=>{
   for(const raw of ['מחיצה 2: mkswap נכשל','מחיצה 2: ה-sha256 לא חושב -- אין ראיה שהזרם הגיע שלם','איטי — 12 MB/s, מתחת לסף 30 MB/s',
-                    'מחיצה 2: הזרם נקטע לפני סופו (מקור rc=1)','הדיסק נותק','הדיסק קטן מדי ב-12 MiB (נדרשים 256060514304 בייט, בדיסק 256000000000; חסרים 60514304 בייט)'])
+                    'מחיצה 2: הזרם נקטע לפני סופו (מקור rc=1)','הדיסק נותק','הדיסק קטן מדי ב-12 MiB (נדרשים 256060514304 בייט, בדיסק 256000000000; חסרים 60514304 בייט)',
+                    'מחיצה 3: האימות אחרי הכתיבה נכשל — הדיסק לא שמר את מה שנכתב'])   // #1805: Nadav's words, whole
     assert.equal(he(raw),raw);
 });
 

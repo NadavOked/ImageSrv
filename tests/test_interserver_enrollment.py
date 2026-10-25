@@ -853,7 +853,7 @@ def test_enroll_node_inserts_trust_material(server):
     conn = server["ctx"].conn
     user = ("noc", "admin")
     rid = storage_nodes.enroll_node(
-        conn, user, label="סניף ב'", base_url="https://sec.example:8443/api",
+        conn, user, label="BRANCH-B", base_url="https://sec.example:8443/api",
         node_id="sn_aaaaaaaaaaaaaaaa", pinned_spki="aa" * 32, client_cert_ref="bb" * 32,
         credential_ref="/data/secondaries/sn_aaaaaaaaaaaaaaaa.token", protocol_version="2.1")
     row = conn.execute("SELECT * FROM storage_nodes WHERE id = ?", (rid,)).fetchone()
@@ -874,7 +874,7 @@ def test_enroll_route_writes_0600_token_and_row(server, monkeypatch, tmp_path):
         "secondary_spki": "cc" * 32})
     resp = admin.post("/api/console/storage-nodes/enroll", json={
         "url": "https://10.20.0.30:8443/api/interserver/v1",
-        "label": "סניף ג'", "code": "ABC-DEF-GHJ",
+        "label": "BRANCH-C", "code": "ABC-DEF-GHJ",
         "expected_secondary_spki": "cc" * 32, "protocol_version": "2.1"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -944,7 +944,7 @@ def test_enroll_traversal_secondary_id_rejected_before_code_and_no_file(
     data_dir = tmp_path / "data"
     resp = admin.post("/api/console/storage-nodes/enroll", json={
         "url": "https://10.20.0.30:8443/api/interserver/v1",
-        "label": "סניף ג'", "code": "ABC-DEF-GHJ",
+        "label": "BRANCH-C", "code": "ABC-DEF-GHJ",
         "expected_secondary_spki": spki, "protocol_version": "2.1"})
     assert resp.status_code == 400, resp.text
     assert calls == ["/pair-begin"]                  # הקוד לא נשלח
@@ -967,7 +967,7 @@ def test_enroll_node_id_is_derived_from_pinned_spki(server, monkeypatch, tmp_pat
     _calls, token = _fake_pair_begin(monkeypatch, secondary_id=derived, spki=spki)
     resp = admin.post("/api/console/storage-nodes/enroll", json={
         "url": "https://10.20.0.31:8443/api/interserver/v1",
-        "label": "סניף ד'", "code": "ABC-DEF-GHJ",
+        "label": "BRANCH-D", "code": "ABC-DEF-GHJ",
         "expected_secondary_spki": spki, "protocol_version": "2.1"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["node_id"] == derived
@@ -1011,7 +1011,7 @@ def test_a_primary_with_secondaries_can_enroll_another_one(conn):
     admin = ("noc", "admin")
     assert storage_nodes.can_enroll_secondary(conn, "admin") is True        # הראשון: אין משני עדיין
     for i in range(2):
-        storage_nodes.enroll_node(conn, admin, label=f"סניף {i}", base_url=f"https://10.0.0.{i + 2}:8443",
+        storage_nodes.enroll_node(conn, admin, label=f"BRANCH-{i}", base_url=f"https://10.0.0.{i + 2}:8443",
                                   node_id=f"sn_{i:016x}", pinned_spki="aa" * 32, client_cert_ref="c",
                                   credential_ref="r", protocol_version="2.1")
     assert storage_nodes.enabled_node_count(conn) == 2

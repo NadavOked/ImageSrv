@@ -1,0 +1,12 @@
+[Unit]
+Description=Recover an interrupted ImageCtl server upgrade
+DefaultDependencies=no
+After=local-fs.target
+Before=imagectl-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/imagectl/tools/server-upgrade-recover.sh
+
+[Install]
+WantedBy=multi-user.target

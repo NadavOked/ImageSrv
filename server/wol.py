@@ -20,6 +20,7 @@ import socket
 from pathlib import Path
 from typing import Callable
 
+from . import learn_wol
 from .db import journal
 from .registry import CLONERS_GROUP, ROOM_GROUPS, normalize_mac
 
@@ -219,6 +220,7 @@ def wake_machine(
     canonical = normalize_mac(mac) or mac
     reason = _try_send(canonical, send)
     if reason is None:
+        learn_wol.sent(conn, canonical)          # #1847: מכאן נמדד אם התעוררה
         return WakeResult(1)
     detail = f"{canonical} failed=1"
     if reason:
@@ -276,6 +278,7 @@ def wake_group(
         reason = _try_send(mac, send)
         if reason is None:
             sent += 1
+            learn_wol.sent(conn, mac)            # #1847
             continue
         failed.append(mac)
         if reason and reason not in reasons:

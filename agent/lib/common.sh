@@ -164,10 +164,11 @@ parse_cmdline() {
             imagectl.mode=recovery)
                 IMAGECTL_MODE="recovery"
                 ;;
-            imagectl.mode=installer)
+            imagectl.mode=installer|imagectl.mode=usbclone)
                 # ‏#1190: ה-ISO של ההתקנה מריץ את אותו initramfs, ו-init מוסר
                 # למתקין החי במקום לסוכן. ‏PXE מהשרת לעולם אינו שולח את זה.
-                IMAGECTL_MODE="installer"
+                # ‏#1914 usbclone: הדיסק-און-קי לשיכפול בלי שרת (usbclone.sh).
+                IMAGECTL_MODE="${_word#imagectl.mode=}"
                 ;;
             imagectl.monitor=1)
                 # מוניטור מרחוק (#690): שירות RFB על /dev/fb0, מגודר בשער
@@ -197,9 +198,9 @@ HTTP_STALL_TIMEOUT="${HTTP_STALL_TIMEOUT:-120}"
 
 http_post_json() {
     # $1 = URL, $2 = file holding the JSON body, $3 = one extra header
-    # (optional; #855 -- the task token on a capture report). Response on stdout.
+    # (optional; #855 -- the task token on a capture report), $4 = where to dump the response headers (optional; #1916). Response on stdout.
     curl -sfS --max-time "$HTTP_TIMEOUT" --retry "$HTTP_RETRIES" \
-        -H "Content-Type: application/json" ${3:+-H "$3"} \
+        -H "Content-Type: application/json" ${3:+-H "$3"} ${4:+-D "$4"} \
         --data-binary "@$2" "$1"
 }
 

@@ -323,7 +323,14 @@ def test_the_guard_blocks_a_real_spawn_and_records_it(tmp_path, monkeypatch):
         sender.run_process(["udp-sender", "--portbase", "21000",
                             "--file", str(tmp_path)])
     # ‏`_no_real_sender` מפיל טסט שהשאיר רישום — הרישום הזה מכוון.
-    assert hygiene.blocked_spawns.pop()[0] == "udp-sender"
+    # ‏#1974: השולח רץ תחת `nice … ionice …` כשהכלים קיימים (‏priority.background_cmd) —
+    # מה שנחסם הוא אותה שורת פקודה, עם הקידומת או בלעדיה.
+    from server import priority
+    spawned = hygiene.blocked_spawns.pop()
+    prefix = list(priority.BACKGROUND_PREFIX)
+    if spawned[:len(prefix)] == prefix:
+        spawned = spawned[len(prefix):]
+    assert spawned[0] == "udp-sender", spawned
 
 
 @requires_native("cat", paths=("/proc",), why="הסריקה קוראת ב-/proc")

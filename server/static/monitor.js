@@ -37,6 +37,7 @@ document.title = titleEl.textContent;
 
 function setStatus(text, cls) {
   statusEl.textContent = text;
+  statusEl.title = text;              /* ‏#1837: הפס קוטע ב-…, המלא במעבר עכבר */
   statusEl.className = "status " + (cls || "");
 }
 
@@ -210,6 +211,8 @@ async function pump() {
   setPixelFormat();
   setEncodings();
   setStatus("מחובר", "ok");
+  setControl("");
+  watchControl();                              // #1852: נוכחות + בקשות שליטה
   requestUpdate(false);
 
   while (!stream.closed) {
@@ -365,11 +368,17 @@ function powerUrl() {
 }
 
 async function sendPower(action, confirm) {
-  const response = await fetch(powerUrl(), {
-    method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, confirm }),
-  });
+  let response;
+  try {
+    response = await fetch(powerUrl(), {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, confirm }),
+    });
+  } catch (e) {
+    /* ‏#1850: "Failed to fetch" של הדפדפן, באנגלית, אינו אומר למפעיל דבר. */
+    throw new Error("אין חיבור לשרת — הפקודה לא נשלחה");
+  }
   if (response.ok) return;
   let detail = "שגיאה " + response.status;
   try { const body = await response.json(); detail = body.detail || detail; } catch (e) {}
@@ -384,7 +393,9 @@ async function sendPower(action, confirm) {
    הרשאה, מכונה לא מוכרת, וסגירת חוסר-הפעילות המכוונת (#1129) — אינו חוזר לבד. */
 const RETRY_DELAYS_S = [2, 4, 8, 15, 30];      // האחרון חוזר עד התקרה
 const RETRY_MAX = 20;                          // ~9 דק' של ניסיונות, ואז ידני
-const NO_RETRY = new Set([4401, 4403, 4404, 4408]);
+/* ‏#1852: ‏4410 — הצפייה עברה לחלון אחר של אותו מנהל; ‏4411 — השליטה הועברה למנהל
+   אחר. ניסיון חוזר היה מחזיר את המכונה הלוך ושוב. */
+const NO_RETRY = new Set([4401, 4403, 4404, 4408, 4410, 4411]);
 let retries = 0;
 let retryTimer = null;
 
@@ -396,6 +407,132 @@ function cancelRetry() {
 function showClosed(text) {
   setStatus(text, "bad");
   showMachineDisconnected(text);
+}
+
+/* ‏#1850: ‏200 מ-…/power אומר "נכתב ל-socket", לא "בוצע" (עיקרון 5). הדף אומר
+   שהפקודה נשלחה ומחכה לניתוק; ניתוק = הראיה. אחרי כיבוי — אין למה להתחבר;
+   אחרי הפעלה מחדש — מתחברים מחדש לבד כשהמחשב עולה. בלי ניתוק בזמן — בגלוי. */
+const POWER_WAIT_S = 90;
+let powerPending = null;                       // {action, label, timer}
+function awaitPower(action, label) {
+  if (powerPending) clearTimeout(powerPending.timer);
+  setStatus(`נשלחה פקודת ${label} — ממתין שהמחשב ${action === "reboot"
+    ? "יתנתק ויעלה מחדש" : "ייכבה"}`, "");
+  const pending = { action, label, timer: 0 };
+  pending.timer = setTimeout(() => {
+    if (powerPending !== pending) return;
+    powerPending = null;
+    setStatus(`פקודת ${label} נשלחה, אבל המחשב לא התנתק תוך ${POWER_WAIT_S} שניות — ייתכן שלא בוצעה`, "bad");
+  }, POWER_WAIT_S * 1000);
+  powerPending = pending;
+}
+/* --- ‏#1852: מכונה אחת, צופה אחד — ובקשת שליטה (הכרעת נדב 19/10) -------------
+   מנהל שני שמקבל 4409 רואה מי מחזיק וכפתור "בקש שליטה" — לא ניסיון חוזר שחוטף.
+   המחזיק שואל כל 5 ש' (זו גם ה"נוכחות" שלו בשרת) ורואה בקשה עם אשר/סרב; 60 ש'
+   בלי תשובה = סירוב, ומחזיק שלא נראה 2 דק' — השרת מאשר לבד. רק במוניטור המקומי. */
+const CONTROL_POLL_MS = 5000;
+let controlTimer = null;
+function controlUrl(tail) {
+  return `/api/console/monitor/${encodeURIComponent(MAC)}/control${tail || ""}`;
+}
+async function controlCall(tail, body) {
+  let response;
+  try {
+    response = await fetch(controlUrl(tail), body === undefined
+      ? { credentials: "same-origin" }
+      : { method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) {
+    throw new Error("אין חיבור לשרת");
+  }
+  let data = {};
+  try { data = await response.json(); } catch (e) {}
+  if (!response.ok) throw new Error(data.detail || "שגיאה " + response.status);
+  return data;
+}
+function setControl(text, buttons) {
+  const box = document.getElementById("control");
+  box.textContent = "";
+  if (text) {
+    const span = document.createElement("span");
+    span.textContent = text;
+    box.appendChild(span);
+  }
+  for (const [label, onclick, cls] of buttons || []) {
+    const b = document.createElement("button");
+    b.className = "btn sm" + (cls ? " " + cls : "");
+    b.textContent = label;
+    b.onclick = onclick;
+    box.appendChild(b);
+  }
+}
+function stopControl() { clearTimeout(controlTimer); controlTimer = null; }
+/* המחזיק: שואל, מציג בקשה פתוחה. */
+function watchControl() {
+  stopControl();
+  if (NODE) return;
+  const tick = async () => {
+    controlTimer = null;
+    if (!rfbReady) return;
+    try {
+      const state = await controlCall("");
+      if (state.you_hold && state.request) {
+        const by = state.request.by;
+        setControl(`${by} מבקש שליטה במכונה (${state.request.seconds_left} ש')`, [
+          ["אשר", () => controlCall("/answer", { approve: true }).catch((e) => setControl(e.message)), "danger"],
+          ["סרב", () => controlCall("/answer", { approve: false }).then(() => setControl("")).catch((e) => setControl(e.message))],
+        ]);
+      } else setControl("");
+    } catch (e) { /* הבדיקה הבאה תנסה שוב */ }
+    if (rfbReady) controlTimer = setTimeout(tick, CONTROL_POLL_MS);
+  };
+  controlTimer = setTimeout(tick, 0);
+}
+/* המבקש: 4409 — מי מחזיק? */
+async function heldBySomeoneElse(reason) {
+  if (NODE) return false;
+  let state;
+  try { state = await controlCall(""); } catch (e) { return false; }
+  if (state.granted_to_you || !state.holder || state.you_hold) return false;
+  showClosed(reason);
+  offerRequest(state.holder);
+  return true;
+}
+function offerRequest(holder, text) {
+  setControl(text || "", [["בקש שליטה", () => requestControl(holder), ""]]);
+}
+async function requestControl(holder) {
+  let asked;
+  try { asked = await controlCall("/request", {}); }
+  catch (e) { setControl(e.message); return; }
+  if (asked.outcome !== "pending") { setControl(""); retries = 0; connect(); return; }
+  const wait = async () => {
+    controlTimer = null;
+    let state;
+    try { state = await controlCall(""); } catch (e) { controlTimer = setTimeout(wait, 2000); return; }
+    if (state.granted_to_you || !state.holder) { setControl(""); retries = 0; connect(); return; }
+    if (state.request) {
+      setControl(`הבקשה נשלחה ל-${holder} — ממתין לאישור (${state.request.seconds_left} ש')`);
+      controlTimer = setTimeout(wait, 2000);
+      return;
+    }
+    const last = state.last || {};
+    offerRequest(holder, last.outcome === "denied" ? `${holder} סירב לבקשה` : `${holder} לא ענה תוך 60 שניות`);
+  };
+  setControl(`הבקשה נשלחה ל-${holder} — ממתין לאישור`);
+  controlTimer = setTimeout(wait, 2000);
+}
+
+/* ניתוק אחרי פקודת כוח: true = טופל כאן. */
+function powerClosed() {
+  if (!powerPending) return false;
+  const done = powerPending;
+  clearTimeout(done.timer);
+  powerPending = null;
+  if (done.action === "poweroff") { showClosed("המחשב כבה (פקודת כיבוי)"); return true; }
+  retries = 0;
+  scheduleRetry("המחשב מאתחל (פקודת הפעלה מחדש) — מתחבר מחדש כשיעלה");
+  return true;
 }
 
 function scheduleRetry(reason) {
@@ -459,6 +596,12 @@ function connect() {
       4512: "הפרוקסי לא הזדהה מול המוניטור במכונה",
       4513: "החיבור למחשב נותק — ייתכן שהמחשב כבה" };
     const reason = failure || event.reason || reasons[event.code] || "החיבור נסגר";
+    if (powerClosed()) return;                 // #1850: הניתוק שחיכינו לו
+    stopControl();
+    if (event.code === 4409) {                 // #1852: מי מחזיק — ובקשת שליטה, לא ניסיון חוזר
+      heldBySomeoneElse(reason).then((held) => { if (!held && ws === sock) scheduleRetry(reason); });
+      return;
+    }
     if (NO_RETRY.has(event.code)) showClosed(reason);
     else scheduleRetry(reason);
   };
@@ -481,6 +624,25 @@ canvas.addEventListener("pointerup", (e) => { buttonMask &= ~(1 << e.button); po
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("keydown", (e) => { e.preventDefault(); keyEvent(keysymFor(e), true); });
 canvas.addEventListener("keyup", (e) => { e.preventDefault(); keyEvent(keysymFor(e), false); });
+
+/* ‏#1854: קלט של המפעיל כאן הוא פעילות בקונסולה — אחרת מי שעובד במסך המכונה
+   (iframe או חלון נפרד) נזרק אחרי console_idle_seconds. ‏BroadcastChannel: אותו
+   origin בלבד מעצם הגדרתו, מגיע גם לחלון שנפתח עם noopener, ונושא רק "פעילות"
+   — לא תוכן ולא קלט. רק קלט נספר, לא מסגרות: מסך שמשתנה לבד (פס התקדמות) אינו
+   אדם ליד המקלדת. לכל היותר הודעה אחת ב-5 ש'. */
+const ACTIVITY_CHANNEL = "imagectl-activity";
+const ACTIVITY_EVERY_MS = 5000;
+const activityChannel = typeof BroadcastChannel === "function"
+  ? new BroadcastChannel(ACTIVITY_CHANNEL) : null;
+let activitySentAt = -Infinity;
+function noteMonitorActivity() {
+  const now = Date.now();
+  if (!activityChannel || now - activitySentAt < ACTIVITY_EVERY_MS) return;
+  activitySentAt = now;
+  activityChannel.postMessage("activity");
+}
+["pointerdown", "pointermove", "keydown", "wheel", "touchstart"].forEach((type) =>
+  document.addEventListener(type, noteMonitorActivity, { passive: true, capture: true }));
 
 /* מודאל אישור לפעולת כוח (#1270): שאלה, השלכה וכפתור אדום — בלי הקלדה,
    במקום prompt/confirm החסומים. משתמש ב-DOM ובמחלקות של console.css. */
@@ -506,7 +668,8 @@ function powerModal(action, label) {
   document.getElementById("pmodal-ok").onclick = () => {
     /* ‏#1129: ההשוואה בשרת. השם הידוע (NAME) נשלח כ-confirm; 403 = לא זהה. */
     error.textContent = "";
-    sendPower(action, NAME).then(close, (e) => { error.textContent = e.message; });
+    sendPower(action, NAME).then(() => { close(); awaitPower(action, label); },
+      (e) => { error.textContent = e.message; });
   };
 }
 

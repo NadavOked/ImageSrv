@@ -48,8 +48,9 @@ ISOLINUX_ENTRY_TEMPLATE = ISO_DIR / "imagectl.cfg.in"
 BASH_SCRIPTS = ("make-pool.sh", "build-iso.sh", "firstboot.sh", "firstboot-answers.sh", "test-iso.sh")
 
 #: מה שרק ה-ISO מוסיף — אין לו מקור בקבצים האחרים, ולכן מוצהר כאן.
-#: ‏dbus/ca-certificates/systemd-timesyncd: מה ש-d-i היה מביא ב-standard ו-debootstrap לא (ESXi 21/09).
-ISO_ONLY = {"linux-image-amd64", "nftables", "sqlite3", "dbus", "ca-certificates", "systemd-timesyncd"}
+#: ‏ca-certificates/systemd-timesyncd: מה ש-d-i היה מביא ב-standard ו-debootstrap לא (ESXi 21/09).
+#: ‏dbus ו-linux-image-amd64 עברו ל-PKGS של המתקין (‏#1987) — יש להם מקור שם.
+ISO_ONLY = {"nftables", "sqlite3", "ca-certificates", "chrony"}
 #: תיקיית קושחה ש-build_initramfs.sh דורש (#1125) → החבילה שמביאה אותה בדביאן 13.
 FIRMWARE_PACKAGE = {"rtl_nic": "firmware-realtek", "i915": "firmware-intel-graphics"}
 
@@ -180,14 +181,15 @@ def test_no_ssh_server_on_the_product_server() -> None:
 
 def test_build_iso_ships_the_live_installer_and_no_debian_installer() -> None:
     """‏#1190: המטען הוא /live/vmlinuz + /live/initrd.img (build_initramfs --installer
-    --with-gui), הקרנל מה-pool ומודולי ה-initramfs מושווים אליו, גיבוב ה-root בקובץ
-    משלו, ומתקין דביאן (install.amd, preseed) אינו על ה-ISO."""
+    --with-gui), הקרנל מה-pool ומודולי ה-initramfs מושווים אליו, אין גיבוב root
+    (‏#1632 — נבחר במסך ההתקנה), ומתקין דביאן (install.amd, preseed) אינו על ה-ISO."""
     build = BUILD_ISO.read_text(encoding="utf-8")
     assert "--live-initrd" in build and 'die "חסר --live-initrd' in build
     assert 'dpkg-deb -x "$kdeb"' in build and '"$ikver" == "$KVER"' in build, "אין השוואת קרנל↔מודולים"
     assert 'install -m 0644 "$kvmlinuz" "$ISO_TREE/live/vmlinuz"' in build
     assert 'install -m 0644 "$LIVE_INITRD" "$ISO_TREE/live/initrd.img"' in build
-    assert '"$ISO_TREE/imagectl/root-password.hash"' in build
+    # #1632: root's password is chosen on the install screen -- no hash on the ISO
+    assert "root-password.hash" not in build and "openssl passwd" not in build
     assert 'rm -rf "$ISO_TREE/install.amd"' in build
     assert 'DI_ARGS="imagectl.mode=installer"' in build, "שורת הקרנל: רק המצב (עיקרון 2)"
     assert "preseed/file=" not in build and "late-command" not in build.replace("late-command.sh מתקין", "")
@@ -397,7 +399,7 @@ def test_the_iso_source_is_the_public_repo_and_private_paths_stop_the_build() ->
     מסרב לארוז נתיבים פרטיים גם כשנותנים `--source` מקומי — אותה רשימה כמו
     HARD_DENY ב-publish-to-public.sh, ועוד מה שרק הפרטי מחזיק."""
     code = BUILD_ISO.read_text(encoding="utf-8")
-    assert 'https://github.com/NadavOked/ImageCtl.git' in code, "ברירת המחדל אינה הריפו הציבורי"
+    assert 'https://github.com/NadavOked/ImageSrv.git' in code, "ברירת המחדל אינה הריפו הציבורי"
     assert 'git clone -q --branch "$REF" --depth 1 "$PUBLIC_URL"' in code
     for deny in (".claude", ".agents", ".otogit", "tools/agents", "AGENTS.md", "logs", "docs/research"):
         assert f" {deny} " in code or f" {deny};" in code, f"השומר אינו מכסה {deny}"
@@ -447,8 +449,9 @@ def test_firstboot_completes_from_the_installers_answers_without_the_wizard() ->
     assert "3< <(printf '%s\\n' \"$secret\")" in fa and 'shred -u "$ANSWERS_SECRET"' in fa, "הסיסמה דרך FD ונמחקת"
     assert '3< "$ANSWERS_SECRET"' not in fa, "הקובץ כולו אינו הסיסמה"
     assert "answers-secret-missing \"$ANSWERS_SECRET has no admin_pass= line\"" in fa
-    # ‏ifup אחרי setup-boot-server — networking.service רץ לפני שהקובץ נכתב
-    assert 'ifup "$servers_if"' in fa and "[nic-up-failed]" in fa
+    # ‏הכרטיס עולה אחרי setup-boot-server — networking.service רץ לפני שהקובץ נכתב;
+    # דרכו ולא ב-ifup מתוך firstboot (#2094: ה-dhcpcd מת עם יחידת ה-oneshot)
+    assert "systemctl restart networking.service" in fa and "[nic-up-failed]" in fa
     assert "verify-boot-payload.sh" in fa and 'touch "$STAMP"' in fa
     assert fa.index("verify-boot-payload.sh") < fa.index('touch "$STAMP"'), "החותמת רק אחרי האימות"
     assert "servers_mac" in fa, "הכרטיס נפתר לפי MAC — השם עלול להשתנות בין הקרנל החי למותקן"
@@ -457,7 +460,9 @@ def test_firstboot_completes_from_the_installers_answers_without_the_wizard() ->
 def test_init_hands_over_to_the_live_installer_only_in_installer_mode() -> None:
     init = _strip_comments((REPO / "agent" / "init").read_text(encoding="utf-8"))
     common = (REPO / "agent" / "lib" / "common.sh").read_text(encoding="utf-8")
-    assert "imagectl.mode=installer)" in common and 'IMAGECTL_MODE="installer"' in common
+    # #1914: one case arm for installer|usbclone, the mode taken from the word itself
+    assert re.search(r"imagectl\.mode=installer(\|imagectl\.mode=usbclone)?\)", common), "installer arm"
+    assert 'IMAGECTL_MODE="installer"' in common or 'IMAGECTL_MODE="${_word#imagectl.mode=}"' in common
     assert 'if [ "$IMAGECTL_MODE" = installer ]; then' in init
     assert init.index("installer_boot") < init.index("udhcpc -i"), "המסירה למתקין לפני לולאת ה-DHCP שנכשלת בלי חכירה"
     assert init.count("parse_cmdline") == 1, "שורת הקרנל נקראת פעם אחת (עיקרון 2)"

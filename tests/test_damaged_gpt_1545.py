@@ -105,7 +105,7 @@ def _run(tmp_path: Path, call: str, rows: list[str]) -> str:
         'log() { echo "LOG $*" >> "$LOG_FILE"; }\n'
         # waits.sh: apply_gpt rereads through reread_table (#1594). Without it the call is
         # "not found", and the log says the kernel refused -- the agent sources it first.
-        + source_line("waits.sh", "restore.sh", "expand.sh")
+        + source_line("waits.sh", "restore.sh", "expand.sh", "writemark.sh")
         + f'manifest_plan() {{ cat "{plan.as_posix()}"; }}\n'
         'json_get() { case "$2" in .sector_size) echo 512 ;; .scheme) echo gpt ;; *) echo null ;; esac; }\n'
         f'blockdev() {{ case "$1" in --getss) echo 512 ;; --getsz) echo {SECTORS} ;; *) return 0 ;; esac; }}\n'

@@ -152,7 +152,7 @@ class Box:
             f'SYSROOT={posix(self.run)!r}/sys LIB_DIR={posix(AGENT)!r}/lib '
             f'SERVER=http://10.44.12.10:8080 MAC=b4:2e:99:07:1a:c4 {env}; '
             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-            f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/hostname.sh; '
+            f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
             f'. {posix(AGENT)}/lib/hostname_linux.sh; . {posix(AGENT)}/lib/linuxdrivers.sh; '
             f'. {posix(AGENT)}/lib/bootstorage.sh; . {posix(AGENT)}/lib/postdeploy.sh; '
             f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; return {plan_rc}; }}; '
@@ -197,7 +197,7 @@ def test_matched_packages_land_on_the_disk_and_device_path_keeps_the_stock_entry
     _, result = box.stage()
     assert result == {"state": "staged", "packages": ["intel-nic", "ahci-fix"],
                       "boot": {"state": "enabled", "service": "storahci"}}
-    assert box.state() == "done"
+    assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
     assert box.staged_files() == {f"{n}/{p}": d for n, fs in FILES.items() for p, d in fs.items()}
     assert box.hive.read_text().strip() == f"{STOCK};{ENTRY}"
     writes = [c for c in box.calls() if c.startswith("-x ")]
@@ -214,7 +214,7 @@ def test_a_download_whose_sha256_differs_stops_before_the_disk_is_touched(tmp_pa
     assert box.staged_files() == {}, "בייט אחד לא הועתק לדיסק"
     assert box.hive.read_text().strip() == STOCK, "DevicePath לא נגע"
     assert box.calls() == [], "המחיצה לא עוגנה כלל"
-    assert box.state() == "done"
+    assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
 
 def test_a_file_the_server_cannot_serve_is_a_failure_not_a_partial_stage(tmp_path):
@@ -241,7 +241,7 @@ def test_no_matching_package_is_no_match_and_touches_nothing(tmp_path):
     _, result = box.stage()
     assert result == {"state": "no_match", "packages": []}
     assert box.calls() == [] and box.staged_files() == {}
-    assert box.state() == "done"
+    assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
 
 def test_no_inventory_on_the_server_is_failed_not_no_match(tmp_path):
@@ -254,7 +254,7 @@ def test_a_server_that_does_not_answer_is_failed(tmp_path):
     box = Box(tmp_path, env="FAKE_QUERY_RC=7")
     _, result = box.stage()
     assert result["state"] == "failed" and "לא ענה" in result["error"]
-    assert box.state() == "done"
+    assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
 
 def test_a_linux_image_is_skipped_by_name(tmp_path):
@@ -299,7 +299,7 @@ def test_a_registry_write_that_fails_is_reported_and_the_disk_is_released(tmp_pa
     assert result["state"] == "failed" and "כתיבת DevicePath לא אומתה" in result["error"]
     assert box.hive.read_text().strip() == STOCK
     assert (box.server / "umounts").read_text().count("umount") == 1
-    assert box.state() == "done"
+    assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
 
 def test_a_missing_software_hive_is_a_failure(tmp_path):

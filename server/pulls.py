@@ -26,6 +26,7 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 
+from . import clockstep
 from .db import journal, now_iso
 from .reports import FINAL
 from .sessions import PULL_PREFIX, TAKEN, UNICAST, SessionError, SessionStore
@@ -181,6 +182,7 @@ def sweep(store: SessionStore) -> None:
     (הקונסולה, השעון, ‏`open_pull`) רושמים שורה אחת בלבד.
     """
     now = datetime.now(timezone.utc)
+    clockstep.guard(store.conn, store, now)       # #1947: before `_failure` reads a stamp
     for row in store.active_pulls():
         members = store.members(row["id"])
         if members and all(m["done"] for m in members):

@@ -105,7 +105,8 @@ def stage_linux(box: Box, disk: str = "sda") -> dict:
     before = tree(box.root)
     _, result = box.stage(disk)
     assert result["state"] == "skipped" and result["reason"] == "not_windows"
-    assert box.state() == "done"
+    state = box.run / "state"   # #1935: never terminal here -- done is the caller's, after the mark
+    assert not state.exists() or state.read_text().strip() not in ("done", "partial", "failed")
     assert tree(box.root) == before, "הבדיקה קוראת בלבד"
     return result["linux"]
 

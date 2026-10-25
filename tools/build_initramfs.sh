@@ -7,6 +7,7 @@
 #   sudo ./tools/build_initramfs.sh [--output FILE] [--kernel-version VER]
 #                                   [--firmware DIR]...
 #                                   [--with-gui] [--installer] [--skip-apt]
+#                                   [--radeon-legacy-firmware]
 #                                   [--tools-selection FILE]
 #                                   [--source-date-epoch SECONDS]
 #                                   [--version VERSION]
@@ -46,6 +47,7 @@ SOURCE_VERSION=""
 #: שכלי המעבדה כותב (tools/lab/after-task-reboot.sh).
 AFTER_TASK=auto
 FIRMWARE_DIRS=("rtl_nic")
+RADEON_LEGACY_FW=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -54,6 +56,7 @@ while [ $# -gt 0 ]; do
         --firmware)       FIRMWARE_DIRS+=("$2"); shift 2 ;;
         --after-task)     AFTER_TASK="$2"; shift 2 ;;
         --with-gui)       WITH_GUI=1; shift ;;
+        --radeon-legacy-firmware) RADEON_LEGACY_FW=1; shift ;;   # #1937: the USB stick's
         --installer)      WITH_INSTALLER=1; shift ;;
         --skip-apt)       SKIP_APT=1; shift ;;
         --tools-selection) TOOLS_SELECTION_FILE="$2"; shift 2 ;;
@@ -112,7 +115,7 @@ declare -A TOOL_PKG=(
 declare -A INSTALLER_PKG=(
     [debootstrap]=debootstrap [mkfs.vfat]=dosfstools [chroot]=coreutils
     [mkfs.ext4]=e2fsprogs [dpkg-deb]=dpkg [eject]=eject [perl]=perl-base
-    [dash]=dash [tar]=tar
+    [dash]=dash [tar]=tar [mdadm]=mdadm
 )
 if [ "$WITH_INSTALLER" -eq 1 ]; then
     # eject (#1190): "remove the media and restart" -- the bridge ejects the ISO
@@ -127,6 +130,8 @@ if [ "$WITH_INSTALLER" -eq 1 ]; then
     # empty argument (ESXi, 21/09). debootstrap and the engine run under
     # dash, which honours PATH; the shadowing applet links go below.
     TOOL_BINS+=(debootstrap dpkg-deb mkfs.vfat chroot mkfs.ext4 eject perl dash tar)
+    # mdadm (#1989): the installer builds the RAID array (installer/lib/raid.sh).
+    TOOL_BINS+=(mdadm)
 fi
 TOOL_PKGS=()
 for _tb in "${TOOL_BINS[@]}"; do
@@ -311,6 +316,13 @@ EOF
 install -m 0755 "$AGENT_DIR/init"           "$ROOT/init"
 install -m 0755 "$AGENT_DIR/imagectl-agent" "$ROOT/usr/bin/imagectl-agent"
 install -m 0644 "$AGENT_DIR"/lib/*.sh       "$ROOT/usr/lib/imagectl/"
+# #1921: the two knowledge tables (SMART, hardware) -- smartjudge.sh reads them from here, and the
+# server reads the same files from the repo. A build without them would judge nothing: stop.
+install -d "$ROOT/usr/lib/imagectl/data"
+for _kb in smart-knowledge.tsv hw-issues.tsv; do
+    [ -s "$AGENT_DIR/lib/data/$_kb" ] || { echo "build_initramfs: agent/lib/data/$_kb missing" >&2; exit 1; }
+    install -m 0644 "$AGENT_DIR/lib/data/$_kb" "$ROOT/usr/lib/imagectl/data/$_kb"
+done
 if [ "$WITH_INSTALLER" -eq 1 ]; then
     # --installer (#1190): the live installer -- engine, its libs, the console
     # process, and the GUI bridge (part 2; packed when present, missing = the
@@ -351,6 +363,11 @@ fi
 # halt the whole machine.
 echo "compiling fanout..."
 gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/fanout" "$AGENT_DIR/fanout.c"
+
+# #1971: netlink KOBJECT_UEVENT listener for immediate drawer changes.
+echo "compiling uevent listener..."
+gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/imagectl-uevent" "$AGENT_DIR/uevent.c"
+[ -x "$ROOT/usr/bin/imagectl-uevent" ] || { echo "imagectl-uevent missing" >&2; exit 1; }
 
 # hivewrite: single-value registry reads/writes that preserve the key's
 # other values (#33). Links against libhivex (no static build shipped),
@@ -442,14 +459,19 @@ fi
 cat > "$ROOT/etc/imagectl/udhcpc.script" << 'EOF'
 #!/bin/sh
 # Minimal udhcpc hook: configure the interface, default route and DNS.
+# udhcpc stays resident and renews (#1949), so this also runs mid-stream:
+# an address that is already ours is never taken down -- a flush drops the
+# routes under a running restore. A lost lease keeps the address too; the
+# next bound replaces it if the server hands out a different one.
 case "$1" in
     deconfig)
-        ip addr flush dev "$interface" 2>/dev/null
         ip link set "$interface" up
         ;;
     bound|renew)
-        ip addr flush dev "$interface" 2>/dev/null
-        ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
+        if ! ip -4 addr show dev "$interface" 2>/dev/null | grep -qF "inet $ip/"; then
+            ip addr flush dev "$interface" 2>/dev/null
+            ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
+        fi
         [ -n "${router:-}" ] && route add default gw "${router%% *}" 2>/dev/null
         : > /etc/resolv.conf
         for d in ${dns:-}; do echo "nameserver $d" >> /etc/resolv.conf; done
@@ -458,6 +480,21 @@ esac
 exit 0
 EOF
 chmod 0755 "$ROOT/etc/imagectl/udhcpc.script"
+
+# #2040: the probe hook (udhcpc -q in agent/init). It configures nothing --
+# it only records which DHCP server answered on this NIC, so init can take the
+# NIC whose server-id is our server and leave the classroom NIC untouched.
+cat > "$ROOT/etc/imagectl/udhcpc.probe" << 'EOF'
+#!/bin/sh
+case "$1" in
+    bound|renew)
+        printf 'serverid=%s\nip=%s\n' "${serverid:-}" "${ip:-}" \
+            > "/run/imagectl/dhcp-probe.$interface"
+        ;;
+esac
+exit 0
+EOF
+chmod 0755 "$ROOT/etc/imagectl/udhcpc.probe"
 
 # --- the account --------------------------------------------------------------
 # The one account in the image. Something has to answer getpwnam, and the
@@ -491,6 +528,7 @@ echo "after-task: $AFTER_TASK"
 if [ "$WITH_GUI" -eq 1 ]; then
     if [ "$SKIP_APT" -eq 0 ]; then
         apt-get install -y --no-install-recommends "${GUI_PACKAGES[@]}"
+        [ "$RADEON_LEGACY_FW" -eq 0 ] || apt-get install -y --no-install-recommends firmware-amd-graphics   # #1937
         # Build-host tools/headers only; none are copied into the image.
         apt-get install -y --no-install-recommends make pkg-config \
             libpango1.0-dev libcairo2-dev libdrm-dev libvncserver-dev
@@ -615,11 +653,33 @@ fi
 MODSRC="/lib/modules/$KVER"
 [ -d "$MODSRC" ] || { echo "no modules for kernel $KVER" >&2; exit 1; }
 
+# #1918: the power button. ACPI's button driver turns a short press into the
+# "Power Button" input device (KEY_POWER) the native GUI reads
+# (native-gui/src/input.c); without it a short press does nothing. Built in
+# or a module depends on the kernel's config, so it is read from
+# modules.builtin, as fuse is below, never assumed: 0 = built in, nothing to
+# pack or load; 1 = not built in, button.ko is a declared module (BUTTON_MOD,
+# added to REQUIRED_MODULES below) -- packed, loaded at boot, and a missing
+# one stops the build; anything else = the file was not read (_btn_miss),
+# and that stops the build too.
+BUTTON_MOD=""; _btn_miss=""; _btn_rc=0
+grep -qx "kernel/drivers/acpi/button.ko" "$MODSRC/modules.builtin" || _btn_rc=$?
+case "$_btn_rc" in
+    0) echo "power button: built into $KVER" ;;
+    1) BUTTON_MOD=button ;;
+    *) _btn_miss=" button(modules.builtin-unreadable)" ;;
+esac
+
 MODULE_SUBDIRS=(kernel/drivers/net/ethernet kernel/drivers/net/phy
                 kernel/drivers/net/mdio     kernel/drivers/nvme
                 kernel/drivers/ata          kernel/drivers/scsi
                 kernel/drivers/cpufreq
                 kernel/drivers/usb/storage
+                # #1914 (metal, the college, 20/10): Intel VMD -- with "RST/VMD"
+                # on in the firmware the NVMe/SATA disks sit behind the VMD
+                # domain, and without vmd.ko the machine had no disks at all
+                # ("לא נמצאו דיסקים"). CONFIG_VMD=m in 6.12.113+deb13-amd64.
+                kernel/drivers/pci/controller
                 # Hyper-V: vmbus הוא התשתית, net/hyperv הוא הכרטיס.
                 # בלעדיהם הסוכן במעבדת ה-VM (issue #12) עולה בלי דיסק ורשת.
                 kernel/drivers/hv           kernel/drivers/net/hyperv
@@ -684,7 +744,7 @@ REQUIRED_MODULES=(hv_netvsc   hv_storvsc      # Hyper-V
                   virtio_net  virtio_blk      # KVM / Proxmox
                   xen-netfront xen-blkfront   # Xen
                   dm-mod dm-snapshot dm-bufio brd   # #1466: local clone, read-only source
-                  af_alg algif_hash sha256-ssse3)   # #1596: fanout's SHA-256 in the kernel
+                  af_alg algif_hash sha256-ssse3 pcspkr)   # #1596/#1967: hash and speaker
 
 # מערכות הקבצים שהמערכת נשענת עליהן — מוצהרות, ולא נוכחות במקרה. עד
 # כאן הן הגיעו כתוצר לוואי של `MODULE_SUBDIRS` וסגירת התלויות, ולכן
@@ -713,6 +773,10 @@ if [ "$WITH_INSTALLER" -eq 1 ]; then
     # התווית ו-init אומר "no media" (נמדד ב-ESXi, 21/09). לתמונת ה-PXE הם
     # נשארים בחוץ בכוונה (ראו למעלה).
     REQUIRED_FS_MODULES+=(isofs sr_mod cdrom)
+    # ‏#1989: ‏RAID במתקין — ‏md-mod והאישיויות שהמנוע טוען (modprobe) לפני
+    # ‏`mdadm --create`. מוצהרים: חסר אחד עוצר את הבנייה, ולא מתגלה מול
+    # שרת עם שלושה דיסקים כ-"mdadm could not create the array".
+    REQUIRED_MODULES+=(md-mod raid1 raid456 raid10)
 fi
 
 if [ "$WITH_GUI" -eq 1 ]; then
@@ -768,6 +832,26 @@ for _mod in iTCO_wdt lpc_ich; do
         echo "optional watchdog module $_mod absent (may be built-in); software fallback available" >&2
     fi
 done
+# #1914 (Nadav 20/10): the GUI on older and virtual display adapters too -- old
+# ATI (radeon), server boards (mgag200, ast), QEMU/Bochs (bochs, cirrus-qemu),
+# VMware SVGA (vmwgfx; VCLONE-2 in BIOS mode had no framebuffer at all) and the
+# firmware framebuffer (simpledrm, built-in on Debian 13). Optional: one that
+# is built in or absent is said, not a stop -- i915 stays the required one.
+# Their firmware is not packed: radeon on a chip that needs it falls back to
+# no KMS, which init then reports (mods_gpu_fallback) and the agent says.
+if [ "$WITH_GUI" -eq 1 ]; then
+    for _mod in radeon mgag200 ast bochs cirrus-qemu vmwgfx simpledrm; do
+        _hit=$(find "$MODSRC" -name "$_mod.ko*" | head -1)
+        if [ -n "$_hit" ]; then
+            _rel=${_hit#"$MODSRC"/}
+            mkdir -p "$ROOT/lib/modules/$KVER/$(dirname "$_rel")"
+            cp -a "$_hit" "$ROOT/lib/modules/$KVER/$_rel"
+        else
+            echo "optional display module $_mod absent (may be built-in)" >&2
+        fi
+    done
+fi
+[ -z "${BUTTON_MOD:-}" ] || REQUIRED_MODULES+=("$BUTTON_MOD"); _missing="$_missing${_btn_miss:-}"   # #1918, above
 for _mod in "${REQUIRED_MODULES[@]}" "${REQUIRED_FS_MODULES[@]}"; do
     _hit=$(find "$MODSRC" -name "$_mod.ko*" | head -1)
     if [ -z "$_hit" ]; then
@@ -989,7 +1073,13 @@ _phy_mods=$(find "$ROOT/lib/modules/$KVER/kernel/drivers/net/phy" \
     # ייראה כחריץ דיסק ריק. הוא יושב בעץ kernel/drivers/scsi שכבר נארז (cdrom
     # נגרר ב-modules.dep). אם לא נטען — אין /sys/module/sr_mod, והסוכן מדווח
     # ‏null ("לא נבדק"), לעולם לא [] ("אין כונן").
-    printf '%s\n' ahci nvme sd_mod sr_mod uas usb-storage hv_vmbus hv_storvsc
+    # vmd before ahci/nvme (#1914): the disks behind a VMD domain appear only
+    # once it is bound; a machine without VMD just fails this one, by name.
+    # ata_piix/ata_generic (#1914, an old HP in the college, 20/10): SATA in
+    # IDE/Legacy mode (ICH7-ICH10) is ata_piix, not ahci -- packed in
+    # kernel/drivers/ata all along and never loaded. initmods.sh loads the
+    # storage controllers by modalias first; these stay as the fallback.
+    printf '%s\n' vmd ahci ata_piix ata_generic nvme sd_mod sr_mod uas usb-storage hv_vmbus hv_storvsc
     # Optional Intel TCO hardware recovery; dependencies follow modules.dep.
     printf '%s\n' lpc_ich iTCO_wdt
     # בקרי הדיסק של ESXi, ‏KVM ו-Xen. ‏`virtio_pci` הוא built-in, ולכן
@@ -1012,13 +1102,16 @@ _phy_mods=$(find "$ROOT/lib/modules/$KVER/kernel/drivers/net/phy" \
     # here, by name. A CPU without SSSE3 refuses it and fanout gets the generic
     # one (same digest); without AF_ALG fanout hashes in-process and says so in
     # the log. Neither is fatal, so neither is in modules.required.
-    printf '%s\n' af_alg algif_hash sha256-ssse3
+    printf '%s\n' af_alg algif_hash sha256-ssse3 pcspkr
+    # #1918: the ACPI power button, when it is a module (BUTTON_MOD, read from
+    # modules.builtin next to MODSRC above); built in = nothing to load
+    [ -z "${BUTTON_MOD:-}" ] || printf '%s\n' "$BUTTON_MOD"
     [ -n "$_phy_mods" ] && printf '%s\n' "$_phy_mods"
     find "$ROOT/lib/modules/$KVER/kernel/drivers/net" -name '*.ko*' 2>/dev/null \
         | sed 's|.*/||; s|\.ko.*||' | sort
     if [ "$WITH_GUI" -eq 1 ]; then
         # ‏GPU של אחד משלושת היצרנים, ועכבר/evdev לקיוסק, ו-uinput למוניטור.
-        printf '%s\n' i915 amdgpu nouveau simpledrm evdev uinput
+        printf '%s\n' i915 amdgpu nouveau radeon mgag200 ast bochs cirrus-qemu vmwgfx simpledrm evdev uinput   # #1914: + older/virtual
     fi
 } | awk '!seen[$0]++' > "$ROOT/etc/imagectl/modules"
 
@@ -1034,7 +1127,8 @@ find "$ROOT/lib/modules/$KVER/kernel/drivers/net" -name '*.ko*' 2>/dev/null \
     | awk 'FILENAME == ARGV[1] { phy[$0]; next } !($0 in phy)' \
           "$ROOT/etc/imagectl/modules.phy" - > "$ROOT/etc/imagectl/modules.nic"
 if [ "$WITH_GUI" -eq 1 ]; then
-    printf '%s\n' i915 amdgpu nouveau > "$ROOT/etc/imagectl/modules.gpu"
+    printf '%s\n' i915 amdgpu nouveau radeon mgag200 ast bochs cirrus-qemu vmwgfx simpledrm \
+        > "$ROOT/etc/imagectl/modules.gpu"   # #1914: + older/virtual adapters, the fallback after modalias
 fi
 
 # ‏מודולי החובה, בנפרד: מערכות הקבצים שהמערכת נשענת עליהן בכל מכונה. אלה
@@ -1064,6 +1158,28 @@ if [ -n "$_no_fw" ]; then
     exit 1
 fi
 
+# --radeon-legacy-firmware (#1937, the USB stick): an HP 6005 Pro (Radeon HD 4200, RS880,
+# 21/10) came up with no screen -- radeon on R600..Evergreen loads its CP/RLC microcode at
+# probe, and without it KMS fails: no fb0. Only those generations' files, not the whole
+# radeon/ directory (SI/CIK, and amdgpu's, are other chips and megabytes), and no UVD
+# (video decode -- radeon goes on without it). Declared files missing stop the build.
+RADEON_LEGACY_CHIPS="R600 R700 RS780 RV610 RV620 RV630 RV635 RV670 RV710 RV730 RV740 RV770 CEDAR REDWOOD JUNIPER CYPRESS PALM SUMO SUMO2"
+if [ "$RADEON_LEGACY_FW" -eq 1 ]; then
+    mkdir -p "$ROOT/lib/firmware/radeon"; _rfw_n=0
+    for _c in $RADEON_LEGACY_CHIPS; do
+        for _f in /lib/firmware/radeon/"${_c}"_*; do
+            [ -e "$_f" ] || continue
+            case "${_f##*/}" in *_uvd*) continue ;; esac
+            cp -a "$_f" "$ROOT/lib/firmware/radeon/"; _rfw_n=$((_rfw_n + 1))
+        done
+    done
+    for _f in RS780_pfp RS780_me R600_rlc; do   # the RS780/RS880 set -- the machine of the field
+        ls "$ROOT/lib/firmware/radeon/$_f".bin* > /dev/null 2>&1 \
+            || { echo "--radeon-legacy-firmware: radeon/$_f.bin missing under /lib/firmware (Debian 13: firmware-amd-graphics, non-free-firmware)" >&2; exit 1; }
+    done
+    echo "radeon legacy firmware: $_rfw_n files, $(du -sk "$ROOT/lib/firmware/radeon" | cut -f1) KB" >&2
+fi
+
 # --- site/lab overlay (#1266) ---------------------------------------------------
 # IMAGECTL_EXTRA_OVERLAY=<dir>: a lab or a site adds to the image what the
 # product does not ship and does not know about. Two parts, both optional:
@@ -1085,6 +1201,9 @@ if [ -n "${EXTRA_OVERLAY:-}" ]; then
     cp -a --no-preserve=ownership "$EXTRA_OVERLAY/." "$ROOT/" \
         || { echo "IMAGECTL_EXTRA_OVERLAY: copying $EXTRA_OVERLAY failed" >&2; exit 1; }
     rm -f "$ROOT/.binaries"
+    # #1412: the image says it carries an overlay; tools/iso/initrd-lab-gate.sh refuses it without --lab.
+    mkdir -p "$ROOT/etc/imagectl" && printf 'overlay: %s\n' "$EXTRA_OVERLAY" > "$ROOT/etc/imagectl/overlay.txt" \
+        || { echo "IMAGECTL_EXTRA_OVERLAY: writing the overlay marker failed" >&2; exit 1; }
     echo "overlay: $EXTRA_OVERLAY copied over the image"
 fi
 

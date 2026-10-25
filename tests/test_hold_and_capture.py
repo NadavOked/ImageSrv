@@ -348,9 +348,13 @@ def test_a_failed_heartbeat_never_becomes_an_action():
     """מה שאסור: המכונה בעצירה על שגיאה ואינה מבצעת יותר כלום (#64).
     כישלון דופק הוא סיבה **לומר**, לא לאתחל, לנסות שוב או לכבות."""
     hold = (AGENT / "lib" / "hold.sh").read_text(encoding="utf-8")
-    watch = code_only(hold[hold.index("hold_watch() {"):])
+    start = hold.index("hold_watch() {")
+    watch = code_only(hold[start:hold.index("\n}\n", start)])   # #2068: hold_action (a person's button) is its own function
     for verb in ("reboot", "poweroff", "die_local", "run_restore"):
         assert verb not in watch, f"‏hold_watch עושה {verb} על כישלון דופק"
+    # #2068: the only reboot / power-off in the hold is a press on the failure screen (fail.action)
+    action = code_only(hold[hold.index("hold_action() {"):])
+    assert 'fail.action' in action.split("case")[0], "hold_action פועל בלי לחיצה"
 
 
 @native_tools

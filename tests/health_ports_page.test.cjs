@@ -69,7 +69,7 @@ function setup(over={}) {
     }});
   for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME={username:"admin",role:"admin",server_name:"srv",version:"v0.34.0",capabilities:{}}; globalThis.sheets=[]; globalThis.toasts=[]; globalThis.realSheet = sheet; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; globalThis.selected=[]; selectPageById=(id)=>{ selected.push(id); current=id; }; openMachineDetail=(m)=>{ globalThis.openedMac=m; };');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",version:"v0.34.0",capabilities:{}}; globalThis.sheets=[]; globalThis.toasts=[]; globalThis.realSheet = sheet; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; globalThis.selected=[]; selectPageById=(id)=>{ selected.push(id); current=id; }; openMachineDetail=(m)=>{ globalThis.openedMac=m; };');
   run('MACHINES='+JSON.stringify(fixtures['/machines'])+'; GROUPS='+JSON.stringify(fixtures['/groups'])+';');
   return {run,requests,fixtures,ctx};
 }
@@ -465,7 +465,7 @@ test('#1267 /ports that could not be read is a red note, not an empty page',asyn
 
 test('deploy role: the pages stay admin-only and no admin endpoint is requested',async()=>{
   const {run,requests}=setup({'/health':403,'/monitor/settings':403,'/update':403});
-  run('ME={username:"mafitz",role:"deploy",server_name:"srv",capabilities:{}}; current="ports"');
+  run('ME={timezone:"UTC",username:"mafitz",role:"deploy",server_name:"srv",capabilities:{}}; current="ports"');
   assert.equal(run('pageAllowed("health")'),false); assert.equal(run('pageAllowed("ports")'),false);
   await run('loadPorts()');
   for(const u of ['/monitor/settings','/net/interfaces']) assert.ok(!requests.some((r)=>r.url===u),u+' must not be requested by deploy');

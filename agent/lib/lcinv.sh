@@ -77,11 +77,11 @@ lc_inv_disk() {
     _li_size=$((_li_sec * 512))
     _li_smart=$(smart_probe "$1"); _li_sr=$(smart_field "$1" 2)
     [ "$_li_smart" != fail ] && _li_cause=$(disk_failure_cause "$1" 2>/dev/null) && { _li_smart=failed_last; _li_sr=$_li_cause; }   # #1580: red SMART wins
-    _li_os=""; _li_n=0; _li_used=0; _li_need=-1; _li_ok=0; _li_why=""
+    _li_os=""; _li_n=0; _li_used=0; _li_need=-1; _li_ok=0; _li_why=""; _li_mark=""; _li_unread=""
     _li_ss=$(logical_block_size "$_li_node")
     _li_sch=$(disk_scheme "$_li_node")
     if [ "$_li_sch" != gpt ]; then
-        case "$_li_sch" in none) _li_why="אין עליו טבלת מחיצות" ;; mbr) _li_why="טבלת MBR — שיכפול מקומי מעתיק GPT בלבד" ;; *) _li_why="לא הצלחנו לקרוא את הדיסק" ;; esac
+        case "$_li_sch" in none) _li_why="אין עליו טבלת מחיצות" ;; mbr) _li_why="טבלת MBR — שיכפול מקומי של MBR יגיע ב-v1.1" ;; *) _li_why="לא הצלחנו לקרוא את הדיסק" ;; esac
     elif [ "$_li_ss" != 512 ]; then
         _li_why="גודל סקטור ${_li_ss:-לא ידוע} — נתמך 512 בלבד"
     elif ! lc_parts "$1" "$LC/inv/$1.parts"; then
@@ -93,6 +93,7 @@ lc_inv_disk() {
         : > "$LC/inv/$1.roles"  # idx|role -- windows only with Windows\System32 on it (#1369)
         while IFS='|' read -r _li_i _li_t _li_u _li_f _li_z; do
             _li_pn=$(partition_node "$1" "$_li_i"); _li_fs=$(_fs_of "$_li_pn"); _li_role=$(_partition_role "$_li_t")
+            [ "$_li_fs" != unreadable ] || _li_unread="$_li_unread $_li_i"   # #1905: blkid failed -- never copied raw as a source
             if [ "$_li_role" = windows ]; then   # #1354: the system partition is the capture's (#1369)
                 _li_role=$(_system_role "$_li_i" "$_li_pn" "$_li_fs" 2>/dev/null) || _li_role=unchecked
             fi
@@ -110,11 +111,16 @@ lc_inv_disk() {
             case "$_li_u2" in ''|*[!0-9]*) _li_used=-1 ;; *) [ "$_li_used" -lt 0 ] || _li_used=$((_li_used + _li_u2)) ;; esac
         done < "$LC/inv/$1.parts"
         _li_gate=$(unique_guid_gate "$LC/inv/$1.parts" "$LC/inv/$1.parts.fail" 2>/dev/null)
+        _li_mark=$(writemark_state "$1")   # #1798: a write that was cut is never a source
         if [ "$_li_n" -eq 0 ]; then _li_why="אין מחיצות על הדיסק"
+        elif [ "$_li_mark" = incomplete ]; then _li_why=$WRITEMARK_HE
+        elif [ "$_li_mark" != clean ]; then _li_why="לא הצלחנו לבדוק אם הכתיבה האחרונה אליו הושלמה"
+        elif [ -n "$_li_unread" ]; then _li_why="לא הצלחנו לקרוא את מערכת הקבצים במחיצה$_li_unread"
         elif [ "$_li_need" -lt 0 ]; then _li_why="לא הצלחנו לחשב את פריסת המחיצות"
         elif [ -n "$_li_gate" ]; then _li_why=$_li_gate
         else _li_ok=1; fi
     fi
+    echo "$_li_mark" > "$LC/inv/$1.mark"   # the screen's lc_disk field 16 (lcgui.sh); "" = not a GPT
     printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_li_port" "$1" "$_li_model" "$_li_ser" \
         "$_li_size" "$_li_smart" "$(_lc_clean "$_li_sr")" "$(_lc_clean "$_li_os")" "$_li_n" "$_li_used" \
         "$_li_need" "$_li_ok" "$(_lc_clean "$_li_why")"
@@ -127,10 +133,19 @@ lc_inventory() {
     rm -f "$LC/inv/"* "$LC/measure/"* 2>/dev/null
     echo scanning > "$LC/inv.state"
     for _lv_d in $(list_drawers); do
+        lc_is_boot_media "$_lv_d" && continue   # #1914: the USB stick is never a source or a target
         if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi
         lc_inv_disk "$_lv_d" > "$LC/inv/$_lv_d.next" && mv "$LC/inv/$_lv_d.next" "$LC/inv/$_lv_d.line"
     done
     echo "done" > "$LC/inv.state"
+}
+
+lc_is_boot_media() {
+    # #1914: 0 = $1 is the stick this machine booted from (usbclone.sh found it by
+    # label). In usbclone mode a list that was not written is every disk: fail closed.
+    [ "${IMAGECTL_MODE:-}" = usbclone ] || return 1
+    [ -s "$RUN_DIR/usb-media.disks" ] || return 0
+    grep -qx "$1" "$RUN_DIR/usb-media.disks"
 }
 
 lc_role() {
@@ -155,6 +170,11 @@ lc_measure() {
     return "$_lm_rc"
 }
 
+_lc_src_he() {   # $1 = source disk -> " (דיסק N)" by its drawer (slotnames.sh), "" when unmapped -- never "sdc" (#2084)
+    _ls_n=$(disk_drawer "$1" "$(disk_port "$1" 2>/dev/null || echo 0)" 2>/dev/null); _ls_n=${_ls_n%%|*}
+    case "$_ls_n" in ''|0|*[!0-9]*) ;; *) printf ' (דיסק %s)' "$_ls_n" ;; esac
+}
+
 _lc_measure_fit() {
     # $1 = source disk. $LC/measure/$1: state|need_min|reason. state: none (no
     # drawer is smaller than the layout -- nothing to measure), done (need_min
@@ -176,11 +196,14 @@ _lc_measure_fit() {
         _lm_pn=$(partition_node "$1" "$_lm_i")
         [ "$(_fs_of "$_lm_pn")" = ntfs ] || continue
         _lm_why=$(capture_ntfs_hibernation_reason "$_lm_pn" "$RUN_DIR/lc-probe") || {
-            echo "failed||מחיצה $_lm_i: $(_lc_clean "$_lm_why")" > "$_lm_out"; return 1; }
+            case "$_lm_why" in   # #2084 (mockup 09, until #2069): the words of the mockup, a disk by its number
+                *"Fast Startup"*) echo "failed||המקור$(_lc_src_he "$1") במצב שינה של Windows — אי אפשר לכווץ אותו לדיסק הזה, שקטן ממנו. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי" ;;
+                *) echo "failed||במקור$(_lc_src_he "$1") — מחיצה $_lm_i: $(_lc_clean "${_lm_why%.}")" ;;   # #1937: drawn on a TARGET's row
+            esac > "$_lm_out"; return 1; }
     done < "$_lm_parts"
     cp "$_lm_parts" "$LC/measure/$1.parts" || { echo "failed||לא הצלחנו להכין את המדידה" > "$_lm_out"; return 1; }
     if ! shrink_plan "$1" "$LC/measure/$1.parts" 512; then
-        echo "failed||$(_lc_clean "$SHRINK_ERROR")" > "$_lm_out"; return 1
+        echo "failed||במקור$(_lc_src_he "$1") — $(_lc_clean "${SHRINK_ERROR%.}")" > "$_lm_out"; return 1
     fi
     # #1466 P2: the run reuses this plan (lc_shrink_plan) on the same disk and table.
     cp "$RUN_DIR/shrink.plan" "$LC/measure/$1.plan" && _lc_clean "$(disk_serial "$1")" > "$LC/measure/$1.serial" || rm -f "$LC/measure/$1.plan"

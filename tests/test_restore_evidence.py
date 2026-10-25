@@ -207,7 +207,7 @@ def build_box(tmp_path, *, plan=PLAN, count=None, plan_cut=None, nodes=None,
         f'SYSROOT={posix(box)} TABLE_SETTLE_S={settle} WAIT_POLL_S=1 REREAD_TRIES=1; '   # #1594: a refusal here is the test, not a busy disk to wait out
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
         f'. {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/progress.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/failmark.sh; '
+        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/failmark.sh; '
         f'. {posix(AGENT)}/lib/diskfit.sh; '   # #1217: disk_fits, split from restore.sh
         # ‏#672: ‏boot_ca_preflight. ‏SYSROOT היא הקופסה ואין בה efivars -- unchecked, ממשיך.
         f'. {posix(AGENT)}/lib/bootcadb.sh; '
@@ -219,6 +219,11 @@ def build_box(tmp_path, *, plan=PLAN, count=None, plan_cut=None, nodes=None,
         # רשימת הצמתים ה"חיים" יושבת בקופסה, ולכן "הקרנל לא בנה את
         # /dev/sda3" הוא מצב שאפשר להעמיד בו את הקוד.
         f'node_is_block() {{ grep -qxF "$1" {posix(box)}/nodes 2>/dev/null; }}; '
+        # ‏#1805: the read-back after the write has its own tests (test_readback_agent_1805.py);
+        # here, as write_check above, the decision on `done` is what is tested.
+        'readback_drawers() { :; }; '
+        "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
+        "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file (test_ntfs_hidden_sectors_2015.py); these disks are files
     )
     return box, run, prelude
 
@@ -443,7 +448,7 @@ def test_a_restore_that_wrote_everything_still_reaches_done(tmp_path):
     _box, run, prelude = build_box(tmp_path)
     out = sh(restore_run(prelude))
     assert rc_of(out) == "rc=0", out
-    assert state_of(run) == "done"
+    assert state_of(run) == "verifying"   # #1935: done is the caller's (do_restore), after the name, the drivers and the mark
     assert (run / "targets" / "sda" / "state").read_text().strip() == "done"
     assert wrote(run) == ["1", "2", "3"]
 
@@ -505,7 +510,7 @@ def test_a_disk_guid_that_sgdisk_accepted_still_reaches_done(tmp_path):
     assert f"-U {DISK_GUID}" in _sgdisk_called_with_U(box), (
         "‏-U לא רץ — אין ראיה שהמסלול בכלל נלקח")
     assert rc_of(out) == "rc=0", out
-    assert state_of(run) == "done"
+    assert state_of(run) == "verifying"   # #1935: done is the caller's (do_restore), after the name, the drivers and the mark
     assert (run / "targets" / "sda" / "state").read_text().strip() == "done"
     assert wrote(run) == ["1", "2", "3"]
     assert f"disk GUID {DISK_GUID} came back from the disk" in log_of(run), (

@@ -178,7 +178,7 @@ package. Its source package of the same version is published by Debian:
 a given source package. We keep a copy of those source packages for each
 release. (TO BE CONFIRMED: see decision 2.)
 
-**Our own code** (MIT) is in this repository: https://github.com/NadavOked/ImageCtl
+**Our own code** (MIT) is in this repository: https://github.com/NadavOked/ImageSrv
 
 ## 4. Full license texts
 

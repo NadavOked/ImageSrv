@@ -77,7 +77,7 @@ gui_state() {
                 .allowed_images[] |
                 "image=" + ([.id, .name, .folder]
                   | map((. // "") | tostring | gsub("[\\r\\n|]"; " ")) | join("|"))
-              end' "$GUI_DIR/station.json" >> "$GUI_DIR/state.next" || return 1 ;;
+              end' "$GUI_DIR/station.json" >> "$GUI_DIR/state.next" && syspart_records "$GUI_DIR/station.json" >> "$GUI_DIR/state.next" || return 1 ;;   # #1896
         capture)
             gui_get folders "$GUI_DIR/folders.json" || return 1
             jq -r 'if type != "array" then error("bad folders") else .[] |
@@ -248,8 +248,9 @@ gui_hello_state() {
     printf 'hello_age=%s\nhello_rc=%s\n' "$_hello_age" "$_hello_rc"
     # #1483: a power-off that came back (safe_poweroff) -- on every screen, said
     [ -s "$RUN_DIR/power.fail" ] && printf 'toast=%s\n' "$(tr -d '\r\n|' < "$RUN_DIR/power.fail")"
-    # #1560: the end-of-task count to power-off (idle.sh end_countdown) -- on every screen
-    [ -s "$RUN_DIR/end.poweroff" ] && printf 'end_poweroff=%s\n' "$(tr -d '\r\n' < "$RUN_DIR/end.poweroff")"
+    [ -s "$RUN_DIR/power.ask" ] && printf 'power_ask=%s\n' "$(tr -d '\r\n' < "$RUN_DIR/power.ask")"   # #1918: the power button's question (powerbtn.sh)
+    # #1560: the end-of-task count to power-off (idle.sh end_countdown) -- on every screen; #2024: held, the problem disks
+    [ -s "$RUN_DIR/end.poweroff" ] && printf 'end_poweroff=%s\n' "$(tr -d '\r\n' < "$RUN_DIR/end.poweroff")" && sed 's/^/end_problem=/' "$RUN_DIR/end.problems" 2>/dev/null
     [ -s "$RUN_DIR/fail.state" ] && cat "$RUN_DIR/fail.state"   # #1569: the failure screen's records (failscreen.sh), on the live kiosk
     return 0
 }

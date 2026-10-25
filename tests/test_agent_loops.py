@@ -199,7 +199,7 @@ def test_a_machine_with_a_task_never_shows_up(loop_server):
     """יש לה משימה — השרת שלח אותה לסוכן, וההגעה מוסברת."""
     mac = "aa:bb:cc:00:00:10"
     assert loop_server["admin"].post("/api/console/machines", json={
-        "mac": mac, "name": "מחשב בנייה", "group_id": "grp_BUILD",
+        "mac": mac, "name": "BUILD-PC", "group_id": "grp_BUILD",
     }).status_code == 200
     assert loop_server["admin"].post("/api/console/tasks/capture", json={
         "mac": mac, "disk": "sda", "name": "Windows 11 Base", "folder": "Office",
@@ -233,7 +233,7 @@ def test_a_build_machine_waiting_for_a_capture_order_is_not_a_loop(loop_server):
     """
     mac = "aa:bb:cc:00:00:31"
     assert loop_server["admin"].post("/api/console/machines", json={
-        "mac": mac, "name": "מחשב בנייה", "group_id": "grp_BUILD",
+        "mac": mac, "name": "BUILD-PC", "group_id": "grp_BUILD",
     }).status_code == 200
     for _ in range(5):
         hello(loop_server, mac)

@@ -413,6 +413,54 @@ def test_only_a_revocation_is_journaled_as_a_revoked_session(server, vm, monkeyp
     assert _closed_details(server) == (["session_revoked"] if revoked else ["browser"])
 
 
+class ClosingWriter(Writer):
+    """ה-socket ל-QEMU, עם ראיה חיובית שנסגר."""
+
+    def __init__(self):
+        super().__init__()
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def test_console_logout_closes_the_open_vm_viewer_and_its_qemu_socket_1394(
+        server, vm, monkeypatch):
+    """הגדרת "גמור" של #1394, דרך ה-HTTP ולא דרך `viewer_sessions` ישירות:
+    צופה פתוח → ‏`POST /api/console/logout` באותה עוגייה → הגשר נסגר ב-4401
+    (‏"session_revoked" ביומן) וה-socket ל-QEMU נסגר. בלי החיווט ב-logout
+    הגשר נשאר פתוח עד idle (נמדד 13/10: ‏4.5 דק' אחרי היציאה)."""
+    import time
+
+    sock = vm["engine"].workdir / "vnc.sock"
+    monkeypatch.setattr(vm["engine"], "vnc_socket", lambda: sock)
+    qemu = ClosingWriter()
+
+    async def connector(path):
+        return QemuReader(), qemu
+
+    client = viewer_client(server, vm["engine"], "admin", connector)
+    console = TestClient(server["app"])
+    console.cookies.set(auth.COOKIE_NAME, client.cookies.get(auth.COOKIE_NAME))
+    with client.websocket_connect(BASE + "/viewer") as ws:
+        ws.receive_bytes()
+        ws.send_bytes(b"RFB 003.008\n")
+        ws.receive_bytes()
+        ws.send_bytes(b"\x01")
+        ws.receive_bytes()
+        ws.send_bytes(b"\x01")                    # ClientInit — הגשר פתוח
+        assert console.post("/api/console/logout").status_code == 200
+        # מחכים ליומן ולא ל-receive: גשר שלא נסגר היה חוסם את ה-receive לנצח.
+        deadline = time.monotonic() + 5
+        while not _closed_details(server) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert _closed_details(server) == ["session_revoked"]
+        with pytest.raises(WebSocketDisconnect) as gone:
+            ws.receive_bytes()
+        assert gone.value.code == 4401
+    assert qemu.closed
+
+
 # --- הכרעה 2: גרסאות וברירת מחדל -------------------------------------------------
 
 

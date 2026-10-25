@@ -84,7 +84,7 @@ def paired(server, secondary, tmp_path):
     cred_path = cred_dir / f"{result['secondary_id']}.token"
     interserver_auth.write_credential_0600(cred_path, result["token"])
     nid = storage_nodes.enroll_node(
-        server["ctx"].conn, ("noc", "admin"), label="חיפה", base_url=url,
+        server["ctx"].conn, ("noc", "admin"), label="HAIFA", base_url=url,
         node_id=result["secondary_id"], pinned_spki=secondary["ident"]["server_spki"],
         client_cert_ref=interserver_auth.certificate_ref(ident["cert_pem"]),
         credential_ref=str(cred_path), protocol_version="2.1")

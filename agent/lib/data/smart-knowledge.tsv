@@ -1,0 +1,675 @@
+# smart-knowledge.tsv -- the SMART table: problems of the disk itself
+# #1921 (Nadav 20/10, final). One row a line, TAB-separated, '-' = empty. Read by the agent
+# (agent/lib/smartjudge.sh, awk) and by the server (server/smart_names.py) -- the same file.
+# kind: ata (id + the name smartctl printed) | devstat | nvme | nvmebit | selftest | errlog | hw
+# field: raw | value (normalized) | temp (raw degrees C) ; op/value: the rule, '-' = none (info)
+# value 'crc' = the crc_warn_threshold setting (default 500); 'wctemp' = the NVMe disk's own WCTEMP
+# verdict when the rule holds: orange | red | hw | info ; a name in neither table = 'לא מוכר'
+# word: the reason word the agent stores (smart.sh SMART_WARN_REASONS) ; media: ssd|hdd|any
+ata	1	Raw_Read_Error_Rate	-	-	-	info	-	any	קצב שגיאות קריאה	קצב השגיאות בקריאה מהמדיה; ב-Seagate הערך הגולמי הוא מונה פעולות ארוז ולא מספר שגיאות.
+ata	1	UECC_Ct	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו (SanDisk)	מספר הקריאות שה-ECC לא הצליח לתקן — אותה משמעות כמו 187.
+ata	1	Uncorrectable_ECC_Cnt	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	שגיאות שלא תוקנו — כמו 187.
+ata	2	Throughput_Performance	-	-	-	info	-	any	ביצועי העברה	מדד ביצועים כללי של הכונן, מנורמל.
+ata	2	Internal_File_Check	-	-	-	info	-	any	בדיקת קבצים פנימית	מונה פנימי של SanDisk.
+ata	3	Spin_Up_Time	-	-	-	info	-	any	זמן עלייה לסיבוב	כמה זמן לוקח לפלטות להגיע למהירות מלאה.
+ata	4	Start_Stop_Count	-	-	-	info	-	any	מספר הפעלות/עצירות	כמה פעמים המנוע הסתובב ונעצר.
+ata	5	Reallocated_Sector_Ct	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	Reallocate_NAND_Blk_Cnt	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	Reallocated_Block_Count	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	Retired_Block_Count	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	Runtime_Bad_Block	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	Retried_Blk_Ct	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	Later_Bad_Block	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	New_Bad_Blk_Cnt	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	5	Realloc_Flash_Blocks_Ct	raw	>	0	orange	reallocated	any	סקטורים שהועברו	סקטורים (ב-SSD: בלוקים) שנפגמו והוחלפו ברזרבה — הדיסק כבר איבד מקום פיזי.
+ata	6	Read_Channel_Margin	-	-	-	info	-	any	מרווח ערוץ הקריאה	מרווח הבטיחות של ערוץ הקריאה; לא מתועד.
+ata	7	Seek_Error_Rate	-	-	-	info	-	any	שגיאות חיפוש	שגיאות במיקום הראשים; ב-Seagate הגולמי ארוז ונראה מפחיד בלי סיבה.
+ata	8	Seek_Time_Performance	-	-	-	info	-	any	ביצועי חיפוש	ביצועי מיקום הראשים, מנורמל.
+ata	9	Power_On_Hours	-	-	-	info	-	any	שעות עבודה	כמה שעות הדיסק היה דלוק בסך הכול.
+ata	9	Power_On_Hours_and_Msec	-	-	-	info	-	any	שעות עבודה	כמה שעות הדיסק היה דלוק בסך הכול.
+ata	10	Spin_Retry_Count	raw	>	0	orange	spin_retry	any	ניסיונות סיבוב חוזרים	כמה פעמים המנוע נכשל להגיע למהירות וניסה שוב — סימן למנוע או לאספקת מתח.
+ata	11	Calibration_Retry_Count	-	-	-	info	-	any	ניסיונות כיול	כמה פעמים כיול הראשים נדרש ניסיון חוזר.
+ata	12	Power_Cycle_Count	-	-	-	info	-	any	מחזורי הפעלה	כמה פעמים הדיסק הודלק.
+ata	13	Read_Soft_Error_Rate	-	-	-	info	-	any	שגיאות קריאה רכות	שגיאות קריאה שתוקנו בניסיון חוזר.
+ata	13	Soft_Read_Error_Rate	-	-	-	info	-	any	שגיאות קריאה רכות	שגיאות קריאה שתוקנו בניסיון חוזר.
+ata	13	Lifetime_UECC_Ct	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו לאורך החיים	סך הקריאות שלא תוקנו מאז הייצור — אותה משמעות כמו 187.
+ata	16	Spare_Blocks_Available	-	-	-	info	-	any	בלוקים רזרביים זמינים	כמות הבלוקים הרזרביים בכונן.
+ata	17	Spare_Blocks_Remaining	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	אחוז הבלוקים הרזרביים שנותרו.
+ata	17	Remaining_Spare_Blocks	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	אחוז הבלוקים הרזרביים שנותרו.
+ata	18	Head_Health	-	-	-	info	-	any	בריאות הראשים	מדד פנימי של Seagate לבריאות הראשים.
+ata	22	Helium_Level	-	-	-	info	-	any	רמת הליום	רמת ההליום בדיסק אטום; ירידה פירושה דליפה.
+ata	23	Helium_Condition_Lower	-	-	-	info	-	any	מצב הליום (תחתון)	מדד הליום של Toshiba.
+ata	24	Helium_Condition_Upper	-	-	-	info	-	any	מצב הליום (עליון)	מדד הליום של Toshiba.
+ata	160	Uncorrectable_Error_Cnt	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו (SMI)	שגיאות שלא תוקנו — אותה משמעות כמו 187.
+ata	160	UECC_Sector_Count	raw	>	0	orange	reported_uncorrectable	any	סקטורים שלא תוקנו	סקטורים שלא תוקנו — כמו 187.
+ata	160	Uncorrectable_Sectors	raw	>	0	orange	reported_uncorrectable	any	סקטורים שלא תוקנו	סקטורים שלא תוקנו — כמו 187.
+ata	161	Valid_Spare_Block_Cnt	-	-	-	info	-	any	בלוקים רזרביים תקינים	מספר הבלוקים הרזרביים (מספר מוחלט, לא אחוז).
+ata	161	Spare_Blocks_Remaining	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	הבלוקים הרזרביים שנותרו (מנורמל).
+ata	161	Spares_Remaining	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	הבלוקים הרזרביים שנותרו (מנורמל).
+ata	163	Initial_Bad_Block_Count	-	-	-	info	-	any	בלוקים פגומים מהמפעל	בלוקים שהיו פגומים כבר בייצור — נורמלי.
+ata	164	Total_Erase_Count	-	-	-	info	-	any	סה״כ מחיקות	סך פעולות המחיקה בזיכרון.
+ata	165	Max_Erase_Count	-	-	-	info	-	any	מונה מחיקות	מונה מחיקות של בלוקים.
+ata	165	Total_Write/Erase_Count	-	-	-	info	-	any	מונה מחיקות	מונה מחיקות של בלוקים.
+ata	165	Block_Erase_Count	-	-	-	info	-	any	מונה מחיקות	מונה מחיקות של בלוקים.
+ata	166	Min_Erase_Count	-	-	-	info	-	any	מינימום מחזורי מחיקה	מספר המחיקות של הבלוק הכי פחות שחוק.
+ata	166	Min_W/E_Cycle	-	-	-	info	-	any	מינימום מחזורי מחיקה	מספר המחיקות של הבלוק הכי פחות שחוק.
+ata	166	Minimum_PE_Cycles_TLC	-	-	-	info	-	any	מינימום מחזורי מחיקה	מספר המחיקות של הבלוק הכי פחות שחוק.
+ata	166	Min_PE_Cycles	-	-	-	info	-	any	מינימום מחזורי מחיקה	מספר המחיקות של הבלוק הכי פחות שחוק.
+ata	167	Average_Erase_Count	-	-	-	info	-	any	מידע יצרן (167)	מונה יצרן: מחיקות, בלוקים פגומים לשבב או מצב הגנת כתיבה.
+ata	167	Min_Bad_Block/Die	-	-	-	info	-	any	מידע יצרן (167)	מונה יצרן: מחיקות, בלוקים פגומים לשבב או מצב הגנת כתיבה.
+ata	167	Max_Bad_Blocks_per_Die	-	-	-	info	-	any	מידע יצרן (167)	מונה יצרן: מחיקות, בלוקים פגומים לשבב או מצב הגנת כתיבה.
+ata	167	Write_Protect_Mode	-	-	-	info	-	any	מידע יצרן (167)	מונה יצרן: מחיקות, בלוקים פגומים לשבב או מצב הגנת כתיבה.
+ata	167	SSD_Protect_Mode	-	-	-	info	-	any	מידע יצרן (167)	מונה יצרן: מחיקות, בלוקים פגומים לשבב או מצב הגנת כתיבה.
+ata	168	Max_Erase_Count_of_Spec	-	-	-	info	-	any	מידע יצרן (168)	מחזורי מחיקה מקסימליים או שגיאות בשכבה הפיזית של SATA (כבל).
+ata	168	Maximum_Erase_Cycle	-	-	-	info	-	any	מידע יצרן (168)	מחזורי מחיקה מקסימליים או שגיאות בשכבה הפיזית של SATA (כבל).
+ata	168	Maximum_PE_Cycles_TLC	-	-	-	info	-	any	מידע יצרן (168)	מחזורי מחיקה מקסימליים או שגיאות בשכבה הפיזית של SATA (כבל).
+ata	168	Max_PE_Cycles	-	-	-	info	-	any	מידע יצרן (168)	מחזורי מחיקה מקסימליים או שגיאות בשכבה הפיזית של SATA (כבל).
+ata	168	SATA_Phy_Error_Count	-	-	-	info	-	any	מידע יצרן (168)	מחזורי מחיקה מקסימליים או שגיאות בשכבה הפיזית של SATA (כבל).
+ata	168	SATA_PHY_Error_Count	-	-	-	info	-	any	מידע יצרן (168)	מחזורי מחיקה מקסימליים או שגיאות בשכבה הפיזית של SATA (כבל).
+ata	168	Min_Erase_Count	-	-	-	info	-	any	מידע יצרן (168)	מחזורי מחיקה מקסימליים או שגיאות בשכבה הפיזית של SATA (כבל).
+ata	169	Remaining_Lifetime_Perc	raw	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר לזיכרון (בערך הגולמי).
+ata	169	Total_Bad_Block	-	-	-	info	-	any	בלוקים פגומים (169)	סך הבלוקים הפגומים, כולל מהמפעל.
+ata	169	Total_Bad_Blocks	-	-	-	info	-	any	בלוקים פגומים (169)	סך הבלוקים הפגומים, כולל מהמפעל.
+ata	169	Bad_Block_Count	-	-	-	info	-	any	בלוקים פגומים (169)	סך הבלוקים הפגומים, כולל מהמפעל.
+ata	169	Bad_Block_Rate	-	-	-	info	-	any	בלוקים פגומים (169)	סך הבלוקים הפגומים, כולל מהמפעל.
+ata	169	Max_Erase_Count	-	-	-	info	-	any	בלוקים פגומים (169)	סך הבלוקים הפגומים, כולל מהמפעל.
+ata	169	Lifetime_Remaining%	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	169	Power_On_UECC_Err_Cnt	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	שגיאות שלא תוקנו — כמו 187.
+ata	169	Power_On_Uncorr_Err_Cnt	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	שגיאות שלא תוקנו — כמו 187.
+ata	170	Unused_Rsvd_Blk_Ct_Chip	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	כמה מהבלוקים הרזרביים עוד פנויים (הערך המנורמל באחוזים).
+ata	170	Available_Reservd_Space	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	כמה מהבלוקים הרזרביים עוד פנויים (הערך המנורמל באחוזים).
+ata	170	Reserve_Block_Count	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	כמה מהבלוקים הרזרביים עוד פנויים (הערך המנורמל באחוזים).
+ata	170	Reserved_Block_Pct	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	כמה מהבלוקים הרזרביים עוד פנויים (הערך המנורמל באחוזים).
+ata	170	Reserved_Block_Count	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	כמה מהבלוקים הרזרביים עוד פנויים (הערך המנורמל באחוזים).
+ata	170	Reserve_Blk_Remaining	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	כמה מהבלוקים הרזרביים עוד פנויים (הערך המנורמל באחוזים).
+ata	170	Reserve_Erase_BlkCt	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	כמה מהבלוקים הרזרביים עוד פנויים (הערך המנורמל באחוזים).
+ata	170	Grown_Failing_Block_Ct	-	-	-	info	-	any	בלוקים שנפגמו בשימוש	כמה בלוקים נפגמו מאז הייצור (מספר, לא אחוז).
+ata	170	Grown_Bad_Blocks	-	-	-	info	-	any	בלוקים שנפגמו בשימוש	כמה בלוקים נפגמו מאז הייצור (מספר, לא אחוז).
+ata	170	Grown_Bad_Block_Ct	-	-	-	info	-	any	בלוקים שנפגמו בשימוש	כמה בלוקים נפגמו מאז הייצור (מספר, לא אחוז).
+ata	170	Bad_Block_Count	-	-	-	info	-	any	בלוקים שנפגמו בשימוש	כמה בלוקים נפגמו מאז הייצור (מספר, לא אחוז).
+ata	170	Bad_Blk_Ct_Lat/Erl	-	-	-	info	-	any	בלוקים שנפגמו בשימוש	כמה בלוקים נפגמו מאז הייצור (מספר, לא אחוז).
+ata	170	Early/Later_Bad_Blck_Ct	-	-	-	info	-	any	בלוקים שנפגמו בשימוש	כמה בלוקים נפגמו מאז הייצור (מספר, לא אחוז).
+ata	171	Program_Fail_Count_Chip	raw	>	0	orange	program_fail	any	כשלונות כתיבה (SSD)	כמה פעמים כתיבה לתא זיכרון נכשלה והבלוק הוצא משימוש.
+ata	171	Program_Fail_Count	raw	>	0	orange	program_fail	any	כשלונות כתיבה (SSD)	כמה פעמים כתיבה לתא זיכרון נכשלה והבלוק הוצא משימוש.
+ata	171	Program_Fail_Ct	raw	>	0	orange	program_fail	any	כשלונות כתיבה (SSD)	כמה פעמים כתיבה לתא זיכרון נכשלה והבלוק הוצא משימוש.
+ata	171	Program_Fail_Cnt	raw	>	0	orange	program_fail	any	כשלונות כתיבה (SSD)	כמה פעמים כתיבה לתא זיכרון נכשלה והבלוק הוצא משימוש.
+ata	171	Avail_OP_Block_Count	-	-	-	info	-	any	בלוקי רזרבה זמינים (Toshiba)	מספר בלוקי ה-over-provisioning הזמינים.
+ata	172	Erase_Fail_Count_Chip	raw	>	0	orange	program_fail	any	כשלונות מחיקה (SSD)	כמה פעמים מחיקת בלוק נכשלה.
+ata	172	Erase_Fail_Count	raw	>	0	orange	program_fail	any	כשלונות מחיקה (SSD)	כמה פעמים מחיקת בלוק נכשלה.
+ata	172	Erase_Fail_Ct	raw	>	0	orange	program_fail	any	כשלונות מחיקה (SSD)	כמה פעמים מחיקת בלוק נכשלה.
+ata	172	Block_Erase_Failure	raw	>	0	orange	program_fail	any	כשלונות מחיקה (SSD)	כמה פעמים מחיקת בלוק נכשלה.
+ata	172	Block_Erase_Failures	raw	>	0	orange	program_fail	any	כשלונות מחיקה (SSD)	כמה פעמים מחיקת בלוק נכשלה.
+ata	172	Erase_Fail_Cnt	raw	>	0	orange	program_fail	any	כשלונות מחיקה (SSD)	כמה פעמים מחיקת בלוק נכשלה.
+ata	173	Wear_Leveling_Count	value	<=	10	orange	ssd_worn	any	שחיקה	הערך המנורמל יורד מ-100 ככל שהזיכרון נשחק; 10 ומטה = 90% שחיקה.
+ata	173	Percent_Life_Used	raw	>=	90	orange	ssd_worn	any	אחוז חיים שנוצל	אחוז השחיקה בערך הגולמי.
+ata	173	Drive_Life_Used%	raw	>=	90	orange	ssd_worn	any	אחוז חיים שנוצל	אחוז השחיקה בערך הגולמי.
+ata	173	Ave_Block-Erase_Count	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Avg_Block-Erase_Count	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Erase_Count	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	MaxAvgErase_Ct	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Avg_Write/Erase_Count	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Average_PE_Cycles_TLC	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Average_PE_Cycles	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Avg_Program/Erase_Ct	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Max/Avg/Min_Erase_Ct	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Unknown_SandForce_Attr	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	173	Unknown_Intel_Attribute	-	-	-	info	-	any	ממוצע מחיקות לבלוק	כמה פעמים בממוצע נמחק כל בלוק; בלי המספר המדורג של הדגם אי-אפשר לשפוט.
+ata	174	Unexpect_Power_Loss_Ct	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	174	Unexpected_Power_Loss	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	174	Unexpect_Power_Loss	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	174	Unexpect_PwrLoss_Ct	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	174	Unexpected_Pwr_Loss_Ct	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	174	Unexpected_Pwr_Loss_Cnt	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	174	Unsafe_Shutdown_Count	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	174	Pwr_Cycle_Ct_Unplanned	-	-	-	info	-	any	כיבויים פתאומיים	כמה פעמים החשמל נותק בלי הודעה לדיסק.
+ata	175	Program_Fail_Count_Chip	raw	>	0	orange	program_fail	any	כשלונות כתיבה בשבב	כשלונות כתיבה בשבב הגרוע ביותר, או שבבים שמתו.
+ata	175	Program_Fail_Count	raw	>	0	orange	program_fail	any	כשלונות כתיבה בשבב	כשלונות כתיבה בשבב הגרוע ביותר, או שבבים שמתו.
+ata	175	Lifetime_Die_Failure_Ct	raw	>	0	orange	program_fail	any	כשלונות כתיבה בשבב	כשלונות כתיבה בשבב הגרוע ביותר, או שבבים שמתו.
+ata	175	Power_Loss_Cap_Test	-	-	-	info	-	any	הגנת הפסקת חשמל ואחרים	בדיקת הקבלים שמגנים על נתונים בניתוק חשמל (בעיקר שרתים).
+ata	175	PwrLoss_ProtectionFail	-	-	-	info	-	any	הגנת הפסקת חשמל ואחרים	בדיקת הקבלים שמגנים על נתונים בניתוק חשמל (בעיקר שרתים).
+ata	175	Bad_Cluster_Table_Count	-	-	-	info	-	any	הגנת הפסקת חשמל ואחרים	בדיקת הקבלים שמגנים על נתונים בניתוק חשמל (בעיקר שרתים).
+ata	175	Not_In_Use	-	-	-	info	-	any	הגנת הפסקת חשמל ואחרים	בדיקת הקבלים שמגנים על נתונים בניתוק חשמל (בעיקר שרתים).
+ata	176	Erase_Fail_Count_Chip	raw	>	0	orange	program_fail	any	כשלונות מחיקה בשבב	כשלונות מחיקה בשבב הגרוע ביותר.
+ata	176	Erase_Fail_Count	raw	>	0	orange	program_fail	any	כשלונות מחיקה בשבב	כשלונות מחיקה בשבב הגרוע ביותר.
+ata	176	Unused_Rsvd_Blk_Cnt_Tot	value	<=	10	orange	spare_exhausted	any	בלוקים רזרביים פנויים	כמה מהרזרבה עוד פנויה (מנורמל באחוזים).
+ata	177	Wear_Leveling_Count	value	<=	10	orange	ssd_worn	any	שחיקה	ב-Samsung: הערך המנורמל יורד מ-100 ככל שהזיכרון נשחק; 10 ומטה = 90% שחיקה.
+ata	177	Lifetime_Remaining%	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	177	DriveLife_Remaining%	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	177	Endurance_Limit_Met	raw	>	0	orange	ssd_worn	any	הגיע לגבול השחיקה	הדיסק עבר את כמות הכתיבה שהיצרן דירג.
+ata	177	Wear_Range_Delta	-	-	-	info	-	any	הפרש שחיקה	ההפרש בין הבלוק הכי שחוק לפחות שחוק.
+ata	178	Used_Rsvd_Blk_Cnt_Chip	value	<=	10	orange	spare_exhausted	any	רזרבה בשבב הגרוע	כמה מהרזרבה נוצלה בשבב הגרוע ביותר (מנורמל: כמה נשאר).
+ata	178	Used_Rsrvd_Blk_Cnt_Wrst	value	<=	10	orange	spare_exhausted	any	רזרבה בשבב הגרוע	כמה מהרזרבה נוצלה בשבב הגרוע ביותר (מנורמל: כמה נשאר).
+ata	178	SSD_LifeLeft(0.01%)	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל).
+ata	178	SSD_Life_Left	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל).
+ata	178	Runtime_Invalid_Blk_Cnt	-	-	-	info	-	any	בלוקים פסולים בזמן ריצה	בלוקים שנפסלו בשימוש.
+ata	179	Used_Rsvd_Blk_Cnt_Tot	value	<=	10	orange	spare_exhausted	any	רזרבה שנוצלה (סה״כ)	כמה מהרזרבה נוצלה בכל הדיסק (מנורמל: כמה נשאר).
+ata	179	Used_Rsrvd_Blk_Cnt_Tot	value	<=	10	orange	spare_exhausted	any	רזרבה שנוצלה (סה״כ)	כמה מהרזרבה נוצלה בכל הדיסק (מנורמל: כמה נשאר).
+ata	180	Unused_Rsvd_Blk_Cnt_Tot	value	<=	10	orange	spare_exhausted	any	רזרבה פנויה (סה״כ)	כמה בלוקים רזרביים עוד פנויים (מנורמל באחוזים).
+ata	180	Unused_Reserve_NAND_Blk	-	-	-	info	-	any	רזרבה פנויה (סה״כ)	כמה בלוקים רזרביים עוד פנויים (מנורמל באחוזים).
+ata	180	End_to_End_Err_Detect	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	נתונים שהשתבשו בדרך בתוך הבקר — כמו 184.
+ata	180	Undetected_Data_Err_Ct	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	נתונים שהשתבשו בדרך בתוך הבקר — כמו 184.
+ata	180	Erase_Fail_Count	raw	>	0	orange	program_fail	any	כשלונות מחיקה	כשלונות מחיקה.
+ata	180	E2E_Error_Det_Corr_Rate	-	-	-	info	-	any	מידע יצרן (180)	מונה יצרן.
+ata	180	Unknown_JMF_Attribute	-	-	-	info	-	any	מידע יצרן (180)	מונה יצרן.
+ata	180	Spare_Blk_Cnt_Left	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	הבלוקים הרזרביים שנותרו (מנורמל).
+ata	181	Program_Fail_Cnt_Total	raw	>	0	orange	program_fail	any	סה״כ כשלונות כתיבה	סך כשלונות הכתיבה לתאי זיכרון.
+ata	181	Program_Fail_Count	raw	>	0	orange	program_fail	any	סה״כ כשלונות כתיבה	סך כשלונות הכתיבה לתאי זיכרון.
+ata	181	Block_Program_Failures	raw	>	0	orange	program_fail	any	סה״כ כשלונות כתיבה	סך כשלונות הכתיבה לתאי זיכרון.
+ata	181	Program_Fail_Blocks	raw	>	0	orange	program_fail	any	סה״כ כשלונות כתיבה	סך כשלונות הכתיבה לתאי זיכרון.
+ata	181	Non4k_Aligned_Access	-	-	-	info	-	any	גישות לא מיושרות	גישות שלא מיושרות ל-4K — ביצועים, לא בריאות.
+ata	181	Sys_Percent_Life_Remain	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	182	Erase_Fail_Count_Total	raw	>	0	orange	program_fail	any	סה״כ כשלונות מחיקה	סך כשלונות מחיקת בלוקים.
+ata	182	Erase_Fail_Count	raw	>	0	orange	program_fail	any	סה״כ כשלונות מחיקה	סך כשלונות מחיקת בלוקים.
+ata	183	Runtime_Bad_Block	raw	>	0	orange	bad_blocks	ssd	בלוקים פגומים בזמן ריצה	ב-Samsung (וזו גם ברירת המחדל): בלוקים שנפגמו בשימוש — בעיית זיכרון, לא כבל.
+ata	183	SATA_Downshift_Count	-	-	-	info	-	any	ירידת מהירות SATA	כמה פעמים הקישור ירד למהירות נמוכה — בדרך כלל כבל או לוח (וב-HP 8100 תמיד 3Gb/s).
+ata	183	SATA_Iface_Downshift	-	-	-	info	-	any	ירידת מהירות SATA	כמה פעמים הקישור ירד למהירות נמוכה — בדרך כלל כבל או לוח (וב-HP 8100 תמיד 3Gb/s).
+ata	183	SATA_Interfac_Downshift	-	-	-	info	-	any	ירידת מהירות SATA	כמה פעמים הקישור ירד למהירות נמוכה — בדרך כלל כבל או לוח (וב-HP 8100 תמיד 3Gb/s).
+ata	183	SATA_Int_Downshift_Ct	-	-	-	info	-	any	ירידת מהירות SATA	כמה פעמים הקישור ירד למהירות נמוכה — בדרך כלל כבל או לוח (וב-HP 8100 תמיד 3Gb/s).
+ata	183	LT_Link_Rate_DwnGrd_Ct	-	-	-	info	-	any	ירידת מהירות SATA	כמה פעמים הקישור ירד למהירות נמוכה — בדרך כלל כבל או לוח (וב-HP 8100 תמיד 3Gb/s).
+ata	184	End-to-End_Error	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	נתונים שהשתבשו בין הזיכרון המטמון לבין המדיה בתוך הדיסק — שחיתות נתונים שקטה.
+ata	184	End-to-End_Error_Count	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	נתונים שהשתבשו בין הזיכרון המטמון לבין המדיה בתוך הדיסק — שחיתות נתונים שקטה.
+ata	184	IO_Error_Detect_Code_Ct	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	נתונים שהשתבשו בין הזיכרון המטמון לבין המדיה בתוך הדיסק — שחיתות נתונים שקטה.
+ata	184	Error_Correction_Count	-	-	-	info	-	any	מידע יצרן (184)	תיקוני ECC (Crucial) או בלוקים פגומים מהמפעל (Toshiba) — נורמלי.
+ata	184	Factory_Bad_Block_Count	-	-	-	info	-	any	מידע יצרן (184)	תיקוני ECC (Crucial) או בלוקים פגומים מהמפעל (Toshiba) — נורמלי.
+ata	185	Head_Stability	-	-	-	info	-	any	יציבות הראשים	מדד WD ליציבות הראשים.
+ata	185	E2E_ErrCnt_SATA-Flash	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	שחיתות נתונים בתוך הבקר — כמו 184.
+ata	186	Induced_Op-Vibration	-	-	-	info	-	any	זיהוי רעידות	רעידות חיצוניות בזמן עבודה.
+ata	187	Reported_Uncorrect	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	קריאות שהדיסק דיווח למחשב שלא הצליח לתקן — נתונים אבדו.
+ata	187	Uncorrectable_Error_Cnt	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	קריאות שהדיסק דיווח למחשב שלא הצליח לתקן — נתונים אבדו.
+ata	187	Uncorrectable_ECC_Ct	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	קריאות שהדיסק דיווח למחשב שלא הצליח לתקן — נתונים אבדו.
+ata	187	Total_Unc_NAND_Reads	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	קריאות שהדיסק דיווח למחשב שלא הצליח לתקן — נתונים אבדו.
+ata	187	Reported_UE_Counts	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	קריאות שהדיסק דיווח למחשב שלא הצליח לתקן — נתונים אבדו.
+ata	187	Reported_Uncorr_Errors	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	קריאות שהדיסק דיווח למחשב שלא הצליח לתקן — נתונים אבדו.
+ata	188	Command_Timeout	-	-	-	info	-	any	פקודות שנתקעו	פקודות שלא הסתיימו בזמן — לרוב כבל או ספק; ב-Seagate הגולמי ארוז משלושה מונים.
+ata	188	Command_Timeouts	-	-	-	info	-	any	פקודות שנתקעו	פקודות שלא הסתיימו בזמן — לרוב כבל או ספק; ב-Seagate הגולמי ארוז משלושה מונים.
+ata	189	High_Fly_Writes	-	-	-	info	-	any	כתיבות בגובה לא תקין	הראש היה גבוה מדי בזמן כתיבה (רעידות או מכה).
+ata	189	Airflow_Temperature_Cel	temp	>	60	orange	hot_now	any	טמפרטורה	טמפרטורה במעלות צלזיוס (SandForce).
+ata	189	Factory_Bad_Block_Ct	-	-	-	info	-	any	מידע יצרן (189)	בלוקים פגומים מהמפעל או דגלי בריאות פנימיים.
+ata	189	SSD_Health_Flags	-	-	-	info	-	any	מידע יצרן (189)	בלוקים פגומים מהמפעל או דגלי בריאות פנימיים.
+ata	190	Airflow_Temperature_Cel	temp	>	60	orange	hot_now	any	טמפרטורה	טמפרטורה במעלות צלזיוס; ב-Samsung SSD זו הטמפרטורה היחידה.
+ata	190	Temperature_Case	temp	>	60	orange	hot_now	any	טמפרטורה	טמפרטורה במעלות צלזיוס; ב-Samsung SSD זו הטמפרטורה היחידה.
+ata	190	Case_Temperature	temp	>	60	orange	hot_now	any	טמפרטורה	טמפרטורה במעלות צלזיוס; ב-Samsung SSD זו הטמפרטורה היחידה.
+ata	190	Drive_Temperature	temp	>	60	orange	hot_now	any	טמפרטורה	טמפרטורה במעלות צלזיוס; ב-Samsung SSD זו הטמפרטורה היחידה.
+ata	190	Temperature_Celsius	temp	>	60	orange	hot_now	any	טמפרטורה	טמפרטורה במעלות צלזיוס; ב-Samsung SSD זו הטמפרטורה היחידה.
+ata	190	SATA_Error_Ct	-	-	-	info	-	any	מידע יצרן (190)	שגיאות SATA (Seagate SSD) או אזהרת חום (WD) — לא טמפרטורה.
+ata	190	Drive_Temp_Warning	-	-	-	info	-	any	מידע יצרן (190)	שגיאות SATA (Seagate SSD) או אזהרת חום (WD) — לא טמפרטורה.
+ata	191	G-Sense_Error_Rate	-	-	-	info	-	any	שגיאות מרעידות	מכות או נפילות שהחיישן רשם.
+ata	191	Clean_Shutdown_Ct	-	-	-	info	-	any	כיבויים מסודרים	כיבויים תקינים.
+ata	192	Power-Off_Retract_Count	-	-	-	info	-	any	נסיגות חירום	כמה פעמים הראשים נסוגו בכיבוי חירום.
+ata	192	Unsafe_Shutdown_Count	-	-	-	info	-	any	כיבויים פתאומיים	כיבויים בלי הודעה לדיסק.
+ata	192	Unexpect_Power_Loss_Ct	-	-	-	info	-	any	כיבויים פתאומיים	כיבויים בלי הודעה לדיסק.
+ata	192	Unclean_Shutdown_Ct	-	-	-	info	-	any	כיבויים פתאומיים	כיבויים בלי הודעה לדיסק.
+ata	193	Load_Cycle_Count	-	-	-	info	-	any	מחזורי טעינת ראשים	כמה פעמים הראשים חנו וחזרו.
+ata	193	Power_Fail_Uncompl_Cnt	-	-	-	info	-	any	כתיבות שלא הושלמו בניתוק	כתיבות שנקטעו בניתוק חשמל.
+ata	194	Temperature_Celsius	temp	>	60	orange	hot_now	any	טמפרטורה	הטמפרטורה הנוכחית במעלות צלזיוס (בערך הגולמי, המספר הראשון).
+ata	194	Temperature_Internal	temp	>	60	orange	hot_now	any	טמפרטורה	הטמפרטורה הנוכחית במעלות צלזיוס (בערך הגולמי, המספר הראשון).
+ata	194	Drive_Temperature	temp	>	60	orange	hot_now	any	טמפרטורה	הטמפרטורה הנוכחית במעלות צלזיוס (בערך הגולמי, המספר הראשון).
+ata	194	Device_Temperature	temp	>	60	orange	hot_now	any	טמפרטורה	הטמפרטורה הנוכחית במעלות צלזיוס (בערך הגולמי, המספר הראשון).
+ata	195	Hardware_ECC_Recovered	-	-	-	info	-	any	שגיאות שתוקנו ב-ECC	שגיאות שתוקנו בתיקון השגיאות של הדיסק — נורמלי, לא מצביע על תקלה.
+ata	195	ECC_Error_Rate	-	-	-	info	-	any	שגיאות שתוקנו ב-ECC	שגיאות שתוקנו בתיקון השגיאות של הדיסק — נורמלי, לא מצביע על תקלה.
+ata	195	Cumulativ_Corrected_ECC	-	-	-	info	-	any	שגיאות שתוקנו ב-ECC	שגיאות שתוקנו בתיקון השגיאות של הדיסק — נורמלי, לא מצביע על תקלה.
+ata	195	RAISE_ECC_Cor_Ct	-	-	-	info	-	any	שגיאות שתוקנו ב-ECC	שגיאות שתוקנו בתיקון השגיאות של הדיסק — נורמלי, לא מצביע על תקלה.
+ata	195	ECC_on_the_Fly_Rate	-	-	-	info	-	any	שגיאות שתוקנו ב-ECC	שגיאות שתוקנו בתיקון השגיאות של הדיסק — נורמלי, לא מצביע על תקלה.
+ata	195	ECC_Uncorr_Error_Count	-	-	-	info	-	any	שגיאות שתוקנו ב-ECC	שגיאות שתוקנו בתיקון השגיאות של הדיסק — נורמלי, לא מצביע על תקלה.
+ata	195	Power_Fail_Health	-	-	-	info	-	any	שגיאות שתוקנו ב-ECC	שגיאות שתוקנו בתיקון השגיאות של הדיסק — נורמלי, לא מצביע על תקלה.
+ata	195	Uncorrectable_Err_Ct	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו / כשלי כתיבה	שגיאות שלא תוקנו (SanDisk) או כשלי כתיבה (OCZ).
+ata	195	Total_Prog_Failures	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו / כשלי כתיבה	שגיאות שלא תוקנו (SanDisk) או כשלי כתיבה (OCZ).
+ata	195	Uncorrectable_Error_Cnt	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו / כשלי כתיבה	שגיאות שלא תוקנו או בלוקים שנכשלו בכתיבה.
+ata	195	Program_Failure_Blk_Ct	raw	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו / כשלי כתיבה	שגיאות שלא תוקנו או בלוקים שנכשלו בכתיבה.
+ata	196	Reallocated_Event_Count	raw	>	0	orange	realloc_event	any	אירועי העברה	כמה פעמים הדיסק העביר סקטור לרזרבה.
+ata	196	Total_Erase_Failures	raw	>	0	orange	program_fail	any	כשלונות מחיקה	כשלונות מחיקה (OCZ).
+ata	196	Lifetime_Retried_Blk_Ct	-	-	-	info	-	any	בלוקים שנוסו שוב	בלוקים שנדרש להם ניסיון חוזר.
+ata	196	Erase_Failure_Blk_Ct	raw	>	0	orange	program_fail	any	כשלונות מחיקה	בלוקים שנכשלו במחיקה.
+ata	197	Current_Pending_Sector	raw	>	0	orange	pending_sectors	any	סקטורים ממתינים	סקטורים שלא נקראו ומחכים להעברה — זה מה שגורם ל-BIOS לעצור על F1.
+ata	197	Current_Pending_ECC_Cnt	raw	>	0	orange	pending_sectors	any	סקטורים ממתינים	סקטורים שלא נקראו ומחכים להעברה — זה מה שגורם ל-BIOS לעצור על F1.
+ata	197	Pending_Sector_Count	raw	>	0	orange	pending_sectors	any	סקטורים ממתינים	סקטורים שלא נקראו ומחכים להעברה — זה מה שגורם ל-BIOS לעצור על F1.
+ata	197	Total_Unc_Read_Failures	raw	>	0	orange	reported_uncorrectable	any	קריאות שלא תוקנו	קריאות שלא תוקנו (OCZ).
+ata	198	Offline_Uncorrectable	raw	>	0	orange	uncorrectable	any	סקטורים שלא ניתנים לתיקון	סקטורים שבדיקה פנימית לא הצליחה לקרוא — גורם ל-F1 ב-BIOS.
+ata	198	Uncorrectable_Sector_Ct	raw	>	0	orange	uncorrectable	any	סקטורים שלא ניתנים לתיקון	סקטורים שבדיקה פנימית לא הצליחה לקרוא — גורם ל-F1 ב-BIOS.
+ata	198	Uncor_Read_Error_Ct	raw	>	0	orange	uncorrectable	any	סקטורים שלא ניתנים לתיקון	סקטורים שבדיקה פנימית לא הצליחה לקרוא — גורם ל-F1 ב-BIOS.
+ata	198	Offline_UErr_Media_Scan	raw	>	0	orange	uncorrectable	any	סקטורים שלא ניתנים לתיקון	סקטורים שבדיקה פנימית לא הצליחה לקרוא — גורם ל-F1 ב-BIOS.
+ata	198	Host_Reads_GiB	-	-	-	info	-	any	נתונים שנקראו	כמות קריאה ב-GiB (OCZ) — לא שגיאה.
+ata	199	Host_Writes_GiB	-	-	-	info	-	any	נתונים שנכתבו	כמות כתיבה ב-GiB (OCZ) — לא שגיאה.
+ata	200	Multi_Zone_Error_Rate	-	-	-	info	-	any	קצב שגיאות כתיבה	שגיאות בזמן כתיבה, מנורמל.
+ata	200	Write_Error_Rate	-	-	-	info	-	any	קצב שגיאות כתיבה	שגיאות בזמן כתיבה, מנורמל.
+ata	200	Pressure_Limit	-	-	-	info	-	any	קצב שגיאות כתיבה	שגיאות בזמן כתיבה, מנורמל.
+ata	201	Soft_Read_Error_Rate	-	-	-	info	-	any	שגיאות קריאה רכות	קצב שגיאות קריאה, מנורמל.
+ata	201	Unc_Read_Error_Rate	-	-	-	info	-	any	שגיאות קריאה רכות	קצב שגיאות קריאה, מנורמל.
+ata	201	Uncorr_Soft_Read_Err_Rt	-	-	-	info	-	any	שגיאות קריאה רכות	קצב שגיאות קריאה, מנורמל.
+ata	201	Read_Error_Rate	-	-	-	info	-	any	שגיאות קריאה רכות	קצב שגיאות קריאה, מנורמל.
+ata	201	Unc_Soft_Read_Err_Rate	-	-	-	info	-	any	שגיאות קריאה רכות	קצב שגיאות קריאה, מנורמל.
+ata	201	Supercap_Status	-	-	-	info	-	any	שגיאות קריאה רכות	קצב שגיאות קריאה, מנורמל.
+ata	201	Lifetime_Remaining%	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	201	Percent_Lifetime_Remain	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	202	Data_Address_Mark_Errs	-	-	-	info	-	any	שגיאות סימון כתובת	שגיאות בסימוני הכתובת (HDD) או מצב חריגה פנימי.
+ata	202	Exception_Mode_Status	-	-	-	info	-	any	שגיאות סימון כתובת	שגיאות בסימוני הכתובת (HDD) או מצב חריגה פנימי.
+ata	202	Total_Read_Bits_Corr_Ct	-	-	-	info	-	any	שגיאות סימון כתובת	שגיאות בסימוני הכתובת (HDD) או מצב חריגה פנימי.
+ata	202	Percent_Lifetime_Remain	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	ב-Crucial/Micron: הערך המנורמל הוא אחוז החיים שנותר (הגולמי — מה שנוצל).
+ata	202	Perc_Rated_Life_Used	raw	>=	90	orange	ssd_worn	any	אחוז חיים שנוצל	אחוז השחיקה בערך הגולמי.
+ata	202	Percent_Lifetime_Used	raw	>=	90	orange	ssd_worn	any	אחוז חיים שנוצל	אחוז השחיקה בערך הגולמי.
+ata	203	Run_Out_Cancel	-	-	-	info	-	any	ביטולי Run Out	מונה ECC פנימי.
+ata	204	Soft_ECC_Correction	-	-	-	info	-	any	תיקוני ECC רכים	שגיאות שתוקנו בתוכנה.
+ata	204	Soft_ECC_Correction_Rt	-	-	-	info	-	any	תיקוני ECC רכים	שגיאות שתוקנו בתוכנה.
+ata	204	Soft_ECC_Correct_Rate	-	-	-	info	-	any	תיקוני ECC רכים	שגיאות שתוקנו בתוכנה.
+ata	204	Average_Block-Erase_Ct	-	-	-	info	-	any	תיקוני ECC רכים	שגיאות שתוקנו בתוכנה.
+ata	205	Thermal_Asperity_Rate	-	-	-	info	-	any	קצב Thermal Asperity	בליטות על הפלטה שמחממות את הראש.
+ata	205	Max_Rated_PE_Count	-	-	-	info	-	any	קצב Thermal Asperity	בליטות על הפלטה שמחממות את הראש.
+ata	205	Read_Retry_Enable_Ct	-	-	-	info	-	any	קצב Thermal Asperity	בליטות על הפלטה שמחממות את הראש.
+ata	206	Flying_Height	-	-	-	info	-	any	גובה ריחוף	גובה הראש מעל הפלטה, או מונה יצרן ב-SSD.
+ata	206	Write_Error_Rate	-	-	-	info	-	any	גובה ריחוף	גובה הראש מעל הפלטה, או מונה יצרן ב-SSD.
+ata	206	Min_Erase_Count	-	-	-	info	-	any	גובה ריחוף	גובה הראש מעל הפלטה, או מונה יצרן ב-SSD.
+ata	206	Successful_RaidRecov_Ct	-	-	-	info	-	any	גובה ריחוף	גובה הראש מעל הפלטה, או מונה יצרן ב-SSD.
+ata	207	Spin_High_Current	-	-	-	info	-	any	זרם גבוה בסיבוב	זרם גבוה בהתנעת המנוע, או מונה האטה מחום ב-SSD.
+ata	207	Thermal_Throttling_Cnt	-	-	-	info	-	any	זרם גבוה בסיבוב	זרם גבוה בהתנעת המנוע, או מונה האטה מחום ב-SSD.
+ata	207	Max_Erase_Count	-	-	-	info	-	any	זרם גבוה בסיבוב	זרם גבוה בהתנעת המנוע, או מונה האטה מחום ב-SSD.
+ata	207	Trimmed_Sector_Ct	-	-	-	info	-	any	זרם גבוה בסיבוב	זרם גבוה בהתנעת המנוע, או מונה האטה מחום ב-SSD.
+ata	208	Spin_Buzz	-	-	-	info	-	any	Spin Buzz	ניסיונות התנעה כשהמנוע לא הסתובב.
+ata	208	Average_Erase_Count	-	-	-	info	-	any	Spin Buzz	ניסיונות התנעה כשהמנוע לא הסתובב.
+ata	209	Offline_Seek_Performnce	-	-	-	info	-	any	ביצועי חיפוש לא מקוון	ביצועי החיפוש בבדיקה פנימית.
+ata	209	Remaining_Lifetime_Perc	raw	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר בערך הגולמי.
+ata	210	Vibration_During_Write	-	-	-	info	-	any	רעידות בכתיבה / שחזור RAIN	רעידות בזמן כתיבה, או שחזורים מוצלחים ממנגנון RAIN ב-Micron.
+ata	210	Success_RAIN_Recov_Cnt	-	-	-	info	-	any	רעידות בכתיבה / שחזור RAIN	רעידות בזמן כתיבה, או שחזורים מוצלחים ממנגנון RAIN ב-Micron.
+ata	210	RAIN_Success_Recovered	-	-	-	info	-	any	רעידות בכתיבה / שחזור RAIN	רעידות בזמן כתיבה, או שחזורים מוצלחים ממנגנון RAIN ב-Micron.
+ata	211	Vibration_During_Write	-	-	-	info	-	any	מידע יצרן (211)	רעידות בכתיבה או מוני סריקה פנימיים.
+ata	211	Integ_Scan_Complete_Cnt	-	-	-	info	-	any	מידע יצרן (211)	רעידות בכתיבה או מוני סריקה פנימיים.
+ata	211	SATA_UNC_Count	-	-	-	info	-	any	מידע יצרן (211)	רעידות בכתיבה או מוני סריקה פנימיים.
+ata	211	Read_Disturb_ReallocEvt	-	-	-	info	-	any	מידע יצרן (211)	רעידות בכתיבה או מוני סריקה פנימיים.
+ata	212	Shock_During_Write	-	-	-	info	-	any	מידע יצרן (212)	מכות בזמן כתיבה או שגיאות בשכבה הפיזית של SATA.
+ata	212	Integ_Scan_Folding_Cnt	-	-	-	info	-	any	מידע יצרן (212)	מכות בזמן כתיבה או שגיאות בשכבה הפיזית של SATA.
+ata	212	SATA_PHY_Error	-	-	-	info	-	any	מידע יצרן (212)	מכות בזמן כתיבה או שגיאות בשכבה הפיזית של SATA.
+ata	212	Phy_Error_Count	-	-	-	info	-	any	מידע יצרן (212)	מכות בזמן כתיבה או שגיאות בשכבה הפיזית של SATA.
+ata	212	NAND_Reads_with_Retry	-	-	-	info	-	any	מידע יצרן (212)	מכות בזמן כתיבה או שגיאות בשכבה הפיזית של SATA.
+ata	220	Disk_Shift	-	-	-	info	-	any	הסטת דיסק	תזוזת הפלטות ביחס לציר, בדרך כלל ממכה.
+ata	221	G-Sense_Error_Rate	-	-	-	info	-	any	שגיאות מרעידות	מכות שהחיישן רשם.
+ata	221	Int_Data_Path_Prot_Unc	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	שחיתות נתונים בתוך הבקר — כמו 184.
+ata	222	Loaded_Hours	-	-	-	info	-	any	שעות טעינה	שעות שהראשים היו מעל הפלטות.
+ata	223	Load_Retry_Count	-	-	-	info	-	any	ניסיונות טעינה חוזרים	ניסיונות חוזרים להעמיס את הראשים.
+ata	224	Load_Friction	-	-	-	info	-	any	חיכוך בטעינה	חיכוך בזמן העמסת הראשים.
+ata	225	Load_Cycle_Count	-	-	-	info	-	any	מחזורי טעינה / נתונים שנכתבו	מחזורי טעינת ראשים (HDD) או כמות כתיבה (Intel).
+ata	225	Host_Writes_32MiB	-	-	-	info	-	any	מחזורי טעינה / נתונים שנכתבו	מחזורי טעינת ראשים (HDD) או כמות כתיבה (Intel).
+ata	226	Load-in_Time	-	-	-	info	-	any	זמן טעינה / שחיקת עומס	זמן העמסת הראשים, או מדד שחיקה בחלון זמן (Intel).
+ata	226	Workld_Media_Wear_Indic	-	-	-	info	-	any	זמן טעינה / שחיקת עומס	זמן העמסת הראשים, או מדד שחיקה בחלון זמן (Intel).
+ata	226	Intel_Internal	-	-	-	info	-	any	זמן טעינה / שחיקת עומס	זמן העמסת הראשים, או מדד שחיקה בחלון זמן (Intel).
+ata	227	Torq-amp_Count	-	-	-	info	-	any	הגברת מומנט	ניסיונות להגביר מומנט להתנעה.
+ata	227	Workld_Host_Reads_Perc	-	-	-	info	-	any	הגברת מומנט	ניסיונות להגביר מומנט להתנעה.
+ata	227	Intel_Internal	-	-	-	info	-	any	הגברת מומנט	ניסיונות להגביר מומנט להתנעה.
+ata	228	Power-off_Retract_Count	-	-	-	info	-	any	מחזורי נסיגה בכיבוי	נסיגות ראשים בכיבוי, או דקות עומס (Intel).
+ata	228	Workload_Minutes	-	-	-	info	-	any	מחזורי נסיגה בכיבוי	נסיגות ראשים בכיבוי, או דקות עומס (Intel).
+ata	228	Intel_Internal	-	-	-	info	-	any	מחזורי נסיגה בכיבוי	נסיגות ראשים בכיבוי, או דקות עומס (Intel).
+ata	230	Head_Amplitude	-	-	-	info	-	any	משרעת הראש	משרעת אות הראש.
+ata	230	Media_Wearout_Indicator	-	-	-	info	-	any	מדד שחיקה (WD)	ב-WD הכיוון הפוך בחלק מהקושחות, ולכן אי-אפשר לשפוט ממנו שחיקה בבטחה.
+ata	230	Drv_Life_Protect_Status	-	-	-	info	-	any	מידע יצרן (230)	מצב הגנת חיים, עקומת חיים או קבלים.
+ata	230	Perc_Write/Erase_Count	-	-	-	info	-	any	מידע יצרן (230)	מצב הגנת חיים, עקומת חיים או קבלים.
+ata	230	Life_Curve_Status	-	-	-	info	-	any	מידע יצרן (230)	מצב הגנת חיים, עקומת חיים או קבלים.
+ata	230	SuperCap_Charge_Status	-	-	-	info	-	any	מידע יצרן (230)	מצב הגנת חיים, עקומת חיים או קבלים.
+ata	231	Temperature_Celsius	temp	>	60	orange	hot_now	any	טמפרטורה	טמפרטורה ב-HDD שמשתמשים ב-231.
+ata	231	SSD_Life_Left	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל); 10 ומטה = 90% שחיקה.
+ata	231	SSD_Life_Left_Perc	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל); 10 ומטה = 90% שחיקה.
+ata	231	Life_Remaining_Percent	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל); 10 ומטה = 90% שחיקה.
+ata	231	Lifetime_Left	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל); 10 ומטה = 90% שחיקה.
+ata	231	Perc_Rated_Life_Remain	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל); 10 ומטה = 90% שחיקה.
+ata	231	Percent_Lifetime_Remain	value	<=	10	orange	ssd_worn	any	חיים שנותרו	אחוז החיים שנותר (מנורמל); 10 ומטה = 90% שחיקה.
+ata	231	Unknown_Marvell_Attr	-	-	-	info	-	any	מידע יצרן (231)	לא מתועד.
+ata	231	Unknown_JMF_Attribute	-	-	-	info	-	any	מידע יצרן (231)	לא מתועד.
+ata	231	Controller_Temperature	-	-	-	info	-	any	טמפרטורת הבקר	טמפרטורת שבב הבקר — חם מהדיסק באופן טבעי, לכן מידע.
+ata	232	Available_Reservd_Space	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	אחוז הרזרבה שנותר (מנורמל).
+ata	232	Perc_Avail_Resrvd_Space	value	<=	10	orange	spare_exhausted	any	מקום רזרבי פנוי	אחוז הרזרבה שנותר (מנורמל).
+ata	232	Read_Fail_Count	-	-	-	info	-	any	מידע יצרן (232)	כשלי קריאה או גרסת קושחה.
+ata	232	Firmware_Version_Info	-	-	-	info	-	any	מידע יצרן (232)	כשלי קריאה או גרסת קושחה.
+ata	232	Read_Failure_Blk_Ct	-	-	-	info	-	any	מידע יצרן (232)	כשלי קריאה או גרסת קושחה.
+ata	232	Spares_Remaining_Perc	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	אחוז הרזרבה שנותר.
+ata	233	Media_Wearout_Indicator	value	<=	10	orange	ssd_worn	any	מדד שחיקה	ב-Intel וב-Samsung הערך המנורמל יורד מ-100 ככל שהזיכרון נשחק.
+ata	233	Percent_Lifetime_Remain	value	<=	10	orange	ssd_worn	any	מדד שחיקה	ב-Intel וב-Samsung הערך המנורמל יורד מ-100 ככל שהזיכרון נשחק.
+ata	233	Remaining_Lifetime_Perc	raw	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר בערך הגולמי (OCZ).
+ata	233	Power_On_Hours	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	NAND_GiB_Written	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	Flash_Writes_GiB	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	Total_NAND_Writes_GiB	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	Lifetime_Nand_Writes	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	NAND_GB_Written_TLC	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	Lifetime_Wts_To_Flsh_GB	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	SandForce_Internal	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	ECC_Fail_Record	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	Number_Of_Write_Ct	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	233	Unknown_JMF_Attribute	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון — מידע.
+ata	234	Avg/Max_Erase_Count	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Thermal_Throttle	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Thermal_Throttle_Status	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Perc_Write/Erase_Ct_BC	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	NAND_GB_Written_SLC	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Lifetime_Nand_Gb	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	NAND_Reads_Sectors	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Lifetime_NAND_Prg_GiB	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Unknown_Samsung_Attr	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Unknown_SK_hynix_Attrib	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	SandForce_Internal	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	234	Unknown_JMF_Attribute	-	-	-	info	-	any	מידע יצרן (234)	מוני מחיקה, האטה מחום או כתיבה.
+ata	235	POR_Recovery_Count	-	-	-	info	-	any	מידע יצרן (235)	התאוששות מכיבוי, בלוקים תקינים או קבלים.
+ata	235	Good/Sys_Block_Count	-	-	-	info	-	any	מידע יצרן (235)	התאוששות מכיבוי, בלוקים תקינים או קבלים.
+ata	235	Capacitor_Health	-	-	-	info	-	any	מידע יצרן (235)	התאוששות מכיבוי, בלוקים תקינים או קבלים.
+ata	235	SuperCap_Health	-	-	-	info	-	any	מידע יצרן (235)	התאוששות מכיבוי, בלוקים תקינים או קבלים.
+ata	235	Power_Loss_Cap_Test	-	-	-	info	-	any	מידע יצרן (235)	התאוששות מכיבוי, בלוקים תקינים או קבלים.
+ata	235	Flash_Writes_Sectors	-	-	-	info	-	any	מידע יצרן (235)	התאוששות מכיבוי, בלוקים תקינים או קבלים.
+ata	235	Lifetime_Writes_GiB	-	-	-	info	-	any	מידע יצרן (235)	התאוששות מכיבוי, בלוקים תקינים או קבלים.
+ata	240	Head_Flying_Hours	-	-	-	info	-	any	שעות טיסת ראשים	שעות שהראשים היו במצב עבודה.
+ata	240	Transfer_Error_Rate	-	-	-	info	-	any	שעות טיסת ראשים	שעות שהראשים היו במצב עבודה.
+ata	241	Total_LBAs_Written	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	241	Lifetime_Writes_GiB	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	241	Host_Writes_GiB	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	241	Host_Writes_32MiB	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	241	Total_Writes_GiB	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	241	Total_Writes_GB	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	241	Lifetime_Wts_Frm_Hst_GB	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	241	Host_Writes	-	-	-	info	-	any	סה״כ נכתב	כמות הנתונים שנכתבה לדיסק מאז הייצור.
+ata	242	Total_LBAs_Read	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	242	Lifetime_Reads_GiB	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	242	Host_Reads_GiB	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	242	Host_Reads_32MiB	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	242	Total_Reads_GiB	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	242	Total_Reads_GB	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	242	Lifetime_Rds_Frm_Hst_GB	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	242	Host_Reads	-	-	-	info	-	any	סה״כ נקרא	כמות הנתונים שנקראה מהדיסק.
+ata	243	SATA_Downshift_Ct	-	-	-	info	-	any	מידע יצרן (243)	ירידות מהירות SATA (Samsung) או כתיבות.
+ata	243	NAND_Writes_32MiB	-	-	-	info	-	any	מידע יצרן (243)	ירידות מהירות SATA (Samsung) או כתיבות.
+ata	243	Total_Media_Writes	-	-	-	info	-	any	מידע יצרן (243)	ירידות מהירות SATA (Samsung) או כתיבות.
+ata	243	Free_Space	-	-	-	info	-	any	מידע יצרן (243)	ירידות מהירות SATA (Samsung) או כתיבות.
+ata	243	Unknown_Marvell_Attr	-	-	-	info	-	any	מידע יצרן (243)	ירידות מהירות SATA (Samsung) או כתיבות.
+ata	243	Total_LBAs_Written_Expanded	-	-	-	info	-	any	מידע יצרן (243)	ירידות מהירות SATA (Samsung) או כתיבות.
+ata	244	Thermal_Throttle_St	-	-	-	info	-	any	האטה מחום	כמה פעמים הדיסק האט את עצמו כי התחמם.
+ata	244	Thermal_Throttle	-	-	-	info	-	any	האטה מחום	כמה פעמים הדיסק האט את עצמו כי התחמם.
+ata	244	Therm_Throt_Activation	-	-	-	info	-	any	האטה מחום	כמה פעמים הדיסק האט את עצמו כי התחמם.
+ata	244	Temp_Throttle_Status	-	-	-	info	-	any	האטה מחום	כמה פעמים הדיסק האט את עצמו כי התחמם.
+ata	244	Average_Erase_Count	-	-	-	info	-	any	האטה מחום	כמה פעמים הדיסק האט את עצמו כי התחמם.
+ata	244	Total_LBAs_Read_Expanded	-	-	-	info	-	any	האטה מחום	כמה פעמים הדיסק האט את עצמו כי התחמם.
+ata	244	SoC_Data_Path_Prot_Det	raw	>	0	orange	data_path	any	שגיאות בנתיב הנתונים	שחיתות נתונים בתוך הבקר — כמו 184.
+ata	245	Drive_Life_Remaining%	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	245	SSD_Life_Left	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	245	Percent_Life_Remaining	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	245	DriveLife_Used%	raw	>=	90	orange	ssd_worn	any	אחוז חיים שנוצל	אחוז השחיקה בערך הגולמי.
+ata	245	Timed_Workld_Media_Wear	-	-	-	info	-	any	מידע יצרן (245)	מדד שחיקה בחלון זמן או מונים.
+ata	245	Max_Erase_Count	-	-	-	info	-	any	מידע יצרן (245)	מדד שחיקה בחלון זמן או מונים.
+ata	245	TLC_Writes_32MiB	-	-	-	info	-	any	מידע יצרן (245)	מדד שחיקה בחלון זמן או מונים.
+ata	245	Read_Error_Rate	-	-	-	info	-	any	מידע יצרן (245)	מדד שחיקה בחלון זמן או מונים.
+ata	246	Timed_Workld_RdWr_Ratio	-	-	-	info	-	any	מידע יצרן (246)	מוני עומס, מחיקה או כתיבה.
+ata	246	Total_Erase_Count	-	-	-	info	-	any	מידע יצרן (246)	מוני עומס, מחיקה או כתיבה.
+ata	246	Total_LBAs_Written	-	-	-	info	-	any	מידע יצרן (246)	מוני עומס, מחיקה או כתיבה.
+ata	246	SLC_Writes_32MiB	-	-	-	info	-	any	מידע יצרן (246)	מוני עומס, מחיקה או כתיבה.
+ata	246	Write_Protect_Detail	-	-	-	info	-	any	מידע יצרן (246)	מוני עומס, מחיקה או כתיבה.
+ata	247	Timed_Workld_Timer	-	-	-	info	-	any	מידע יצרן (247)	מוני עומס או כתיבה.
+ata	247	Host_Program_Page_Count	-	-	-	info	-	any	מידע יצרן (247)	מוני עומס או כתיבה.
+ata	247	Raid_Recoverty_Ct	-	-	-	info	-	any	מידע יצרן (247)	מוני עומס או כתיבה.
+ata	247	Health_Check_Timer	-	-	-	info	-	any	מידע יצרן (247)	מוני עומס או כתיבה.
+ata	248	FTL_Program_Page_Count	-	-	-	info	-	any	מידע יצרן (248)	כתיבות פנימיות של הבקר.
+ata	248	Bckgnd_Program_Page_Cnt	-	-	-	info	-	any	מידע יצרן (248)	כתיבות פנימיות של הבקר.
+ata	248	Unkn_SiliconMotion_Attr	-	-	-	info	-	any	מידע יצרן (248)	כתיבות פנימיות של הבקר.
+ata	248	Lifetime_Remaining%	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	248	PCT_Life_Remaining	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	248	Perc_Rated_Life_Remain	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	248	Percent_Lifetime_Remain	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	248	Remaining_Life	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	248	SSD_Remaining_Life_Perc	value	<=	10	orange	ssd_worn	any	אחוז חיים שנותר	אחוז החיים שנותר (מנורמל).
+ata	249	NAND_Writes_1GiB	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון ב-GiB.
+ata	249	NAND_Writes_GiB	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון ב-GiB.
+ata	249	TLC_NAND_GB_Writes	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון ב-GiB.
+ata	249	Total_NAND_Prog_Ct_GiB	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון ב-GiB.
+ata	249	Unkn_CrucialMicron_Attr	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון ב-GiB.
+ata	249	Unkn_SiliconMotion_Attr	-	-	-	info	-	any	כתיבות לזיכרון	כמות הכתיבה לזיכרון ב-GiB.
+ata	249	Spare_Block_Remaining	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	הרזרבה שנותרה (מנורמל).
+ata	249	Spare_Blocks_Remaining	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	הרזרבה שנותרה (מנורמל).
+ata	249	Spares_Remaining_Perc	value	<=	10	orange	spare_exhausted	any	רזרבה שנותרה	הרזרבה שנותרה (מנורמל).
+ata	250	Read_Error_Retry_Rate	-	-	-	info	-	any	ניסיונות קריאה חוזרים	ניסיונות קריאה חוזרים, או ב-Samsung ירידות מהירות (הגולמי ארוז ונראה ענק).
+ata	250	SATA_Iface_Downshift	-	-	-	info	-	any	ניסיונות קריאה חוזרים	ניסיונות קריאה חוזרים, או ב-Samsung ירידות מהירות (הגולמי ארוז ונראה ענק).
+ata	250	Read_Retry_Count	-	-	-	info	-	any	ניסיונות קריאה חוזרים	ניסיונות קריאה חוזרים, או ב-Samsung ירידות מהירות (הגולמי ארוז ונראה ענק).
+ata	251	NAND_Writes	-	-	-	info	-	any	מידע יצרן (251)	כתיבות לזיכרון (Samsung) או מונים אחרים.
+ata	251	Minimum_Spares_Remaining	-	-	-	info	-	any	מידע יצרן (251)	כתיבות לזיכרון (Samsung) או מונים אחרים.
+ata	251	Total_NAND_Read_Ct_GiB	-	-	-	info	-	any	מידע יצרן (251)	כתיבות לזיכרון (Samsung) או מונים אחרים.
+ata	251	Unkn_CrucialMicron_Attr	-	-	-	info	-	any	מידע יצרן (251)	כתיבות לזיכרון (Samsung) או מונים אחרים.
+ata	251	Unkn_SiliconMotion_Attr	-	-	-	info	-	any	מידע יצרן (251)	כתיבות לזיכרון (Samsung) או מונים אחרים.
+ata	251	Min_Spares_Remain_Perc	value	<=	10	orange	spare_exhausted	any	רזרבה מינימלית שנותרה	אחוז הרזרבה בשבב הגרוע ביותר.
+ata	252	Added_Bad_Flash_Blk_Ct	-	-	-	info	-	any	בלוקים פגומים חדשים	בלוקים שנפגמו מאז הייצור (Samsung).
+ata	252	Newly_Added_Bad_Flash_Block	-	-	-	info	-	any	בלוקים פגומים חדשים	בלוקים שנפגמו מאז הייצור (Samsung).
+ata	252	Unkn_CrucialMicron_Attr	-	-	-	info	-	any	בלוקים פגומים חדשים	בלוקים שנפגמו מאז הייצור (Samsung).
+ata	253	SPI_Test_Remaining	-	-	-	info	-	any	מידע יצרן (253)	מונה יצרן.
+ata	253	Unkn_CrucialMicron_Attr	-	-	-	info	-	any	מידע יצרן (253)	מונה יצרן.
+ata	254	Free_Fall_Sensor	-	-	-	info	-	any	הגנת נפילה	כמה פעמים חיישן הנפילה החנה את הראשים.
+ata	254	Unkn_CrucialMicron_Attr	-	-	-	info	-	any	הגנת נפילה	כמה פעמים חיישן הנפילה החנה את הראשים.
+ata	1	Raw_Read_Error_Count	-	-	-	info	-	any	Raw_Read_Error_Count	שם של יצרן, מידע בלבד (ATP SATA III Value Line SSDs, ATP SATA III Superior Line SSDs)
+ata	14	Device_Capacity_LBAs	-	-	-	info	-	any	Device_Capacity_LBAs	שם של יצרן, מידע בלבד (SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	14	Device_Raw_Capacity	-	-	-	info	-	any	Device_Raw_Capacity	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs, ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	15	Device_User_Capacity	-	-	-	info	-	any	Device_User_Capacity	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs, ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	15	User_Capacity_LBAs	-	-	-	info	-	any	User_Capacity_LBAs	שם של יצרן, מידע בלבד (SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	15	User_Cpcty_Sector_Cnt	-	-	-	info	-	any	User_Cpcty_Sector_Cnt	שם של יצרן, מידע בלבד (Supermicro SATA DOM (SuperDOM))
+ata	16	Avg_Erase_Count_pSLC	-	-	-	info	-	any	Avg_Erase_Count_pSLC	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	16	Gas_Gauge	-	-	-	info	-	any	Gas_Gauge	שם של יצרן, מידע בלבד (Hitachi/HGST Ultrastar 7K2)
+ata	16	Init_Spare_Blocks_Avail	-	-	-	info	-	any	Init_Spare_Blocks_Avail	שם של יצרן, מידע בלבד (SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	16	Initial_Spare_Blocks	-	-	-	info	-	any	Initial_Spare_Blocks	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs, ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	16	Total_LBAs_Read	-	-	-	info	-	any	Total_LBAs_Read	שם של יצרן, מידע בלבד (Western Digital Re)
+ata	17	Rated_Erase_Count_pSLC	-	-	-	info	-	any	Rated_Erase_Count_pSLC	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	27	MAMR_Health_Monitor	-	-	-	info	-	any	MAMR_Health_Monitor	שם של יצרן, מידע בלבד (Toshiba MG09ACA... Enterprise Capacity HDD, Toshiba MG10ACA... Enterprise Capacity HDD)
+ata	32	Lifetime_Write_AmpFctr	-	-	-	info	-	any	Lifetime_Write_AmpFctr	שם של יצרן, מידע בלבד (Sandisk SATA Cloudspeed Max and GEN2 ESS SSDs)
+ata	32	Write_Ampflication	-	-	-	info	-	any	Write_Ampflication	שם של יצרן, מידע בלבד (Sandisk SATA CS1K GEN1 ESS SSDs)
+ata	33	Write_AmpFctr	-	-	-	info	-	any	Write_AmpFctr	שם של יצרן, מידע בלבד (Sandisk SATA Cloudspeed Max and GEN2 ESS SSDs)
+ata	71	Milli_Micro_Actuator	-	-	-	info	-	any	Milli_Micro_Actuator	שם של יצרן, מידע בלבד (Western Digital Ultrastar DC HC570, Western Digital Ultrastar DC HC670)
+ata	82	Head_Health_Score	-	-	-	info	-	any	Head_Health_Score	שם של יצרן, מידע בלבד (Western Digital Ultrastar DC HC560, Western Digital Ultrastar DC HC570)
+ata	90	NAND_Master	-	-	-	info	-	any	NAND_Master	שם של יצרן, מידע בלבד (Western Digital Ultrastar DC HC560, Western Digital Ultrastar DC HC570)
+ata	100	Erase_Program_Cycles	-	-	-	info	-	any	Erase_Program_Cycles	שם של יצרן, מידע בלבד (STEC Mach2 CompactFlash Cards)
+ata	100	Flash_GB_Erased	-	-	-	info	-	any	Flash_GB_Erased	שם של יצרן, מידע בלבד (Seagate IronWolf 110 SATA SSD, Seagate Nytro SATA SSD)
+ata	100	Gigabytes_Erased	-	-	-	info	-	any	Gigabytes_Erased	שם של יצרן, מידע בלבד (SandForce Driven SSDs)
+ata	100	Max_Min_EC_Count	-	-	-	info	-	any	Max_Min_EC_Count	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	100	Total_Blocks_Erased	-	-	-	info	-	any	Total_Blocks_Erased	שם של יצרן, מידע בלבד (OCZ Intrepid 3000 SSDs)
+ata	100	Total_Erase_Count	-	-	-	info	-	any	Total_Erase_Count	שם של יצרן, מידע בלבד (SMART Modular Technologies mSATA XL+ SLC SSDs, SK hynix SATA SSDs)
+ata	100	Total_Erease_Count	-	-	-	info	-	any	Total_Erease_Count	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs, ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	102	Lifetime_PS4_Entry_Ct	-	-	-	info	-	any	Lifetime_PS4_Entry_Ct	שם של יצרן, מידע בלבד (Seagate IronWolf 110 SATA SSD, Seagate Nytro SATA SSD)
+ata	103	Lifetime_PS3_Exit_Ct	-	-	-	info	-	any	Lifetime_PS3_Exit_Ct	שם של יצרן, מידע בלבד (Seagate IronWolf 110 SATA SSD, Seagate Nytro SATA SSD)
+ata	103	Remaining_Energy_Storg	-	-	-	info	-	any	Remaining_Energy_Storg	שם של יצרן, מידע בלבד (STEC Mach2 CompactFlash Cards)
+ata	130	Minimum_Spares_All_Zs	-	-	-	info	-	any	Minimum_Spares_All_Zs	שם של יצרן, מידע בלבד (Smart Storage Systems Adtron A25FB 3xN SSDs)
+ata	148	Total_SLC_Erase_Ct	-	-	-	info	-	any	Total_SLC_Erase_Ct	שם של יצרן, מידע בלבד (Silicon Motion based SSDs, Silicon Motion based OEM SSDs)
+ata	149	Max_SLC_Erase_Ct	-	-	-	info	-	any	Max_SLC_Erase_Ct	שם של יצרן, מידע בלבד (Silicon Motion based SSDs, Silicon Motion based OEM SSDs)
+ata	150	Min_SLC_Erase_Ct	-	-	-	info	-	any	Min_SLC_Erase_Ct	שם של יצרן, מידע בלבד (Silicon Motion based SSDs, Silicon Motion based OEM SSDs)
+ata	151	Average_SLC_Erase_Ct	-	-	-	info	-	any	Average_SLC_Erase_Ct	שם של יצרן, מידע בלבד (Silicon Motion based SSDs, Silicon Motion based OEM SSDs)
+ata	159	DRAM_1_Bit_Error_Count	-	-	-	info	-	any	DRAM_1_Bit_Error_Count	שם של יצרן, מידע בלבד (Silicon Motion based SSDs)
+ata	160	Initial_Bad_Block_Count	-	-	-	info	-	any	Initial_Bad_Block_Count	שם של יצרן, מידע בלבד (Apacer SDM4 Series SSD Module)
+ata	161	Bad_Block_Count	-	-	-	info	-	any	Bad_Block_Count	שם של יצרן, מידע בלבד (Apacer SDM4 Series SSD Module)
+ata	161	Number_of_Pure_Spare	-	-	-	info	-	any	Number_of_Pure_Spare	שם של יצרן, מידע בלבד (Innodisk 3IE2/3ME2/3MG2/3SE2/3TG6 SSDs)
+ata	161	Spare_Block_Count	-	-	-	info	-	any	Spare_Block_Count	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	162	Cache_Block_Count	-	-	-	info	-	any	Cache_Block_Count	שם של יצרן, מידע בלבד (Silicon Motion based SSDs)
+ata	162	Child_Pair_Count	-	-	-	info	-	any	Child_Pair_Count	שם של יצרן, מידע בלבד (InnoDisk iCF 9000 / 1SE2 Cards)
+ata	162	Spare_Block_Count	-	-	-	info	-	any	Spare_Block_Count	שם של יצרן, מידע בלבד (Apacer SDM4 Series SSD Module)
+ata	163	Max_Erase_Count	-	-	-	info	-	any	Max_Erase_Count	שם של יצרן, מידע בלבד (Apacer SDM4 Series SSD Module, Apacer SDM5/5A/5A-M Series SSD Module)
+ata	163	Maximum_Erase_Count	-	-	-	info	-	any	Maximum_Erase_Count	שם של יצרן, מידע בלבד (Apacer SSDs)
+ata	163	Total_Bad_Block_Count	-	-	-	info	-	any	Total_Bad_Block_Count	שם של יצרן, מידע בלבד (Innodisk 3IE2/3ME2/3MG2/3SE2/3TG6 SSDs, Innodisk 1IE3/3IE3/3ME3/3IE4/3ME4 SSDs)
+ata	164	Average_Erase_Count	-	-	-	info	-	any	Average_Erase_Count	שם של יצרן, מידע בלבד (Apacer SDM4 Series SSD Module, Apacer SDM5/5A/5A-M Series SSD Module)
+ata	165	Average_Erase_Count	-	-	-	info	-	any	Average_Erase_Count	שם של יצרן, מידע בלבד (Apacer SDM4 Series SSD Module)
+ata	165	Maximum_Erase_Count	-	-	-	info	-	any	Maximum_Erase_Count	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD, Swissbit X-8x Family SATA SSD)
+ata	166	Grown_Bad_Block_Count	-	-	-	info	-	any	Grown_Bad_Block_Count	שם של יצרן, מידע בלבד (Apacer SDM5/5A/5A-M Series SSD Module)
+ata	166	Later_Bad_Block_Count	-	-	-	info	-	any	Later_Bad_Block_Count	שם של יצרן, מידע בלבד (Apacer AS340/350 SSDs)
+ata	166	Minimum_Erase_Count	-	-	-	info	-	any	Minimum_Erase_Count	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	166	Total_Later_Bad_Blk_Ct	-	-	-	info	-	any	Total_Later_Bad_Blk_Ct	שם של יצרן, מידע בלבד (Apacer SSDs)
+ata	167	Max_Bad_Blocks_Per_Die	-	-	-	info	-	any	Max_Bad_Blocks_Per_Die	שם של יצרן, מידע בלבד (SandForce Driven SSDs)
+ata	167	SSD_Protect_mode	-	-	-	info	-	any	SSD_Protect_mode	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	167	SSD_Write_Protect_Mode	-	-	-	info	-	any	SSD_Write_Protect_Mode	שם של יצרן, מידע בלבד (Apacer SDM5/5A/5A-M Series SSD Module)
+ata	168	Rated_Erase_Count	-	-	-	info	-	any	Rated_Erase_Count	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD, Swissbit X-8x Family SATA SSD)
+ata	168	SATA_PHY_Err_Ct	-	-	-	info	-	any	SATA_PHY_Err_Ct	שם של יצרן, מידע בלבד (Apacer SDM5/5A/5A-M Series SSD Module, SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	168	SATA_PHY_Error_Cnt	-	-	-	info	-	any	SATA_PHY_Error_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	169	Bad_Block_Cnt	-	-	-	info	-	any	Bad_Block_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	169	Power_On_Data_Repairs	-	-	-	info	-	any	Power_On_Data_Repairs	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	170	Bad_Bl_Ct_LATER_0_EARLY	-	-	-	info	-	any	Bad_Bl_Ct_LATER_0_EARLY	שם של יצרן, מידע בלבד (ATP SATA III Value Line SSDs)
+ata	170	Bad_Block_Count_New/Tot	-	-	-	info	-	any	Bad_Block_Count_New/Tot	שם של יצרן, מידע בלבד (InnoDisk InnoLite SATADOM D150QV SSDs)
+ata	170	Initial_Bad_Block_Count	-	-	-	info	-	any	Initial_Bad_Block_Count	שם של יצרן, מידע בלבד (SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	170	Spare_Block_Count	-	-	-	info	-	any	Spare_Block_Count	שם של יצרן, מידע בלבד (Innodisk 3IE2/3ME2/3MG2/3SE2/3TG6 SSDs, Innodisk 1IE3/3IE3/3ME3/3IE4/3ME4 SSDs)
+ata	173	Average_PE_Count	-	-	-	info	-	any	Average_PE_Count	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	173	Erase_Cnt	-	-	-	info	-	any	Erase_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	173	Erase_Count_0_AVG_MAX	-	-	-	info	-	any	Erase_Count_0_AVG_MAX	שם של יצרן, מידע בלבד (ATP SATA III Value Line SSDs)
+ata	173	Erase_Count_Max/Avg	-	-	-	info	-	any	Erase_Count_Max/Avg	שם של יצרן, מידע בלבד (InnoDisk InnoLite SATADOM D150QV SSDs)
+ata	173	Max_Erase_Count	-	-	-	info	-	any	Max_Erase_Count	שם של יצרן, מידע בלבד (ATP SATA III aMLC M.2 2242/80 Embedded SSDs, SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	173	Maximum_Erase_Count	-	-	-	info	-	any	Maximum_Erase_Count	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs)
+ata	174	Host_Reads_MiB	-	-	-	info	-	any	Host_Reads_MiB	שם של יצרן, מידע בלבד (Apple SD/SM/TS...E/F/G SSDs)
+ata	174	Unexpected_Power_Cycle	-	-	-	info	-	any	Unexpected_Power_Cycle	שם של יצרן, מידע בלבד (ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	175	Average_Erase_Count	-	-	-	info	-	any	Average_Erase_Count	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs, ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	175	Bad_Cluster_Cnt	-	-	-	info	-	any	Bad_Cluster_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	175	Bad_Cluster_Table_Ct	-	-	-	info	-	any	Bad_Cluster_Table_Ct	שם של יצרן, מידע בלבד (Apacer SSDs)
+ata	175	Host_Writes_MiB	-	-	-	info	-	any	Host_Writes_MiB	שם של יצרן, מידע בלבד (Apple SD/SM/TS...E/F/G SSDs)
+ata	175	PLP_Failure	-	-	-	info	-	any	PLP_Failure	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	176	RANGE_RECORD_Count	-	-	-	info	-	any	RANGE_RECORD_Count	שם של יצרן, מידע בלבד (Innodisk 1IE3/3IE3/3ME3/3IE4/3ME4 SSDs)
+ata	176	Uncorr_RECORD_Count	-	-	-	info	-	any	Uncorr_RECORD_Count	שם של יצרן, מידע בלבד (Innodisk 1ME3/3ME/3SE SSDs)
+ata	177	Read_Retry_Cnt	-	-	-	info	-	any	Read_Retry_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	180	Over-Provisioning_Rate	-	-	-	info	-	any	Over-Provisioning_Rate	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	182	Heavy_GC_Log	-	-	-	info	-	any	Heavy_GC_Log	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	184	Initial_Bad_Block_Count	-	-	-	info	-	any	Initial_Bad_Block_Count	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	189	Maximum_Erase_Count	-	-	-	info	-	any	Maximum_Erase_Count	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	191	Mininum_Erase_Count	-	-	-	info	-	any	Mininum_Erase_Count	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	192	Init_Spare_Blocks_Avail	-	-	-	info	-	any	Init_Spare_Blocks_Avail	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	192	Unexpected_Power_Loss	-	-	-	info	-	any	Unexpected_Power_Loss	שם של יצרן, מידע בלבד (ATP SATA III Value Line SSDs)
+ata	193	Dynamic_Remaps	-	-	-	info	-	any	Dynamic_Remaps	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD, Swissbit X-7x Family SATA SSD)
+ata	194	Fractional_Temperature	-	-	-	info	-	any	Fractional_Temperature	שם של יצרן, מידע בלבד (Smart Storage Systems Adtron A25FB 2xN SSDs)
+ata	196	Spare_Blocks	-	-	-	info	-	any	Spare_Blocks	שם של יצרן, מידע בלבד (Swissbit C440 Industrial CompactFlash Card)
+ata	196	Total_Spare_Block_Cnt	-	-	-	info	-	any	Total_Spare_Block_Cnt	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	197	ECC_Error_Count	-	-	-	info	-	any	ECC_Error_Count	שם של יצרן, מידע בלבד (Smart Storage Systems Xcel-10 SSDs)
+ata	197	Read_Failure_Blk_Ct	-	-	-	info	-	any	Read_Failure_Blk_Ct	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	198	Read_Sectors_Tot_Ct	-	-	-	info	-	any	Read_Sectors_Tot_Ct	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	199	Write_Sectors_Tot_Ct	-	-	-	info	-	any	Write_Sectors_Tot_Ct	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	200	Read_Commands_Tot_Ct	-	-	-	info	-	any	Read_Commands_Tot_Ct	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	200	SATA_COM_Reset	-	-	-	info	-	any	SATA_COM_Reset	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	201	Power_Loss_Cap_Test	-	-	-	info	-	any	Power_Loss_Cap_Test	שם של יצרן, מידע בלבד (Dell Certified Intel S3520 Series SSDs, Dell Certified Intel S4x00/D3-S4x10 Series SSDs)
+ata	201	Write_Commands_Tot_Ct	-	-	-	info	-	any	Write_Commands_Tot_Ct	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	202	End_of_Life	-	-	-	info	-	any	End_of_Life	שם של יצרן, מידע בלבד (Dell Certified Intel S3520 Series SSDs, Dell Certified Intel S4x00/D3-S4x10 Series SSDs)
+ata	202	Error_Bits_Flash_Tot_Ct	-	-	-	info	-	any	Error_Bits_Flash_Tot_Ct	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	203	Corr_Read_Errors_Tot_Ct	-	-	-	info	-	any	Corr_Read_Errors_Tot_Ct	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	203	Total_ECC_Errors	-	-	-	info	-	any	Total_ECC_Errors	שם של יצרן, מידע בלבד (Swissbit C440 Industrial CompactFlash Card)
+ata	204	Bad_Block_Full_Flag	-	-	-	info	-	any	Bad_Block_Full_Flag	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	205	Max_PE_Count_Spec	-	-	-	info	-	any	Max_PE_Count_Spec	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	206	Min_Erase_Cnt	-	-	-	info	-	any	Min_Erase_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	207	Max_Erase_Cnt	-	-	-	info	-	any	Max_Erase_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	208	Avg_Erase_Cnt	-	-	-	info	-	any	Avg_Erase_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	209	SLC_Min_Erase_Cnt	-	-	-	info	-	any	SLC_Min_Erase_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	210	Raid_Success_Recover_Ct	-	-	-	info	-	any	Raid_Success_Recover_Ct	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	210	SLC_Max_Erase_Cnt	-	-	-	info	-	any	SLC_Max_Erase_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	211	SATA_Error_Ct_CRC	-	-	-	info	-	any	SATA_Error_Ct_CRC	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	211	SLC_Avg_Erase_Cnt	-	-	-	info	-	any	SLC_Avg_Erase_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	212	Pages_Requiring_Rd_Rtry	-	-	-	info	-	any	Pages_Requiring_Rd_Rtry	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs)
+ata	212	SATA_Error_Ct_Handshake	-	-	-	info	-	any	SATA_Error_Ct_Handshake	שם של יצרן, מידע בלבד (Indilinx Barefoot based SSDs)
+ata	213	Integ_Scan_Progress	-	-	-	info	-	any	Integ_Scan_Progress	שם של יצרן, מידע בלבד (Micron 5100 / 52x0 / 5300 / 5400 SSDs)
+ata	213	Simple_Rd_Rtry_Attempts	-	-	-	info	-	any	Simple_Rd_Rtry_Attempts	שם של יצרן, מידע בלבד (OCZ Intrepid 3000 SSDs)
+ata	213	Snmple_Retry_Attempts	-	-	-	info	-	any	Snmple_Retry_Attempts	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs)
+ata	213	Spare_Block_Cnt_Worst	-	-	-	info	-	any	Spare_Block_Cnt_Worst	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	213	Spare_Blocks_Worst_Chip	-	-	-	info	-	any	Spare_Blocks_Worst_Chip	שם של יצרן, מידע בלבד (Swissbit C440 Industrial CompactFlash Card)
+ata	214	Adaptive_Retry_Attempts	-	-	-	info	-	any	Adaptive_Retry_Attempts	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs)
+ata	214	Adaptv_Rd_Rtry_Attempts	-	-	-	info	-	any	Adaptv_Rd_Rtry_Attempts	שם של יצרן, מידע בלבד (OCZ Intrepid 3000 SSDs)
+ata	215	Current_TRIM_Percent	-	-	-	info	-	any	Current_TRIM_Percent	שם של יצרן, מידע בלבד (Swissbit C440 Industrial CompactFlash Card)
+ata	215	Number_of_TRIM_Commands	-	-	-	info	-	any	Number_of_TRIM_Commands	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	215	TRIM_Count	-	-	-	info	-	any	TRIM_Count	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	215	Trim_Status	-	-	-	info	-	any	Trim_Status	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	222	RAID_Recovery_Count	-	-	-	info	-	any	RAID_Recovery_Count	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs, OCZ Intrepid 3000 SSDs)
+ata	224	In_Warranty	-	-	-	info	-	any	In_Warranty	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs)
+ata	225	DAS_Polarity	-	-	-	info	-	any	DAS_Polarity	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs)
+ata	225	Data_Log_Write_Count	-	-	-	info	-	any	Data_Log_Write_Count	שם של יצרן, מידע בלבד (Innodisk 1IE3/3IE3/3ME3/3IE4/3ME4 SSDs)
+ata	226	Partial_Pfail	-	-	-	info	-	any	Partial_Pfail	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs)
+ata	229	Erase_Count	-	-	-	info	-	any	Erase_Count	שם של יצרן, מידע בלבד (Swissbit C440 Industrial CompactFlash Card)
+ata	229	Flash_ID	-	-	-	info	-	any	Flash_ID	שם של יצרן, מידע בלבד (InnoDisk InnoLite SATADOM D150QV SSDs, Innodisk 1ME3/3ME/3SE SSDs)
+ata	229	Halt_System/Flash_ID	-	-	-	info	-	any	Halt_System/Flash_ID	שם של יצרן, מידע בלבד (JMicron based SSDs)
+ata	229	PLP_Failure	-	-	-	info	-	any	PLP_Failure	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	229	Total_Flash_Blk_Erases	-	-	-	info	-	any	Total_Flash_Blk_Erases	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	230	Write_Throttling	-	-	-	info	-	any	Write_Throttling	שם של יצרן, מידע בלבד (Indilinx Barefoot 3 based SSDs)
+ata	232	Lifetime_Writes	-	-	-	info	-	any	Lifetime_Writes	שם של יצרן, מידע בלבד (Indilinx Barefoot_2/Everest/Martini based SSDs)
+ata	232	Total_Number_of_Reads	-	-	-	info	-	any	Total_Number_of_Reads	שם של יצרן, מידע בלבד (Swissbit C440 Industrial CompactFlash Card)
+ata	232	Total_Read_Cnt	-	-	-	info	-	any	Total_Read_Cnt	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	233	Flash_Writes_32MiB	-	-	-	info	-	any	Flash_Writes_32MiB	שם של יצרן, מידע בלבד (Innodisk 3IE2/3ME2/3MG2/3SE2/3TG6 SSDs)
+ata	233	NAND_Writes_1GiB	-	-	-	info	-	any	NAND_Writes_1GiB	שם של יצרן, מידע בלבד (Supermicro SATA DOM (SuperDOM))
+ata	233	Total_LBAs_Written	-	-	-	info	-	any	Total_LBAs_Written	שם של יצרן, מידע בלבד (Dell Certified Intel S3520 Series SSDs, Dell Certified Intel S4x00/D3-S4x10 Series SSDs)
+ata	234	Flash_Reads_32MiB	-	-	-	info	-	any	Flash_Reads_32MiB	שם של יצרן, מידע בלבד (Innodisk 3IE2/3ME2/3MG2/3SE2/3TG6 SSDs)
+ata	234	Flash_Reads_LBAs	-	-	-	info	-	any	Flash_Reads_LBAs	שם של יצרן, מידע בלבד (SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	234	Nand_Sectors_Read	-	-	-	info	-	any	Nand_Sectors_Read	שם של יצרן, מידע בלבד (ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	234	Sectors_Read_from_NAND	-	-	-	info	-	any	Sectors_Read_from_NAND	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs)
+ata	235	Device_Sectors_Written	-	-	-	info	-	any	Device_Sectors_Written	שם של יצרן, מידע בלבד (ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	235	Flash_LBAs_Written	-	-	-	info	-	any	Flash_LBAs_Written	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	235	Flash_Writes_LBAs	-	-	-	info	-	any	Flash_Writes_LBAs	שם של יצרן, מידע בלבד (SMART Modular Technologies mSATA XL+ SLC SSDs)
+ata	235	Flash_Writes_LBAs_Low	-	-	-	info	-	any	Flash_Writes_LBAs_Low	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	235	Lat_Bad_Blk_Era/Wri/Rea	-	-	-	info	-	any	Lat_Bad_Blk_Era/Wri/Rea	שם של יצרן, מידע בלבד (InnoDisk InnoLite SATADOM D150QV SSDs)
+ata	235	Later_Bad_Blk_Inf_R/W/E	-	-	-	info	-	any	Later_Bad_Blk_Inf_R/W/E	שם של יצרן, מידע בלבד (Innodisk 1IE3/3IE3/3ME3/3IE4/3ME4 SSDs)
+ata	235	Later_Bad_Block	-	-	-	info	-	any	Later_Bad_Block	שם של יצרן, מידע בלבד (Innodisk 1ME3/3ME/3SE SSDs)
+ata	235	Later_Bad_Block_Info	-	-	-	info	-	any	Later_Bad_Block_Info	שם של יצרן, מידע בלבד (Innodisk 3IE2/3ME2/3MG2/3SE2/3TG6 SSDs)
+ata	235	Sectors_Written_to_SSD	-	-	-	info	-	any	Sectors_Written_to_SSD	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs)
+ata	236	Unstable_Power_Count	-	-	-	info	-	any	Unstable_Power_Count	שם של יצרן, מידע בלבד (InnoDisk InnoLite SATADOM D150QV SSDs, Innodisk 1ME3/3ME/3SE SSDs)
+ata	237	Flash_LBAs_Written_Exp	-	-	-	info	-	any	Flash_LBAs_Written_Exp	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	237	Flash_Writes_LBAs_High	-	-	-	info	-	any	Flash_Writes_LBAs_High	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	240	Write_Head	-	-	-	info	-	any	Write_Head	שם של יצרן, מידע בלבד (InnoDisk InnoLite SATADOM D150QV SSDs, Innodisk 1ME3/3ME/3SE SSDs)
+ata	241	Lifetime_NAND_Prg_GiB	-	-	-	info	-	any	Lifetime_NAND_Prg_GiB	שם של יצרן, מידע בלבד (SK hynix SATA SSDs)
+ata	241	Nand_Sectors_Written	-	-	-	info	-	any	Nand_Sectors_Written	שם של יצרן, מידע בלבד (ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	241	Sectors_Written_to_NAND	-	-	-	info	-	any	Sectors_Written_to_NAND	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs)
+ata	241	Total_Host_LBA_Written	-	-	-	info	-	any	Total_Host_LBA_Written	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	241	Total_LBAs_Written_Low	-	-	-	info	-	any	Total_LBAs_Written_Low	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	242	Device_Bytes_Read	-	-	-	info	-	any	Device_Bytes_Read	שם של יצרן, מידע בלבד (ATP SATA III aMLC M.2 2242/80 Embedded SSDs)
+ata	242	Host_Reades_GiB	-	-	-	info	-	any	Host_Reades_GiB	שם של יצרן, מידע בלבד (Apple MacBook Air SSD)
+ata	242	Sectors_Read_from_SSD	-	-	-	info	-	any	Sectors_Read_from_SSD	שם של יצרן, מידע בלבד (ATP SATA III Superior Line SSDs)
+ata	242	Total_Host_LBA_Read	-	-	-	info	-	any	Total_Host_LBA_Read	שם של יצרן, מידע בלבד (Swissbit X-8x Family SATA SSD)
+ata	242	Total_LBAs_Read_Low	-	-	-	info	-	any	Total_LBAs_Read_Low	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	243	Host_LBA_Write_Exp	-	-	-	info	-	any	Host_LBA_Write_Exp	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	243	Total_LBAs_Written_High	-	-	-	info	-	any	Total_LBAs_Written_High	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	243	Total_NAND_Written	-	-	-	info	-	any	Total_NAND_Written	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	244	Host_LBA_Read_Exp	-	-	-	info	-	any	Host_LBA_Read_Exp	שם של יצרן, מידע בלבד (Swissbit X-7x Family SATA SSD)
+ata	244	Total_LBAs_Read_High	-	-	-	info	-	any	Total_LBAs_Read_High	שם של יצרן, מידע בלבד (Swissbit X-600m Series Industrial mSATA SSD)
+ata	245	Bit_Error_Cnt	-	-	-	info	-	any	Bit_Error_Cnt	שם של יצרן, מידע בלבד (Lexar 128GB SSD)
+ata	245	Flash_Writes_32MiB	-	-	-	info	-	any	Flash_Writes_32MiB	שם של יצרן, מידע בלבד (Innodisk 3IE2/3ME2/3MG2/3SE2/3TG6 SSDs)
+ata	245	Thermal_Sensor_Health	-	-	-	info	-	any	Thermal_Sensor_Health	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	246	Heavy_Read_Retry_count	-	-	-	info	-	any	Heavy_Read_Retry_count	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	247	NOR_Health	-	-	-	info	-	any	NOR_Health	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	248	Cross_Temp_Duration	-	-	-	info	-	any	Cross_Temp_Duration	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	249	SSD_Health	-	-	-	info	-	any	SSD_Health	שם של יצרן, מידע בלבד (SSSTC ERX GD/CD Series SSDs)
+ata	254	Total_Erase_Blocks_Ct	-	-	-	info	-	any	Total_Erase_Blocks_Ct	שם של יצרן, מידע בלבד (Smart Storage Systems Xcel-10 SSDs)
+devstat	-	Percentage Used Endurance Indicator	value	>=	90	orange	ssd_worn	any	שחיקה (ATA, תקני)	אחוז השחיקה בדף 7 של Device Statistics (ACS-3) — אותו מדד כמו NVMe Percentage Used, בלי תלות ביצרן.
+devstat	-	Number of Reported Uncorrectable Errors	value	>	0	orange	reported_uncorrectable	any	שגיאות שלא תוקנו	אותו מונה כמו 187, מהדף התקני.
+devstat	-	Current Temperature	value	>	60	orange	hot_now	any	טמפרטורה	הטמפרטורה הנוכחית.
+devstat	-	Number of Reallocated Logical Sectors	value	>	0	orange	reallocated	any	סקטורים שהועברו	אותו מונה כמו 5.
+devstat	-	Number of Realloc. Candidate Logical Sectors	value	>	0	orange	pending_sectors	any	סקטורים ממתינים	אותו מונה כמו 197.
+nvme	critical_warning	Critical Warning	value	bits	-	info	-	any	אזהרה קריטית	מפת סיביות של אזהרות הבקר; 0x00 = אין אזהרה (ראו טבלת הביטים).
+nvme	temperature	Temperature	value	>=	wctemp	orange	hot_now	any	טמפרטורה	הטמפרטורה המשוקללת של הבקר (Composite) במעלות צלזיוס.
+nvme	available_spare	Available Spare	value	<=	10	orange	spare_exhausted	any	רזרבה פנויה	אחוז הבלוקים הרזרביים שנותרו.
+nvme	available_spare_threshold	Available Spare Threshold	value	-	-	info	-	any	סף הרזרבה	הסף שהיצרן קבע לרזרבה (מידע; ההשוואה אליו היא ביט 0).
+nvme	percentage_used	Percentage Used	value	>=	90	orange	ssd_worn	any	שחיקה	אחוז מחיי הדיסק שנוצלו; יכול לעבור 100.
+nvme	endurance_group_cw	Endurance Group Critical Warning Summary	value	-	-	info	-	any	סיכום אזהרות קבוצת עמידות	סיכום אזהרות לקבוצות עמידות (NVMe 1.4) — נדיר בדיסקים רגילים.
+nvme	data_units_read	Data Units Read	value	-	-	info	-	any	נתונים שנקראו	יחידות של 512,000 בייט שנקראו.
+nvme	data_units_written	Data Units Written	value	-	-	info	-	any	נתונים שנכתבו	יחידות של 512,000 בייט שנכתבו.
+nvme	host_read_commands	Host Read Commands	value	-	-	info	-	any	פקודות קריאה	מספר פקודות הקריאה שהבקר ביצע.
+nvme	host_write_commands	Host Write Commands	value	-	-	info	-	any	פקודות כתיבה	מספר פקודות הכתיבה שהבקר ביצע.
+nvme	controller_busy_time	Controller Busy Time	value	-	-	info	-	any	זמן עסוק	דקות שהבקר היה עסוק בפקודות.
+nvme	power_cycles	Power Cycles	value	-	-	info	-	any	מחזורי הפעלה	מספר מחזורי הפעלה.
+nvme	power_on_hours	Power On Hours	value	-	-	info	-	any	שעות עבודה	שעות עבודה מצטברות.
+nvme	unsafe_shutdowns	Unsafe Shutdowns	value	-	-	info	-	any	כיבויים פתאומיים	כיבויים בלי הודעה לדיסק.
+nvme	media_errors	Media and Data Integrity Errors	value	>	0	orange	media_errors	any	שגיאות מדיה ונתונים	שגיאות שלא תוקנו (ECC/CRC/LBA tag) — המקביל של 187 ב-NVMe.
+nvme	error_log_entries	Error Information Log Entries	value	-	-	info	-	any	רשומות ביומן השגיאות	מונה כל השגיאות שהבקר רשם, כולל פקודות לא חוקיות מהמחשב — כמעט תמיד לא בעיה בדיסק.
+nvme	warning_temp_time	Warning Comp. Temperature Time	value	-	-	info	-	any	זמן מעל סף אזהרת חום	דקות מצטברות מעל סף האזהרה של הבקר.
+nvme	critical_temp_time	Critical Comp. Temperature Time	value	-	-	info	-	any	זמן מעל סף חום קריטי	דקות מצטברות מעל הסף הקריטי של הבקר.
+nvmebit	0	Available spare below threshold	value	bit	0x01	orange	spare_exhausted	any	הרזרבה ירדה מתחת לסף	נשארו פחות בלוקים רזרביים ממה שהיצרן קבע.
+nvmebit	1	Temperature above/below threshold	value	bit	0x02	orange	hot_now	any	טמפרטורה מחוץ לסף	הבקר מדווח חום (או קור) מעבר לסף שלו.
+nvmebit	2	NVM subsystem reliability degraded	value	bit	0x04	orange	nvme_reliability	any	האמינות נפגעה	שגיאות מדיה או תקלה פנימית פגעו באמינות; חלק מהיצרנים מדליקים אותו גם כשהשחיקה עברה 100%.
+nvmebit	3	Media placed in read-only mode	value	bit	0x08	red	media_readonly	any	הדיסק עבר לקריאה בלבד	הבקר נעל את הדיסק לכתיבה — אי-אפשר לשכפל אליו בכלל.
+nvmebit	4	Volatile memory backup device failed	value	bit	0x10	red	health_failed	any	הגיבוי לזיכרון הנדיף נכשל	הקבלים ששומרים את המטמון בניתוק חשמל נכשלו (בעיקר דיסקים לשרתים).
+nvmebit	5	Persistent Memory Region read-only/unreliable	value	bit	0x20	red	health_failed	any	אזור הזיכרון הקבוע לא אמין	אזור PMR (NVMe 1.4) נכשל — נדיר מאוד בדיסקים רגילים.
+selftest	-	Completed without error	-	has	-	ok	-	any	הבדיקה העצמית הסתיימה בלי שגיאה	הבדיקה העצמית האחרונה הסתיימה בלי שגיאה
+selftest	-	Completed: read failure	-	has	-	orange	selftest_failed	any	הבדיקה מצאה סקטור שלא נקרא (עם LBA)	הבדיקה מצאה סקטור שלא נקרא (עם LBA)
+selftest	-	Completed: electrical failure	-	has	-	orange	selftest_failed	any	תקלה חשמלית	תקלה חשמלית
+selftest	-	Completed: servo/seek failure	-	has	-	orange	selftest_failed	any	תקלת מיקום ראשים	תקלת מיקום ראשים
+selftest	-	Completed: unknown failure	-	has	-	orange	selftest_failed	any	כשל לא ידוע	כשל לא ידוע
+selftest	-	Completed: handling damage??	-	has	-	orange	selftest_failed	any	נזק פיזי (מכה)	נזק פיזי (מכה)
+selftest	-	Fatal or unknown error	-	has	-	orange	selftest_failed	any	הבדיקה נכשלה בלי לסיים	הבדיקה נכשלה בלי לסיים
+selftest	-	Aborted by host	-	has	-	info	-	any	המחשב עצר את הבדיקה	המחשב עצר את הבדיקה
+selftest	-	Interrupted (host reset)	-	has	-	info	-	any	הבדיקה נקטעה באתחול	הבדיקה נקטעה באתחול
+selftest	-	Self-test routine in progress	-	has	-	info	-	any	בדיקה רצה עכשיו	בדיקה רצה עכשיו
+selftest	-	No self-tests have been logged	-	has	-	info	-	any	לא בוצעה בדיקה עצמית	לא בוצעה בדיקה עצמית
+selftest	-	Completed: failed segments	-	has	-	orange	selftest_failed	any	בדיקת NVMe מצאה מקטע פגום	בדיקת NVMe מצאה מקטע פגום
+selftest	-	Completed: unknown failed segment	-	has	-	orange	selftest_failed	any	בדיקת NVMe מצאה מקטע פגום	בדיקת NVMe מצאה מקטע פגום
+selftest	-	Fatal or unknown test error	-	has	-	orange	selftest_failed	any	בדיקת NVMe נכשלה	בדיקת NVMe נכשלה
+selftest	-	Aborted:	-	has	-	info	-	any	בדיקת NVMe נעצרה	בדיקת NVMe נעצרה
+selftest	-	Controller Reset	-	has	-	info	-	any	בדיקת NVMe נעצרה	בדיקת NVMe נעצרה
+selftest	-	Namespace removed	-	has	-	info	-	any	בדיקת NVMe נעצרה	בדיקת NVMe נעצרה
+selftest	-	Format NVM	-	has	-	info	-	any	בדיקת NVMe נעצרה	בדיקת NVMe נעצרה
+selftest	-	Sanitize	-	has	-	info	-	any	בדיקת NVMe נעצרה	בדיקת NVMe נעצרה
+selftest	-	unknown reason)	-	has	-	info	-	any	בדיקת NVMe נעצרה	בדיקת NVMe נעצרה
+errlog	-	UNC	-	has	-	orange	unc_logged	any	יומן השגיאות: נתונים שלא תוקנו	שגיאה מסוג UNC ביומן השגיאות של הדיסק
+errlog	-	IDNF	-	has	-	info	-	any	יומן השגיאות: כתובת לא נמצאה	שגיאה מסוג IDNF ביומן השגיאות של הדיסק
+errlog	-	AMNF	-	has	-	info	-	any	יומן השגיאות: סימון כתובת לא נמצא	שגיאה מסוג AMNF ביומן השגיאות של הדיסק
+errlog	-	ABRT	-	has	-	info	-	any	יומן השגיאות: הפקודה בוטלה	שגיאה מסוג ABRT ביומן השגיאות של הדיסק
+errlog	-	TK0NF	-	has	-	info	-	any	יומן השגיאות: רצועה 0 לא נמצאה	שגיאה מסוג TK0NF ביומן השגיאות של הדיסק
+errlog	-	WP	-	has	-	info	-	any	יומן השגיאות: מוגן מכתיבה	שגיאה מסוג WP ביומן השגיאות של הדיסק
+errlog	-	MC	-	has	-	info	-	any	יומן השגיאות: מדיה הוחלפה	שגיאה מסוג MC ביומן השגיאות של הדיסק
+errlog	-	NM	-	has	-	info	-	any	יומן השגיאות: אין מדיה	שגיאה מסוג NM ביומן השגיאות של הדיסק

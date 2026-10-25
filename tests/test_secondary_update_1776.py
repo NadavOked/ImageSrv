@@ -68,7 +68,7 @@ def test_apply_runs_on_the_secondary_in_its_own_path_and_is_journaled_on_both(
     assert _journal(secondary["conn"], "update_apply_started") == [("primary:noc", TAG)]
     assert _journal(secondary["conn"], "peer_write")[-1] == ("primary:noc", "POST /update/apply → 200")
     primary = _journal(server["ctx"].conn, "peer_write")
-    assert primary[-1][0] == "noc" and "חיפה" in primary[-1][1]
+    assert primary[-1][0] == "noc" and "HAIFA" in primary[-1][1]
     assert "POST /update/apply → 200" in primary[-1][1]
     assert _journal(server["ctx"].conn, "update_apply_started") == []
     # ההתקדמות נקראת מהמשני, דרך אותו ערוץ

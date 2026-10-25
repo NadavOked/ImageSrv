@@ -4,6 +4,7 @@
 #include <string.h>
 #include "screens_install.h"
 #include "screens_rounds.h"   /* bidi_isolate */
+#include "install_raid.h"     /* #1989 */
 
 /* "ext4, unknown, unknown" -> every exact "unknown" token in Hebrew (#1566) */
 static void display_part_types(const char *in,char *out,size_t n){
@@ -59,7 +60,7 @@ static void disk_head(cairo_t *cr,const Theme *t,Rect r){
 }
 
 static void disk_row(App *a,cairo_t *cr,Rect r,int i){
-    InstallState *s=&a->install;InstallDisk *d=&s->disks[i];const Theme *t=a->theme;int selected=i==s->disk;
+    InstallState *s=&a->install;InstallDisk *d=&s->disks[i];const Theme *t=a->theme;int selected=i==s->disk||(s->disk>=0&&install_raid_member(s,i));   /* #1989: every member is erased; #2147: once a disk is chosen */
     draw_fill_rrect(cr,r,0,d->iso?t->field:(selected?t->danger_soft:t->surface));
     cairo_rectangle(cr,r.x,r.y+r.h-1,r.w,1);draw_set(cr,t->hair);cairo_fill(cr);
     double cx=r.x+r.w-22,cy=r.y+r.h/2;cairo_arc(cr,cx,cy,7,0,6.283);draw_set(cr,d->iso?t->muted:(selected?t->danger:t->hair));cairo_set_line_width(cr,2);cairo_stroke(cr);
@@ -75,18 +76,40 @@ static void disk_row(App *a,cairo_t *cr,Rect r,int i){
     if(!d->iso)hit_add(a,r,HIT_INSTALL_DISK_BASE+i);
 }
 
-static void disk_ack(App *a,cairo_t *cr,Rect r){
-    InstallState *s=&a->install;const Theme *t=a->theme;draw_fill_rrect(cr,r,t->radius,s->disk_ack?t->danger_soft:t->surface);draw_border_rrect(cr,r,t->radius,s->disk_ack?t->danger:t->hair,1);
-    Rect box={r.x+r.w-38,r.y+12,20,20};draw_fill_rrect(cr,box,4,s->disk_ack?t->danger:t->field);draw_border_rrect(cr,box,4,s->disk_ack?t->danger:t->hair,1);
-    if(s->disk_ack)install_text_r(cr,t,"✓",13,600,box.x+17,box.y+1,16,t->on_ink);
-    install_text_r(cr,t,"אני מבין",13,600,r.x+r.w-50,r.y+13,r.w-64,t->ink);hit_add(a,r,HIT_INSTALL_DISK_ACK);
+/* #2147: off (muted, no hit box) until a disk is chosen */
+static void disk_ack(App *a,cairo_t *cr,Rect r,int enabled){
+    InstallState *s=&a->install;const Theme *t=a->theme;int on=enabled&&s->disk_ack;draw_fill_rrect(cr,r,t->radius,on?t->danger_soft:(enabled?t->surface:t->field));draw_border_rrect(cr,r,t->radius,on?t->danger:t->hair,1);
+    Rect box={r.x+r.w-38,r.y+12,20,20};draw_fill_rrect(cr,box,4,on?t->danger:t->field);draw_border_rrect(cr,box,4,on?t->danger:t->hair,1);
+    if(on)install_text_r(cr,t,"✓",13,600,box.x+17,box.y+1,16,t->on_ink);
+    install_text_r(cr,t,"אני מבין",13,600,r.x+r.w-50,r.y+13,r.w-64,enabled?t->ink:t->muted);if(enabled)hit_add(a,r,HIT_INSTALL_DISK_ACK);
+}
+
+/* #1989: the RAID choices this server allows, as one row of chips (RTL: the
+ * first choice on the right); a VM gets the reason instead of a choice. */
+static double raid_row(App *a,cairo_t *cr,double x,double y,double w){
+    InstallState *s=&a->install;const Theme *t=a->theme;int n=install_raid_suitable(s);
+    if(n<2)return y;
+    if(s->virt==INSTALL_VIRT_VIRTUAL){install_text_r(cr,t,"שרת וירטואלי: RAID נעשה ברמת המארח (ESXi/Hyper-V), ולכן אינו מוצע כאן",13,500,x+w,y,w,t->muted);return y+30;}
+    char cap[160];snprintf(cap,sizeof cap,"RAID מ-%d הכוננים המתאימים",n);install_text_r(cr,t,cap,13,600,x+w,y,w,t->ink);y+=24;
+    int shown=0;for(int c=0;c<RAID_CHOICES;c++)shown+=install_raid_allowed(s,c);
+    double gap=8,cw=(w-gap*(shown-1))/shown,cx=x+w;
+    for(int c=0;c<RAID_CHOICES;c++){if(!install_raid_allowed(s,c))continue;int on=s->raid==c;Rect r={cx-cw,y,cw,38};cx-=cw+gap;
+        draw_fill_rrect(cr,r,t->radius_sm,on?t->indigo_soft:t->surface);draw_border_rrect(cr,r,t->radius_sm,on?t->indigo:t->hair,on?2:1);
+        Text q=text_make(cr,FONT_SANS,13,on?600:500,RAID_OPTS[c].label,(int)cw-8,DIR_RTL);text_draw(cr,&q,r.x+(r.w-q.w)/2,r.y+(r.h-q.h)/2,on?t->indigo:t->ink);text_free(&q);
+        hit_add(a,r,HIT_INSTALL_RAID_BASE+c);}
+    y+=46;
+    if(s->virt==INSTALL_VIRT_UNKNOWN){install_text_r(cr,t,"לא זוהה אם השרת פיזי או וירטואלי — ברירת המחדל: בלי RAID",12,400,x+w,y,w,t->muted);y+=22;}
+    return y+4;
 }
 
 void install_draw_disk(App *a,cairo_t *cr,InstallLayout l){
     InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;
     Rect table={x,y,w,42+s->ndisks*58};install_card(cr,t,table);disk_head(cr,t,(Rect){x+1,y+1,w-2,40});
     for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);}y+=table.h+16;
-    if(s->disk>=0&&s->disk<s->ndisks){char warning[260];snprintf(warning,sizeof warning,"כל הנתונים בדיסק %s יימחקו",s->disks[s->disk].model[0]?s->disks[s->disk].model:s->disks[s->disk].path);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44});}
+    y=raid_row(a,cr,x,y,w);
+    int selectable=0;for(int i=0;i<s->ndisks;i++)selectable+=!s->disks[i].iso;
+    if(s->disk>=0&&s->disk<s->ndisks){char warning[320];const InstallDisk *d=&s->disks[s->disk];if(s->raid!=RAID_NONE)snprintf(warning,sizeof warning,"כל הנתונים ב-%d הכוננים יימחקו, והם יאוחדו למערך %s",install_raid_count(s),RAID_OPTS[s->raid].label);else snprintf(warning,sizeof warning,"כל הנתונים בדיסק %s · %.1f GiB · %s יימחקו",d->model[0]?d->model:"ללא שם",d->size_bytes/1073741824.0,d->path);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},1);}   /* #2147: name, size and device */
+    else if(selectable){install_text_r(cr,t,"בחר את הדיסק להתקנה — כל הנתונים בו יימחקו",14,600,x+w,y,w,t->ink);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},0);}   /* #2147: more than one disk, none chosen */
     else{install_text_r(cr,t,"לא נמצא דיסק חוקי להתקנה.",13,600,x+w,y,w,t->danger_fg);y+=48;}
     if(s->field_error[0][0]){install_text_r(cr,t,s->field_error[0],12,600,x+w,y+50,w,t->danger_fg);}
     if(s->existing_disk>=0&&s->existing_disk<s->ndisks){InstallDisk *d=&s->disks[s->existing_disk];Rect card={x,y+58,w,72};install_card(cr,t,card);install_text_r(cr,t,"נמצאה התקנה קיימת — אתחל מהדיסק",14,600,x+w-16,card.y+14,w-220,t->ink);install_text_ltr(cr,d->model,11,400,x+180,card.y+42,w-210,t->muted);Text boot=btn_label(cr,"אתחל מהדיסק");draw_btn(a,cr,(Rect){x+16,card.y+17,150,38},&boot,BTN_PLAIN,HIT_INSTALL_BOOT_LOCAL);text_free(&boot);}
@@ -109,8 +132,10 @@ static void table_head(cairo_t *cr,const Theme *t,Rect r){draw_fill_rrect(cr,r,0
 
 static void nic_row(App *a,cairo_t *cr,Rect r,int i){InstallState *s=&a->install;InstallNic *n=&s->nics[i];const Theme *t=a->theme;int sel=i==s->nic;draw_fill_rrect(cr,r,0,sel?t->indigo_soft:t->surface);cairo_rectangle(cr,r.x,r.y+r.h-1,r.w,1);draw_set(cr,t->hair);cairo_fill(cr);
     double cx=r.x+r.w-22,cy=r.y+r.h/2;cairo_arc(cr,cx,cy,7,0,6.283);draw_set(cr,sel?t->indigo:t->hair);cairo_set_line_width(cr,2);cairo_stroke(cr);if(sel){cairo_arc(cr,cx,cy,3.5,0,6.283);draw_set(cr,t->indigo);cairo_fill(cr);}
-    char identity[180];snprintf(identity,sizeof identity,"%s · %s",n->name,n->model[0]?n->model:"כרטיס רשת");
-    install_text_ltr(cr,identity,13,600,r.x+r.w-210,r.y+9,145,t->ink);install_text_ltr(cr,n->mac,11,400,r.x+r.w-210,r.y+31,180,t->muted);
+    /* #2096: a name a person reads (the model, or "כרטיס רשת N"), not "VMware 0x07b0"; the
+     * kernel name and the MAC on the line under it, each one line (it wrapped onto the MAC) */
+    char label[96],ids[96];if(n->model[0])snprintf(label,sizeof label,"%s",n->model);else snprintf(label,sizeof label,"כרטיס רשת %d",i+1);snprintf(ids,sizeof ids,"%s · %s",n->name,n->mac);
+    install_text_r(cr,t,label,13,600,r.x+r.w-45,r.y+9,200,t->ink);Text q=text_make(cr,FONT_MONO,11,400,ids,0,DIR_LTR);text_draw(cr,&q,r.x+r.w-45-q.w,r.y+31,t->muted);text_free(&q);
     char link[40];if(!strcmp(n->link,"unknown"))snprintf(link,sizeof link,"לא ידוע");else snprintf(link,sizeof link,"%s",n->link);
     install_text_r(cr,t,link,12,600,r.x+r.w*.56,r.y+20,r.w*.15,!strcmp(link,"מחובר")?t->success_ink:t->muted);
     install_text_ltr(cr,n->current[0]?n->current:"—",12,400,r.x+r.w*.21,r.y+20,r.w*.18,t->ink);
@@ -119,6 +144,7 @@ static void nic_row(App *a,cairo_t *cr,Rect r,int i){InstallState *s=&a->install
 void install_draw_network(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y;Rect table={x,y,w,42+s->nnics*58};install_card(cr,t,table);table_head(cr,t,(Rect){x+1,y+1,w-2,40});for(int i=0;i<s->nnics;i++)nic_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);y+=table.h+16;
     double half=(w-12)/2;install_radio(a,cr,(Rect){x+half+12,y,half,66},"לקוח DHCP (מומלץ)","הכתובת מגיעה משרת ה-DHCP של המכללה.",!s->static_mode,HIT_INSTALL_DHCP);install_radio(a,cr,(Rect){x,y,half,66},"כתובת סטטית","כשאין DHCP או כשהכתובת חייבת להישאר קבועה.",s->static_mode,HIT_INSTALL_STATIC);y+=79;
     double gap=12,fw=(w-gap)/2;install_field_draw(a,cr,(Rect){x+fw+gap,y,fw,56},"כתובת IP",s->address,0,HIT_INSTALL_ADDRESS,s->static_mode);install_field_draw(a,cr,(Rect){x,y,fw,56},"מסכת רשת",s->netmask,0,HIT_INSTALL_NETMASK,s->static_mode);y+=68;install_field_draw(a,cr,(Rect){x+fw+gap,y,fw,56},"שער (רשות)",s->gateway,0,HIT_INSTALL_GATEWAY,s->static_mode);install_field_draw(a,cr,(Rect){x,y,fw,56},"DNS (רשות)",s->dns,0,HIT_INSTALL_DNS,s->static_mode);
-    const char *err="";for(int i=3;i<=8;i++)if(s->field_error[i][0]){err=s->field_error[i];break;}if(err[0])install_text_r(cr,t,err,12,600,x+w,y+62,w,t->danger_fg);
+    /* #2096: the message under the field it is about (DNS sat under the gateway) */
+    for(int i=3;i<=8;i++)if(s->field_error[i][0]){double right=i==6||i==8?x+fw:x+w,width=i<5?w:fw;install_text_r(cr,t,s->field_error[i],12,600,right,y+62,width,t->danger_fg);break;}
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,s->nic>=0);
 }

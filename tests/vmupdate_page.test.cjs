@@ -34,7 +34,7 @@ function setup({user = 'nadav', role = 'admin'} = {}) {
   vm.runInContext(read('console.js'), ctx);
   vm.runInContext(read('vmupdate.js'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
-  run(`ME={username:${JSON.stringify(user)},role:${JSON.stringify(role)},capabilities:{}};`);
+  run(`ME={timezone:"UTC",username:${JSON.stringify(user)},role:${JSON.stringify(role)},capabilities:{}};`);
   return {run, node};
 }
 

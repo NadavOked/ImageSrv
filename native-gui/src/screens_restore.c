@@ -167,10 +167,12 @@ void screen_restore(App *a, cairo_t *cr, double W, double H, double head_h) {
                     y + row * (image_h + grid_gap), image_w, image_h};
         if (box.y + box.h > grid_bottom) break;
         const char *line1, *line2; char count[48];
-        int selected_now;
+        int selected_now, unchecked = 0;
         if (in) {
             line1 = s->images[items[i]].name; line2 = folder_label(a->pick_folder);
             selected_now = a->restore_image_sel == items[i] + 1;
+            /* #1896: an old image whose C: is not known -- "לא נבדק", and a click marks it */
+            if ((unchecked = s->images[items[i]].unchecked)) line2 = "לא נבדק — לחצו כדי לסמן איזו מחיצה היא C:";
         } else {
             const char *f = s->images[ffirst[i]].folder;
             line1 = folder_label(f);
@@ -182,12 +184,12 @@ void screen_restore(App *a, cairo_t *cr, double W, double H, double head_h) {
         draw_fill_rrect(cr, box, t->radius,
                         selected_now ? t->indigo_soft : t->surface);
         draw_border_rrect(cr, box, t->radius,
-                          selected_now ? t->indigo : t->hair,
-                          selected_now ? 2 : 1);
+                          selected_now ? t->indigo : unchecked ? t->warn : t->hair,
+                          selected_now || unchecked ? 2 : 1);
         Text name = rtl_block_make(cr, 14, 600, line1, box.w - 32);
         Text sub = rtl_block_make(cr, 11, 400, line2, box.w - 32);
         text_draw_r(cr, &name, box.x + box.w - 16, box.y + 10, t->ink);
-        text_draw_r(cr, &sub, box.x + box.w - 16, box.y + 31, t->muted);
+        text_draw_r(cr, &sub, box.x + box.w - 16, box.y + 31, unchecked ? t->warn : t->muted);
         if (i < 9) {
             char key[4]; snprintf(key, sizeof key, "%d", i + 1);
             Text kt = text_make(cr, FONT_MONO, 11, 500, key, 0, DIR_LTR);
@@ -215,7 +217,8 @@ void screen_restore(App *a, cairo_t *cr, double W, double H, double head_h) {
     /* #1270 (owner, 10/10): no typed name -- "מחק ושחזר" opens a confirm
      * dialog once an image is chosen and there is a disk to write to */
     int ready = (pull ? lc_pull_ports(a, NULL, 0) > 0 : target != NULL)
-             && a->restore_image_sel > 0 && a->restore_image_sel <= s->nimages;
+             && a->restore_image_sel > 0 && a->restore_image_sel <= s->nimages
+             && !s->images[a->restore_image_sel - 1].unchecked;   /* #1896: never an image whose C: is unknown */
     Text start = btn_label(cr, "מחק ושחזר…");
     double sw = btn_width(&start);
     Rect start_box = {N_PAD, y, sw, N_BUTTON_H};

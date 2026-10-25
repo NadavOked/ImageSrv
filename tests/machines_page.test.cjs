@@ -213,10 +213,10 @@ test('the machine drawer: header line, actions (monitor, WoL for the room, "requ
   assert.match(html,/<div class="sec" data-cnt="3">דיסקים<\/div>/,'#1300: the disks tab carries its count');
   assert.doesNotMatch(html,/דיווח אחרון/,'the compact disk list omits the report caption');
   assert.match(html,/<table class="n-tbl disk-map"><thead><tr><th>דיסק<\/th><th>חיבור<\/th><th>גודל<\/th><th>SMART<\/th>/,'#1485: the mockup table (W.machDrawer) + the connection column');
-  assert.match(html,/<tr class="" data-slot="1"><td><b>דיסק 1<\/b><\/td><td><select class="n-in conn-sel"[^>]*><option value="sata:1" title="SATA 0" selected>דיסק 1<\/option>[^]*?<\/select><\/td><td><span class="mono"><bdi dir="ltr">256GB<\/bdi><\/span> <span class="cap">870<\/span><\/td>/);
+  assert.match(html,/<tr class="" data-slot="1"><td><b>דיסק 1<\/b><\/td><td><span class="mono" title="SATA 0">דיסק 1<\/span><\/td><td><span class="mono"><bdi dir="ltr">256GB<\/bdi><\/span> <span class="cap">870<\/span><\/td>/);
   assert.doesNotMatch(html,/S5Y30|SMART תקין|SMART לא נבדק/,'serials are absent from the disk list; SMART is a chip in its own column');
   assert.doesNotMatch(html,/sd[abc]/,'never sd*');
-  assert.match(html,/slotEditAdd\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">\+ הוסף חריץ</,'#1485: the count is set in the disks tab — the separate dialog is gone'); assert.doesNotMatch(html,/editDrawerCount/);
+  assert.match(html,/openSlotMap\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">מיפוי חיבורים…</,'#2001: the mapping window opens from the disks tab — the separate dialog is gone'); assert.doesNotMatch(html,/editDrawerCount/);
   assert.match(html,/<span class="k">דגם<\/span><span class="v">LENOVO M720q</); assert.match(html,/<span class="k">TPM<\/span><span class="v">לא נבדק</); assert.match(html,/דף הדרייברים לא נטען/);
   assert.match(html,/טוען את היומן…/);
   const j=requests.find(r=>r.url.startsWith('/api/console/journal?'));
@@ -231,7 +231,7 @@ test('the machine drawer: header line, actions (monitor, WoL for the room, "requ
   assert.match(html,/המכונה מעולם לא דיווחה על חומרה/); assert.match(html,/המכונה מעולם לא דיווחה על כוננים/,'no slots declared and nothing reported is said, not drawn');
   run("openMachineDetail('a0:48:1c:8a:18:40')"); html=node('#drawerBody').innerHTML;
   assert.match(html,/<div class="sec" data-cnt="2">דיסקים/);
-  assert.match(html,/data-slot="1"[^]*title="SATA 0" selected>דיסק 1[^]*ריק[^]*data-slot="2"[^]*title="SATA 1" selected>דיסק 2[^]*ריק/,'reported-empty cloner renders its configured slots as empty rows');
+  assert.match(html,/data-slot="1"[^]*title="SATA 0">דיסק 1[^]*ריק[^]*data-slot="2"[^]*title="SATA 1">דיסק 2[^]*ריק/,'reported-empty cloner renders its configured slots as empty rows');
   run("openMachineDetail('b4:2e:99:07:1a:c3')"); html=node('#drawerBody').innerHTML;
   assert.match(html,/title="v2">WoL ואתחול מרחוק — לתחנות כיתה ב-v2</,'classroom: WoL (#984) and reboot are v2, not buttons'); assert.doesNotMatch(html,/monitorMachine|openMachineMonitor/); assert.match(html,/st warn">חסר בסבב</);
   assert.doesNotMatch(html,/rebootMachine\(|wakeMachine\(/);

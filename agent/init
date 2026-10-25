@@ -131,15 +131,28 @@ if [ -f "$LIB_DIR/common.sh" ]; then
         installer_boot
         fail "installer handover returned"
     fi
+    # #1914: the clone stick -- no server and no lease to wait for; the agent
+    # goes straight to the local clone screen (usbclone.sh). No NIC is brought up.
+    if [ "$IMAGECTL_MODE" = usbclone ]; then
+        exec /usr/bin/imagectl-agent
+    fi
 fi
 
 # --- network -----------------------------------------------------------------
-# Try every wired interface with a carrier, in order, until DHCP answers.
-# PXE got an address seconds ago on one of them, so this converges fast.
+# #2040: a build machine has two cabled NICs, deploy and classroom, in either
+# order. Ours is the NIC whose lease came from OUR server (DHCP server-id ==
+# the imagectl.server host) -- never the first lease in name order. Each
+# carrier NIC gets a one-shot probe (-q; the hook only records the lease), and
+# the one that is ours gets the resident udhcpc that renews (#1949). None ours
+# = no guess: the deadline reboots, and GRUB's default is the local disk
+# (principle 1). -V is how the deploy NIC's dnsmasq tells us from Windows
+# (AGENT_VENDOR_CLASS in server/dhcp.py).
 
 ip link set lo up 2>/dev/null
 
 IFACE=""
+_foreign=""
+_srv=${IMAGECTL_SERVER#*://}; _srv=${_srv%%[:/]*}
 _link_marked=0
 _deadline=$(( $(date +%s) + 90 ))
 while [ -z "$IFACE" ]; do
@@ -164,28 +177,61 @@ while [ -z "$IFACE" ]; do
         [ "$_carrier_found" = 1 ] && break
         poll_tick; _carrier_t=$((_carrier_t + _tk))
     done
+    _tried=0
     for _d in /sys/class/net/*; do
         [ -e "$_d" ] || continue
         _n=${_d##*/}
         [ "$_n" = "lo" ] && continue
         _carrier=$(cat "$_d/carrier" 2>/dev/null || echo 0)
         [ "$_carrier" = "1" ] || continue
+        case " $_foreign " in *" $_n "*) continue ;; esac   # its network does not move
         [ "$_link_marked" = 1 ] || { boot_mark link; _link_marked=1; }
-        if udhcpc -i "$_n" -n -q -t 4 -T 3 -s /etc/imagectl/udhcpc.script \
-            >/dev/null 2>&1; then
+        _tried=1
+        rm -f "/run/imagectl/dhcp-probe.$_n"
+        udhcpc -i "$_n" -n -q -t 4 -T 3 -V ImageSrv-agent \
+            -s /etc/imagectl/udhcpc.probe >/dev/null 2>&1 || continue
+        _sid=$(sed -n 's/^serverid=//p' "/run/imagectl/dhcp-probe.$_n" 2>/dev/null)
+        if [ -z "$_srv" ] || [ "$_sid" != "$_srv" ]; then
+            echo "ImageSrv: $_n has a lease from '${_sid:-?}', not from the server '${_srv:-?}' -- not used (#2040)"
+            _foreign="$_foreign $_n"
+            continue
+        fi
+        # No -q (#1949): once bound, udhcpc backgrounds and renews the lease
+        # at T1. With -q it exited, the 12h lease lapsed under a long run,
+        # dnsmasq dropped it, and the identity check refused every report.
+        if udhcpc -i "$_n" -n -t 4 -T 3 -V ImageSrv-agent \
+            -s /etc/imagectl/udhcpc.script >/dev/null 2>&1; then
             IFACE="$_n"
             break
         fi
     done
-    [ "$(date +%s)" -lt "$_deadline" ] || fail "no DHCP lease on any interface"
+    [ -n "$IFACE" ] || [ "$_tried" = 1 ] || poll_tick   # every carrier NIC foreign: no spin
+    [ -n "$IFACE" ] || [ "$(date +%s)" -lt "$_deadline" ] || fail \
+        "no DHCP lease ${_foreign:+from the ImageSrv server ${_srv:-?} }on any interface${_foreign:+ (another network on:$_foreign)}"
 done
 boot_mark dhcp
+
+# #2040: every other NIC goes down for the whole run -- the agent works on the
+# deploy network only. A NIC that refuses is said on the console, not hidden;
+# it still has no address (the probe configures nothing).
+NICS_DOWN=""
+for _d in /sys/class/net/*; do
+    [ -d "$_d" ] || continue      # a NIC is a directory; bonding_masters is a file
+    _n=${_d##*/}
+    [ "$_n" = "lo" ] || [ "$_n" = "$IFACE" ] && continue
+    if ip link set "$_n" down 2>/dev/null; then
+        NICS_DOWN="$NICS_DOWN${NICS_DOWN:+ }$_n"
+    else
+        echo "ImageSrv: WARNING $_n would not go down -- it stays up without an address (#2040)"
+    fi
+done
+[ -z "$NICS_DOWN" ] || echo "ImageSrv: server on $IFACE; down for this run: $NICS_DOWN (#2040)"
 
 IP=$(ip -4 addr show "$IFACE" 2>/dev/null \
      | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -n 1)
 [ -n "$IP" ] || fail "DHCP succeeded but no address on $IFACE"
 
-printf 'IFACE=%s\nIP=%s\n' "$IFACE" "$IP" > /run/imagectl/net.conf
+printf 'IFACE=%s\nIP=%s\nNICS_DOWN="%s"\n' "$IFACE" "$IP" "$NICS_DOWN" > /run/imagectl/net.conf
 echo "ImageSrv: network up on $IFACE ($IP)"
 
 # --- boot trace (#400) --------------------------------------------------------

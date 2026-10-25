@@ -33,7 +33,7 @@ Rgb smart_color(const Theme *t, const char *smart) {
 const char *smart_he(const char *smart) {
     if (!smart || !smart[0] || !strcmp(smart, "unchecked")) return "לא נבדק";
     if (!strcmp(smart, "pending")) return "ממתין להכרעה";
-    if (!strcmp(smart, "passed")) return "תקין";
+    if (!strcmp(smart, "passed") || !strcmp(smart, "ok")) return "תקין";   /* #1861: dsmart carries smart.sh's "ok" */
     if (!strcmp(smart, "failed_last")) return "נכשל בשיכפול הקודם";
     if (!strcmp(smart, "fail")) return "SMART תקול";
     if (!strcmp(smart, "warn")) return "אזהרה";
@@ -62,19 +62,51 @@ const char *smart_reason_text(const char *reason) {
     if (!reason || !reason[0] || !strcmp(reason, "ok")) return "";
     /* #1742: /sys/block/<d>/ro = 1, or the server's cause of a refused write (EPERM/EROFS) */
     if (!strcmp(reason, "readonly")) return "הדיסק במצב קריאה בלבד";
-    /* #1366: the three reasons of fail -- what stops an HP BIOS on "press F1" */
+    /* #1921 (Nadav 20/10): red is the disk's own FAILED -- what stops an HP BIOS on "press F1";
+     * 197/198 are orange -- an early sign, the disk still works */
     if (!strcmp(reason, "health_failed")) return "ה-BIOS יעצור ב-F1 — SMART: בדיקת הבריאות נכשלה";
-    if (!strcmp(reason, "pending_sectors")) return "ה-BIOS יעצור ב-F1 — SMART: סקטורים ממתינים (197)";
-    if (!strcmp(reason, "uncorrectable")) return "ה-BIOS יעצור ב-F1 — SMART: סקטורים שלא ניתנים לתיקון (198)";
+    if (!strcmp(reason, "pending_sectors")) return "סקטורים ממתינים (197) — הדיסק מתקשה לקרוא חלק מהאזורים";
+    if (!strcmp(reason, "uncorrectable")) return "סקטורים שלא ניתנים לתיקון (198) — הדיסק מצא אזורים שלא נקראו";
+    if (!strcmp(reason, "media_readonly")) return "הבקר נעל את הדיסק לקריאה בלבד (NVMe)";
+    /* #2078: smartctl's UNKNOWN! -- the disk refused the SMART read; red, the BIOS may stop on F1 */
+    if (!strcmp(reason, "health_unread")) return "ה-SMART לא נקרא — ה-BIOS עלול לעצור ב-F1";
+    if (!strcmp(reason, "no_table")) return "טבלת הידע של SMART חסרה — לא נבדק";
     if (!strcmp(reason, "no_health")) return "הדיסק אינו מדווח על בריאות";
     if (!strcmp(reason, "no_smartctl")) return "smartctl חסר ב-initramfs";
     if (!strcmp(reason, "timeout")) return "smartctl לא ענה בזמן — לא נבדק";   /* #1367 */
+    /* #1861: the rest of smart.sh's unchecked words -- each said, none passed through */
+    if (!strcmp(reason, "open_failed")) return "smartctl לא הצליח לפתוח את הדיסק — לא נבדק";
+    if (!strcmp(reason, "no_smart")) return "הדיסק אינו תומך ב-SMART — לא נבדק";
+    if (!strcmp(reason, "ro_unread")) return "לא נקרא אם הדיסק במצב קריאה בלבד — לא נבדק";
+    if (!strcmp(reason, "cmd_failed")) return "פקודת SMART לדיסק נכשלה — לא נבדק";   /* #1903 */
+    if (!strcmp(reason, "no_attrs")) return "הדיסק לא החזיר טבלת מאפייני SMART — לא נבדק";
     if (!strcmp(reason, "pending")) return "ממתין להכרעה";
+    /* #1859 (Nadav 20/10): the orange -- smart.sh SMART_WARN_REASONS, the same words as smart_reason_he */
+    if (!strcmp(reason, "critical_rose")) return "מאפיין קריטי עלה מאז הסבב הקודם — להחליף את הדיסק";
+    if (!strcmp(reason, "downshift_rose")) return "ירידות מהירות SATA (183) עלו מאז הסבב הקודם";
+    if (!strcmp(reason, "timeout_rose")) return "פקודות שנתקעו (188) עלו מאז הסבב הקודם";
+    if (!strcmp(reason, "hot")) return "הדיסק התחמם בכתיבה בסבב הקודם";
+    if (!strcmp(reason, "reported_uncorrectable")) return "שגיאות שלא תוקנו (187)";
+    if (!strcmp(reason, "reallocated")) return "סקטורים שהועברו (5)";
+    if (!strcmp(reason, "realloc_event")) return "אירועי העברה (196)";
+    if (!strcmp(reason, "spin_retry")) return "ניסיונות סיבוב חוזרים (10)";
+    if (!strcmp(reason, "ssd_worn")) return "הדיסק שחוק — 90% או יותר";
+    if (!strcmp(reason, "spare_exhausted")) return "הרזרבה של הדיסק נגמרה";
+    /* #1921: the knowledge table's orange -- smart.sh smart_reason_he, the same sentences */
+    if (!strcmp(reason, "hot_now")) return "הדיסק חם מעבר לסף שלו עכשיו — לבדוק אוורור";
+    if (!strcmp(reason, "bad_blocks")) return "הדיסק מצא בלוקים פגומים בזמן עבודה (183)";
+    if (!strcmp(reason, "unc_logged")) return "ביומן הדיסק יש קריאה שלא תוקנה (UNC)";
+    if (!strcmp(reason, "media_errors")) return "הדיסק דיווח על שגיאות נתונים שלא תוקנו (NVMe)";
+    if (!strcmp(reason, "program_fail")) return "הזיכרון של ה-SSD נכשל בכתיבה או במחיקה";
+    if (!strcmp(reason, "data_path")) return "שגיאות בנתיב הנתונים בתוך הדיסק";
+    if (!strcmp(reason, "selftest_failed")) return "הבדיקה העצמית האחרונה של הדיסק נכשלה";
+    if (!strcmp(reason, "nvme_reliability")) return "הבקר מדווח שהאמינות של הדיסק נפגעה (NVMe)";
     /* #1503: failed_last carries the server's cause instead (ata_cause.py CAUSES);
      * the words are the console's FAILURE_CAUSE_HE, which this was showing in English */
     if (!strcmp(reason, "cable")) return "סיבה: כבל/חריץ";
     if (!strcmp(reason, "disk")) return "סיבה: הדיסק";
     if (!strcmp(reason, "removed")) return "סיבה: המגירה נשלפה";   /* ata_cause.py, owner 17/10 */
+    if (!strcmp(reason, "write_error")) return "סיבה: שגיאת כתיבה לדיסק";   /* #1841: a refused fsync mid-partition */
     if (!strcmp(reason, "unclassified")) return "סיבה: לא סווג";
     return reason;
 }
@@ -104,6 +136,18 @@ void unmapped_label(const char *name, const char *conn, int port, const char *de
     if (name && name[0]) snprintf(what, sizeof what, "%s", name);
     else conn_text(conn, port, dev, what, sizeof what);
     snprintf(out, n, "%s (לא ממופה)", what);
+}
+
+void card_name(const char *name, int bay, const char *conn, int port, char *out, size_t n) {
+    if (bay > 0 && name && name[0]) snprintf(out, n, "%s", name);
+    else if (bay > 0) conn_text(conn, port, "", out, n);
+    else unmapped_label(name, conn, port, "", out, n);
+}
+
+const CUsed *cused_for_dev(const State *s, const char *dev) {
+    for (int i = 0; dev && dev[0] && i < s->ncuseds; i++)
+        if (!strcmp(s->cuseds[i].dev, dev)) return &s->cuseds[i];
+    return NULL;
 }
 
 int cloner_bay_count(const State *s) {

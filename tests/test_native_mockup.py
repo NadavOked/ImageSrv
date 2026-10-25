@@ -258,7 +258,10 @@ def test_cloner_smart_answers_are_ordered_by_risk():
     inviting colour on the risky choice. Now: replace, skip (plain), and
     write-anyway as a warning outline, laid from the inline end."""
     cloner = code(body(_src("screens_cloner.c"), "screen_cloner"))
-    assert "BTN_DANGER" not in cloner and "BTN_PRIMARY" not in cloner
+    # no red and no inviting colour on a SMART answer. #2081 (mockup 03) adds the held
+    # end's own "כבה את המחשב" as the screen's primary button -- that one only.
+    styled = re.findall(r"(BTN_DANGER|BTN_PRIMARY),\s*(HIT_\w+)", cloner)
+    assert styled == [("BTN_PRIMARY", "HIT_END_NOW")], styled
     draws = re.findall(r'key_button\(a, cr, x, by, ([^,]+(?:, [^,]+)?), "?[^,]*"?, (BTN_\w+), (HIT_SMART_\w+), 1\)', cloner)
     assert [d[2] for d in draws] == ["HIT_SMART_REPLACE", "HIT_SMART_SKIP", "HIT_SMART_RESCUE"], draws
     assert [d[1] for d in draws] == ["BTN_PLAIN", "BTN_PLAIN", "BTN_WARN"], draws
@@ -269,7 +272,8 @@ def test_cloner_and_standby_status_bars_list_only_working_keys():
     keys = code(body(_src("screens.c"), "status_keys"))
     cloner = keys[keys.index("case SCREEN_CLONER:"):keys.index("case SCREEN_RESTORE:")]
     assert "if(!a->st.smart_pending)" in cloner
-    assert 'return "אין פעולה במסך הזה"' in cloner          # no SMART question, no keys
+    # no SMART question, no keys -- but Enter on a held end (#2081: its own "כבה את המחשב")
+    assert 'a->st.end_kind!=END_NONE&&a->st.end_held?"Enter  כיבוי":"אין פעולה במסך הזה"' in cloner
     assert "דיסקים: 1 · 2 · 3" not in keys
 
 
@@ -751,7 +755,7 @@ def test_digits_pick_a_folder_then_an_image_and_esc_or_backspace_go_back():
     handle = body(main, "handle")
     assert "int image = pick_digit(a, e->ch - '1');" in handle
     assert handle.count("pick_digit(a, e->ch - '1')") == 2               # restore and the room's list
-    assert "if (image >= 0) a->restore_image_sel = image + 1;" in handle
+    assert "if (image >= 0) restore_pick(a, image);" in handle   # #1896: an unchecked image opens the C: picker first
     assert "if (image >= 0) { a->image_sel = image + 1; a->dd_open = 0; }" in handle
     esc = handle[handle.index("if (e->key == KEYSYM_ESC) {"):]
     assert esc.index("a->pick_in_folder = 0; break;") < esc.index("if (a->dd_open) { a->dd_open = 0; break; }")

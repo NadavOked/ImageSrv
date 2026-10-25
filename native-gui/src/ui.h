@@ -37,7 +37,9 @@
  * the grow-back of a disk left shrunk. A request with more is not drawn. */
 #define MAX_ASK_ROWS 16
 /* 11/10: the kinds of question the agent asks through the dialog (ask_prompt=) */
-enum { ASK_NONE, ASK_GROWBACK, ASK_CAPTURE_END, ASK_SEND_END, ASK_ROUND_END };   /* #1560: send/round */
+enum { ASK_NONE, ASK_GROWBACK, ASK_CAPTURE_END, ASK_SEND_END, ASK_ROUND_END,   /* #1560: send/round */
+       ASK_RAID, ASK_SHARE,     /* #1808/#1898: a cloner drawer's question (drawergate.sh) */
+       ASK_BADSECT };           /* #2017: a local clone's source with bad sectors (lcraw.sh) */
 /* #1560: what ended before the count to power-off (end_poweroff=<epoch>|<kind>) */
 enum { END_NONE, END_DRAWERS, END_PARTIAL, END_LOCALCLONE, END_FAILED };
 /* #1269: the models the driver library has (GET /api/console/room/driver-models). */
@@ -47,6 +49,7 @@ enum { END_NONE, END_DRAWERS, END_PARTIAL, END_LOCALCLONE, END_FAILED };
 #define MAX_FAIL_ROWS 8
 #define MAX_FAIL_STEPS 4
 #define MAX_FAIL_CODE 12
+#define MAX_FAIL_BTNS 3   /* #2068: the failure screen's buttons */
 /* #432/#65: round.precheck (room_warn=) and round.missing (room_missing=)
  * lines on the live room screen; more than this are said, not cut silently. */
 #define MAX_ROOM_NOTES 32
@@ -150,15 +153,24 @@ enum {
     HIT_ASK_SECONDARY,
     HIT_END_NOW,          /* #1560: "כבה עכשיו" on the end-of-task count */
     HIT_END_HOLD,         /* #1560: "עצור את הספירה" -- read the results (partial/failed) */
+    HIT_IDLE_KEEP,        /* mockup 10: the idle window's "השאר דלוק" (Esc) */
+    HIT_IDLE_OFF,         /* mockup 10: the idle window's "כבה עכשיו" (Enter) */
+    HIT_WAIT_BACK,        /* #2079 (mockup 02): "חזרה למסך הבחירה" on the cloner's wait (Esc) */
     /* #1322: the boot choice and the local clone */
     HIT_LC_BOOT_SERVER, HIT_LC_BOOT_LOCAL, HIT_LC_BACK, HIT_LC_NEXT, HIT_LC_GO, HIT_LC_CANCEL,
     HIT_LC_STOP, HIT_LC_STOP_GO, HIT_LC_STOP_NO, HIT_LC_OFF, HIT_LC_AGAIN,
     HIT_LC_BOOT_PULL,     /* 16/10: "שחזור אימג' מהשרת" */
     /* 16/10 (Nadav): the SMART warning window -- "דלג" and "כתוב בכל זאת" */
     HIT_SDLG_SKIP, HIT_SDLG_GO,
-    HIT_FAIL_DETAILS,     /* #1569: the "פרטים טכניים" bar of the failure screen */
+    HIT_FAIL_BTN,         /* #2068: the failure screen's buttons, HIT_FAIL_BTN + i (MAX_FAIL_BTNS of them) */
+    HIT_FAIL_BTN1,
+    HIT_FAIL_BTN_LAST,
     /* #1386: "בטל דיסק זה" -- the window's two buttons, and "בטל דיסק…" in the foot */
     HIT_CDLG_KEEP, HIT_CDLG_GO, HIT_CDLG_OPEN,
+    HIT_LC_REBOOT,        /* #1914 (Nadav 20/10): "הפעל מחדש" on the USB stick's result screen */
+    HIT_LC_USBSET,        /* #1914 (Nadav 20/10): "הגדרות" -- top left of the USB stick's source screen */
+    HIT_PWR_KEEP, HIT_PWR_STOP,   /* #1918: the power button's question -- "המשך" and the red "עצור וכבה" */
+    HIT_SYSP_CANCEL,      /* #1896: "ביטול" in the C: picker */
     HIT_INSTALL_SUMMARY_BASE = 1000,
     HIT_INSTALL_NIC_BASE = 1020,
     /* ranges: base + index */
@@ -188,6 +200,8 @@ enum {
      * picks, cloner_cancel_picks / room_cancel_picks) and a row of the window's
      * picker (+index) */
     HIT_BAY_CANCEL_BASE = 3400, HIT_CDLG_PICK_BASE = 3500,
+    HIT_SYSP_BASE = 3600,  /* #1896: a partition of the C: picker (+index into the image's cand) */
+    HIT_IDENTIFY_BASE = 3700,  /* #1966: identify a drawer (+drawer index); not 3600 -- that is #1896's C: picker */
 };
 
 typedef struct { Rect r; int id; } Hit;
@@ -258,7 +272,12 @@ typedef struct {
      * this machine's own disk; "" = not read, never "healthy" */
     char smart[16], smart_reason[48], serial[80]; int port;
 } Disk;
-typedef struct { char id[64], name[96], folder[64]; } Image;
+/* #1896: an old image whose C: is not known (image_unchecked=) -- shown "לא
+ * נבדק" in the picker and never restored; its candidates (image_cand=) are
+ * what the C: picker offers. More than MAX_SYSP_CANDS: marked in the console. */
+#define MAX_SYSP_CANDS 4
+typedef struct { char id[64], name[96], folder[64]; int unchecked, ncand;
+                 struct { int idx; unsigned long long size, used; } cand[MAX_SYSP_CANDS]; } Image;
 /* #695: one physical slot of a room machine, for the distribute grid. present
  * is separate from size_bytes (a real disk may report 0). port 0 is the
  * legacy/null-port fallback assigned by state_parse(). */
@@ -325,15 +344,24 @@ typedef struct {
     char drv_state[12], drv_detail[160], drv_boot[12], drv_bsvc[24], drv_berr[160];
     /* #1331 T8: drawer fields 18-20 -- drivers.linux: state, module, error|reason */
     char drv_lstate[12], drv_lmod[12], drv_ldet[160];
+    /* #1907: a drawer_rb= record -- done, not verified: the check list did not come down */
+    int rb_nolist;
+    /* #2055: a drawer_moved= record -- when its bytes last moved (epoch; 0 = not said) */
+    long long moved;
 } Drawer;
 /* A physically connected disk shown on the cloner's IDLE screen (no round yet),
  * so the operator sees what is plugged in before a broadcast starts. */
 typedef struct { int port; char dev[32], model[48]; unsigned long long size; char smart[16];
-                 char cause[16]; /* #874: cable|disk|unclassified for failed_last, else "" */
+                 char cause[32]; /* #874: cable|disk|unclassified for failed_last, else ""; #1921: 32 -- reported_uncorrectable */
                  char link[8], link_max[8]; /* #432: "6.0" Gb/s; "" = not read, never "fine" */
                  long crc_suspect; /* #1366: field 9 -- the CRC count over crc_warn_threshold; 0 = not over / not read */
-                 int drawer; char conn[32]; } IdleDisk;
+                 int drawer; char conn[32];
+                 char mark[12]; /* #1798: field 12 -- incomplete|unchecked; "" = clean or not reported */
+                 char hw[240]; /* #1921: field 13 -- the drawer's hardware note (hw-issues.tsv), never the disk's colour */ } IdleDisk;
 typedef struct { char conn[32], name[SLOT_NAME_MAX]; int set; } ClonerBay;
+/* #2030: cused=dev|size|used -- the size of a disk of this cloner and the bytes
+ * in use on it (diskused.sh). used -1 = not measured: said so, never 0. */
+typedef struct { char dev[32]; unsigned long long size; long long used; } CUsed;
 typedef struct { int drawer; char conn[32], model[48]; } COptical;
 
 /* Everything the --state file can say. See README "The --state file". */
@@ -346,6 +374,7 @@ typedef struct State {
     Drawer drawers[MAX_DRAWERS];        int ndrawers;
     IdleDisk idisks[MAX_DRAWERS];       int nidisks;   /* cloner idle inventory */
     ClonerBay cbays[MAX_DRAWERS];        int ncbays;
+    CUsed cuseds[MAX_DRAWERS + 4];       int ncuseds;   /* #2030: any disk the cloner has, drawers or not */
     COptical copticals[MAX_DRAWERS];     int ncopticals;
     int drawer_count;                    /* configured cloner bays; 0 = legacy default */
     char disk_probe[16];                /* drives / no_disks / no_ports / unchecked */
@@ -376,10 +405,14 @@ typedef struct State {
     char wave_state[16];
     /* #434: idle_poweroff_at=<epoch> from guistate.sh while the agent counts
      * down to a power-off; 0 = no countdown. Any key press emits "touch". */
-    long long idle_poweroff_at;
+    long long idle_poweroff_at; int idle_poweroff_s;   /* mockup 10: field 2 -- the idle time that ran out */
     /* #1560: end_poweroff=<epoch>|<kind> while the agent counts down to the
-     * power-off at the end of a task (idle.sh end_countdown); 0 = none. */
+     * power-off at the end of a task (idle.sh end_countdown); 0 = none.
+     * #2024: held with epoch 0 = the results stay, no time limit (end_kind
+     * says a record is there, not the epoch). end_problem=<dev>|<r|o>|<reason>:
+     * the targets that hold it, drawn highlighted with their reason. */
     long long end_poweroff_at; int end_kind, end_done, end_total, end_held;
+    struct { char dev[32], why[400]; int red; } end_prob[MAX_DRAWERS]; int nend_prob;
     /* classes.js live session */
     int has_session; char sess_image[96], sess_prefix[32], sess_group[80];
     int sess_open, joined, expected, starts_in;
@@ -431,10 +464,20 @@ typedef struct State {
     /* 11/10 (GUI only): a question the agent used to ask on the text console
      * (askgui.sh via guistate.sh): ask_prompt=<nonce>|<kind>|<count>|<subject>
      * and, for the grow-back, one ask_row=<idx>|<now bytes>|<orig bytes>|
-     * <table|fs> per row. All-or-nothing, like the shrink question. */
+     * <table|fs> per row. All-or-nothing, like the shrink question.
+     * #1808 raid: one ask_row=<port>|<metadata type>; #1898 share:
+     * ask_row=<port>|<idx>|<now bytes>|<after bytes> (orig_bytes = after).
+     * #2017 badsect: one ask_row=<port>|<idx>|<epoch> -- until = when the copy
+     * goes on by itself (Nadav 22/10), counted down on the dialog. */
     int ask_pending, ask_kind, nask;
     char ask_nonce[32], ask_subject[32];
-    struct { int idx, fs_only; unsigned long long now_bytes, orig_bytes; } ask[MAX_ASK_ROWS];
+    struct { int idx, fs_only, port; unsigned long long now_bytes, orig_bytes; char word[24]; long long until; } ask[MAX_ASK_ROWS];
+
+    /* #1918: the power button pressed during a write (agent/lib/powerbtn.sh):
+     * power_ask=<nonce>|<kind>|<can_stop>. Empty nonce = no question. kind:
+     * localclone, round, restore, capture, unknown; can_stop 0 = "המשך" only. */
+    char power_nonce[24], power_kind[16];
+    int power_can_stop;
 
     /* #1090: positive evidence from the agent's latest hello. -1 means the
      * key was absent, which is different from a measured zero seconds/HTTP 0. */
@@ -470,13 +513,15 @@ typedef struct State {
      * fail_why= / fail_safe= / fail_ctx= / fail_row= / fail_step= / fail_code=
      * lines after it belong to it (a second fail= replaces the block). A
      * non-empty title routes to SCREEN_FAILURE before everything else.
-     * fail_at: the epoch of die_local's reboot (0 = the machine holds). */
+     * fail_at: the epoch of die_local's reboot (0 = the machine holds).
+     * fail_info (#1802): tone inf -- not a failure (ui_unknown, mockup case 8). */
     char fail_title[128], fail_sub[160], fail_why[400], fail_safe[240];
-    int fail_warn, fail_hold, fail_cloner; long long fail_at;   /* fail_cloner: field 5 = cloner (the header's role) */
+    int fail_warn, fail_info, fail_hold, fail_cloner; long long fail_at;   /* fail_cloner: field 5 = cloner (the header's role) */
     struct { char label[48], value[96]; } fail_ctx[MAX_FAIL_CTX]; int nfail_ctx;
     struct { char label[96], sub[240], kind[8], pill[32]; } fail_rows[MAX_FAIL_ROWS]; int nfail_rows;
     char fail_steps[MAX_FAIL_STEPS][240]; int nfail_steps;
-    char fail_code[MAX_FAIL_CODE][240]; int nfail_code;
+    char fail_code[MAX_FAIL_CODE][240]; int nfail_code;   /* not drawn (#2068): the log is in the console's drawer */
+    struct { char action[16], label[64]; } fail_btns[MAX_FAIL_BTNS]; int nfail_btns;   /* #2068: fail_btn=<action>|<label> */
 } State;
 
 /* #649: one row of $GUI_DIR/tools (id|domain|title|risk|args). risk is
@@ -524,7 +569,6 @@ typedef struct App {
     int force_standby;          /* --screen standby / idle cloner */
     int fixed_clock;            /* --png: header clock is a constant, so two renders
                                    a minute apart are byte-identical (test flake, 19/09) */
-    int fail_open;              /* #1569: "פרטים טכניים" unfolded (Enter / click) */
     int watching;               /* #st-progress was on screen (drawDone trigger) */
     /* #408: the capture rate, measured here from two state reads (bytes and
      * the agent's updated= epoch). <= 0 = not measured yet -- never drawn as 0.
@@ -607,6 +651,8 @@ typedef struct App {
 
     char shrink_sent[32];       /* #928: the nonce already answered -- one answer per question */
     char ask_sent[32];          /* 11/10: the same, for the question dialog */
+    char power_sent[24];        /* #1918: the power question already answered (its nonce) */
+    int sysp_open;              /* #1896: the C: picker is open on image sysp_open-1; 0 = closed */
 
     State st;
 
@@ -632,11 +678,16 @@ typedef struct App {
 
     Hit hits[MAX_HITS];
     int nhits;
+    int end_off_own;            /* #2081: this frame's screen drew its own "כבה את המחשב" -- the end bar is words only */
     Rect clip; int clip_on;     /* .sbody overflow: hits outside are dropped */
 } App;
 
 /* Draw the whole screen into <cr> (W x H pixels) and rebuild the hit table. */
 void app_draw(App *a, cairo_t *cr, int W, int H);
+/* #2001: the USB stick's connections window is up -- F2 is its save there, not the theme */
+int app_usbset_window(const App *a);
+int app_usbset_here(const App *a);   /* mockup 01: the USB stick's "הגדרות" in the top bar (F4) */
+int standby_back_locked(const App *a);   /* #2079: screens_standby.c */
 /* The screen's scale (mockup 10/10): clamp(H/800, 1, 1.4) in quarter steps --
  * 1024x768 and 1280x800 stay 1:1, 1280x1024 and 1920x1080 are 1.25. */
 double ui_scale(int H);
@@ -693,8 +744,17 @@ void draw_shrink_dialog(App *a, cairo_t *cr, double W, double H);
  * modal like the shrink question and drawn in its style; the shrink question
  * wins if both are pending. */
 void draw_ask_dialog(App *a, cairo_t *cr, double W, double H);
+/* #1898: the split question's words -- "הדיסק" for one disk, "הדיסקים" for more (the rows' drawers) */
+int ask_share_words(const State *s, char *lead, size_t n, const char **skip, const char **hint);
 /* #1560 (screens_ask.c): the end-of-task count to power-off, one button */
 void draw_end_dialog(App *a, cairo_t *cr, double W, double H);
+/* #2024: the reason <dev> holds the end (end_problem=), NULL = it does not;
+ * *red = 1 red, 0 orange. Only while the end record is on the screen. */
+const char *end_problem_of(const State *s, const char *dev, int *red);
+/* #1918 (screens_ask.c): the power button pressed during a write -- over
+ * every screen while power_ask_open(); the write goes on until an answer. */
+int power_ask_open(const App *a);
+void draw_power_dialog(App *a, cairo_t *cr, double W, double H);
 /* #1270 (screens.c): the confirm dialog of a->confirm, modal like the shrink
  * question -- it replaces the hit table with [ביטול] and the red action. */
 void draw_confirm_dialog(App *a, cairo_t *cr, double W, double H);

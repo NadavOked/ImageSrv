@@ -20,42 +20,27 @@ restart`` — ולכן, כמו ה-DHCP, כל מגע עובר דרך hooks שבד
 
 from __future__ import annotations
 
-import ipaddress
-import re
 import socket
 import subprocess
 from typing import Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from . import auth, console_tls, deploy_net
+from . import auth, console_tls, deploy_net, hostname_rule
 from .api import ServerContext
 from .db import journal
-from .update import _active_round
+from .update import restart_blocker
 
 Hooks = dict[str, Callable]
 
-#: תווית אחת לפי RFC 1123: אות/ספרה בקצוות, מקפים באמצע, עד 63.
-_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
-MAX_HOSTNAME = 253
-
 
 def hostname_refusal(name: str) -> str | None:
-    """למה ``name`` (כבר באותיות קטנות) אינו שם מארח לפי RFC 1123, או ``None``."""
-    if not name:
-        return "שם המארח ריק"
-    if len(name) > MAX_HOSTNAME:
-        return f"שם המארח ארוך מ-{MAX_HOSTNAME} תווים"
-    try:
-        ipaddress.ip_address(name)
-        return "זו כתובת IP, לא שם מארח"
-    except ValueError:
-        pass
-    for label in name.split("."):
-        if not _LABEL.match(label):
-            return ("כל חלק בשם (בין נקודות) — 1 עד 63 תווים: אותיות אנגליות, "
-                    "ספרות ומקפים, בלי מקף בהתחלה או בסוף (RFC 1123)")
-    return None
+    """למה ``name`` (כבר באותיות קטנות) אינו שם שרת, או ``None``.
+    ‏#1997 (נדב, 22/10): שם השרת הוא שם מחשב — אותו כלל כמו מחשב בנייה ושרת
+    משנה (`hostname_rule`): אותיות אנגליות, ספרות ומקף, עד 15, בלי נקודות.
+    עד כאן RFC 1123 (עד 253, עם נקודות) — ושם כזה לא נכנס לשורת שרת המשנה
+    ולא ל-NetBIOS."""
+    return hostname_rule.refusal(name, "שם השרת")
 
 
 def _hostnamectl(name: str) -> str | None:
@@ -79,7 +64,7 @@ def default_hooks() -> Hooks:
 
 
 def create_hostcfg_router(ctx: ServerContext, data_dir, running_tls,
-                          hooks: Hooks | None = None) -> APIRouter:
+                          hooks: Hooks | None = None, busy_source=None) -> APIRouter:
     """‏``running_tls`` — ה-``ConsoleTLS`` שהתהליך הזה עלה איתו (``None`` =
     הקונסולה בלי TLS). ההשוואה מולו היא מה שאומר "ממתין לאתחול"."""
     router = APIRouter(prefix="/api/console")
@@ -87,9 +72,10 @@ def create_hostcfg_router(ctx: ServerContext, data_dir, running_tls,
     hooks = {**default_hooks(), **(hooks or {})}
 
     def _not_during_round() -> None:
-        if _active_round(ctx):
-            raise HTTPException(409, "יש סבב פתוח/רץ — השינוי מחייב אתחול של "
-                                     "השרת, ולכן ממתין לסיום הסבב")
+        blocker = restart_blocker(busy_source or ctx)   # ‏#1891
+        if blocker:
+            raise HTTPException(409, f"{blocker} — השינוי מחייב אתחול של "
+                                     "השרת, ולכן ממתין שזה יסתיים")
 
     @router.get("/tls")
     def tls_status(user=Depends(admin_only)):

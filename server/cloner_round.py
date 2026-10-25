@@ -24,9 +24,12 @@
 - **הנתונים של השרת, לא של הבקשה.** הגוף נושא פורטים בלבד — לא MAC-ים, לא
   דיסקים. ‏`target_slots` נבנה מה-MAC המאומת; החריצים נבדקים מול המיפוי
   הרשום (‏`drawer_slots`) והדיסקים מה-hello האחרון שנשמר בשרת
-  (‏`_validate_target_slots`), והאימג'ים המותרים מחושבים מאותם דיסקים
-  שמורים (‏`allowed_for_disks`) — כל שדה אחר בגוף מתעלמים ממנו.
+  (‏`_validate_target_slots`), והגודל נבדק מול אותם דיסקים שמורים
+  (‏`disk_floor` של המגירות שנבחרו) — כל שדה אחר בגוף מתעלמים ממנו.
 - אחר כך כל בדיקות `open_round`: אימג' קשור, גודל, ‏409 כשיש סבב פעיל.
+  **הגודל הוא הכרעה אחת עם הקונסולה** (‏#1863): ‏`fit_refusal` מול המגירה
+  הקטנה שנבחרה, ‏409 `fit` עם המשפט של הקונסולה ("דיסק 3 במחשב 1 הוא 43GB,
+  האימג' צריך 61GB"). המשפחה (256/500) אינה מכריעה.
 - **אין כאן סגירה, עצירה, "התחל עכשיו" או כיבוי**: הנתיב פותח, ותו לא.
 
 כל ניסיון נרשם ביומן: ‏`room_open_cloner` כשנפתח ("נפתח ממחשב שיכפול
@@ -35,7 +38,6 @@
 
 from __future__ import annotations
 
-import json
 import secrets
 import threading
 import time
@@ -48,7 +50,7 @@ from boot.grub_menu import normalize_mac as lenient_mac
 from . import identity, registry
 from .api import ServerContext, _error, identity_gate
 from .db import journal
-from .room import open_round
+from .room import FitRefusal, open_round
 from .sessions import SessionError
 
 #: הנתיב, על פורט הסוכן (‏`/api/v1/agent/*`, ‏#824).
@@ -60,16 +62,6 @@ RATE_S = 10
 
 #: השעון — מוחלף בבדיקות.
 _now = time.monotonic
-
-
-def _disks_of(ctx: ServerContext, mac: str) -> list[dict]:
-    """הדיסקים מה-hello האחרון **שנשמר בשרת** — לא מהבקשה."""
-    row = ctx.conn.execute(
-        "SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
-    if row is None or not row["disks_json"]:
-        return []
-    disks = json.loads(row["disks_json"])
-    return [d for d in disks if isinstance(d, dict)] if isinstance(disks, list) else []
 
 
 def initiator(machine) -> str:
@@ -159,7 +151,10 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         image_id = body.get("image_id")
         if not isinstance(image_id, str) or not image_id:
             return refuse(mac, 400, "לא נבחר אימג'", "bad_image")
-        if image_id not in ctx.library.allowed_for_disks(_disks_of(ctx, machine["mac"])):
+        # ‏#1863: כאן רק "אימג' שמוצע למכונות בכלל" (קיים, זמין, ברירת המחדל
+        # של השושלת, ‏#1334) — **לא** הגודל. הגודל מוכרע ב-`open_round` מול
+        # המגירות שנבחרו, אותה `fit_refusal` של הקונסולה (‏FitRefusal למטה).
+        if image_id not in ctx.library.allowed_for_disks(None):
             return refuse(mac, 403, "האימג' הזה אינו מותר למחשב הזה", "image_not_allowed",
                           f"האימג' {image_id} אינו מותר למחשב הזה")
 
@@ -167,6 +162,8 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         try:
             opened = open_round(ctx, image_id, len(ports), who,
                                 [{"mac": machine["mac"], "ports": ports}])
+        except FitRefusal as exc:            # לפני SessionError — הוא יורש ממנו
+            return refuse(mac, 409, str(exc), "fit")
         except SessionError as exc:          # לפני ValueError — הוא יורש ממנו
             return refuse(mac, 409, str(exc), "round_conflict")
         except (ValueError, TypeError) as exc:
@@ -176,5 +173,31 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
                 f" ({mac}), {image_id}, מגירות {','.join(str(p) for p in sorted(ports))}",
                 who)
         return JSONResponse({"ok": True, **opened})
+
+    @router.post(PATH + "/system-partition")
+    async def system_partition(request: Request) -> JSONResponse:
+        """‏#1896 (הכרעת נדב 22/10): מסך המשכפל מסמן איזו מחיצה היא C: באימג'
+        ישן שבו שתי מחיצות windows שוות — באותו שער של פתיחת הסבב (זהות, משכפל
+        רשום, אסימון המסך החד-פעמי), **ורק באימג' שעוד לא סומן**: שינוי סימון —
+        מהקונסולה. גוף ``{"mac", "nonce", "image_id", "index"}``."""
+        body, mac, machine = await caller(request, "cloner-system-partition")
+        if mac is None:
+            return machine
+        now = _now()
+        with lock:
+            held = nonces.pop(mac, None)   # single-use, like the open
+        sent = body.get("nonce")
+        if (held is None or not isinstance(sent, str) or held[1] < now
+                or not secrets.compare_digest(sent, held[0])):
+            return refuse(mac, 403, "מסך השחזור במחשב אינו פתוח מול השרת — חזרו ובחרו שוב", "bad_nonce")
+        image_id, index = body.get("image_id"), body.get("index")
+        if not isinstance(image_id, str) or ctx.library.get(image_id) is None:
+            return refuse(mac, 404, "האימג' לא נמצא בספרייה", "bad_image")
+        why = ctx.library.record_system_partition(image_id, index, only_unmarked=True)
+        if why is not None:
+            return refuse(mac, 409, why, "not_marked")
+        journal(ctx.conn, "image_system_partition",
+                f"{image_id} system={index} (ממחשב שיכפול {machine['suffix'] or mac})", initiator(machine))
+        return JSONResponse({"ok": True, "index": index})
 
     return router

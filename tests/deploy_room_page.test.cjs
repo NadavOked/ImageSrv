@@ -325,8 +325,8 @@ test('running wave (mockup P.deploy): a card per cloner — name, "מחובר", 
   const c1=mach(grid,C1), c2=mach(grid,C2), c3=mach(grid,C3);
   assert.match(c1,new RegExp(`^data-mac="${C1}" title="${C1}"><div class="mt"><span>מחשב 1</span><span class="pill ok">מחובר</span></div><div class="ms"><bdi dir="ltr">10\\.44\\.12\\.118</bdi></div><div class="dsks">`),'name + "מחובר" + IP; the MAC is the tooltip');
   assert.match(c1,/<div class="dsk" data-slot="1" title="SATA 0 · 870 EVO · S5Y10 · כותב · SMART תקין"><span>דיסק 1<\/span><div class="bar " role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="38"><i style="--w:38%"><\/i><\/div><b>38%<\/b>/,'"דיסק N" · bar · percent, the mockup row; the state word is in the tooltip');
-  assert.match(c2,/<div class="dsk" data-slot="2" title="SATA 1 · 870 EVO · S5Y31 · כותב · CRC \+3 · לבדוק כבל · SMART אזהרה"><span>דיסק 2<\/span><div class="bar warn"[^>]*><i style="--w:37%"><\/i><\/div><b>37%<\/b>/);
-  assert.match(c2,/<div class="dsk bad" data-slot="3" title="[^"]*נכשל בסבב — queue overflow: target lost bytes[^"]*"><span>דיסק 3<\/span><div class="bar err"><i style="--w:100%"><\/i><\/div><b>נכשל<\/b><\/div>/,'a write that failed says "נכשל" (principle 4), never a quiet skip');
+  assert.match(c2,/<div class="dsk bay-emphasis warn" data-slot="2" title="SATA 1 · 870 EVO · S5Y31 · כותב · CRC \+3 · לבדוק כבל · SMART אזהרה"><span>דיסק 2<\/span><div class="bar warn"[^>]*><i style="--w:37%"><\/i><\/div><b>37%<\/b>/);
+  assert.match(c2,/<div class="dsk bad bay-emphasis err" data-slot="3" title="[^"]*נכשל בסבב — queue overflow: target lost bytes[^"]*"><span>דיסק 3<\/span><div class="bar err"><i style="--w:100%"><\/i><\/div><b>נכשל<\/b><\/div>/,'a write that failed says "נכשל" (principle 4), never a quiet skip');
   assert.match(grid,new RegExp(`<div class="mach err" data-mac="${C2}"`),'a machine with a failed drawer is red');
   assert.match(c2,/<span>מחשב 2<\/span><span class="pill err">דיסק אדום<\/span><\/div><div class="ms">דיסק 3 אדום — הדיסק לא עמד בקצב — אבדו בייטים<\/div>/,'which disk and why, on the card');
   assert.doesNotMatch(c2.replace(/title="[^"]*"/g,''),/queue overflow/,'no English on the screen; the raw reason stays in the tooltip');
@@ -340,9 +340,31 @@ test('running wave (mockup P.deploy): a card per cloner — name, "מחובר", 
   assert.match(d2,/<div class="dsk" data-slot="1" [^>]*><span>דיסק 1<\/span><div class="bar ok"[^>]*aria-valuenow="100"><i style="--w:100%"><\/i><\/div><b>100%<\/b>/);
   const notes=between(html,'<div class="c12 rnotes">');
   assert.match(notes,/<div class="note warn">[^]*?<b>מחשב 2 · דיסק 2<\/b> — SMART אזהרה \/ CRC \/ קישור איטי: <b>הסוכן ממשיך לכתוב<\/b> \(כתום = כותב\)[^]*?דילוג מרחוק — <b[^>]*>דורש API<\/b>/);
-  // #1732 (owner 18/10): red is never a target -- the note says so, not "the agent skips if nobody answers"
-  assert.match(notes,/<div class="note err">[^]*?<b>מחשב 2 · דיסק 3<\/b> — אדום: <b>SMART נכשל — לא כותבים על הדיסק הזה[^<]*<\/b> \(#1732: מדולג בגלוי, בלי שאלה\)/);
+  // #1767: drawer 3's write failed in the round (smart ok) -- the red note says that, not "SMART נכשל" (see the test below)
+  assert.match(notes,/<div class="note err">[^]*?<b>מחשב 2 · דיסק 3<\/b> — אדום: <b>הכתיבה בסבב נכשלה: הדיסק לא עמד בקצב — אבדו בייטים<\/b>\. /);
   assert.doesNotMatch(notes,/דלג בשניהם|onclick="[^"]*skip/,'never "skip both", never an invented skip endpoint');
+});
+
+test('#1767: the red note says the red drawer\'s own reason -- the write failed / SMART failed / read-only -- never "SMART נכשל" for all three', () => {
+  const redNote=(html)=>between(html,'<div class="c12 rnotes">').match(/<div class="note err">(?:(?!<div class="note).)*/g)||[];
+  // (1) the write failed in the round, SMART ok
+  let notes=redNote(setup({room:roomRunning()}).run('deploy(0)'));
+  assert.equal(notes.length,1,notes);
+  assert.match(notes[0],/<b>מחשב 2 · דיסק 3<\/b> — אדום: <b>הכתיבה בסבב נכשלה: הדיסק לא עמד בקצב — אבדו בייטים<\/b>\. /);
+  assert.doesNotMatch(notes[0],/SMART|#1732|לחלץ לשרת/,'not SMART, not "skipped", not "extract to the server"');
+  // (2) SMART failed: never written -- the #1732 note, as before
+  let r=roomRunning(); r.machines[1].drawer_list[2]={...r.machines[1].drawer_list[2],state:null,error:null,bytes_written:0,bytes_total:0,smart:'fail'};
+  notes=redNote(setup({room:r}).run('deploy(0)'));
+  assert.equal(notes.length,1,notes);
+  assert.match(notes[0],/<b>מחשב 2 · דיסק 3<\/b> — אדום: <b>SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת<\/b> \(#1732: מדולג בגלוי, בלי שאלה\)/);
+  // (3) read-only (#1742): its own cause, not SMART
+  r=roomRunning(); r.machines[1].drawer_list[2]={...r.machines[1].drawer_list[2],state:null,error:null,bytes_written:0,bytes_total:0,smart:'ok'};
+  const k=setup({room:r});
+  k.run(`DISK_FAILURES=[{id:9,session_id:'r15',mac:'${C2}',dev:'sdc',serial:'S5Y2NX0R12345',port:3,disk_number:3,ata_port:'ata3',at:'2026-09-15T14:22:00Z',cause:'readonly',error:'read-only',ata_log:[]}]`);
+  notes=redNote(k.run('deploy(0)'));
+  assert.equal(notes.length,1,notes);
+  assert.match(notes[0],/<b>מחשב 2 · דיסק 3<\/b> — אדום: <b>הדיסק במצב קריאה בלבד<\/b>\. /);
+  assert.doesNotMatch(notes[0],/SMART/);
 });
 
 test('a drawer with no report is "—" (not 0%), an empty slot is "ריק", and a red drawer that was not written in the round is "דולג" with a red track', () => {
@@ -351,7 +373,7 @@ test('a drawer with no report is "—" (not 0%), an empty slot is "ריק", and 
   r.machines[1].drawer_list[2]={...r.machines[1].drawer_list[2],state:null,error:null,bytes_written:0,bytes_total:0,smart:'fail'};
   const html=setup({room:r}).run('deploy(0)'); balanced(html);
   assert.match(mach(html,C1),/<div class="dsk" data-slot="2" [^>]*><span>דיסק 2<\/span><div class="bar "><i style="--w:0%"><\/i><\/div><b>—<\/b><\/div>/);
-  assert.match(mach(html,C2),/<div class="dsk bad" data-slot="3" [^>]*><span>דיסק 3<\/span><div class="bar err"><i style="--w:0%"><\/i><\/div><b>דולג<\/b><\/div>/);
+  assert.match(mach(html,C2),/<div class="dsk bad bay-emphasis err" data-slot="3" [^>]*><span>דיסק 3<\/span><div class="bar err"><i style="--w:0%"><\/i><\/div><b>דולג<\/b><\/div>/);
   assert.match(mach(html,C2),/<div class="ms">דיסק 3 אדום — SMART נכשל<\/div>/);
   assert.match(mach(html,C3),/<div class="dsk vacant" data-slot="1"><span>דיסק 1<\/span><div class="bar "><i style="--w:0%"><\/i><\/div><b>ריק<\/b><\/div>/);
 });
@@ -778,7 +800,7 @@ function roomOpenWave(extra={}) {
 test('#432: a slow drawer is orange with the link and CRC rise in its tooltip; an unread link says "unknown" and is never called fine', () => {
   const {run}=setup({room:roomOpenWave()});
   const html=run('deploy(0)'); balanced(html);
-  assert.match(mach(html,C2),/<div class="dsk" data-slot="2" title="[^"]*קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה · CRC \+12 מאז הסבב הקודם · SMART תקין">/);
+  assert.match(mach(html,C2),/<div class="dsk bay-emphasis warn" data-slot="2" title="[^"]*קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה · CRC \+12 מאז הסבב הקודם · SMART תקין">/);
   assert.match(mach(html,C1),/<div class="dsk" data-slot="1" title="[^"]*קישור 6\.0 מתוך 6\.0 Gb\/s · SMART תקין">/);
   assert.match(mach(html,C1),/<div class="dsk" data-slot="2" title="[^"]*קישור SATA לא ידוע · SMART תקין">/,'unknown is said, not hidden');
   assert.doesNotMatch(mach(html,C1),/לא ידוע · לבדוק כבל/);
@@ -878,4 +900,16 @@ test('#1386: the window is the console\'s danger sheet -- "המשך לכתוב" 
   fixtures['/room/drawer/cancel']={__status:409,detail:'הדיסק אינו כותב עכשיו — אין מה לבטל'};
   await assert.rejects(run('formOptions.onSubmit({})'),/הדיסק אינו כותב עכשיו/,'the server\'s reason reaches the sheet\'s error line');
   run('ME=null; formOptions=undefined'); run(`cancelDrawer(encodeURIComponent('${C2}'),2)`); assert.equal(run('typeof formOptions'),'undefined');
+});
+
+test('#1936: a drawer the operator cancelled in an earlier wave says "בוטל", not "נכתב" 100%', () => {
+  // wave 2: S5Y11 (C1 disk 2) was cancelled in wave 1 -- closed in the round, not a target now
+  const s=setup({room:roomRunning({wave_number:2})});
+  s.run("Object.assign(ROOM.machines[0].drawer_list[1],{state:null,bytes_written:0,bytes_total:0,fresh:false,cancelled_round:true})");
+  let html=s.run('deploy(0)'); balanced(html);
+  assert.match(mach(html,C1),/<div class="dsk cancelled" data-slot="2"[^>]*><span>דיסק 2<\/span><div class="bar "[^>]*><i style="--w:0%"><\/i><\/div><b>בוטל<\/b>/);
+  // the guard: written in an earlier wave (no cancelled_round) is still "נכתב" 100% (#1790)
+  s.run("ROOM.machines[0].drawer_list[1].cancelled_round=false");
+  html=s.run('deploy(0)');
+  assert.match(mach(html,C1),/<div class="dsk" data-slot="2"[^>]*><span>דיסק 2<\/span><div class="bar ok"[^>]*><i style="--w:100%"><\/i><\/div><b>נכתב<\/b>/);
 });

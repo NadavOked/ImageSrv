@@ -84,7 +84,7 @@ def _stream(tmp_path: Path, mode: str, before: str | None, after: str | None) ->
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; "
         f". {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ {swap}cat {posix(payload)!r}; }}; "

@@ -14,7 +14,8 @@
 # "ok", partclone exited 0, the target relay (fanout) exited 0, and the xxh64 of what
 # the target pipeline consumed equals the xxh64 of what was read from the
 # source. A failing target fails alone; the source failing fails every one.
-# No full read-back of the data (owner, 13/10): it would double the time.
+# No full read-back DURING the copy (owner, 13/10: it would double the time);
+# #1805 (owner, 19/10): after it, every target is read back against the source (readback.sh).
 
 LC_STALL_S="${LC_STALL_S:-${WAIT_STREAM_STALL_S:-300}}"
 
@@ -41,7 +42,7 @@ lc_prepare_target() {
         log "WARNING: expansion failed on $1 -- writing at the source's own size"
         apply_gpt "$1" "$2" || { fail_written_target "$1" "$(_lc_gpt_why)"; return 1; }
     fi
-    lc_set_names "$1" || { fail_written_target "$1" "שמות המחיצות לא נכתבו (sgdisk -c)"; return 1; }
+    # #1798: the source's names come back only after the copy and the grow (finish_grow) -- until then the mark
     reread_table "$DEVROOT/$1" \
         || { fail_written_target "$1" "הקרנל לא קרא את הטבלה החדשה"; return 1; }
 }
@@ -67,8 +68,9 @@ _lc_target_pipeline() {
             -L "$_lt_t/partclone.log" < "$_lt_t/relay" 2>> "$LOG_FILE"
           echo "$?" > "$_lt_t/pipeline.rc"; } &
         _lt_pp=$!
-        fanout -H "$_lt_t/sha.out" 16777216 "$_lt_t/relay" < "$_lt_t/feed" \
-            > "$_lt_t/relay.out" 2>> "$LOG_FILE"
+        # shellcheck disable=SC2016 # $$ is sh -c's own. #2045: reader.pid = the feed's reader, drawer_watch (verdict.sh) kills it
+        sh -c 'echo "$$" > "$1"; shift; exec "$@"' fanout "$_lt_t/reader.pid" fanout -H "$_lt_t/sha.out" 16777216 \
+            "$_lt_t/relay" < "$_lt_t/feed" > "$_lt_t/relay.out" 2>> "$LOG_FILE"
         echo "$?" > "$_lt_t/tee.rc"   # ‏rc של הממסר: 0 רק אם partclone לקח הכול
         wait_pid "$_lt_pp" "$WAIT_DRAWER_S" "partclone של יעד $1 (מחיצה $3)" \
             || echo "$WAIT_TIMED_OUT" > "$_lt_t/pipeline.rc"
@@ -117,7 +119,7 @@ lc_stream() {
         _ls_d="$RUN_DIR/targets/$_ls_t"
         [ "$(cat "$_ls_d/state")" = failed ] && continue
         rm -f "$_ls_d/feed" "$_ls_d/feed.bytes" "$_ls_d/relay" "$_ls_d/relay.bytes" "$_ls_d/relay.out" \
-              "$_ls_d/sha.out" "$_ls_d/pipeline.rc" "$_ls_d/tee.rc" "$_ls_d/pipeline.pid"
+              "$_ls_d/sha.out" "$_ls_d/pipeline.rc" "$_ls_d/tee.rc" "$_ls_d/pipeline.pid" "$_ls_d/reader.pid"
         mkfifo "$_ls_d/feed" "$_ls_d/relay" || { fail_written_target "$_ls_t" "מחיצה $_ls_i: mkfifo נכשל"; continue; }
         target_counter "$_ls_t" "$_ls_d/feed.bytes"
         echo "$_ls_i" > "$_ls_d/lc_part"
@@ -136,10 +138,16 @@ lc_stream() {
     # חוצץ 512KB (‏-z): ‏160 → 170MB/s, ‏1MB נמדד פעמיים (160/160); 4MB ‏114, ‏16MB ‏106.
     [ "$_ls_pcl" = partclone.dd ] || _ls_ign="$_ls_ign -a0 -z ${LC_SRC_Z:-524288}"   # lctune.sh
     # #1466: a partition shrunk through a RAM view is read from the view (lc_src_node).
+    # #2017: the operator's "continue anyway" (lcraw.sh) reads through bad sectors: zeros, counted.
+    rm -f "$_ls_r/rescue.err"
     (
-        # shellcheck disable=SC2046 # partclone_mode flags are a word list
-        "$_ls_pcl" $(partclone_mode "$_ls_pcl" -c) $_ls_ign -s "$(lc_src_node "$_ls_src" "$_ls_i")" \
-            -L "$_ls_r/partclone.log" > "$_ls_r/src.fifo" 2>> "$_ls_r/partclone.err" &
+        if [ "${LC_RESCUE:-0}" = 1 ]; then
+            busybox dd if="$(lc_src_node "$_ls_src" "$_ls_i")" bs="$LC_RESCUE_BS" conv=noerror,sync > "$_ls_r/src.fifo" 2> "$_ls_r/rescue.err" &
+        else
+            # shellcheck disable=SC2046 # partclone_mode flags are a word list
+            "$_ls_pcl" $(partclone_mode "$_ls_pcl" -c) $_ls_ign -s "$(lc_src_node "$_ls_src" "$_ls_i")" \
+                -L "$_ls_r/partclone.log" > "$_ls_r/src.fifo" 2>> "$_ls_r/partclone.err" &
+        fi
         echo "$!" > "$_ls_r/src.pid"; wait "$!"; echo "$?" > "$_ls_r/src.rc"
     ) &
     # ‏#1438: fanout מגבב (‏-H, רק בסוף זרם שנקרא כולו) ומונה (‏-P, פורמט pv -n)
@@ -148,13 +156,17 @@ lc_stream() {
     ( fanout -H "$_ls_r/sha.out" -P "$_ls_raw" "$(_fanout_buffer "$(echo "$_ls_feeds" | wc -w)")" \
         $_ls_feeds < "$_ls_r/src.fifo" > "$_ls_r/fanout.out" 2>> "$LOG_FILE"
       echo "$?" > "$_ls_r/fanout.rc" ) &
-    _lc_wait_stream "$!" "$_ls_raw"; _ls_w=$?
+    # #2045 (metal D2): a pulled drawer is out in seconds, by name, as in a round (#1598) -- not after
+    # 45 s of a held stream (fanout's BLOCK_EVICT_MS) as a "stalled" found only when the partition ends.
+    _ls_fp=$!; drawer_watch "$_ls_fp" "$_ls_i" "$*" & _ls_wp=$!
+    _lc_wait_stream "$_ls_fp" "$_ls_raw"; _ls_w=$?
+    wait_pid "$_ls_wp" "$WAIT_HELPER_S" "מעקב המגירות (מחיצה $_ls_i)" || :
     # The stream is over: a target whose fifo never got a writer (fanout that
     # did not start, #49) is released now, not after a drawer's ceiling.
     for _ls_f in $_ls_feeds; do unblock_fifo "$_ls_f"; done
     for _ls_t in "$@"; do
         _ls_pf="$RUN_DIR/targets/$_ls_t/pipeline.pid"
-        [ -f "$_ls_pf" ] || continue
+        [ -f "$_ls_pf" ] && [ ! -f "$RUN_DIR/targets/$_ls_t/dead" ] || continue   # #2045: drawer_watch failed it
         wait_pid "$(cat "$_ls_pf")" "$WAIT_DRAWER_S" "יעד $_ls_t (מחיצה $_ls_i)" && continue
         unblock_fifo "$RUN_DIR/targets/$_ls_t/feed"
         fail_written_target "$_ls_t" "מחיצה $_ls_i: פג הזמן — היעד הפסיק לכתוב"
@@ -164,6 +176,9 @@ lc_stream() {
     _ls_why=""
     if [ "$_ls_w" = 2 ]; then _ls_why="השיכפול נעצר באמצע מחיצה $_ls_i — היעד אינו שמיש"
     elif [ "$_ls_w" = 1 ]; then _ls_why="מחיצה $_ls_i: המקור לא התקדם $LC_STALL_S שניות"
+    elif [ "$_ls_src_rc" != 0 ] && [ "${LC_RESCUE:-0}" != 1 ] && grep -qE ' ok$| failed empty stream$' "$_ls_r/fanout.out" 2>/dev/null; then
+        # #2017: the reader failed and a target took all it gave -- the source, not the targets (lcraw.sh)
+        LC_SRC_RC=$_ls_src_rc; [ "$_ls_pcl" = partclone.dd ] && return 4; return 3
     elif [ "$_ls_src_rc" != 0 ]; then _ls_why="מחיצה $_ls_i: קריאת המקור נכשלה (partclone rc=${_ls_src_rc:-לא נרשם}) — המקור לא שונה"
     elif ! _lc_hash_ok "$_ls_sha"; then _ls_why="מחיצה $_ls_i: ה-xxh64 של המקור לא חושב — אין ראיה למה שנקרא"
     fi
@@ -231,7 +246,7 @@ _lc_copy_parts() {
             echo "$_lk_i|done" >> "$LC/run/swaps"
         else
             log "local clone: partition $_lk_i ($_lk_r, $_lk_fs) -> $*"
-            lc_stream "$_lk_i" "$_lk_fs" "$_lk_src" "$@"; _lk_rc=$?
+            lc_stream_any "$_lk_i" "$_lk_fs" "$_lk_src" "$@"; _lk_rc=$?   # #2017: raw when it must be (lcraw.sh)
             [ "$_lk_rc" = 2 ] && return 2
         fi
         _any_alive "$*" || return 1
@@ -239,16 +254,25 @@ _lc_copy_parts() {
 }
 
 lc_finish() {
-    # $1 = manifest, $2.. = targets. The table read back, then the grown
-    # filesystem follows its partition (finish_grow, best-effort as in a round).
+    # $1 = manifest, $2.. = targets. The table read back, the data read back
+    # against the source (#1805), then the grown filesystem follows its
+    # partition (finish_grow, best-effort as in a round).
     _lf_m="$1"; shift
     for _lf_t in "$@"; do
         [ "$(cat "$RUN_DIR/targets/$_lf_t/state")" = failed ] && continue
         target_set "$_lf_t" verifying
-        if ! lc_table_check "$_lf_t" "$_lf_m"; then
-            fail_written_target "$_lf_t" "טבלת המחיצות שנקראה בחזרה מהיעד אינה זהה למקור: $LC_ERROR"
-            continue
-        fi
-        finish_grow "$_lf_t"
+        lc_table_check "$_lf_t" "$_lf_m" \
+            || fail_written_target "$_lf_t" "טבלת המחיצות שנקראה בחזרה מהיעד אינה זהה למקור: $LC_ERROR"
+    done
+    readback_local "$_lf_m" "$(cat "$LC/run/src" 2>/dev/null)" "$@"   # one that fails fails alone
+    [ "$?" -ne 127 ] || _fail_alive "$*" "האימות אחרי הכתיבה לא רץ — readback.sh לא נטען"   # missing is not "verified"
+    for _lf_t in "$@"; do   # #1798: a failed read-back keeps the mark; the source's names replace it only after the grow
+        [ "$(cat "$RUN_DIR/targets/$_lf_t/state")" = failed ] && continue
+        lc_unhibernate_target "$_lf_t" "$_lf_m"; _lf_u=$?   # #2009: on the copy, before its grow; 1 = failed by name
+        [ "$_lf_u" = 0 ] || { [ "$_lf_u" = 1 ] || fail_written_target "$_lf_t" "מצב ההשהיה של Windows בעותק לא נבדק (rc=$_lf_u)"; continue; }
+        lc_raw_nogrow "$_lf_t" "$_lf_m"; finish_grow "$_lf_t" "$LC/run/entries" "$_lf_m" || continue
+        [ "$(cat "$RUN_DIR/targets/$_lf_t/state")" != done ] || lc_ntfs_note "$_lf_t" "$_lf_m"   # #2009: orange, not green
+        _lf_n=$(lc_raw_note "$_lf_t" "$_lf_m"); _lf_e=$(cat "$RUN_DIR/targets/$_lf_t/error" 2>/dev/null)   # #2017: orange, why raw
+        [ -z "$_lf_n" ] || target_set "$_lf_t" "done" "$_lf_n${_lf_e:+ · $_lf_e}"
     done
 }

@@ -86,8 +86,8 @@ static unsigned char key_down[KEY_MAX + 1];
  * kept -- everyone else is closed before the handshake; (2) RFB security
  * type 2 framing, 16-byte challenge, 16-byte response. The response is
  * HMAC-SHA256(secret, challenge) truncated to 16 bytes, not the secret
- * itself and not DES. The secret is drawn on the machine, reported in
- * hello, and rewritten after every authenticated session ends so a
+ * itself and not DES. The secret is drawn on the machine and reported in
+ * hello; every successful authentication moves it on (rekey_secret) so a
  * captured response cannot be replayed. The browser never sees it.
  */
 #define SECRET_LEN 16
@@ -368,32 +368,39 @@ static int write_secret_file(const unsigned char *bytes) {
     return -1;
 }
 
-/* After an authenticated RFB session ends, a new 16-byte secret so a
- * captured HMAC cannot be replayed. Failure keeps the old secret and
- * says so -- wiping it would take the monitor down until the next hello. */
-static void rotate_secret(void) {
-    unsigned char fresh[SECRET_LEN];
-    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+/*
+ * #1837: every successful authentication moves the secret on, to
+ * HMAC-SHA256(secret, REKEY_LABEL || challenge) truncated to 16 bytes.
+ * Derived, not drawn: the server's proxy holds the same secret and saw the
+ * same challenge, so it derives the same next secret as soon as it reads
+ * SecurityResult OK, and the next connection authenticates on the first
+ * try with no hello in between. Until #1837 a random secret was drawn when
+ * the session ended, the server learned it only from the next hello, and
+ * every reconnect before that hello was "bad HMAC". Replay protection is
+ * unchanged: a captured response was keyed with a secret that is gone, and
+ * the next secret cannot be computed without it. A failed file write keeps
+ * the old secret and says so; the server re-learns it from hello.
+ */
+static const char REKEY_LABEL[] = "imagectl-monitor-rekey";
 
-    if (fd < 0 || read(fd, fresh, SECRET_LEN) != SECRET_LEN) {
-        if (fd >= 0)
-            close(fd);
-        fprintf(stderr, "imagectl-monitor: could not rotate secret: %s\n",
-                strerror(errno));
+static void rekey_secret(const unsigned char *challenge) {
+    unsigned char message[sizeof(REKEY_LABEL) - 1 + SECRET_LEN];
+    unsigned char next[32];
+
+    memcpy(message, REKEY_LABEL, sizeof(REKEY_LABEL) - 1);
+    memcpy(message + sizeof(REKEY_LABEL) - 1, challenge, SECRET_LEN);
+    hmac_sha256(secret, SECRET_LEN, message, sizeof(message), next);
+    if (write_secret_file(next) < 0) {
+        fprintf(stderr, "imagectl-monitor: could not write the next session "
+                "secret; keeping the old one until the next hello\n");
         return;
     }
-    close(fd);
-    if (write_secret_file(fresh) < 0) {
-        fprintf(stderr, "imagectl-monitor: could not write rotated secret\n");
-        return;
-    }
-    memcpy(secret, fresh, SECRET_LEN);
-    fprintf(stderr, "imagectl-monitor: rotated session secret\n");
+    memcpy(secret, next, SECRET_LEN);
+    fprintf(stderr, "imagectl-monitor: rekeyed session secret\n");
 }
 
 static void client_gone(rfbClientPtr client) {
     int code, released = 0;
-    int authed = client->clientData != NULL;
 
     fprintf(stderr, "imagectl-monitor: client %s gone\n",
             client->host ? client->host : "?");
@@ -413,8 +420,6 @@ static void client_gone(rfbClientPtr client) {
         if (released)
             sync_input();
     }
-    if (authed)
-        rotate_secret();
 }
 
 static int peer_is_server(rfbClientPtr client) {
@@ -437,7 +442,6 @@ static enum rfbNewClientAction new_client(rfbClientPtr client) {
                     client->host ? client->host : "?", peer_rejects);
         return RFB_CLIENT_REFUSE;
     }
-    client->clientData = NULL;
     client->clientGoneHook = client_gone;
     return RFB_CLIENT_ACCEPT;
 }
@@ -465,7 +469,7 @@ static rfbBool secret_check(rfbClientPtr client, const char *response,
             diff |= (unsigned char)response[i] ^ expected[i];
     }
     if (!diff) {
-        client->clientData = (void *)1;
+        rekey_secret((const unsigned char *)client->authChallenge);
         return TRUE;
     }
     auth_failures++;

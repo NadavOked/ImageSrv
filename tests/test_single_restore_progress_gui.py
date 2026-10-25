@@ -161,10 +161,11 @@ def restore(tmp_path: Path, run_restore: str, *, gui: str | None = "live", manif
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/pull.sh; "
         f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/guibridge.sh; "
-        f". {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/slotnames.sh; "
+        f". {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/slotnames.sh; "
         f". {posix(AGENT)}/lib/single_restore.sh; . {posix(AGENT)}/lib/srgui.sh; "
         f". {posix(AGENT)}/lib/guistate.sh; "   # gui_header_state: the header's machine and server
         "disk_port() { echo 1; }; pick_internal_disk() { echo sda; }; stage_drivers() { :; }; "
+        "sr_share_gate() { return 0; }; "   # #1898: the split question -- its own tests (test_single_restore_share_1898.py)
         f"http_get() {{ {get}; }}; "
         "pull_post() { printf '{\"id\":\"ses_1\"}' > \"$3\"; echo 200; }; "
         "http_post_json() { :; }; progress_loop() { :; }; "
@@ -274,7 +275,7 @@ def test_a_failed_write_shows_its_reason_on_the_same_gui(tmp_path):
     """#1545's message, now on the progress GUI -- no second GUI takes the display."""
     r = restore(tmp_path, FAILS)
     last = body(cards(r["seen"])[-1])
-    assert last == f"message=השחזור נכשל — השאירו את המחשב דלוק ופנו ל-IT|{RLM}{REASON}\n", last
+    assert last == f"message=השחזור נכשל — המחשב נשאר דלוק ומדווח לשרת|{RLM}{REASON}\n", last
     assert len(r["calls"]) == 1, r["calls"]
     assert "TEST-HOLD" in r["out"] and "RC=1" in r["out"]
 
@@ -369,7 +370,7 @@ def agent_state(tmp_path: Path, stage: str = "writing") -> Path:
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))}; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; "
-        f". {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/srgui.sh; "
+        f". {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/srgui.sh; "
         f'target_init sda {TOTAL}; target_set sda writing; echo writing > "$RUN_DIR/state"; '
         'echo 2 > "$RUN_DIR/targets/sda/partition"; echo 18000000000 >> "$RUN_DIR/targets/sda/bytes.raw"; '
         + STAGES[stage] +
@@ -419,7 +420,7 @@ def test_the_first_and_last_cards_route_to_the_progress_card(driver, tmp_path, s
 @native
 def test_the_failure_message_routes_over_the_progress_screen(driver, tmp_path):
     msg = tmp_path / "failed.state"
-    msg.write_text(f"message=השחזור נכשל — השאירו את המחשב דלוק ופנו ל-IT|{REASON}\n", encoding="utf-8", newline="\n")
+    msg.write_text(f"message=השחזור נכשל — המחשב נשאר דלוק ומדווח לשרת|{REASON}\n", encoding="utf-8", newline="\n")
     out = drive(driver, msg, tmp_path / "failed.png")
     screen, message = (int(v) for v in re.findall(r"screen=(\d+) progress=\d+ message=(\d+)", out)[0])
     assert screen == message, out

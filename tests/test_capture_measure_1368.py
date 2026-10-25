@@ -136,13 +136,16 @@ def test_a_non_ntfs_basic_data_partition_is_data_without_mounting(tmp_path):
 # --- הקליטה כולה: המניפסט ש-img_5790e4 היה צריך לקבל -------------------------
 
 #: ‏p1 = מחיצת OEM/נתונים בתחילת הדיסק, ‏p2 = ‏C:. שתיהן Basic Data.
+#: ‏p3 = ה-ESP: ‏Windows בדיסק בלי ESP נדחה מאז #1822, וזה לא הנושא כאן.
 TWO_BASIC_DATA = (
     '#!/bin/sh\n'
     'if [ "$1" = "-i" ]; then\n'
-    '  echo "Partition GUID code: ' + BASIC_DATA + ' (Microsoft basic data)"\n'
+    '  if [ "$2" = 3 ]; then echo "Partition GUID code: C12A7328-F81F-11D2-BA4B-00A0C93EC93B (EFI)"\n'
+    '  else echo "Partition GUID code: ' + BASIC_DATA + ' (Microsoft basic data)"; fi\n'
     '  echo "Partition unique GUID: 4C7B1E00-0000-4000-8000-00000000000$2"\n'
     '  case "$2" in\n'
     '    1) echo "First sector: 2048 (at 1024 KiB)" ;;\n'
+    '    3) echo "First sector: 411648 (at 201 MiB)" ;;\n'
     '    *) echo "First sector: 206848 (at 101 MiB)" ;;\n'
     '  esac\n'
     '  echo "Partition size: 204800 sectors (100.0 MiB)"\n'
@@ -154,6 +157,7 @@ TWO_BASIC_DATA = (
     'echo "Number  Start (sector)    End (sector)  Size       Code  Name"\n'
     'echo "   1            2048          206847   100.0 MiB   0700  Basic data"\n'
     'echo "   2          206848          411647   100.0 MiB   0700  Basic data"\n'
+    'echo "   3          411648          616447   100.0 MiB   EF00  EFI system"\n'
 )
 
 CAPTURE_STUBS = {
@@ -181,7 +185,7 @@ def test_the_oem_partition_is_data_and_only_the_system_is_windows(tmp_path):
     """img_5790e4: ‏p1 ‏(3GB, ‏sector 2048) ו-‏p2 ‏(C:) שתיהן היו windows."""
     written = _captured(tmp_path)
     roles = {p["index"]: p["role"] for p in written["partitions"]}
-    assert roles == {1: "data", 2: "windows"}, written["partitions"]
+    assert roles == {1: "data", 2: "windows", 3: "esp"}, written["partitions"]
     assert written["os"] == "windows"
     expandable = [p["index"] for p in written["partitions"] if p["expandable"]]
     assert expandable == [2]
@@ -191,7 +195,7 @@ def test_the_oem_partition_is_data_and_only_the_system_is_windows(tmp_path):
 def test_every_ntfs_partition_in_the_manifest_is_measured(tmp_path):
     written = _captured(tmp_path)
     used = {p["index"]: p["used_bytes"] for p in written["partitions"]}
-    assert used == {1: 1024 * 1024, 2: 1024 * 1024}, written["partitions"]
+    assert used == {1: 1024 * 1024, 2: 1024 * 1024, 3: 1024 * 1024}, written["partitions"]
 
 
 @requires_native(("bash", BASH))
@@ -226,7 +230,7 @@ def _name_old_image(tmp_path, plan: list[str]) -> tuple[dict, Path]:
              f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
              f'LOG_FILE={posix(run / "log")!r}; '
              f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-             f'. {posix(AGENT)}/lib/hostname.sh; '
+             f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
              f"manifest_plan() {{ printf '{lines}\\n'; }}; "
              'partition_node() { echo /dev/fake$2; }; '
              'write_hostname sda /dev/null LAB1-05 || true')

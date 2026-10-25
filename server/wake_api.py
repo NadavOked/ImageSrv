@@ -21,7 +21,7 @@ from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from . import auth, room_console, wol
+from . import auth, held, room_console, wol
 from .api import ServerContext
 from .db import journal
 from .registry import normalize_mac
@@ -108,6 +108,30 @@ def create_wake_router(
                                            confirmed=confirmed)
         journal(ctx.conn, "machine_reboot",
                 canonical + (" local copy confirmed" if confirmed else ""), user[0])
+        return {"requested": count, "ttl_s": room_console.POWEROFF_TTL_SECONDS}
+
+    @router.post("/machines/{mac}/poweroff")
+    def poweroff_held(mac: str, body: dict, user=Depends(room_operator)):
+        """‏#2031: "כבה" למשכפל שמחזיק את התוצאות עד לחיצה (#2024) — **רק** כשהוא
+        מוחזק עכשיו (דיווח held טרי); לכיבוי כללי יש את כיבוי החדר. בקשה בערוץ של
+        ‏#980 — נמסרת בתשובת הדיווח held, והסוכן מכבה דרך `safe_poweroff`
+        (‏`arm_wol`). אין כתיבה פעילה במוחזק, ולכן אין סירוב בזמן סבב. ‏`confirm_name`
+        = שם המחשב, מחלון האישור (#1270)."""
+        canonical = normalize_mac(mac)
+        if canonical is None:
+            raise HTTPException(400, "MAC לא תקין")
+        row = ctx.conn.execute(
+            "SELECT m.suffix, g.role FROM machines m"
+            " JOIN groups g ON g.id = m.group_id WHERE m.mac = ?", (canonical,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "מכונה לא רשומה")
+        if body.get("confirm_name") != row["suffix"]:
+            raise HTTPException(400, "השם שנשלח אינו שם המחשב")
+        if not held.is_held(ctx.conn, canonical):
+            raise HTTPException(409, "המחשב אינו מחכה ללחיצה על 'כבה' — כיבוי מכאן רק"
+                                     " למשכפל שמחזיק תוצאות של דיסק עם בעיה")
+        count = room_console.request_power(ctx.conn, [canonical], room_console.POWEROFF, user[0])
+        journal(ctx.conn, "held_poweroff", canonical, user[0])
         return {"requested": count, "ttl_s": room_console.POWEROFF_TTL_SECONDS}
 
     @router.post("/groups/{gid}/wake")

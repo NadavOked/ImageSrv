@@ -21,6 +21,15 @@ static int split(char *v, char *f[], int max) {
 }
 
 static void cp(char *dst, size_t n, const char *src) { snprintf(dst, n, "%s", src); }
+/* #2024: cp, and a cut never leaves half a UTF-8 character (it drew as garbage) */
+static void cp_utf8(char *dst, size_t n, const char *src) {
+    cp(dst, n, src);
+    size_t len = strlen(dst);
+    if (len == strlen(src)) return;
+    while (len && ((unsigned char)dst[len - 1] & 0xC0) == 0x80) len--;
+    if (len && ((unsigned char)dst[len - 1] & 0xC0) == 0xC0) len--;
+    dst[len] = 0;
+}
 static int  num(const char *s, int dflt) { return s[0] ? atoi(s) : dflt; }
 
 /* #1331: a drawer's drivers outcome -- only the words the agent writes; anything
@@ -179,10 +188,26 @@ void state_parse(State *s, FILE *fp) {
             disk_slots[at].known = 1;
         } else if (KEY("folder") && s->nfolders < MAX_FOLDERS) {
             cp(s->folders[s->nfolders++], sizeof s->folders[0], val);
-        } else if (KEY("image") && s->nimages < MAX_IMAGES) {
+        } else if ((KEY("image") || KEY("image_unchecked")) && s->nimages < MAX_IMAGES) {
             split(val, f, 3);
             Image *im = &s->images[s->nimages++];
+            memset(im, 0, sizeof *im);
             cp(im->id, sizeof im->id, f[0]); cp(im->name, sizeof im->name, f[1]); cp(im->folder, sizeof im->folder, f[2]);
+            im->unchecked = KEY("image_unchecked");   /* #1896: "לא נבדק" until C: is marked */
+        } else if (KEY("image_cand")) {
+            /* #1896: <image id>|<idx>|<size bytes>|<used bytes or empty> -- after its image_unchecked= */
+            unsigned long long idx, size, used = 0;
+            if (split(val, f, 5) != 4 || !parse_uint(f[1], &idx) || idx < 1 || idx > INT_MAX ||
+                !parse_uint(f[2], &size) || (f[3][0] && !parse_uint(f[3], &used))) continue;
+            for (int i = 0; i < s->nimages; i++) {
+                Image *im = &s->images[i];
+                if (!im->unchecked || strcmp(im->id, f[0])) continue;
+                if (im->ncand < MAX_SYSP_CANDS) {
+                    im->cand[im->ncand].idx = (int)idx; im->cand[im->ncand].size = size; im->cand[im->ncand].used = used;
+                }
+                im->ncand++;   /* past the max: counted, and the picker sends to the console */
+                break;
+            }
         } else if (KEY("machine")) {
             if (s->nmachines >= MAX_MACHINES) {
                 s->hidden_machines++;
@@ -387,6 +412,17 @@ void state_parse(State *s, FILE *fp) {
                 drv_boot_fields(d->drv_boot, d->drv_bsvc, d->drv_berr, f + 14);
                 if (nf >= 20) drv_linux_fields(d->drv_lstate, d->drv_lmod, d->drv_ldet, f + 17);   /* #1331 T8: fields 18-20 */
             }
+        } else if (KEY("drawer_moved")) {
+            /* #2055: drawer_moved=dev|epoch -- the bytes of that drawer last moved then (clonergui.sh) */
+            if (split(val, f, 2) == 2 && f[1][0])
+                for (int i = 0; i < s->ndrawers; i++)
+                    if (!strcmp(s->drawers[i].dev, f[0])) s->drawers[i].moved = strtoll(f[1], NULL, 10);
+        } else if (KEY("drawer_rb")) {
+            /* #1907: drawer_rb=dev|list_not_fetched -- that drawer is done and not
+             * verified because the check list did not come down (clonergui.sh) */
+            if (split(val, f, 2) == 2 && !strcmp(f[1], "list_not_fetched"))
+                for (int i = 0; i < s->ndrawers; i++)
+                    if (!strcmp(s->drawers[i].dev, f[0])) s->drawers[i].rb_nolist = 1;
         } else if (KEY("cdisk") && s->nidisks < MAX_DRAWERS) {
             /* cdisk=port|dev|model|size|smart|cause -- the cloner's idle
              * inventory. NOT "disk=" -- that key already holds the build
@@ -394,7 +430,7 @@ void state_parse(State *s, FILE *fp) {
              * first (#688). The 5th field (#709) and the 6th (#874: the
              * server's cause for failed_last) are optional so an older agent
              * still parses. */
-            int nf = split(val, f, 11);   /* #1495: drawer and connection are fields 10/11 */
+            int nf = split(val, f, 13);   /* #1495: drawer and connection are fields 10/11; #1798: the mark 12; #1921: hw 13 */
             if (nf < 4) continue;
             unsigned long long port, size;
             if (!parse_uint(f[0], &port) || port > INT_MAX) continue;
@@ -415,10 +451,11 @@ void state_parse(State *s, FILE *fp) {
                 sm = "unchecked";
             cp(id->smart, sizeof id->smart, sm);
             /* #1366: on fail the 6th field is the SMART reason of the F1 stop */
-            const char *cause = (nf >= 6 && (!strcmp(sm, "failed_last") || !strcmp(sm, "fail"))) ? f[5] : "";
-            if (!strcmp(sm, "failed_last") ? strcmp(cause, "cable") && strcmp(cause, "disk") && strcmp(cause, "readonly")   /* #1742 */
+            const char *cause = (nf >= 6 && (!strcmp(sm, "failed_last") || !strcmp(sm, "fail") || !strcmp(sm, "warn"))) ? f[5] : "";
+            if (!strcmp(sm, "warn")) { if (strspn(cause, "abcdefghijklmnopqrstuvwxyz_") != strlen(cause)) cause = ""; }   /* #1859: a reason word (smart.sh), said by smart_reason_text */
+            else if (!strcmp(sm, "failed_last") ? strcmp(cause, "cable") && strcmp(cause, "disk") && strcmp(cause, "readonly")   /* #1742 */
                     : strcmp(cause, "health_failed") && strcmp(cause, "pending_sectors") && strcmp(cause, "uncorrectable")
-                      && strcmp(cause, "readonly"))   /* #1742: red because the disk is read-only */
+                      && strcmp(cause, "readonly") && strcmp(cause, "media_readonly") && strcmp(cause, "health_unread"))   /* #1742: read-only; #1921: NVMe read-only; #2078 */
                 cause = "";
             cp(id->cause, sizeof id->cause, cause);
             /* #432: fields 7/8 (link, port max), "6.0"-shaped or not read --
@@ -432,6 +469,20 @@ void state_parse(State *s, FILE *fp) {
             id->crc_suspect = nf >= 9 && parse_uint(f[8], &crc) && crc > 0 && crc < 100000000ULL ? (long)crc : 0;
             id->drawer = nf >= 10 ? parse_drawer(f[9]) : 0;
             if (nf >= 11) cp(id->conn, sizeof id->conn, f[10]);
+            /* #1798: the incomplete-write mark on the disk (writemark.sh). Only the two
+             * words that say something are kept; clean or absent draws nothing. */
+            if (nf >= 12 && (!strcmp(f[11], "incomplete") || !strcmp(f[11], "unchecked")))
+                cp(id->mark, sizeof id->mark, f[11]);
+            if (nf >= 13) cp(id->hw, sizeof id->hw, f[12]);   /* #1921: said as it is; "" = no note */
+        } else if (KEY("cused") && s->ncuseds < MAX_DRAWERS + 4) {
+            /* #2030: cused=dev|size|used -- used -1 (or anything unreadable) = not measured */
+            if (split(val, f, 3) < 3) continue;
+            unsigned long long size, used;
+            if (!f[0][0] || !parse_uint(f[1], &size)) continue;
+            CUsed *cu = &s->cuseds[s->ncuseds++];
+            cp(cu->dev, sizeof cu->dev, f[0]);
+            cu->size = size;
+            cu->used = parse_uint(f[2], &used) && used <= (unsigned long long)LLONG_MAX ? (long long)used : -1;
         } else if (KEY("disk_probe")) {
             if (!strcmp(val, "drives") || !strcmp(val, "no_disks") ||
                 !strcmp(val, "no_ports") || !strcmp(val, "unchecked"))
@@ -490,17 +541,51 @@ void state_parse(State *s, FILE *fp) {
             else if (!strcmp(f[1], "capture-end")) kind = ASK_CAPTURE_END;
             else if (!strcmp(f[1], "send-end")) kind = ASK_SEND_END;     /* #1560 */
             else if (!strcmp(f[1], "round-end")) kind = ASK_ROUND_END;   /* #1560 */
+            else if (!strcmp(f[1], "raid")) kind = ASK_RAID;             /* #1808: exactly one row */
+            else if (!strcmp(f[1], "share")) kind = ASK_SHARE;           /* #1898: 1..MAX_ASK_ROWS rows */
+            else if (!strcmp(f[1], "badsect")) kind = ASK_BADSECT;       /* #2017: exactly one row */
             if (kind == ASK_NONE || !f[0][0] ||
                 strspn(f[0], "0123456789-") != strlen(f[0]) ||
                 strlen(f[0]) >= sizeof s->ask_nonce ||
                 strspn(f[3], "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-") != strlen(f[3]) ||
                 strlen(f[3]) >= sizeof s->ask_subject ||
                 !parse_uint(f[2], &n) || n > MAX_ASK_ROWS ||
-                (kind == ASK_GROWBACK && n < 1) || (kind != ASK_GROWBACK && n != 0)) { ask_bad = 1; continue; }
+                ((kind == ASK_GROWBACK || kind == ASK_SHARE) && n < 1) || ((kind == ASK_RAID || kind == ASK_BADSECT) && n != 1) ||
+                (kind != ASK_GROWBACK && kind != ASK_SHARE && kind != ASK_RAID && kind != ASK_BADSECT && n != 0)) { ask_bad = 1; continue; }
             cp(s->ask_nonce, sizeof s->ask_nonce, f[0]);
             cp(s->ask_subject, sizeof s->ask_subject, f[3]);
             s->ask_kind = kind;
             ask_declared = n;
+        } else if (KEY("ask_row") && s->ask_kind == ASK_RAID) {
+            /* #1808: port|metadata type -- one word, drawn by name */
+            unsigned long long port;
+            if (split(val, f, 3) != 2 || !parse_uint(f[0], &port) || port > INT_MAX || !f[1][0] ||
+                strspn(f[1], "abcdefghijklmnopqrstuvwxyz_") != strlen(f[1]) || strlen(f[1]) >= sizeof s->ask[0].word ||
+                s->nask >= MAX_ASK_ROWS) { ask_bad = 1; continue; }
+            memset(&s->ask[s->nask], 0, sizeof s->ask[0]);
+            s->ask[s->nask].port = (int)port;
+            cp(s->ask[s->nask].word, sizeof s->ask[0].word, f[1]);
+            s->nask++;
+        } else if (KEY("ask_row") && s->ask_kind == ASK_BADSECT) {
+            /* #2017: port|idx|epoch -- the source partition that did not read, and
+               when the copy goes on by itself (Nadav 22/10); no epoch, no question */
+            unsigned long long port, idx, until;
+            if (split(val, f, 4) != 3 || !parse_uint(f[0], &port) || port > INT_MAX ||
+                !parse_uint(f[1], &idx) || idx < 1 || idx > INT_MAX ||
+                !parse_uint(f[2], &until) || until < 1 || until > LLONG_MAX || s->nask >= MAX_ASK_ROWS) { ask_bad = 1; continue; }
+            memset(&s->ask[s->nask], 0, sizeof s->ask[0]);
+            s->ask[s->nask].port = (int)port; s->ask[s->nask].idx = (int)idx; s->ask[s->nask].until = (long long)until;
+            s->nask++;
+        } else if (KEY("ask_row") && s->ask_kind == ASK_SHARE) {
+            /* #1898: port|idx|now bytes|after bytes -- the split grows each one */
+            unsigned long long port, idx, now_b, after_b;
+            if (split(val, f, 5) != 4 || !parse_uint(f[0], &port) || port > INT_MAX ||
+                !parse_uint(f[1], &idx) || idx < 1 || idx > INT_MAX || !parse_uint(f[2], &now_b) ||
+                !parse_uint(f[3], &after_b) || now_b < 1 || after_b <= now_b || s->nask >= MAX_ASK_ROWS) { ask_bad = 1; continue; }
+            memset(&s->ask[s->nask], 0, sizeof s->ask[0]);
+            s->ask[s->nask].port = (int)port; s->ask[s->nask].idx = (int)idx;
+            s->ask[s->nask].now_bytes = now_b; s->ask[s->nask].orig_bytes = after_b;
+            s->nask++;
         } else if (KEY("ask_row")) {
             /* idx|now bytes|orig bytes|table|fs -- the grow-back makes a
              * partition (or its filesystem) bigger again: now < orig */
@@ -570,15 +655,16 @@ void state_parse(State *s, FILE *fp) {
         } else if (KEY("updated")) {
             s->updated = strtoll(val, NULL, 10);                 /* #410 */
         } else if (KEY("idle_poweroff_at")) {
-            s->idle_poweroff_at = strtoll(val, NULL, 10);        /* #434 */
+            char *bar = NULL; s->idle_poweroff_at = strtoll(val, &bar, 10);        /* #434 */
+            s->idle_poweroff_s = bar && *bar == '|' ? atoi(bar + 1) : 0;   /* mockup 10: an older agent sends none */
         } else if (KEY("end_poweroff")) {
             /* #1560: <epoch>|<kind>|<done>|<targets>|<held>; done/targets
              * may be empty (not said). All or nothing: a record this screen
-             * cannot read draws no count -- the agent's count runs regardless. */
+             * cannot read draws no count. #2024: epoch 0 + held 1 is unlimited. */
             unsigned long long at = 0, dn = 0, tot = 0, held = 2; int kind = END_NONE;
-            if (split(val, f, 6) == 5 && parse_uint(f[0], &at) && at > 0 && at < (1ULL << 40) &&
+            if (split(val, f, 6) == 5 && parse_uint(f[0], &at) && at < (1ULL << 40) &&
                 (!f[2][0] || parse_uint(f[2], &dn)) && (!f[3][0] || parse_uint(f[3], &tot)) &&
-                dn <= tot && tot < 100 && parse_uint(f[4], &held) && held <= 1) {
+                dn <= tot && tot < 100 && parse_uint(f[4], &held) && held <= 1 && (at > 0 || held == 1)) {
                 if (!strcmp(f[1], "drawers")) kind = END_DRAWERS;
                 else if (!strcmp(f[1], "partial")) kind = END_PARTIAL;   /* some targets failed */
                 else if (!strcmp(f[1], "localclone")) kind = END_LOCALCLONE;
@@ -587,6 +673,23 @@ void state_parse(State *s, FILE *fp) {
             if (kind == END_NONE) fprintf(stderr, "native-gui: state: end_poweroff malformed; not shown\n");
             else { s->end_poweroff_at = (long long)at; s->end_kind = kind;
                    s->end_done = (int)dn; s->end_total = (int)tot; s->end_held = (int)held; }
+        } else if (KEY("end_problem") && s->nend_prob < MAX_DRAWERS) {
+            /* #2024: <dev>|<r|o>|<reason> (idle.sh end_problems). A tone that is
+             * not "o" draws red: an unread colour is never "only orange". */
+            if (split(val, f, 3) != 3 || !f[2][0]) { fprintf(stderr, "native-gui: state: end_problem malformed; not shown\n"); continue; }
+            cp(s->end_prob[s->nend_prob].dev, sizeof s->end_prob[0].dev, f[0]);
+            cp_utf8(s->end_prob[s->nend_prob].why, sizeof s->end_prob[0].why, f[2]);
+            s->end_prob[s->nend_prob++].red = strcmp(f[1], "o") != 0;
+        } else if (KEY("power_ask")) {
+            /* #1918: <nonce>|<kind>|<can_stop> (powerbtn.sh). All or nothing:
+             * a record this screen cannot read asks nothing -- the write goes on. */
+            unsigned long long nonce = 0;
+            if (split(val, f, 4) == 3 && parse_uint(f[0], &nonce) && nonce > 0 &&
+                f[1][0] && strlen(f[1]) < sizeof s->power_kind && (!strcmp(f[2], "0") || !strcmp(f[2], "1"))) {
+                snprintf(s->power_nonce, sizeof s->power_nonce, "%llu", nonce);
+                cp(s->power_kind, sizeof s->power_kind, f[1]);
+                s->power_can_stop = f[2][0] == '1';
+            } else fprintf(stderr, "native-gui: state: power_ask malformed; not shown\n");
         } else if (KEY("session")) {
             split(val, f, 7);
             s->has_session = 1;
@@ -604,10 +707,10 @@ void state_parse(State *s, FILE *fp) {
          * (the kiosk's hello state and a display-only loop) draws them once. */
         else if (KEY("fail")) {
             split(val, f, 5);
-            s->fail_warn = !strcmp(f[0], "warn"); s->fail_hold = num(f[1], 1) != 0; s->fail_cloner = !strcmp(f[4], "cloner");
+            s->fail_warn = !strcmp(f[0], "warn"); s->fail_info = !strcmp(f[0], "inf"); s->fail_hold = num(f[1], 1) != 0; s->fail_cloner = !strcmp(f[4], "cloner");
             cp(s->fail_title, sizeof s->fail_title, f[2]); cp(s->fail_sub, sizeof s->fail_sub, f[3]);
             s->fail_why[0] = s->fail_safe[0] = 0; s->fail_at = 0;
-            s->nfail_ctx = s->nfail_rows = s->nfail_steps = s->nfail_code = 0;
+            s->nfail_ctx = s->nfail_rows = s->nfail_steps = s->nfail_code = s->nfail_btns = 0;
         }
         else if (KEY("fail_why"))  cp(s->fail_why, sizeof s->fail_why, val);
         else if (KEY("fail_safe")) cp(s->fail_safe, sizeof s->fail_safe, val);
@@ -626,6 +729,11 @@ void state_parse(State *s, FILE *fp) {
         }
         else if (KEY("fail_step")) { if (s->nfail_steps < MAX_FAIL_STEPS) cp(s->fail_steps[s->nfail_steps++], sizeof s->fail_steps[0], val); }
         else if (KEY("fail_code")) { if (s->nfail_code < MAX_FAIL_CODE) cp(s->fail_code[s->nfail_code++], sizeof s->fail_code[0], val); }
+        else if (KEY("fail_btn")) {   /* #2068 */
+            if (s->nfail_btns < MAX_FAIL_BTNS) { split(val, f, 2);
+                cp(s->fail_btns[s->nfail_btns].action, sizeof s->fail_btns[0].action, f[0]);
+                cp(s->fail_btns[s->nfail_btns].label, sizeof s->fail_btns[0].label, f[1]); s->nfail_btns++; }
+        }
         else fprintf(stderr, "native-gui: state: unknown key '%s' ignored\n", key);
 #undef KEY
     }

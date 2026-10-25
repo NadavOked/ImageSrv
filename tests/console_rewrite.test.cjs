@@ -38,7 +38,7 @@ function setup() {
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../server/static/progress.js'),'utf8'),ctx);
   vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME={username:"admin",role:"admin",idle_seconds:300,capabilities:{interbranch_transfer:true,classrooms:true}};');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",idle_seconds:300,capabilities:{interbranch_transfer:true,classrooms:true}};');
   for(const [name,key] of [['OVERVIEW','/overview'],['IMAGES','/images'],['FOLDERS','/folders'],['MACHINES','/machines'],['GROUPS','/groups']]) run(name+'='+JSON.stringify(fixtures[key]));
   return {ctx,run,node,requests,fixtures,intervals};
 }
@@ -98,7 +98,7 @@ test('journal filters reach server, inclusive end minute, truncated warning (#95
   run("LOG.event='capture';LOG.q='needle';LOG.user='admin';LOG.range='custom';LOG.since='2026-09-01T10:00';LOG.until='2026-09-13T12:00';");
   await run('loadJournalData()'); const r=requests.find(r=>r.url.startsWith('/api/console/journal?'));
   assert.ok(r);const q=new URL(r.url,'http://localhost').searchParams;
-  assert.equal(q.get('event'),'capture');assert.equal(q.get('user'),'admin');assert.equal(q.get('q'),'needle');assert.equal(q.get('from'),'2026-09-01T10:00');assert.equal(q.get('to'),'2026-09-13T12:00:59');assert.equal(q.get('limit'),'200');
+  assert.equal(q.get('event'),'capture');assert.equal(q.get('user'),'admin');assert.equal(q.get('q'),'needle');assert.equal(q.get('from'),'2026-09-01T10:00:00');assert.equal(q.get('to'),'2026-09-13T12:00:59');assert.equal(q.get('limit'),'200');
   assert.equal(run('LOG.truncated'),true,'the X-Journal-Search-Truncated header is read');
   assert.match(run('logs()'),/חיפוש חלקי/);
 });

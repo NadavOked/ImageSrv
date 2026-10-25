@@ -66,7 +66,7 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     })
     check("ארבע תחנות יובאו", imported.get("saved") == 4, str(imported))
     status, _ = console.json("POST", "/api/console/machines", {
-        "mac": BUILD_MAC, "name": "מחשב בנייה", "group_id": "grp_BUILD"})
+        "mac": BUILD_MAC, "name": "BUILD-PC", "group_id": "grp_BUILD"})   # #1997: שם מחשב באנגלית
     check("מחשב הבנייה נרשם (קבוצה קבועה)", status == 200, str(status))
     status, _ = console.json("POST", "/api/console/machines", {
         "mac": CLONER_MAC, "name": "01", "group_id": "grp_CLONERS"})
@@ -82,7 +82,7 @@ def run(data_dir, images_dir) -> SimpleNamespace:
                                      disk("sdb", GB256, "DRW-B", port=1),
                                      disk("sdc", GB256, "DRW-C", port=2)])
     return SimpleNamespace(
-        console=console, deploy=deploy, images_dir=images_dir,
+        console=console, deploy=deploy, images_dir=images_dir, data_dir=data_dir,
         builder=builder, stations=stations, cloner=cloner,
         image_a=None, manifest_a=None, image_b=None, manifest_b=None,
     )

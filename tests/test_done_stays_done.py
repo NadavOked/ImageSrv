@@ -28,6 +28,7 @@ from pathlib import Path
 from test_agent import AGENT, posix
 from test_final_report import (  # noqa: F401 — ‏`reports` הוא fixture
     IMAGE,
+    PRESS_OFF,
     SESSION,
     native_tools,
     reports,
@@ -144,9 +145,10 @@ def test_a_cloning_round_that_could_not_arm_wol_stays_done(tmp_path, reports):
         tmp_path, url_of(reports),
         f'_build_standby=0; do_restore_drawers {IMAGE} {SESSION}; '
         'echo "RETURNED rc=$? standby=$_build_standby"',
-        stubs=WOL_UNARMED, env=ROOM_ENV,
+        stubs=WOL_UNARMED + PRESS_OFF, env=ROOM_ENV,
     )
     assert "DRAWERS" in result["trace"], result["trace"]
+    assert "PRESSED" in result["trace"], "the round was not held (#2024): " + str(result["trace"])
     assert "no drawer completed" not in result["out"]
     assert_done_stays_done(result, reports)
 

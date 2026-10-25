@@ -56,7 +56,7 @@ function setup(fixtures, me = {}) {
   vm.runInContext(fs.readFileSync(path.join(root, 'branches.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'storage_nodes.js'), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
-  const meJson = JSON.stringify({username: 'admin', role: 'admin', idle_seconds: 300, capabilities: {interbranch_transfer: true, enroll_secondary: true}, ...me});
+  const meJson = JSON.stringify({timezone: 'UTC', username: 'admin', role: 'admin', idle_seconds: 300, capabilities: {interbranch_transfer: true, enroll_secondary: true}, ...me});
   run(`ME=${meJson}; toast=(m)=>__toasts.push(m); current="branches"; currentTab=0;`);
   ctx.__toasts = toasts;
   return {ctx, run, opened, toasts, calls, node, listeners};
@@ -502,7 +502,7 @@ test('monitor.js connects to the remote path when node= is present, and to the l
 });
 
 test('after login the console holds the /me capabilities, so the branches tab is reachable without a reload', async () => {
-  const fixtures = {...base, '/me': {username: 'noc', role: 'admin', idle_seconds: 300, capabilities: {interbranch_transfer: true, enroll_secondary: true, open_local_pairing: false}},
+  const fixtures = {...base, '/me': {timezone: 'UTC', username: 'noc', role: 'admin', idle_seconds: 300, capabilities: {interbranch_transfer: true, enroll_secondary: true, open_local_pairing: false}},
     '/overview': {session: null, pulls: [], room: null, machines: 0, images: 0, storage: null}};
   const {run, listeners} = setup(fixtures);
   run('ME=null; showApp=async()=>{};');

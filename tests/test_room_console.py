@@ -150,7 +150,10 @@ def test_history_lists_finished_rounds_newest_first_without_the_one_on_screen(se
         "image_name": "img_gone", "source_kind": "library",
         "target_drives": 4, "written_drives": 1, "opened_by": "noc",
         "created_at": "2026-09-15T08:00:00+00:00",
-        "closed_at": "2026-09-15T08:20:00+00:00", "failed_reason": "send_failed"}
+        "closed_at": "2026-09-15T08:20:00+00:00", "failed_reason": "send_failed",
+        # ‏#1889: אין גלים בחלון — לא נמדד (null), לא 0.
+        "waits": {"waves": 0, "open_wait_s": None, "smart_hold_s": None, "smart_holds": 0,
+                  "smart_unreleased": 0}}
 
 
 def test_history_hides_a_failed_round_that_is_still_on_screen(server):

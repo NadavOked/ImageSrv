@@ -91,13 +91,17 @@ gui_keep() {
     # end.poweroff). The handoff (restore-start) ends it: that is no crash.
     _gk_n=0
     while :; do
-        rm -f "$RUN_DIR/gui/station.pid"
+        rm -f "$RUN_DIR/gui/station.pid"; mkdir -p "$RUN_DIR/gui"; : > "$RUN_DIR/gui/beat"   # #1946: each GUI's start grace
         "$GUI_KIOSK" >> "$LOG_FILE" 2>&1 &
         _gk_k=$!; _gk_d=0; _gk_w=$WAIT_HELPER_S
         while kill -0 "$_gk_k" 2>/dev/null; do
             sleep "$GUI_KEEP_TICK_S"
             read -r _gk_s _gk_t 2>/dev/null < "$RUN_DIR/gui/station.pid" || continue
-            if kill -0 "$_gk_s" 2>/dev/null; then continue; fi   # no bare `! cmd` (#231)
+            if kill -0 "$_gk_s" 2>/dev/null && gui_beat_fresh; then continue; fi   # no bare `! cmd` (#231)
+            if kill -0 "$_gk_s" 2>/dev/null; then   # #1946: alive and silent = stopped or wedged
+                log "native GUI $_gk_s: heartbeat older than ${GUI_BEAT_MAX_S}s (stopped or wedged) -- killing it"
+                kill -9 "$_gk_s" 2>/dev/null
+            fi
             _gk_d=$((_gk_d + 1)); [ "$_gk_d" -ge 2 ] || continue   # the bridge sees its pipe end first
             log "native GUI process $_gk_s is gone and its bridge is held -- stopping the bridge"
             # its state writer too: a bridge stopped by force never reaches gui_cleanup

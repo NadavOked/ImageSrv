@@ -14,7 +14,7 @@ from datetime import datetime
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
-from . import capture_detail, disk_failures, drawer_cancel, slot_names
+from . import capture_detail, cloner_cpu, disk_failures, drawer_cancel, restore_stages, slot_names, smart_history
 from .db import journal, now_iso, update_one
 from .tasks import CAPTURE_STAGES, OPEN_STATES, claim_task
 
@@ -211,11 +211,16 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     # זה בדיוק מה ש-#535 תיקן למשימות; מסלול הסבב לא קיבל את אותו
     # טיפול. אותה תשובה בשם, ואותו רישום ביומן.
     session = conn.execute(
-        "SELECT state FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        "SELECT state, failed_reason FROM sessions WHERE id = ?", (session_id,)).fetchone()
     if session is None or session["state"] not in ("open", "running"):
         journal(conn, "report_on_closed_session", f"{mac} for {session_id}{sent_as}")
-        return {"ok": False, "error": "this session is no longer open",
-                "code": "not_open"}
+        closed = {"ok": False, "error": "this session is no longer open", "code": "not_open"}
+        # ‏#1928 (S4): סבב שנכשל אומר למכונה **למה** — "קובץ מחיצה חסר באימג'"
+        # ולא רק "השרת סגר את הסבב", כדי שהמפעיל לא ינסה שוב ושוב.
+        reason = _closed_reason(conn, session_id, session)
+        if reason:
+            closed["reason"] = reason
+        return closed
 
     row = conn.execute(
         "SELECT state, done, targets_json FROM session_members"
@@ -241,6 +246,7 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     previous_targets = row["targets_json"]
     was_cancelled = _cancelled_devs(previous_targets)
     _clean_target_drivers(targets)
+    restore_stages.clean_targets(targets)   # #1883: marks → durations, or dropped
     targets = stamp_movement(previous_targets, targets)
     targets = stamp_done_serials(conn, mac, previous_targets, targets)
     bytes_written = sum(_int(t.get("bytes_written")) for t in targets)
@@ -251,13 +257,15 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     # ‏#720: תוצאת ה-staging — נכתבת כשהגיעה, ונשארת (COALESCE) כשלא.
     drivers = well_formed_drivers(payload.get("drivers"))
     drops = well_formed_udp_drops(payload)
+    cpu = cloner_cpu.well_formed(payload.get("cpu"))   # #1885: רק בדיווח הסופי
 
     previous = row["state"]
     conn.execute(
         "UPDATE session_members SET state = ?, bytes_written = ?, bytes_total = ?,"
         " error = ?, done = ?, targets_json = ?, updated_at = ?,"
         " drivers_json = COALESCE(?, drivers_json),"
-        " udp_drops_json = COALESCE(?, udp_drops_json)"
+        " udp_drops_json = COALESCE(?, udp_drops_json),"
+        " cpu_json = COALESCE(?, cpu_json)"
         " WHERE session_id = ? AND mac = ?",
         (
             state, bytes_written, bytes_total, errors or None,
@@ -265,6 +273,7 @@ def ingest(conn: sqlite3.Connection, payload: dict,
             json.dumps(targets), now_iso(),
             json.dumps(drivers, ensure_ascii=False) if drivers else None,
             json.dumps(drops) if drops else None,
+            json.dumps(cpu) if cpu else None,
             session_id, mac,
         ),
     )
@@ -282,6 +291,12 @@ def ingest(conn: sqlite3.Connection, payload: dict,
                     f"{mac} in {session_id} — {', '.join(drivers['packages'])}")
         _journal_boot(conn, drivers, f"{mac} in {session_id}")
         _journal_linux(conn, drivers, f"{mac} in {session_id}")
+        cloner_cpu.note_final(conn, mac, session_id, cpu)   # ‏#1885: throttle שעלה — ביומן
+        # ‏#1883: ציר הזמן של כל מגירה — פעם אחת, במעבר הטרמינלי של המכונה.
+        for t in targets:
+            if isinstance(t, dict) and isinstance(t.get("dev"), str):
+                restore_stages.record(conn, session_id, mac, t,
+                                      smart_history.serial_of(conn, mac, t["dev"]))
         # ‏#1269: מגירות של מחשב שיכפול — התוצאה לכל מגירה, פעם אחת, באותו מעבר.
         for t in targets:
             outcome = t.get("drivers") if isinstance(t, dict) else None
@@ -297,9 +312,18 @@ def ingest(conn: sqlite3.Connection, payload: dict,
                         f" — {', '.join(outcome['packages'])}{named}")
             _journal_boot(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named)
             _journal_linux(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named)
+        # ‏#1907 (נדב 22/10): מגירה שהושלמה ולא אומתה כי רשימת הבדיקה לא הורדה — ביומן, בשמה.
+        for t in targets:
+            if (isinstance(t, dict) and t.get("state") == "done" and t.get("readback") == "unverified"
+                    and t.get("readback_why") == "list_not_fetched"):
+                journal(conn, "readback_list_not_fetched", f"{mac} {t.get('dev', '?')} in {session_id}"
+                        + slot_names.journal_suffix(slot_names.label(conn, mac, dev=t.get("dev"))))
     # ‏#874: יעד שנכשל בכתיבה נכנס לזיכרון הכשלים (סידורי + חריץ + שורות
     # ה-ATA). פעם אחת ליעד — הדיווח חוזר כל 2 שניות, ו-`record` מתעלם מכפול.
     for t in targets:
+        # ‏#1859: החום מיד אחרי הכתיבה, על שורת הסבב של הסידורי (‏smart_history).
+        if isinstance(t.get("temp_c"), int) and isinstance(t.get("dev"), str):
+            smart_history.record_temp(conn, smart_history.serial_of(conn, mac, t["dev"]), session_id, t["temp_c"], mac)
         if t.get("state") == "failed":
             disk_failures.record(conn, session_id, mac, t)
         # ‏#1386: "בוטל" נרשם כשהסוכן דיווח אותו — פעם אחת, במעבר. לא disk_failure:
@@ -310,6 +334,24 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     # ‏#1386: בקשות "בטל דיסק זה" מהקונסולה/מחשב הבנייה נמסרות בתשובה הזו.
     cancel = drawer_cancel.pending(conn, session_id, mac)
     return {"ok": True, "cancel": cancel} if cancel else {"ok": True}
+
+
+def _closed_reason(conn: sqlite3.Connection, session_id: str,
+                   session: sqlite3.Row | None) -> str | None:
+    """‏#1928: למה הסבב כבר אינו פתוח — מה שמגירת המשכפל כותבת אחרי "השרת סגר את הסבב".
+
+    ‏`failed` — ה-`failed_reason` שלו (‏S4: "קובץ מחיצה חסר באימג'…"). ‏`closed` בידי
+    משתמש מחובר (עצירת הסבב מהקונסולה או מחדר השיכפולים — `session_close` ביומן עם
+    המשתמש, ‏FI O1 21/10) — "המפעיל ‹משתמש› עצר את הסבב". השרת שסגר בעצמו (גל שהסתיים,
+    משיכה שנגמרה — `session_close` בלי משתמש) — ‏None: הנוסח הישן, לא סיבה מומצאת."""
+    if session is None:
+        return None
+    if session["state"] == "failed":
+        return session["failed_reason"] or None
+    row = conn.execute(
+        "SELECT user FROM journal WHERE event = 'session_close' AND detail = ? AND user != ''"
+        " ORDER BY id DESC LIMIT 1", (session_id,)).fetchone()
+    return f"המפעיל {row['user']} עצר את הסבב" if row is not None else None
 
 
 def _cancelled_devs(previous_json: str | None) -> set[str]:
@@ -515,12 +557,14 @@ def _ingest_task(conn: sqlite3.Connection, task_id: str, mac: str,
         # כשהשלב **השתנה** — זה "כמה זמן בשלב הזה" שהקונסולה מציגה.
         "UPDATE tasks SET state = ?, bytes_written = ?, bytes_total = ?,"
         " error = COALESCE(?, error), targets_json = ?, updated_at = ?,"
+        # ‏#1843: הדיווח הראשון — תחילת המשימה, לזמן הצפוי (`learn_eta.capture`)
+        " started_at = COALESCE(started_at, ?),"
         " stage_started_at = CASE WHEN ? IS NOT NULL AND stage IS NOT ?"
         " THEN ? ELSE stage_started_at END,"
         " stage = COALESCE(?, stage)"
         " WHERE id = ? AND state IN ('pending', 'running')",
         (new_state, written, total, errors or None, json.dumps(targets),
-         now, known_stage, known_stage, now, known_stage, task_id),
+         now, now, known_stage, known_stage, now, known_stage, task_id),
     ):
         journal(conn, "report_on_closed_task", f"{mac} for {task_id}{sent_as}")
         return {"ok": False, "error": "the task is no longer open",

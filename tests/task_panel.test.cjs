@@ -23,7 +23,7 @@ function setup() {
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
   for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=(s)=>vm.runInContext(s,ctx);
-  run('ME={username:"admin",role:"admin",capabilities:{}}; overviewError="";');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",capabilities:{}}; overviewError="";');
   return {run,body,count,summary,clock};
 }
 const task=(over={})=>({id:'tsk_749e',mac:'b4:2e:99:07:1a:c4',machine:'HP-BUILD',type:'capture',disk:'sda',name:'Office 2024',folder:'Office',state:'running',

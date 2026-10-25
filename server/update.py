@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from .db import get_setting, journal, now_iso, set_setting
 
@@ -52,7 +53,7 @@ LAST_CHECK_KEY = "update_last_check"
 
 #: הריפו הציבורי — הוא שער ה-CI (CLAUDE.md, "ארבעת הריפואים"). הבדיקה
 #: אף פעם אינה מול הפרטי: שם `tests` לא רץ ואין ראיה שהתג ירוק.
-PUBLIC_UPDATE_URL = "https://github.com/NadavOked/ImageCtl.git"
+PUBLIC_UPDATE_URL = "https://github.com/NadavOked/ImageSrv.git"
 NO_NETWORK_MESSAGE = (
     "השרת לא הצליח להגיע ל-github.com בפורט 443 (חומת אש או DNS). "
     "כדי לעדכן, בקשו לפתוח בחומת האש של המכללה: השרת ← github.com:443."
@@ -495,7 +496,7 @@ def status_with_verification(conn, hooks: Hooks, repo_dir: str | Path,
 
 
 def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
-                         user: str) -> bool:
+                         user: str, forced: str | None = None) -> bool:
     """‏``False`` = יחידת שדרוג כבר רצה (#1273): הסטטוס הקודם חוזר כמו שהיה,
     ו-failed **אינו** נכתב — המפעיל היה רואה "נכשל" בזמן שהעדכון רץ."""
     prior = get_status(conn)
@@ -512,8 +513,12 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
     # שבו בקשה שהתקבלה עדיין נראית idle.
     # ‏#1301: ‏started_at/by/from — הסקריפט ממשיך את אותה ריצה (אותו שעון ואותו
     # מפעיל), ומסך העדכון בקונסולה מציג אותם גם אחרי רענון.
-    _set_status(conn, {"state": "running", "tag": tag, "started_at": now_iso(),
-                       "by": user, "from": previous})
+    doc = {"state": "running", "tag": tag, "started_at": now_iso(),
+           "by": user, "from": previous}
+    if forced:
+        # ‏#1891: המנהל אישר מעל חסימה — הסקריפט קורא את זה ואינו מסרב שוב.
+        doc["forced"] = forced
+    _set_status(conn, doc)
     ok, err = hooks["run_upgrade"](repo_dir, tag)
     if not ok and unit_already_exists(err):
         _set_status(conn, prior or {"state": "idle"})
@@ -532,29 +537,39 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
     return True
 
 
-def start_apply(ctx, hooks: Hooks, repo_dir: str | Path, tag: str, user: str) -> bool:
+def start_apply(ctx, hooks: Hooks, repo_dir: str | Path, tag: str, user: str,
+                forced: str | None = None) -> bool:
     """שיגור הסקריפט המנותק (שניות ספורות, לא השדרוג עצמו). ‏FastAPI
     מריץ נתיבי `def` סינכרוניים בתוך thread pool משלו, כך שזה אינו חוסם
     את ה-event loop; אין צורך ב-``threading.Thread`` נוסף."""
-    return _apply_in_background(ctx.conn, hooks, repo_dir, tag, user)
+    return _apply_in_background(ctx.conn, hooks, repo_dir, tag, user, forced)
 
 
-def _active_round(ctx) -> bool:
-    """סבב פתוח/רץ — לא הזמן להחליף עץ מתחת לרגליו של שידור. אותה שאילתה
-    שמזהה 'יש סבב חי' בכל שאר הקונסולה (sessions.py)."""
+def restart_blocker(rt) -> str | None:
+    """מה מונע עכשיו פעולה שמסתיימת ב-restart של השרת, או None (#1891).
+
+    ההגדרה היא `auto_reboot.busy_reason` — סבב, סבב חדר **גם בין גלים**
+    (‏`room_rounds` ‏active/closing, כש-`sessions` כבר סגור), קליטה רצה,
+    עדכון VM ושיכפול מקומי. עד כאן נבדקה כאן רק `sessions`, ו"החל עדכון"
+    התקבל בין גל לגל ובאמצע קליטה. ‏``rt`` הוא כל אובייקט עם ``conn`` (ובשרת
+    — גם ``vmupdate``).
+
+    DB שלא נקרא אינו "לא עסוק": זה סירוב בשם (עיקרון 5)."""
+    from . import auto_reboot
     try:
-        row = ctx.conn.execute(
-            "SELECT 1 FROM sessions WHERE state IN ('open', 'running') LIMIT 1"
-        ).fetchone()
-    except Exception:                                    # noqa: BLE001 — לא ידוע = לא לחסום בשקט
-        return False
-    return row is not None
+        return auto_reboot.busy_reason(rt, include_update=False)
+    except Exception as exc:                             # noqa: BLE001 — לא ידוע = סירוב
+        log.warning("restart_blocker: could not read the busy state: %r", exc)
+        return "לא ניתן היה לבדוק אם השרת עסוק (קריאת ה-DB נכשלה)"
 
 
 def create_update_router(ctx, repo_dir: str | Path, server_base: str,
                          hooks: Hooks | None = None,
                          public_url: str = PUBLIC_UPDATE_URL,
-                         vm_warning: Callable[[], str | None] | None = None) -> APIRouter:
+                         vm_warning: Callable[[], str | None] | None = None,
+                         busy_source=None) -> APIRouter:
+    """‏``busy_source`` (‏#1891): מה ש-`restart_blocker` שואל — בשרת, ה-runtime
+    (שנושא גם את ``vmupdate``); ‏None = ``ctx``."""
     from . import auth
 
     router = APIRouter(prefix="/api/console/update")
@@ -612,20 +627,30 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
                f"current={result['current']} latest={result['latest']}", user[0])
         return result
 
-    def _apply_or_revert(user, tag: str) -> dict:
+    def _apply_or_revert(user, tag: str, force: bool = False):
         if not enabled(ctx.conn):
             raise HTTPException(404, "עדכון כבוי בהגדרות השרת")
-        if _active_round(ctx):
-            raise HTTPException(409, "יש סבב פתוח/רץ — לא ניתן לעדכן עכשיו")
+        blocker = restart_blocker(busy_source or ctx)
+        if blocker and not force:
+            # ‏#1891 (סקירה): חלק מהחסימות הן דיווח של מחשבים, ומחשב תקוע היה חוסם
+            # עדכון אבטחה לעד. לכן זו אזהרה עם סיבה ו-"עדכן בכל זאת" (`force`),
+            # לא קיר. האתחול המתוזמן (`auto_reboot`) אינו עוקף — רק מנהל, בלחיצה.
+            return JSONResponse(status_code=409, content={
+                "detail": f"{blocker} — לא ניתן לעדכן עכשיו; העדכון יתאפשר כשזה "
+                          "יסתיים, או בלחיצה על \"עדכן בכל זאת\"",
+                "code": "update_busy", "busy": blocker})
         with apply_lock:
             # ‏running שאומת כבר הוא done (status_with_verification) — לא חוסם.
             now = status_with_verification(ctx.conn, hooks, repo_dir)
             if now.get("state") == "running":
                 raise HTTPException(409, f"עדכון ל-{now.get('tag')} כבר רץ — ממתינים "
                                          "שיסתיים (השרת יאותחל) לפני עדכון נוסף")
-            if not start_apply(ctx, hooks, repo_dir, tag, user[0]):
+            if not start_apply(ctx, hooks, repo_dir, tag, user[0], forced=blocker or None):
                 raise HTTPException(409, f"יחידת השדרוג ({UPGRADE_UNIT}) כבר רצה — "
                                          "עדכון קודם עוד לא הסתיים")
+        if blocker:
+            # ‏#1891: העקיפה גלויה ביומן — מי, לאיזו גרסה, ומעל איזו חסימה.
+            journal(ctx.conn, "update_forced", f"{tag}: הוחל מעל חסימה — {blocker}", user[0])
         return {"ok": True, "started": True, "tag": tag}
 
     # ‏def רגיל (לא async): FastAPI מריץ אותו ב-thread pool משלו. הקריאה
@@ -637,16 +662,17 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
         if not semver_key(tag):
             raise HTTPException(400, f"תג לא תקין: {tag!r}")
         # עדכון הפיך דרך update_previous, ולכן אינו דורש הקלדת שם (#1192).
-        return _apply_or_revert(user, tag)
+        return _apply_or_revert(user, tag, force=body.get("force") is True)
 
     # ‏#1778 (הכרעת #1270): בלי הקלדת שם — חלון אישור עם כפתור אדום בקונסולה.
     # החזרה הפיכה בדיוק כמו apply: היא עוברת באותו מסלול, ו-update_previous
     # מקבל את הגרסה שממנה חזרנו. ‏confirm_name שנשלח (קונסולה ישנה) מתעלמים ממנו.
     @router.post("/revert")
-    def revert(user=Depends(admin_only)):
+    def revert(body: dict = Body(default={}), user=Depends(admin_only)):
         previous = get_setting(ctx.conn, PREVIOUS_KEY)
         if not previous:
             raise HTTPException(404, "אין גרסה קודמת לחזור אליה")
-        return _apply_or_revert(user, previous)
+        force = isinstance(body, dict) and body.get("force") is True   # ‏#1891
+        return _apply_or_revert(user, previous, force=force)
 
     return router

@@ -17,11 +17,17 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from server import room as room_mod
+
+try:
+    from server import clockstep          # #1947
+except ImportError:                       # pragma: no cover — negative control
+    clockstep = None
 
 from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, report, room, room_body, room_server,
@@ -50,13 +56,20 @@ def _round(ctx) -> dict:
 
 
 class _Clock:
-    """השעון של `room._utcnow`: מתחיל ברגע שגל 2 נפתח, ומתקדם ביד."""
+    """השעון של `room._utcnow`: מתחיל ברגע שגל 2 נפתח, ומתקדם ביד.
+
+    ‏#1947: התקדמות ביד היא זמן שעובר, ולא קפיצת שעון — ולכן גם השעון
+    המונוטוני של גלאי הקפיצות (`clockstep._mono`) זז איתו."""
 
     def __init__(self, start: datetime):
         self.now = start
+        self.skew = time.time() - time.monotonic()
 
     def __call__(self) -> datetime:
         return self.now
+
+    def mono(self) -> float:
+        return self.now.timestamp() - self.skew
 
 
 def _wave1_partial(room_server, monkeypatch, drawers=None, target=2, partial_mac=CLONER1):
@@ -91,6 +104,8 @@ def _wave1_partial(room_server, monkeypatch, drawers=None, target=2, partial_mac
                                (row["wave_session_id"],)).fetchone()["created_at"]
     clock = _Clock(datetime.fromisoformat(created))
     monkeypatch.setattr(room_mod, "_utcnow", clock, raising=False)
+    if clockstep is not None:
+        monkeypatch.setattr(clockstep, "_mono", clock.mono)
     return clock, row["wave_session_id"]
 
 

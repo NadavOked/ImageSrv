@@ -118,6 +118,7 @@ def test_hibernated_capture_stops_before_upload_but_clean_capture_proceeds(tmp_p
     box, run, out = capture_run(tmp_path / "dirty", stubs=common, shell_pre=hibernated)
     reason = refusal_reason(box, run, out)
     assert "Fast Startup" in reason and "powercfg /h off" in reason
+    assert (run / "capture.reason").read_text(encoding="utf-8").strip() == "source_ntfs"
     assert not (run / "new-manifest.json").exists()
 
     box, run, out = capture_run(
@@ -127,6 +128,7 @@ def test_hibernated_capture_stops_before_upload_but_clean_capture_proceeds(tmp_p
     )
     assert out.strip().endswith("rc=0"), out
     assert (run / "new-manifest.json").exists()
+    assert not (run / "capture.reason").exists()
 
 
 def test_the_gui_draws_a_task_error_as_a_right_to_left_paragraph():

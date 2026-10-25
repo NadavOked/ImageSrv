@@ -9,7 +9,8 @@
 #      retried, #76), the paravirtual NIC the DMI/CPUID says we run on, and the
 #      PCI network devices that are actually present, by modalias;
 #   2. `ip link set up` -- autonegotiation runs while step 3 loads;
-#   3. everything else, in the old order (USB, storage, filesystems, crypto);
+#   3. the mass-storage controllers present, by modalias (#1914), then
+#      everything else, in the old order (USB, storage, filesystems, crypto);
 #   4. no physical NIC after (1)? Load every packaged NIC driver, as before.
 #      A display device with no framebuffer after (3) gets every GPU driver.
 # An initramfs without modules.nic (old build) loads the whole list in order.
@@ -24,10 +25,18 @@ SYS_DIR="${SYS_DIR:-/sys}"
 mods_load() {
     modprobe "$1" 2>/dev/null && return 0
     case "$_required" in
-        *" $1 "*) _req_fail="$_req_fail$1 " ;;
+        *" $1 "*) if mods_alt_ok "$1"; then _opt_fail="$_opt_fail$1 "; else _req_fail="$_req_fail$1 "; fi ;;
         *) platform_module_expected "$1" && _opt_fail="$_opt_fail$1 " ;;
     esac
     return 0
+}
+
+# #1937 (the college, 21/10): crc32c-intel needs SSE4.2 -- no Core2, no Phenom II -- and its
+# failure said "ERROR ... restore may corrupt" on each of them. What is required is crc32c,
+# not this driver of it: 0 only on positive evidence that the kernel has a crc32c
+# (crc32c_generic, loaded before it). /proc/crypto unread = not excused (principle 5).
+mods_alt_ok() {
+    [ "$1" = crc32c-intel ] && grep -q '^name[[:space:]]*:[[:space:]]*crc32c$' "${PROC_DIR:-/proc}/crypto" 2>/dev/null
 }
 
 # $1 = list file, $2 = " name name " to leave out.
@@ -121,6 +130,11 @@ mods_load_all() {
         mods_load_pci 03 ""
         _skip="$_skip$_gpu"
     fi
+    # #1914 (an old HP in the college, 20/10: "no disks"): the mass-storage
+    # controllers that are present, by modalias -- ata_piix for SATA in IDE
+    # mode, pata_* on PATA, vmd for Intel VMD -- before the fixed list, which
+    # names only ahci/nvme first and stays the fallback.
+    mods_load_pci 01 ""
     mods_load_file "$MOD_DIR/modules" "$_skip"
     [ -s "$MOD_DIR/modules.gpu" ] && mods_gpu_fallback
     return 0

@@ -20,7 +20,17 @@ _partition_role() {
 }
 
 _fs_of() {
-    blkid -o value -s TYPE "$1" 2>/dev/null || echo "unknown"
+    # $1 = partition node. The filesystem, or one of two words that are not one
+    # (#1905, principle 5): `unknown` = blkid answered "no TYPE" (rc 2) AND the
+    # head of the partition reads back -- an MSR, a raw partition; `unreadable` =
+    # blkid itself failed (4 usage, 8 ambivalent/I-O, 127 missing), or rc 2 on a
+    # node whose first 64KiB (every superblock blkid looks for) did not read.
+    _fo=$(blkid -o value -s TYPE "$1" 2>/dev/null); _fo_rc=$?
+    case "$_fo_rc" in
+        0) echo "${_fo:-unknown}" ;;
+        2) if dd if="$1" bs=65536 count=1 of=/dev/null 2>/dev/null; then echo unknown; else echo unreadable; fi ;;
+        *) echo unreadable ;;
+    esac
 }
 
 _uuid_of() {
@@ -51,6 +61,7 @@ _system_role() {
     # ושתי מחיצות "windows" שלחו את כתיבת השם ואת #1354 אל מחיצת 3GB ריקה.
     # ‏windows רק על ראיה — ‏Windows\System32 במחיצה, בעיגון לקריאה בלבד.
     # ‏Windows עולה רק מ-NTFS, ולכן מערכת קבצים אחרת היא data בלי עיגון.
+    rm -f "$RUN_DIR/system.$1"   # #1875
     case "$3" in
         ntfs|ntfs-3g) ;;
         *) log "partition $1: $3, not NTFS -- data, not a system partition" >&2
@@ -63,11 +74,44 @@ _system_role() {
         return 1; }
     _sr=data
     [ -d "$_sm/Windows/System32" ] && _sr=windows
+    # ‏#1875: באותו עיגון — כוורת SYSTEM היא הראיה שזו מחיצת המערכת, והיא
+    # נרשמת במניפסט ("system": true, ‏_system_json). הסימון לכל אינדקס נמחק
+    # בתחילת הפונקציה, כדי שקליטה קודמת באותו אתחול לא תדבר בשם זו.
+    _hv=""
+    [ "$_sr" = windows ] && [ -f "$_sm/Windows/System32/config/SYSTEM" ] \
+        && : > "$RUN_DIR/system.$1" && _hv=" + SYSTEM hive"
     # עיגון שנשאר אינו "נבדק" — הקריאה של partclone הייתה רצה מול כרך חי.
     umount "$_sm" 2>>"$LOG_FILE" || {
         echo "מחיצה $1: הניתוק אחרי בדיקת מחיצת המערכת נכשל"; return 1; }
-    log "partition $1: $_sr (Windows\\System32 checked read-only)" >&2
+    log "partition $1: $_sr (Windows\\System32$_hv checked read-only)" >&2
     echo "$_sr"
+}
+
+_linux_system() {
+    # $1 = index, $2 = node, $3 = fs; a partition whose GUID says linux. #1899:
+    # the root is marked "system": true on evidence -- etc/os-release or
+    # etc/fstab on it, or one level down on btrfs (Fedora "root", Ubuntu "@").
+    # A separate /boot holds neither. Only the filesystems we capture are
+    # mounted (ext4, btrfs); rc 1 = not checked, stdout = the reason.
+    rm -f "$RUN_DIR/system.$1"
+    case "$3" in ext4|btrfs) ;; *) return 0 ;; esac
+    _lm="$RUN_DIR/sysprobe"; mkdir -p "$_lm"
+    _probe_mount "$2" "$3" ro "$_lm" || {
+        echo "מחיצה $1: לא הצלחנו לעגן לקריאה ולבדוק אם היא שורש הלינוקס (/etc)"; return 1; }
+    for _le in "$_lm/etc" "$_lm"/*/etc; do
+        if [ -f "$_le/os-release" ] || [ -f "$_le/fstab" ]; then : > "$RUN_DIR/system.$1"; break; fi
+    done
+    umount "$_lm" 2>>"$LOG_FILE" || { echo "מחיצה $1: הניתוק אחרי בדיקת שורש הלינוקס נכשל"; return 1; }
+    [ -f "$RUN_DIR/system.$1" ] && log "partition $1: the linux root (/etc found read-only)" >&2
+    return 0
+}
+
+_system_json() {
+    # $1 = role, $2 = index. ‏,"system":true on the partition _system_role found
+    # the SYSTEM hive on (#1875), or _linux_system found /etc on (#1899), in
+    # THIS capture; nothing otherwise.
+    case "$1" in windows|linux) [ -f "$RUN_DIR/system.$2" ] && printf ',"system":true' ;; esac
+    return 0
 }
 
 _used_bytes() {
@@ -219,7 +263,8 @@ verify_unique_guids() {
         if ! _vg=$(read_unique_guid "$DEVROOT/$1" "$_vi"); then
             PLAN_ERROR="מחיצה $_vi: לא הצלחנו לקרוא בחזרה מהדיסק את ה-GUID הייחודי ($_vg)"
         elif [ "$(printf '%s' "$_vg" | tr 'a-f' 'A-F')" != "$(printf '%s' "$_vu" | tr 'a-f' 'A-F')" ]; then
-            PLAN_ERROR="מחיצה $_vi: ה-GUID הייחודי בדיסק הוא $_vg ולא $_vu (#26)"
+            log "$1: partition $_vi unique GUID on the disk $_vg, in the manifest $_vu"   # #1924: values in the log only
+            PLAN_ERROR="מחיצה $_vi: ה-GUID הייחודי בדיסק אינו של האימג' (#26)"
         else
             _vn=$((_vn + 1))
             continue

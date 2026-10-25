@@ -441,6 +441,7 @@ def _fake_repo(tmp_path: Path, *, live_ok: bool, payload_ok: bool = True) -> Pat
     (repo / "install").mkdir(parents=True)
     (repo / "tools").mkdir()
     (repo / "install" / "imagectl-server.service").write_text("[Unit]\n", encoding="utf-8")
+    shutil.copy(REPO / "install" / "imagectl-upgrade-recover.service", repo / "install")
     shutil.copy(UPGRADE, repo / "tools" / "server-upgrade.sh")
     (repo / "install" / "console-live.sh").write_text(
         '#!/usr/bin/env bash\nprintf "console-live %s\\n" "$*" >> "$FAKE_LOG"\n'
@@ -473,12 +474,14 @@ def _upgrade_env(tmp_path: Path, repo: Path, data: Path) -> dict:
             "IMAGECTL_LIVE_WAIT": "1", "PYTHONPATH": posix(REPO)}
 
 
-def _upgrade_fakes(bindir: Path, *, restart_fails: bool = False) -> None:
+def _upgrade_fakes(bindir: Path, *, restart_fails: bool = False, enable_fails: bool = False) -> None:
     fake_tool(bindir, "git", 'case "$1" in describe) echo "$FAKE_TAG" ;; checkout) exit 0 ;; '
                              'rev-parse) echo "commit-of-$FAKE_TAG" ;; rev-list) echo "commit-of-$4" ;; esac')
     restart = 'echo restart failed >&2; exit 1' if restart_fails else "exit 0"
+    enable = 'echo "Failed to enable unit" >&2; exit 1' if enable_fails else "exit 0"
     fake_tool(bindir, "systemctl",
-              f'case "$1" in restart) {restart} ;; show) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;; esac')
+              f'case "$1" in restart) {restart} ;; enable) {enable} ;; '
+              'show) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;; esac')
 
 
 def _status(data: Path) -> dict | None:
@@ -569,7 +572,7 @@ def test_upgrade_refuses_while_a_round_is_open_even_when_run_by_hand(tmp_path, b
     seen = calls(tmp_path)
     assert not [c for c in seen if c.startswith("systemctl restart")]
     status = _status(data)
-    assert status and status["state"] == "failed" and "סבב פתוח" in status["error"]
+    assert status and status["state"] == "failed" and "סבב הפצה פתוח" in status["error"]   # #1891: busy_reason
 
 
 def test_upgrade_without_a_saved_previous_tag_rolls_back_to_the_commit_it_started_from(tmp_path, bindir):
@@ -611,6 +614,73 @@ def test_a_stale_saved_previous_tag_is_not_the_rollback_target(tmp_path, bindir)
     assert "git checkout --detach commit-of-v0.49.0" in seen, seen
     status = _status(data)
     assert status and status["state"] == "failed" and "הוחזר ל-commit-of-v0.49.0" in status["error"]
+
+
+# --- ‏#1957: טיימרים — מותקנים ומופעלים בכל עדכון, ולא רק בהתקנה נקייה ---------------
+
+TIMER = "imagectl-backup.timer"
+
+
+def _with_timer(repo: Path) -> None:
+    (repo / "install" / TIMER).write_text("[Timer]\nOnCalendar=hourly\n", encoding="utf-8")
+    (repo / "install" / "imagectl-backup.service").write_text("[Unit]\n", encoding="utf-8")
+
+
+def test_upgrade_installs_and_enables_every_timer_of_the_new_version(tmp_path, bindir):
+    """שרת שמתעדכן לגרסה עם `imagectl-backup.timer` (#1895) מקבל אותו — מותקן
+    ומופעל, אחרי daemon-reload. בלי זה הגיבוי השעתי קיים רק בהתקנה נקייה."""
+    data = tmp_path / "data"
+    _seed_db(data)
+    repo = _fake_repo(tmp_path, live_ok=True)
+    _with_timer(repo)
+    _upgrade_fakes(bindir)
+    proc = _run_upgrade(tmp_path, bindir, repo, data)
+    assert proc.returncode == 0, proc.stderr + (tmp_path / "upgrade.log").read_text(encoding="utf-8")
+    assert (tmp_path / "units" / TIMER).exists()
+    assert (tmp_path / "units" / "imagectl-backup.service").exists()
+    seen = calls(tmp_path)
+    enable = f"systemctl enable --now {TIMER}"
+    assert enable in seen, seen
+    assert seen.index("systemctl daemon-reload") < seen.index(enable)
+    assert (_status(data) or {}).get("state") != "failed"
+
+
+def test_a_timer_that_does_not_enable_fails_the_upgrade_and_rolls_back(tmp_path, bindir):
+    """כשל בהפעלה אינו שקט: חזרה לתג הקודם, וסטטוס `failed` שנוקב בטיימר."""
+    data = tmp_path / "data"
+    _seed_db(data, previous="v0.48.0")
+    repo = _fake_repo(tmp_path, live_ok=True)
+    _with_timer(repo)
+    _upgrade_fakes(bindir, enable_fails=True)
+    proc = _run_upgrade(tmp_path, bindir, repo, data)
+    assert proc.returncode != 0
+    assert "git checkout --detach v0.48.0" in calls(tmp_path)
+    status = _status(data)
+    assert status and status["state"] == "failed" and TIMER in status["error"], status
+
+
+def test_rollback_disables_a_timer_the_previous_version_does_not_have(tmp_path, bindir):
+    """חזרה לגרסה שאין לה את הטיימר לא משאירה אותו מופעל מול מודול שאינו
+    קיים: הוא מכובה ומוסר. טיימר שקיים גם בגרסה הישנה נשאר."""
+    data = tmp_path / "data"
+    _seed_db(data, previous="v0.48.0")
+    repo = _fake_repo(tmp_path, live_ok=False)
+    _with_timer(repo)
+    _upgrade_fakes(bindir)
+    git = bindir / "git"   # העץ של v0.48.0 — בלי הטיימר
+    git.write_text(git.read_text(encoding="utf-8").replace(
+        "checkout) exit 0 ;;",
+        f'checkout) if [ "$3" = v0.48.0 ]; then rm -f install/{TIMER}; fi; exit 0 ;;'),
+        encoding="utf-8", newline="\n")
+    proc = _run_upgrade(tmp_path, bindir, repo, data)
+    assert proc.returncode != 0
+    seen = calls(tmp_path)
+    disable = f"systemctl disable --now {TIMER}"
+    assert disable in seen, seen
+    assert seen.index("git checkout --detach v0.48.0") < seen.index(disable)
+    assert not (tmp_path / "units" / TIMER).exists()
+    status = _status(data)
+    assert status and status["state"] == "failed" and "הוחזר ל-v0.48.0" in status["error"], status
 
 
 def test_console_live_rereads_the_pinned_cert_on_every_attempt():

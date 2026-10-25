@@ -29,13 +29,20 @@ from boot.grub_menu import GrubConfig
 from boot.http import create_boot_asgi, gui_initrd_path
 
 from . import auth, auto_reboot, boottrace, deploy_net, dhcp, drive_rates, pulls, registry
-from . import timezone   # #1447
+from . import learn_netloss, learn_wol   # #1846, #1847
+from . import server_io   # #1884
+from . import pxe_log   # #1887
+from . import timezone, timesync   # #1447, #1773
 from .api import ServerContext, create_agent_router
 from .console_api import create_console_router
+from .console_data import create_console_data_router   # #1882-#1889
 from .console_hostcfg import create_hostcfg_router
 from .console_timezone import create_timezone_router
+from .console_timesync import create_timesync_router
+from .console_ups import create_ups_router
 from .console_tls import ConsoleTLS
 from .console_storage import create_storage_router
+from .console_backup_target import create_backup_target_router
 from .console_storage_locations import create_storage_locations_router
 from . import storage_locations
 from . import storage_heartbeat
@@ -49,6 +56,7 @@ from .station import create_station_router
 from .console_library import create_library_router
 from .console_drivers import create_agent_drivers_router, create_drivers_router   # #720
 from .console_tools import create_tools_router   # #649 שלב 1
+from .console_usb import create_usb_router   # #1914: the clone stick download
 from .drivers import DriverLibrary
 from .capture import (create_agent_capture_router, create_console_capture_router,
                       start_verification)
@@ -69,6 +77,7 @@ from .kiosk import create_kiosk_router, mark_build_gui
 from .cloner_round import create_cloner_round_router
 from . import room
 from . import usedbackfill
+from . import readbackhash
 from .room import CLONERS_GROUP, create_room_router
 from .room_console import create_room_console_router
 from .wake_api import create_wake_router
@@ -226,14 +235,23 @@ async def _room_clock(rt: ServerRuntime, interval: float) -> None:
     שאינו אימג' — טבלאות שגדלות ואזורי עבודה נטושים. ‏`housekeeping.run` לעולם
     אינו זורק.
     """
-    elapsed = 0.0
+    pxe_elapsed = 0.0   # ‏#1887
     storage_every = rt.storage_check_interval or storage_locations.CHECK_INTERVAL
+    # ‏#2123: מיקום שסומן "לא נבדק" בעלייה נבדק כבר בפעימה הראשונה, לא אחרי דקה.
+    elapsed = storage_every if storage_locations.has_unchecked(rt.conn) else 0.0
     chores = housekeeping.Schedule(rt.housekeeping_first, rt.housekeeping_every)
     while True:
         await asyncio.sleep(interval)
         await asyncio.to_thread(room.sweep, rt.conn, rt.store)
         # ‏#1573: משיכה שנכשלה או שתקה נסגרת גם כשאיש אינו צופה.
         await asyncio.to_thread(pulls.background_sweep, rt.store)
+        # ‏#1847: שליחה חוזרת מוקדמת להערה שעברה פי 2 מהזמן הטיפוסי, והתראה על רצף.
+        await asyncio.to_thread(learn_wol.sweep, rt.conn, rt.wol_send)
+        # ‏#1887: מה ש-dnsmasq ראה (קריאת journal בלבד) — כל `pxe_log.EVERY_S`. לעולם אינו זורק.
+        pxe_elapsed += interval
+        if pxe_elapsed >= pxe_log.EVERY_S:
+            pxe_elapsed = 0.0
+            await asyncio.to_thread(pxe_log.sweep, rt.conn)
         elapsed += interval
         if elapsed >= storage_every:
             elapsed = 0.0
@@ -334,6 +352,19 @@ def _backfill_used_bytes(conn: Connection, library: ImageLibrary) -> None:
         journal(conn, "image_used_bytes_underived", "ההשלמה נכשלה — ראו יומן השרת")
 
 
+def _readback_reporter(conn: Connection):
+    """‏#1805: שורת יומן לכל אימג' שנוסה — מה גובב לקריאה חוזרת, ומה לא ולמה."""
+    def report(result: dict) -> None:
+        written = ", ".join(f"p{i}" for i in sorted(result["written"]))
+        if written:
+            journal(conn, "image_readback_derived",
+                    f"{result['image_id']}: גיבוב לקריאה חוזרת — {written}")
+        if result["problems"]:
+            journal(conn, "image_readback_underived",
+                    f"{result['image_id']}: לא גובב — {'; '.join(result['problems'])}")
+    return report
+
+
 def create_runtime(
     data_dir: str | Path,
     images_root: str | Path,
@@ -415,10 +446,15 @@ def create_runtime(
     # ``main`` מדליק; בבדיקות תהליכון רקע שמריץ zstd על ספריית tmp היה כותב
     # ליומן בזמן לא צפוי.
     backfill_used_bytes: bool = False,
+    # ‏#1805: הגיבוב לקריאה החוזרת (readbackhash.py) — תהליכון רקע שעובר על
+    # הספרייה בעלייה, כשאימג' נכנס (`kick`), ופעם בעשר דקות. ‏False כמו למעלה:
+    # רק ``main`` מדליק.
+    backfill_readback: bool = False,
     # ‏#1447: אזור הזמן של המערכת מיושר להגדרה בעלייה (``timedatectl``).
     # ‏False כברירת מחדל מאותו טעם כמו ``sync_dnsmasq``: רק ``main`` מדליק —
     # בבדיקות ברירת המחדל הייתה משנה את אזור הזמן של מכונת הבדיקות.
     apply_timezone: bool = False,
+    apply_timesync: bool = False,
 ) -> ServerRuntime:
     """בונה את המצב המשותף פעם אחת ומריץ את האתחול החד-פעמי.
 
@@ -442,6 +478,7 @@ def create_runtime(
             conn, "image_manifest_rejected",
             f"המניפסט {path} הוצא מהספרייה: {reason}", ""))
     storage_locations.ensure_local(conn, library.root)
+    storage_locations.mark_unchecked_after_start(conn)   # ‏#2123
     library.bind_locations(
         lambda: storage_locations.library_roots(conn, library.root))
     # ‏#1334: ברירת המחדל לכל שושלת גרסאות — מה שמחשב בנייה מקבל לסבב חדש.
@@ -458,6 +495,8 @@ def create_runtime(
     # רשת שנפל לא יעכב את עליית השרת; כל קריאה תחומה בטיימר משלה.
     if apply_timezone:
         timezone.apply_on_start(conn, {**timezone.default_hooks(), **(host_hooks or {})})
+    if apply_timesync:
+        timesync.apply_on_start(conn, {**timesync.default_hooks(), **(host_hooks or {})})
 
     if backfill_used_bytes:
         threading.Thread(target=_backfill_used_bytes, args=(conn, library),
@@ -509,8 +548,13 @@ def create_runtime(
             # קצב אוטומטי (11/10): מה ש-udp-sender ספר בגל שהסתיים — הגל הבא
             # עולה רק על אפס שידורים חוזרים שנקראו כאן. לעולם אינו זורק.
             # ‏#1758: ואיך השולח סיים — גל שנכשל עם שידורים חוזרים הוא ההגנה.
-            drive_rates.record_stream(conn, session_id,
-                                      {**sender.wave_outcome(session_id), "ended": event})
+            outcome = {**sender.wave_outcome(session_id), "ended": event}
+            drive_rates.record_stream(conn, session_id, outcome)
+            # ‏#1884: הדיסק של הספרייה בגל — לפני #1846, שלא יאשים את הרשת בגל שהשרת האט.
+            server_io.end(conn, "wave", session_id, library.root, seconds=outcome.get("wall_s"))
+            # ‏#1846: האבדן של הגל מול הבסיס של כרטיס ההפצה — קפיצה נרשמת ביומן.
+            # לעולם אינו זורק.
+            learn_netloss.evaluate(conn, session_id)
         if event != "send_failed":
             return
         if session_id:
@@ -535,12 +579,17 @@ def create_runtime(
         # ‏#447 + קצב אוטומטי (11/10): הקצב לגל — מהגל הקודם של כל מחשב שיכפול
         # (#1471) והכוננים שבו, לעולם לא מעל `max_bitrate` (בלעדיו — 900m) ולא מעל
         # 90% מהקישור של כרטיס ההפצה (15/10).
-        wave_bitrate=lambda session: drive_rates.decide(
-            conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
-            sender.max_bitrate, link=sender.link),
+        # ‏#1884: באותו רגע — צילום הדיסק של הספרייה ולחץ ה-I/O של השרת (לעולם אינו זורק).
+        wave_bitrate=lambda session: (
+            server_io.begin(conn, "wave", session["id"], library.root),
+            drive_rates.decide(
+                conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
+                sender.max_bitrate, link=sender.link))[1],
         # ‏#1430: `store` נבנה למטה (הוא צריך את `sender.stop`); הקריאה
         # היא מתהליכון השולח, הרבה אחרי שהפונקציה הזו סיימה.
         live_receivers=lambda session_id: store.live_count(session_id),
+        # ‏#1950: חבר `lost` שעדיין מקבל את הזרם נספר במחיצה הבאה.
+        lost_receivers=lambda session_id: store.lost_ips(session_id),
         # ברזל 17/10: שאלת SMART פתוחה בגל עוצרת את שעון ה-180 של השולח.
         # מכונה שחרגה מהתקרה (‏ASK_HOLD_MAX_SECONDS) משתחררת מהגל לבדה.
         pending_asks=lambda session_id: smart_ask.waiting_in_wave(conn, session_id),
@@ -595,7 +644,8 @@ def create_runtime(
     # ‏#705: השירותים לכל כרטיס — **לפני** ה-render של dnsmasq בעלייה, כי הוא
     # קורא אותם; ‏`startup` מחזיר שינוי שפג בזמן שהשרת לא רץ.
     ctx.nic_services = _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq,
-                                     nic_hooks, netcfg_hooks, health_hooks)
+                                     nic_hooks, netcfg_hooks, health_hooks,
+                                     apply_timesync=apply_timesync)
     ctx.nic_services.startup()
     sender.gate = ctx.nic_services.multicast_refused
 
@@ -627,6 +677,14 @@ def create_runtime(
             if vm_host else None)
     if host is not None:
         health_hooks = {**(health_hooks or {}), "vm_host": host.health}
+    if backfill_readback:
+        # ‏#1864 (ברזל 20/10): אחרי שהשולח קיים — הגיבוב מפנה לו את הדרך (`server_busy`),
+        # ואימג' שנפתח לו סבב קודם לאימג' גדול שאיש לא פורס (`last_use`, ‏`kick`).
+        threading.Thread(target=readbackhash.run_forever, args=(library,),
+                         kwargs={"report": _readback_reporter(conn),
+                                 "busy": readbackhash.server_busy(conn, sender),
+                                 "rank": readbackhash.last_use(conn)},
+                         name="readback-digest", daemon=True).start()
     return ServerRuntime(
         ctx=ctx, conn=conn, library=library, store=store,
         server_base=server_base, data_dir=data_dir, netcfg_dir=netcfg_dir,
@@ -648,12 +706,12 @@ def create_runtime(
 
 
 def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
-                  netcfg_hooks=None, health_hooks=None):
+                  netcfg_hooks=None, health_hooks=None, apply_timesync=False):
     """‏#705: ‏`NicServices` עם הבסיס של היום (כרטיס הניהול מה-`DeployContext`,
     כרטיס ההפצה של השולח) ושני שלבי אכיפה שחיים כאן — dnsmasq וחומת האש.
     ‏dnsmasq מחובר רק כשיש hooks מפורשים או ‏`sync_dnsmasq` (‏main): ברירות
     המחדל האמיתיות כותבות ל-/etc ומפעילות שירות, ובדיקה אסור לה."""
-    from . import nic_services
+    from . import nic_services, timesync
 
     hooks = dict(nic_hooks or {})
     # ‏#113: אותה רשימת כרטיסים שהוזרקה לשאר הלשוניות — בדיקה לא קוראת את המכונה
@@ -681,10 +739,39 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
             return regenerate(deploy.repo_dir, deploy_if=None, servers_if=None,
                               primary_ip=deploy.primary_ip, services=per)
         hooks["firewall"] = firewall_step
+    if "timesync" not in hooks and apply_timesync:
+        chrony_hooks = timesync.default_hooks()
+
+        def timesync_step(nic):
+            interfaces, effective = nic.state()
+            present = {row["name"]: row for row in interfaces}
+            networks = []
+            for name, services in effective.items():
+                if "ntp" not in services:
+                    continue
+                for cidr in present.get(name, {}).get("addresses") or []:
+                    try:
+                        networks.append(str(__import__("ipaddress").ip_interface(cidr).network))
+                    except ValueError:
+                        continue
+            timesync.apply_server(networks, chrony_hooks)
+            return None
+        hooks["timesync"] = timesync_step
     base = nic_services.Baseline(
         console=deploy.servers_interface if deploy is not None else None,
         deploy=interface or (deploy.state.interface if deploy is not None else None))
-    return nic_services.NicServices(ctx.conn, base, hooks)
+    service = nic_services.NicServices(ctx.conn, base, hooks)
+    if apply_timesync and hooks.get("timesync"):
+        # startup default is explicit port 0. A server without chrony (or its
+        # chrony.conf) still comes up: the failure is a named journal line,
+        # not a server that never answers (enforce() catches the same way).
+        try:
+            hooks["timesync"](service)
+        except Exception as exc:                              # noqa: BLE001
+            from .db import journal
+            journal(ctx.conn, "timesync_apply_failed",
+                    f"שרת NTP לפי כרטיס: {exc or type(exc).__name__}")
+    return service
 
 
 #: ‏#1266: הדגל שאינו מוגש לתחנות מ-PXE, גם כשהועבר ב-`--extra-cmdline`.
@@ -863,9 +950,12 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_storage_router(ctx, rt.data_dir))   # #727/#740
     include(create_storage_locations_router(
         ctx, rt.storage_hooks, rt.data_dir, rt.server_base))   # #1066
+    include(create_backup_target_router(ctx, rt.storage_hooks, rt.data_dir))   # #1956
     include(create_library_router(ctx))
+    include(create_console_data_router(ctx))   # #1882-#1889: מה שנאסף על מכונה
     include(create_drivers_router(ctx))   # #720
     include(create_tools_router(ctx, rt.data_dir))   # #649: ארגז הכלים — קטלוג + בחירה
+    include(create_usb_router(ctx, rt.data_dir))   # #1914: הדיסק-און-קי לשיכפול — הורדה למנהל
     include(create_net_router(ctx))
     # ‏#1013: מתג ה-TFTP בדף הפורטים מחיל את אותם קובצי dnsmasq, דרך אותם
     # hooks, כמו לשונית ה-DHCP — מקום אחד שכותב את הקובץ.
@@ -883,9 +973,13 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_update_router(
         ctx, repo_dir, rt.server_base, rt.update_hooks,
         public_url=PUBLIC_UPDATE_URL,
-        vm_warning=rt.vm_host.warning if rt.vm_host else None))   # #1372
-    include(create_hostcfg_router(ctx, rt.data_dir, rt.console_tls, rt.host_hooks))   # #153
+        vm_warning=rt.vm_host.warning if rt.vm_host else None,   # #1372
+        busy_source=rt))   # #1891
+    include(create_hostcfg_router(ctx, rt.data_dir, rt.console_tls, rt.host_hooks,
+                                  busy_source=rt))   # #153, #1891
     include(create_timezone_router(ctx, rt.host_hooks))   # #1447
+    include(create_timesync_router(ctx, rt.host_hooks))   # #1773
+    include(create_ups_router(ctx, (rt.host_hooks or {}).get("ups")))   # #1973
     # ‏#690: admin RFB proxy + settings — ה-HTTP שלו admin_only ממילא.
     app.include_router(create_monitor_router(ctx))
     # ‏#1334: ה-HTTP דרך include (console_only: deploy מקבל את הסירוב של #1073),

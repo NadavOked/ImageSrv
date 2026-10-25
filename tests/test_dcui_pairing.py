@@ -418,7 +418,7 @@ def test_f2_sets_the_address_the_primary_sees_behind_the_password(tmp_path, conn
     runtime = _runtime(tmp_path, conn)
     _press(runtime, KEYS.KEY_F2, *"before", "\n")
     assert runtime.screen == "menu"
-    runtime.menu_index = len(dcui_app.MENU_ITEMS) - 1
+    runtime.menu_index = dcui_app.MENU_ITEMS.index("Primary-Visible Address")   # #1988: not the last
     assert dcui_app.MENU_ITEMS[runtime.menu_index] == "Primary-Visible Address"
     _press(runtime, "\n")
     assert runtime.screen == "advertised"

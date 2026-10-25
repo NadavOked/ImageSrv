@@ -37,6 +37,12 @@ const IdleDisk *idle_for_port(const State *s, int port);
 int eff_drawer(int drawer, int port);
 void conn_text(const char *conn, int port, const char *dev, char *out, size_t n);
 void unmapped_label(const char *name, const char *conn, int port, const char *dev, char *out, size_t n);
+/* #2030: the NAME on a drawer card. The big number on the card's end is the drawer; the name
+ * says the other thing -- the connection ("SATA 0", "NVMe 03:00.0") -- instead of repeating the
+ * number as "דיסק N". An operator's slot name (#704) still wins; a disk outside the mapping keeps
+ * "(לא ממופה)". Never a device name: "sda" is a log word, not the operator's. */
+void card_name(const char *name, int bay, const char *conn, int port, char *out, size_t n);
+const CUsed *cused_for_dev(const State *s, const char *dev);   /* #2030: NULL = no size read for it */
 int cloner_bay_count(const State *s);
 const IdleDisk *idle_for_bay(const State *s, int bay);
 const Drawer *drawer_for_bay(const State *s, int bay);
@@ -77,6 +83,7 @@ void bidi_isolate(const char *in, char *out, size_t n);
 void disk_size(unsigned long long b, char *out, size_t n);
 void sb_led(cairo_t *cr, double cx, double cy, double d, Rgb c, Rgb soft, int ring, double alpha);
 double sb_pill(cairo_t *cr, double right, double cy, const char *label, Rgb fg, Rgb bg);
+double sb_bay_pill(cairo_t *cr, double right, double cy, const char *label, Rgb fg, Rgb bg, int emphasis);
 void sb_hatch(cairo_t *cr, const Theme *t, Rect r);
 void progline_draw(cairo_t *, const Theme *, ProgLine *, double, double, double);
 void foot_buttons(App *, cairo_t *, Rect, Text *, const int *, const int *, int);

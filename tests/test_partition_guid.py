@@ -64,8 +64,9 @@ def source_disk(type_guid: str, *, uguid_line: str = UGUID_LINE, i_rc: int = 0) 
 def capture(tmp_path, stub):
     # ‏#1369: מחיצת ה-Windows כאן היא קובץ ריק בלי מערכת קבצים; מה שנבדק
     # הוא ה-GUID, ולכן היא "מכילה" מערכת (התפקיד נבדק ב-test_capture_measure_1368).
+    # ‏#1822: דיסק Windows בלי ESP נדחה — הפריסה אינה הנושא כאן (test_capture_layout_1822_1824).
     return capture_run(tmp_path, stubs={"sgdisk": stub, "curl": CURL_SINK},
-                       shell_pre="_system_role() { echo windows; }; ")
+                       shell_pre="_system_role() { echo windows; }; capture_layout_reason() { :; }; ")
 
 
 def manifest_of(run):
@@ -136,7 +137,7 @@ def test_unique_guids_that_came_back_from_the_disk_reach_done(tmp_path):
     box, run, prelude = build_box(tmp_path)
     out = sh(restore_run(prelude))
     assert rc_of(out) == "rc=0", out
-    assert state_of(run) == "done"
+    assert state_of(run) == "verifying"   # #1935: done is the caller's, after the name, the drivers and the mark
     assert wrote(run) == ["1", "2", "3"]
     assert "3 partition unique GUIDs came back from the disk" in log_of(run)
     # הראיה נקראה מהדיסק ולא נגזרה מקוד היציאה של `-u`.
@@ -155,8 +156,11 @@ def test_a_unique_guid_the_disk_did_not_keep_fails_the_restore(tmp_path):
     assert state_of(run) == "failed"
     assert wrote(run) == [], "מחיצה נכתבה על טבלה עם GUID שגוי"
     err = target_error(run)
-    assert "מחיצה 2" in err and "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA" in err, err
-    assert "22222222-2222-2222-2222-222222222222" in err, err
+    # #1924: the error reaches the server (progress/done, the journal) -- the
+    # GUIDs stay in the agent's log; the error says what differs.
+    assert "מחיצה 2" in err and "אינו של האימג'" in err, err
+    assert "AAAAAAAA" not in err and "22222222" not in err, err
+    assert "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA, in the manifest 22222222-2222-2222-2222-222222222222" in log_of(run)
 
 
 @pytest.mark.parametrize("mode,expect", [
@@ -187,7 +191,7 @@ def test_a_partition_without_a_guid_in_the_manifest_is_logged_not_checked(tmp_pa
     box, run, prelude = build_box(tmp_path, plan=[PLAN[0], "|".join(fields), PLAN[2]])
     out = sh(restore_run(prelude))
     assert rc_of(out) == "rc=0", out
-    assert state_of(run) == "done"
+    assert state_of(run) == "verifying"   # #1935: done is the caller's, after the name, the drivers and the mark
     log = log_of(run)
     assert "partition 2 has no unique GUID in the manifest -- not checked" in log
     assert "2 partition unique GUIDs came back from the disk" in log
@@ -203,7 +207,7 @@ def test_the_readback_ignores_the_case_of_the_hex_digits(tmp_path):
     (box / "uguid.lie.2").write_text("abcdef00-1111-2222-3333-444444444444\n", newline="\n")
     out = sh(restore_run(prelude))
     assert rc_of(out) == "rc=0", out
-    assert state_of(run) == "done"
+    assert state_of(run) == "verifying"   # #1935: done is the caller's, after the name, the drivers and the mark
 
 
 def test_the_expansion_reads_the_unique_guids_back_too(tmp_path):
@@ -220,6 +224,7 @@ def test_the_expansion_reads_the_unique_guids_back_too(tmp_path):
              + 'expand_last sda m.json; echo "rc=$?"')
     assert rc_of(out) == "rc=1", out
     assert "expanding partition 2" in log_of(run)
-    assert "מחיצה 2: ה-GUID הייחודי בדיסק הוא AAAAAAAA" in log_of(run)
+    assert "מחיצה 2: ה-GUID הייחודי בדיסק אינו של האימג'" in log_of(run)
+    assert "partition 2 unique GUID on the disk AAAAAAAA" in log_of(run)   # #1924: the values, in the log only
     assert not (run / "targets" / "sda" / "expanded").exists(), \
         "סימון ההרחבה נכתב בלי שה-GUID אושר"

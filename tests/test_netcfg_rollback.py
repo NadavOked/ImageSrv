@@ -311,8 +311,43 @@ def test_a_confirmation_whose_marker_survives_is_not_reported_as_confirmed(
     response = confirm(net_server, "eth0")
     assert response.status_code == 500, response.text
     assert "סמן ההחזרה" in response.json()["detail"]
+    # ‏#1226 "גמור": ואומר שהשינוי יוחזר — לא רק שהמחיקה נכשלה
+    assert "יוחזר בתום החלון" in response.json()["detail"], response.text
     assert pending_file(net_server)["interface"] == "eth0"
     assert ("net_confirmed", "eth0") not in journal_events(net_server)
+
+
+def test_an_unarmed_change_whose_old_marker_survives_says_so(net_server, monkeypatch):
+    """‏#2076: שינוי שאינו חמוש מנקה סמן ישן (רק סמן פגום מגיע לשם — תקין נדחה
+    קודם). ‏`clear_pending` בולע כישלון מחיקה; "הוחל" בלי לומר שהסמן נשאר הוא
+    עיקרון 5 — אותה ראיה חיובית כמו באישור (#291/#1226)."""
+    path = netcfg_rollback.pending_path(net_server["state_dir"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json", encoding="utf-8")
+    real_unlink = Path.unlink
+
+    def stuck(self, *args, **kwargs):
+        if self.name == netcfg_rollback.PENDING_NAME:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", stuck)
+    result = put(net_server, address="10.44.9.11").json()
+    assert result["rollback"]["pending"] is False                  # לא חמוש: eth1
+    assert result["ok"] is False, result
+    assert "סמן ההחזרה הישן" in (result["apply_error"] or ""), result
+    assert path.exists()
+    assert any(e == "net_rollback_marker_stuck" for e, _ in journal_events(net_server))
+
+
+def test_an_unarmed_change_that_clears_the_old_marker_is_ok(net_server):
+    """הצד השני: המחיקה הצליחה — ok, בלי שגיאה ובלי סמן."""
+    path = netcfg_rollback.pending_path(net_server["state_dir"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json", encoding="utf-8")
+    result = put(net_server, address="10.44.9.11").json()
+    assert result["ok"] is True and result["apply_error"] is None, result
+    assert not path.exists()
 
 
 # --- הפירור → שורת יומן --------------------------------------------------------

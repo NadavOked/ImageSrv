@@ -89,6 +89,8 @@ def test_f2_menu_has_no_admin_admin_reset(tmp_path, monkeypatch):
         monkeypatch.setattr(actions, name,
                             lambda *a, **k: actions.ActionResult(True, "stub"))
     monkeypatch.setattr(actions, "note_tls_display", lambda conn: None)
+    # #1988: "Add Disk" reads the disks on entry -- never the machine's own.
+    monkeypatch.setattr(actions, "blank_disks", lambda hooks=None: ({"items": [], "hidden": []}, None))
     snapshot = demo_snapshot()
     for index in range(len(dcui_app.MENU_ITEMS)):
         screen = "\n".join(render_menu(snapshot, selected=index))
@@ -273,6 +275,8 @@ def test_f2_menu_has_no_wizard_rerun(tmp_path, monkeypatch):
         monkeypatch.setattr(actions, name,
                             lambda *a, **k: actions.ActionResult(True, "stub"))
     monkeypatch.setattr(actions, "note_tls_display", lambda conn: None)
+    # #1988: "Add Disk" reads the disks on entry -- never the machine's own.
+    monkeypatch.setattr(actions, "blank_disks", lambda hooks=None: ({"items": [], "hidden": []}, None))
     assert not any("Wizard" in item for item in dcui_app.MENU_ITEMS)
     assert not hasattr(actions, "start_wizard")
     snapshot = demo_snapshot()

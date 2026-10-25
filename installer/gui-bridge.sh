@@ -8,6 +8,7 @@
 # the GUI says "the installer is not available (<action>)", never "ok".
 #
 #   inventory      disk= lines (imagectl-install --inventory) + nic= lines
+#                  + virt= and raid_default= (#1989)
 #   validate       the form (+ step) -> errors.<field>=... or nothing
 #   apply          writes the answers (0600), starts the engine, job=
 #   progress       the engine's state file, plus output= for the log tail
@@ -41,6 +42,8 @@ PRIMARY_ALIVE_PATH=/api/interserver/v1/alive
 . "$BRIDGE_DIR/lib/answers.sh"   # normalize_primary_url -- one rule, engine and GUI
 # shellcheck source=installer/lib/fielderrors.sh
 . "$BRIDGE_DIR/lib/fielderrors.sh"   # field_for_code, he_for_code (#1503)
+# shellcheck source=installer/lib/raid.sh
+. "$BRIDGE_DIR/lib/raid.sh"          # virt_kind, raid_default, raid_eligible_count (#1989)
 
 ACTION=${1:-}; [ -n "$ACTION" ] || { echo 'usage: gui-bridge.sh <action> < form.json' >&2; exit 2; }
 INPUT=$(cat)
@@ -52,14 +55,15 @@ field() { printf '%s' "$INPUT" | jq -r --arg k "$1" '.[$k] // "" | tostring' 2>/
 emit() { printf '%s=%s\n' "$1" "$(printf '%s' "$2" | tr '\r\n' '  ')"; }
 
 # --- NIC rows: name|model|mac|link|current|source|address|netmask|gateway|dns --
-nic_model() {
+nic_model() {   # #2096: a readable name, never "VMware 0x07b0"; unknown = empty -> "כרטיס רשת N" on screen
     _nm_dev="$SYSROOT/sys/class/net/$1/device"
-    [ -r "$_nm_dev/vendor" ] && [ -r "$_nm_dev/device" ] || { printf -- '-'; return; }
+    [ -r "$_nm_dev/vendor" ] && [ -r "$_nm_dev/device" ] || return 0
     _nm_v=$(cat "$_nm_dev/vendor"); _nm_d=$(cat "$_nm_dev/device")
-    case "$_nm_v" in
-        0x8086) printf 'Intel %s' "$_nm_d" ;; 0x15ad) printf 'VMware %s' "$_nm_d" ;;
-        0x10ec) printf 'Realtek %s' "$_nm_d" ;; 0x14e4) printf 'Broadcom %s' "$_nm_d" ;;
-        0x1af4) printf 'virtio %s' "$_nm_d" ;; *) printf '%s %s' "$_nm_v" "$_nm_d" ;;
+    case "$_nm_v:$_nm_d" in
+        0x15ad:0x07b0) printf 'VMware VMXNET3' ;; 0x15ad:*) printf 'VMware' ;; 0x1414:*) printf 'Hyper-V' ;;
+        0x8086:0x100e|0x8086:0x100f) printf 'Intel E1000' ;; 0x8086:0x10d3) printf 'Intel 82574L' ;; 0x8086:*) printf 'Intel' ;;
+        0x10ec:0x8168) printf 'Realtek RTL8111' ;; 0x10ec:0x8125) printf 'Realtek RTL8125' ;; 0x10ec:*) printf 'Realtek' ;;
+        0x14e4:*) printf 'Broadcom' ;; 0x1af4:*) printf 'virtio' ;;
     esac
 }
 
@@ -132,19 +136,25 @@ write_answers() {
         # own check ("admin_pass must not be empty") belongs to step 4+, not to
         # a disk/role/network validation. A placeholder keeps the dry-run honest
         # for every other field; apply always sends the real one.
-        if [ -n "$(field password)" ] || [ "${_wa_placeholder:-0}" = 0 ]; then emit admin_pass "$(field password)"; else emit admin_pass "not-yet-asked-1!"; fi
+        secret_answer admin_pass password; secret_answer root_pass root_password   # #1632: root's too
+        # #1989: the GUI's RAID choice; a form without one is "no RAID".
+        _wa_raid=$(field raid_level); _wa_spares=$(field raid_spares)
+        emit raid_level "${_wa_raid:-none}"; emit raid_disks "$(field raid_disks)"; emit raid_spares "${_wa_spares:-0}"
     } > "$_wa_out"
 }
 
-password_errors() {
-    _pe_p=$(field password); _pe_c=$(field password_confirm); _pe_bad=0
-    [ "${#_pe_p}" -ge 8 ] || { emit errors.password 'לפחות 8 תווים'; _pe_bad=1; }
-    case "$_pe_p" in *[A-Za-z]*) ;; *) emit errors.password 'נדרשת לפחות אות אחת'; _pe_bad=1 ;; esac
-    case "$_pe_p" in *[0-9]*) ;; *) emit errors.password 'נדרשת לפחות ספרה אחת'; _pe_bad=1 ;; esac
-    case "$_pe_p" in *[!A-Za-z0-9]*) ;; *) emit errors.password 'נדרש לפחות תו מיוחד אחד'; _pe_bad=1 ;; esac
-    [ "$_pe_p" = "$_pe_c" ] || { emit errors.password_confirm 'הסיסמאות שהזנת אינן תואמות'; _pe_bad=1; }
+secret_answer() { if [ -n "$(field "$2")" ] || [ "${_wa_placeholder:-0}" = 0 ]; then emit "$1" "$(field "$2")"; else emit "$1" "not-yet-asked-1!"; fi; }
+pw_errors() {   # #1632: one rule for both passwords -- the field, its confirmation, the mismatch line
+    _pe_p=$(field "$1"); _pe_c=$(field "$2"); _pe_bad=0
+    [ "${#_pe_p}" -ge 8 ] || { emit "errors.$1" 'לפחות 8 תווים'; _pe_bad=1; }
+    case "$_pe_p" in *[A-Za-z]*) ;; *) emit "errors.$1" 'נדרשת לפחות אות אחת'; _pe_bad=1 ;; esac
+    case "$_pe_p" in *[0-9]*) ;; *) emit "errors.$1" 'נדרשת לפחות ספרה אחת'; _pe_bad=1 ;; esac
+    case "$_pe_p" in *[!A-Za-z0-9]*) ;; *) emit "errors.$1" 'נדרש לפחות תו מיוחד אחד'; _pe_bad=1 ;; esac
+    [ "$_pe_p" = "$_pe_c" ] || { emit "errors.$2" "$3"; _pe_bad=1; }
     return $_pe_bad
 }
+password_errors() { pw_errors password password_confirm 'הסיסמאות שהזנת אינן תואמות'; _pr_bad=$?
+    pw_errors root_password root_password_confirm 'סיסמאות ה-root שהזנת אינן תואמות' || _pr_bad=1; return $_pr_bad; }
 
 # Run the engine's own validation (--dry-run: no command touches a disk) on
 # the form as an answers file; the first failure names the field.
@@ -162,8 +172,15 @@ engine_validate() {
 }
 
 do_inventory() {
-    "$ENGINE" --inventory || { echo 'gui-bridge: engine inventory failed' >&2; return 4; }
+    _di_inv=$("$ENGINE" --inventory) || { echo 'gui-bridge: engine inventory failed' >&2; return 4; }
+    printf '%s
+' "$_di_inv"
     nic_rows
+    # #1989: virtual servers get no RAID (the host does it); metal gets the
+    # default for its count of suitable disks (2 -> raid1, 3 -> raid5, 4+ -> raid10).
+    _di_virt=$(virt_kind); _di_n=$(printf '%s
+' "$_di_inv" | raid_eligible_count)
+    emit virt "$_di_virt"; emit raid_default "$(raid_default "$_di_n" "$_di_virt")"
     _di_role=standalone; _di_if=
     for _d in "$SYSROOT"/sys/class/net/*; do _n=${_d##*/}; [ "$_n" = lo ] && continue
         [ -r "$DHCP_DIR/$_n" ] && grep -q '^state=lease$' "$DHCP_DIR/$_n" && { _di_if=$_n; break; }; done

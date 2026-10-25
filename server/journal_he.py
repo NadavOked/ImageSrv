@@ -28,6 +28,7 @@ EVENTS_HE = {
     "sessions_revoked": "הפעלות בוטלו",
     "agent_login": "כניסה ממסך תחנה",
     "local_clone": "שיכפול מקומי במחשב שיכפול (דיווח המחשב)",   # #1322
+    "local_clone_note": "שיכפול מקומי — הושלם עם הערה (דיווח המחשב)",   # #2049: a done drawer with ntfs_note
     "agent_login_failed": "ניסיון כניסה כושל במסך תחנה",
     "agent_role_refused": "פתיחת סבב נדחתה — התפקיד אינו רשאי",
     "class_deploy_refused": "פתיחת סבב כיתה נדחתה — הפצה לכיתות כבויה",
@@ -47,6 +48,8 @@ EVENTS_HE = {
     "session_start_auto": "השידור התחיל — ההמתנה הסתיימה",
     "session_start_manual": "השידור התחיל ידנית",
     "session_close": "סבב נסגר",
+    # ‏#1861: ‏`event=` של `Sessions.close` — סבב גמור שנסגר כשנפתח הבא (#35).
+    "session_autoclose": "סבב שהסתיים נסגר — נפתח סבב חדש",
     # ‏#411: פיוס בעליית השרת — סבב שהיה `running` בלי משדר.
     "session_orphaned": "השרת עלה מחדש — המשדר אבד, הסבב נסגר ככישלון",
     "session_image_bound": "פתיחת סבב נדחתה — האימג' קשור למכונה אחרת",
@@ -57,9 +60,26 @@ EVENTS_HE = {
     "pull_refused": "משיכת יוניקאסט נדחתה",
     "client_done": "מחשב סיים לכתוב",
     "client_failed": "כתיבה נכשלה במחשב",
+    # ‏#1801/#1861: ‏`f"client_{state}"` (reports.py) — ‏partial = חלק מהמגירות נכתבו וחלק לא.
+    "client_partial": "מחשב סיים חלקית — חלק מהדיסקים לא נכתבו",
     "wol_sent": "המחשבים הוערו (WoL)",
     "wol_failed": "הערת WoL נכשלה",
     "wol_arm_failed": "המחשב לא הצליח לדרוך Wake-on-LAN לפני כיבוי",
+    "net_loss_jump": "האבדן ברשת ההפצה קפץ מול הבסיס שלה — סוויץ'/כבל/IGMP",
+    "wol_resent": "WoL נשלח שוב — המחשב לא ענה בזמן הטיפוסי שלו",
+    "wol_no_wake": "המחשב לא מתעורר מ-WoL — BIOS/כבל",
+    "boot_step_slow": "שלב באתחול התארך פי 2 מהבסיס של המחשב",
+    # ‏#1882: הזנב של לוג הסוכן נשמר בשרת (מסונן), עם הכשלים המוכרים שזוהו בו.
+    "agent_log": "הלוג של המכונה מסוף הסבב נשמר בשרת",
+    # ‏#1888: ה-IP של מכונה השתנה — חכירה חדשה, DHCP זר, או מכונה שעברה רשת.
+    "ip_changed": "כתובת ה-IP של המכונה השתנתה",
+    # ‏#1885: ה-throttle של מעבד המשכפל עלה בגל — הגל לא נכנס ללמידת הקצב.
+    "cloner_throttled": "המשכפל התחמם/הואט בגל — בדקו אוורור; הגל לא נכנס ללמידת הקצב",
+    # ‏#1884: השרת חיכה לדיסק של הספרייה חלק ניכר מזמן הזרם — הגל לא נכנס ללמידה.
+    "server_disk_slow": "דיסק הספרייה בשרת היה צוואר הבקבוק — הגל לא נכנס ללמידת הקצב",
+    # ‏#1886: לפני שהקליטה נוצרה — אין מקום לגרסה הקודמת של האימג' (סירוב), או שאין למה להשוות.
+    "capture_space_refused": "קליטה סורבה לפני שהתחילה — אין מקום בשרת לגרסה הקודמת של האימג'",
+    "capture_space_unchecked": "קליטה התחילה בלי השוואה לגרסה קודמת — המקום ייבדק כשהסוכן ימדוד",
     "room_open": "סבב חדר שיכפולים נפתח",
     "room_open_cloner": "סבב חדר נפתח ממסך מחשב שיכפול (המגירות שלו בלבד)",   # 16/10
     "cloner_round_refused": "פתיחת סבב ממסך מחשב שיכפול נדחתה",   # 16/10
@@ -71,6 +91,7 @@ EVENTS_HE = {
     "room_drawer_cancelled": "הכתיבה לדיסק בוטלה — טבלת המחיצות נמחקה, שאר הדיסקים ממשיכים",
     # ‏#105: כונן בלי serial שסיים — לא הוחלף, פשוט אין זהות לספור.
     "room_drawer_unidentified": "לא ניתן לזהות את הכונן (אין serial) — הכתיבה לא נספרה",
+    "room_drawer_wake_mismatch": "המשכפל עלה ובחריץ שנבחר אין את הדיסק שנבחר — המגירה דולגה ולא נכתבה",   # #1954
     "room_done": "סבב חדר השיכפולים הושלם",
     "room_failed": "סבב חדר השיכפולים נכשל — אף מגירה לא נכתבה בגל",   # 17/10
     # ‏#1721: ה-WoL של הגל נבלע (המשכפל עוד היה בספירת הכיבוי) — נשלח שוב, עם תקרה.
@@ -83,6 +104,7 @@ EVENTS_HE = {
     "machine_reboot": "התבקש אתחול מרחוק",
     # ‏#65: "כבה אותו" — מחשב שיכפול אחד שחסר בגל הפתוח, כדי להחליף בו מגירות.
     "room_missing_poweroff": "התבקש כיבוי מחשב שיכפול שחסר בגל",
+    "held_poweroff": "התבקש כיבוי משכפל שמחכה ללחיצה (דיסק עם בעיה)",   # #2031
     # ‏#432: הגל יצא לדרך כשמגירה בו התחברה מתחת למהירות הפורט או שה-CRC שלה עלה.
     "room_precheck_warned": "הגל יצא לדרך למרות אזהרת קישור/CRC על מגירה",
     "power_delivered": "בקשה מהקונסולה נמסרה לסוכן",
@@ -91,6 +113,8 @@ EVENTS_HE = {
     # ברזל 17/10: מחשב שיכפול בגל עומד על שאלת SMART — השולח לא מתחיל עד התשובה.
     "send_held_smart": "השידור ממתין לתשובה על דיסק (SMART) — הזמן לא נספר",
     "send_hold_released": "אין עוד שאלה פתוחה על דיסק — השידור ממשיך",
+    # ‏#1950: חבר שסומן "אבד" קיבל את המחיצה הקודמת עד סופה — השולח ממתין גם לו.
+    "send_counts_lost": "מחשב שסומן כאבוד עדיין מקבל את הזרם — השידור ממתין גם לו",
     "smart_ask_expired": "שאלת SMART לא נענתה בזמן — המכונה שוחררה מהגל, השאר ממשיכים",
     "wave_rate": "נקבע קצב לגל",
     "machine_nic_speed": "מהירות כרטיס הרשת של מכונה נקבעה ידנית",
@@ -137,6 +161,11 @@ EVENTS_HE = {
     "monitor_connected": "מוניטור נפתח למכונה",
     "monitor_closed": "מוניטור נסגר",
     "monitor_power": "פקודת כוח דרך המוניטור",
+    "monitor_control_request": "בקשת שליטה במכונה במוניטור",
+    "monitor_control_approved": "שליטה במוניטור הועברה באישור",
+    "monitor_control_denied": "בקשת שליטה במוניטור נדחתה",
+    "monitor_control_timeout": "בקשת שליטה במוניטור לא נענתה",
+    "monitor_control_auto": "שליטה במוניטור הועברה — המחזיק לא נראה",
     # ‏#1334: עדכון אימג' בתוך VM על השרת.
     "vmupdate_start": "עדכון ב-VM: הדיסק נבנה מהאימג'",
     "vmupdate_running": "עדכון ב-VM: ה-VM הודלק",
@@ -179,11 +208,19 @@ EVENTS_HE = {
     "timezone_change_failed": "שינוי אזור הזמן של השרת נכשל",
     "timezone_applied": "אזור הזמן של המערכת יושר להגדרה בעליית השרת",
     "timezone_apply_failed": "יישור אזור הזמן של המערכת בעליית השרת נכשל",
+    "timesync_changed": "מקור השעה",
+    "timesync_change_failed": "שינוי מקור השעה נכשל",
+    "timesync_applied": "מקור השעה הוחל בעליית השרת",
+    "timesync_apply_failed": "החלת מקור השעה בעליית השרת נכשלה",
     "hostname_restart_failed": "שם המארח שונה אך אתחול השרת לא תוזמן",
     "image_edit": "אימג' עודכן",
     "image_delete": "אימג' נמחק",
+    "image_system_partition": "סומנה מחיצת המערכת (C:) באימג' ישן",   # #1896
     "image_used_bytes_derived": "נפח בשימוש של אימג' ישן הושלם מכותרת partclone",   # #1494
     "image_used_bytes_underived": "נפח בשימוש של אימג' ישן לא הושלם",               # #1494
+    "image_readback_derived": "גיבוב לקריאה חוזרת נרשם לאימג'",                  # #1805
+    "image_readback_underived": "גיבוב לקריאה חוזרת לא נרשם לאימג'",              # #1805
+    "readback_list_not_fetched": "הדיסק הושלם ולא אומת — רשימת הבדיקה לא הורדה מהשרת",   # #1907
     "capture_start": "קליטת אימג' הוזמנה",
     "capture_verifying": "אימג' התקבל — מאמת לפני הכניסה לספרייה",
     "capture_done": "אימג' נקלט",
@@ -196,6 +233,8 @@ EVENTS_HE = {
     "retention_failed": "ניקוי יומי: חלק לא בוצע (#1737)",
     "image_download": "אימג' הורד למחשב",
     "image_upload": "אימג' הועלה מהמחשב",
+    # ‏#1861: הקריאה פרוסה על שתי שורות ב-app.py, והסריקה שורה-שורה לא ראתה אותה.
+    "image_manifest_rejected": "אימג' הוצא מהספרייה — המניפסט שלו פגום",
     "driver_upload": "חבילת דרייברים יובאה",
     "driver_delete": "חבילת דרייברים נמחקה",
     "tools_selection": "בחירת ארגז הכלים נשמרה",   # #649
@@ -222,6 +261,7 @@ EVENTS_HE = {
     "net_confirmed": "שינוי הרשת אושר — החיבור עדיין חי",
     "net_rollback": "הוחזרה תצורת רשת קודמת, השינוי לא אושר",
     "net_rollback_unreadable": "הוחזרה תצורת רשת, הפרטים לא ניתנים לקריאה",
+    "net_rollback_marker_stuck": "סמן החזרה ישן של הרשת לא נמחק",   # #2076
     # ‏#705: שירותים לכל כרטיס רשת
     "nic_services_set": "השירותים של כרטיס רשת שונו",
     "nic_services_armed": "כיבוי הקונסולה בכרטיס ממתין לאישור — בלעדיו יחזור",
@@ -233,6 +273,8 @@ EVENTS_HE = {
     "admin_password_reset_dcui": "סיסמת המנהל אופסה ממסך השרת (DCUI)",
     "bind_address_changed": "כתובת ההאזנה של השרת השתנתה",
     "client_lost": "מכונה אבדה באמצע גל — לא דיווחה בזמן",
+    # ‏#1947: שעון השרת זז (NTP, ‏snapshot, סנכרון מהמארח) — הזמנים של הסבבים הפעילים כוילו.
+    "clock_jump": "שעון השרת קפץ — זמני הסבבים הפעילים כוילו מחדש",
     # ‏#1728: אתחול באמצע הזרם — יצא מהגל וממתין לגל הבא.
     "room_rejoin": "מחשב שיכפול אותחל באמצע הזרם — ממתין לגל הבא",
     "console_tls_by_name_only": "תעודת הקונסולה תקפה לשם בלבד, לא לכתובת",
@@ -258,6 +300,7 @@ EVENTS_HE = {
     "disk_decision": "הכרעה על דיסק (SMART) נרשמה",
     "machine_drawer_count": "מספר המגירות של מכונה עודכן",
     "machine_drawer_slots": "מיפוי חיבורי הדיסקים של מכונה עודכן",
+    "machine_slot_map": "מיפוי החיבורים נשמר (מחשב או כל מחשבי הדגם)",
     "machine_slot_name": "שם של חיבור כונן במכונה עודכן",
     "monitor_stations": "מתג המוניטור בתחנות שונה",
     "net_config_refused": "שינוי רשת נדחה",
@@ -284,6 +327,11 @@ EVENTS_HE = {
     "storage_location_format": "מיקום אחסון פורמט",
     "storage_location_mount": "מיקום אחסון עוגן",
     "storage_location_unreachable": "מיקום אחסון אינו נגיש",
+    # ‏#1988: "הוסף כונן" (server/storage_disks.py)
+    "storage_disk_prepare_start": "הכנת כונן חדש למיקום אחסון",
+    "storage_disk_prepare_failed": "הכנת הכונן החדש נכשלה",
+    "storage_disk_add_failed": "הוספת הכונן נכשלה — לא נוסף מיקום",
+    "storage_location_add_disk": "כונן חדש נוסף כמיקום אחסון",
     "storage_monitor_tunnel_closed": "מנהרת מוניטור למכונה בשרת המשנה נסגרה",
     "storage_pairing_open": "צימוד שרת משנה נפתח",
     "storage_pairing_closed": "קוד הצימוד בוטל במסך השרת",            # DCUI F4, 16/10
@@ -294,6 +342,7 @@ EVENTS_HE = {
     "task_token_refused": "אסימון משימה נדחה",
     "settings_backup_downloaded": "גיבוי ההגדרות הורד",
     "update_apply_busy": "החלת עדכון נדחתה — יחידת השדרוג כבר רצה",
+    "update_forced": "עדכון הוחל מעל חסימה באישור מנהל",   # #1891
     "update_apply_failed": "החלת עדכון נכשלה",
     "update_apply_started": "החלת עדכון החלה",
     "update_check": "בדיקת עדכון מול הריפו הציבורי",
@@ -301,6 +350,19 @@ EVENTS_HE = {
     "user_enabled": "משתמש הופעל מחדש",
     "send_simulated": "שידור מדומה (סימולציה בלבד — אין udp-sender)",
     "shrink_open": "רשומת כיווץ נפתחה לדיסק — הטבלה המקורית נשמרה בשרת",
+    # ‏#1861: ברירת המחדל של `event` ב-`shrink_records.close_record`.
+    "shrink_close": "רשומת כיווץ נסגרה",
+    # ‏#1973: ה-UPS (‏server/ups.py).
+    "ups_on_battery": "החשמל נפל — השרת על סוללת UPS",
+    "ups_power_restored": "החשמל חזר — השרת על חשמל",
+    "ups_low_battery": "סוללת ה-UPS נמוכה",
+    "ups_work_stopped": "עבודה נעצרה לפני כיבוי (UPS)",
+    "ups_shutdown": "השרת נכבה מסודר — סוללת UPS נמוכה",
+    "ups_shutdown_failed": "כיבוי השרת בסוללה נמוכה נכשל",
+    "ups_unreachable": "ה-UPS לא נקרא",
+    "ups_reachable": "ה-UPS נקרא שוב",
+    "ups_config_changed": "הגדרת ה-UPS שונתה",
+    "ups_config_failed": "הגדרת ה-UPS נכשלה",
 }
 
 #: ‏#968: חומרת האירוע לציר-הזמן ולעמודת הצבע ביומן — נקבעת **כאן**, לצד
@@ -314,27 +376,33 @@ _SEVERITY_ERR = {
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
     "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
     "room_wave_lost", "room_failed", "room_wake_failed", "send_failed", "direct_failed", "disk_failure",
-    "session_orphaned", "identity_refused", "storage_transfer_failed", "logo_refused",
+    "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
     "known_macs_apply_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
     "vmupdate_no_lease", "vmupdate_net_teardown_failed",
+    "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
 }
 _SEVERITY_WARN = {
     "unknown_mac", "drive_rates_failed", "boot_loop_local", "boot_loop_unverified", "agent_loop",
     "agent_loop_unverified", "report_from_nonmember", "identity_unverifiable", "room_rejoin",
     "capture_cancel", "direct_cancel", "task_boot_cancel", "send_stopped", "dhcp_proxy_risk",
     "net_config_unverified", "net_rollback_armed", "net_rollback",
-    "net_rollback_unreadable", "work_area_kept", "nic_services_armed", "nic_services_reverted",
+    "net_rollback_unreadable", "net_rollback_marker_stuck", "work_area_kept", "nic_services_armed", "nic_services_reverted",
     "storage_node_disable",
-    "room_drawer_changed", "room_drawer_unidentified", "room_rewake",
-    "power_expired", "gui_failed", "wol_arm_failed", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
+    "room_drawer_changed", "room_drawer_unidentified", "room_drawer_wake_mismatch", "room_rewake", "clock_jump",
+    "power_expired", "gui_failed", "wol_arm_failed", "net_loss_jump", "wol_no_wake", "wol_resent", "boot_step_slow", "server_disk_slow", "capture_space_refused", "capture_space_unchecked", "cloner_throttled", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
     "vmupdate_mac_created", "vmupdate_leftover_failed", "linux_initramfs_warning",
+    "send_counts_lost",
+    "readback_list_not_fetched",   # #1907
+    "local_clone_note",   # #2049: a local clone done with a note (ntfs_note) -- orange, not "succeeded"
+    "ups_on_battery", "ups_work_stopped",
 }
 _SEVERITY_OK = {
     "login", "capture_done", "client_done", "pull_done", "room_done",
     "send_done", "direct_done", "storage_transfer_done", "net_confirmed", "nic_services_confirmed",
     "disk_failure_cleared", "drivers_staged", "storage_image_received",
     "wol_sent", "vmupdate_saved", "vmupdate_lease",
+    "ups_power_restored", "ups_reachable",
 }
 
 
@@ -370,9 +438,16 @@ SETTINGS_HE = {
     "crc_warn_threshold": "סף שגיאות CRC לאזהרה",   # #1366
     "min_free_gb": "מינימום מקום פנוי אחרי שחזור (GB)",   # #1354
     "intersite_rate_cap_mbps": "הגבלת קצב בין אתרים (Mb/s)",   # #1473
+    "igmp_querier": "IGMP querier ברשת ההפצה",   # #1972
     "auto_reboot": "הפעלה מחדש אוטומטית",
     "auto_reboot_time": "שעה",
     "auto_reboot_weekday": "יום",
+    "cloner_beep": "צליל בסיום סבב שיכפול",   # #1967, as in console.js
+    "backup_target": "יעד גיבוי המסד",   # #1956: הסוג, ואחריו היעד (בלי סיסמה)
+    # ‏#1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
+    "identity_check": "אימות מחשבים לפי כתובת ה-DHCP",
+    "readback_full": "אימות מלא אחרי הכתיבה",
+    "update_enabled": "עדכון גרסה מהקונסולה",
 }
 
 ROLES_HE = {"classroom": "כיתה", "cloner": "חדר שיכפולים", "build": "מחשב בנייה"}
@@ -463,7 +538,7 @@ class JournalTranslator:
                 text = f'{m.group(4)} — "{image}"'
         elif event in ("pull_done", "pull_failed"):
             text = _SES.sub(lambda m: self._sessions.get(m.group(1), m.group(1)), detail)
-        elif event in ("client_done", "client_failed", "report_from_nonmember", "room_rejoin"):
+        elif event in ("client_done", "client_failed", "client_partial", "report_from_nonmember", "room_rejoin"):
             text = self._names(_SES.sub("הסבב", detail)).replace(" in ", " בתוך ")
         elif event in ("send_held_smart", "send_hold_released", "smart_ask_expired"):
             text = self._names(_SES.sub(lambda m: self._sessions.get(m.group(1), m.group(1)),

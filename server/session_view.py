@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from . import bootguard, disk_events
+from . import bootguard, disk_events, learn_eta
 from .sessions import MULTICAST
 
 
@@ -129,3 +129,16 @@ def build(store, session: sqlite3.Row, library) -> dict:
         if session["state"] == "open" else 0,
         "members": members,
     }
+
+
+def pull_forecast(store, session: sqlite3.Row, library) -> dict | None:
+    """‏#1843: משיכה (שחזור) שרצה — כמה זמן היא צפויה לקחת לפי המשיכות הקודמות
+    של אותה מכונה (‏`learn_eta.pull`). לקונסולה בלבד (‏`/overview.pulls[]`), לא
+    לתשובה שמוגשת לסוכן. ‏None = אינה משיכה רצה של מכונה אחת."""
+    members = store.members(session["id"])
+    if session["kind"] == MULTICAST or session["state"] != "running" or len(members) != 1:
+        return None
+    manifest = library.get(session["image_id"]) if library is not None else None
+    size = manifest.get("total_compressed_bytes") if isinstance(manifest, dict) else None
+    return learn_eta.pull(store.conn, members[0]["mac"], size, session["started_at"],
+                          session["id"])

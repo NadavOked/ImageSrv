@@ -92,6 +92,9 @@ def test_4kn_capture_writes_logical_geometry_not_512(tmp_path):
         shell_pre=(
             f"printf '4096\\n' > {posix(logical)!r}; "
             f"printf '{KERNEL_SECTORS}\\n' > {posix(sizef)!r}; "
+            # ‏#1900: מקור 4Kn נדחה עכשיו לפני הבייט הראשון (השרת מקבל רק 512,
+            # ‏test_capture_gates.py). כאן נשמר חישוב הגיאומטריה — השער עקוף.
+            "capture_source_reason() { :; }; "
         ),
     )
     assert out.strip().endswith("rc=0"), (

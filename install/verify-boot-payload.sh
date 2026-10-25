@@ -166,7 +166,7 @@ cat >&2 <<EOF
 
 מה עושים (docs/server-install.md, "שלב שני, חובה: הקרנל וה-initrd"):
 
-  sudo apt-get install -y linux-image-amd64
+  sudo apt-get install -y --no-install-recommends linux-image-amd64
   KVER=\$(ls /lib/modules | grep -v cloud | tail -n1)
   sudo bash tools/build_initramfs.sh --kernel-version "\$KVER" \\
        --output $HTTP_ROOT/initrd.img

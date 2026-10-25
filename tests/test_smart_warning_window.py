@@ -141,7 +141,7 @@ def _gui_state(tmp_path: Path, mode: str, runs: int = 1) -> list[str]:
         f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
         f'. {posix(AGENT)}/lib/buildmenuitems.sh; . {posix(AGENT)}/lib/buildmenu.sh; '
-        f'. {posix(AGENT)}/lib/guistate.sh; . {posix(AGENT)}/lib/askgui.sh; '
+        f'. {posix(AGENT)}/lib/guistate.sh; . {posix(AGENT)}/lib/askgui.sh; . {posix(AGENT)}/lib/syspartgui.sh; '   # #1896: syspart_records
         + SMART_STUBS
         + 'disk_slot_records() { :; }; '   # #1495's drawer numbering, tested in test_drawer_map_gui_1495
         + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '

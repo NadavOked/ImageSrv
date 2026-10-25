@@ -428,6 +428,43 @@ def test_monitor_refuses_to_start_without_a_usable_secret(tmp_path):
     assert "hex" in malformed.stderr, malformed.stderr
 
 
+@NATIVE
+def test_monitor_refuses_to_start_without_a_usable_allow_from(tmp_path):
+    """#1077: ‏5900 נגיש רק לשרת, ולכן `--allow-from` חובה וכתובת IPv4 תקינה.
+    בלי הדגל — usage ויציאה; כתובת לא תקינה — יציאה בשמה. עד כאן אף טסט לא
+    הפיל את הסרת שני השומרים (בקרה רטרואקטיבית, 24/10): בלעדיהם המוניטור
+    עולה עם ‏`allow_from` = ‏0.0.0.0 — שער שאיש לא קבע."""
+    binary = _build(tmp_path)
+    fb = tmp_path / "fb0.raw"
+    fb.write_bytes(bytes(WIDTH * HEIGHT * 4))
+    secret = tmp_path / "monitor.secret"
+    secret.write_text(SECRET + "\n")
+    base = [str(binary), "--bind", "127.0.0.1", "--port", str(_free_port()),
+            "--fb", str(fb), "--geometry", f"{WIDTH}x{HEIGHT}",
+            "--secret-file", str(secret)]
+
+    def exit_of(argv):
+        """(קוד יציאה, stderr) — או (None, …) כשהמוניטור עלה ועדיין רץ."""
+        proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                text=True)
+        try:
+            _, err = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _, err = proc.communicate()
+            return None, err
+        return proc.returncode, err
+
+    code, err = exit_of(base)
+    assert code is not None, f"המוניטור עלה בלי --allow-from: {err}"
+    assert code != 0 and "--allow-from" in err, (code, err)
+
+    code, err = exit_of(base + ["--allow-from", "server.example"])
+    assert code is not None, f"המוניטור עלה עם --allow-from לא תקין: {err}"
+    assert code != 0 and "invalid --allow-from" in err, (code, err)
+
+
 def test_view_only_source_never_assigns_null_input_callbacks():
     """שומר-מקור שרץ בכל תחנה, גם בלי gcc (ולכן בלי ‏NATIVE): ‏`kbdAddEvent`/`ptrAddEvent`
     לעולם אינם `NULL`. זה בדיוק השורש של #833 — ‏LibVNCServer אינו בודק.
@@ -561,26 +598,92 @@ def test_wrong_peer_is_closed_before_the_handshake(tmp_path):
     assert "not the server" in text, text
 
 
+def _rekey(secret: bytes, challenge: bytes) -> bytes:
+    """‏#1837: ‏`rekey_secret` — כתוב כאן בנפרד מ-monitor.c ומהשרת."""
+    return hmaclib.new(secret, b"imagectl-monitor-rekey" + challenge,
+                       hashlib.sha256).digest()[:16]
+
+
 @NATIVE
-def test_secret_file_rotates_after_an_authenticated_client_leaves(tmp_path):
+def test_authentication_moves_the_secret_to_the_derived_one(tmp_path):
+    """‏#1837: האימות מעביר את הסוד — בקובץ ובזיכרון — ל-HMAC(סוד,
+    תווית‖challenge), מה שהשרת גוזר מאותו challenge. ראיה חיובית: הקובץ
+    שווה בדיוק לגזירה, הסוד הבא מתקבל, והסוד הקודם נדחה. עד #1837 הוגרל
+    סוד אקראי ביציאת הלקוח, ואיש מחוץ למכונה לא יכול היה לדעת אותו."""
     binary = _build(tmp_path)
     monitor = Monitor(tmp_path, binary)
-    before = monitor.secret_file.read_text().strip()
     try:
         with monitor.connect() as sock:
-            _handshake(sock)
-        deadline = time.monotonic() + 5
-        after = before
-        while time.monotonic() < deadline:
-            after = monitor.secret_file.read_text().strip()
-            if after != before:
-                break
-            time.sleep(0.05)
-        assert after != before, after
-        assert len(after) == 32
+            _security_types(sock)
+            sock.sendall(b"\x02")
+            challenge = _recv_exact(sock, 16)
+            sock.sendall(_hmac16(SECRET_BYTES, challenge))
+            assert struct.unpack(">I", _recv_exact(sock, 4))[0] == 0
+            following = _rekey(SECRET_BYTES, challenge)
+            assert monitor.secret_file.read_text().strip() == following.hex()
+
+        with monitor.connect() as sock:                # הסוד הקודם — נדחה
+            _security_types(sock)
+            assert _answer_challenge(sock, secret=SECRET_BYTES) == 1
+        with monitor.connect() as sock:                # הסוד הבא — מתקבל מיד
+            _security_types(sock)
+            assert _answer_challenge(sock, secret=following) == 0
+        assert monitor.alive()
     finally:
         text = monitor.stop()
-    assert "rotated session secret" in text, text
+    assert "rekeyed session secret" in text, text
+
+
+@NATIVE
+def test_the_server_reconnects_to_the_real_monitor_without_a_hello(server, tmp_path):
+    """‏#1837 מקצה לקצה: הפרוקסי של השרת (‏`create_monitor_router`) מול
+    הבינארי האמיתי של הסוכן. hello אחד, ואז שלושה חיבורים ברצף — כמו מעבר
+    מהיר בין מכונות בדף המוניטור. כל אחד מקבל ServerInit בניסיון הראשון.
+    על הקוד שלפני #1837 השני נסגר 4512 (‏"password check failed!")."""
+    import asyncio
+
+    from starlette.websockets import WebSocketDisconnect
+
+    from server.db import net_seen
+    from test_monitor import MAC, browser_handshake, monitor_client, stored_secret
+
+    binary = _build(tmp_path)
+    machine = Monitor(tmp_path, binary)
+    try:
+        assert server["admin"].post(
+            "/api/console/machines",
+            json={"mac": MAC, "name": "Monitor", "group_id": "grp_BUILD"},
+        ).status_code == 200
+        net_seen(server["ctx"].conn, MAC, "127.0.0.1", monitor_secret=SECRET,
+                 monitor_auth="hmac")                  # ה-hello היחיד
+
+        async def connector(host, _port):
+            return await asyncio.open_connection(host, machine.port)
+
+        client = monitor_client(server, "admin", connector)
+        for attempt in range(3):
+            # ‏4409 = המנעול של החיבור הקודם לא שוחרר. נמדד 20/10: 5 מ-15 ריצות,
+            # ונשאר לעולם — זה היה #1860 (ביטול בתוך wait_closed), שתוקף בנפרד;
+            # הניסיון החוזר נשאר כמו ב-monitor.js. ‏4512 — הבאג של #1837 —
+            # לעולם אינו מנוסה שוב: הוא נכשל כאן מיד.
+            for _ in range(50):
+                try:
+                    with client.websocket_connect(f"/api/console/monitor/{MAC}") as ws:
+                        browser_handshake(ws)
+                        head = b""
+                        while len(head) < 4:
+                            head += ws.receive_bytes()
+                        assert struct.unpack(">HH", head[:4]) == (WIDTH, HEIGHT), attempt
+                    break
+                except WebSocketDisconnect as exc:
+                    assert exc.code == 4409, (attempt, exc.code, exc.reason)
+                    time.sleep(0.1)
+            else:
+                raise AssertionError(f"attempt {attempt}: still 4409 after 5s")
+        assert stored_secret(server) == machine.secret_file.read_text().strip()
+    finally:
+        text = machine.stop()
+    assert "bad HMAC" not in text, text
 
 
 # --- ‏#949: מצביע מוחלט -----------------------------------------------------

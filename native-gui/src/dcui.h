@@ -33,7 +33,7 @@
 #define DCUI_MAX_ROWS 7
 #define DCUI_MAX_PROBS 3
 #define DCUI_MAX_ITEMS 6
-#define DCUI_MAX_PROWS 4
+#define DCUI_MAX_PROWS 8                /* #1962: a row per drawer, up to 8 */
 #define DCUI_MAX_NOTES 4
 #define DCUI_MAX_KEYS 8
 #define DCUI_MAX_EL 28
@@ -59,12 +59,16 @@ typedef struct { char caps[24], label[96]; int lock; } DcuiKey;
 
 /* One element of the dialog, in order; a run of opts or btns is one row. */
 enum { DEL_P = 1, DEL_FIELD, DEL_HINT, DEL_NOTE, DEL_OPT, DEL_RADIO, DEL_ALERT,
-       DEL_BULLET, DEL_KV, DEL_ERROR, DEL_BTN, DEL_CODE };
+       DEL_BULLET, DEL_KV, DEL_ERROR, DEL_BTN, DEL_CODE,
+       /* #2001: the USB stick's connections window (dlg kind "map", screens_dcui.c map_win) --
+        * a row per connection, the "הוסף חיבור" link, its form, the footer's status */
+       DEL_CONN, DEL_ADDLINK, DEL_ADD, DEL_FOOT };
 typedef struct {
     int type;
     char a[DCUI_FIELD];                 /* main text (markup for p/note/alert/bullet/hint) */
     char b[256], c[64], d[64];
     int f1, f2;                         /* selected/focused, en chip, mono ... per type */
+    char e[64], g[160], h[64], k[16];   /* #2001 d.conn: size, tag, placeholder, kind */
 } DcuiEl;
 
 typedef struct {
@@ -81,6 +85,8 @@ typedef struct {
     int nprows; DcuiRow prows[DCUI_MAX_PROWS];
     int npnotes; char pnotes[DCUI_MAX_NOTES][512];
     char dot[8], word[128], rest[256], lang[96];
+    char lang_chip[8];                  /* #2001: not from the frame -- the station GUI's typing language
+                                         * ("עב"/"EN") for the USB stick's name field; "" = "EN" */
     int nkeys; DcuiKey keys[DCUI_MAX_KEYS];
     char notice_kind[8], notice[512];
     int dialog; char dlg_kind[8]; int dlg_width; char dlg_title[256], dlg_lead[512];
@@ -99,6 +105,17 @@ void dcui_draw(const DcuiFrame *f, const Theme *t, cairo_t *cr, int W, int H);
  * Characters are the US layout (ev->ch), never ev->he: the keyboard is
  * forced to English on this screen; Caps Lock flips a letter's case. */
 int dcui_token(const Event *ev, int caps, char *out, size_t n);
+
+/* #1959: what a click can press, from the last dcui_draw (screen pixels).
+ * keys = the tokens above, one per line -- the keys a person would have
+ * pressed for the same thing; what = "item:<title>", "btn:<label>",
+ * "opt:<title>" or "key:<caps>". */
+#define DCUI_MAX_HITS 48                /* #2001: two per connection row, up to 12 */
+typedef struct { double x, y, w, h; char what[160]; char keys[192]; } DcuiHit;
+int dcui_hits(const DcuiHit **out);
+/* 1 and <keys> when a click at x,y (screen pixels) presses something. "KEY LAYOUT"
+ * (#2001, the language chip) is no backend token: the caller switches the language. */
+int dcui_click(double x, double y, char *keys, size_t n);
 
 int dcui_main(const Theme *theme);
 int dcui_render_png(const char *prefix, const char *frame_path, int w, int h);

@@ -56,3 +56,23 @@ def test_labels_are_hebrew_and_not_the_key(event):
     label = journal_he.EVENTS_HE[event]
     assert label != event
     assert re.search(r"[֐-׿]", label), f"{event}: התווית אינה בעברית: {label!r}"
+
+
+# --- ‏#1991: הגדרות שהקונסולה כותבת — `setting_change` מתרגם לפי SETTINGS_HE ---
+
+def test_every_console_setting_has_a_hebrew_label():
+    """‏`SETTINGS_HE.get(key, key)` נופל למפתח עצמו, ולכן הגדרה חדשה בלי תווית
+    לא נשברת — היא מגיעה ליומן העברי כ-`readback_full: פעיל`. ההצלבה מול
+    `WRITE_SETTINGS` (מה שהקונסולה באמת כותבת) היא מה שמונע את הסחיפה."""
+    pytest.importorskip("fastapi")
+    from server import console_api
+    assert len(console_api.WRITE_SETTINGS) > 10, "ההצלבה לא רואה את ההגדרות שנכתבה בשבילן"
+    missing = sorted(k for k in console_api.WRITE_SETTINGS if k not in journal_he.SETTINGS_HE)
+    assert missing == [], f"הגדרות בלי תווית עברית ב-SETTINGS_HE: {missing}"
+
+
+@pytest.mark.parametrize("key", sorted(journal_he.SETTINGS_HE))
+def test_setting_labels_are_hebrew_and_not_the_key(key):
+    label = journal_he.SETTINGS_HE[key]
+    assert label != key
+    assert re.search(r"[֐-׿]", label), f"{key}: התווית אינה בעברית: {label!r}"

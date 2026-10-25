@@ -6,8 +6,9 @@
 # the hold (ui.sh) and the fatal reboot (common.sh die_local) -- now calls
 # fail_screen, which turns the English line it already has into the records
 # of one Hebrew screen: title, what happened (the target's own reason, in
-# Hebrew -- fail_reason_he), what to do, and the technical lines folded away
-# (native-gui screens_failure.c); the raw lines go there and nowhere else.
+# Hebrew -- fail_reason_he), what to do and the buttons that do it (#2068,
+# hold.sh hold_action). The raw lines (fail_code) are not drawn: the log is in
+# the machine's drawer on the console (Nadav 24/10).
 #
 # How it reaches a display -- in this order, never two GUIs on one framebuffer:
 #   1. a live kiosk (guiparent.sh _gui_pid): its state writer copies
@@ -18,7 +19,8 @@
 #      a loop rewrites that file every 2 s (hello_age= moves: the status bar
 #      says whether the server still hears the hold, principle 5).
 # No GUI binary, or none that starts: the tty line stays, as before.
-# TODO (#1550, open): "מכונה לא מוכרת" is not a failure and is not drawn here.
+# "מכונה לא מוכרת" is not a failure (#1802): ui_unknown (ui.sh) writes case 8's
+# records itself -- tone inf, no hold, fail_at -- and shows them via fail_show.
 
 FAIL_GUI_BIN="${FAIL_GUI_BIN:-/usr/bin/imagectl-station-gui}"
 FAIL_SHOW_S="${FAIL_SHOW_S:-10}"   # die_local: how long the screen stays before the reboot
@@ -68,11 +70,16 @@ fail_stage_he() {
     esac
 }
 
+fail_state_he() {   # $1 = a target's state word (progress.sh target_set) -> its pill, never the word (#1861)
+    case "$1" in waiting|pending) printf 'ממתין' ;; writing) printf 'כותב' ;; verifying) printf 'מאמת' ;; replacing) printf 'ממתין להחלפה' ;;
+        cancelled) printf 'בוטל' ;; skipped) printf 'דולג' ;; failed) printf 'נכשל' ;; done) printf 'נכתב' ;; *) printf 'לא ידוע' ;; esac
+}
+
 fail_disk_he() {
-    # $1 = dev -> "פנימי · 500GB" (the mockup's cell) from sysfs; 1 when unread.
-    _fd_s=$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null); _fd_r=$(cat "$SYSROOT/sys/block/$1/removable" 2>/dev/null)
+    # $1 = dev -> "פנימי · 500GB" from sysfs; 1 when unread. "פנימי" = disk_internal, the hello's one answer (#1909).
+    _fd_s=$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null)
     case "$_fd_s" in ''|*[!0-9]*) return 1 ;; esac
-    printf '%s · %sGB' "$([ "$_fd_r" = 1 ] && echo חיצוני || echo פנימי)" "$((_fd_s * 512 / 1000000000))"
+    printf '%s · %sGB' "$(disk_internal "$1" && echo פנימי || echo חיצוני)" "$((_fd_s * 512 / 1000000000))"
 }
 
 fail_case() {
@@ -83,7 +90,7 @@ fail_case() {
         "all drawers skipped"*)          _fc=skipped ;;
         "the disk was skipped"*)         _fc=skipped1 ;;
         "no drawer completed"*)          _fc=drawers ;;
-        "restore did not complete"*)     _fc=restore ;;
+        "restore did not complete"*|"restore cancelled"*) _fc=restore ;;   # #2068: a cancel whose wipe failed is a partial disk too
         "capture did not complete"*)     _fc=capture ;;
         "direct deployment did not"*)    _fc=direct ;;
         "the work finished but"*)        _fc=finished ;;
@@ -92,61 +99,65 @@ fail_case() {
 }
 
 fail_texts() {
-    # $1 = case, $2 = the Hebrew reason, $3 = the image name ("" = unknown).
-    # Sets _ft_title _ft_sub _ft_why _ft_safe _ft_s1.._ft_s3 _ft_disk (the
-    # context cell's label for the disk / drawers).
-    _ft_safe=""; _ft_disk="דיסק"; _ft_img=${3:+ · $3}
-    _ft_s1="השאירו את המחשב דלוק — הוא מדווח לשרת, והקונסולה רואה \"נכשל\"."
-    _ft_s2="פנו ל-IT ומסרו את שם המחשב ואת הכותרת שבמסך."
-    _ft_s3="אחרי הטיפול: לחיצה ארוכה על כפתור ההפעלה, והדליקו מחדש."
+    # $1 = case, $2 = Hebrew reason, $3 = image name, $4 = optional capture recovery code.
+    # Sets _ft_title _ft_sub _ft_why _ft_safe _ft_disk (the context cell's label for the
+    # disk / drawers), _ft_do (what happened and what the buttons do; _ft_do2 a second,
+    # muted line) and _ft_btn ("action|label;..." -- hold.sh hold_action does them).
+    # #2068/#2084 (Nadav 24/10): the screen says what to do with a button on this
+    # screen -- never "פנו ל-IT", never another screen, never a device name.
+    _ft_safe=""; _ft_disk="דיסק"; _ft_img=${3:+ · $3}; _ft_do2=""
+    _ft_do="המשימה נעצרה. המחשב נשאר דלוק ומדווח לשרת."; _ft_btn="retry|נסה שוב;off|כבה את המחשב"
     case "$1" in
         skipped)  _ft_title="כל המגירות דולגו — לא נכתב דבר"; _ft_sub="סבב$_ft_img · מחשב שיכפול"; _ft_disk="מגירות"
                   _ft_why="בבדיקת הדיסקים לפני הכתיבה כל המגירות דולגו, ולכן לא נכתב אף בייט — הדיסקים נשארו כפי שהיו."
-                  _ft_s2="החליפו את הדיסקים שסומנו, או פנו ל-IT אם הם תקינים לדעתכם."
-                  _ft_s3="אחרי ההחלפה: לחיצה ארוכה על כפתור ההפעלה, והדליקו — המחשב יצטרף לסבב הבא." ;;
+                  _ft_do="כל הדיסקים דולגו בבדיקה לפני הכתיבה, ולא נכתב דבר. אחרי החלפת הדיסקים שסומנו, המחשב יצטרף לסבב הבא."
+                  _ft_btn="off|כבה את המחשב;standby|בדוק את הדיסקים שוב" ;;
         skipped1) _ft_title="הדיסק דולג — לא נכתב דבר"; _ft_sub="שחזור לתחנה$_ft_img"
                   _ft_why="בדיקת הדיסק לפני השחזור סימנה אותו כבעייתי ($2), והשחזור לא התחיל. הדיסק נשאר כפי שהיה."
                   _ft_safe="המערכת הקיימת בדיסק לא נגעה — אפשר עדיין לאתחל ממנו, אבל הוא עלול להיכשל בקרוב."
-                  _ft_s2="הדיסק צריך החלפה. לא לוחצים על כלום עד שמגיע טכנאי." ;;
+                  _ft_do="הדיסק צריך החלפה. המחשב נשאר דלוק ומדווח לשרת." ;;
         drawers)  _ft_title="אף מגירה לא הסתיימה בהצלחה"; _ft_sub="סבב$_ft_img · מחשב שיכפול"; _ft_disk="מגירות"
                   _ft_why="בכל המגירות הכתיבה נכשלה ($2). הדיסקים נמצאים במצב חלקי — לא ניתן להשתמש בהם כמו שהם."
                   _ft_safe="אל תכניסו דיסקים אלה לתחנות לפני שיכפול מחדש."
-                  _ft_s2="בדקו שהדיסקים יושבים חזק במגירות ושהכבלים מחוברים."
-                  _ft_s3="פנו ל-IT ומסרו: שם המחשב והסבב שבמסך." ;;
+                  _ft_do="הסיבה של כל מגירה כתובה ברשימה. בדקו שהדיסקים יושבים חזק ושהכבלים מחוברים."
+                  _ft_do2="המחשב נשאר דלוק ומדווח לשרת. \"חזרה להמתנה\" מצרף אותו לסבב הבא בלי לאתחל."
+                  _ft_btn="standby|חזרה להמתנה לסבב;off|כבה את המחשב" ;;
         restore)  _ft_title="השחזור נכשל"; _ft_sub="שחזור אימג׳ למחשב הזה$_ft_img"; _ft_disk="דיסק יעד"
                   _ft_why="הכתיבה לדיסק נעצרה לפני שהסתיימה: $2."
                   _ft_safe="הדיסק במצב לא תקין — אל תאתחלו ממנו עד שמחזירים אימג׳ תקין."
-                  _ft_s2="אפשר לנסות שוב: כבו והדליקו, ובחרו שחזור שוב."
-                  _ft_s3="אם נכשל שוב — החליפו את הדיסק." ;;
+                  _ft_do="הכתיבה נעצרה לפני הסוף, והדיסק לא שמיש עד ששחזור יסתיים." ;;
         capture)  _ft_title="הקליטה נכשלה"; _ft_sub="קליטת אימג׳ חדש$_ft_img"; _ft_disk="דיסק מקור"
-                  _ft_why="הדיסק נקרא, אבל $2, ולכן האימג׳ לא נכנס לספרייה."
+                  _ft_why="הדיסק נקרא, אבל ${2%.}, ולכן האימג׳ לא נכנס לספרייה."
                   _ft_safe="הדיסק של המחשב הזה לא שונה — קליטה רק קוראת ממנו. אפשר להתחיל מחדש."
-                  _ft_s2="בדקו שכבל הרשת מחובר ושהשרת פעיל (הסטטוס למטה)."
-                  _ft_s3="כבו והדליקו, ובחרו שוב \"קליטת אימג׳ חדש\"." ;;
+                  _ft_btn="windows|הפעל את Windows;retry|נסה שוב"
+                  case "${4:-unknown}" in
+                      network_server) _ft_do="ההעלאה לשרת נעצרה. הדיסק של המחשב הזה לא שונה."; _ft_btn="retry|נסה שוב;off|כבה את המחשב" ;;
+                      source_ntfs) _ft_do="‏NTFS במקור מסומן כלא תקין. ב-Windows: ⁦chkdsk C: /f⁩, הפעלה מחדש, ואז קליטה שוב." ;;
+                      source_bitlocker) _ft_do="‏BitLocker פעיל במקור. ב-Windows: ⁦manage-bde -off C:⁩, והמתינו לסוף הפענוח." ;;
+                      source_dynamic) _ft_do="המירו את הדיסק ל-Basic ב-Windows (בניהול הדיסקים ההמרה מוחקת את הכרכים — גבו קודם), ואז קלטו שוב." ;;   # #1824
+                      source_no_esp) _ft_do="התקינו את Windows מחדש כשרק הדיסק הזה מחובר, או צרו בו מחיצת EFI (bcdboot) — ואז קלטו שוב." ;;   # #1822
+                      source_disk) _ft_do="דיסק המקור לא נקרא עד הסוף. \"בדוק את הדיסק\" מציג כאן את מצב ה-SMART שלו."; _ft_btn="smart|בדוק את הדיסק;retry|נסה שוב" ;;
+                      *) _ft_btn="retry|נסה שוב;off|כבה את המחשב" ;;
+                  esac ;;
         direct)   _ft_title="השליחה הישירה נכשלה"; _ft_sub="ממחשב הבנייה אל מחשבי היעד · שליחה חד-פעמית"; _ft_disk="דיסק מקור"
                   _ft_why="השליחה אל מחשבי היעד נעצרה לפני שהסתיימה: $2. הדיסקים ביעדים אינם שלמים ולא יעלו."
                   _ft_safe="הדיסק של מחשב הבנייה לא שונה — הוא נקרא בלבד."
-                  _ft_s2="ודאו שהכבל בין המחשבים מחובר ושהיעדים עדיין דלוקים."
-                  _ft_s3="כבו והדליקו את מחשב הבנייה, והתחילו את השליחה שוב מהתפריט." ;;
+                  _ft_do="ודאו שהכבל בין המחשבים מחובר ושהיעדים עדיין דלוקים." ;;
         finished) _ft_title="המשימה הסתיימה — והשרת לא אישר"; _ft_sub="המשימה$_ft_img · הדיווח האחרון לא אושר"
                   _ft_why="העבודה הסתיימה, אבל השרת לא אישר שקיבל את הדיווח. בקונסולה המשימה עדיין נראית \"רצה\" — עד שהקשר יחזור."
                   _ft_safe="המחשב ממשיך לנסות לדווח. הדיסק לא שונה."
-                  _ft_s1="השאירו את המחשב דלוק — כשהקשר יחזור הוא ידווח לבד."
-                  _ft_s2="בדקו את כבל הרשת של המחשב ואת מצב השרת."
-                  _ft_s3="אם הקשר לא חוזר תוך כמה דקות — פנו ל-IT." ;;
+                  _ft_do="העבודה הסתיימה, והשרת לא אישר שקיבל את הדיווח. המחשב ממשיך לנסות לבד."; _ft_btn="beat|נסה לדווח עכשיו" ;;
         fatal)    _ft_title="המחשב נעצר — מאתחל"; _ft_sub="השרת מחליט מאיפה האתחול הבא"
                   _ft_why="$2"
                   _ft_safe="לא נכתב דבר לדיסק."
-                  _ft_s1="אין צורך לעשות דבר — המחשב מאתחל בעוד כמה שניות, והשרת מחליט מאיפה יעלה."
-                  _ft_s2="אם המסך הזה חוזר שוב ושוב — פנו ל-IT ומסרו את השורה שבפרטים הטכניים."
-                  _ft_s3="" ;;
+                  _ft_do="המחשב יאתחל בעוד ${FAIL_SHOW_S} שניות, והשרת יחליט מאיפה יעלה."; _ft_btn="reboot|אתחל עכשיו" ;;
         *)        _ft_title="המשימה נכשלה"; _ft_sub="המשימה$_ft_img נעצרה"
                   _ft_why="המשימה נעצרה לפני שהסתיימה: $2." ;;
     esac
     if [ "${_fc_unheard:-0}" = 1 ] && [ "$1" != finished ]; then
         _ft_title="$_ft_title — והשרת לא יודע"
         _ft_why="$_ft_why גם הדיווח על כך לא הגיע לשרת: בקונסולה המשימה עדיין נראית \"רצה\" — עד שהקשר יחזור."
-        _ft_s1="השאירו את המחשב דלוק — כשהקשר יחזור הוא ידווח לבד."
+        _ft_do2="כשהקשר יחזור, המחשב ידווח לבד."
     fi
 }
 
@@ -157,10 +168,19 @@ fail_fatal_he() {
         *"no longer allowed"*)     printf 'האימג׳ שנבחר כבר אינו מותר למחשב הזה. לא נכתב דבר.' ;;
         *"malformed image id"*)    printf 'מזהה האימג׳ שהגיע מהמסך פגום. לא נכתב דבר.' ;;
         *"manifest fetch failed"*) printf 'לא ניתן היה לקרוא מהשרת את פרטי האימג׳.' ;;
+        *"manifest is not of the session"*) printf 'פרטי האימג׳ שהגיעו מהשרת שייכים לאימג׳ אחר מזה של הסבב (#1826). לא נכתב דבר.' ;;
+        *"session portbase"*)     printf 'הפורט שהשרת נתן לסבב אינו תקין, ולכן אין דרך לדעת איזה שידור שייך לסבב (#1826). לא נכתב דבר.' ;;
         *"no internal disk"*)      printf 'לא נמצא דיסק פנימי במחשב הזה.' ;;
+        *"more than one internal disk"*|*"no single internal disk"*) printf 'במחשב אין דיסק פנימי אחד בדיוק (אף אחד, או יותר מאחד) — לא משחזרים בניחוש. לא נכתב דבר.' ;;   # #1807
+        *"split of the room was not approved"*) printf 'חלוקת המקום בין המחיצות לא אושרה. לא נכתב דבר.' ;;   *"split of the room did not compute"*) printf 'לא הצלחנו לחשב את חלוקת המקום בין המחיצות. לא נכתב דבר.' ;;   # #1898
         *"server unreachable"*)    printf 'השרת לא ענה במשך יותר מדקה.' ;;
         *"no work for this"*)      printf 'אין למחשב הזה משימה — הוא עולה מהדיסק המקומי.' ;;
-        *)                         printf 'המחשב נעצר: %s' "$(fail_clean "$1")" ;;
+        *"MAC not registered"*)    printf 'המחשב אינו רשום במערכת — הוא עולה מהדיסק המקומי.' ;;   *"another vlan"*) printf 'הסבב פתוח ברשת אחרת — המחשב אינו ברשת ההפצה.' ;;
+        *"no image id"*|*"without image or id"*) printf 'לא נבחר אימג׳ למשימה. לא נכתב דבר.' ;;
+        *"failed SMART"*)          printf 'הדיסק נכשל בבדיקת SMART ואינו יעד לכתיבה. לא נכתב דבר.' ;;   *"is read-only"*) printf 'הדיסק במצב קריאה בלבד ואינו יעד לכתיבה. לא נכתב דבר.' ;;
+        *"target selection"*|*"selected drawer"*|*"selected no writable"*) printf 'בחירת המגירות לסבב חסרה או אינה תואמת לדיסקים במחשב. לא נכתב דבר.' ;;
+        *"imagectl.server"*|*"network configuration"*) printf 'הגדרות הרשת או כתובת השרת חסרות באתחול.' ;;   *"GUI unavailable"*) printf 'המסך הגרפי לא עלה.' ;;
+        *)                         printf 'המחשב נעצר בשלב שאין לו הסבר כאן. הלוג המלא במגירת המכונה בקונסולה.' ;;   # #1861: never the English itself; #2068: no details box
     esac
 }
 
@@ -176,12 +196,15 @@ fail_image_name() {
 fail_records() {
     # $1 = case, $2 = the English line, $3 = tone (bad|warn), $4 = hold (0|1),
     # $5 = the Hebrew reason. Prints the fail* records (docs/interfaces.md).
-    _fx_img=$(fail_image_name); fail_texts "$1" "$5" "$_fx_img"
+    _fx_img=$(fail_image_name); _fx_reason=""
+    [ "$1" != capture ] || _fx_reason=$(cat "$RUN_DIR/capture.reason" 2>/dev/null)
+    fail_texts "$1" "$5" "$_fx_img" "$_fx_reason"
     _fx_sub=$(fail_clean "$2")
     printf 'fail=%s|%s|%s|%s|%s\n' "$3" "$4" "$(fail_clean "$_ft_title")" "$(fail_clean "$_ft_sub")" "${D_ROLE:-}"   # field 5: the role, for the header
     printf 'fail_why=%s\n' "$(fail_clean "$_ft_why")"
     [ -n "$_ft_safe" ] && printf 'fail_safe=%s\n' "$(fail_clean "$_ft_safe")"
-    for _fx_s in "$_ft_s1" "$_ft_s2" "$_ft_s3"; do [ -n "$_fx_s" ] && printf 'fail_step=%s\n' "$(fail_clean "$_fx_s")"; done
+    for _fx_s in "$_ft_do" "$_ft_do2"; do [ -n "$_fx_s" ] && printf 'fail_step=%s\n' "$(fail_clean "$_fx_s")"; done
+    printf '%s\n' "$_ft_btn" | tr ';' '\n' | sed 's/^/fail_btn=/'   # #2068: the buttons (hold.sh hold_action); the first is Enter
     # the context strip, the mockup's four cells: machine · disk/drawers · image · stage
     _fx_name=$(json_get "$RUN_DIR/response.json" ".name" 2>/dev/null); case "$_fx_name" in null|'') _fx_name=${MAC:-} ;; esac
     printf 'fail_ctx=מכונה|%s\n' "$(fail_clean "$_fx_name")"
@@ -191,9 +214,9 @@ fail_records() {
         _fx_d=${_fx_t%/}; _fx_d=${_fx_d##*/}; _fx_st=$(cat "$_fx_t/state" 2>/dev/null); [ -n "$_fx_first" ] || _fx_first=$_fx_d
         _fx_n=$((_fx_n + 1)); case "$_fx_st" in failed|skipped) _fx_bad=$((_fx_bad + 1)) ;; esac
         _fx_e=$(head -n 1 "$_fx_t/error" 2>/dev/null | tr -d '\r|')
-        case "$_fx_st" in skipped) _fx_k="wn|דולג" ;; failed) _fx_k="bad|נכשל" ;; done) _fx_k="ok|נכתב" ;; *) _fx_k="off|$(fail_clean "${_fx_st:-לא ידוע}")" ;; esac
+        case "$_fx_st" in skipped) _fx_k="wn|דולג" ;; failed) _fx_k="bad|נכשל" ;; done) _fx_k="ok|נכתב" ;; *) _fx_k="off|$(fail_state_he "$_fx_st")" ;; esac
         _fx_p=$(disk_port "$_fx_d" 2>/dev/null); _fx_dr=$(disk_drawer "$_fx_d" "${_fx_p:-0}" 2>/dev/null); _fx_dr=${_fx_dr%%|*}
-        case "$_fx_dr" in ''|0|*[!0-9]*) _fx_lbl="דיסק $_fx_d" ;; *) _fx_lbl="מגירה $_fx_dr · דיסק $_fx_dr" ;; esac
+        case "$_fx_dr" in ''|0|*[!0-9]*) _fx_lbl="דיסק לא ממופה" ;; *) _fx_lbl="מגירה $_fx_dr · דיסק $_fx_dr" ;; esac
         _fx_rows="${_fx_rows}fail_row=$_fx_lbl|$([ -n "$_fx_e" ] && fail_reason_he "$_fx_e")|$_fx_k
 "
         _fx_codes="${_fx_codes}fail_code=targets/$_fx_d/state $(fail_clean "${_fx_st:-?}")
@@ -201,7 +224,7 @@ ${_fx_e:+fail_code=targets/$_fx_d/error $_fx_e
 }"
     done
     if [ "$_fx_n" -gt 1 ] || [ "$_ft_disk" = מגירות ]; then printf 'fail_ctx=מגירות|%s מתוך %s נכשלו או דולגו\n' "$_fx_bad" "$_fx_n"
-    elif [ -n "$_fx_first" ]; then printf 'fail_ctx=%s|%s\n' "$_ft_disk" "$(fail_disk_he "$_fx_first" || printf '%s' "$_fx_first")"; fi
+    elif [ -n "$_fx_first" ]; then printf 'fail_ctx=%s|%s\n' "$_ft_disk" "$(fail_disk_he "$_fx_first" || printf 'לא נקרא')"; fi
     [ -z "$_fx_img" ] || printf 'fail_ctx=אימג׳|%s\n' "$_fx_img"
     _fx_pct=""   # a percentage only once bytes moved: not before the write, not on a skipped disk
     if [ -n "$_fx_first" ] && [ "$(fail_stage)" != skipped ] && [ "$(fail_stage)" != waiting ]; then
@@ -245,6 +268,11 @@ fail_screen() {
       [ "$1" != fatal ] || printf 'fail_at=%s\n' "$(( $(date +%s) + FAIL_SHOW_S ))"; } > "$RUN_DIR/fail.state.next" || return 1
     mv "$RUN_DIR/fail.state.next" "$RUN_DIR/fail.state" || return 1
     log "failure screen: $_fc -- $_fs_r${_fs_raw:+ ($_fs_raw)}"
+    fail_show
+}
+
+fail_show() {
+    # $RUN_DIR/fail.state to a display, in the order at the top of this file.
     fail_gui_live && return 0
     _fs_f="$RUN_DIR/gui/failed.state"
     if [ -n "${_sf_pid:-}" ] && kill -0 "$_sf_pid" 2>/dev/null; then _fs_pid=$_sf_pid   # #1548's GUI, same file
@@ -265,5 +293,7 @@ fail_fatal() {
     # die_local's screen: drawn, then held for FAIL_SHOW_S so a person reads
     # it (the 3 s line was not readable). 1 = nothing drawn, the caller's wait.
     fail_screen fatal "$1" || return 1
-    [ "${IMAGECTL_TEST:-0}" = 1 ] || sleep "$FAIL_SHOW_S"
+    [ "${IMAGECTL_TEST:-0}" = 1 ] && return 0
+    _ff_n=0   # #2068: "אתחל עכשיו" (fail.action, hold.sh) ends the wait; die_local reboots
+    while [ "$_ff_n" -lt "$FAIL_SHOW_S" ] && ! mv "${GUI_DIR:-$RUN_DIR/gui}/fail.action" "$RUN_DIR/fail.action.taken" 2>/dev/null; do sleep 1; _ff_n=$((_ff_n + 1)); done
 }

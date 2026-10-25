@@ -6,7 +6,10 @@ import asyncio
 import hashlib
 import hmac
 import json
+import socket
 import struct
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
 from urllib.parse import urlsplit
@@ -16,7 +19,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from . import auth, registry
 from .api import ServerContext
-from .db import get_setting, journal, set_setting
+from .db import get_setting, journal, monitor_rekeyed, set_setting
 
 MONITOR_PORT = 5900
 ONLINE_SECONDS = 90
@@ -80,6 +83,18 @@ RFB_QEMU = 255
 RFB_CLIENT_MESSAGE_MAX = 1 << 20
 POWER_PREFIX = "imagectl-power:"
 POWER_ACTIONS = ("reboot", "poweroff")
+#: ‏#1852 (הכרעת נדב 19/10): מכונה אחת — צופה אחד. מנהל שני רואה מי מחזיק
+#: ו**מבקש** שליטה, כמו ב-VM (‏#1334): המחזיק מאשר; 60 ש' בלי תשובה = סירוב;
+#: מחזיק שלא נראה 2 דק' (הדף שלו לא שאל על `…/control`) — אישור אוטומטי.
+CONTROL_REQUEST_SECONDS = 60
+HOLDER_GONE_SECONDS = 120
+#: אחרי העברה: המכונה שמורה למקבל עד שיתחבר — אחר לא "חוטף" אותה באמצע.
+GRANT_HOLD_SECONDS = 30
+#: אותו מנהל פתח את המכונה במקום אחר ("פתח בחלון נפרד", רענון): הצפייה עוברת.
+WS_MOVED = 4410
+#: השליטה הועברה למנהל אחר (אישור, או אוטומטי כשהמחזיק לא נראה).
+WS_HANDED_OVER = 4411
+POWER_NAME_STALE = "שם המחשב השתנה מאז שהמוניטור נפתח — סגרו ופתחו אותו מחדש"
 POWER_OVER_WS_REFUSED = "פקודת כוח אינה עוברת ב-WebSocket — רק POST …/power"
 
 
@@ -224,6 +239,28 @@ async def connect_machine(
         await asyncio.sleep(min(delay, remaining))
 
 
+#: ‏#1850: מכונה שנעלמה בלי FIN (‏`reboot -f`, ‏`poweroff -f`, כיבוי idle, חשמל,
+#: כבל) — בלי keepalive הגשר חיכה לה עד `IDLE_SECONDS` (10 דק') עם מסך קפוא
+#: "מחובר". 10 ש' שקט, ואז שלוש בדיקות כל 5 ש': מכונה מתה מזוהה תוך ~25 ש',
+#: ומכונה שאותחלה (קרנל חדש עונה RST) מיד. כמה בייטים בדקה, רק בזמן צפייה.
+KEEPALIVE_IDLE_SECONDS = 10
+KEEPALIVE_INTERVAL_SECONDS = 5
+KEEPALIVE_PROBES = 3
+
+
+def keep_alive(sock) -> None:
+    """‏TCP keepalive על ה-socket אל המכונה (#1850) — במוניטור המקומי ובמנהרה
+    מהמשני. כשל ה-keepalive מגיע לקורא כ-`TimeoutError`/`ConnectionError`, והגשר
+    נסגר `machine` (4513) — וה-monitor.js מתחבר מחדש לבד."""
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    for name, value in (("TCP_KEEPIDLE", KEEPALIVE_IDLE_SECONDS),
+                        ("TCP_KEEPINTVL", KEEPALIVE_INTERVAL_SECONDS),
+                        ("TCP_KEEPCNT", KEEPALIVE_PROBES)):
+        option = getattr(socket, name, None)
+        if option is not None:          # Linux (השרת) — כולן; ווינדוס ישן — חלק
+            sock.setsockopt(socket.IPPROTO_TCP, option, value)
+
+
 def connect_error_reason(exc: OSError | asyncio.TimeoutError) -> str:
     """A short Hebrew reason suitable for the WebSocket close frame."""
     if isinstance(exc, ConnectionRefusedError):
@@ -272,7 +309,7 @@ def machine_rows(conn, now: datetime | None = None) -> list[dict]:
     נקבע **בשרת** באותו חלון-נוכחות של ``_target``. משמש גם את הראשי
     שצופה במשני (#655 v1) — אותה רשימה, אותו חישוב."""
     rows = conn.execute(
-        "SELECT m.mac, m.suffix, g.role, d.ip, d.last_seen, d.prompt "
+        "SELECT m.mac, m.suffix, g.role, d.ip, d.last_seen, d.progress_seen, d.prompt "
         "FROM machines m "
         "JOIN groups g ON g.id = m.group_id "
         "LEFT JOIN net_devices d ON d.mac = m.mac "
@@ -285,7 +322,9 @@ def machine_rows(conn, now: datetime | None = None) -> list[dict]:
             "name": r["suffix"],
             "role": r["role"],
             "ip": r["ip"],
-            "online": bool(r["ip"]) and seen_within(r["last_seen"], now),
+            # ‏#1839: hello **או** progress — משכפל שכותב אינו שולח hello.
+            "online": bool(r["ip"]) and (seen_within(r["last_seen"], now)
+                                         or seen_within(r["progress_seen"], now)),
             "prompt": r["prompt"],   # #906: השאלה שממתינה לאדם, או None
         }
         for r in rows
@@ -296,6 +335,26 @@ def hmac_response(secret: str, challenge: bytes) -> bytes:
     """HMAC-SHA256(secret, challenge) truncated to the 16-byte RFB response."""
     return hmac.new(bytes.fromhex(secret), challenge,
                     hashlib.sha256).digest()[:HMAC_RESPONSE_LEN]
+
+
+#: ‏#1837: אותה תווית כמו `REKEY_LABEL` ב-`agent/monitor.c` — בייט-בייט.
+REKEY_LABEL = b"imagectl-monitor-rekey"
+
+#: ‏#1837: SecurityResult שאינו 0 — המכונה דחתה את התשובה של השרת. בעברית
+#: ובלי הסיבה של LibVNCServer (‏"password check failed!" באנגלית, באמצע
+#: פס RTL). הסיבה הנפוצה: המכונה אותחלה וה-hello שלה עוד לא הגיע.
+MACHINE_REJECTED_SECRET = "המכונה דחתה את אימות השרת — ממתינים לדיווח הבא שלה"
+
+
+def next_secret(secret: str, challenge: bytes) -> str:
+    """‏#1837: הסוד הבא, אחרי אימות שהצליח — מה ש-`rekey_secret` במכונה
+    גוזר מאותו סוד ומאותו challenge: HMAC-SHA256(סוד, תווית‖challenge)
+    הקטום ל-16 בייטים, כ-32 hex קטנות (הצורה של `monitor_secret`).
+
+    שני הצדדים גוזרים אותו בלי לשלוח אותו, ולכן החיבור הבא מצליח מיד —
+    בלי לחכות ל-hello. תשובה שנלכדה קודם נשענת על סוד שכבר אינו בתוקף."""
+    return hmac.new(bytes.fromhex(secret), REKEY_LABEL + challenge,
+                    hashlib.sha256).digest()[:HMAC_RESPONSE_LEN].hex()
 
 
 def _target(ctx: ServerContext, mac: str,
@@ -309,7 +368,7 @@ def _target(ctx: ServerContext, mac: str,
         raise HTTPException(404, "מכונה לא מוכרת")
 
     row = ctx.conn.execute(
-        "SELECT d.ip, d.last_seen, d.monitor_secret, d.monitor_auth, g.role "
+        "SELECT d.ip, d.last_seen, d.progress_seen, d.monitor_secret, d.monitor_auth, g.role "
         "FROM machines m "
         "JOIN groups g ON g.id = m.group_id "
         "LEFT JOIN net_devices d ON d.mac = m.mac "
@@ -331,7 +390,10 @@ def _target(ctx: ServerContext, mac: str,
         raise HTTPException(409, "זמן הנוכחות של המכונה אינו תקין")
 
     current = now or datetime.now(timezone.utc)
-    if current - seen > timedelta(seconds=ONLINE_SECONDS):
+    # ‏#1839: דיווח progress שהתקבל בחלון הוא ראיה שהמכונה חיה — בזמן כתיבה
+    # הוא הקשר היחיד שלה, ובלעדיו המוניטור נדחה בדיוק כשהכי רוצים לצפות.
+    if (current - seen > timedelta(seconds=ONLINE_SECONDS)
+            and not seen_within(row["progress_seen"], current)):
         raise HTTPException(409, "המכונה אינה מחוברת")
     return row["ip"], row["role"], row["monitor_secret"], row["monitor_auth"]
 
@@ -362,7 +424,7 @@ async def _reason(reader) -> str:
     return (await _read_exact(reader, length)).decode("utf-8", "replace")[:40]
 
 
-async def authenticate_machine(reader, writer, secret: str) -> None:
+async def authenticate_machine(reader, writer, secret: str) -> str:
     """‏#839/#1077: לחיצת-יד RFB 3.8 מול imagectl-monitor, עד SecurityResult.
 
     הפרוקסי — ולא הדפדפן — הוא הצד שמזדהה: הוא בוחר את סוג 2 בלבד, עונה
@@ -371,6 +433,9 @@ async def authenticate_machine(reader, writer, secret: str) -> None:
     אם הוצע: מוניטור שמציע אותו הוא סוכן שלא שודרג או מישהו שמתחזה
     למכונה, ושניהם אינם מסלול. אחרי ההצלחה המכונה ממתינה ל-ClientInit
     — והוא מגיע מהדפדפן דרך הממסר הרגיל.
+
+    ‏#1837: מחזיר את הסוד הבא (`next_secret`) — המכונה כבר עברה אליו, והקורא
+    שומר אותו (`db.monitor_rekeyed`) לפני שהחיבור הבא נפתח.
     """
     banner = await _read_exact(reader, 12)
     if not banner.startswith(b"RFB 003."):
@@ -392,7 +457,8 @@ async def authenticate_machine(reader, writer, secret: str) -> None:
     await writer.drain()
     result = struct.unpack(">I", await _read_exact(reader, 4))[0]
     if result != 0:
-        raise MachineAuthError(f"המוניטור דחה את סוד השרת: {await _reason(reader)}")
+        raise MachineAuthError(MACHINE_REJECTED_SECRET)
+    return next_secret(secret, challenge)
 
 
 #: ‏#1334: הודעות קלט של RFB — מקלדת (4) ועכבר (5). צופה בלבד אינו שולח אותן.
@@ -402,7 +468,8 @@ RFB_INPUT_TYPES = (4, 5, RFB_QEMU)
 
 async def bridge_browser(websocket: WebSocket, reader, writer, *,
                          idle_seconds: float = IDLE_SECONDS,
-                         allow_input: Callable[[], bool] | None = None) -> str:
+                         allow_input: Callable[[], bool] | None = None,
+                         evicted: asyncio.Future | None = None) -> str:
     """מגשר WebSocket שכבר התקבל (‏`accept_browser`) לזרם RFB שכבר עבר
     אימות מול המכונה.
 
@@ -546,13 +613,22 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
     downstream = asyncio.create_task(machine_to_browser())
     watchdog = asyncio.create_task(idle_watch())
     tasks = (upstream, downstream, watchdog)
+    # ‏#1852: הצפייה עברה — לחלון אחר של אותו מנהל, או למנהל אחר שקיבל שליטה.
+    # ‏`evicted` מתמלא ב-(קוד, סיבה) מבחוץ (`call_soon_threadsafe`).
+    waits = tasks + ((evicted,) if evicted is not None else ())
     try:
         done, not_done = await asyncio.wait(
-            tasks, return_when=asyncio.FIRST_COMPLETED)
+            waits, return_when=asyncio.FIRST_COMPLETED)
         for task in not_done:
-            task.cancel()
-        await asyncio.gather(*done, *not_done, return_exceptions=True)
-        if watchdog in done:
+            if task is not evicted:
+                task.cancel()
+        await asyncio.gather(*(t for t in (*done, *not_done) if t is not evicted),
+                             return_exceptions=True)
+        if evicted is not None and evicted.done():
+            code, reason = evicted.result()
+            outcome = "moved"
+            await websocket.close(code=code, reason=close_reason(reason))
+        elif watchdog in done:
             await websocket.close(
                 code=WS_IDLE,
                 reason=f"המוניטור נסגר — {int(idle_seconds // 60)} דק' בלי תעבורה")
@@ -567,18 +643,45 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
     return outcome
 
 
+class _Holder:
+    """‏#1852: מי מחזיק מכונה — ומאיזה event loop אפשר לסגור את הגשר שלו."""
+
+    def __init__(self, user: str, now: float, loop: asyncio.AbstractEventLoop):
+        self.user = user
+        self.seen = now
+        self.request: tuple[str, float] | None = None
+        self.loop = loop
+        self.evicted: asyncio.Future = loop.create_future()
+
+    def evict(self, code: int, reason: str) -> None:
+        def settle() -> None:
+            if not self.evicted.done():
+                self.evicted.set_result((code, reason))
+        try:
+            self.loop.call_soon_threadsafe(settle)
+        except RuntimeError:            # ה-loop שלו כבר נסגר — הגשר כבר איננו
+            pass
+
+
 def create_monitor_router(
     ctx: ServerContext,
     *,
     open_connection: OpenConnection = asyncio.open_connection,
     now_fn: Callable[[], datetime] | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/console")
     _, admin_only = auth.dependencies(ctx.conn)
-    active: set[str] = set()
+    #: ‏#1852: מי מחזיק כל מכונה. ‏`threading.Lock` ולא asyncio: הבקשות של
+    #: ‏`…/control` רצות בתהליכוני ה-threadpool, וכל WebSocket ב-TestClient
+    #: רץ ב-event loop משלו. אין `await` בתוך הנעילה.
+    active: dict[str, _Holder] = {}
+    grants: dict[str, tuple[str, float]] = {}
+    outcomes: dict[str, dict] = {}
     #: ‏#1129: הכותב אל המכונה של כל גשר פתוח — הנתיב היחיד של פקודת כוח.
     bridges: dict[str, asyncio.StreamWriter] = {}
-    lock = asyncio.Lock()
+    lock = threading.Lock()
+    clock = clock or time.monotonic
 
     @router.get("/monitor/settings")
     def read_settings(user=Depends(admin_only)):
@@ -610,17 +713,132 @@ def create_monitor_router(
                 "on" if want else "off", user[0])
         return {"enabled": stations_enabled(ctx.conn)}
 
-    async def reserve(mac: str) -> bool:
-        async with lock:
-            if mac in active:
-                return False
-            active.add(mac)
-            return True
+    def _expire(mac: str, now: float) -> None:
+        """בקשה שלא נענתה 60 ש' = סירוב; שמירה למקבל שלא הגיע — פגה."""
+        holder = active.get(mac)
+        if holder is not None and holder.request is not None:
+            by, at = holder.request
+            if now - at >= CONTROL_REQUEST_SECONDS:
+                holder.request = None
+                outcomes[mac] = {"by": by, "outcome": "timeout"}
+                journal(ctx.conn, "monitor_control_timeout", f"{mac} {by} \u2190 {holder.user}", by)
+        grant = grants.get(mac)
+        if grant is not None and now >= grant[1]:
+            grants.pop(mac, None)
 
-    async def release(mac: str) -> None:
-        async with lock:
-            active.discard(mac)
-            bridges.pop(mac, None)
+    def _hand_over(mac: str, holder: _Holder, to: str, outcome: str) -> None:
+        """המכונה עוברת ל-`to`: הגשר של המחזיק נסגר 4411, והמכונה שמורה למקבל."""
+        active.pop(mac, None)
+        grants[mac] = (to, clock() + GRANT_HOLD_SECONDS)
+        outcomes[mac] = {"by": to, "outcome": outcome}
+        holder.evict(WS_HANDED_OVER, f"השליטה במכונה הועברה ל-{to}")
+        journal(ctx.conn, "monitor_control_auto" if outcome == "auto" else "monitor_control_approved",
+                f"{mac} {holder.user} \u2192 {to}", to)
+
+    def reserve(mac: str, user: str) -> tuple[_Holder | None, str]:
+        """‏#1852: (המחזיק החדש, "") — או (None, הסיבה ל-4409, עם שם המחזיק)."""
+        loop = asyncio.get_running_loop()
+        with lock:
+            now = clock()
+            _expire(mac, now)
+            grant = grants.get(mac)
+            current = active.get(mac)
+            if current is not None and current.user != user:
+                return None, f"המכונה בצפייה של {current.user}"
+            if current is None and grant is not None and grant[0] != user:
+                return None, f"השליטה במכונה הועברה ל-{grant[0]} — ממתינה שיתחבר"
+            grants.pop(mac, None)
+            holder = _Holder(user, now, loop)
+            active[mac] = holder
+        if current is not None:
+            # אותו מנהל פתח את המכונה במקום אחר — הצפייה עוברת לשם.
+            current.evict(WS_MOVED, "המוניטור נפתח בחלון אחר")
+        return holder, ""
+
+    def release(mac: str, holder: _Holder, writer) -> None:
+        with lock:
+            if active.get(mac) is holder:
+                del active[mac]
+            if writer is not None and bridges.get(mac) is writer:
+                del bridges[mac]
+
+    def _control_view(mac: str, user: str) -> dict:
+        now = clock()
+        _expire(mac, now)
+        holder = active.get(mac)
+        if holder is not None and holder.user == user:
+            holder.seen = now
+        grant = grants.get(mac)
+        request = None
+        if holder is not None and holder.request is not None:
+            by, at = holder.request
+            request = {"by": by, "seconds_left": max(0, int(at + CONTROL_REQUEST_SECONDS - now))}
+        return {
+            "holder": holder.user if holder else None,
+            "you_hold": bool(holder and holder.user == user),
+            "request": request,
+            "granted_to_you": bool(grant and grant[0] == user),
+            "last": outcomes.get(mac),
+        }
+
+    def _canonical_or_404(mac: str) -> str:
+        canonical = registry.normalize_mac(mac)
+        if canonical is None:
+            raise HTTPException(404, "מכונה לא מוכרת")
+        return canonical
+
+    @router.get("/monitor/{mac}/control")
+    def control_state(mac: str, user=Depends(admin_only)):
+        """‏#1852: מי מחזיק את המכונה, ובקשת שליטה פתוחה. הדף של המחזיק שואל
+        כל כמה שניות — וזו גם ה"נוכחות" שלו (2 דק' בלי = לא נראה)."""
+        canonical = _canonical_or_404(mac)
+        with lock:
+            return _control_view(canonical, user[0])
+
+    @router.post("/monitor/{mac}/control/request")
+    def control_request(mac: str, user=Depends(admin_only)):
+        """‏#1852: בקשה, לא השתלטות. מחזיק שלא נראה 2 דק' — אישור אוטומטי."""
+        canonical = _canonical_or_404(mac)
+        who = user[0]
+        with lock:
+            now = clock()
+            _expire(canonical, now)
+            holder = active.get(canonical)
+            if holder is None:
+                return {"outcome": "free"}
+            if holder.user == who:
+                raise HTTPException(409, "המכונה כבר בצפייה שלך")
+            if holder.request is not None:
+                raise HTTPException(409, f"{holder.request[0]} כבר ביקש שליטה")
+            if now - holder.seen >= HOLDER_GONE_SECONDS:
+                _hand_over(canonical, holder, who, "auto")
+                return {"outcome": "auto"}
+            holder.request = (who, now)
+            journal(ctx.conn, "monitor_control_request", f"{canonical} {who} \u2192 {holder.user}", who)
+            return {"outcome": "pending", "seconds_left": CONTROL_REQUEST_SECONDS}
+
+    @router.post("/monitor/{mac}/control/answer")
+    def control_answer(mac: str, body: dict, user=Depends(admin_only)):
+        """‏#1852: רק המחזיק עונה. אישור = הגשר שלו נסגר והמכונה שמורה למבקש."""
+        canonical = _canonical_or_404(mac)
+        who = user[0]
+        with lock:
+            now = clock()
+            _expire(canonical, now)
+            holder = active.get(canonical)
+            if holder is None or holder.user != who:
+                raise HTTPException(403, "רק מי שצופה במכונה עונה על בקשת שליטה")
+            holder.seen = now
+            if holder.request is None:
+                raise HTTPException(409, "אין בקשת שליטה ממתינה")
+            by = holder.request[0]
+            holder.request = None
+            if body.get("approve") is True:
+                _hand_over(canonical, holder, by, "approved")
+                return {"outcome": "approved"}
+            outcomes[canonical] = {"by": by, "outcome": "denied"}
+            journal(ctx.conn, "monitor_control_denied", f"{canonical} {who} \u2192 {by}", who)
+            return {"outcome": "denied"}
 
     @router.post("/monitor/{mac}/power")
     async def power(mac: str, body: dict, user=Depends(admin_only)):
@@ -641,11 +859,19 @@ def create_monitor_router(
         if name is None:
             raise HTTPException(404, "מכונה לא מוכרת")
         if body.get("confirm") != name:
-            raise HTTPException(403, "השם שהוקלד אינו זהה לשם המחשב")
+            # ‏#1850: מאז #1270 איש אינו מקליד — הדף שולח את שמו. אי-התאמה = השם
+            # השתנה אחרי שהדף נפתח.
+            raise HTTPException(403, POWER_NAME_STALE)
         writer = bridges.get(canonical)
         if writer is None:
             raise HTTPException(
                 409, "אין מוניטור פתוח למכונה — הפקודה נוסעת דרך חיבור המוניטור")
+        with lock:
+            holder = active.get(canonical)
+        if holder is None or holder.user != user[0]:
+            # ‏#1852: הפקודה נוסעת בגשר של מי שמחזיק את המכונה — רק הוא שולח אותה.
+            raise HTTPException(409, f"המכונה בצפייה של {holder.user if holder else 'אחר'}"
+                                     " — בקשו שליטה כדי לשלוח פקודה")
         writer.write(power_frame(action))
         await writer.drain()
         journal(ctx.conn, "monitor_power", f"{canonical} {action}", user[0])
@@ -717,8 +943,10 @@ def create_monitor_router(
                 code=WS_MACHINE_AUTH,
                 reason="המכונה אינה תומכת באתגר-תגובה (HMAC) — סוכן ישן? אתחל מחדש")
             return
-        if not await reserve(canonical):
-            await websocket.close(code=4409, reason="כבר פתוח מוניטור למכונה הזאת")
+        holder, refused = reserve(canonical, found[0])
+        if holder is None:
+            # ‏#1852: מי מחזיק — וב-`…/control` אפשר לבקש ממנו שליטה.
+            await websocket.close(code=4409, reason=close_reason(refused))
             return
 
         writer: asyncio.StreamWriter | None = None
@@ -732,9 +960,15 @@ def create_monitor_router(
                         "שירות המוניטור במכונה אינו זמין לאחר 15 שניות: "
                         f"{connect_error_reason(exc)}"))
                 return
+            # ‏#1850: מכונה שנעלמה בלי FIN נסגרת 4513 תוך ~25 ש', לא idle אחרי 10 דק'.
+            # (מכונה מזויפת בבדיקות אינה StreamWriter ואין לה socket.)
+            machine_socket = (writer.get_extra_info("socket")
+                              if hasattr(writer, "get_extra_info") else None)
+            if machine_socket is not None:
+                keep_alive(machine_socket)
 
             try:
-                await asyncio.wait_for(
+                rekeyed = await asyncio.wait_for(
                     authenticate_machine(reader, writer, secret), timeout=5.0)
             except MachineAuthError as exc:
                 await websocket.close(code=WS_MACHINE_AUTH,
@@ -745,6 +979,9 @@ def create_monitor_router(
                     code=WS_MACHINE_AUTH,
                     reason="המוניטור לא השלים את לחיצת-היד תוך 5 שניות")
                 return
+            # ‏#1837: המכונה כבר עברה לסוד הבא — שומרים אותו לפני כל דבר
+            # אחר, כדי שהחיבור הבא יצליח בלי לחכות ל-hello.
+            monitor_rekeyed(ctx.conn, canonical, secret, rekeyed)
 
             bridges[canonical] = writer
             journal(ctx.conn, "monitor_connected", canonical, found[0])
@@ -753,7 +990,8 @@ def create_monitor_router(
             outcome = "error"
             try:
                 outcome = await bridge_browser(websocket, reader, writer,
-                                               idle_seconds=IDLE_SECONDS)
+                                               idle_seconds=IDLE_SECONDS,
+                                               evicted=holder.evicted)
             except (WebSocketDisconnect, asyncio.CancelledError):
                 outcome = "browser"
                 raise
@@ -771,9 +1009,19 @@ def create_monitor_router(
             # יציאה כזו מסמנת את ה-future של ה-runner כמבוטל ו-result() זורק.
             pass
         finally:
-            if writer is not None:
-                writer.close()
-                await writer.wait_closed()
-            await release(canonical)
+            # ‏#1860: ביטול שנופל בתוך `wait_closed` (ה-runner מבטל בפירוק,
+            # #725) — או `wait_closed` שזורק, בדיוק כשהמכונה נעלמה (#1850) —
+            # דילג על `release`, והמכונה נשארה "כבר פתוח" (4409) עד אתחול.
+            # השחרור יושב ב-`finally` משלו; הביטול ממשיך הלאה. סגירה שנכשלה
+            # של socket למכונה שכבר איננה אינה כשל של הגשר: הוא כבר הסתיים.
+            try:
+                if writer is not None:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
+            finally:
+                release(canonical, holder, writer)
 
     return router

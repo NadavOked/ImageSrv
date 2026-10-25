@@ -128,7 +128,7 @@ def test_without_a_real_confirmation_the_request_is_what_it_was(room_server, ext
 def test_reboot_confirmed_over_the_local_copy_reaches_the_agent_confirmed(server):
     _copying(server["anon"], RB_CLONER)
     r = server["admin"].post(f"/api/console/machines/{RB_CLONER}/reboot",
-                             json={"confirm_name": "מחשב 1", "confirm_local_copy": True})
+                             json={"confirm_name": "CLONER-1", "confirm_local_copy": True})
     assert r.status_code == 200, r.text
     answer = _copying(server["anon"], RB_CLONER)
     assert answer.get("power_action") == "reboot" and answer.get("power_confirmed") is True, answer
@@ -136,7 +136,7 @@ def test_reboot_confirmed_over_the_local_copy_reaches_the_agent_confirmed(server
 
 
 def test_a_plain_reboot_is_not_confirmed(server):
-    r = server["admin"].post(f"/api/console/machines/{RB_CLONER}/reboot", json={"confirm_name": "מחשב 1"})
+    r = server["admin"].post(f"/api/console/machines/{RB_CLONER}/reboot", json={"confirm_name": "CLONER-1"})
     assert r.status_code == 200, r.text
     answer = _copying(server["anon"], RB_CLONER, copying=False)
     assert answer.get("power_action") == "reboot" and "power_confirmed" not in answer, answer

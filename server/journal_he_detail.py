@@ -42,6 +42,10 @@ RULES: dict[str, list[tuple[str, str]]] = {
     "report_from_nonmember": _FOR,
     "report_on_closed_task": _FOR,
     "room_tick_failed": [(r"^background — ", "ברקע — ")],
+    # ‏#1988: "<מיקום> <התקן> UUID=<uuid> <שם>"
+    "storage_location_add_disk": [(r"\bUUID=", "מזהה מערכת הקבצים (UUID)=")],
+    # ‏#1947: "<±שניות>s <סבבים>"; ‏"?" = חותמת בעתיד שהגלאי לא ראה את הקפיצה שלה.
+    "clock_jump": [(r"^\? ", "גודל לא ידוע (חותמת בעתיד) "), (r"^([+-]\d+)s\b", r"\1 שניות")],
     "capture_done": [(r"\(reconciled on start\)", "(הותאם בעלייה)"),
                      # ‏#1470: האימות ברקע — כמה ובכמה זמן; ואימות שהושלם לפני אתחול
                      (r" verified (\d+) bytes in ([\d.]+)s$", r" אומת: \1 בייט ב-\2 שניות"),
@@ -94,6 +98,9 @@ RULES: dict[str, list[tuple[str, str]]] = {
         (_NET_NAME + r"management selection not read back$",
          r"\1 · בחירת כרטיס הניהול לא נקראה בחזרה")],
     "dcui_net_rollback_requested": [(r"^no pending change$", "אין שינוי ממתין")],
+    # ‏#1848 / #1846: הלמידה — מזהים ומספרים נשארים, המילים בעברית
+    "boot_step_slow": [(r" baseline=", " (רגיל: "), (r"s \((\d+) boots\)$", r"s, לפי \1 אתחולים)")],
+    "net_loss_jump": [(r" baseline=", " (רגיל: "), (r"% \((\d+) waves\)", r"%, לפי \1 גלים)")],
 }
 
 

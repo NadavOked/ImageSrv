@@ -9,7 +9,7 @@ and every local clone paid them before the first byte.
 
 Here: a counting sgdisk stub (``test_restore_evidence.build_box``). The table
 is written by ``--zap-all`` + ONE call, the expansion by ONE call, the local
-clone's names by ONE call. Negative control: on the code before #1714 the
+clone's names by ONE call (since #1798 that call is writemark_clear's). Negative control: on the code before #1714 the
 counts are 6 / 3 / 3 and every test here fails.
 
 That the one call writes the SAME table, byte for byte, as the separate calls
@@ -93,21 +93,30 @@ ENTRIES = ["1|EFI system partition|8000000000000000",
            "4|Basic data partition|0"]
 
 
-def _names(tmp_path, entries, fail=False):
+def _names(tmp_path, entries, fail=False, marked=(1, 2, 3, 4)):
+    """#1798: the local clone's names come back through writemark_clear -- it
+    reads which partitions carry the mark (-p), writes them in ONE call, reads
+    back with -i, one partition at a time. The stub's -p lists the marked rows
+    until a write happened; -i says the name its -c wrote."""
     lc = tmp_path / "lc"
     (lc / "run").mkdir(parents=True)
-    (lc / "run" / "entries").write_text("\n".join(entries) + "\n", encoding="utf-8")
+    (lc / "run" / "entries").write_text("\n".join(entries) + "\n", encoding="utf-8", newline="\n")
     stubs = tmp_path / "stubs"
     stubs.mkdir()
-    calls = tmp_path / "calls"
+    calls, done = tmp_path / "calls", tmp_path / "written"
+    rows = "".join(f"echo '   {i}   2048   4095   1.0 MiB   0700  imagectl-incomplete'\n" for i in marked)
     (stubs / "sgdisk").write_text(
         "#!/bin/sh\n"
+        f"if [ \"$1\" = -p ]; then [ -f {posix(done)} ] || {{\n{rows}:\n}}; exit 0; fi\n"
+        f"if [ \"$1\" = -i ]; then echo \"Partition name: '$(cat {posix(tmp_path)}/name.$2)'\"; exit 0; fi\n"
+        f"p=; for a in \"$@\"; do [ \"$p\" = -c ] && printf '%s\\n' \"${{a#*:}}\" > {posix(tmp_path)}/name.${{a%%:*}}; p=$a; done\n"
         f"for a in \"$@\"; do printf '[%s]' \"$a\"; done >> {posix(calls)}\n"
         f"echo >> {posix(calls)}\n"
+        f": > {posix(done)}\n"
         f"exit {1 if fail else 0}\n", encoding="utf-8", newline="\n")
     out = sh(f'chmod 0755 {posix(stubs)}/sgdisk; export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
-             f'LC={posix(lc)!r} DEVROOT=/nodev LOG_FILE={posix(tmp_path / "log")!r}; '
-             f'. {posix(AGENT)}/lib/lcplan.sh; lc_set_names sdb; echo "rc=$?"')
+             f'LC={posix(lc)!r} DEVROOT=/nodev LOG_FILE={posix(tmp_path / "log")!r}; log() {{ :; }}; '
+             f'. {posix(AGENT)}/lib/writemark.sh; writemark_clear sdb "$LC/run/entries"; echo "rc=$?"')
     lines = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
     return rc_of(out), lines
 
@@ -115,13 +124,14 @@ def _names(tmp_path, entries, fail=False):
 def test_the_local_clone_names_are_one_call_and_keep_their_spaces(tmp_path):
     rc, lines = _names(tmp_path, ENTRIES)
     assert rc == "rc=0"
+    # #1798: an empty source name is written too -- it replaces the mark
     assert lines == ["[-c][1:EFI system partition][-c][2:Microsoft reserved partition]"
-                     "[-c][4:Basic data partition][/nodev/sdb]"], lines   # before #1714: 3 calls
+                     "[-c][3:][-c][4:Basic data partition][/nodev/sdb]"], lines   # before #1714: 3 calls
 
 
-def test_a_refused_names_call_is_a_failure_and_no_names_is_no_call(tmp_path):
+def test_a_refused_names_call_is_a_failure_and_no_mark_is_no_call(tmp_path):
     rc, _lines = _names(tmp_path, ENTRIES, fail=True)
-    assert rc == "rc=1", "sgdisk -c refused, and lc_set_names said 0"
+    assert rc == "rc=1", "sgdisk -c refused, and writemark_clear said 0"
     (tmp_path / "none").mkdir()
-    rc, lines = _names(tmp_path / "none", ["1||0", "2||0"])
-    assert (rc, lines) == ("rc=0", []), "a table without names wrote nothing before #1714 either"
+    rc, lines = _names(tmp_path / "none", ["1||0", "2||0"], marked=())
+    assert (rc, lines) == ("rc=0", []), "a table without the mark is not written"

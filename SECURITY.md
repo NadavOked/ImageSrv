@@ -9,7 +9,7 @@ ImageCtl מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחו�
 | ריפו | נראות | מה Issue שם עושה |
 |---|---|---|
 | `NadavOked/ImageCtl-archive` | **פרטי** | Issue אינו מפרסם דבר. זה מקום הדיווח. |
-| `NadavOked/ImageCtl` | ציבורי | ענף, PR או Issue שם מפרסמים את החולשה לפני שיש תיקון. |
+| `NadavOked/ImageSrv` | ציבורי | ענף, PR או Issue שם מפרסמים את החולשה לפני שיש תיקון. |
 
 **דיווח על חולשה בארכיון הפרטי הוא Issue, והוא מותר ורצוי.** מה שאסור
 הוא לפרסם אותה לציבורי לפני שיש תיקון.
@@ -39,7 +39,7 @@ ImageCtl מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחו�
 **אם יש גישה ל-`NadavOked/ImageCtl-archive` (הריפו הפרטי):** Issue שם,
 עם תווית `security`. הוא אינו מפרסם דבר. זה המסלול הרגיל.
 
-**אם נראה רק `NadavOked/ImageCtl` (הציבורי):** אין גישה לארכיון. דיווח
+**אם נראה רק `NadavOked/ImageSrv` (הציבורי):** אין גישה לארכיון. דיווח
 דרך GitHub Security Advisories בלבד — לשונית **Security** ← **Report a
 vulnerability**, או
 <https://github.com/NadavOked/ImageCtl-archive/security/advisories/new>.
@@ -116,7 +116,7 @@ Advisory נדרש כשהחולשה נוגעת **למי שאינו נדב**:
 להשתיק התראה** — זה מנתק את ה-CI מהגרסה שנפרסת (#113; ‏PR 754/755
 נסגרו מהסיבה הזו ב-13/09).
 
-מצב ההתראות הפתוחות, מול security-tracker.debian.org (‏17/10/2026):
+מצב ההתראות הפתוחות, מול security-tracker.debian.org (‏17/10/2026, נבדק שוב 22/10/2026 — ללא שינוי, #1975):
 
 | התראה | על מה | trixie | ניתן לניצול אצלנו? |
 |---|---|---|---|
@@ -125,6 +125,7 @@ Advisory נדרש כשהחולשה נוגעת **למי שאינו נדב**:
 | #5 CVE-2026-27459 | `set_cookie_generate_callback` (DTLS) | **תוקן** (‏`25.0.0-1+deb13u1`) | לא — אין DTLS |
 | #6 CVE-2026-34073 | name constraints ב-`x509.verification` | **vulnerable, no-DSA** | לא — אין `x509.verification` (#1639) |
 | #9 CVE-2026-69249 | בניית שרשרת ב-`x509.verification` | **vulnerable, no-DSA** | לא — אין `x509.verification` (#1639) |
+| — CVE-2026-69248 (אין התראה: GHSA מציין 45.0.0–48.0.0) | wildcard מול name constraints ב-`x509.verification` | **vulnerable, no-DSA** | לא — אין `x509.verification` |
 | #1, #2, #7 | OpenSSL **בתוך wheels** של PyPI | לא רלוונטי | לא — חבילת apt מקשרת ל-`libssl3t64` של המערכת (בדיקה: `trixie-security` ‏`openssl 3.5.7-1~deb13u3`); ה-wheel רץ רק ב-CI ובפיתוח |
 
 "אינו ניתן לניצול" אינו טענה שנשענים עליה בלי ראיה:
@@ -135,6 +136,30 @@ Advisory נדרש כשהחולשה נוגעת **למי שאינו נדב**:
 **תיקון של Debian מגיע לשרת מותקן רק בתוך גרסה חתומה של ImageSrv** (הכרעת נדב
 15/10, #1411) — לא דרך `apt` חי בשרת. עד שהמנגנון הזה קיים, "תוקן ב-trixie"
 פירושו "תוקן במקור", לא "תוקן אצל המכללה".
+
+### חולשות פתוחות ב-Debian 13 בכל מה שהשרת וה-initramfs מתקינים
+
+‏Dependabot רואה רק את `server/requirements.txt`. השאר — חבילות המקור (כ-580 כשנספרו עם Recommends, לפני #1987)
+ש-`apt` מתקין מ-`tools/iso/packages.txt` (בלי Recommends, #1987) — נבדק ב-
+‏`tools/security-recheck.py` מול security-tracker.debian.org, על תג נתון,
+על מכונת Debian 13 (ה-testrunner). **מריצים אותו על התג של כל גרסה לפני
+השחרור** ומצרפים את התוצאה להערות השחרור (#1975):
+
+```sh
+# על ה-testrunner (Debian 13, ‏apt-get update טרי; בלי GitHub):
+python3 -I tools/security-recheck.py --repo . --tag vX.Y.Z \
+    [--baseline <הריצה הקודמת>.tsv] > security-vX.Y.Z.tsv
+# בתחנת הפיתוח (‏gh מחובר, בלי apt):
+python tools/security-recheck.py --dependabot-only
+```
+
+הכלי מדפיס **כל** CVE שלא תוקן ב-trixie; רובן בחבילות שאינן נגישות מהרשת
+(הקרנל לבדו כ-740, ארגז הכלים, ‏QEMU). ההכרעה "נגיש אצלנו?" אינה בכלי —
+היא נכתבת ב-#1975, והנתיבים שנקבע שאינם נגישים נעולים בטסט
+(‏`tests/test_pinned_deps_unreachable_paths.py`: ‏python-multipart, ‏h2/hpack,
+‏anyio, ‏python3.13, ו-applets של busybox בסוכן). ב-22/10 נמצאו שתיים
+עם נתיב בקוד שלנו, שתיהן Low: ‏busybox ‏udhcpc ‏CVE-2026-88833 (‏DoS מוילן
+ההפצה, #1980) ו-open-iscsi ‏CVE-2026-44943 (‏discovery מול יעד מתחזה, #1983).
 
 ---
 
@@ -159,7 +184,7 @@ Two repositories, two disclosure surfaces:
 - `NadavOked/ImageCtl-archive` is **private**. An issue there does not
   publish anything. That is the working repo — file the issue there, with
   the `security` label.
-- `NadavOked/ImageCtl` is public. A branch, PR, or issue there discloses
+- `NadavOked/ImageSrv` is public. A branch, PR, or issue there discloses
   the weakness before a fix exists. Do not file there.
 
 If you can only see the public repo, report through GitHub Security

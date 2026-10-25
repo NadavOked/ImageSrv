@@ -19,11 +19,13 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, Response
 
 import hashlib
+import shutil
 
-from . import (agent_loops, auth, capabilities, dhcp, foreign_vlan, hello,
-               identity, monitor, ports)
-from .db import now_iso
-from . import auto_reboot
+from . import (agent_loops, auth, capabilities, dhcp, disk_reserve, foreign_vlan, hello,
+               identity, monitor, ports, timesync)
+from .db import last_disk_full, now_iso
+from . import auto_reboot, backup_job
+from . import raid_status
 
 #: ‏#1000: מתי `/health` נמדד — כותרת HTTP (ISO, שעון השרת), כי הגוף הוא
 #: מערך ש-`HOME`, ‏`updateAlertBadge` וטסטי node קוראים כמות שהוא; מעטפת
@@ -77,8 +79,7 @@ def default_hooks() -> dict:
         "installer_conf": dhcp.read_installer_conf,
         "shim_src": lambda: "/usr/lib/shim/shimx64.efi.signed",
         "unit_active": lambda name: _run(["systemctl", "is-active", name]).strip(),
-        "time_synchronized": lambda: _run(
-            ["timedatectl", "show", "-p", "NTPSynchronized", "--value"]).strip(),
+        "timesync_status": lambda: timesync.status(timesync.default_hooks()),
         "http_get": _http_probe,
         "http_size": _http_size,
         "interfaces": dhcp.list_interfaces,
@@ -95,10 +96,54 @@ def default_hooks() -> dict:
         # ‏#1372: המארח של "עדכון ב-VM" — ‏`(state, detail)` מ-`vmhost.VmHost.health`.
         # ‏None = לא הוזרק (בדיקות, הרצה ישירה) — אין שורה; ‏main מזריק.
         "vm_host": None,
+        # ‏#1972: ה-querier בכרטיס ההפצה (‏`igmp_querier.Querier.health`), ו-#1973:
+        # ה-UPS (‏`ups.UpsMonitor.health`) — ‏`(state, detail)`. ‏None = לא הוזרק
+        # (בדיקות, הרצה ישירה) — אין שורה; ‏main מזריק את שניהם.
+        "igmp_querier": None,
+        "ups": None,
         # ‏#968: זמן הפעילות של **המכונה** (‏`/proc/uptime`), ל-`/me`. ‏None =
         # לא נקרא (ווינדוס, קובץ חסר) — הקונסולה מציגה "לא נבדק", לא 0.
         "uptime": read_uptime,
+        # ‏#1892: הפנוי במחיצת ה-DB (‏data_dir); ‏None = לא נמדד.
+        "db_free": _db_free,
+        # ‏#1989: מערכי ה-RAID — ‏/proc/mdstat הוא הראיה, ‏/etc/imagectl/raid
+        # הוא מה שהמתקין יצר. ‏None מה-hook = אין קובץ; ‏OSError = לא נקרא.
+        "mdstat": lambda: raid_status.read_optional(raid_status.MDSTAT_PATH),
+        "raid_declared": lambda: raid_status.read_optional(raid_status.RAID_FACT_PATH),
     }
+
+
+def _db_free(data_dir) -> int | None:
+    if data_dir is None:
+        return None
+    try:
+        return shutil.disk_usage(data_dir).free
+    except OSError:
+        return None
+
+
+#: ‏#1892: מתחת לזה — אדום. ‏1 GiB הוא נתח "ה-DB ו-/var/tmp" ברזרבת המערכת
+#: (`disk_reserve`, ‏#1737); מתחת לרזרבה כולה — כתום.
+DB_FREE_BAD_BYTES = 1024 ** 3
+
+
+def db_space_check(free: int | None, full: dict | None) -> dict:
+    """‏#1892: מחיצת ה-DB. כתיבה שכבר נכשלה ב-SQLITE_FULL אדומה גם אם
+    המדידה עכשיו מראה מקום — היא הראיה, והיא מתנקה בכתיבה המוצלחת הבאה."""
+    label = "מקום פנוי ל-DB"
+    if full is not None:
+        return check("db_space", label, "bad",
+                     f"כתיבה ל-DB נכשלה כי המחיצה מלאה ({full['what']}, {full['at']})")
+    if free is None:
+        return check("db_space", label, "unknown", "לא ניתן למדוד את המחיצה — לא נבדק")
+    shown = disk_reserve.gb(free)
+    if free < DB_FREE_BAD_BYTES:
+        return check("db_space", label, "bad",
+                     f"נותרו {shown} — ה-DB עומד להתמלא ויפסיק לרשום")
+    if free < disk_reserve.reserve():
+        return check("db_space", label, "warn",
+                     f"נותרו {shown}, פחות מרזרבת המערכת ({disk_reserve.gb(disk_reserve.reserve())})")
+    return check("db_space", label, "ok", f"פנויים {shown}")
 
 
 #: ‏#968: המחשב, לא התהליך — למפעיל "השרת פעיל X" הוא המכונה; זמן
@@ -187,15 +232,31 @@ def check(check_id: str, label: str, state: str, detail: str) -> dict:
     return {"id": check_id, "label": label, "state": state, "detail": detail}
 
 
-def time_sync_check(service: str, synchronized: str) -> dict:
-    if synchronized == "yes" and service == "active":
-        return check("time_sync", "סנכרון שעון", "ok", "NTP פעיל והשעון מסונכרן")
-    if not synchronized and not service:
-        return check("time_sync", "סנכרון שעון", "off",
-                     "לא ניתן לבדוק timedatectl/systemd-timesyncd")
-    detail = ("שירות systemd-timesyncd אינו פעיל" if service != "active"
-              else "NTP פעיל אך השעון עדיין אינו מסונכרן")
-    return check("time_sync", "סנכרון שעון", "warn", detail)
+def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
+    # Compatibility for callers from before #1773; the live route uses the
+    # structured measurement above, including its explicit unknown state.
+    if isinstance(status, str):
+        status = {"synchronized": (legacy_sync == "yes" and status == "active") if legacy_sync else None,
+                  "server": "chrony" if status == "active" else None,
+                  "offset_ms": None}
+    # #1814: source · synchronized or not · offset. The offset's size decides too: over
+    # 1 s chrony should already have stepped (makestep 1.0 -1), and from 30 s TOTP codes
+    # no longer match (±30 s) -- every MFA login fails, so that is `bad`, not `warn`.
+    synchronized = status.get("synchronized")
+    if synchronized is None:
+        return check("time_sync", "שעון", "off", "לא נבדק")
+    offset = status.get("offset_ms")
+    parts = [f"מקור {status.get('server') or 'לא ידוע'}", "מסונכרן" if synchronized else "לא מסונכרן"]
+    if offset is None:
+        parts.append("סטייה לא נמדדה")
+    elif abs(offset) >= 1000:
+        parts.append(f"השעון {'מקדים' if offset > 0 else 'מאחר'} ב-{abs(offset) / 1000:.0f} ש'")
+    else:
+        parts.append(f"סטייה {offset:+.3f} ms")
+    if offset is not None and abs(offset) >= 30_000:
+        return check("time_sync", "שעון", "bad", " · ".join(parts + ["קודי MFA לא יתקבלו"]))
+    steady = synchronized and (offset is None or abs(offset) < 1000)
+    return check("time_sync", "שעון", "ok" if steady else "warn", " · ".join(parts))
 
 
 def live_udp_sender_pids() -> list[int] | None:
@@ -276,9 +337,18 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
                          reboot_detail))
     ss_out = hooks["ss"]()
 
-    sync = hooks["time_synchronized"]() if hooks.get("time_synchronized") else ""
-    sync_service = hooks["unit_active"]("systemd-timesyncd")
-    results.append(time_sync_check(sync_service, sync))
+    if hooks.get("time_synchronized") is not None:  # legacy injected test hook
+        sync = {"synchronized": hooks["time_synchronized"]() == "yes",
+                "server": "chrony" if hooks["unit_active"]("chrony") == "active" else None,
+                "offset_ms": None}
+    else:
+        sync = hooks["timesync_status"]() if hooks.get("timesync_status") else {"synchronized": None}
+    results.append(time_sync_check(sync))
+    results.append(db_space_check(hooks["db_free"](getattr(ctx, "data_dir", None)),
+                                  last_disk_full()))
+    # ‏#1895 (נדב 22/10): גיבוי המסד — כתום עד שנבחר יעד, "ישן" אחרי שעתיים, אדום על כשל.
+    results.append(backup_job.health_check(ctx.conn, getattr(ctx, "data_dir", None),
+                                           hooks["unit_active"](backup_job.TIMER_UNIT)))
 
     # ‏#1088: רשת ההפצה — טרם הוגדרה היא מצב **מוצהר** אחרי התקנה נקייה,
     # לא כשל: השורה אומרת מה לעשות, ובדיקות ה-PXE שתלויות בה (TFTP,
@@ -430,17 +500,60 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
             else " · DHCP לא הודלק על אף כרטיס"
         results.append(check("nics", "כרטיסי רשת", "ok", detail))
 
+    # ‏#1810: כרטיס ההפצה נשמר **כשם** (nft, ‏dnsmasq, ‏udp-sender). שם שהשתנה
+    # (שדרוג דביאן, vNIC חדש, כרטיס שהוחלף) — הכול נטען ושום דבר לא נתפס.
+    deploy_if = deploy_state.interface if deploy_state is not None         and deploy_state.configured else None
+    names = [n["name"] for n in nics]
+    if deploy_if and not nics:
+        results.append(check("deploy_nic", "כרטיס ההפצה", "unknown",
+                             f"רשימת הכרטיסים ריקה — לא נבדק אם {deploy_if} קיים"))
+    elif deploy_if and deploy_if not in names:
+        results.append(check("deploy_nic", "כרטיס ההפצה", "bad",
+                             f"כרטיס ההפצה {deploy_if} לא קיים במערכת (יש: "
+                             f"{', '.join(names)}) — DHCP, TFTP וחומת האש מפנים "
+                             "לשם שאינו קיים; בחרו כרטיס בלשונית רשת הפצה"))
+    elif deploy_if:
+        results.append(check("deploy_nic", "כרטיס ההפצה", "ok",
+                             f"{deploy_if} קיים במערכת"))
+
     # ‏#1074: חומת האש שהמתקין כותב — שלושה מצבים, לא "חסר = כבוי".
-    fw_state, fw_detail = ports.firewall_status(hooks["nft_ruleset"]())
+    fw_state, fw_detail = ports.firewall_status(hooks["nft_ruleset"](), names)
     results.append(check("firewall", "חומת אש", fw_state, fw_detail))
+
+    # ‏#1972: querier ברשת ההפצה — פעיל / יש querier אחר / כבוי. ‏#1973: מצב ה-UPS.
+    if hooks.get("igmp_querier"):
+        results.append(check("igmp_querier", "IGMP querier", *hooks["igmp_querier"]()))
+    if hooks.get("ups"):
+        results.append(check("ups", "UPS", *hooks["ups"]()))
 
     # ‏#1372: מארח שאינו מוכן ל-VM הוא אזהרה בשם — לא שקט ירוק אחרי עדכון.
     if hooks.get("vm_host"):
         results.append(check("vm_host", "עדכון ב-VM", *hooks["vm_host"]()))
 
+    # ‏#1846: האבדן ברשת ההפצה מול הבסיס שלה — שורה לכל כרטיס הפצה שנמדד עליו גל.
+    from . import learn_netloss as _learn_netloss
+    results.extend(_learn_netloss.health_checks(ctx.conn))
+    # ‏#1847: מכונה שלא מתעוררת מ-WoL — רצף של הערות בלי תשובה.
+    from . import learn_wol as _learn_wol
+    results.extend(_learn_wol.health_checks(ctx.conn))
+    # ‏#1848: שלב אתחול שהתארך פי 2 מהבסיס של המכונה, ולפני/אחרי עדכון.
+    from . import learn_boot as _learn_boot
+    results.extend(_learn_boot.health_checks(ctx.conn))
+    # ‏#1884: דיסק הספרייה בגל האחרון — קצב ולחץ I/O.
+    from . import server_io as _server_io
+    results.extend(_server_io.health_checks(ctx.conn))
+    # ‏#1886: המקום הפנוי לאורך זמן — "מתמלא בעוד ~N ימים".
+    from . import storage_history as _storage_history
+    results.extend(_storage_history.health_checks(ctx.conn))
+    # ‏#1889: סיכום שבועי של ההמתנה למפעיל — המלצה לאדם, לא פעולה.
+    from . import learn_waits as _learn_waits
+    results.extend(_learn_waits.health_checks(ctx.conn))
+
     # #1066: שורה לכל מיקום אחסון — מחובר / לא נגיש / מנותק / לא נבדק.
     from . import storage_locations as _storage_locations
     results.extend(_storage_locations.health_checks(ctx))
+    # ‏#1989: שורה לכל מערך RAID — תקין / פגוע / בבנייה מחדש (עם אחוז).
+    results.extend(raid_status.health_checks(hooks.get("mdstat"), hooks.get("raid_declared")))
 
     # ‏#855: שומר הזהות — מתג כבוי הוא מצב מוצהר שנאמר כאן, וקובץ חכירות
     # שאינו נקרא הוא "כל hello מסורב", לא שקט.
@@ -665,12 +778,25 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
         off_means="אין צפייה/שליטה מרחוק במחשבי בנייה ושיכפול; אף תחנה לא "
                   "מפעילה שירות RFB"))
 
+    ntp_bind = ports.bind_addresses(ss_out, 123)
+    listening = None if ntp_bind is None else bool(ntp_bind)
+    nic = getattr(ctx, "nic_services", None)
+    ntp_nics = nic.current_plan()["nics"]["ntp"] if nic is not None else []
+    state, detail = ports.measured_state(bool(ntp_nics), listening)
+    entries.append(_port("ntp", "שרת זמן (NTP)", "123", "udp",
+        "השרת מספק שעה למחשבים ברשת", "מחשבים ברשתות שנבחרו",
+        state, detail, "UDP 123 נכנס רק בכרטיסים שבהם השירות דלוק",
+        enabled=bool(ntp_nics), listening=listening, bind=ntp_bind,
+        toggle="api", toggle_url="/api/console/net/services/{name}",
+        off_means="השרת לא מספק שעה", interfaces=ntp_nics))
+
     entries.append(_own_row(ctx, hooks, "interserver", ss_tcp, name="HTTPS (mTLS)",
         desc="רישום וסנכרון של שרתי משנה (#740)", target="שרת ראשי/שרת משנה",
         note="לפתוח ב-FW: TCP 8443 בין השרתים בלבד"))
 
     ruleset = hooks["nft_ruleset"]()
-    fw_state, fw_detail = ports.firewall_status(ruleset)
+    fw_state, fw_detail = ports.firewall_status(
+        ruleset, [n["name"] for n in hooks["interfaces"]()])   # ‏#1810
     entries.append(_port("firewall", "חומת אש", "—", "nft",
         "מדיניות nftables לפי וילן שהמתקין כותב (#1074)", "השרת (host)",
         fw_state, fw_detail,
@@ -687,7 +813,7 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
         row["network"] = ports.network_of(row["id"])
         row["firewall"], row["firewall_detail"] = (
             ports.port_firewall(ruleset, row["proto"], row["port"])
-            if row["network"] in ("mgmt", "interserver") else (None, None))
+            if row["network"] in ("mgmt", "interserver", "per_nic") else (None, None))
     return entries
 
 

@@ -52,14 +52,29 @@ _np_parse_cable() {
     END { emit(); printf "{\"status\":\"%s\",\"pairs\":[%s]}", st, pairs }'
 }
 
-_np_cable() {
-    _if="$1"
-    _car=$(cat "$SYSFS_ROOT/class/net/$_if/carrier" 2>/dev/null) || _car=""
-    if [ "$_car" = 1 ]; then printf '{"skipped":"link up"}'; return; fi
+_np_cable_run() {
+    # $1 = interface. The test itself: absent (null) | unsupported | failed | parsed.
     _np_have "$ETHTOOL" || { printf 'null'; return; }
-    _raw=$("$ETHTOOL" --cable-test "$_if" 2>&1); _rc=$?
-    [ "$_rc" = 0 ] || { _np_pe "ethtool --cable-test rc $_rc"; return; }
+    _raw=$("$ETHTOOL" --cable-test "$1" 2>&1); _rc=$?
+    if [ "$_rc" != 0 ]; then   # #1968: a NIC without the test is "not checked", never ok
+        case "$_raw" in *[Nn]ot\ supported*) printf '{"status":"unchecked","reason":"unsupported"}' ;;
+            *) _np_pe "ethtool --cable-test rc $_rc" ;; esac
+        return
+    fi
     printf '%s' "$_raw" | _np_parse_cable
+}
+
+_np_cable() {
+    # Never on a live link from here (the test drops it). #1968: a live link that
+    # is slow or dropped is tested by cable_live_check (cablelive.sh) while the
+    # cloner idles; its result is served instead of "skipped".
+    _car=$(cat "$SYSFS_ROOT/class/net/$1/carrier" 2>/dev/null) || _car=""
+    if [ "$_car" = 1 ]; then
+        if [ -s "${RUN_DIR:-/nonexistent}/cable-live.json" ]; then cat "$RUN_DIR/cable-live.json"
+        else printf '{"skipped":"link up"}'; fi
+        return
+    fi
+    _np_cable_run "$1"
 }
 
 _np_lldp() {

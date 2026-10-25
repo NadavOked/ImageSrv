@@ -20,6 +20,9 @@ void sdlg_open(App *a, int kind, int ref, const char *dev, const char *label, co
  * of it with done->go = 1 for "כתוב בכל זאת", 0 for "דלג"; otherwise
  * done->kind is SDLG_NONE. Enter takes the focused button, Esc is "דלג". */
 int sdlg_handle(App *a, const Event *e, SmartDlg *done);
+/* #2017 (Nadav 22/10): an orange source of the local clone -- a notice, one button
+ * "המשך" (Enter/Esc/click all hand back go=1). A red source keeps the question. */
+int sdlg_notice(const SmartDlg *d);
 /* Over the screen and its dialogs, under the status bar; nothing when closed. */
 void sdlg_draw(App *a, cairo_t *cr, double W, double H);
 #endif

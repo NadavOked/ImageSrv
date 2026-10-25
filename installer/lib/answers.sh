@@ -14,13 +14,16 @@ answer_set() {
         hostname) ANSWER_HOSTNAME=$_as_value ;; admin_pass) ANSWER_ADMIN_PASS=$_as_value ;;
         admin_user) ANSWER_ADMIN_USER=$_as_value ;; timezone) ANSWER_TIMEZONE=$_as_value ;;
         primary_fingerprint) ANSWER_PRIMARY_FINGERPRINT=$_as_value ;;
+        raid_level) ANSWER_RAID_LEVEL=$_as_value ;; raid_disks) ANSWER_RAID_DISKS=$_as_value ;;
+        raid_spares) ANSWER_RAID_SPARES=$_as_value ;;   # #1989: optional, absent = no RAID
+        root_pass) ANSWER_ROOT_PASS=$_as_value ;;   # #1632: the operator's own, from the admin screen
         *) fail unknown-key "unknown answer: $_as_key" ;;
     esac
 }
 
 parse_answers() {
     _pa_file=$1; [ -r "$_pa_file" ] || fail answers-unreadable "cannot read answers file: $_pa_file"
-    ANSWER_KEYS=
+    ANSWER_KEYS=; ANSWER_RAID_LEVEL=none; ANSWER_RAID_DISKS=; ANSWER_RAID_SPARES=0
     while IFS= read -r _pa_line || [ -n "$_pa_line" ]; do
         case "$_pa_line" in *=*) ;; *) fail invalid-line "answer line has no '='" ;; esac
         _pa_key=${_pa_line%%=*}; _pa_value=${_pa_line#*=}
@@ -28,7 +31,7 @@ parse_answers() {
         answer_set "$_pa_key" "$_pa_value"
     done < "$_pa_file"
     for _pa_key in disk role primary_url primary_fingerprint servers_if servers_mac servers_mode \
-        servers_addr servers_mask servers_gw servers_dns hostname timezone admin_user admin_pass; do
+        servers_addr servers_mask servers_gw servers_dns hostname timezone admin_user admin_pass root_pass; do
         case " $ANSWER_KEYS " in *" $_pa_key "*) ;; *) fail missing-key "missing answer: $_pa_key" ;; esac
     done
 }
@@ -91,8 +94,10 @@ validate_answers() {
             [ "${#ANSWER_PRIMARY_FINGERPRINT}" -eq 64 ] || fail primary-unverified "the primary was not verified (no green connection check)"
             ;;
         *) fail invalid-role "role must be standalone or secondary" ;; esac
-    case "$ANSWER_HOSTNAME" in ''|*[!A-Za-z0-9-]*|-*|*-) fail invalid-hostname "hostname must be an RFC-1123 label" ;; esac
-    [ "${#ANSWER_HOSTNAME}" -le 63 ] || fail invalid-hostname "hostname is longer than 63 characters"
+    # #1997: the server's name is a computer name -- server/hostname_rule.py, the same rule
+    # (letters, digits, hyphen, up to 15, no hyphen at either end); a test compares the two.
+    case "$ANSWER_HOSTNAME" in ''|*[!A-Za-z0-9-]*|-*|*-) fail invalid-hostname "hostname must be letters, digits and hyphens, not at either end" ;; esac
+    [ "${#ANSWER_HOSTNAME}" -le 15 ] || fail invalid-hostname "hostname is longer than 15 characters"
     case "$ANSWER_SERVERS_IF" in ''|*/*|*[!A-Za-z0-9_.:-]*) fail invalid-interface "invalid management interface name" ;; esac
     [ -r "$SYSROOT/sys/class/net/$ANSWER_SERVERS_IF/address" ] || fail invalid-interface "management interface does not exist: $ANSWER_SERVERS_IF"
     valid_mac "$ANSWER_SERVERS_MAC" || fail invalid-mac "invalid management MAC: $ANSWER_SERVERS_MAC"
@@ -103,8 +108,10 @@ validate_answers() {
         static)
             valid_ipv4 "$ANSWER_SERVERS_ADDR" || fail invalid-address "invalid static address"
             valid_ipv4 "$ANSWER_SERVERS_MASK" || fail invalid-netmask "invalid static netmask"
-            valid_ipv4 "$ANSWER_SERVERS_GW" || fail invalid-gateway "invalid static gateway"
-            valid_dns_list "$ANSWER_SERVERS_DNS" || fail invalid-dns "invalid comma-separated DNS list"
+            # #2096: the screen says "(optional)" -- empty is no gateway / no DNS
+            # (setup-boot-server and netcfg take them empty); a value is checked.
+            [ -z "$ANSWER_SERVERS_GW" ] || valid_ipv4 "$ANSWER_SERVERS_GW" || fail invalid-gateway "invalid static gateway"
+            [ -z "$ANSWER_SERVERS_DNS" ] || valid_dns_list "$ANSWER_SERVERS_DNS" || fail invalid-dns "invalid comma-separated DNS list"
             ;;
         *) fail invalid-network-mode "servers_mode must be dhcp or static" ;;
     esac
@@ -121,7 +128,12 @@ validate_answers() {
     case "$ANSWER_ADMIN_USER" in ''|*[!a-z0-9._-]*|-*) fail invalid-admin-user "admin_user must be lowercase letters, digits, . _ - and not start with -" ;; esac
     [ "${#ANSWER_ADMIN_USER}" -le 32 ] || fail invalid-admin-user "admin_user is longer than 32 characters"
     [ -n "$ANSWER_ADMIN_PASS" ] || fail invalid-admin-password "admin_pass must not be empty"
+    # #1632 (Nadav 24/10): root's password is chosen on the install screen; no
+    # value from the ISO and no default. Not exported: finish.sh is sourced.
+    [ -n "$ANSWER_ROOT_PASS" ] || fail invalid-root-password "root_pass must not be empty"
+    validate_raid   # #1989 (raid.sh): no RAID unless the answers ask for it
     export DISK_NAME ANSWER_DISK ANSWER_ROLE ANSWER_PRIMARY_URL ANSWER_PRIMARY_FINGERPRINT ANSWER_SERVERS_IF
     export ANSWER_SERVERS_MAC ANSWER_SERVERS_MODE ANSWER_SERVERS_ADDR ANSWER_SERVERS_MASK
     export ANSWER_SERVERS_GW ANSWER_SERVERS_DNS ANSWER_HOSTNAME ANSWER_TIMEZONE ANSWER_ADMIN_USER ANSWER_ADMIN_PASS
+    export ANSWER_RAID_LEVEL ANSWER_RAID_DISKS ANSWER_RAID_SPARES
 }

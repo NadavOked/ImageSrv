@@ -205,8 +205,8 @@ cmp /tmp/i /srv/imagectl/boot/initrd.img && echo "זהה"
 
 ### האשף
 
-אחרי שה-ISO מסיים את התקנת Debian והאתחול הראשון בונה את שני קובצי
-ה-initrd, עולה `imagectl-wizard` על `https://<כתובת-השרת>:8081`. התעודה
+**רק בשרת בלי `/etc/imagectl/answers`** (שלא הותקן מהמתקין בגואי; ראו הטבלה
+למטה): אחרי שהאתחול הראשון בונה את שני קובצי ה-initrd, עולה `imagectl-wizard` על `https://<כתובת-השרת>:8081`. התעודה
 עצמית והדף כולו מקומי — השרת אינו צריך אינטרנט. האשף מאשר או משנה את
 תפקיד השרת, מגדיר את **רשת הניהול בלבד**, קובע hostname וסיסמת `admin`,
 ומציג סיכום לפני ההחלה. רשת ההפצה מוגדרת אחר כך בקונסולה.
@@ -294,31 +294,26 @@ systemctl enable imagectl-dcui.service   # עולה באתחול הבא; tty1 ע
 ```bash
 # על דביאן 13 עם אינטרנט (שרת המעבדה), פעם אחת לגרסה:
 sudo tools/iso/make-pool.sh --out /root/ic-iso-tmp/repo
-sudo IMAGECTL_ROOT_PASSWORD='...' tools/iso/build-iso.sh \
+sudo tools/iso/build-iso.sh \
      --out /root/ic-iso-tmp --pool /root/ic-iso-tmp/repo --ref v0.48.0
 # → imagectl-v0.48.0-amd64.iso + SHA256SUMS
 ```
 
-**מה קורה כשמאתחלים שרת ממנו:**
+סיסמת root נבחרת במסך ההתקנה ולא בבנייה (‏#1632); ‏`--root-password` מסורב.
+
+**מה קורה כשמאתחלים שרת ממנו** (#1190, "כמו ESXi"; הפירוט ב-`tools/iso/README.md`):
 
 | שלב | מה | מי רואה |
 |---|---|---|
-| תפריט | "ImageCtl server install (wipes the first disk)" מסומן; **ממתין ל-Enter** — אין timeout שמתחיל מחיקה לבד. ערך שני: שרת משני | המסך |
-| ‏d-i | דביאן על **הדיסק הראשון שאינו USB**, בלי שאלות: ‏`imagectl-server`, ‏root בלבד (הסיסמה מהבנייה, מוחלפת בכניסה הראשונה), החבילות מה-ISO | המסך |
-| ‏`late_command` | הקוד → `/opt/imagectl-src`; ‏`/etc/imagectl/installer-nic` = הכרטיס ש-d-i הגדיר (שם + MAC); ‏`installer-role`; ‏`iso-release.json` | — |
-| אתחול ראשון | ‏`imagectl-firstboot`: בונה `initrd.img` + `initrd.img.gui`, מעתיק `vmlinuz`, ומפעיל את `imagectl-wizard` עם עובדות הכרטיס והתפקיד מ-d-i כברירות מחדל | המסך + `journalctl -u imagectl-firstboot` |
-| אשף | `https://<כתובת>:8081`; שישה שלבים, ורק לאחר אישור המפעיל המתקין ואימות מטען האתחול רצים | הדפדפן |
-| הקונסולה | מקבלת את 8081 בסיום המוצלח; רשת ההפצה מוגדרת ממדף הרשת | הדפדפן |
+| אתחול | ‏GRUB/isolinux עולים **ישר** (`timeout=0`, ערך אחד) למתקין החי: ‏`/live/vmlinuz` + ‏`/live/initrd.img` עם `imagectl.mode=installer`. אין מתקין דביאן ואין preseed | המסך |
+| המתקין בגואי | דיסק (רשימה + "אני מבין" למחיקה) ← תפקיד ← רשת ניהול (DHCP או סטטית, כרטיס אחד, שם קריא; #2096) ← שם ← מנהל **וסיסמת root** (#1632) ← סיכום ← התקדמות ← "ההתקנה הושלמה" (הפעלה מחדש אוטומטית אחרי 90 שניות, או Enter) | המסך |
+| המנוע | ‏`installer/gui-bridge.sh` ← `imagectl-install`: ‏GPT, ‏debootstrap מ-`/cdrom`, ‏`packages.txt` מה-pool, ‏GRUB לשתי הקושחות, ‏`/etc/imagectl/answers` (בלי סיסמאות) + ‏`answers.secret` (‏0600), ‏`iso-release.json`, המאגר המקומי `/var/lib/imagectl/apt-repo` | המסך |
+| אתחול ראשון | ‏`imagectl-firstboot` בונה `initrd.img` + `initrd.img.gui`, ואז `firstboot-answers.sh` מריץ את `setup-boot-server.sh` מהתשובות (הסיסמה דרך FD 3; ‏`answers.secret` נמחק), מאמת את המטען, ומדליק את ה-DCUI על tty1. **בלי אשף.** הכרטיס נקבע לפי MAC, ולכן שינוי השם (`eth0` ← `ens33`) לא מאבד את הכתובת (#2124) | המסך + `journalctl -u imagectl-firstboot` |
+| הקונסולה | `https://<כתובת>:8081`; ה-DCUI מציג את הכתובת ואת טביעת התעודה (זהה למה ש-openssl רואה; #2095). רשת ההפצה מוגדרת ממדף הרשת | הדפדפן |
 
-**האתחול הראשון אינו מנחש כרטיס.** האשף מתאים את ה-MAC ש-d-i רשם
-לרשימת הכרטיסים החיים. אם d-i לא הגדיר רשת, ה-MAC נעלם או שהבדיקה עצמה
-לא רצה, אין ברירת מחדל מסומנת והמפעיל חייב לבחור כרטיס קיים. המצבים
-`network-nic-undecidable` ו-`check-error` נרשמים בשם ביומן ואינם הופכים
-לבחירה שקטה.
+**האשף (למעלה) הוא המסלול בלי `answers`:** שרת שהותקן בדרך אחרת. אז ‏DHCP זמני, ‏DCUI טרום-התקנה ואשף ב-8081, והאתחול הראשון **אינו מנחש כרטיס**: ‏`network-nic-undecidable` ו-`check-error` נרשמים בשם ביומן ומחייבים בחירה.
 
-**מה עוד לא אומת (19/09):** אתחול מה-ISO ב-VM/ברזל; ‏Secure Boot בפועל;
-שרת משני (כתובת הראשי נדרשת באשף; מ-#1310 בדיקת 8443 **חוסמת** — ראו
-"שרת משני: כתובת הראשי ו'בדוק חיבור'").
+**מה אומת (24/10, ‏v0.76.0-rc2/rc3):** התקנה מלאה עד מסך הסיום על ESXi (‏DHCP ב-rc2, סטטית ב-rc3) ועל Hyper-V (‏rc2); שלושה אתחולים; טביעת התעודה; כניסת root; "הוסף כונן" ו-restart לשירות (#2122). **לא אומת עדיין:** שרת משני מה-ISO; ברזל (‏HP-BUILD-2).
 
 ---
 

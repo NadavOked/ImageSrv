@@ -64,11 +64,12 @@ OFFLINE_PHRASES = ("device offline error", "הקרנל סימן את הכונן 
 #: סימני קריאה-בלבד (‏#1742) — ‏strerror של EPERM ושל EROFS כפי ש-`dd`/busybox
 #: מדפיסים אותו על כתיבה להתקן שהקרנל מחזיק לקריאה בלבד (`/sys/block/<d>/ro`).
 READONLY_PHRASES = ("Operation not permitted", "Read-only file system")
+WRITE_ERROR_PHRASES = ("periodic fsync failed", "write_error")
 
 #: הדגלים שבתוך `{ ... }` — מה שהקרנל מדפיס כקבוצה, מופרד ברווחים.
 _BRACED = re.compile(r"\{([^}]*)\}")
 
-CAUSES = ("readonly", "cable", "disk", "removed", "unclassified")
+CAUSES = ("readonly", "write_error", "cable", "disk", "removed", "unclassified")
 
 #: תקרות הקלט: הסוכן שולח עד 40 שורות; מעבר לזה — קלט לא מהסוכן שלנו.
 MAX_LINES = 40
@@ -101,6 +102,8 @@ def classify(lines: list[str], error: str = "") -> str:
     flags = _flags(text)
     if any(p in text for p in READONLY_PHRASES):
         return "readonly"
+    if any(p in text for p in WRITE_ERROR_PHRASES):
+        return "write_error"
     if any(p in text for p in CABLE_PHRASES) or flags & CABLE_FLAGS:
         return "cable"
     if any(p in text for p in DISK_PHRASES) or flags & DISK_FLAGS:

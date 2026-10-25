@@ -6,7 +6,11 @@
 #
 #   sudo tools/iso/build-iso.sh --out /root/ic-iso-tmp --live-initrd live.img \
 #        [--netinst debian-13.7.0-amd64-netinst.iso] [--pool /root/ic-iso-tmp/repo] \
-#        [--ref v0.48.0] [--root-password '...' | IMAGECTL_ROOT_PASSWORD=...]
+#        [--ref v0.48.0]
+#
+# ‏#1632 (הכרעת נדב 24/10): סיסמת root **אינה** חלק מה-ISO. המפעיל בוחר אותה
+# במסך ההתקנה, ליד סיסמת ה-admin, והמנוע כותב את הגיבוב שלה ביעד. ‏--root-password
+# ו-IMAGECTL_ROOT_PASSWORD מסורבים בשם — כדי שאיש לא יחשוב שקבע בהם משהו.
 #
 # ‏#1190 (הכרעת נדב 21/09): ה-ISO **אינו** מריץ את מתקין דביאן. הוא עולה
 # ישר ל-initramfs שלנו (`build_initramfs.sh --installer --with-gui`) עם
@@ -44,12 +48,11 @@ OUT=""
 NETINST=""
 POOL=""
 REF="HEAD"
-# הקוד שנכנס ל-ISO מגיע מהריפו **הציבורי** (NadavOked/ImageCtl) — עותק
+# הקוד שנכנס ל-ISO מגיע מהריפו **הציבורי** (NadavOked/ImageSrv) — עותק
 # הפרסום הנקי, בלי כלי סוכנים, יומנים ותשובות מחקר. ‏`--source DIR` מאפשר
 # עץ מקומי (למעבדה), ובכל מקרה השומר למטה מסרב לארוז נתיבים פרטיים.
-PUBLIC_URL="${IMAGECTL_PUBLIC_URL:-https://github.com/NadavOked/ImageCtl.git}"
+PUBLIC_URL="${IMAGECTL_PUBLIC_URL:-https://github.com/NadavOked/ImageSrv.git}"
 SOURCE=""
-ROOT_PASSWORD="${IMAGECTL_ROOT_PASSWORD:-}"
 LIVE_INITRD=""
 LAB=false
 VOLID="IMAGECTL_INSTALL"
@@ -68,13 +71,19 @@ ImageSrv — בניית ISO ההתקנה.
   --source DIR         ריפו מקומי במקום clone של הציבורי (מעבדה); נתיבים
                        פרטיים (tools/agents, .agents, logs, docs/research…)
                        עוצרים את הבנייה גם אז
-  --public-url URL     הריפו הציבורי לשיבוט (ברירת מחדל NadavOked/ImageCtl)
-  --root-password PW   סיסמת root הראשונית (מוחלפת בכניסה הראשונה); או IMAGECTL_ROOT_PASSWORD
+  --public-url URL     הריפו הציבורי לשיבוט (ברירת מחדל NadavOked/ImageSrv)
   --live-initrd FILE   ה-initramfs של המתקין החי (build_initramfs.sh --installer --with-gui);
                        הקרנל ל-/live נלקח מ-linux-image של ה-pool ומושווה למודולים שבו
   --lab                אפשר initrd עם גישת מעבדה; שם ה-ISO והמניפסט יסומנו ב--lab
 EOF
 }
+
+# #1632: סיסמת root נקבעת במסך ההתקנה, לא כאן — סירוב בשם, לפני כל עבודה.
+refuse_root_password() {
+    printf 'build-iso: %s\n' "סיסמת root אינה נקבעת עוד בבניית ה-ISO (#1632): המפעיל בוחר אותה במסך ההתקנה, ליד סיסמת ה-admin. הסר את --root-password / IMAGECTL_ROOT_PASSWORD." >&2
+    exit 2
+}
+[[ -z "${IMAGECTL_ROOT_PASSWORD:-}" ]] || refuse_root_password
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -84,7 +93,7 @@ while [[ $# -gt 0 ]]; do
         --ref)           REF="${2:?}"; shift 2 ;;
         --source)        SOURCE="${2:?}"; shift 2 ;;
         --public-url)    PUBLIC_URL="${2:?}"; shift 2 ;;
-        --root-password) ROOT_PASSWORD="${2:?}"; shift 2 ;;
+        --root-password|--root-password=*) refuse_root_password ;;
         --live-initrd)   LIVE_INITRD="${2:?}"; shift 2 ;;
         --lab)           LAB=true; shift ;;
         -h|--help)       usage; exit 0 ;;
@@ -96,8 +105,7 @@ die() { printf 'build-iso: %s\n' "$*" >&2; exit 1; }
 say() { printf 'build-iso: %s\n' "$*"; }
 
 [[ -n "$OUT" ]] || { usage >&2; exit 2; }
-[[ -n "$ROOT_PASSWORD" ]] || die "חסרה סיסמת root: --root-password או IMAGECTL_ROOT_PASSWORD (הגיבוב אינו נשמר ב-git)"
-for tool in xorriso dpkg-scanpackages dpkg-deb git python3 sha256sum openssl gzip tar cpio zstd; do
+for tool in xorriso dpkg-scanpackages dpkg-deb git python3 sha256sum gzip tar cpio zstd; do
     command -v "$tool" >/dev/null || die "חסר $tool"
 done
 [[ -f "$SCRIPT_DIR/packages.txt" ]] || die "אין packages.txt ליד הסקריפט"
@@ -254,14 +262,11 @@ install -m 0644 "$ISO_TREE/imagectl-src/THIRD_PARTY_NOTICES.md" \
     "$ISO_TREE/THIRD_PARTY_NOTICES.md"
 
 # --- המטען החי: קרנל + initramfs + הקבצים ש-firstboot והמנוע קוראים ----------------
-HASH=$(openssl passwd -6 "$ROOT_PASSWORD")
 install -d "$ISO_TREE/imagectl" "$ISO_TREE/live"
 install -m 0755 "$SCRIPT_DIR/firstboot.sh" "$ISO_TREE/imagectl/firstboot.sh"
 install -m 0644 "$SCRIPT_DIR/imagectl-firstboot.service" "$ISO_TREE/imagectl/imagectl-firstboot.service"
-# הגיבוב לבדו, בקובץ משלו: המנוע (installer/lib/finish.sh) קורא אותו ומזין
-# ל-chpasswd -e ביעד. אין preseed שיישא אותו יותר.
-printf '%s\n' "$HASH" > "$ISO_TREE/imagectl/root-password.hash"
-grep -q '^\$6\$' "$ISO_TREE/imagectl/root-password.hash" || die "גיבוב ה-root לא נכתב"
+# אין גיבוב root על ה-ISO (#1632): סיסמת root נבחרת במסך ההתקנה, והמנוע
+# (installer/lib/finish.sh) מגבב אותה ביעד.
 
 # הקרנל: מה-linux-image שב-pool (זה שהמותקן יקבל), והמודולים ב-initramfs
 # חייבים להיות שלו — מודול של קרנל אחר לא נטען, וזה נראה כמו "אין דיסקים".

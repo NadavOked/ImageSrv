@@ -69,7 +69,7 @@ def _write_fake(path: Path, body: str) -> None:
     path.write_text(body, encoding="utf-8")
 
 
-def _rerun_over_http(tmp_path: Path):
+def _rerun_over_http(tmp_path: Path, admin_name: str = "admin"):
     """אשף בהרצה חוזרת (‏--rerun) מול DB אמיתי עם admin, דרך ה-HTTP — כך
     שגם הכתובת שה-handler מוסר לבדיקה נבדקת. מחזיר (state, apply, close)."""
     from server import db as server_db, users
@@ -77,7 +77,8 @@ def _rerun_over_http(tmp_path: Path):
     paths = _paths(tmp_path, tmp_path / "unused", tmp_path / "unused2")
     paths.data_dir.mkdir(parents=True)
     conn = server_db.connect(paths.data_dir / "imagectl.db")
-    users.create(conn, "admin", "Curr3nt!admin", "admin", by="test", check_policy=False)
+    users.create(conn, admin_name, "Curr3nt!admin", "admin", by="test",
+                 check_policy=False, is_builtin=True)
     conn.close()
     state = WizardState(paths, rerun=True, dev=True, interfaces_provider=lambda: NICS)
     nic_fact, role_fact = tmp_path / "nic", tmp_path / "role"
@@ -131,6 +132,17 @@ def test_rerun_with_the_right_password_still_runs_the_installer(tmp_path: Path) 
         got = apply("Curr3nt!admin")
         assert got["state"] != "validation-failed", got
         assert "fake setup-boot-server.sh completed" in got["output"], "ההתקנה לא רצה עם הסיסמה הנכונה"
+    finally:
+        close()
+
+
+def test_rerun_authenticates_the_chosen_installer_admin(tmp_path: Path) -> None:
+    """#1745: the installer admin is not necessarily literally named ``admin``."""
+    _state, apply, close = _rerun_over_http(tmp_path, "nadav")
+    try:
+        got = apply("Curr3nt!admin")
+        assert got["state"] != "validation-failed", got
+        assert "fake setup-boot-server.sh completed" in got["output"]
     finally:
         close()
 

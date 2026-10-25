@@ -33,6 +33,21 @@ answers_servers_if() {
     return 1
 }
 
+# #2094: the first global IPv4 address on the NIC, polled for up to
+# FIRSTBOOT_ADDR_WAIT_S (the ESXi lease took ~7 s: offer, then 5 s of ARP
+# probing). Empty = no address in time; return 2 = `ip` itself failed, which
+# is "not checked", not "no address" (principle 5).
+wait_servers_address() {
+    local nic="$1" waited=0 addr="" out
+    while :; do
+        out=$(ip -o -4 addr show dev "$nic" scope global) || return 2
+        addr=$(awk 'NR == 1 {print $4}' <<<"$out")
+        [[ -n "$addr" || "$waited" -ge "${FIRSTBOOT_ADDR_WAIT_S:-30}" ]] && break
+        sleep 1; waited=$((waited + 1))
+    done
+    printf '%s\n' "$addr"
+}
+
 firstboot_from_answers() {
     local role primary mode host servers_if argv rc
     [[ -s "$ANSWERS_SECRET" ]] || fail answers-secret-missing "$ANSWERS exists but $ANSWERS_SECRET is missing or empty"
@@ -69,7 +84,9 @@ firstboot_from_answers() {
     secret=$(sed -n 's/^admin_pass=//p' "$ANSWERS_SECRET" | head -n 1)
     [[ -n "$secret" ]] || fail answers-secret-missing "$ANSWERS_SECRET has no admin_pass= line"
     set +e
-    "${argv[@]}" 3< <(printf '%s\n' "$secret") >>"$BUILD_LOG" 2>&1
+    # #2148: the certificate is issued again below, once the NIC has its
+    # address -- the fingerprint goes on the DCUI, not into this log
+    IMAGECTL_CONSOLE_FP_ON_DCUI=1 "${argv[@]}" 3< <(printf '%s\n' "$secret") >>"$BUILD_LOG" 2>&1
     rc=$?
     set -e
     unset secret
@@ -80,11 +97,31 @@ firstboot_from_answers() {
     # no ifup (the web wizard is connected through that NIC); here nobody is,
     # and networking.service ran before the file existed -- without this the
     # first DCUI says "link down" until the next restart (ESXi, 21/09).
-    if ifup "$servers_if" >>"$BUILD_LOG" 2>&1; then
-        addr=$(ip -o -4 addr show dev "$servers_if" scope global 2>/dev/null | awk 'NR == 1 {print $4}')
-        log "nic $servers_if: ${addr:-up, no IPv4 address yet}"
+    # #2094: through networking.service, not `ifup` here. The DHCP client
+    # (`dhcpcd -b`) stays in the cgroup of whoever ran ifup; this oneshot unit
+    # ends a second later, systemd stops its cgroup, and dhcpcd's SIGTERM
+    # removed the address ("received SIGTERM ... ens33: removing interface",
+    # ESXi 24/10). networking.service stays active (RemainAfterExit), as on
+    # every later boot -- where the address was always there.
+    addr=
+    if systemctl restart networking.service >>"$BUILD_LOG" 2>&1; then
+        if addr=$(wait_servers_address "$servers_if" 2>>"$BUILD_LOG"); then
+            log "nic $servers_if: ${addr:-up, no IPv4 address after ${FIRSTBOOT_ADDR_WAIT_S:-30}s}"
+        else
+            addr=
+            log "[nic-check-failed] could not read the addresses of $servers_if (see $BUILD_LOG)"
+        fi
     else
-        log "[nic-up-failed] ifup $servers_if failed (see $BUILD_LOG); the console is reachable after a restart"
+        log "[nic-up-failed] networking.service restart for $servers_if failed (see $BUILD_LOG); the console is reachable after a restart"
+    fi
+    # #2095: setup-boot-server issued the console certificate before the NIC
+    # had an address (loopback + name only). With the address on the NIC the
+    # server starts again and issues it for that address -- here, before the
+    # DCUI shows a fingerprint to photograph -- not on the second boot, after
+    # the operator already trusted the first one.
+    if [[ -n "$addr" ]]; then
+        systemctl restart imagectl-server.service >>"$BUILD_LOG" 2>&1 \
+            || fail installer-failed "imagectl-server did not restart after $servers_if got $addr"
     fi
 
     bash "$APP_DIR/install/verify-boot-payload.sh" --app-dir "$APP_DIR" --http-root "$HTTP_ROOT" \

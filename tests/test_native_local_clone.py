@@ -60,6 +60,12 @@ PAIRS = [("lcboot", "light", "1280x800", "boot"), ("lcboot-paused", "light", "12
 #: (mean difference <= 10), the other states of the same flow -0.14-0.31.
 CORR_MIN = 0.55
 MAD_MAX = 12.0
+#: #2050 (mockup 07, Nadav 24/10): a local clone's result card and a failed target/partition box
+#: are now a 3px frame over the soft fill of their colour; the localclone.html PNGs above have a thin
+#: edge on white, so these two states correlate less with them (measured 24/10 on the testrunner:
+#: 0.53 and 0.41, mean difference 5.4 and 5.8). The layout is the same: only their correlation bound
+#: is lower -- the mean-difference bound is not.
+CORR_RESTYLED = {("lcprogress-fail", "light", "1280x800"): 0.45, ("lcdone-ok", "light", "1280x800"): 0.35}
 
 
 def fingerprint(img, cols=32, rows=20) -> list[int]:
@@ -120,7 +126,7 @@ def renders(tmp_path_factory) -> dict:
 def test_each_state_is_drawn_as_the_approved_mockup(renders, card, theme, size, mock):
     ours = fingerprint(_png_rgb(renders[(card, theme, size)]))
     c, m = corr(ours, MOCK["cards"][mock]), mad(ours, MOCK["cards"][mock])
-    assert c >= CORR_MIN and m <= MAD_MAX, f"{card}/{theme}/{size} vs {mock}.png: corr {c:.2f}, mean diff {m:.1f}"
+    assert c >= CORR_RESTYLED.get((card, theme, size), CORR_MIN) and m <= MAD_MAX, f"{card}/{theme}/{size} vs {mock}.png: corr {c:.2f}, mean diff {m:.1f}"
 
 
 def test_a_different_state_is_far_from_the_mockup(renders):

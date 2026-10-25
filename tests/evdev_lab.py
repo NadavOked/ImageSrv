@@ -127,11 +127,13 @@ class UinputDevice:
     מוסיף BTN_TOUCH (מסך מגע); ‏`rel=True` = עכבר יחסי (‏REL_X/REL_Y + BTN_LEFT)."""
 
     def __init__(self, name: str, *, abs: tuple[int, int] | None = None,
-                 touch: bool = False, rel: bool = False):
+                 touch: bool = False, rel: bool = False, keys: tuple[int, ...] = ()):
         self.name = name
         self.fd = os.open(UINPUT_PATH, os.O_WRONLY | os.O_NONBLOCK | os.O_CLOEXEC)
         fcntl.ioctl(self.fd, UI_SET_EVBIT, EV_KEY)
-        fcntl.ioctl(self.fd, UI_SET_KEYBIT, BTN_LEFT)
+        # #1918: `keys` = a keys-only device (the ACPI "Power Button": KEY_POWER and nothing else)
+        for code in keys or (BTN_LEFT,):
+            fcntl.ioctl(self.fd, UI_SET_KEYBIT, code)
         if touch:
             fcntl.ioctl(self.fd, UI_SET_KEYBIT, BTN_TOUCH)
         if abs is not None:

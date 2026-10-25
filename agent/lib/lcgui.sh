@@ -24,6 +24,9 @@ lc_gui_state() {
     # #1367: the round on the server as the agent's beat last heard it
     # (attended.sh). Only "open" draws anything; empty = not known.
     printf 'lc_round=%s\n' "$(cat "$RUN_DIR/attended.round" 2>/dev/null)" >> "$_gs_n" || return 1
+    [ "${IMAGECTL_MODE:-}" != usbclone ] || printf 'lc_usb=1\nlc_diag=%s\nlc_ide=%s\nlc_survey=%s\n' "$(cat "$RUN_DIR/usb.diag" 2>/dev/null)" "$(cut -d'|' -f1 "$RUN_DIR/usb.ctrl" 2>/dev/null)" "$(cat "$RUN_DIR/usb.survey" 2>/dev/null)" >> "$_gs_n"   # #1914 (lc_state.c)
+    # #1914: the USB stick's settings that were refused, or kept for this session only -- aloud
+    [ -s "$RUN_DIR/usb.notice" ] && printf 'toast=%s\n' "$(_lc_clean "$(cat "$RUN_DIR/usb.notice")")" >> "$_gs_n"
     if [ "$_gs_scr" = boot ]; then
         IFS='|' read -r _gs_dl _gs_p < "$LC/boot" 2>/dev/null || { _gs_dl=0; _gs_p=0; }
         printf 'lc_boot=%s|%s|%s\n' "${_gs_dl:-0}" "${_gs_p:-0}" "$(date +%s)" >> "$_gs_n"
@@ -35,17 +38,25 @@ lc_gui_state() {
         printf 'lc_inv=%s\nlc_phase=%s\n' "$(cat "$LC/inv.state" 2>/dev/null)" "$(cat "$LC/phase" 2>/dev/null)" >> "$_gs_n"
         # by the drawer of the mapping, a disk not in it last, then by port (#867).
         # #1495: fields 14-15 = disk_drawer (slotnames.sh), "<drawer>|<connection>".
+        # #1798: field 16 = the incomplete-write mark (lcinv.sh): incomplete|clean|unchecked|"".
+        # #1921: field 17 = the drawer's hardware note (hwissues.sh) -- CRC, link, reset, USB 2.0; never a colour.
+        # #2001: field 18 = the name of its connection on the clone stick (usbmap.sh); "" = "דיסק N".
+        { ! command -v usb_default_follow > /dev/null 2>&1 || usb_default_follow; } || :   # #2001: the stick's default follows the disks
         drawer_slots_refresh || :
         for _gs_f in "$LC"/inv/*.line; do
             [ -f "$_gs_f" ] || continue
             IFS='|' read -r _gs_p _gs_d _gs_x < "$_gs_f"; _gs_m=$(disk_drawer "$_gs_d" "${_gs_p:-0}")
-            printf '%s|%s|%s|%s\n' "$([ "${_gs_m%%|*}" = 0 ] && echo 1 || echo 0)" "${_gs_m%%|*}" "$(cat "$_gs_f")" "$_gs_m"
+            printf '%s|%s|%s|%s|%s|%s|%s\n' "$([ "${_gs_m%%|*}" = 0 ] && echo 1 || echo 0)" "${_gs_m%%|*}" "$(cat "$_gs_f")" "$_gs_m" \
+                "$(cat "$LC/inv/$_gs_d.mark" 2>/dev/null)" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_gs_d" "")" \
+                "$(command -v usb_drawer_name >/dev/null 2>&1 && usb_drawer_name "$_gs_d" "${_gs_p:-0}")"
         done | sort -t'|' -k1,1n -k2,2n -k3,3n | sed 's/^[01]|[0-9]*|/lc_disk=/' >> "$_gs_n"
         _gs_src=$(cat "$LC/source" 2>/dev/null)
         if [ -n "$_gs_src" ]; then
             # #1443: + copy|why -- the bytes the copy moves (lcsize.sh); -1|why = not measured, empty = not yet
             printf 'lc_src=%s|%s|%s\n' "$_gs_src" "$(cut -d'|' -f1 "$LC/measure/$_gs_src" 2>/dev/null)" \
                 "$(cat "$LC/measure/$_gs_src.copy" 2>/dev/null || echo '|')" >> "$_gs_n"
+            # Nadav 22/10: the source's SMART already counts sectors it could not read -- an orange line, no question
+            _gs_u=$(lc_smart_unread "$_gs_src"); [ -z "$_gs_u" ] || printf 'lc_unread=%s|%s\n' "$_gs_src" "$_gs_u" >> "$_gs_n"
             for _gs_f in "$LC"/inv/*.line; do
                 [ -f "$_gs_f" ] || continue
                 _gs_d=$(basename "$_gs_f" .line); [ "$_gs_d" = "$_gs_src" ] && continue
@@ -54,6 +65,7 @@ lc_gui_state() {
         fi
         [ -d "$LC/run" ] && lc_gui_run >> "$_gs_n"
     fi
+    if command -v gui_ask_state > /dev/null; then gui_ask_state >> "$_gs_n" || return 1; fi   # #2017: bad sectors -- continue or stop (lcraw.sh; gui_libs loads askgui.sh)
     printf 'updated=%s\n' "$(date +%s)" >> "$_gs_n" || return 1
     mv "$_gs_n" "$GUI_DIR/state"
 }
@@ -102,9 +114,14 @@ lc_gui_run() {
         _gr_t="$RUN_DIR/targets/$_gr_d"
         _gr_ok=$(awk 'END { print NR }' "$_gr_t/lc_ok" 2>/dev/null)
         _gr_nb=$(awk 'END { print NR }' "$_gr_t/ntfs_boot" 2>/dev/null)   # #1487: NTFS backup boot sectors read back
-        printf 'lc_tgt=%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_gr_d" "$(cat "$_gr_t/state" 2>/dev/null)" "$(target_bytes "$_gr_d")" \
+        # #2009: field 10 = why a "done" is orange ("" = green); #2017: field 11 = raw partitions,sectors not read (-1 = none rescued) -- lcraw.sh
+        # #2045: field 12 = 1 when the disk left the system mid-copy (drawer_watch, verdict.sh) -- "pulled", not "broken"
+        _gr_pl=0; [ ! -f "$_gr_t/pulled" ] || _gr_pl=1
+        printf 'lc_tgt=%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_gr_d" "$(cat "$_gr_t/state" 2>/dev/null)" "$(target_bytes "$_gr_d")" \
             "$(cat "$_gr_t/lc_part" 2>/dev/null)" "${_gr_ok:-0}" "$(cat "$_gr_t/lc_table" 2>/dev/null | tr '|' ',')" \
-            "$(_lc_clean "$(cat "$_gr_t/error" 2>/dev/null)")" "$(cat "$_gr_t/total" 2>/dev/null)" "${_gr_nb:-0}"
+            "$(_lc_clean "$(cat "$_gr_t/error" 2>/dev/null)")" "$(cat "$_gr_t/total" 2>/dev/null)" "${_gr_nb:-0}" \
+            "$(_lc_clean "$(cat "$_gr_t/ntfs_note" 2>/dev/null)")" \
+            "$(if command -v lc_raw_flags > /dev/null; then lc_raw_flags "$_gr_d" "$_gr_r/manifest.json"; fi)" "$_gr_pl"
     done
 }
 
@@ -135,6 +152,9 @@ EOF
             case "$_gd_i" in ''|*[!A-Za-z0-9_.-]*) return 1 ;; esac
             lc_pull_ports "$_gd_p" > /dev/null || return 1   # drawers of this machine, now
             _lc_req pull.req "$_gd_i|$_gd_p" ;;
+        "lc-syspart|"*)   # #1896: C: of an old image -- the agent posts it with the screen nonce (syspartgui.sh)
+            [ "$_gd_scr" = pull ] && _syspart_token "${token#lc-syspart|}" || return 1
+            _lc_req syspart.req "${token#lc-syspart|}" ;;
         "lc-measure|"*)
             [ "$_gd_scr" = local ] && [ "$_gd_ph" = idle ] || return 1
             _gd_d=${token#lc-measure|}; _lc_dev_ok "$_gd_d" || return 1
@@ -151,9 +171,15 @@ EOF
                 _lc_dev_ok "$_gd_d" && [ "$_gd_d" != "$_gd_s" ] || return 1
             done
             _lc_req start.req "$_gd_s|$_gd_t|$_gd_k" ;;
+        lc-usbset)   # #1914: "הגדרות" -- the USB stick only, and not while a copy runs
+            [ "${IMAGECTL_MODE:-}" = usbclone ] && [ "$_gd_scr" = local ] && [ "$_gd_ph" = idle ] || return 1
+            usbset_open ;;
+        "lc-usbset|"*)
+            [ "$_gd_scr" = usbset ] || return 1
+            usbset_key "${token#lc-usbset|}" ;;
         lc-stop)
             case "$_gd_ph" in copying|shrinking) _lc_req stop.req stop ;; *) return 1 ;; esac ;;
-        lc-poweroff|lc-again)
+        lc-poweroff|lc-again|lc-reboot)   # #1914: lc-reboot -- the USB stick's result screen
             case "$_gd_ph" in done|stopped) _lc_req end.req "${token#lc-}" ;;
                 *) [ "$token" = lc-poweroff ] && [ -d "$LC/run" ] && \
                        _lc_req run/notice "המחשב לא כובה: השיכפול עוד לא הסתיים בצד הסוכן ($_gd_ph). נסו שוב בעוד רגע."   # #1483: aloud

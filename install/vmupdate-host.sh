@@ -81,7 +81,7 @@ if [[ ${#need[@]} -gt 0 ]]; then
         || upd_note="apt-get update נכשל: $(printf '%s\n' "$upd_out" | grep -v '^\s*$' | tail -n 1)"
     [[ -z "$upd_note" ]] || echo "$upd_note"
     echo "מתקין (מהמאגר המקומי): ${need[*]}"
-    if ! out="$(env DEBIAN_FRONTEND=noninteractive "$APT" install -y -qq "${need[@]}" 2>&1)"; then
+    if ! out="$(env DEBIAN_FRONTEND=noninteractive "$APT" install -y -qq --no-install-recommends "${need[@]}" 2>&1)"; then
         printf '%s\n' "$out" | tail -n 5
         echo "apt-get install נכשל: $(printf '%s\n' "$out" | grep -v '^\s*$' | tail -n 1)${upd_note:+ · $upd_note}"
         exit 3

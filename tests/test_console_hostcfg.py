@@ -341,8 +341,7 @@ def test_hostname_status_reads_the_machine(host):
 
 @pytest.mark.parametrize("given,applied", [
     ("imagectl", "imagectl"), ("imagectl-tlv", "imagectl-tlv"),
-    ("srv1.college.ac.il", "srv1.college.ac.il"), ("IMAGECTL-TA", "imagectl-ta"),
-    ("1srv", "1srv"), ("a" * 63, "a" * 63),
+    ("IMAGECTL-TA", "imagectl-ta"), ("1srv", "1srv"), ("a" * 15, "a" * 15),
 ])
 def test_a_valid_hostname_is_applied_read_back_and_restarts(host, given, applied):
     r = host["admin"].post("/api/console/hostname", json={"hostname": given})
@@ -353,13 +352,16 @@ def test_a_valid_hostname_is_applied_read_back_and_restarts(host, given, applied
     assert events(host["ctx"], "hostname_changed") == [f"imagectl-old → {applied}"]
 
 
+#: ‏#1997 (נדב, 22/10): שם השרת הוא שם מחשב — עד 15, בלי נקודות. עד כאן RFC 1123
+#: (‏"srv1.college.ac.il" ו-63 תווים עברו).
 @pytest.mark.parametrize("bad", [
-    "", " ", "-abc", "abc-", "a_b", "has space", "a" * 64, "שרת", "a..b", ".abc",
-    "abc.", "10.0.0.1", "ab$c", ".".join(["a" * 63] * 4) + "a",
+    "", " ", "-abc", "abc-", "a_b", "has space", "a" * 16, "a" * 64, "שרת", "a..b", ".abc",
+    "abc.", "10.0.0.1", "ab$c", ".".join(["a" * 63] * 4) + "a", "srv1.college.ac.il",
 ])
 def test_an_invalid_hostname_is_refused_before_touching_the_machine(host, bad):
     r = host["admin"].post("/api/console/hostname", json={"hostname": bad})
     assert r.status_code == 400, (bad, r.text)
+    assert "אותיות אנגליות, ספרות ומקף" in r.json()["detail"]
     assert host["machine"].set_calls == []
     assert host["machine"].restarts == 0
 

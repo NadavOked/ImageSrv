@@ -27,9 +27,9 @@ LIB = REPO / "agent" / "lib"
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow",
+LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
         "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
-        "shrinkmem", "smart", "guistate", "attended", "lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "localclone", "lcwait", "idle", "lcgui")   # attended, lcwait, idle: #1367
+        "shrinkmem", "smart", "guistate", "attended", "lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "lcwait", "idle", "lcgui")   # attended, lcwait, idle: #1367
 
 
 def run(tmp_path: Path, script: str, timeout: int = 60, **env) -> subprocess.CompletedProcess:
@@ -313,7 +313,7 @@ def test_the_choice_wraps_the_idle_cloner_and_nothing_else():
 
 def test_the_kernel_command_line_is_not_read():
     """Principle 2: nothing of the local clone travels on the command line."""
-    for name in ("lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "localclone", "lcwait", "lcgui"):
+    for name in ("lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "lcwait", "lcgui"):
         text = (LIB / f"{name}.sh").read_text(encoding="utf-8")
         assert "/proc/cmdline" not in text and "imagectl.mode" not in text and "parse_cmdline" not in text, name
 

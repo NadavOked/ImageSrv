@@ -17,6 +17,8 @@ import shutil
 import threading
 from pathlib import Path
 
+from .atomicfile import write_atomic
+
 log = logging.getLogger("imagectl.images")
 
 REQUIRED_FIELDS = ("id", "name", "family", "min_target_bytes", "partitions")
@@ -395,9 +397,7 @@ def validate_display_name(value: str, what: str = "השם") -> str:
 
 def _replace_json(path: Path, data: dict) -> None:
     """כתיבה אטומית של manifest.json: קובץ זמני באותה תיקייה, ואז replace."""
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    write_atomic(path, json.dumps(data, ensure_ascii=False, indent=2))
 
 
 class ImageLibrary:
@@ -595,6 +595,8 @@ class ImageLibrary:
                 return f"partition {index} has malformed used_bytes"
             if not isinstance(part.get("expandable", False), bool):
                 return f"partition {index} has malformed expandable flag"
+            if not isinstance(part.get("system", False), bool):   # #1875: "is the system" decides min-free
+                return f"partition {index} has malformed system flag"
             for field in ("role", "fs", "file", "sha256", "unique_guid", "uuid", "attrs"):
                 value = part.get(field)
                 if isinstance(value, str) and any(ord(ch) < 32 or ch in "|" for ch in value):
@@ -641,19 +643,39 @@ class ImageLibrary:
             return None
         return guarded_image_path(manifest["_dir"], filename)
 
-    def allowed_for_disks(self, disks: list[dict] | None) -> list[str]:
+    def unmarked_images(self, min_free_gb: int) -> list[dict]:
+        """‏#1896: האימג'ים שמסך מחשב הבנייה ומסך המשכפל מציגים "לא נבדק" עם
+        סימון C: — ברירת המחדל של כל שושלת, זמינים, שאפשר לסמן בהם ועוד לא
+        סומנו. רק כשהכלל דלוק (`min_free_gb` > 0): כבוי — הם כבר מוצעים."""
+        from .minfree import candidates_view, unmarked   # minfree ← images
+        if min_free_gb <= 0:
+            return []
+        scanned = self.scan()
+        chosen = set(self.defaults(scanned).values())
+        return sorted(({"id": iid, "name": m["name"], "folder": m.get("folder", ""),
+                        "candidates": candidates_view(m)}
+                       for iid, m in scanned.items()
+                       if iid in chosen and m.get("_available", True) and unmarked(m)),
+                      key=lambda item: item["id"])
+
+    def allowed_for_disks(self, disks: list[dict] | None, min_free_gb: int = 0) -> list[str]:
         """מזהי האימג'ים שמתאימים לדיסקים שדווחו ב-hello.
 
-        שני מסננים מול הדיסק הפנימי הגדול ביותר, ולכל אחד תפקיד משלו:
+        **הכרעה אחת, לפי הגודל בלבד** (‏#1863, הכרעת נדב 20/10): אימג' מוצע
+        כשהוא נכנס לדיסק הפנימי הגדול ביותר — ‏`required_bytes` (‏#82) ועוד
+        ‏`min_free_gb` פנויים במחיצת המערכת (‏#1354, ‏`min_disk_bytes`). זו
+        אותה הכרעה ש-`room.fit_refusal` עושה מול המגירה שנבחרה: אימג' שנכנס
+        לחלק מהמגירות מוצע, והמגירה הקטנה מדי נדחית בפתיחת הסבב.
 
-        1. **המשפחה** (אפיון סעיף 13) — אימג' 500 לא יוצע לכונן 256.
-           תווית גסה בת שתי מחלקות, וזה כל מה שהיא.
-        2. **הדרישה האמיתית** (`required_bytes`, ‏#82) — הגיאומטריה של
-           הפריסה. זו ההחלטה הפיזית, וזו שאסור לוותר עליה: המשפחה לבדה
-           הייתה מציעה אימג' של 299GB לכונן של 240GB — שניהם `256`.
+        ‏`family` (256/500) **אינה מסננת יותר** — היא תווית תצוגה. מאז הכיווץ
+        (‏#1171) אימג' "500" נכנס לדיסק 256, והמשפחה הסתירה אותו ממסך
+        המשכפל וממחשב הבנייה בזמן שהקונסולה אישרה אותו.
 
-        הסוכן רק מציג, הוא לא מסנן בעצמו (כלל ממשק 3).
+        דרישה שאינה ניתנת לקביעה (‏`None`) — לא מוצע (עיקרון 5). הסוכן רק
+        מציג, הוא לא מסנן בעצמו (כלל ממשק 3).
         """
+        # ייבוא מקומי: ‏minfree ← imagefit ← images. במעלה הקובץ זה מעגל.
+        from .minfree import min_disk_bytes
         scanned = self.scan()
         # ‏#1334: למכונה מוצעת **ברירת המחדל** של כל שושלת בלבד — סבב חדש
         # מקבל את הגרסה העדכנית (או זו שנקבעה); סבב פתוח ממשיך עם המזהה
@@ -671,15 +693,14 @@ class ImageLibrary:
         if not internal:
             return []
         biggest = max(internal)
-        family = disk_family(biggest)
         allowed = []
         for image_id, manifest in images.items():
-            need = required_bytes(manifest)
+            need = min_disk_bytes(manifest, min_free_gb)
             if need is None:
                 # לא ידענו לחשב כמה הוא צריך — לא מציעים אותו (עיקרון 5).
                 log.warning("skipping %s: its size requirement is unknown", image_id)
                 continue
-            if need <= biggest and manifest["family"] <= family:
+            if need <= biggest:
                 allowed.append(image_id)
         return sorted(allowed)
 
@@ -690,7 +711,7 @@ class ImageLibrary:
         ‏`min_free_gb` (‏#1354) — ההגדרה, כדי ש"נכנס לדיסק מ-X" יכלול אותה.
         """
         # ייבוא מקומי: ‏minfree ← imagefit ← images. במעלה הקובץ זה מעגל.
-        from .minfree import min_disk_bytes, unchecked
+        from .minfree import candidates_view, markable, min_disk_bytes, unchecked, unmarked
         result = []
         scanned = self.scan()
         chosen = set(self.defaults(scanned).values())
@@ -716,6 +737,10 @@ class ImageLibrary:
                     # ‏#1494: הכלל אינו ניתן לבדיקה (‏`used_bytes` של מחיצת
                     # המערכת לא נמדד) — הסוכן יסרב בכל מגירה. מחרוזת הסוכן, או None.
                     "min_free_unchecked": unchecked(manifest, min_free_gb),
+                    # ‏#1896: המחיצות שאפשר לסמן ביניהן את C: (‏[] = אין בין מה
+                    # לבחור, או שהקליטה סימנה), ו"לא נבדק" עד שמסמנים.
+                    "system_candidates": candidates_view(manifest) if markable(manifest) else [],
+                    "system_unmarked": unmarked(manifest),
                     "used_bytes": used_bytes_total(manifest),
                     "total_compressed_bytes": manifest.get("total_compressed_bytes", 0),
                     "partitions": len(manifest.get("partitions") or []),
@@ -810,6 +835,100 @@ class ImageLibrary:
             problem = self._validate(raw)
             if problem:
                 log.warning("not recording used_bytes for %s: %s", image_id, problem)
+                return []
+            _replace_json(path, raw)
+            return sorted(written)
+
+    def record_system_partition(self, image_id: str, index: object, *,
+                                only_unmarked: bool = False) -> str | None:
+        """‏#1896 (הכרעת נדב 22/10): מסמן איזו מחיצה היא C: — `"system": true` ועמו
+        `"system_source": "operator"` — באימג' ישן שהקליטה לא סימנה בו, ושתי
+        מחיצות ה-windows שלו (או ה-linux, ‏#1899) אינן ניתנות להבחנה. נכתב
+        ל-manifest.json עצמו (עיקרון 3: הסוכן והשרת קוראים אותו סימון), **אטומית
+        ועמיד** (`write_atomic`, ‏#1908). ‏`only_unmarked` — המשכפל: רק אימג' שעוד
+        לא סומן; שינוי סימון — מהקונסולה. מחזיר `None`, או את הסיבה שלא נכתב."""
+        from .minfree import OPERATOR, markable, system_candidates  # minfree ← images
+        if isinstance(index, bool) or not isinstance(index, int):
+            return "לא נבחרה מחיצה"
+        manifest = self.get(image_id)
+        if manifest is None or not manifest.get("_dir") or not manifest.get("_available", True):
+            return "האימג' לא נמצא בספרייה, או שהמיקום שלו אינו נגיש"
+        path = Path(manifest["_dir"]) / "manifest.json"
+        with self._write_lock:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not markable(raw):
+                return "באימג' הזה אין מחיצות לבחור ביניהן, או שהקליטה כבר סימנה את מחיצת המערכת"
+            parts = [p for p in raw.get("partitions") or [] if isinstance(p, dict)]
+            if only_unmarked and any(p.get("system") is True for p in parts):
+                return "מחיצת המערכת באימג' הזה כבר סומנה — שינוי מהקונסולה"
+            allowed = [_whole(p.get("index")) for p in system_candidates(raw)]
+            if index not in allowed:
+                return f"מחיצה {index} אינה אחת המחיצות לבחירה ({', '.join(map(str, allowed))})"
+            for part in parts:
+                if _whole(part.get("index")) == index:
+                    part["system"], part["system_source"] = True, OPERATOR
+                else:
+                    part.pop("system", None)
+                    part.pop("system_source", None)
+            problem = self._validate(raw)
+            if problem:
+                log.warning("not recording the system partition of %s: %s", image_id, problem)
+                return f"המניפסט לא נשמר: {problem}"
+            write_atomic(path, json.dumps(raw, ensure_ascii=False, indent=2))
+        return None
+
+    #: ‏#1805/#1864: חתיכה של זרם הנתונים שהרשימה מגבבת — ‏RB_CHUNK של fanout.c.
+    READBACK_CHUNK_BYTES = 4 * 1024 * 1024
+
+    def record_readback(self, image_id: str, values: dict) -> list[int]:
+        """רושם את רשימת הקריאה החוזרת (‏#1805, הכרעת נדב 20/10) למחיצות שקיבלו.
+
+        ‏`values` = ‏{index: (רשימה, בייטים, XXH64 של הרשימה)} מ-`readbackhash.derive`.
+        קודם קובץ הרשימה ליד קובץ המחיצה (`<file>.readback`, אטומית), ורק אז
+        המניפסט: ‏`readback_xxh64`, ‏`readback_chunks`, ‏`readback_bytes`,
+        ‏`readback_chunk_bytes` — הסוכן קורא את המניפסט שהשרת מגיש (עיקרון 3).
+        ערך שאינו עקבי — רשימה שאינה שורות של 16 ספרות hex, מספר שורות שאינו
+        תואם את הבייטים, בייטים מעל `size_bytes`, ‏XXH64 שאינו 16 ספרות — אינו
+        נכתב: הסוכן היה מכשיל עליו מגירות תקינות. ‏`readback_sha256` ישן נשאר כמו
+        שהוא. מניפסט שהשינוי היה פוסל — לא נכתב כלל. מחזיר את האינדקסים שנכתבו."""
+        manifest = self.get(image_id)
+        if manifest is None or not manifest.get("_dir") or not manifest.get("_available", True):
+            return []
+        folder = Path(manifest["_dir"])
+        path = folder / "manifest.json"
+        hexd = set("0123456789abcdef")
+        with self._write_lock:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            written = []
+            for part in raw.get("partitions") or []:
+                if not isinstance(part, dict):
+                    continue
+                index = _whole(part.get("index"))
+                value = values.get(index) if index is not None else None
+                if not isinstance(value, tuple) or len(value) != 3:
+                    continue
+                text, count, xxh = value
+                size = _whole(part.get("size_bytes"))
+                lines = text.split("\n")[:-1] if isinstance(text, str) and text.endswith("\n") else None
+                chunk = self.READBACK_CHUNK_BYTES
+                if lines is None or _whole(count) is None or size is None or count > size \
+                        or len(lines) != (count + chunk - 1) // chunk \
+                        or any(len(x) != 16 or not set(x) <= hexd for x in lines) \
+                        or not (isinstance(xxh, str) and len(xxh) == 16 and set(xxh) <= hexd):
+                    continue
+                base = guarded_image_path(folder, part.get("file"))
+                if base is None:
+                    continue
+                target = base.with_name(base.name + ".readback")
+                write_atomic(target, text, encoding="ascii")
+                part.update({"readback_xxh64": xxh, "readback_chunks": len(lines),
+                             "readback_bytes": count, "readback_chunk_bytes": chunk})
+                written.append(index)
+            if not written:
+                return []
+            problem = self._validate(raw)
+            if problem:
+                log.warning("not recording readback for %s: %s", image_id, problem)
                 return []
             _replace_json(path, raw)
             return sorted(written)

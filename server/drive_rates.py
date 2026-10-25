@@ -33,7 +33,8 @@
                           **וגם** הזרם עצמו רץ ב-KEEP_UP מהקצב לפחות
           ‏× DOWN_FACTOR — שידורים חוזרים מעל LOSS_DOWN_RATIO מהבלוקים
           כמות שהוא    — כל השאר, כולל "לא נמדד" (עיקרון 5)
-          "הגל האחרון" — עם אותו מספר מגירות במכונה, ובלעדיו הקרוב (`_pick`)
+          "הגל האחרון" — עם אותו מספר מגירות במכונה, ובלעדיו הקרוב (`_pick`);
+          מהקרוב עם **פחות** מגירות — הקצב שהוכח × DOWN_FACTOR לכל הכפלה (‏#1842)
           מכונה בלי גל כזה (חדשה / הוחלפה) — **כל הגל** בפתיחה (`_from_previous`)
     קצב = min(קצב, הכונן האיטי המוכר × MARGIN)        (#447, למטה)
     קצב = בין FLOOR_RATIO × פתיחה לבין הגג
@@ -81,6 +82,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import sqlite3
 from collections import Counter
@@ -88,7 +90,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from . import nic_speed
+from . import cloner_cpu, nic_speed, server_io
 from .db import _write_lock, get_setting, journal, now_iso, writing
 
 log = logging.getLogger("imagectl.drive_rates")
@@ -487,7 +489,7 @@ def _climb(points: list[dict], unsafe: list[int] = ()) -> tuple[int, str, dict]:
 def _pick(counts: dict[int, tuple], want: int) -> tuple[int, tuple]:
     """(מספר המגירות, הגל) שממנו מכונה עם `want` מגירות יורשת (הכרעת נדב
     17/10): אותו מספר; ובלעדיו — הקרוב, ובתיקו **היותר** מגירות. קצב שנלמד
-    תחת יותר עומס בטוח לפחות עומס; ההפך נחסם ב-`_from_previous`."""
+    תחת יותר עומס בטוח לפחות עומס; ההפך מוקטן ב-`_from_previous` (‏#1842)."""
     drawers = min(counts, key=lambda c: (abs(c - want), -c))
     return drawers, counts[drawers]
 
@@ -509,16 +511,33 @@ def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
     ‏**ולפי מספר המגירות שלה בגל** (הכרעת נדב 17/10): המעבד של המקלט עובד
     לכל מגירה (‏zstd ו-partclone לכל אחת), וקצב שנלמד עם שלוש מגירות אינו
     מעניש גל של אחת. "הגל האחרון" הוא האחרון עם אותו מספר מגירות למכונה;
-    בלעדיו — הקרוב (`_pick`), ומגל עם **פחות** מגירות אין עלייה: לכל היותר
-    הקצב שהגל ההוא רץ בו (‏`held`). ‏`previous.drawers` — כמה מגירות היו
-    למכונה שקבעה בגל ההוא.
+    בלעדיו — הקרוב (`_pick`). ‏`previous.drawers` — כמה מגירות היו למכונה
+    שקבעה בגל ההוא.
+
+    ‏**מגל עם פחות מגירות — הקצב מוקטן לפי מספר המגירות** (‏#1842):
+
+        קצב = min(הקצב שהגל ההוא מוריש,
+                  הקצב שהוכח × DOWN_FACTOR ^ log2(מגירות עכשיו / מגירות אז))
+
+    (‏`basis: "drawers"`) — ‏×0.75 **לכל הכפלה** של מספר המגירות (2→4: ‏×0.75;
+    1→4: ‏×0.5625; 1→3: ‏×0.634). **הכרעת נדב 20/10**, על המדידה מברזל 19/10,
+    משכפל 2, ‏19.5GB: סבב של 4 מגירות ב-432m — הקצב של 2 מגירות (‏`held`,
+    ‏ses_5002758a) כמות שהוא — ‏963k שידורים חוזרים, ‏623 פקיעות, ‏10:27;
+    הסבב הבא של 4, אחרי שהכלל ירד ×0.75 ל-324m — ‏437k, ‏78 פקיעות, ‏9:18.
+    ‏432 × 0.75 = 324m: הגל הראשון של 4 יוצא בקצב שהברזל הוכיח, בלי הגל הרע
+    שלפניו. (נשקל גם יחס ישר — מגירות אז / עכשיו, ‏216m — ונדחה: גל ראשון
+    איטי מ-324m שנמדד.) ממנו החיפוש (`_climb`) ממשיך על הזיכרון של 4.
+    עד #1842 — "לכל היותר הקצב שהוכח", כלומר 432m כמות שהוא על 4 מגירות.
+    ומקצב שנגזר כך שנרשם כלא-בטוח (‏`unsafe_rates`) למכונה עם מספר מגירות
+    כזה או קטן ממנו — מתחתיו, ‏×DOWN_FACTOR: אין לנגזרת ראיה משלה.
+    מגל עם **יותר** מגירות — כמות שהוא (קצב שעמד ביותר עומס בטוח לפחות).
 
     ‏**ולפי goodput** (‏#1758): מאותו מספר מגירות נלקחים עד GOODPUT_WINDOW הגלים
     האחרונים, ומהם נקודות goodput (`_point`) — וחיפוש השיא (`_climb`) קובע.
     ‏`previous` הוא עדיין הגל האחרון של המכונה, ועליו גם `rule: "goodput"`,
     ‏`wall_s`, ‏`goodput_bps` (שלו) ו-`best` (השיא). בלי אף נקודה — כל הגלים
-    מלפני #1758 — הכלל הקודם על הגל האחרון (`_next_from`). מגל עם פחות
-    מגירות — לכל היותר הקצב שהוכח (השיא, או הגל ההוא בכלל הקודם).
+    מלפני #1758 — הכלל הקודם על הגל האחרון (`_next_from`). "הקצב שהוכח"
+    למעלה — השיא, או הגל ההוא בכלל הקודם.
 
     הגל יוצא, נמדד, ובפעם הבאה המכונה החדשה כבר מוכרת. ההגנות לכל כונן
     אינן משתנות: הכונן האיטי המוכר (`_limit_of`) מוריד אחרי זה, בדיקת
@@ -544,8 +563,14 @@ def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
         rate = parse_bitrate(past.get("max_bitrate"))
         if past.get("direct") or rate is None:
             continue
+        # ‏#1884: גל שהשרת היה צוואר הבקבוק בו (דיסק הספרייה) אינו ראיה על המשכפלים.
+        if server_io.bound(conn, row["session_id"]):
+            continue
         had = Counter(d.get("mac") for d in roster if isinstance(d, dict))
         for mac in want.keys() & had.keys():
+            # ‏#1885: גל שבו המעבד של המכונה הואט (throttle) אינו ראיה על הקצב שלה.
+            if isinstance(delivered, dict) and cloner_cpu.throttled((delivered.get(mac) or {}).get("cpu")):
+                continue
             waves = seen.setdefault(mac, {}).setdefault(had[mac], [])
             if len(waves) < GOODPUT_WINDOW:
                 waves.append((row["session_id"], past, stream, rate, roster, drops,
@@ -557,10 +582,11 @@ def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
         drawers, waves = _pick(counts, want[mac])
         session_id, past, stream, rate, roster, drops, _ = waves[0]
         points = [p for w in waves if (p := _point(w[0], w[1], w[3], w[2], w[6], mac))]
+        unsafe = [r["rate_bps"] for r in conn.execute(
+            "SELECT rate_bps FROM unsafe_rates WHERE mac = ? AND drawers <= ?",
+            (mac, max(drawers, want[mac])))]
         if points:                                   # ‏#1758: goodput
-            bits, basis, best = _climb(points, [r["rate_bps"] for r in conn.execute(
-                "SELECT rate_bps FROM unsafe_rates WHERE mac = ? AND drawers <= ?",
-                (mac, max(drawers, want[mac])))])
+            bits, basis, best = _climb(points, unsafe)
             mine = next((p for p in points if p["session_id"] == session_id), None)
             previous = {**_summary(session_id, past, stream, roster, drops),
                         "rule": "goodput", "wall_s": stream.get("wall_s"),
@@ -573,8 +599,13 @@ def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
             bits, basis, previous = _next_from(conn, session_id, past, stream, rate,
                                                roster, drops)
             proven = rate
-        if drawers < want[mac] and bits > proven:
-            bits, basis = proven, "held"            # מפחות מגירות — לא עולים
+        if drawers < want[mac]:                      # ‏#1842: מפחות מגירות
+            scaled = int(proven * DOWN_FACTOR ** math.log2(want[mac] / drawers))
+            if bits > scaled:
+                bits, basis = scaled, "drawers"
+            wall = min((r for r in unsafe if r <= bits), default=None)
+            if wall is not None:
+                bits, basis = int(wall * DOWN_FACTOR), "drawers"
         found[mac] = bits, basis, {**previous, "drawers": drawers}
     mac, (bits, basis, previous) = min(found.items(), key=lambda kv: (kv[1][0], kv[0]))
     return bits, basis, {**previous, "mac": mac}
@@ -588,7 +619,8 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
     ‏`max_bitrate` הוא מה שעובר ל-udp-sender, ו-`basis` אומר למה: ‏`start`
     (מכונה בגל שאין לה גל קודם — #1471) · ‏`climb` / ‏`peak` / ‏`back` (‏#1758,
     חיפוש השיא על goodput — `_climb`; ‏`previous.best` = השיא) · ‏`up` (הגל הקודם של המכונה שקבעה
-    נקי — ב-`previous`, עם ה-`mac` שלה) ·
+    נקי — ב-`previous`, עם ה-`mac` שלה) · ‏`drawers` (‏#1842 — נגזר מגל עם
+    פחות מגירות למכונה, מוקטן לפי מספר המגירות; `_from_previous`) ·
     ‏`down` (שידורים חוזרים בגל הקודם) · ‏`held` (הגל הקודם לא הוכיח שאפשר
     לעלות) · ‏`unmeasured` (המונה של הגל הקודם לא נקרא — נשאר) · ‏`learned`
     (כונן מוכר הוריד, והוא ב-`by`) · ‏`ceiling` (הגג עצר) · ‏`disabled` (המתג
@@ -734,7 +766,7 @@ def _basis_note(basis: str, previous: dict | None) -> str:
     = מקלט שלא דיווח. ‏#1758 — כשהבסיס הוא goodput, גם השיא ומה שהגל הקודם
     עצמו עשה: ‏`climb(best=482m:52.1MB/s,eff=86%,goodput=52.1MB/s,loss=1.47%,rcvbuf=198228)`."""
     if not previous or basis not in ("up", "held", "down", "unmeasured",
-                                     "climb", "peak", "back"):
+                                     "climb", "peak", "back", "drawers"):
         return basis
     loss, sent = previous.get("loss_blocks"), previous.get("sent_bytes")
     pct = (f"{100 * loss / -(-sent // UDPCAST_BLOCK):.2f}%"
@@ -867,6 +899,12 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
         delivered = {mac: ({"drawers": sum(m == mac for m, _ in roster), "done": 0,
                             "written_bytes": 0}
                            if mac in reported else None) for mac, _ in roster}
+        # ‏#1885: מעבד/throttle/טמפ' של כל מכונה בגל (‏`cpu_json`) — `_from_previous`. לא דווח —
+        # המפתח חסר (כמו לפני #1885), לא אפס.
+        for member in members:
+            got, cpu = delivered.get(member["mac"]), _cpu(member)
+            if got is not None and cpu is not None:
+                got["cpu"] = cpu
         rows = []
         for member in members:
             for t in json.loads(member["targets_json"] or "[]"):
@@ -911,6 +949,18 @@ def _udp_drops(member) -> dict | None:
     except (TypeError, ValueError):
         return None
     return got if isinstance(got, dict) else None
+
+
+def _cpu(member) -> dict | None:
+    """‏#1885: ‏`session_members.cpu_json` של חבר, או ‏None — לא דווח."""
+    try:
+        raw = member["cpu_json"]
+    except (KeyError, IndexError):
+        return None
+    try:
+        return cloner_cpu.well_formed(json.loads(raw)) if raw else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _failed(conn: sqlite3.Connection, detail: str) -> None:

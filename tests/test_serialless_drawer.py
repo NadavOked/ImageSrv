@@ -146,7 +146,7 @@ def test_a_written_drawer_with_no_serial_is_journaled_as_unidentified(room_serve
 
     round_row = ctx.conn.execute(
         "SELECT * FROM room_rounds WHERE id = ?", (opened["id"],)).fetchone()
-    total, written, skipped = room._tally(ctx.conn, round_row, ctx.store.members(wave))
+    total, written, skipped, _cancelled = room._tally(ctx.conn, round_row, ctx.store.members(wave))
     assert (total, written, skipped) == (1, {"S1"}, set())   # #1760: + the red-skipped
 
     events = [r["event"] for r in ctx.conn.execute(

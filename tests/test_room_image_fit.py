@@ -184,3 +184,25 @@ def test_the_library_list_exposes_the_derived_requirement_and_used_bytes(tmp_pat
     assert fit300["used_bytes"] == 31457280 + 84509376512
     # מחיצה שלא נמדדה ("would not mount", #84) — "לא ידוע", לא 0 ולא סכום חלקי.
     assert by_id["img_dead00"]["used_bytes"] is None
+
+
+@pytest.mark.parametrize("floor_bytes", [None, DISK_500])
+def test_an_image_that_fits_no_disk_size_is_refused_not_waved_through(floor_bytes):
+    """‏#1863: דרישה שאינה ניתנת לקביעה (`min_disk_bytes` = None) — כאן מחיצת
+    מערכת שאינה הניתנת להרחבה, עם 5GB פנויים מול מינימום 20 — **אינה "נכנס"**.
+    עד #1863 ‏`fit_refusal` החזיר כאן None, הסבב נפתח, והסוכן סירב בכל מגירה;
+    והרשימה של המכונה (`allowed_for_disks`) כבר הסתירה אותו — שתי הכרעות."""
+    from server.minfree import min_disk_bytes
+    from server.room import fit_refusal
+
+    esp, win = IMAGE_230["partitions"]
+    # exactly one marked partition is the one the restore grows (expandable_candidate) -- not C:
+    stuck = {**IMAGE_230, "partitions": [
+        {**esp, "expandable": True},
+        {**win, "expandable": False, "used_bytes": win["size_bytes"] - 5 * GB}]}
+    assert min_disk_bytes(stuck, 20) is None
+    floor = None if floor_bytes is None else {
+        "mac": CLONER1, "name": "1", "port": 1, "dev": "sda", "size_bytes": floor_bytes}
+    reason = fit_refusal(stuck, floor, 20)
+    assert reason is not None and reason.startswith("לא נכנס — יישארו רק 4.7 GB פנויים ב-C:"), reason
+    assert fit_refusal(stuck, floor, 0) is None     # the rule off: the layout fits 500GB

@@ -53,9 +53,10 @@ def on_the_wire(body: str) -> str:
             'case "$2" in *dfeed.*) ;; *)\n' + good + "exit 0 ;;\nesac\n" + wire)
 
 
-#: The good fanout, recording the eviction ceiling it got on the wire.
+#: The good fanout, recording both eviction ceilings it got on the wire (#674, #1796).
 FANOUT_RECORDS_EVICTION = on_the_wire(
-    'echo "${FANOUT_STALL_EVICT_MS:-unset}" >> "$EVICT_LOG"\n' + STUBS["fanout"])
+    'echo "${FANOUT_STALL_EVICT_MS:-unset} ${FANOUT_BLOCK_EVICT_MS:-unset}" >> "$EVICT_LOG"\n'
+    + STUBS["fanout"])
 
 DIRECT_BYTES = b"A" * 4096          # PARTCLONE's 4096 bytes; zstd is `exec cat`
 
@@ -78,7 +79,7 @@ def station(tmp_path, sha: str, stubs: dict, env: str = "") -> tuple[Path, str, 
         + env + "; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/ntfsboot.sh; "   # #1487: restore_partition calls ntfs_boot_target
+        f". {posix(AGENT)}/lib/ntfsboot.sh; . {posix(AGENT)}/lib/drawers.sh; "   # #1487: restore_partition calls ntfs_boot_target; #1906: and restore_pipe
         f"target_init sda {len(PAYLOAD)}; "
         f"stream_source() {{ cat {posix(payload)!r}; }}; "
         "node_is_block() { true; }; "
@@ -166,14 +167,17 @@ def direct(tmp_path, *, fanout: str | None = None, env: dict | None = None,
         stubs["fanout"] = fanout
     if shutil.which("jq") is None:
         stubs["jq"] = JQ_STUB
-    libs = " ".join(f". {posix(AGENT)}/lib/{n}.sh;" for n in (
+    if shutil.which("blkid") is None:   # #1905: a missing blkid is "unreadable"; the real one says rc 2 on these files
+        stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
+    libs =" ".join(f". {posix(AGENT)}/lib/{n}.sh;" for n in (
         "common", "sysinfo", "waits", "jsonq", "progress", "restore", "manifest",
-        "bootca", "hibernation", "shrinkplan", "shrink", "lcsnap", "capture", "capturesink",
-        "directsend", "ui"))   # #1466: lcsnap.sh -- capture_disk reads through lc_src_node
+        "bootca", "hibernation", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink",
+        "directsend", "directrecv", "ui"))   # #1466: lcsnap.sh -- capture_disk reads through lc_src_node; #1901/#1808: the source gates
     started = time.monotonic()
     out = run_sh(
         make_stubs(box / "stubs", stubs) + exports + libs
         + f' node_is_block() {{ grep -qxF "$1" {posix(nodes)!r} 2>/dev/null; }}; '
+        "raid_member_reason() { :; }; "   # #1808: tested in test_capture_gates.py; this disk is a file
         f'send_hello() {{ cp {posix(box / "answer.json")!r} "$RESP"; }}; '
         f"direct_send_run {TASK} sda > {posix(box)}/direct.out 2>&1; "
         'echo "rc=$?"; '
@@ -211,15 +215,19 @@ def test_fanout_eviction_is_pushed_past_the_shell_ceiling(tmp_path):
     """udp-sender reads nothing until its receivers join -- up to 780s on a
     later partition (#957). fanout's own default (150s, #674) would evict
     that healthy reader; the shell's wait_progress (start 600 + stall 300 by
-    default) must stay the only ceiling, as it was with tee. Negative
-    control: unset/150000 fails the bound."""
+    default) must stay the only ceiling, as it was with tee. The same holds
+    for the held-stdin clock (45s, #1796): that wait IS a held stdin. Negative
+    control: unset/150000/45000 fails the bound."""
     box, run, out, _ = direct(tmp_path, fanout=FANOUT_RECORDS_EVICTION)
     assert out.strip().endswith("rc=0"), out + log_of(run)
     log = box / "evict.log"
     assert log.exists(), "fanout never ran on the wire (pass 2)"
-    recorded = log.read_text(encoding="utf-8").split()
-    assert len(recorded) == 1, recorded
-    assert recorded[0].isdigit() and int(recorded[0]) >= (600 + 300) * 1000, recorded
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1, lines
+    recorded = lines[0].split()
+    assert len(recorded) == 2, recorded
+    for ceiling in recorded:
+        assert ceiling.isdigit() and int(ceiling) >= (600 + 300) * 1000, recorded
 
 
 def test_a_send_whose_fanout_dies_before_open_fails_fast(tmp_path):

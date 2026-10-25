@@ -25,6 +25,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .atomicfile import write_atomic
+
 log = logging.getLogger(__name__)
 
 DEFAULT_CONF = "/etc/dnsmasq.d/imagectl-dhcp.conf"
@@ -250,8 +252,13 @@ def apply(text: str, conf_path: str | Path = DEFAULT_CONF) -> str | None:
 
     מחזיר הודעת שגיאה או None. כתיבה שנכשלת (הרשאות) לא מפילה את השרת:
     ההגדרה כבר נשמרה ב-DB, והודעה ברורה בקונסולה עדיפה על 500.
+
+    ‏#1828: ‏`dnsmasq --test` על ההגדרה כולה **לפני** ה-restart, וכשל בבדיקה
+    או ב-restart מחזיר את הקובץ הקודם — קובץ פגום אינו משאיר את dnsmasq
+    למטה ואת הכיתה בלי DHCP/PXE.
     """
-    return _write(text, conf_path) or _systemctl("restart", "dnsmasq")
+    path = Path(conf_path)
+    return _apply_checked(text, path, _main_test_cmd(path), "restart", "dnsmasq")
 
 
 def apply_proxy(text: str, active: bool,
@@ -261,9 +268,15 @@ def apply_proxy(text: str, active: bool,
     כשאף ממשק אינו במצב proxy היחידה נעצרת — תהליך dnsmasq שני שרץ
     על קובץ ריק הוא רק עוד משהו שיכול להיתקע. הכתיבה קודמת ל-systemctl,
     כך שכשל בכתיבה חוזר בלי לגעת בשירותים.
+
+    ‏#1828: כשהיחידה עולה — ‏`--test` על הקובץ (אותה שורה כמו ExecStartPre
+    שלה) לפני ה-restart, והחזרת הקודם בכשל. עצירה אינה דורשת בדיקה.
     """
-    return _write(text, conf_path) or _systemctl(
-        "restart" if active else "stop", PROXY_UNIT)
+    path = Path(conf_path)
+    if not active:
+        return _write(text, path) or _systemctl("stop", PROXY_UNIT)
+    return _apply_checked(text, path, ["dnsmasq", "--test", f"--conf-file={path}"],
+                          "restart", PROXY_UNIT)
 
 
 def apply_known_macs(text: str, conf_path: str | Path = KNOWN_MACS_CONF) -> str | None:
@@ -273,15 +286,80 @@ def apply_known_macs(text: str, conf_path: str | Path = KNOWN_MACS_CONF) -> str 
     בלי לאבד חכירות ובלי להפיל את הסוקטים (נבדק במדריך dnsmasq ובמעבדה,
     ‏#36 הוא התקדים למה restart על ההגדרה הזו אסור). מחזיר הודעת שגיאה
     או None, באותו דפוס כמו apply/apply_proxy.
+
+    ‏#1828: בלי `--test` (קובץ hostsfile אינו קובץ הגדרה), אבל reload שנכשל
+    מחזיר את הקובץ הקודם, כמו השניים שלמעלה.
     """
-    return _write(text, conf_path) or _systemctl("reload", "dnsmasq")
+    return _apply_checked(text, Path(conf_path), None, "reload", "dnsmasq")
+
+
+def _main_test_cmd(path: Path) -> list[str]:
+    """‏`dnsmasq --test` כמו שהיחידה של דביאן בודקת לפני עלייה: ‏/etc/dnsmasq.conf
+    ועוד התיקייה של הקובץ, בלי הסיומות שהחבילה מדלגת עליהן."""
+    return ["dnsmasq", "--test", f"--conf-dir={path.parent},.dpkg-dist,.dpkg-old,.dpkg-new"]
+
+
+def _dnsmasq_test(cmd: list[str]) -> str | None:
+    """‏None = dnsmasq קיבל את ההגדרה. בדיקה שלא רצה היא כישלון (עיקרון 5)."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=20, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("dhcp_host: %s could not run: %s", " ".join(cmd), exc)
+        return "לא ניתן היה לבדוק את ההגדרה (dnsmasq --test) — הפרטים ביומן השרת"
+    if result.returncode != 0:
+        log.warning("dhcp_host: %s rc=%s: %s", " ".join(cmd), result.returncode,
+                    (result.stderr or result.stdout).strip()[:300])
+        return "dnsmasq דחה את ההגדרה החדשה (dnsmasq --test) — הפרטים ביומן השרת"
+    return None
+
+
+def _restore(path: Path, previous: str | None) -> str | None:
+    """הקובץ הקודם בחזרה (או מחיקה, כשלא היה) — None או הודעה."""
+    try:
+        if previous is None:
+            path.unlink(missing_ok=True)
+        else:
+            write_atomic(path, previous)
+    except OSError as exc:
+        log.warning("dhcp_host: restoring %s failed: %s", path, exc)
+        return f"והחזרת {path} הקודם נכשלה גם היא — הפרטים ביומן השרת"
+    return None
+
+
+def _apply_checked(text: str, path: Path, test_cmd: list[str] | None,
+                   action: str, unit: str) -> str | None:
+    try:
+        previous = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        previous = None
+    except OSError as exc:
+        # בלי הקודם אין לאן לחזור — לא כותבים (עיקרון 5).
+        log.warning("dhcp_host: read %s failed: %s", path, exc)
+        return f"לא ניתן לקרוא את {path} הקיים — לא נכתב דבר; הפרטים ביומן השרת"
+    error = _write(text, path)
+    if error:
+        return error
+    error = _dnsmasq_test(test_cmd) if test_cmd is not None else None
+    if error:
+        failed = _restore(path, previous)
+        return f"{error}. {path} הקודם הוחזר" if failed is None else f"{error}, {failed}"
+    error = _systemctl(action, unit)
+    if error:
+        failed = _restore(path, previous)
+        if failed is not None:
+            return f"{error}, {failed}"
+        again = _systemctl(action, unit)
+        return (f"{error}. {path} הקודם הוחזר ו-{unit} הופעל איתו" if again is None
+                else f"{error}. {path} הקודם הוחזר, אך גם {action} שלו נכשל")
+    return None
 
 
 def _write(text: str, conf_path: str | Path) -> str | None:
     path = Path(conf_path)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        write_atomic(path, text)   # ‏#1908: לא קובץ חתוך שמפיל את dnsmasq
     except OSError as exc:
         # הטקסט הגולמי של מערכת ההפעלה (אנגלית, תלוי-שפה) הולך ללוג בלבד;
         # המשתמש מקבל משפט בעברית עם הנתיב (#1016).

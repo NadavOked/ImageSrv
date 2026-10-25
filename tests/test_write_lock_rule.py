@@ -52,7 +52,8 @@ BOOTSTRAP = frozenset({
 STILL_BARE = frozenset({
     "capture.py:_fail",
     "capture.py:cancel",
-    "capture.py:create_capture",
+    # ‏create_capture יצא מהחוב ב-#1934: הגוף עבר ל-order_capture (#1786)
+    # וה-INSERT שם עטוף ב-writing().
     # ‏finish_capture יצא מהחוב ב-#1470: ה-UPDATE ל-verifying בתוך writing().
     "capture.py:upload_partition",
     "console_dhcp.py:forget",

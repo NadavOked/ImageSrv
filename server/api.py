@@ -7,26 +7,32 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
 from . import (agent_loops, disk_events, drawer_slots, foreign_vlan, identity, inventory,
                login_guard, probe, pulls, registry, reports, shrink_records, users)
 from .auth import COOKIE_NAME, PURPOSE_KIOSK, read_session
-from .db import journal
-from . import direct, gui_failure, local_clone_report, room_console, smart_ask
+from .db import agent_seen, disk_full, journal, note_disk_full
+from . import direct, gui_failure, learn_wol, local_clone_report, readbackhash, room_console, smart_ask
+from . import agent_logs   # #1882
+from . import held   # #2031
+from .readbackhash import mode as readback_mode
 from .hello import (build_answer, hello_payload_oversized, login_required, off_deploy_vlan,
                     well_formed_monitor_auth, well_formed_monitor_secret)
 from .images import ImageLibrary, restore_refusal
 from .sessions import SessionError, SessionStore
-from .tasks import TOKEN_HEADER
+from .tasks import TOKEN_HEADER, discard_failed_staging
 
 log = logging.getLogger("imagectl.api")
 
@@ -55,6 +61,11 @@ class ServerContext:
     #: ‏#705: השירותים לכל כרטיס (`nic_services.NicServices`) — ‏`create_runtime`
     #: מתקין תמיד; None = בדיקות שבונות ctx ביד, ואז אין שער (ההתנהגות של היום).
     nic_services: object | None = None
+    #: ‏#1949: ‏(אירוע, פירוט) → ‏[מתי נרשם, כמה נספרו מאז] — ריסון היומן
+    #: של סירובי הזהות (`_identity_repeats`). לכל אפליקציה, לא גלובלי.
+    identity_journaled: dict = field(default_factory=dict)
+    #: ‏#1973: מנטר ה-UPS (`ups.UpsMonitor`) — ‏`server.main` בלבד; None = אין מנטר.
+    ups: object | None = None
 
 
 def _error(status: int, message: str, code: str) -> JSONResponse:
@@ -72,9 +83,44 @@ def _identity_refusal(ctx: ServerContext, verdict: identity.Verdict,
     לא מתרחשים, כי הפונה אינו המכונה (‏#585)."""
     if verdict.ok:
         return None
-    journal(ctx.conn, verdict.event, f"{verdict.detail} ({where})")
-    log.warning("%s: %s (%s)", verdict.event, verdict.detail, where)
+    repeats = _identity_repeats(ctx, verdict)
+    if repeats is not None:
+        suffix = (f" [+{repeats[0]} identical refusals in the last {repeats[1]}s not journaled]"
+                  if repeats[0] else "")
+        journal(ctx.conn, verdict.event, f"{verdict.detail} ({where}){suffix}")
+        log.warning("%s: %s (%s)%s", verdict.event, verdict.detail, where, suffix)
     return _error(403, verdict.message, verdict.event)
+
+
+#: ‏#1949: סירוב זהות זהה (אותו אירוע, אותו MAC/כתובת ואותה סיבה) נרשם
+#: ביומן פעם אחת בחלון כזה; החוזרים בתוכו נספרים ונכתבים כמונה בשורה
+#: הבאה. ‏R2 (22/10): ‏346 שורות `identity_unverifiable` ב-10 דקות — שתיים
+#: כל 2 שניות — הסתירו את `client_lost` שבאמצען. הסירוב עצמו (403) אינו
+#: משתנה: רק הרישום מרוסן.
+IDENTITY_JOURNAL_WINDOW_S = 300
+#: מעל כמה מפתחות מנקים את אלה שהחלון שלהם עבר — MAC מזויף שונה בכל
+#: בקשה אינו מגדל את הזיכרון בלי גבול.
+_IDENTITY_KEYS_PRUNE_AT = 256
+_identity_lock = threading.Lock()
+_clock = time.monotonic
+
+
+def _identity_repeats(ctx: ServerContext, verdict: identity.Verdict) -> tuple[int, int] | None:
+    """‏None = סירוב שכבר נרשם בחלון הנוכחי — נספר ולא נכתב. אחרת
+    ‏(כמה נספרו מאז השורה הקודמת, לפני כמה שניות היא נכתבה) — ‏(0, 0) לראשון."""
+    now = _clock()
+    key = (verdict.event, verdict.detail)
+    with _identity_lock:
+        seen = ctx.identity_journaled.get(key)
+        if seen is not None and now - seen[0] < IDENTITY_JOURNAL_WINDOW_S:
+            seen[1] += 1
+            return None
+        ctx.identity_journaled[key] = [now, 0]
+        if len(ctx.identity_journaled) > _IDENTITY_KEYS_PRUNE_AT:
+            for old in [k for k, (at, _n) in ctx.identity_journaled.items()
+                        if now - at >= IDENTITY_JOURNAL_WINDOW_S]:
+                del ctx.identity_journaled[old]
+    return (seen[1], int(now - seen[0])) if seen is not None else (0, 0)
 
 
 def identity_gate(ctx: ServerContext, mac: str, request: Request,
@@ -146,12 +192,29 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/hello")
     async def agent_hello(request: Request) -> JSONResponse:
+        """‏#1892: מחיצת ה-DB מלאה ו-hello שצריך לכתוב (סבב, בקשת כיבוי) —
+        ‏503 מוצהר עם סיבה, ולא 500. הסוכן חוזר לדיסק המקומי כמו בכל כשל
+        (עיקרון 1); מכונה לא רשומה עונה known:false כרגיל (`build_answer`)."""
+        try:
+            return await _agent_hello(request)
+        except sqlite3.OperationalError as exc:
+            if not disk_full(exc):
+                raise
+            note_disk_full("hello")
+            return _error(503, "the server's database partition is full", "db_full")
+
+    async def _agent_hello(request: Request) -> JSONResponse:
         try:
             body = await request.json()
         except ValueError:
             return _error(400, "body is not JSON", "bad_json")
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+
+        return await run_in_threadpool(_agent_hello_body, request, body)
+
+    def _agent_hello_body(request: Request, body: dict) -> JSONResponse:
+        """All registry/session/sqlite work runs on a worker with its own connection."""
 
         mac = lenient_mac(body.get("mac"))
         if mac is None:
@@ -255,6 +318,8 @@ def create_agent_router(ctx: ServerContext,
             firmware=firmware, secure_boot=secure_boot,
             agent_version=agent_version, local_clone=local_clone, optical=optical,
             optical_reported=True,
+            # ‏#1952: מי קיבל את המחיצה הקודמת עד סופה — מהלוג של מחשב הבנייה.
+            direct_finished=direct.clean_finished(body),
             # ‏#715: פרמטרי השידור למקור שהוא מחשב בנייה — של המנוע, אם יש.
             multicast=ctx.sender.multicast_params() if ctx.sender is not None else None,
         )
@@ -263,6 +328,9 @@ def create_agent_router(ctx: ServerContext,
         # רשומה; השדה חסר כשאין בקשה, וסוכן ישן מתעלם ממנו.
         if answer["known"]:
             power_action, power_confirmed = room_console.take_power(ctx.conn, mac)
+            # ‏#2031: hello מצטרף = המכונה חזרה לתור; כיבוי שנמסר = היא יוצאת מההחזקה
+            if joining or power_action is not None:
+                held.clear(ctx.conn, mac)
             if power_action is not None:
                 answer["power_action"] = power_action
                 # ‏#1367: רק בקשה שאושרה מעל אזהרת השיכפול המקומי מכבה מכונה שכותבת
@@ -291,7 +359,11 @@ def create_agent_router(ctx: ServerContext,
         # reboots to the local disk. An alert in the journal, never a gate.
         if "gui_failed" in body:
             gui_failure.note(ctx.conn, mac, body.get("gui_failed"), known=bool(answer["known"]))
-        if body.get("wol_armed") is False and answer["known"]:
+        # ‏#1847: hello = המכונה ערה — סוגר הערת WoL פתוחה (אם יש).
+        learn_wol.answered(ctx.conn, mac)
+        # ‏#1847: פעם אחת לכל אתחול, לא בכל hello (היה מציף את היומן כל 5 דק').
+        if (body.get("wol_armed") is False and answer["known"]
+                and learn_wol.arm_failure_is_new(ctx.conn, mac)):
             journal(ctx.conn, "wol_arm_failed", mac)
         # #1447: the agent has no NTP and the RTC may drift or have a dead
         # battery (cloner 2 ran 13 min ahead on metal 16/10). The server's
@@ -425,10 +497,31 @@ def create_agent_router(ctx: ServerContext,
             refused = identity_gate(ctx, mac, request, "progress")
             if refused is not None:
                 return refused
+        if body.get("state") == "held" and "session_id" not in body and "task_id" not in body:
+            # ‏#2031: משכפל שמחזיק את התוצאות עד "כבה" (#2024) — בלי סבב ובלי משימה.
+            # ראיית חיים (‏progress_seen), לא hello: אינו מצטרף לגל ואינו "נראה" ל-#1721.
+            if mac is None:
+                return _error(400, "missing or malformed mac", "bad_mac")
+            if registry.lookup(ctx.conn, mac) is None:
+                return _error(403, "unknown machine", "unknown_machine")
+            held.note(ctx.conn, mac, held.well_formed(body.get("problems")))
+            agent_seen(ctx.conn, mac)
+            reply: dict = {"ok": True}
+            power_action, _confirmed = room_console.take_power(ctx.conn, mac)
+            if power_action is not None:      # #980: "כבה" מהקונסולה — באותה תשובה
+                held.clear(ctx.conn, mac)
+                reply["power_action"] = power_action
+            return JSONResponse(reply)
         result = reports.ingest(ctx.conn, body,
                                 token=request.headers.get(TOKEN_HEADER, ""))
         if result.get("code") == "bad_token":     # #855: כמו ההעלאה — 403
             return JSONResponse(result, status_code=403)
+        # ‏#1839: דיווח שהתקבל (זהות + חבר בסבב פתוח / אסימון משימה) הוא ראיה
+        # שהמכונה חיה — בזמן כתיבה זה הקשר היחיד שלה, ובלעדיו "לא מחובר" אחרי 90ש'.
+        if result.get("ok") and mac is not None:
+            agent_seen(ctx.conn, mac)
+        if result.get("ok") and body.get("task_id") and body.get("state") == "failed":
+            discard_failed_staging(ctx.conn, ctx.library.root, body["task_id"])   # #1915
         return JSONResponse(result, status_code=200 if (result.get("ok") or result.get("code") == "not_open") else 400)
 
     @router.post("/agent/disk-event")
@@ -475,8 +568,35 @@ def create_agent_router(ctx: ServerContext,
             line = local_clone_report.journal_line(body)
         except local_clone_report.BadReport as exc:
             return _error(400, str(exc), "bad_report")
-        journal(ctx.conn, "local_clone", f"{mac}: {line}")
+        journal(ctx.conn, "local_clone_note" if local_clone_report.has_note(body) else "local_clone", f"{mac}: {line}")   # #2049
         return JSONResponse({"ok": True})
+
+    @router.post("/agent/log")
+    async def agent_log(request: Request) -> JSONResponse:
+        """‏#1882: הקטע האחרון של לוג הסוכן, gzip, פעם אחת בסוף סבב. ‏mac/‏session_id/‏reason
+        ב-query (הגוף הוא הלוג עצמו). best effort מצד הסוכן — כשל כאן אינו משנה דבר שם."""
+        mac = lenient_mac(request.query_params.get("mac"))
+        if mac is None:
+            return _error(400, "missing or malformed mac", "bad_mac")
+        refused = identity_gate(ctx, mac, request, "agent-log")
+        if refused is not None:
+            return refused
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > agent_logs.MAX_BODY:
+            return _error(413, "log too large", "too_large")
+        # ‏Content-Length אינו חובה (chunked): הגוף נקרא כזרם עם מונה, ובקשה שעוברת את
+        # התקרה נעצרת ב-413 ברגע שעברה — לא נקראת כולה לזיכרון (סקירה, #1882).
+        body = bytearray()
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > agent_logs.MAX_BODY:
+                return _error(413, "log too large", "too_large")
+        result = agent_logs.receive(
+            ctx.conn, mac, request.query_params.get("session_id"),
+            request.query_params.get("reason"), bytes(body),
+            known=registry.lookup(ctx.conn, mac) is not None)
+        status = 200 if result.get("ok") else 403 if result.get("code") == "unknown_machine" else 400
+        return JSONResponse(result, status_code=status)
 
     @router.post("/agent/shrink-open")
     async def agent_shrink_open(request: Request) -> JSONResponse:
@@ -565,6 +685,9 @@ def create_agent_router(ctx: ServerContext,
         if manifest is None:
             return _error(404, "unknown image", "no_image")
         public = {k: v for k, v in manifest.items() if not k.startswith("_")}
+        # ‏#1805/#1864 (נדב 20/10): האימות אחרי הכתיבה — "sample" (ברירת המחדל) או
+        # "full" (`readback_full` בהגדרות). נקבע כשהסוכן מושך את המניפסט: לכל הסבב.
+        public["readback_mode"] = readback_mode(ctx.conn)
         return JSONResponse(public)
 
     @router.get("/images/{image_id}/files/{filename}")
@@ -577,5 +700,22 @@ def create_agent_router(ctx: ServerContext,
         if path is None:
             return _error(404, "file not in this image's manifest", "no_file")
         return FileResponse(path, media_type="application/octet-stream")
+
+    @router.get("/images/{image_id}/readback/{index}")
+    def image_readback(image_id: str, index: int, request: Request):
+        """‏#1805/#1864: רשימת ה-XXH64 של מחיצה — שורה לחתיכה של 4MiB של זרם הנתונים
+        (‏`server/readbackhash.py`). הסוכן בודק אותה בעצמו מול `readback_xxh64`
+        שבמניפסט; אין רשימה (טרם גובב, הפצה ישירה) — 404, והסוכן אומר "לא אומת"."""
+        refused = source_gate(ctx, request, "readback")
+        if refused is not None:
+            return refused
+        manifest = ctx.library.get(image_id)
+        if manifest is None or not manifest.get("_dir") or not manifest.get("_available", True):
+            return _error(404, "unknown image", "no_image")
+        part = next((p for p in manifest.get("partitions") or []
+                     if isinstance(p, dict) and p.get("index") == index), None)
+        if part is None or not readbackhash.has_list(manifest["_dir"], part):
+            return _error(404, "no read-back list for this partition", "no_list")
+        return FileResponse(readbackhash.list_path(manifest["_dir"], part), media_type="text/plain")
 
     return router

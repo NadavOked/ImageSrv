@@ -26,6 +26,8 @@ PRELUDE = (
     f'. {posix(AGENT)}/lib/sysinfo.sh; '
     f'. {posix(AGENT)}/lib/progress.sh; '
     f'. {posix(AGENT)}/lib/smart.sh; '
+    # #1921: the knowledge tables judge the disk -- without them smart_probe says no_table
+    f'export SMART_KB={posix(AGENT)}/lib/data; . {posix(AGENT)}/lib/smartjudge.sh; . {posix(AGENT)}/lib/hwissues.sh; '
     f'. {posix(AGENT)}/lib/crcdelta.sh; '
 )
 

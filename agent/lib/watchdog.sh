@@ -113,3 +113,26 @@ watchdog_start() {
         sh "$LIB_DIR" "$RUN_DIR" </dev/null >> "$LOG_FILE" 2>&1 &
     _wd_supervisor=$!
 }
+
+agent_lock() {
+    # #1929 (M3, 20/10): one agent writes the drawers, never two. Nothing in
+    # the code starts a second one -- /init runs it once, in the foreground,
+    # and reboots when it exits; the watchdog only reboots -- so this is the
+    # lock against whatever does. $RUN_DIR/agent.pid is created with
+    # noclobber (atomic). A pid file whose process is gone, or is not an
+    # agent, is a dead agent's: taken over, aloud. 1 = another agent is alive.
+    _al_f="$RUN_DIR/agent.pid"
+    ( set -C; echo "$$" > "$_al_f" ) 2>/dev/null && return 0
+    _al_p=$(cat "$_al_f" 2>/dev/null)
+    case "$_al_p" in
+        ''|*[!0-9]*) ;;
+        "$$") return 0 ;;
+        *) if kill -0 "$_al_p" 2>/dev/null &&
+                   tr '\0' ' ' < "${SYSROOT:-}/proc/$_al_p/cmdline" 2>/dev/null | grep -q imagectl-agent; then
+               echo "agent: another agent (pid $_al_p) is running -- this one ($$) stops before it touches anything" >&2
+               return 1
+           fi ;;
+    esac
+    echo "agent: the pid file named '$_al_p', which is not a live agent -- taken over by $$" >&2
+    rm -f "$_al_f" && ( set -C; echo "$$" > "$_al_f" ) 2>/dev/null
+}

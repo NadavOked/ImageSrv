@@ -76,7 +76,7 @@ STUBS = {
 #: מה שלפני הזרם אינו הנבדק: הטבלה "נכתבה", ‏write_started נרשם כמו ב-apply_gpt.
 PRE_STREAM = (
     "disk_fits() { :; }; boot_ca_preflight() { :; }; write_check() { :; }; "
-    "write_speed_verdict() { :; }; expand_last() { :; }; finish_grow() { :; }; "
+    "write_speed_verdict() { :; }; readback_drawers() { :; }; expand_last() { :; }; finish_grow() { :; }; "
     "apply_gpt() { target_write_started \"$1\"; }; node_is_block() { :; }; "
     "ntfs_boot_target() { :; }; "
     'manifest_plan() { cat "$BOX/plan"; }; '
@@ -133,7 +133,8 @@ def station(tmp_path: Path, fanout_dir: Path, source: str, pcl: str) -> tuple[Pa
            "FANOUT_STALL_EVICT_MS=2000 WAIT_POLL_S=1 WAIT_DRAWER_S=4 WAIT_HELPER_S=4 "
            "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=5; ")
     libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in (
-        "common", "jsonq", "sysinfo", "waits", "progress", "restore", "verdict", "failmark"))
+        "common", "jsonq", "sysinfo", "waits", "progress", "restore", "verdict", "failmark",
+        "drawers"))   # #1906: restore_partition's pipe is restore_pipe (drawers.sh), as in the agent
     out = run_sh(
         make_stubs(box / "stubs", STUBS)
         + f'export PATH="{posix(fanout_dir)}:$PATH"\n'

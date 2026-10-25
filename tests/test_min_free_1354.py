@@ -95,6 +95,7 @@ def box(tmp_path: Path, image: dict, disk: int, gb: str | None = None):
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
         + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
                   ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
+        + "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
     )
     return run, path, prelude
 
@@ -210,7 +211,7 @@ def test_every_restore_path_goes_through_disk_fits():
     """Round (drawers, through #1366's write_check_round), build machine /
     single restore, local clone."""
     for lib, call in (("drawers.sh", 'write_check_round "$_manifest" $_disks'),
-                      ("writecheck.sh", 'disk_fits "$_wr_d" "$_wr_m" && write_check "$_wr_d"'),
+                      ("writecheck.sh", 'disk_fits "$_wr_d" "$_wr_m" && '),   # #1808: raid_wipe, then write_check
                       ("restore.sh", 'disk_fits "$2" "$5"'),
                       ("lccopy.sh", 'disk_fits "$1" "$2"')):
         assert call in (AGENT / "lib" / lib).read_text(encoding="utf-8"), lib
@@ -326,11 +327,12 @@ def test_local_clone_unmeasured_c_is_unchecked_not_fits(tmp_path):
 def test_local_clone_judges_the_system32_partition_not_the_first_basic_data_one(tmp_path):
     """#1369: the Basic Data GUID is shared by C: and any OEM/data partition.
     The inventory checks for Windows/System32 (inv/<src>.roles) and the rule
-    follows it; by the GUID alone the 16 MiB OEM partition in front is "C:"."""
+    follows it. By the GUID alone both are windows, and since #1875 the larger
+    one is C: (until then the 16 MiB OEM partition in front was, "0.0 GB")."""
     roles = {1: "esp", 2: "data", 3: "windows", 4: "recovery"}
     assert lc_box(tmp_path / "a", str(52 * GIB), NEED + 12 * GIB, roles=roles, oem=True).startswith("fits|")
     by_guid = lc_box(tmp_path / "b", str(52 * GIB), NEED + 12 * GIB, oem=True)
-    assert by_guid.startswith("short|") and "יישארו רק 0.0 GB" in by_guid, by_guid
+    assert by_guid.startswith("fits|"), by_guid
 
 
 @needs_shell
@@ -343,7 +345,7 @@ def test_local_clone_a_system_check_that_failed_is_unchecked(tmp_path):
 def test_the_local_clone_screen_shows_the_reason_of_a_short_verdict():
     src = (Path(__file__).resolve().parent.parent / "native-gui" / "src" / "screens_local.c").read_text(encoding="utf-8")
     block = src[src.index("case LCV_SHORT:"):src.index("default:", src.index("case LCV_SHORT:"))]
-    assert 'if (f->reason[0]) { snprintf(out, n, "%s. לא ישמש כיעד.", f->reason); return; }' in block
+    assert 'if (f->reason[0]) { snprintf(out, n, "%s. לא ישמש כיעד.", why); return; }' in block   # #1937: why = the reason, no trailing "."
 
 
 # --- one rule, two implementations ------------------------------------------

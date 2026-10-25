@@ -56,7 +56,7 @@ STUBS = {
     "fanout": None,
 }
 
-LIBS = ("common", "sysinfo", "waits", "jsonq", "progress", "restore", "drawers", "verdict",
+LIBS = ("common", "sysinfo", "waits", "jsonq", "progress", "restore", "drawers", "drawerfeed", "verdict",
         "cancel", "failmark", "ntfsboot")
 
 
@@ -128,12 +128,12 @@ def test_a_cancel_asked_before_the_partition_feeds_nobody_and_kills_nothing(tmp_
     """בקשה שהגיעה בלי זרם רץ (לפני מחיצה, בין שתיים): המגירה לא מוזנת כלל,
     ה-GPT נמחק, ואף תהליך לא נהרג לפי קובץ pid ישן."""
     pre = ('printf "ממסך מחשב השיכפול\\n" > "$RUN_DIR/targets/sdb/cancel"; '
-           'echo 999999 > "$RUN_DIR/targets/sdb/zstd.pid"; ')
+           'echo 999999 > "$RUN_DIR/targets/sdb/reader.pid"; ')
     box, run, out, _ = room(tmp_path, fanout_dir, ask=0, pre=pre)
     assert "rc=0" in out and "machine=done" in out, out + log_of(run)
     assert target(run, "sdb", "state") == "cancelled"
     assert not (box / "dev" / "sdb3").exists(), "a cancelled drawer is not fed"
-    assert "its zstd was not stopped" not in log_of(run), "nothing to kill between partitions"
+    assert "its fifo's reader was not stopped" not in log_of(run), "nothing to kill between partitions"
     assert "--zap-all" in (box / "sgdisk.calls").read_text()
 
 

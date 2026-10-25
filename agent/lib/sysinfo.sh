@@ -93,8 +93,9 @@ disk_scheme() {
     # שתסמן כונן מלא נתונים כריק — `has_data:false`. עיקרון 5: "לא
     # הצלחנו לבדוק" הוא מצב משלו.
     [ -n "$_lbs" ] || { echo "unknown"; return; }
-    _sig=$(dd if="$1" bs=8 skip=$((_lbs / 8)) count=1 2>/dev/null)
+    _sig=$(dd if="$1" bs=8 skip=$((_lbs / 8)) count=1 2>/dev/null) || { echo "unknown"; return; }   # #1904: a failed read is not "no signature"
     if [ "$_sig" = "EFI PART" ]; then echo "gpt"; return; fi
+    dd if="$1" bs=2 skip=255 count=1 of=/dev/null 2>/dev/null || { echo "unknown"; return; }   # #1904: dd's own rc -- in the pipe below it is tr's
     _mbr=$(dd if="$1" bs=2 skip=255 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
     [ "$_mbr" = "55aa" ] && echo "mbr" || echo "none"
 }
@@ -162,11 +163,10 @@ build_disk_entry() {
     _size=$((_sectors * 512))
     _model=$(trim "$(cat "$SYSROOT/sys/block/$_name/device/model" 2>/dev/null)")
     _serial=$(disk_serial "$_name")
-    _removable=$(cat "$SYSROOT/sys/block/$_name/removable" 2>/dev/null || echo 0)
-    [ "$_removable" = "1" ] && _removable="true" || _removable="false"
+    if disk_internal "$_name"; then _removable=false; else _removable=true; fi   # #1807/#1832: every reader of the field means "internal"
     _scheme=$(disk_scheme "$DEVROOT/$_name")
-    _has="false"
-    [ "$_scheme" != "none" ] && _has="true"
+    _content=""   # #1924: a target says nothing of what is on it; only the build capture screen draws it (via /agent/state)
+    [ "${D_ROLE:-}" != build ] || { _has=false; [ "$_scheme" = none ] || _has=true; _content=",\"scheme\":\"$_scheme\",\"has_data\":$_has"; }
 
     _serial_json="null"
     [ -n "$_serial" ] && _serial_json="\"$(json_escape "$_serial")\""
@@ -181,12 +181,12 @@ build_disk_entry() {
     # (או בלי ריצת probe) הערך `unchecked` — לא-נבדק, לא נכשל (עיקרון 5).
     _smart="unchecked"; _smart_r=""
     if command -v smart_hello_field >/dev/null 2>&1; then   # #1366: the reason of a fail (F1), else ""
-        _smart=$(smart_hello_field "$_name"); [ "$_smart" = fail ] && _smart_r=$(smart_field "$_name" 2)
+        _smart=$(smart_hello_field "$_name"); case "$_smart" in fail|warn) _smart_r=$(smart_field "$_name" 2) ;; esac   # #1859: and why orange
     fi
 
-    printf '{"dev":"%s","size_bytes":%s,"model":"%s","serial":%s,"removable":%s,"scheme":"%s","has_data":%s,"port":%s,"smart":"%s","smart_reason":"%s"%s}' \
+    printf '{"dev":"%s","size_bytes":%s,"model":"%s","serial":%s,"removable":%s%s,"port":%s,"smart":"%s","smart_reason":"%s"%s}' \
         "$_name" "$_size" "$(json_escape "$_model")" "$_serial_json" \
-        "$_removable" "$_scheme" "$_has" "$_port_json" "$_smart" "$(json_escape "$_smart_r")" "$(command -v disk_link_json >/dev/null 2>&1 && disk_link_json "$_name")$(command -v disk_pci_json >/dev/null 2>&1 && disk_pci_json "$_name")"   # #432+#1485
+        "$_removable" "$_content" "$_port_json" "$_smart" "$(json_escape "$_smart_r")" "$(command -v disk_link_json >/dev/null 2>&1 && disk_link_json "$_name")$(command -v disk_pci_json >/dev/null 2>&1 && disk_pci_json "$_name")$(command -v smart_attrs_hello >/dev/null 2>&1 && smart_attrs_hello "$_name")$(command -v writemark_json >/dev/null 2>&1 && writemark_json "$_name" "$_scheme")$(command -v raid_member_json >/dev/null 2>&1 && raid_member_json "$_name")"   # #432+#1485; #1859: every SMART attribute; #1798 write_mark; #1808 raid_member
 }
 
 list_disks() {
@@ -199,6 +199,14 @@ list_disks() {
         esac
         echo "$_n"
     done
+}
+
+disk_internal() {
+    # $1 = disk. #1807/#1832: `removable` is a MEDIA bit -- a USB-SATA enclosure or an sdhci
+    # card says 0. Internal = 0 AND a device path that reads, on no USB/MMC bus (principle 5).
+    [ "$(cat "$SYSROOT/sys/block/$1/removable" 2>/dev/null)" = 0 ] && [ -e "$SYSROOT/sys/block/$1/device" ] || return 1
+    _dip=$(readlink -f "$SYSROOT/sys/block/$1/device" 2>/dev/null) && [ -n "$_dip" ] || return 1
+    case "$_dip/" in */usb[0-9]*|*/mmc_host/*|*/memstick*) return 1 ;; esac
 }
 
 sata_ports_implemented() {
@@ -271,9 +279,9 @@ build_hello() {
 
     # #720+#1049+#1048: inventory, probe, netprobe fragments (each with a leading comma).
     _wol=""; [ "$(cat "$RUN_DIR/wol_armed" 2>/dev/null)" = false ] && _wol=',"wol_armed":false'
-    printf '{"schema":2,"mac":"%s","all_macs":[%s],"ip":"%s","hostname_current":null,"uuid":%s,"firmware":"%s","secure_boot":%s,"agent_version":"%s","memory_bytes":%s,"joining":%s,"disks":[%s],"disk_probe":"%s"%s%s%s}' \
+    printf '{"schema":2,"mac":"%s","all_macs":[%s],"ip":"%s","uuid":%s,"firmware":"%s","secure_boot":%s,"agent_version":"%s","memory_bytes":%s,"joining":%s,"disks":[%s],"disk_probe":"%s"%s%s%s}' \
         "$_mac" "$_all" "$IP" "$_uuid_json" \
         "$(detect_firmware)" "$(detect_secure_boot)" "$AGENT_VERSION" \
         "$(detect_memory_bytes)" "$_joining" "$_disks" "$(disk_probe)" \
-        "$_msecret" "$(command -v inventory_json >/dev/null 2>&1 && inventory_json)$(command -v probe_json >/dev/null 2>&1 && probe_json)$(command -v netprobe_json >/dev/null 2>&1 && netprobe_json)$(command -v optical_json >/dev/null 2>&1 && optical_json)" "$_wol"
+        "$_msecret" "$(command -v inventory_json >/dev/null 2>&1 && inventory_json)$(command -v probe_json >/dev/null 2>&1 && probe_json)$(command -v netprobe_json >/dev/null 2>&1 && netprobe_json)$(command -v optical_json >/dev/null 2>&1 && optical_json)" "$_wol$(cat "$RUN_DIR/direct.finished" 2>/dev/null)"   # #1952: direct_hello's fragment; absent = not reported
 }

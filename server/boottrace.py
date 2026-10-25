@@ -10,11 +10,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime, timezone
 
 from boot.trace import LOCAL_STEPS, STEP_INDEX, STEPS, is_step
 
+from . import learn_boot, learn_wol
 from .db import _write_lock, now_iso, writing
+
+log = logging.getLogger("imagectl.boottrace")
 
 __all__ = ["STALL_SECONDS", "STEP_LABELS", "describe", "record", "trail"]
 
@@ -74,17 +79,31 @@ def record(conn, mac: str, step: str) -> bool:
     """
     if not is_step(step):
         return False
-    ts = now_iso()
+    # ‏#1847: הפירור הראשון — הקושחה עלתה ב-PXE — הוא הראיה המוקדמת ביותר שהערת WoL
+    # הצליחה. לעולם אינו זורק, ואינו משנה את הרישום.
+    learn_wol.answered(conn, mac)
+    ts, epoch = now_iso(), time.time()
+    seconds, version = None, learn_boot.version()
     with _write_lock, writing(conn):
+        # ‏#1848: כמה זמן ארך המעבר מהפירור הקודם — נקרא **לפני** שהשורה החיה
+        # נדרסת, תחת אותה נעילה. כשל במדידה אינו מפיל את הפירור עצמו.
+        try:
+            prev = conn.execute("SELECT step, idx, at_epoch FROM boot_steps WHERE mac = ?",
+                                (mac,)).fetchone()
+            seconds = learn_boot.measure(conn, mac, step, prev, epoch, version)
+        except Exception:         # noqa: BLE001 — אבחון שמפיל פירור הוא נזק
+            log.exception("boot step timing for %s %s failed", mac, step)
         conn.execute(
-            "INSERT INTO boot_steps (mac, step, idx, at, first_at)"
-            " VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO boot_steps (mac, step, idx, at, first_at, at_epoch)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
             " ON CONFLICT (mac) DO UPDATE SET"
             "   step = excluded.step, idx = excluded.idx, at = excluded.at,"
+            "   at_epoch = excluded.at_epoch,"
             "   first_at = CASE WHEN excluded.idx <= boot_steps.idx"
             "              THEN excluded.at ELSE boot_steps.first_at END",
-            (mac, step, STEP_INDEX[step], ts, ts),
+            (mac, step, STEP_INDEX[step], ts, ts, epoch),
         )
+    learn_boot.after_record(conn, mac, step, seconds)
     return True
 
 

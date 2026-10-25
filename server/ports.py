@@ -526,6 +526,7 @@ WARNINGS_HE = {
                     "מול השרת הזה."),
     "monitor": ("כיבוי המוניטור עוצר צפייה ושליטה מרחוק במחשבי בנייה ושיכפול; "
                 "אף תחנה לא מקבלת חיבור 5900."),
+    "ntp": "כיבוי 123 (NTP) מפסיק לתת שעה למחשבים ברשת; השעון של השרת עצמו ממשיך להתעדכן.",
 }
 
 
@@ -668,18 +669,42 @@ def count_imagectl_rules(ruleset: str) -> int | None:
     return n
 
 
-def firewall_status(ruleset: str | None) -> tuple[str, str]:
+def rule_interfaces(ruleset: str) -> set[str]:
+    """‏#1810: שמות הכרטיסים שכללי טבלת imagectl מפנים אליהם (‏`iifname`)."""
+    body = _imagectl_table_body(ruleset) or ""
+    names = set(re.findall(r'iifname\s+"([^"]+)"', body))
+    for group in re.findall(r"iifname\s+\{([^}]*)\}", body):
+        names |= set(re.findall(r'"([^"]+)"', group))
+    return names
+
+
+def firewall_status(ruleset: str | None,
+                    interfaces: list[str] | None = None) -> tuple[str, str]:
     """שלושה מצבים, שלושה משפטים (עיקרון 5 / #1074).
 
     None → לא הצלחנו לבדוק; אין טבלת imagectl → לא נטענה;
     טבלה קיימת → פעילה, N כללים.
+
+    ‏#1810: ‏`interfaces` — הכרטיסים שקיימים במערכת. כלל `iifname` שמפנה לשם
+    שאינו ביניהם נטען בלי שגיאה ואינו תופס אף חבילה — אדום, לא "פעילה".
+    ‏None = לא נבדק (כמו היום); רשימה ריקה = לא נקראה, ונאמר.
     """
     if ruleset is None:
         return "unknown", "לא הצלחנו לבדוק"
     n = count_imagectl_rules(ruleset)
     if n is None:
         return "off", "לא נטענה"
-    return "ok", f"פעילה, {n} כללים לטבלת imagectl"
+    detail = f"פעילה, {n} כללים לטבלת imagectl"
+    if interfaces is None:
+        return "ok", detail
+    if not interfaces:
+        return "ok", detail + " · רשימת הכרטיסים לא נקראה — לא נבדק שהכללים מפנים לכרטיס קיים"
+    missing = sorted(name for name in rule_interfaces(ruleset)
+                     if name != "lo" and "*" not in name and name not in interfaces)
+    if missing:
+        return "bad", (f"{detail} — אבל הכללים מפנים לכרטיס שאינו קיים במערכת: "
+                       f"{', '.join(missing)}; חבילות בכרטיס האמיתי אינן נתפסות")
+    return "ok", detail
 
 
 #: ‏#1267: לאיזו רשת שייכת כל שורה ב-`/ports`. ברשת ההפצה השרת מנהל את
@@ -687,7 +712,7 @@ def firewall_status(ruleset: str | None) -> tuple[str, str]:
 #: ‏`firewall` (מצב ה-nft כולו) אינו פורט — ‏None.
 NETWORK = {"dhcp": "deploy", "tftp": "deploy", "http_boot": "deploy",
            "pxe_proxy": "deploy", "multicast": "deploy", "monitor": "deploy",
-           "http_console": "mgmt", "interserver": "interserver"}
+           "http_console": "mgmt", "interserver": "interserver", "ntp": "per_nic"}
 
 
 def network_of(port_id: str) -> str | None:

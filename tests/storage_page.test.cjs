@@ -41,7 +41,7 @@ function setup(fixtures, role = 'admin') {
   });
   for (const f of ['progress.js', 'console.js', 'net.js', 'storage.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
-  run(`ME={username:"u",role:"${role}",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="storage"; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); confirmSheet=(t,s,l,f)=>sheets.push({title:t,sub:s,submitLabel:l,onSubmit:f}); globalThis.drawer=""; openDrawer=(t,b)=>{ drawer=t+"|"+b; }; closeDrawer=()=>{}; renderCurrent=()=>{};`);
+  run(`ME={timezone:"UTC",username:"u",role:"${role}",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="storage"; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); confirmSheet=(t,s,l,f)=>sheets.push({title:t,sub:s,submitLabel:l,onSubmit:f}); globalThis.drawer=""; openDrawer=(t,b)=>{ drawer=t+"|"+b; }; closeDrawer=()=>{}; renderCurrent=()=>{};`);
   ctx.__toasts = toasts;
   return {run, toasts, requests};
 }
@@ -441,4 +441,47 @@ test('stage 2: capacity card keeps three states apart - never measured / last ch
   assert.doesNotMatch(failed, /בשימוש<\/b>/, 'a stale measurement is not presented as the current usage');
   const ok = await card([LOCAL], {checked_at: '2026-09-18T09:40:00+00:00'});
   assert.match(ok, /614 GB<\/bdi> בשימוש/); assert.doesNotMatch(ok, /לא נכלל/, 'nothing excluded - no sub-line');
+});
+
+test('#1988 add disk: only empty disks are selectable, the rest show why; the red button is disabled until a disk and a name; the sheet says all data is erased and sends confirm_erase with serial and size', async () => {
+  const DISK = {device: '/dev/sdb', name: 'sdb', size_bytes: 4000787030016, model: 'WDC WD40EFRX', serial: 'WD-WCC7K1234567', bus: 'sata'};
+  const fixtures = {...BASE,
+    'GET /storage-locations/disks': {items: [DISK], hidden: [{device: '/dev/sdc', size_bytes: 2e12, model: 'ST2000', serial: 'Z1', bus: 'sata', reason: 'blkid מצא עליו ntfs'}]},
+    'POST /storage-locations/add-disk': () => ({...LOCAL, id: 'loc_dddd0004', name: 'big-disk', type_label: 'כונן', removable: true})};
+  const {run, requests} = setup(fixtures);
+  await run('loadStorage()');
+  assert.match(run('storagePage()'), /storageGo\('disk'\)[^<]*>[\s\S]*?הוסף כונן/, 'the list header offers הוסף כונן');
+  run(`storageGo('disk')`);
+  await settle();
+  let html = run('storagePage()');
+  assert.match(html, /name="st-pick-disk" value="\/dev\/sdb"/);
+  assert.doesNotMatch(html, /name="st-pick-disk" value="\/dev\/sdc"/, 'a disk with data is not selectable');
+  assert.match(html, /\/dev\/sdc[\s\S]*ntfs/, 'and the reason is shown');
+  assert.match(html, /id="st-add-disk"[^>]*disabled/, 'disabled before a choice');
+  run(`storagePick('disk','/dev/sdb')`);
+  assert.match(run('storagePage()'), /id="st-add-disk"[^>]*disabled/, 'still disabled without a name');
+  run(`SV.form.name='big-disk'`);
+  html = run('storagePage()');
+  assert.doesNotMatch(html, /id="st-add-disk"[^>]*disabled/);
+  assert.match(html, /class="btn danger" id="st-add-disk"/);
+  run('storageAddDiskSheet()');
+  assert.equal(run('sheets.length'), 1);
+  assert.equal(run('sheets[0].danger'), true);
+  assert.match(run('sheets[0].sub + sheets[0].note'), /כל המידע בכונן יימחק/);
+  await run('sheets[0].onSubmit({})');
+  const sent = requests.find(r => r.method === 'POST' && r.url === '/storage-locations/add-disk');
+  assert.deepEqual(sent.body, {device: '/dev/sdb', serial: 'WD-WCC7K1234567', size_bytes: 4000787030016, name: 'big-disk', confirm_erase: true});
+  assert.equal(run('SV.view'), 'list');
+});
+
+test('#1988 add disk: a list that could not be read says so — it is not "no empty disk"', async () => {
+  const err = Object.assign(new Error('lsblk לא נמצא במערכת'), {status: 503});
+  const {run} = setup({...BASE, 'GET /storage-locations/disks': err});
+  await run('loadStorage()');
+  run(`storageGo('disk')`);
+  await settle();
+  const html = run('storagePage()');
+  assert.match(html, /רשימת הכוננים לא נקראה/);
+  assert.match(html, /lsblk/);
+  assert.doesNotMatch(html, /name="st-pick-disk"/);
 });

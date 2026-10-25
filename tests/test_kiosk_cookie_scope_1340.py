@@ -86,3 +86,18 @@ def test_console_cookie_is_not_marked_kiosk(server):
     found = auth.read_session(server["ctx"].conn, console.cookies.get(auth.COOKIE_NAME))
     assert found is not None and found.purpose == ""
     assert console.get("/api/console/users").status_code == 200
+
+
+def test_a_deploy_kiosk_cookie_gets_the_1073_refusal_in_the_console(server):
+    """‏#1626, "גמור": ‏deploy שנכנס בקיוסק מקבל בקונסולה את אותו 403 של #1073 —
+    לא 401 ולא 200 — גם בנתיב המוניטור שמחוץ ל-``console_only``. לפני התיקון
+    המוניטור ענה שם 403 אחר ("פעולה למנהל בלבד"), כי העוגייה הייתה מלאה."""
+    kiosk = TestClient(create_agent_app(server["app"].state.runtime))
+    r = kiosk.post("/api/console/login", json={"username": "labtech", "password": "deploy-pass-1"})
+    assert r.status_code == 200, r.text
+    console = TestClient(create_console_app(server["app"].state.runtime))
+    console.cookies.set(auth.COOKIE_NAME, kiosk.cookies.get(auth.COOKIE_NAME))
+    for path in ("/api/console/users", "/api/console/monitor/settings"):
+        r = console.get(path)
+        assert r.status_code == 403, (path, r.status_code, r.text)
+        assert r.json()["detail"] == auth.DEPLOY_NO_CONSOLE_HE, (path, r.text)

@@ -38,7 +38,7 @@ ADMIN = {"username": "noc", "password": "admin-pass-123"}
 
 def setup_cloner(server, mac: str = CLONER) -> str:
     server["admin"].post("/api/console/machines",
-                         json={"mac": mac, "name": "שכפול 1",
+                         json={"mac": mac, "name": "CLONER1",
                                "group_id": "grp_CLONERS"})
     return mac
 

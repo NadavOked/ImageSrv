@@ -77,8 +77,10 @@ def zap_calls(box: Path) -> list[str]:
 
 def rename_calls(box: Path) -> list[str]:
     """קריאות שמשנות **שם** מחיצה (`-c`) — מה ש-#845 עשה. ‏`-n`/`-t`/`-e`
-    הן של apply_gpt, לפני הזרם, ונשארות."""
-    return [c for c in sgdisk_calls(box) if c.startswith("-c ") or " -c " in c]
+    הן של apply_gpt, לפני הזרם, ונשארות — ו-#1798 ‏(`-c i:imagectl-incomplete`)
+    רוכב על אותה קריאה של הטבלה (`-n`), לפני הזרם: זו אינה סימון של כשל."""
+    return [c for c in sgdisk_calls(box)
+            if (c.startswith("-c ") or " -c " in c) and " -n " not in f" {c}"]
 
 
 def error_of(run: Path, dev: str) -> str:

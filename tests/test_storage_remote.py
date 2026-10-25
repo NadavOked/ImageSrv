@@ -277,7 +277,8 @@ def test_remote_monitor_machine_rejecting_the_secret(server, secondary, paired,
     monkeypatch.setattr(monitor, "MONITOR_PORT", fake.port)
     _register(secondary["conn"], "127.0.0.1")
     code, reason = _close_code(server["admin"], _ws_path(paired))
-    assert code == 4512 and "bad secret" in reason
+    # ‏#1837: הסיבה בעברית — לא "bad secret" של המכונה.
+    assert code == 4512 and reason == monitor.MACHINE_REJECTED_SECRET, reason
     fake.stop()
 
 
@@ -471,3 +472,29 @@ def test_remote_monitor_refuses_a_foreign_origin_before_accept(server, secondary
             pass
     assert (e.value.code, e.value.reason) == (monitor.WS_FORBIDDEN, monitor.ORIGIN_REFUSED)
     assert not machine.connected.is_set()
+
+
+def test_remote_monitor_socket_to_the_machine_carries_keepalive(server, secondary,
+                                                                paired, machine,
+                                                                monkeypatch):
+    """‏#1850 במנהרה: ה-socket של המשני אל המכונה נושא TCP keepalive — מכונה
+    שנעלמה בלי FIN סוגרת את המנהרה תוך ~25 ש', לא `idle`. קריאה בחזרה מהקרנל."""
+    made: list[socket.socket] = []
+    real = socket.create_connection
+
+    def capture(*args, **kwargs):
+        sock = real(*args, **kwargs)
+        made.append(sock)
+        return sock
+
+    monkeypatch.setattr(interserver_api.socket, "create_connection", capture)
+    with server["admin"].websocket_connect(_ws_path(paired)) as ws:
+        _browser_handshake(ws)
+        assert ws.receive_bytes() == SERVER_INIT
+        to_machine = [s for s in made if s.getpeername()[1] == machine.port]
+        assert len(to_machine) == 1, made
+        sock = to_machine[0]
+        assert sock.getsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE) != 0
+        idle = getattr(socket, "TCP_KEEPIDLE", None)
+        if idle is not None:
+            assert sock.getsockopt(socket.IPPROTO_TCP, idle) == monitor.KEEPALIVE_IDLE_SECONDS

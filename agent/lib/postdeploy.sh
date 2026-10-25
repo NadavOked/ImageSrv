@@ -125,13 +125,12 @@ _device_path_add() {
 
 stage_drivers() {
     # $1 = disk name, $2 = manifest file. Always returns 0, and always leaves
-    # the top-level state at "done": the restore IS complete, and a member
-    # left in "staging" would never be terminal for the server (reports.py).
+    # the top-level state non-terminal; the caller writes done only after every
+    # postdeploy step and the incomplete-write mark have finished (#1935).
     # #433: the boot entry comes after the drivers, on the same hook -- both
     # restore paths (the round, single_restore.sh) pass through here.
     _stage_drivers "$@"
     ensure_boot_entry "$@"
-    echo "done" > "$RUN_DIR/state"
     return 0
 }
 

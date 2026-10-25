@@ -143,7 +143,9 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
     הוא רק מה קורה ליעד אחרי ``finish_grow``."""
     run = tmp_path / "run"
     run.mkdir()
-    extra = {"ntfsfix": OK, "ntfsresize": OK, "e2fsck": OK, "resize2fs": OK}
+    # #1798: finish_grow reads the table for the incomplete-write mark -- an empty table here
+    extra = {"ntfsfix": OK, "ntfsresize": OK, "e2fsck": OK, "resize2fs": OK, "sgdisk": OK,
+             "ntfs-3g.probe": OK}   # #2009: the grow reads the volume's hibernation first -- clean here
     extra.update(stubs or {})
     marks = ""
     if mark:
@@ -155,10 +157,11 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         f". {posix(AGENT)}/lib/writecheck.sh; "
         "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
-        "write_check() { return 0; }; write_speed_verdict() { return 0; }; "
+        "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
+        "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
         "expand_last() { return 0; }; "
         "manifest_plan() { echo '1|G|win|ntfs|2048|1024|p1.zst|sha|false|UG|'; }; "
         "restore_partition_drawers() { return 0; }; "
@@ -174,7 +177,9 @@ def grow_station(tmp_path, *, fs="ntfs", stubs=None, mark=True) -> tuple[Path, s
     """``run_restore`` האמיתי של תחנת הכיתה — אותו שלב, מסך אחר."""
     run = tmp_path / "run"
     run.mkdir()
-    extra = {"ntfsfix": OK, "ntfsresize": OK, "e2fsck": OK, "resize2fs": OK}
+    # #1798: finish_grow reads the table for the incomplete-write mark -- an empty table here
+    extra = {"ntfsfix": OK, "ntfsresize": OK, "e2fsck": OK, "resize2fs": OK, "sgdisk": OK,
+             "ntfs-3g.probe": OK}   # #2009: the grow reads the volume's hibernation first -- clean here
     extra.update(stubs or {})
     mark_cmd = f"echo '2|{fs}' > \"$RUN_DIR/targets/sda/expanded\"; " if mark else ""
     out = run_sh(
@@ -182,9 +187,10 @@ def grow_station(tmp_path, *, fs="ntfs", stubs=None, mark=True) -> tuple[Path, s
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; "
+        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; "
         "disk_fits() { return 0; }; boot_ca_preflight() { return 0; }; apply_gpt() { return 0; }; "
-        "write_check() { return 0; }; write_speed_verdict() { return 0; }; "
+        "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
+        "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
         "expand_last() { return 0; }; "
         "manifest_plan() { echo '1|G|win|ntfs|2048|1024|p1.zst|sha|false|UG|'; }; "
         "restore_partition() { return 0; }; "
@@ -213,7 +219,7 @@ def test_grow_failure_defers_growth_without_failing_clone(tmp_path, runner, fs, 
     err = error_of(run, "sda")
     assert "ההרחבה נדחתה" in err, err
     assert fs in err, err
-    assert (run / "state").read_text(encoding="utf-8").strip() == "done"
+    assert (run / "state").read_text(encoding="utf-8").strip() == "verifying"   # #1935: done is the caller's, last
 
 
 def test_ntfs_grow_calls_the_three_steps_in_order_dirty_last(tmp_path):
@@ -257,6 +263,28 @@ def test_ntfsfix_failure_still_attempts_double_force_resize(tmp_path):
     assert f"-d {dev}" in calls, calls
 
 
+NTFSFIX_LAST_FAILS = '#!/bin/sh\ncase "$1" in -b) exit 0 ;; *) exit 1 ;; esac\n'
+UMOUNT_STUCK = "#!/bin/sh\nexit 32\n"
+
+
+@pytest.mark.parametrize("runner", [grow_drawers, grow_station])
+@pytest.mark.parametrize(("fs", "stubs", "said"), [
+    ("ntfs", {"ntfsfix": NTFSFIX_LAST_FAILS}, "מערכת הקבצים הורחבה, אך דגל ה-dirty של NTFS נשאר (ntfsfix -d rc=1)"),
+    ("xfs", {"mount": OK, "xfs_growfs": OK, "umount": UMOUNT_STUCK}, "xfs הורחב, אך נשאר מעוגן (umount rc=32)"),
+])
+def test_a_grow_that_succeeded_is_never_said_deferred(tmp_path, runner, fs, stubs, said):
+    """‏#2011 (שטח 22/10): ‏ntfsresize הצליח ורק ה-`ntfsfix -d` האחרון נכשל — ההודעה אמרה
+    "ההרחבה נדחתה" ומיד אחריה "מערכת הקבצים הורחבה". הורחב = "הורחב"; הדגל שנשאר הוא
+    אזהרה (#2009 — לא ירוק), ו"נדחתה" נשאר רק כשההרחבה עצמה לא קרתה."""
+    run, out = runner(tmp_path, fs=fs, stubs=stubs)
+    assert out.strip().endswith("rc=0"), out
+    assert state_of(run, "sda") == "done"
+    err = error_of(run, "sda")
+    assert said in err, err                                   # still a warning, never green
+    assert "נדחתה" not in err, err
+    assert f"מחיצה 2 ({fs})" in err, err
+
+
 def test_one_drawer_deferring_grow_leaves_the_machine_done(tmp_path):
     """האזהרה שייכת רק למגירה שההרחבה שלה נדחתה; השאר done נקי,
     והמכונה כולה done (‏best-effort — לא partial)."""
@@ -271,7 +299,7 @@ def test_one_drawer_deferring_grow_leaves_the_machine_done(tmp_path):
     assert error_of(run, "sda") == ""
     assert state_of(run, "sdb") == "done"
     assert "ההרחבה נדחתה" in error_of(run, "sdb")
-    assert (run / "state").read_text(encoding="utf-8").strip() == "done"
+    assert (run / "state").read_text(encoding="utf-8").strip() == "verifying"   # #1935: done is the caller's, last
 
 
 # --- רדיוס הפגיעה: אזהרת הרחבה אינה נכשלת את העבודה כולה -----------------
@@ -356,15 +384,16 @@ def _plan_drawers(tmp_path, *, plan_cmd, restore_cmd="return 0",
     run = tmp_path / "run"
     run.mkdir()
     out = run_sh(
-        make_stubs(tmp_path / "stubs", {"ntfsfix": OK, "ntfsresize": OK})
+        make_stubs(tmp_path / "stubs", {"ntfsfix": OK, "ntfsresize": OK, "sgdisk": OK})   # #1798: the mark's table read
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         f". {posix(AGENT)}/lib/writecheck.sh; "
         "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
-        "write_check() { return 0; }; write_speed_verdict() { return 0; }; "
+        "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
+        "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
         "expand_last() { return 0; }; grow_expanded() { return 0; }; "
         f"manifest_plan() {{ {plan_cmd}; }}; "
         "restore_partition_drawers() { "
@@ -433,7 +462,7 @@ def test_a_whole_plan_still_reaches_done_on_every_drawer(tmp_path):
         plan_cmd="echo '1|G|win|ntfs|2048|1|p1.zst|aa|false|U|'",
     )
     assert out.strip().endswith("rc=0"), out
-    assert (run / "state").read_text(encoding="utf-8").strip() == "done"
+    assert (run / "state").read_text(encoding="utf-8").strip() == "verifying"   # #1935: done is the caller's, last
     for dev in ("sda", "sdb"):
         assert state_of(run, dev) == "done", error_of(run, dev)
         assert error_of(run, dev) == ""

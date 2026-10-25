@@ -67,6 +67,22 @@ def test_first_start_creates_cert_and_0600_key_with_the_management_sans(tmp_path
     assert FP_RE.match(tls.fingerprint_sha256), tls.fingerprint_sha256
 
 
+@pytest.mark.parametrize("ahead_hours", [3, 14])
+def test_a_cert_issued_while_the_rtc_ran_ahead_is_valid_once_the_clock_is_corrected(
+        tmp_path: Path, ahead_hours: int):
+    """‏#2139 (rc3, Hyper-V 24/10): שעון חומרה בשעון מקומי — 3 שעות קדימה
+    עד ש-chrony מתקן. תעודה שנוצרה בחלון הזה נבדקת בשעון המתוקן (וב-UTC+14,
+    ההיסט הגדול ביותר), כמו שדפדפן בודק אותה: היא כבר בתוקף, ולא בעוד שעות."""
+    import datetime
+    tls = console_tls.ensure_console_cert(tmp_path / "data", "10.68.0.82", "rc3-hv")
+    issuing_clock = datetime.datetime.now(datetime.timezone.utc)   # the clock that ran ahead
+    corrected = issuing_clock - datetime.timedelta(hours=ahead_hours)
+    info = console_tls.validate_upload(tls.cert_pem, tls.key_pem, now=corrected)
+    assert info["fingerprint_sha256"] == tls.fingerprint_sha256
+    cert = x509.load_pem_x509_certificate(tls.cert_pem)
+    assert cert.not_valid_after_utc - issuing_clock > datetime.timedelta(days=3640)   # the term itself unchanged
+
+
 def test_second_start_loads_the_same_cert_not_a_new_one(tmp_path: Path):
     """הדפדפן מאשר פעם אחת — תעודה שמתחלפת בכל הפעלה הייתה מבקשת אישור
     בכל בוקר, ומרגילה את המפעיל ללחוץ "המשך" בלי לקרוא."""
@@ -147,11 +163,14 @@ def test_main_gives_the_cert_to_every_console_listener_and_nothing_else(
 
     console = configs["console"]
     assert sorted(c["host"] for c in console) == ["10.0.0.1", "127.0.0.1"]
-    expected_cert = tmp_path / "data" / "console-tls" / "console.crt"
+    canonical = tmp_path / "data" / "console-tls" / "console.crt"
+    # #2095: the listeners load the pinned copy of the bytes /me was computed from
+    served = canonical.parent / "serving" / "console.crt"
     for cfg in console:
-        assert Path(cfg["ssl_certfile"]) == expected_cert
-        assert Path(cfg["ssl_keyfile"]) == expected_cert.with_name("console.key")
-    assert expected_cert.is_file()
+        assert Path(cfg["ssl_certfile"]) == served
+        assert Path(cfg["ssl_keyfile"]) == served.with_name("console.key")
+    assert served.read_bytes() == canonical.read_bytes()
+    assert served.with_name("console.key").read_bytes() == canonical.with_name("console.key").read_bytes()
     for cfg in configs["agent"]:
         assert "ssl_certfile" not in cfg and "ssl_keyfile" not in cfg
 
@@ -300,3 +319,100 @@ def test_uvicorn_serves_https_with_the_generated_cert(tmp_path: Path):
     finally:
         server.should_exit = True
         thread.join(5)
+
+
+# ---------- #2095: /me = the certificate that is served ----------
+
+def _served_fingerprint(port: int) -> str:
+    import hashlib
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as raw:
+        with context.wrap_socket(raw, server_hostname="127.0.0.1") as tls_sock:
+            der = tls_sock.getpeercert(binary_form=True)
+    digest = hashlib.sha256(der).hexdigest().upper()
+    return ":".join(digest[i:i + 2] for i in range(0, len(digest), 2))
+
+
+def test_the_reported_fingerprint_is_the_one_served_after_the_file_changes(tmp_path: Path):
+    """ISO rc1 (24/10): ESXi served B9:F7... and /me said 90:9A...: a listener
+    built after the address arrived (#1088) read console.crt from disk, which
+    the DCUI had re-issued after the server computed its fingerprint. The
+    fingerprint is now what a TLS client is shown, whatever happens to the
+    canonical file after the start (here: re-issued for a new address)."""
+    uvicorn = pytest.importorskip("uvicorn")
+    data = tmp_path / "data"
+    tls = console_tls.ensure_console_cert(data, "127.0.0.1", "srv")
+    kwargs = tls.uvicorn_kwargs()                                   # server start
+    rewritten = console_tls.ensure_console_cert(data, "10.0.0.9", "srv")  # another writer
+    assert rewritten.fingerprint_sha256 != tls.fingerprint_sha256   # the file did change
+
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    port = _free_port()
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
+                                           log_level="warning", **kwargs))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            thread.join(0.05)
+        assert server.started, "uvicorn did not start"
+        assert _served_fingerprint(port) == tls.public_info()["fingerprint_sha256"]
+    finally:
+        server.should_exit = True
+        thread.join(5)
+
+
+def test_a_start_before_the_lease_keeps_the_certificate(tmp_path: Path):
+    """The server passes 127.0.0.1 while the DHCP lease has not arrived. That
+    re-issued the certificate on every boot where the server came up first
+    (ESXi 24/10: three fingerprints in two boots). Loopback is no new address."""
+    data = tmp_path / "data"
+    first = console_tls.ensure_console_cert(data, "10.0.0.1", "srv")
+    again = console_tls.ensure_console_cert(data, "127.0.0.1", "srv")
+    assert again.regenerated is False
+    assert again.fingerprint_sha256 == first.fingerprint_sha256
+    assert not first.cert_path.with_name("console.crt.prev").exists()
+
+
+def test_the_dcui_shows_the_served_certificate_and_never_reissues_it(tmp_path: Path, monkeypatch):
+    """The DCUI called ensure_console_cert with the address it saw -- a second
+    writer: the certificate on disk changed under the running server, and the
+    DCUI showed a fingerprint /me did not (ESXi + Hyper-V, 24/10).
+    #2148: "served" is what the listener presents (tests/test_console_fp_one_2148.py);
+    here nothing listens, so the file on disk is not shown either."""
+    from server.dcui import data as dcui_data
+    from server.dcui.data import CommandResult, collect_snapshot
+    monkeypatch.setattr(dcui_data, "CONSOLE_LOCAL", ("127.0.0.1", _free_port()))
+
+    data = tmp_path / "data"
+    data.mkdir()
+    tls = console_tls.ensure_console_cert(data, "127.0.0.1", "srv")   # server up before the lease
+    tls.uvicorn_kwargs()
+    canonical = tls.cert_path.read_bytes()
+    status = tmp_path / "firstboot.status"
+    status.write_text("state=done\nservers_if=ens33\n", encoding="utf-8")
+    nic = tmp_path / "net" / "ens33"
+    nic.mkdir(parents=True)
+    for name, value in (("address", "00:50:56:01:02:01"), ("carrier", "1"),
+                        ("operstate", "up"), ("speed", "1000")):
+        (nic / name).write_text(value, encoding="ascii")
+
+    def runner(argv):
+        if argv[:4] == ["ip", "-j", "address", "show"]:
+            return CommandResult(0, '[{"ifname":"ens33","operstate":"UP","addr_info":'
+                                    '[{"family":"inet","local":"10.10.10.8","prefixlen":24}]}]')
+        return CommandResult(1, "", "unavailable")
+
+    snapshot = collect_snapshot(data, runner=runner, sys_net=tmp_path / "net",
+                                status_file=status, override_file=tmp_path / "none",
+                                repo_dir=tmp_path / "src", manifest_file=tmp_path / "none.json")
+    assert snapshot.fingerprint.startswith("unavailable"), snapshot.fingerprint
+    assert tls.cert_path.read_bytes() == canonical
+    assert not tls.cert_path.with_name("console.crt.prev").exists()

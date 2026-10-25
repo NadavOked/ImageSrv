@@ -21,7 +21,10 @@ _mount_linux() {
         _mount_plan="$RUN_DIR/mount-linux.plan"
         manifest_plan "$2" > "$_mount_plan" || return 1
     fi
-    _idx=$(awk -F'|' '$3 == "linux" { print $1; exit }' "$_mount_plan") || return 1
+    # ‏#1899: השורש שהקליטה סימנה ("system": true) — לא "הראשונה", שהיא /boot
+    # כשהוא נפרד. מניפסט בלי סימון (לפני #1899): כמו קודם, הראשונה.
+    _idx=$(jq -r '[.partitions[] | select(.role == "linux" and .system == true)][0].index // empty' "$2" 2>> "$LOG_FILE")
+    [ -n "$_idx" ] || _idx=$(awk -F'|' '$3 == "linux" { print $1; exit }' "$_mount_plan") || return 1
     [ -n "$_idx" ] || { log "no linux partition in the manifest" >&2; return 1; }
     _fs=$(awk -F'|' -v i="$_idx" '$1 == i { print $4 }' "$_mount_plan") || return 1
     _node=$(partition_node "$1" "$_idx")

@@ -233,6 +233,44 @@ def list_open(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
+#: ‏#1792: שורת היומן של ניקוי אוטומטי — מה שהמפעיל קורא ליד "רשומת כשל דיסק נוקתה".
+AUTO_CLEARED_HE = "נוקה אוטומטית: נכתב בהצלחה בסבב {round_id}"
+
+
+def clear_written(conn: sqlite3.Connection, serials, round_id: str) -> list[int]:
+    """‏#1792 (ברזל D2/D5, 19/10): דיסק שנכשל פעם אחת ונכתב אחר כך **במלואו** נשאר
+    כתום ("נכשל בשיכפול הקודם"), והמשכפל עצר לשאלה בכל סבב עד "נקה" ידני.
+
+    ‏`serials` — הסידוריים שהסבב ספר עכשיו ככתובים (‏`room._tally`: יעד `done`
+    שהסידורי שהוטבע בו תואם לדיסק שבאותו התקן — ראיה חיובית שהדיסק **הזה** נכתב
+    ואומת). הרשומות הפתוחות על הסידוריים האלה נסגרות, כל אחת עם שורת יומן.
+    ‏**אדום אינו מתנקה לבד** (#1742, ‏#1580): רשומה שהסיבה שלה — כפי שהיא נקראת היום
+    (`_cause`) — היא `readonly` נשארת עד "נקה"; ‏SMART נכשל אינו רשומה כאן כלל.
+    לפי סידורי בלבד: רשומה בלי סידורי (תואמת רק לחריץ) אינה נסגרת — הצלחה של דיסק
+    אחד אינה ראיה על חריץ. חוזר על עצמו בבטחה: רשומה שכבר נוקתה אינה נספרת שוב.
+    מחזיר את המזהים שנסגרו עכשיו."""
+    wanted = sorted({s for s in serials if isinstance(s, str) and s})
+    if not wanted:
+        return []
+    rows = conn.execute(
+        "SELECT id, serial, cause, error, ata_log FROM disk_failures WHERE cleared_at IS NULL"
+        f" AND serial IN ({','.join('?' * len(wanted))}) ORDER BY id", wanted).fetchall()
+    cleared = []
+    with _write_lock, writing(conn):
+        for r in rows:
+            if _cause(r) == "readonly":
+                continue                      # אדום: רק "נקה" של המפעיל
+            if conn.execute(
+                "UPDATE disk_failures SET cleared_at = ? WHERE id = ? AND cleared_at IS NULL",
+                (now_iso(), r["id"]),
+            ).rowcount == 1:
+                cleared.append((r["id"], r["serial"]))
+    for failure_id, serial in cleared:
+        journal(conn, "disk_failure_cleared",
+                f"#{failure_id} serial={serial} " + AUTO_CLEARED_HE.format(round_id=round_id))
+    return [failure_id for failure_id, _ in cleared]
+
+
 def clear(conn: sqlite3.Connection, failure_id: int, by: str = "") -> bool:
     """"נקה": הרשומה מקבלת `cleared_at`. אמת רק אם רשומה פתוחה נסגרה
     עכשיו — רשומה שאינה קיימת או שכבר נוקתה אינה "נוקתה" (עיקרון 5)."""

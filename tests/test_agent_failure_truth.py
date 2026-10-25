@@ -20,12 +20,14 @@ def grow_box(tmp_path: Path, stubs: dict[str, str]) -> tuple[str, Path]:
     target.mkdir(parents=True)
     (target / "expanded").write_text("1|ntfs\n", newline="\n")
     bindir = tmp_path / "bin"; bindir.mkdir()
+    # #1798: finish_grow reads the table for the incomplete-write mark -- an empty table here
+    stubs = {"sgdisk": "exit 0", "ntfs-3g.probe": "exit 0", **stubs}   # #2009: the grow reads hibernation first -- clean
     setup = "".join(stub(bindir / name, body) for name, body in stubs.items())
     setup += (
         f'export PATH="$(cd {posix(bindir)!r} && pwd):/usr/bin" '
         f'RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "agent.log")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; '
-        f'. {posix(AGENT)}/lib/grow.sh; '
+        f'. {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; '
         'partition_node() { printf "/dev/%s%s\\n" "$1" "$2"; }; '
     )
     return setup, run
@@ -65,7 +67,7 @@ def test_hostname_manifest_failure_is_named_and_never_selects_linux(tmp_path):
     run = tmp_path / "run"; run.mkdir()
     script = (
         f'RUN_DIR={posix(run)!r}; LOG_FILE={posix(run / "agent.log")!r}; '
-        f'. {posix(AGENT)}/lib/hostname.sh; '
+        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
         'manifest_plan() { printf "1|guid|windows|ntfs\\n"; return 7; }; '
         '_write_hostname_linux() { echo LINUX_CALLED; return 0; }; '
         'write_hostname sda /manifest LAB-01; r=$?; echo "rc=$r"'
@@ -85,7 +87,7 @@ def test_restore_plan_count_failure_is_named_before_any_partition_stream(tmp_pat
         f'RUN_DIR={posix(run)!r}; LOG_FILE={posix(run / "agent.log")!r}; '
         f'. {posix(AGENT)}/lib/restore.sh; '
         'target_set() { :; }; disk_fits() { return 0; }; boot_ca_preflight() { return 0; }; apply_gpt() { return 0; }; '
-        'write_check() { return 0; }; write_speed_verdict() { return 0; }; '
+        'write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; '
         'expand_last() { return 0; }; manifest_plan() { echo "1|g|linux|ext4|1|512|p|s"; }; '
         'awk() { return 7; }; restore_partition() { echo STREAMED; return 0; }; '
         'fail_written_target() { echo "$2" > "$RUN_DIR/failure"; }; '

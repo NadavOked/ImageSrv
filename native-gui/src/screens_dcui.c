@@ -18,6 +18,52 @@
 
 typedef struct { cairo_t *cr; const Theme *t; int sm, dark; } G;
 
+/* #1959: what a click can press, from the last dcui_draw, in screen pixels.
+ * A click is the keys a person would have pressed (dcui_click): the backend
+ * gets the same tokens either way, so a click never does what a key cannot. */
+static DcuiHit hits[DCUI_MAX_HITS];
+static int nhits;
+static double hit_s = 1;
+
+static void hit_add(Rect r, const char *what, const char *keys) {
+    if (nhits >= DCUI_MAX_HITS || !keys[0]) return;
+    DcuiHit *h = &hits[nhits++];
+    *h = (DcuiHit){ r.x * hit_s, r.y * hit_s, r.w * hit_s, r.h * hit_s, "", "" };
+    snprintf(h->what, sizeof h->what, "%s", what);
+    snprintf(h->keys, sizeof h->keys, "%s", keys);
+}
+
+/* <count> times <tok>, then <last> (or nothing) -- one token per line */
+static void keys_rep(char *out, size_t n, const char *tok, int count, const char *last) {
+    size_t used = 0; out[0] = 0;
+    for (int i = 0; i < count && used < n; i++) used += snprintf(out + used, n - used, "%s\n", tok);
+    if (last && used < n) snprintf(out + used, n - used, "%s\n", last);
+}
+
+/* a key cap the backend has a token for ("Enter" -> "KEY ENTER"), or "" */
+static const char *cap_token(const char *cap) {
+    static const struct { const char *cap, *tok; } C[] = {
+        { "Enter", "KEY ENTER" }, { "Esc", "KEY ESC" }, { "Tab", "KEY TAB" }, { "F2", "KEY F2" },
+        { "F4", "KEY F4" }, { "F5", "KEY F5" }, { "F9", "KEY F9" }, { "F12", "KEY F12" } };
+    for (size_t i = 0; i < sizeof C / sizeof C[0]; i++) if (!strcmp(C[i].cap, cap)) return C[i].tok;
+    static char one[16];                                        /* #1962: "+" / "-" -- the character's own token */
+    if (cap[0] > 0x20 && cap[0] < 0x7f && !cap[1] && !(cap[0] >= 'A' && cap[0] <= 'Z')) {
+        snprintf(one, sizeof one, "CHAR %x", cap[0]);
+        return one;
+    }
+    return "";
+}
+
+int dcui_hits(const DcuiHit **out) { *out = hits; return nhits; }
+
+int dcui_click(double x, double y, char *keys, size_t n) {
+    for (int i = nhits - 1; i >= 0; i--) {
+        const DcuiHit *h = &hits[i];
+        if (x >= h->x && x < h->x + h->w && y >= h->y && y < h->y + h->h) { snprintf(keys, n, "%s", h->keys); return 1; }
+    }
+    return 0;
+}
+
 static const Rgb DARK_ON = { 11 / 255.0, 17 / 255.0, 21 / 255.0 };   /* #0b1115: text on a filled colour, dark */
 static const Rgb WHITE = { 1, 1, 1 };
 static Rgb on_fill(const G *g) { return g->dark ? DARK_ON : WHITE; }
@@ -192,6 +238,10 @@ static void icon_menu(G *g, Rect box, const char *kind, Rgb c) {
         draw_rrect_path(cr, (Rect){ 4, 14, 16, 6 }, 1.5);
         cairo_move_to(cr, 8, 7); cairo_line_to(cr, 8.01, 7);
         cairo_move_to(cr, 8, 17); cairo_line_to(cr, 8.01, 17);
+    } else if (!strcmp(kind, "disk")) {                        /* #1988: a drive, its light and label */
+        draw_rrect_path(cr, (Rect){ 3, 6, 18, 12 }, 2);
+        cairo_move_to(cr, 7, 14); cairo_line_to(cr, 7.01, 14);
+        cairo_move_to(cr, 11, 14); cairo_line_to(cr, 17, 14);
     } else {                                                   /* cert: the shield and a tick */
         cairo_move_to(cr, 12, 3); cairo_line_to(cr, 19, 6); cairo_line_to(cr, 19, 11);
         cairo_curve_to(cr, 19, 16, 16, 19, 12, 21);
@@ -324,22 +374,31 @@ static void status_line(G *g, const DcuiFrame *f, double W, double H) {
     /* .keys at the left edge; the first item is the rightmost of the group */
     double total = 0, lang_w = 0;
     KcStyle en = { g->t->surface, g->t->indigo, g->t->action_fg, 20, 11.5 };   /* .lang .kc */
+    const char *chip = f->lang_chip[0] ? f->lang_chip : "EN";  /* #2001: the station GUI's typing language */
     if (f->lang[0]) {
         Text lt = rtl(g, 12.5, 400, f->lang, 0);
-        lang_w = kc_w(g, "EN", 11.5) + 8 + lt.w;
+        lang_w = kc_w(g, chip, 11.5) + 8 + lt.w;
         text_free(&lt);
         total += lang_w;
     }
     for (int i = 0; i < f->nkeys; i++) total += (total > 0 ? gap : 0) + key_item(g, 0, cy, &f->keys[i], 0);
     double x = pad + total;
     if (f->lang[0]) {
-        double cw = kc(g, x, cy, "EN", en);
+        double cw = kc(g, x, cy, chip, en);
+        if (f->lang_chip[0]) hit_add((Rect){ x - cw, y, cw, h }, "lang", "KEY LAYOUT\n");   /* a click = Alt+Shift */
         Text lt = rtl(g, 12.5, 400, f->lang, 0);
         put_r(g, &lt, x - cw - 8, cy - lt.h / 2.0, g->t->muted);
         text_free(&lt);
         x -= lang_w + gap;
     }
-    for (int i = 0; i < f->nkeys; i++) x -= key_item(g, x, cy, &f->keys[i], 1) + gap;
+    for (int i = 0; i < f->nkeys; i++) {
+        double kw = key_item(g, x, cy, &f->keys[i], 1);
+        char what[128], keys[32] = "";
+        snprintf(what, sizeof what, "key:%s", f->keys[i].caps);
+        if (cap_token(f->keys[i].caps)[0]) snprintf(keys, sizeof keys, "%s\n", cap_token(f->keys[i].caps));
+        hit_add((Rect){ x - kw, y, kw, h }, what, keys);   /* #1959 */
+        x -= kw + gap;
+    }
 }
 
 /* ---- rows (.row) ------------------------------------------------------------- */
@@ -609,6 +668,8 @@ static void settings_body(G *g, const DcuiFrame *f, Rect page) {
     text_free(&h1); text_free(&p);
     double lw = g->sm ? 380 : 420, gap = 20, bottom = page.y + page.h;
     double ly = y;
+    int sel = 0;                                                /* #1959: the item the keys move from */
+    for (int i = 0; i < f->nitems; i++) if (f->items[i].selected) sel = i;
     for (int i = 0; i < f->nitems; i++) {                       /* .it */
         const DcuiItem *it = &f->items[i];
         Text ti = rtl(g, 15, 600, it->title, 0), su = rtl(g, 12.5, 400, it->sub, 0);
@@ -627,6 +688,12 @@ static void settings_body(G *g, const DcuiFrame *f, Rect page) {
         Text ch = rtl(g, 18, 400, "‹", 0);
         put_l(g, &ch, r.x + 17, cy - ch.h / 2.0, it->selected ? t->action_fg : t->muted);
         text_free(&ti); text_free(&su); text_free(&ch);
+        if (!f->dialog) {                                       /* #1959: behind a dialog, nothing to press */
+            char what[160], keys[96];
+            snprintf(what, sizeof what, "item:%s", it->title);
+            keys_rep(keys, sizeof keys, i > sel ? "KEY DOWN" : "KEY UP", abs(i - sel), "KEY ENTER");
+            hit_add(r, what, keys);
+        }
         ly += h + 8;
     }
     if (f->na_m[0]) {                                           /* .na: dashed */
@@ -682,6 +749,15 @@ static double btn_row(Dlg *d, int from, int to, double y, int draw) {
         double kw = e->c[0] ? kc_w(g, e->c, 11) : 0;
         double w = 20 + l.w + (kw > 0 ? 10 + kw : 0) + 20;
         Rect r = { right - w, y, w, 40 };
+        if (draw) {                                             /* #1959: the cap's key, or Tab to it and Enter */
+            char what[160], keys[96] = "";
+            int foc = -1;
+            for (int k = from; k < to; k++) if (d->f->el[k].f1) foc = k;
+            if (cap_token(e->c)[0]) snprintf(keys, sizeof keys, "%s\n", cap_token(e->c));
+            else if (foc >= 0) keys_rep(keys, sizeof keys, "KEY TAB", (i - foc + (to - from)) % (to - from), "KEY ENTER");
+            snprintf(what, sizeof what, "btn:%s", e->a);
+            hit_add(r, what, keys);
+        }
         if (draw) {
             Rgb bg = pri ? t->indigo : dng ? t->danger : t->surface, line = pri ? t->indigo : dng ? t->danger : t->hair;
             Rgb fg = pri ? t->on_ink : dng ? on_fill(g) : t->action_fg;
@@ -738,7 +814,27 @@ static double field_el(Dlg *d, const DcuiEl *e, double fx, double fw, double y, 
             put_l(g, &v, x, cy - v.h / 2.0, ro ? t->muted : t->ink); x += v.w + 2;
             text_free(&v);
         }
-        if (e->f1) { cairo_rectangle(g->cr, x, cy - 10, 2, 20); draw_set(g->cr, t->indigo); cairo_fill(g->cr); }
+        const int pick = !strcmp(e->c, "pick");                 /* #1962: a value chosen with Left/Right, not typed */
+        if (e->f1 && !pick) { cairo_rectangle(g->cr, x, cy - 10, 2, 20); draw_set(g->cr, t->indigo); cairo_fill(g->cr); }
+        if (pick) {
+            Text ch = rtl(g, 18, 400, "‹ ›", 0);
+            put_r(g, &ch, r.x + r.w - 12, cy - ch.h / 2.0, e->f1 ? t->action_fg : t->muted);
+            text_free(&ch);
+            int me = -1, foc = -1, k = 0;                       /* Up/Down to it, then Left: its next value */
+            for (int i = 0; i < d->f->nel; i++) {
+                const DcuiEl *o = &d->f->el[i];
+                if (o->type != DEL_FIELD || strcmp(o->c, "pick")) continue;
+                if (o == e) me = k;
+                if (o->f1) foc = k;
+                k++;
+            }
+            if (me >= 0 && foc >= 0) {
+                char what[DCUI_FIELD + 16], keys[96];
+                snprintf(what, sizeof what, "field:%s", e->b);
+                keys_rep(keys, sizeof keys, me > foc ? "KEY DOWN" : "KEY UP", abs(me - foc), "KEY LEFT");
+                hit_add(r, what, keys);
+            }
+        }
         if (e->f2) {                                            /* .inp .en: the chip at the field's end */
             Text en = mono(g, 11, 700, "EN");
             Rect c = { r.x + r.w - 12 - en.w - 14, cy - 11, en.w + 14, 22 };
@@ -769,6 +865,14 @@ static double opts_row(Dlg *d, int from, int to, double y, int draw) {
         if (draw) {
             Rgb sel = d->danger ? t->danger : t->indigo, soft = d->danger ? t->danger_soft : t->indigo_soft;
             Rect r = { x, y, w, h };
+            int on = -1;                                        /* #1959: Left/Right to it, as the keys do */
+            for (int k = from; k < to; k++) if (d->f->el[k].f1) on = k - from;
+            if (on >= 0 && on != i) {
+                char what[160], keys[96];
+                snprintf(what, sizeof what, "opt:%s", e->a);
+                keys_rep(keys, sizeof keys, i > on ? "KEY LEFT" : "KEY RIGHT", abs(i - on), NULL);
+                hit_add(r, what, keys);
+            }
             if (e->f1 && e->f2) draw_border_rrect(g->cr, (Rect){ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }, 11, t->indigo, 2);
             draw_fill_rrect(g->cr, r, 8, e->f1 ? sel : t->hair);
             double bw = e->f1 ? 2 : 1;
@@ -870,7 +974,8 @@ static double dialog_body(Dlg *d, double y0, int draw) {
              * fits a 768px screen; the first of a pair is the right one */
             int run = 0;
             while (i + run < f->nel && f->el[i + run].type == DEL_FIELD
-                   && (!strcmp(f->el[i + run].c, "text") || !strcmp(f->el[i + run].c, "unused"))) run++;
+                   && (!strcmp(f->el[i + run].c, "text") || !strcmp(f->el[i + run].c, "unused")
+                       || !strcmp(f->el[i + run].c, "pick"))) /* #1962: the drawers, two to a row */ run++;
             if (run >= 3) {
                 double hw = (d->w - 16) / 2;
                 for (int m = 0; m < run; m += 2) {
@@ -960,8 +1065,329 @@ static double dialog_body(Dlg *d, double y0, int draw) {
     return y - y0;
 }
 
+/* ---- #2001: the USB stick's connections window -------------------------------------
+ * The approved mockup (Nadav 22/10): docs/design/console-redesign/mockups/
+ * slot-map-2001.html ?surface=usb, its CSS cited by selector. A frame "dlg map"
+ * (usbmapwin.sh): d.alert (.note -- "info" or the red one), a d.conn per row
+ * (.map tr), d.addlink (.addrow) or d.add (.addform), d.foot and the d.btn's
+ * (.w-foot). The mockup's tokens that theme.c has no name for are here, light/dark. */
+typedef struct { G *g; const DcuiFrame *f; double x, w, R; const char *chip; } Mw;
+static Rgb mw_faint(const G *g) { return g->dark ? (Rgb){ 0x7c / 255.0, 0x88 / 255.0, 0x91 / 255.0 } : (Rgb){ 0x8A / 255.0, 0x8F / 255.0, 0x94 / 255.0 }; }   /* --clr-faint */
+static Rgb mw_hover(const G *g) { return g->dark ? (Rgb){ 0x20 / 255.0, 0x2a / 255.0, 0x31 / 255.0 } : (Rgb){ 0xF3 / 255.0, 0xF9 / 255.0, 0xFC / 255.0 }; }  /* --clr-row-hover */
+static Rgb mw_swoff(const G *g) { return g->dark ? (Rgb){ 0x3b / 255.0, 0x48 / 255.0, 0x52 / 255.0 } : (Rgb){ 0xC9 / 255.0, 0xCE / 255.0, 0xD3 / 255.0 }; }  /* --switch-off */
+static void mw_hex(Rgb c, char *out) { snprintf(out, 8, "#%02X%02X%02X", (int)lround(c.r * 255), (int)lround(c.g * 255), (int)lround(c.b * 255)); }
+
+/* <b>..</b> of the backend's note, in the note's ink (.note b / .note.err b) */
+static Text mw_note_text(G *g, const char *s, Rgb bold, double w) {
+    char col[8], span[96], buf[2048]; size_t o = 0;
+    mw_hex(bold, col); snprintf(span, sizeof span, "<span weight=\"600\" foreground=\"%s\">", col);
+    for (const char *p = s; *p && o + 1 < sizeof buf; ) {
+        const char *rep = !strncmp(p, "<b>", 3) ? span : !strncmp(p, "</b>", 4) ? "</span>" : NULL;
+        if (rep) { size_t l = strlen(rep); if (o + l >= sizeof buf) break; memcpy(buf + o, rep, l); o += l; p += p[1] == 'b' ? 3 : 4; }
+        else buf[o++] = *p++;
+    }
+    buf[o] = 0;
+    return mk(g, FONT_SANS, 13, 400, buf, w, 0, 1);
+}
+
+/* .inp: 32px, the value or the placeholder (faint), the caret where the next letter goes,
+ * and on the stick the typing language's chip (.inp .lang) -- a click on it is Alt+Shift */
+static void mw_input(Mw *m, Rect r, const char *val, const char *ph, int focus, int mono_v, int chip) {
+    G *g = m->g; const Theme *t = g->t; const double cy = r.y + r.h / 2;
+    if (focus) { cairo_save(g->cr); draw_set_a(g->cr, t->indigo, .22); draw_rrect_path(g->cr, (Rect){ r.x - 3, r.y - 3, r.w + 6, r.h + 6 }, t->radius_sm + 3); cairo_fill(g->cr); cairo_restore(g->cr); }
+    draw_fill_rrect(g->cr, r, t->radius_sm, focus ? t->indigo : t->hair);
+    draw_fill_rrect(g->cr, (Rect){ r.x + 1, r.y + 1, r.w - 2, r.h - 2 }, t->radius_sm - 1, t->field);
+    double right = r.x + r.w - 10, left = r.x + 10;
+    if (chip) {
+        Text c = mono(g, 10, 700, m->chip);
+        Rect cr = { left, cy - (c.h + 4) / 2, c.w + 10, c.h + 4 };
+        draw_fill_rrect(g->cr, cr, 4, t->hair);
+        draw_fill_rrect(g->cr, (Rect){ cr.x + 1, cr.y + 1, cr.w - 2, cr.h - 2 }, 3, t->porcelain);
+        text_draw(g->cr, &c, cr.x + 5, cr.y + 2, t->muted);
+        hit_add(cr, "lang", "KEY LAYOUT\n");
+        left += cr.w + 8; text_free(&c);
+    }
+    Text v = mono_v ? mono(g, 14, 400, val[0] ? val : ph) : rtl(g, 14, 400, val[0] ? val : ph, 0);
+    if (mono_v) put_l(g, &v, left, cy - v.h / 2.0, val[0] ? t->ink : mw_faint(g));
+    else put_r(g, &v, right, cy - v.h / 2.0, val[0] ? t->ink : mw_faint(g));
+    if (focus) {                                                /* left of a Hebrew name, right of an English one */
+        double cx = mono_v ? left + (val[0] ? v.w + 2 : 0) : right;
+        if (!mono_v && val[0]) {
+            PangoRectangle lg, strong, weak; int ltr = 0;
+            for (const unsigned char *p = (const unsigned char *)val; *p; p++) {
+                if ((*p | 32) >= 'a' && (*p | 32) <= 'z') { ltr = 1; break; }
+                if (*p >= 0x80) break;
+            }
+            pango_layout_get_pixel_extents(v.layout, NULL, &lg);
+            pango_layout_get_cursor_pos(v.layout, (int)strlen(val), &strong, &weak);
+            cx = right - (lg.x + lg.width) + (ltr ? weak.x : strong.x) / (double)PANGO_SCALE;
+        }
+        cairo_rectangle(g->cr, cx - 1, cy - 8, 2, 16); draw_set(g->cr, t->indigo); cairo_fill(g->cr);
+    }
+    text_free(&v);
+}
+
+/* .sw: 38x22, the knob at the start (right) when off; .dis 45%; .kf the keyboard's ring */
+static void mw_switch(Mw *m, double x, double cy, int on, int dis, int kf) {
+    G *g = m->g; const Theme *t = g->t;
+    Rect r = { x, cy - 11, 38, 22 };
+    if (kf) draw_border_rrect(g->cr, (Rect){ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }, 15, t->indigo, 2);
+    cairo_save(g->cr);
+    if (dis) cairo_push_group(g->cr);
+    draw_fill_rrect(g->cr, r, 11, on ? t->indigo : mw_swoff(g));
+    double kx = on ? r.x + 2 + 9 : r.x + r.w - 2 - 9;
+    cairo_arc(g->cr, kx, cy + .5, 9.5, 0, 2 * M_PI); draw_set_a(g->cr, (Rgb){ 0, 0, 0 }, .18); cairo_fill(g->cr);
+    cairo_arc(g->cr, kx, cy, 9, 0, 2 * M_PI); draw_set(g->cr, g->dark ? t->ink : (Rgb){ 1, 1, 1 }); cairo_fill(g->cr);
+    if (dis) { cairo_pop_group_to_source(g->cr); cairo_paint_with_alpha(g->cr, .45); }
+    cairo_restore(g->cr);
+}
+
+/* .btn (32px, 13/600, the key cap after the word); kind pri/plain/ghost. Returns its width. */
+static double mw_btn(Mw *m, double left, double y, const DcuiEl *e, int draw) {
+    G *g = m->g; const Theme *t = g->t;
+    const int pri = !strcmp(e->d, "pri"), ghost = !strcmp(e->d, "ghost");
+    Text l = rtl(g, 13, 600, e->a, 0), c = mono(g, 10, 700, e->c);
+    double w = 14 + l.w + (e->c[0] ? 8 + c.w + 8 : 0) + 14;
+    if (draw) {
+        Rect r = { left, y, w, 32 };
+        Rgb fg = pri ? (Rgb){ 1, 1, 1 } : ghost ? t->action_fg : t->ink;
+        if (!ghost) { draw_fill_rrect(g->cr, r, t->radius_sm, pri ? t->indigo : t->hair);
+            draw_fill_rrect(g->cr, (Rect){ r.x + 1, r.y + 1, r.w - 2, r.h - 2 }, t->radius_sm - 1, pri ? t->indigo : t->surface); }
+        put_r(g, &l, r.x + r.w - 14, y + (32 - l.h) / 2, fg);
+        if (e->c[0]) {
+            Rect k = { r.x + 14, y + 16 - (c.h + 2) / 2, c.w + 8, c.h + 2 };
+            cairo_save(g->cr); draw_set_a(g->cr, fg, .8); draw_rrect_path(g->cr, k, 3); cairo_set_line_width(g->cr, 1); cairo_stroke(g->cr); cairo_restore(g->cr);
+            text_draw(g->cr, &c, k.x + 4, k.y + 1, fg);
+        }
+        char what[160]; snprintf(what, sizeof what, "btn:%.150s", e->a);
+        if (cap_token(e->c)[0]) { char keys[32]; snprintf(keys, sizeof keys, "%s\n", cap_token(e->c)); hit_add(r, what, keys); }
+    }
+    text_free(&l); text_free(&c);
+    return w;
+}
+
+/* the conn rows that can take the focus (a CD/DVD drive cannot) */
+static int mw_sel(const DcuiEl *e) { return e->type == DEL_CONN && strcmp(e->k, "optical"); }
+
+static double mw_row(Mw *m, const DcuiEl *e, double y, double rh, int draw) {
+    G *g = m->g; const Theme *t = g->t; const DcuiFrame *f = m->f;
+    if (!draw) return rh;
+    const double R = m->R, L = m->x, cy = y + rh / 2;
+    const int on = e->f2, opt = !strcmp(e->k, "optical"), manual = !strcmp(e->k, "manual");
+    if (manual) draw_fill_rrect(g->cr, (Rect){ L, y, m->w, rh }, 0, t->indigo_soft);              /* .map tr.new */
+    if (e->f1) {                                                                                  /* tr.focus */
+        draw_fill_rrect(g->cr, (Rect){ L, y, m->w, rh }, 0, mw_hover(g));
+        draw_fill_rrect(g->cr, (Rect){ R - 3, y, 3, rh }, 0, t->indigo);
+    }
+    draw_fill_rrect(g->cr, (Rect){ L, y + rh - 1, m->w, 1 }, 0, t->track);                         /* --clr-row-border */
+    /* td.conn: the label (b), the PCI address under it */
+    Text cn = rtl(g, 14, 600, e->c, 0), pci = mono(g, 11, 400, e->d);
+    double ch = cn.h + (e->d[0] ? pci.h + 1 : 0), ty = cy - ch / 2;
+    put_r(g, &cn, R - 22, ty, on ? t->ink : mw_faint(g));
+    if (e->d[0]) put_r(g, &pci, R - 22, ty + cn.h + 1, t->muted);
+    text_free(&cn); text_free(&pci);
+    /* td.now: the model (muted) · the size (mono, 600) -- or "ריק" (faint) and the tag */
+    double nr = R - 118 - 10;
+    char col[8], colsz[8], mk_[900];
+    gchar *esc = g_markup_escape_text(e->b, -1);
+    mw_hex(t->muted, col); mw_hex(on ? t->ink : mw_faint(g), colsz);
+    if (e->e[0]) snprintf(mk_, sizeof mk_, "<span foreground=\"%s\">%s</span><span foreground=\"%s\"> · </span>"
+                          "<span font_family=\"" FONT_MONO_FAMILY "\" weight=\"600\" foreground=\"%s\">\xE2\x81\xA8%s\xE2\x81\xA9</span>",
+                          col, esc, colsz, colsz, e->e);
+    else { char cf[8]; mw_hex(mw_faint(g), cf); snprintf(mk_, sizeof mk_, "<span foreground=\"%s\">%s</span>", opt ? col : cf, esc); }
+    g_free(esc);
+    Text now = mk(g, FONT_SANS, 14, 400, mk_, 0, 0, 1);
+    put_r(g, &now, nr, cy - now.h / 2.0, t->ink);
+    if (e->g[0]) {                                                                                /* .tag */
+        Text tg = rtl(g, 11, 400, e->g, 0);
+        Rect tr = { nr - now.w - 6 - (tg.w + 14), cy - (tg.h + 2) / 2, tg.w + 14, tg.h + 2 };
+        draw_fill_rrect(g->cr, tr, tr.h / 2, t->warning_soft);
+        put_r(g, &tg, tr.x + tr.w - 7, tr.y + 1, t->warning_ink);
+        text_free(&tg);
+    }
+    text_free(&now);
+    /* td.name: the field, "לא בשימוש" or "לא דיסק" (.na) */
+    Rect in = { L + 72 + 10, cy - 16, 216, 32 };
+    if (opt || !on) {
+        Text na = rtl(g, 13, 400, opt ? "לא דיסק — לא יעד ולא מקור" : "לא בשימוש", 0);
+        put_r(g, &na, in.x + in.w, cy - na.h / 2.0, mw_faint(g)); text_free(&na);
+    }
+    /* the switch, the field's hits: Up/Down to the row, Tab to the column (#1959: the keys) */
+    int me = -1, fr = -1, fc = 0, k = 0, tgt_on = on;
+    for (int i = 0; i < f->nel; i++) {
+        const DcuiEl *o = &f->el[i];
+        if (!mw_sel(o)) continue;
+        if (o == e) me = k;
+        if (o->f1) { fr = k; fc = o->f1 - 1; }
+        k++;
+    }
+    mw_switch(m, L + 22, cy, on, opt, e->f1 == 2);
+    if (on && !opt) mw_input(m, in, e->a, e->h, e->f1 == 1, 0, e->f1 == 1);
+    if (me >= 0 && fr >= 0) {
+        int c2 = tgt_on ? fc : 1;                                   /* Up/Down onto a row that is off: its switch */
+        for (int col = 0; col < 2; col++) {
+            if (col == 0 && !on) continue;
+            char what[96], keys[192];
+            keys_rep(keys, sizeof keys, me > fr ? "KEY DOWN" : "KEY UP", abs(me - fr), NULL);
+            size_t u = strlen(keys);
+            if (col != c2 && u < sizeof keys) u += snprintf(keys + u, sizeof keys - u, "KEY TAB\n");
+            if (col == 1 && u < sizeof keys) snprintf(keys + u, sizeof keys - u, "KEY LEFT\n");
+            snprintf(what, sizeof what, "%s:%s", col ? "active" : "name", e->c);
+            if (col == 0) hit_add(in, what, keys);
+            else hit_add((Rect){ L + 18, cy - 15, 46, 30 }, what, keys);
+        }
+    }
+    return rh;
+}
+
+/* .addform: [סוג .seg] [מספר 120] [שם 1fr] [הוסף][ביטול], the help under them */
+static double mw_add(Mw *m, const DcuiEl *e, double y, int draw) {
+    G *g = m->g; const Theme *t = g->t;
+    const double x = m->x + 22, w = m->w - 44, R = x + w, pad = 12;
+    Text lt = rtl(g, 12, 600, "סוג", 0), help = rtl(g, 12, 400, e->b, w - 2 * pad);
+    double h = pad + lt.h + 4 + 32 + 10 + help.h + pad;
+    if (!draw) { text_free(&lt); text_free(&help); return h; }
+    draw_fill_rrect(g->cr, (Rect){ x, y, w, h }, t->radius, t->indigo);
+    draw_fill_rrect(g->cr, (Rect){ x + 1, y + 1, w - 2, h - 2 }, t->radius - 1, t->indigo_soft);
+    double fy = y + pad + lt.h + 4, cx = R - pad;
+    /* the type: .seg, SATA at the right */
+    Text sa = rtl(g, 13, 400, "SATA", 0), nv = rtl(g, 13, 400, "NVMe", 0);
+    double sw = 2 + (sa.w + 24) + (nv.w + 24) + 2;
+    Rect seg = { cx - sw, fy, sw, 32 };
+    if (e->f1 == 0) draw_border_rrect(g->cr, (Rect){ seg.x - 3, seg.y - 3, seg.w + 6, seg.h + 6 }, 10, t->indigo, 2);
+    draw_fill_rrect(g->cr, seg, 8, t->hair); draw_fill_rrect(g->cr, (Rect){ seg.x + 1, seg.y + 1, seg.w - 2, seg.h - 2 }, 7, t->porcelain);
+    put_r(g, &lt, cx, y + pad, t->muted);
+    const int nvme = !strcmp(e->c, "NVMe");
+    for (int i = 0; i < 2; i++) {
+        Text *o = i ? &nv : &sa; int sel = i == nvme;
+        double ow = o->w + 24, ox = i ? seg.x + 2 : seg.x + seg.w - 2 - ow;
+        Rect orr = { ox, seg.y + 3, ow, 26 };
+        if (sel) draw_fill_rrect(g->cr, orr, 6, g->dark ? t->indigo_soft : t->surface);
+        Text s2 = rtl(g, 13, sel ? 600 : 400, i ? "NVMe" : "SATA", 0);
+        put_r(g, &s2, ox + ow - 12, orr.y + (26 - s2.h) / 2, sel ? t->ink : t->muted); text_free(&s2);
+        char keys[64]; int n = (0 - e->f1 + 3) % 3; keys_rep(keys, sizeof keys, "KEY TAB", n, sel ? NULL : "KEY LEFT");
+        char what[32]; snprintf(what, sizeof what, "add:%s", i ? "NVMe" : "SATA");
+        hit_add(orr, what, keys);
+    }
+    text_free(&sa); text_free(&nv);
+    cx = seg.x - 12;
+    /* the number: 120px */
+    Text ln = rtl(g, 12, 600, "מספר", 0); put_r(g, &ln, cx, y + pad, t->muted); text_free(&ln);
+    Rect num = { cx - 120, fy, 120, 32 };
+    mw_input(m, num, e->d, "", e->f1 == 1, 1, 0);
+    { char keys[64]; keys_rep(keys, sizeof keys, "KEY TAB", (1 - e->f1 + 3) % 3, NULL); hit_add(num, "add:number", keys); }
+    cx = num.x - 12;
+    /* the buttons, at the left: הוסף (pri), ביטול */
+    static DcuiEl go = { .type = DEL_BTN, .a = "הוסף", .d = "pri" }, no = { .type = DEL_BTN, .a = "ביטול", .d = "plain" };
+    double bw2 = mw_btn(m, 0, 0, &no, 0), bw1 = mw_btn(m, 0, 0, &go, 0);   /* no key caps here (.addform .btn) */
+    mw_btn(m, x + pad, fy, &no, 1); mw_btn(m, x + pad + bw2 + 8, fy, &go, 1);
+    hit_add((Rect){ x + pad, fy, bw2, 32 }, "add:cancel", "KEY ESC\n");
+    hit_add((Rect){ x + pad + bw2 + 8, fy, bw1, 32 }, "add:go", "KEY ENTER\n");
+    /* the name: what is left */
+    Text lnm = rtl(g, 12, 600, "שם", 0); put_r(g, &lnm, cx, y + pad, t->muted); text_free(&lnm);
+    Rect nm = { x + pad + bw2 + 8 + bw1 + 12, fy, cx - (x + pad + bw2 + 8 + bw1 + 12), 32 };
+    mw_input(m, nm, e->a, "", e->f1 == 2, 0, 1);
+    { char keys[64]; keys_rep(keys, sizeof keys, "KEY TAB", (2 - e->f1 + 3) % 3, NULL); hit_add(nm, "add:name", keys); }
+    put_r(g, &help, R - pad, fy + 32 + 10, t->muted);
+    text_free(&lt); text_free(&help);
+    return h;
+}
+
+static void map_win(G *g, const DcuiFrame *f, double W, double H) {
+    const Theme *t = g->t;
+    cairo_rectangle(g->cr, 0, 48, W, H - 48 - 40);                       /* .usb .scrim */
+    if (g->dark) draw_set_a(g->cr, (Rgb){ 5 / 255.0, 9 / 255.0, 14 / 255.0 }, .62);
+    else draw_set_a(g->cr, (Rgb){ 37 / 255.0, 51 / 255.0, 61 / 255.0 }, .45);
+    cairo_fill(g->cr);
+    const double rw = g->dark ? 8 : 14;                                  /* --r-win */
+    Rect box = { 22, 66, W - 44, H - 66 - 58 };                          /* .usb .win: inset 22px, 66px 58px */
+    draw_box_shadow(g->cr, box, rw, 18, 48, 0, (Rgb){ 0, 0, 0 }, g->dark ? .45 : .22);
+    draw_fill_rrect(g->cr, box, rw, t->hair);
+    draw_fill_rrect(g->cr, (Rect){ box.x + 1, box.y + 1, box.w - 2, box.h - 2 }, rw - 1, t->surface);
+    Mw m = { g, f, box.x, box.w, box.x + box.w, f->lang_chip[0] ? f->lang_chip : "EN" };
+    cairo_save(g->cr); draw_rrect_path(g->cr, box, rw); cairo_clip(g->cr);
+    /* .w-head */
+    Text h2 = rtl(g, 22, 600, f->dlg_title, box.w - 40), sub = rtl(g, 13, 400, f->dlg_lead, box.w - 40);
+    double y = box.y + 16;
+    put_r(g, &h2, m.R - 20, y, t->ink); y += h2.h + 4;
+    put_r(g, &sub, m.R - 20, y, t->muted); y += sub.h + 10;
+    text_free(&h2); text_free(&sub);
+    /* the footer first: the table gets what is left */
+    const DcuiEl *foot = NULL; int nrows = 0; double other = 0;
+    for (int i = 0; i < f->nel; i++) {
+        const DcuiEl *e = &f->el[i];
+        if (e->type == DEL_FOOT) foot = e;
+        if (e->type == DEL_CONN) nrows++;
+    }
+    const double fh = 12 + 32 + 12, ybot = box.y + box.h - fh;
+    double ny = y;
+    for (int i = 0; i < f->nel; i++) {
+        const DcuiEl *e = &f->el[i];
+        if (e->type == DEL_ALERT) {
+            Text n = mw_note_text(g, e->a, strcmp(e->c, "info") ? t->danger_fg : t->ink, box.w - 44 - 24 - 3);
+            other += 9 + n.h + 9 + 10; text_free(&n);
+        } else if (e->type == DEL_ADD) other += mw_add(&m, e, 0, 0) + 4;
+        else if (e->type == DEL_ADDLINK) other += 40;
+    }
+    Text th = rtl(g, 12, 600, "חיבור", 0);
+    const double thh = 8 + th.h + 8;
+    double rh = nrows ? (ybot - ny - other - thh) / nrows : 44;
+    if (rh > 44) rh = 44;
+    if (rh < 32) rh = 32;
+    for (int i = 0; i < f->nel; i++) {
+        const DcuiEl *e = &f->el[i];
+        if (e->type != DEL_ALERT) continue;                              /* .note */
+        const int info = !strcmp(e->c, "info");
+        Text n = mw_note_text(g, e->a, info ? t->ink : t->danger_fg, box.w - 44 - 24 - 3);
+        Rect r = { box.x + 22, y, box.w - 44, 9 + n.h + 9 };
+        draw_fill_rrect(g->cr, r, t->radius_sm, info ? t->indigo_soft : t->danger_soft);
+        draw_fill_rrect(g->cr, (Rect){ r.x + r.w - 3, r.y, 3, r.h }, 0, info ? t->indigo : t->danger);
+        put_r(g, &n, r.x + r.w - 3 - 12, r.y + 9, t->ink);
+        y += r.h + 10; text_free(&n);
+    }
+    /* thead */
+    const char *heads[4] = { "חיבור", "מחובר עכשיו", "שם", "פעיל" };
+    const double hx[4] = { m.R - 22, m.R - 118 - 10, m.x + 72 + 236 - 10, 0 };
+    for (int i = 0; i < 4; i++) {
+        Text c = rtl(g, 12, 600, heads[i], 0);
+        if (i < 3) put_r(g, &c, hx[i], y + 8, t->muted); else put_l(g, &c, m.x + 22, y + 8, t->muted);
+        text_free(&c);
+    }
+    text_free(&th);
+    y += thh; draw_fill_rrect(g->cr, (Rect){ m.x, y - 1, m.w, 1 }, 0, t->hair);
+    for (int i = 0; i < f->nel; i++) {
+        const DcuiEl *e = &f->el[i];
+        if (e->type == DEL_CONN) y += mw_row(&m, e, y, rh, 1);
+        else if (e->type == DEL_ADDLINK) {                                /* .addrow: the link, the hint */
+            Text l = rtl(g, 13, 600, e->a, 0), hn = rtl(g, 13, 400, e->b, 0);
+            double cy = y + 20;
+            put_r(g, &l, m.R - 22, cy - l.h / 2.0, t->action_fg);
+            put_r(g, &hn, m.R - 22 - l.w - 10, cy - hn.h / 2.0, mw_faint(g));
+            hit_add((Rect){ m.R - 22 - l.w - 4, y + 6, l.w + 8, 28 }, "addlink", "CHAR 2b\n");
+            text_free(&l); text_free(&hn); y += 40;
+        } else if (e->type == DEL_ADD) y += mw_add(&m, e, y, 1) + 4;
+    }
+    /* .w-foot: the status at the right, then the buttons from the left -- שמירה first */
+    draw_fill_rrect(g->cr, (Rect){ m.x, ybot, m.w, 1 }, 0, t->hair);
+    double fy = ybot + 12;
+    if (foot) {
+        Text s = rtl(g, 13, 400, foot->a, 0), d = rtl(g, 13, 400, foot->b, 0);
+        put_r(g, &s, m.R - 22, fy + (32 - s.h) / 2, t->muted);
+        if (foot->b[0]) put_r(g, &d, m.R - 22 - s.w - 8, fy + (32 - d.h) / 2, t->warning_ink);
+        text_free(&s); text_free(&d);
+    }
+    double bx = m.x + 22;
+    for (int i = f->nel - 1; i >= 0; i--) {
+        const DcuiEl *e = &f->el[i];
+        if (e->type != DEL_BTN) continue;
+        bx += mw_btn(&m, bx, fy, e, 1) + 8;
+    }
+    cairo_restore(g->cr);
+}
+
 static void dialog(G *g, const DcuiFrame *f, double W, double H) {
     const Theme *t = g->t;
+    if (!strcmp(f->dlg_kind, "map")) { map_win(g, f, W, H); return; }   /* #2001 */
     cairo_rectangle(g->cr, 0, 48, W, H - 48 - 40);                       /* .scrim */
     draw_set_a(g->cr, (Rgb){ 10 / 255.0, 16 / 255.0, 22 / 255.0 }, .55); cairo_fill(g->cr);
     const int danger = !strcmp(f->dlg_kind, "danger");
@@ -1004,6 +1430,7 @@ static double scale_for(int H) { double s = floor(H / 800.0 * 4) / 4; return s <
 void dcui_draw(const DcuiFrame *f, const Theme *t, cairo_t *cr, int Wpx, int Hpx) {
     double s = scale_for(Hpx), W = Wpx / s, H = Hpx / s;
     G g = { cr, t, W < 1200, t == &THEME_DARK };
+    nhits = 0; hit_s = s;                                       /* #1959: this draw's */
     cairo_save(cr);
     cairo_scale(cr, s, s);
     draw_fill_rrect(cr, (Rect){ 0, 0, W, H }, 0, t->porcelain);

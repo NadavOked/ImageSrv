@@ -273,13 +273,13 @@ def test_three_drawers_do_not_punish_a_wave_of_one(conn):
     _wave(conn, "ses_1", drawers={MAC_A: 1}, loss_ratio=0.017)       # 600 → 450
     _wave(conn, "ses_2", drawers={MAC_A: 1})                          # 450 → 550
     assert _wave(conn, "ses_3", drawers={MAC_A: 3},                   # הקרוב: 1 —
-                 loss_ratio=0.017) == "450m"                          # בלי עלייה
+                 loss_ratio=0.017) == "285m"                          # 450 × 0.75^log2(3) (#1842)
     one = _next(conn, {MAC_A: 1})
     assert one["max_bitrate"] == "550m" and one["basis"] == "up"
     assert one["previous"]["session_id"] == "ses_2"
     assert one["previous"]["drawers"] == 1
     three = _next(conn, {MAC_A: 3})
-    assert three["max_bitrate"] == "337m" and three["basis"] == "down"
+    assert three["max_bitrate"] == "213m" and three["basis"] == "down"
     assert three["previous"]["session_id"] == "ses_3"
     assert three["previous"]["drawers"] == 3
 
@@ -297,10 +297,10 @@ def test_without_the_same_count_more_drawers_are_the_safe_side(conn):
 
 def test_a_clean_wave_of_fewer_drawers_does_not_raise_more(conn):
     """רק גל נקי של מגירה אחת בזיכרון, והגל הבא של שלוש: לא עולים ממנו —
-    לכל היותר הקצב שהוא רץ בו."""
+    הקצב שהוא רץ בו × 0.75 לכל הכפלה (‏#1842, נדב 20/10): 600 × 0.75^log2(3)."""
     _wave(conn, "ses_1", drawers={MAC_A: 1})
     got = _next(conn, {MAC_A: 3})
-    assert got["max_bitrate"] == "600m" and got["basis"] == "held"
+    assert got["max_bitrate"] == "380m" and got["basis"] == "drawers"
     assert got["previous"]["drawers"] == 1
 
 
@@ -311,9 +311,10 @@ def test_a_clean_wave_of_more_drawers_raises_fewer(conn):
 
 
 def test_a_lowering_from_fewer_drawers_still_lowers(conn):
+    """‏#1842: ירידה ×0.75 (‏450m) גבוהה מ-600m × 0.75^log2(3) (‏380m) — הנמוך."""
     _wave(conn, "ses_1", drawers={MAC_A: 1}, loss_ratio=0.017)
     got = _next(conn, {MAC_A: 3})
-    assert got["max_bitrate"] == "450m" and got["basis"] == "down"
+    assert got["max_bitrate"] == "380m" and got["basis"] == "drawers"
 
 
 # --- 4. היומן -----------------------------------------------------------------
@@ -334,8 +335,8 @@ def test_the_journal_says_what_the_basis_rests_on(conn):
     assert "mac=" + MAC_A + " drawers=1/1" in lines[1]
     assert lines[2].startswith(f"ses_3 700m basis=held(loss=0.05%,rcvbuf={BUDGET + 1}) ")
     drive_rates.decide(conn, "ses_4", lambda: _drives("ses_4", {MAC_A: 3}), None)
-    assert _journal(conn)[3].startswith(
-        "ses_4 700m basis=unmeasured(loss=0.05%,rcvbuf=None) ")
+    assert _journal(conn)[3].startswith(                 # 700 × 0.75^log2(3) (#1842)
+        "ses_4 443m basis=drawers(loss=0.05%,rcvbuf=None) ")
     assert "drawers=1/3" in _journal(conn)[3]
 
 

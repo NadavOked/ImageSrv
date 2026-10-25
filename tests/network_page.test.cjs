@@ -92,7 +92,7 @@ function setup(over={},me={}) {
     }});
   for(const f of ['progress.js','console.js','net.js','netcfg.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME='+JSON.stringify({username:'nadav',role:'admin',server_name:'שרת המכללה',version:'v0.38.1',capabilities:{enroll_secondary:true,classrooms:true},...me})
+  run('ME='+JSON.stringify({timezone:'UTC',username:'nadav',role:'admin',server_name:'שרת המכללה',version:'v0.38.1',capabilities:{enroll_secondary:true,classrooms:true},...me})
     +'; globalThis.sheets=[]; globalThis.toasts=[]; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; };'
     +' globalThis.selected=[]; selectPageById=(id)=>{ selected.push(id); current=id; }; openMachineDetail=(m)=>{ globalThis.openedMac=m; }; openAddMachine=(o)=>{ globalThis.addMachine=o; };');
   run('MACHINES='+JSON.stringify(fixtures['/machines'])+'; GROUPS='+JSON.stringify(fixtures['/groups'])+';');

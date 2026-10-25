@@ -36,6 +36,12 @@ ExecStart=/usr/bin/python3 -m server.main --server-url ${IMAGECTL_URL} \
     --data-dir /var/lib/imagectl --images /srv/imagectl/images $IMAGECTL_STORAGE_ARGS
 Restart=on-failure
 RestartSec=3
+# ‏#1819: גבול הקבצים הפתוחים. ברירת המחדל של systemd היא גבול רך של 1024,
+# ו-Python אינו מעלה אותו; סוכנים, WebSocket של המוניטור, הזרמת אימג'ים
+# וחיבור sqlite לכל תהליכון בסבב כיתה יכולים לעבור אותו — ואז accept נכשל
+# ב-EMFILE. ‏65536 = רך וקשיח, ליחידה הזו בלבד. לא infinity: דליפת
+# descriptors צריכה להיעצר בגבול, לא לאכול את המערכת.
+LimitNOFILE=65536
 
 # הקשחה בסיסית: השרת נוגע רק בנתונים, בספרייה שלו, ובשני קבצי ה-DHCP
 # שהוא כותב (לשונית הרשת, אפיון סעיף 24): זה של האינסטנס הראשי
@@ -77,7 +83,7 @@ ProtectHome=yes
 # ושומר רשומות discovery/node ב-/var/lib/iscsi. בלעדיהם "גלה יעדים" נכשל
 # ב-"Read-only file system" בשרת חיפה (17/10). ‏/run/lock ולא /run/lock/iscsi:
 # התת-תיקייה אינה קיימת עד ההרצה הראשונה, ומקף היה מדלג עליה בשקט.
-ReadWritePaths=/var/lib/imagectl /srv/imagectl/images /etc/dnsmasq.d -/etc/imagectl /etc/network/interfaces.d /etc -/srv/tftp -/run/network -/run/dhcpcd -/var/lib/dhcpcd -/run/lock -/var/lib/iscsi
+ReadWritePaths=/var/lib/imagectl /srv/imagectl/images /etc/dnsmasq.d -/etc/imagectl /etc/network/interfaces.d /etc/chrony/conf.d /etc -/srv/tftp -/run/network -/run/dhcpcd -/var/lib/dhcpcd -/run/lock -/var/lib/iscsi
 PrivateTmp=yes
 
 [Install]

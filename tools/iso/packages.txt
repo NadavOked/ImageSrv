@@ -16,7 +16,11 @@
 #   [iso]        מה שרק ה-ISO מוסיף — ראה הסבר ליד כל אחת
 #
 # שורה = חבילה אחת. `#` פותח הערה. ‏make-pool.sh מוריד את כולן **עם
-# התלויות**; ‏build-iso.sh כותב אותן ל-`pkgsel/include` ב-preseed.
+# התלויות**; ‏installer/lib/bootstrap.sh מתקין אותן.
+#
+# **כל ההתקנות הן `--no-install-recommends`** (‏#1987; ‏tests/
+# test_no_install_recommends_1987.py נופל על התקנה בלעדיו). תלות שהשרת
+# באמת צריך ואינה Depends של אף חבילה כאן — נרשמת כאן במפורש, עם הסיבה.
 # ‏fonts-ibm-plex יושבת ב-**contrib** (#120) — ה-pool כולל main+contrib.
 
 # --- [installer] install/setup-boot-server.sh · PKGS ---------------------
@@ -37,6 +41,12 @@ cifs-utils
 git                 # #1185: כפתור העדכון עובד על /opt/imagectl/.git שה-ISO נושא
 rsync               # #1128: tools/backup-server.sh — גיבוי מצטבר של האימג'ים
 ifenslave           # #1264: כרטיס שני לרשת ההפצה (bond, balance-alb) — bond-slaves ב-ifupdown
+nut-client          # #1973: UPS — upsc לטכנאי; השרת קורא בפרוטוקול NUT בעצמו
+nut-server          # #1973: UPS ב-USB — upsd + usbhid-ups; מוגדר מהקונסולה (server/ups.py)
+dbus                # #1987: hostnamectl/timedatectl צריכים את ה-system bus; ב-debootstrap אין (ESXi 21/09: hostname-failed), ובשרת רגיל הגיע רק כ-Recommends של libdbus-1-3
+# הקרנל של דביאן — **לא** cloud: ‏build_initramfs.sh מסרב לקרנל cloud (#904). גם הקרנל
+# של מכשיר ה-guestfs (עד #1987 הגיע לשרת רגיל רק כ-Recommends של supermin).
+linux-image-amd64
 
 # --- [vmupdate] install/vmupdate-packages.txt (#1334) — המדידה שם -----------
 qemu-system-x86
@@ -114,16 +124,14 @@ dosfstools
 debootstrap            # [installer] live installer base system bootstrap
 dpkg                   # [installer] debootstrap extracts packages with dpkg-deb
 perl-base              # [installer] debootstrap pkgdetails (perl one-liners) in the live image
-dbus                   # [installer] hostnamectl/logind need the system bus; debootstrap's base has none (ESXi 21/09: hostname-failed)
 ca-certificates        # [installer] git fetch from github over HTTPS (the update button); only a Recommends of git
-systemd-timesyncd      # [installer] a clock that is right: TLS validity and journal times; a Recommends of systemd
+chrony                 # [installer] clock client + NTP/SNTP server (#1773); conflicts with systemd-timesyncd
 dash                   # [installer] the engine and debootstrap run under dash: busybox sh runs its own applets whatever PATH says
 tar                    # [installer] GNU tar for debootstrap's extraction (-k), not the busybox applet
+mdadm                  # [installer] software RAID in the live installer and on the installed server (#1989)
 eject                  # [installer] "remove the media and restart" -- ejects the ISO device (#1190)
 
 # --- [iso] מה שרק ה-ISO מוסיף ----------------------------------------------
-# הקרנל של דביאן — **לא** cloud: ‏build_initramfs.sh מסרב לקרנל cloud (#904).
-linux-image-amd64
 # **אין שרת SSH בכוונה** — הכרעת נדב 19/09: אין SSH על השרת האמיתי;
 # ‏SSH הוא כלי טכנאי במעבדה, מותקן ידנית אחרי ההתקנה, לא מה-ISO.
 # חומת האש — המתקין מתקין אותה בנפרד מ-PKGS (setup-boot-server.sh, R20-F1).

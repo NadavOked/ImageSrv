@@ -55,7 +55,7 @@ function setup(over={}) {
     }});
   for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME={username:"admin",role:"admin",server_name:"srv",idle_seconds:600,version:"v0.35.0",capabilities:{classrooms:true}}; globalThis.sheets=[]; globalThis.toasts=[]; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; globalThis.selected=[]; selectPageById=(id)=>{ selected.push(id); current=id; }; globalThis.drawer=""; openDrawer=(t,b)=>{ drawer=t+"|"+b; }; globalThis.idleRestarted=0; startIdleWatch=()=>{ idleRestarted++; };');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",idle_seconds:600,version:"v0.35.0",capabilities:{classrooms:true}}; globalThis.sheets=[]; globalThis.toasts=[]; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; globalThis.selected=[]; selectPageById=(id)=>{ selected.push(id); current=id; }; globalThis.drawer=""; openDrawer=(t,b)=>{ drawer=t+"|"+b; }; globalThis.idleRestarted=0; startIdleWatch=()=>{ idleRestarted++; };');
   run('MACHINES='+JSON.stringify(fixtures['/machines'])+'; GROUPS='+JSON.stringify(fixtures['/groups'])+'; NET=[]; DISK_FAILURES=[]; SHRINK_RECORDS=[];');
   return {run,requests,fixtures,ctx,node};
 }
@@ -130,7 +130,13 @@ test('settings (סידור 17/10, המוקאפ settings-redesign): four groups, 
   // ‏#1303: מתג הקצב הנלמד — ב"שיכפול והפצה"; חסר = אוטומטי (דלוק)
   assert.ok(groupOf('שיכפול והפצה').includes('id="srow-learned_rate_enabled"')); assert.match(sw('learned_rate_enabled'),/ checked onchange="settingsSwitch\('learned_rate_enabled', this\)">/);
   run('SETTINGS.learned_rate_enabled="false"'); assert.equal(run('settingCurrent("learned_rate_enabled")'),false,'"false" is the only off');
-  assert.equal((html.match(/role="switch"/g)||[]).length,run('classroomsOn()')?7:6,'learned rate · recovery · identity · update · idle logout · MFA for admins (18/10) (+ class deploy with classrooms)');
+  // ‏#1805 (נדב 20/10): מתג "אימות מלא אחרי הכתיבה" ב"שיכפול והפצה", כבוי כברירת מחדל (מדגם). #1934: הספירה לא עודכנה אז.
+  assert.ok(groupOf('שיכפול והפצה').includes('id="srow-readback_full"')); assert.doesNotMatch(sw('readback_full'),/ checked /,'#1805: sample by default');
+  // ‏#1972 (נדב 22/10): מתג "IGMP querier ברשת ההפצה" ב"שיכפול והפצה", דלוק כשלא נקבע.
+  assert.ok(groupOf('שיכפול והפצה').includes('id="srow-igmp_querier"')); assert.match(sw('igmp_querier'),/ checked /,'#1972: missing = on');
+  // ‏#1967 (22/10): מתג "צליל בסיום סבב שיכפול" ב"שיכפול והפצה", דלוק כשלא נקבע.
+  assert.ok(groupOf('שיכפול והפצה').includes('id="srow-cloner_beep"')); assert.match(sw('cloner_beep'),/ checked /,'#1967: missing = on');
+  assert.equal((html.match(/role="switch"/g)||[]).length,run('classroomsOn()')?10:9,'learned rate · full read-back (20/10) · IGMP querier (22/10) · cloner beep (22/10) · recovery · identity · update · idle logout · MFA for admins (18/10) (+ class deploy with classrooms)');
   // תעודה ותחזוקה — שורה אחת כל אחת
   assert.match(groupOf('אבטחה'),/<dt>תעודת TLS<\/dt><dd><span class="muted">בלי TLS \(loopback בלבד\)<\/span><\/dd>/);
   assert.match(groupOf('עדכונים ותחזוקה'),/<dt title="[^"]*">הפעלה מחדש אוטומטית<\/dt><dd[^>]*><span class="sv">כבוי<\/span> <button[^>]*autoRebootSheet\(\)">שינוי…</);
@@ -347,15 +353,15 @@ test('logs: filters go to the server as query parameters (q, event, user, from f
   run("logFilter('q','LAB303')"); await new Promise((r)=>setImmediate(r)); assert.equal(q().get('q'),'LAB303');
   run("logFilter('event','session_open')"); await new Promise((r)=>setImmediate(r)); assert.equal(q().get('event'),'session_open'); assert.equal(q().get('q'),'LAB303');
   run("logFilter('user','nadav')"); await new Promise((r)=>setImmediate(r)); assert.equal(q().get('user'),'nadav');
-  run("logFilter('range','today')"); await new Promise((r)=>setImmediate(r)); assert.equal(q().get('from'),today);
+  run("logFilter('range','today')"); await new Promise((r)=>setImmediate(r)); assert.equal(q().get('from'),today+'T00:00:00');   // #1933: חצות של השרת (כאן UTC)
   run("logFilter('range','7d')"); await new Promise((r)=>setImmediate(r)); assert.match(q().get('from'),/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/);
   const before=requests.length; run("logFilter('range','custom')"); await new Promise((r)=>setImmediate(r));
   assert.equal(requests.length,before,'custom without dates: no request yet, the inputs appear'); assert.match(run('logs()'),/type="datetime-local" aria-label="מתאריך"/);
   run("logFilter('since','2026-09-01T10:00')"); await new Promise((r)=>setImmediate(r)); run("logFilter('until','2026-09-13T12:00')"); await new Promise((r)=>setImmediate(r));
-  assert.equal(q().get('from'),'2026-09-01T10:00'); assert.equal(q().get('to'),'2026-09-13T12:00:59','inclusive end minute');
+  assert.equal(q().get('from'),'2026-09-01T10:00:00'); assert.equal(q().get('to'),'2026-09-13T12:00:59','inclusive end minute');
   assert.match(run('logs()'),/מסונן: &quot;LAB303&quot; · סבב נפתח · nadav · 2026-09-01T10:00 – 2026-09-13T12:00/);
   // ‏#1008: "עוד" = הדף הבא עם before=<id האחרון>, ומוסיף — לא limit גדל
-  assert.match(run('logs()'),/href="\/api\/console\/journal\.csv\?q=LAB303&amp;event=session_open&amp;user=nadav&amp;from=2026-09-01T10%3A00&amp;to=2026-09-13T12%3A00%3A59" download>/,'the export carries the filter, without limit');
+  assert.match(run('logs()'),/href="\/api\/console\/journal\.csv\?q=LAB303&amp;event=session_open&amp;user=nadav&amp;from=2026-09-01T10%3A00%3A00&amp;to=2026-09-13T12%3A00%3A59" download>/,'the export carries the filter, without limit');
   fixtures['/journal']=Array.from({length:200},(_,i)=>({id:1000-i,ts:today+'T10:00:00',user:'u',event:'login',label:'L'+i,text:''}));
   fixtures.__total=350;
   run("logFilter('q','')"); await new Promise((r)=>setImmediate(r)); assert.equal(q().get('before'),null,'a filter change starts from the top');

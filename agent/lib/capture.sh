@@ -40,8 +40,9 @@ capture_pcl_flags() {
 }
 
 capture_disk() {
-    # $1 = task id, $2 = disk name. Emits the manifest path on success.
+    # $1 = task id, $2 = disk name, $3 = the serial it was ordered for (#1901; a direct send too, #1955). Emits the manifest path on success.
     _task="$1"; _disk="$2"
+    rm -f "$RUN_DIR/capture.reason"
     _node_base="$DEVROOT/$_disk"
     capture_stage ntfs_check   # #980 §4: the source checks (GPT, partitions, NTFS hibernation)
 
@@ -52,11 +53,16 @@ capture_disk() {
     # (‏node_is_block ולא `[ -b ]` ישיר, מאותה סיבה שב-restore.sh.)
     target_init "$_disk" 0
     node_is_block "$_node_base" || { _capture_failed "$_disk" "אין דיסק כזה: /dev/$_disk"; return 1; }
+    _why=$(capture_source_reason "$_disk" ${3+"$3"}) || _why="שערי המקור לא רצו (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; }   # #1901 serial, #1808 RAID, #1900 4Kn (capturegate.sh)
     _sector_size=$(logical_block_size "$_node_base")
     [ -n "$_sector_size" ] \
         || { _capture_failed "$_disk" "גודל הסקטור הלוגי של /dev/$_disk לא זמין"; return 1; }
     _scheme=$(disk_scheme "$_node_base")
     [ "$_scheme" = "gpt" ] || { _capture_failed "$_disk" "הכונן אינו GPT (נמצא: $_scheme)"; return 1; }
+    case "$(writemark_state "$_disk")" in   # #1798: a write that was cut is never a source (direct send too)
+        clean) ;; incomplete) _capture_failed "$_disk" "$WRITEMARK_HE: הכתיבה האחרונה לדיסק נקטעה — לא נקלט"; return 1 ;;
+        *) _capture_failed "$_disk" "לא הצלחנו לבדוק אם הכתיבה האחרונה לדיסק הושלמה — לא נקלט"; return 1 ;;
+    esac
 
     _sectors=$(cat "$SYSROOT/sys/block/$_disk/size" 2>/dev/null || echo 0)
     _disk_bytes=$((_sectors * 512))
@@ -97,13 +103,18 @@ capture_disk() {
 
     while IFS='|' read -r _idx _guid _uguid _first _sizesec; do
         _node=$(partition_node "$_disk" "$_idx"); _fs=$(_fs_of "$_node")
-        case "$_fs" in ntfs|ntfs-3g) _why=$(capture_ntfs_hibernation_reason "$_node" "$RUN_DIR/ntfs-check.$_idx"); [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; } ;; esac
-    done < "$_parts"
+        _why=$(_bitlocker_reason "$_idx" "$_fs" "$_node"); [ -z "$_why" ] || { _capture_failed "$_disk" "$_why" source_bitlocker; return 1; }   # #1806: every partition, before a byte
+        case "$_fs" in ntfs|ntfs-3g)
+            _why=$(capture_ntfs_hibernation_reason "$_node" "$RUN_DIR/ntfs-check.$_idx"); _hn_status=$?
+            [ -z "$_why" ] || { _hn_code=source_disk; [ "$_hn_status" != 1 ] || _hn_code=source_ntfs; _capture_failed "$_disk" "$_why" "$_hn_code"; return 1; } ;;
+            unreadable) _capture_failed "$_disk" "מחיצה $_idx: לא הצלחנו לקרוא את מערכת הקבצים שלה (blkid) — לא נקלט"; return 1 ;;   # #1905: never raw, never past the hibernation gate
+            *) _why=$(capture_fs_reason "$_idx" "$_fs") || _why="בדיקת מערכת הקבצים לא רצה (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; } ;; esac   # #1900: before the space check, not at the end
+    done < "$_parts"; _why=$(capture_layout_reason "$_disk" "$_parts") || _why="source_disk|בדיקת הדיסק הדינמי ומחיצת האתחול לא רצה (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "${_why#*|}" "${_why%%|*}"; return 1; }   # #1824 LDM, #1822 no ESP
     # ‏#87: אחרי שער המהובר ולפני חישוב הפריסה — הכיווץ משכתב את $_parts,
     # וכל מה שלמטה (הרצפה, השער החמישי, המניפסט) רואה את הפריסה המצומצמת.
     capture_stage shrink; cd_init "$_disk" "$_parts" "$_sector_size" 2>/dev/null || :   # #1505: the console's partition table
     capture_space_preflight "$_task" "$_disk" "$_parts" "$_sector_size" \
-        || { _capture_failed "$_disk" "$CAPTURE_SPACE_ERROR"; return 1; }
+        || { _capture_failed "$_disk" "$CAPTURE_SPACE_ERROR" "${CAPTURE_SPACE_CODE:-network_server}"; return 1; }
     shrink_before_capture "$_disk" "$_parts" "$_sector_size" \
         || { _capture_failed "$_disk" "${SHRINK_ERROR:-הכיווץ נכשל בלי סיבה (shrink.sh לא נטען?)}"; return 1; }
 
@@ -161,10 +172,9 @@ capture_disk() {
         _node=$(lc_src_node "$_disk" "$_idx")   # #1466: a shrunk partition is read from its RAM view
         _attrs=$(awk -F'|' -v i="$_idx" '$1 == i { print $2 }' "$RUN_DIR/partition.attrs")
         _fs=$(_fs_of "$_node")
-        _why=$(_bitlocker_reason "$_idx" "$_fs" "$_node")
-        [ -n "$_why" ] && { _capture_failed "$_disk" "$_why"; return 1; }
         _role=$(_partition_role "$_guid")
         [ "$_role" = windows ] && { _role=$(_system_role "$_idx" "$_node" "$_fs") || { _capture_failed "$_disk" "$_role"; return 1; }; }   # #1369
+        [ "$_role" = linux ] && { _why=$(_linux_system "$_idx" "$_node" "$_fs") || { _capture_failed "$_disk" "$_why"; return 1; }; }   # #1899: the root, not /boot
         # A generic linux-data GUID holding swap is still swap; a swap GUID
         # is swap regardless of what blkid says.
         [ "$_fs" = "swap" ] && _role="swap"
@@ -243,8 +253,9 @@ capture_disk() {
             # הסיבה מהכלי עצמו — זה מה שהקונסולה תציג ליד failed.
             _why=$(tail -n 1 "$RUN_DIR/targets/$_disk/partclone.log" 2>/dev/null | tr -d '\r')
             log "partition $_idx capture tool said: ${_why:-nothing}"   # the tool's own line: log, not the headline
+            _cf_code=unknown; [ "$_uprc" -eq 0 ] || _cf_code=network_server; [ "$_stage" != pcl ] || _cf_code=source_disk
             _capture_failed "$_disk" \
-                "מחיצה $_idx: הקליטה נכשלה (שלב=$_stage rc=$_rc העלאה=$_uprc)"
+                "מחיצה $_idx: הקליטה נכשלה (שלב=$_stage rc=$_rc העלאה=$_uprc)" "$_cf_code"
             return 1
         fi
 
@@ -261,7 +272,7 @@ capture_disk() {
 
         # Every partition is written not expandable; _mark_expandable picks
         # the one candidate once the whole list is known.
-        _json_parts="$_json_parts{\"index\":$_idx,\"type_guid\":\"$_guid\",\"unique_guid\":\"$_uguid\",\"attrs\":\"$_attrs\",\"role\":\"$_role\",\"fs\":\"$_fs\",\"start_sector\":$_first,\"size_bytes\":$((_sizesec * _sector_size)),\"used_bytes\":$_used,\"file\":\"$_file\",\"sha256\":\"$_sha\",\"expandable\":false$(shrink_json_extra "$_idx" "$_first" "$_sizesec" "$_sector_size")},"
+        _json_parts="$_json_parts{\"index\":$_idx,\"type_guid\":\"$_guid\",\"unique_guid\":\"$_uguid\",\"attrs\":\"$_attrs\",\"role\":\"$_role\",\"fs\":\"$_fs\",\"start_sector\":$_first,\"size_bytes\":$((_sizesec * _sector_size)),\"used_bytes\":$_used,\"file\":\"$_file\",\"sha256\":\"$_sha\",\"expandable\":false$(_system_json "$_role" "$_idx")$(shrink_json_extra "$_idx" "$_first" "$_sizesec" "$_sector_size")$(rb_capture_json "$_node" "$_fs" "$((_sizesec * _sector_size))")},"   # #1805: a direct send's digest
     done < "$_parts"
     # ‏#1466: הבייטים עברו; העותק בזיכרון משוחרר (המקור לא נכתב). כשל = אזהרה בלבד.
     capture_stage restore_size

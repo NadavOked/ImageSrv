@@ -25,6 +25,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from . import auth, capabilities
+from .atomicfile import write_atomic
 from .api import ServerContext
 from .db import get_setting, journal, set_setting
 
@@ -67,8 +68,8 @@ def summarize(tools: list[dict], ids: list[str]) -> dict:
 
 def write_selection_file(data_dir: Path, selection: dict[str, list[str]]) -> Path:
     path = Path(data_dir) / SELECTION_FILE
-    path.write_text(json.dumps({"schema": 1, **selection}, ensure_ascii=False, indent=1) + "\n",
-                    encoding="utf-8", newline="\n")
+    # ‏#1828: אטומי — קובץ בחירה חתוך אינו "שום דבר לא נבחר".
+    write_atomic(path, json.dumps({"schema": 1, **selection}, ensure_ascii=False, indent=1) + "\n")
     return path
 
 

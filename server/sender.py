@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from . import priority
 from .images import streamed_partitions
 
 log = logging.getLogger("imagectl.sender")
@@ -162,8 +163,10 @@ def run_process(cmd: list[str]) -> subprocess.Popen:
     # נחסם על הפלט של עצמו והשידור קופא, והמקבלים מתים בזה אחר זה (#22).
     # אותו לקח בדיוק כמו שרת הסימולציה ב-#12: פלט של תהליך ארוך → קובץ.
     # לוג פר-מחיצה נגזר מ---file, כדי שראיית מחיצה קודמת לא תימחק.
+    # ‏#1974: בעדיפות הרקע (‏nice/ionice) — הקונסולה קודמת לשידור כשיש תחרות.
     with partition_log(cmd[cmd.index("--file") + 1]).open("wb") as handle:
-        return subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT)
+        return subprocess.Popen(priority.background_cmd(cmd), stdout=handle,
+                                stderr=subprocess.STDOUT)
 
 
 #: טבלאות ה-UDP של הקרנל — מקור האמת למי מחזיק פורט בלינוקס.
@@ -384,6 +387,40 @@ def wave_events(logs: list[Path]) -> tuple[int, int] | None:
     return drops, timeouts
 
 
+#: ‏#1950: השורות שבהן udp-sender אומר מי מקבל ממנו. נמדד מול udpcast
+#: 20120424 (testrunner, ‏22/10): ‏`New connection from 127.0.0.1  (#0) 00000009`,
+#: ובסוף `Transfer complete.` ואחריה `Disconnecting #0 (127.0.0.1)`.
+#: ‏`Dropping client #N because of timeout` — ‏senddata.c (ראו `SENDER_DROP`).
+_RECEIVER_LINE = re.compile(
+    r"New connection from (\S+)\s+\(#(\d+)\)"
+    r"|Dropping client #(\d+)"
+    r"|Disconnecting #(\d+)"
+    r"|(Transfer complete)")
+
+
+def finished_receivers(log_path: Path) -> set[str] | None:
+    """‏#1950: הכתובות שקיבלו את המחיצה עד סופה — התחברו, ולא נזרקו ולא
+    התנתקו לפני `Transfer complete`. זו ראיה חיובית שהמקלט חי **עכשיו**:
+    הוא ענה ל-ACK האחרון של השולח לפני שניות.
+
+    ‏None = הלוג לא נקרא — "לא נבדק", לא "אף אחד" (עיקרון 5). ‏udpcast
+    ממחזר מספר `#N` אחרי ניתוק, ולכן השורות נקראות לפי הסדר."""
+    try:
+        text = log_path.read_text(errors="replace")
+    except OSError:
+        return None
+    slots: dict[str, str] = {}
+    for m in _RECEIVER_LINE.finditer(text):
+        joined_ip, joined_slot, dropped, left, complete = m.groups()
+        if complete:
+            break
+        if joined_ip:
+            slots[joined_slot] = joined_ip
+        else:
+            slots.pop(dropped or left, None)
+    return set(slots.values())
+
+
 def _reaped(process, seconds: float) -> bool:
     """True רק כשיש ראיה שהילד מת. היעדר בדיקה אינו ראיה (#439)."""
     deadline = time.monotonic() + seconds
@@ -439,6 +476,7 @@ class SenderEngine:
         live_receivers: Callable[[str], int] | None = None,
         link_speed: Callable[[str | None], dict] | None = None,
         pending_asks: Callable[[str], list[str]] | None = None,
+        lost_receivers: Callable[[str], list[str | None]] | None = None,
     ):
         self.library = library
         self.runner = runner
@@ -472,6 +510,12 @@ class SenderEngine:
         # אותו מבזבז את כל `--max-wait` (600ש' במחיצה 2+) על מכונה מתה —
         # עד שהמכונה התקינה פוקעת. בלעדיו — הצילום של `joined` מתחילת הגל.
         self.live_receivers = live_receivers
+        # ‏#1950: הכתובות של חברי הגל שהשרת סימן `lost` (‏None = כתובת לא
+        # ידועה). ‏`lost` הוא הסקה של השרת ("לא דיווח"), לא דיווח של המכונה:
+        # מכונה שקיבלה את המחיצה הקודמת עד סופה עדיין מתחברת לשולח, ובלי
+        # לספור אותה היא "ממלאת" את `--min-receivers` והמחיצה יוצאת בלי
+        # החבר החי. ‏None = לא מחובר: ההתנהגות של #1430.
+        self.lost_receivers = lost_receivers
         # הכרעת נדב 15/10: מהירות הקישור של `interface` (‏`drive_rates.read_link`)
         # — הגג והפתיחה של הקצב לפיה. ‏None = לא מחובר (בדיקות; ‏`server.main`
         # מחבר תמיד): "לא נקרא", וההתנהגות של היום — לא ניחוש של 1GbE.
@@ -934,20 +978,38 @@ class SenderEngine:
             self._stop.wait(ASK_HOLD_POLL_S)
         return False
 
-    def _receivers(self, session_id: str, joined: int) -> int:
+    def _receivers(self, session_id: str, joined: int,
+                   previous_log: Path | None = None) -> int:
         """‏`--min-receivers` למחיצה שעומדת לצאת: החברים החיים, לא פחות מ-1.
 
         בדיקה שנכשלה אינה "אף אחד לא חי" (עיקרון 5): נשארים על הצילום
         של `joined` — ההתנהגות שלפני #1430, שממתינה יותר אך אינה מפילה
-        מקבל חי — ואומרים את זה ביומן."""
+        מקבל חי — ואומרים את זה ביומן.
+
+        ‏#1950: ועוד חבר `lost` שקיבל את המחיצה הקודמת (`previous_log`) עד
+        סופה — הוא יתחבר גם לזו. בלי לספור אותו, הוא הגיע ראשון ל-p4 והשולח
+        יצא לדרך בלי משכפל 2, שהצטרף 4 שניות אחריו וקיבל זרם ריק (R2,
+        ‏22/10). חבר שנזרק או שלא התחבר — אינו נספר, כמו ב-#1430. לוג שלא
+        נקרא או כתובת לא ידועה — נספר: המחיר הוא המתנה של `--max-wait`, לא
+        מגירה חיה שנכשלת."""
         if self.live_receivers is None:
             return joined
         try:
-            return max(1, int(self.live_receivers(session_id)))
+            live = int(self.live_receivers(session_id))
+            lost = (list(self.lost_receivers(session_id))
+                    if self.lost_receivers is not None and previous_log is not None else [])
         except Exception as exc:          # noqa: BLE001 — חריגה כאן הורגת את התהליכון
             log.warning("sender: live receivers of %s unreadable (%s);"
                         " keeping the wave's %s", session_id, exc, joined)
             return joined
+        if not lost:
+            return max(1, live)
+        finished = finished_receivers(previous_log)
+        still = [ip for ip in lost if finished is None or ip is None or ip in finished]
+        if still:
+            self.on_event("send_counts_lost",
+                          f"{session_id} {' '.join(ip or '?' for ip in still)}")
+        return max(1, live + len(still))
 
     def _run(self, session: dict) -> None:
         if self.gate is not None:
@@ -975,13 +1037,16 @@ class SenderEngine:
             f'{session["id"]} {session["image_id"]} partitions={len(partitions)}',
         )
 
+        previous_log: Path | None = None        # ‏#1950: מי קיבל את הקודמת עד סופה
         for number, part in enumerate(partitions, start=1):
             if self._stop.is_set():
                 self.on_event("send_stopped", session["id"])
                 return
             path = self.library.file_path(session["image_id"], part["file"])
             if path is None:
-                self._fail(f"קובץ מחיצה חסר: {part['file']}")
+                # ‏#1928: המפעיל צריך לדעת שהאימג' עצמו חסר — לא לנסות שוב ושוב
+                self._fail(f"קובץ מחיצה חסר באימג' {session['image_id']}: {part['file']}"
+                           " — האימג' חסר או פגום בשרת")
                 return
             code = None
             while code is None:      # ברזל rc2: מחיצה 1 חוזרת להמתנה על שאלה מאוחרת
@@ -992,8 +1057,9 @@ class SenderEngine:
                     self._state.index = number
                     self._state.file = part["file"]
                     self._state.state = "sending"
-                cmd = self.command_for(path, self._receivers(session["id"], joined),
-                                       number, bitrate)
+                cmd = self.command_for(
+                    path, self._receivers(session["id"], joined, previous_log),
+                    number, bitrate)
                 log_path = partition_log(path)
                 log.info("sending partition %s/%s: %s", number, len(partitions), part["file"])
                 try:
@@ -1037,6 +1103,7 @@ class SenderEngine:
                     " יש לבדוק כבל רשת, אתחול PXE ורישום MAC"
                 )
                 return
+            previous_log = log_path
 
         with self._lock:
             self._state.state = "done"

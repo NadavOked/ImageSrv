@@ -127,6 +127,7 @@ apply_gpt() {
         [ -z "$_uguid" ] || _gpt="$_gpt -u $_idx:$_uguid"
         [ -z "$_attrs" ] || _gpt="$_gpt -A $_idx:=:0x$_attrs"
     done < "$RUN_DIR/gate${PREP_TAG:-}.plan" || return 1
+    _gpt="$_gpt$(writemark_args "$RUN_DIR/gate${PREP_TAG:-}.plan")"   # #1798: "not finished", in the same write
     _dguid=$(json_get "$2" ".disk_guid")
     if [ -n "$_dguid" ] && [ "$_dguid" != "null" ]; then _gpt="$_gpt -U $_dguid"; fi
     # מכאן ומטה כל שורה היא ראיה, ואף אחת מהן אינה מסתיימת ב-`|| true`:
@@ -150,7 +151,7 @@ expand_last() {
     # את השאר, ולכן גם השלב השני של ההרחבה נשאל לכל אחת לחוד.
     _mark="$RUN_DIR/targets/$1/expanded"
     mkdir -p "$RUN_DIR/targets/$1"
-    rm -f "$_mark"
+    rm -f "$_mark" "$_mark.more"   # #1897: .more = the shrunk partitions that share the room
     # תוכנית חלקית כאן אינה "אין מועמד" אלא מועמד **שגוי**, ואיתו הזזה של
     # מחיצות שאיש לא ספר. כל הקוראים למטה מריצים את manifest_plan בתוך
     # החלפת פקודה או צינור, ושם קוד היציאה שלו אינו נראה — ולכן הוא נבדק
@@ -182,14 +183,21 @@ expand_last() {
     _table_end=$((_start + _size / 512))
     # הסף נמדד על מה שבאמת יתווסף למחיצה: הזנב, פחות **כל** מה שיחזור אליו.
     [ $((_disk_sectors - _table_end - _tailsec)) -gt 2097152 ] || return 0
+    _add=$((_disk_sectors - 34 - _table_end - _tailsec)); _sh=""; [ ! -e "$RUN_DIR/targets/$1/share.ok" ] || _sh=1
+    _tail=$(SHARE_HEAD=$_sh share_tail "$1" "$2" "$_line" "$_tail" "$_add") || return 1   # #1897: the room, by the source ratio (expandshare.sh)
+    _head=$_start; [ -z "$_sh" ] || _head=$(share_head "$1" "$2" "$_line" "$_add") || return 1   # #1898: approved (drawergate.sh) -- a shrunk one before it too
+    _start=$(printf '%s\n' "$_head" | sed -n 1p); _head=$(printf '%s\n' "$_head" | sed 1d)
+    # #2016: rebuilt here anyway -- an odd source start (58653315, field 22/10) is aligned UP to 1MiB.
+    _start=$(( (_start + 2047) / 2048 * 2048 ))
 
     log "expanding partition $_idx to fill the disk"
     # #1714: the tail's move and the candidate's rebuild are ONE sgdisk call, in
     # the order the separate calls ran. The unique GUID survives the rebuild,
     # or the BCD loses the system partition just restored (#26).
-    _gpt="-a 1$(_move_to_tail "$_tail" "$_disk_sectors") -d $_idx -n $_idx:$_start:0 -t $_idx:$_guid"
+    _gpt="-a 1$(_move_to_tail "$_tail" "$_disk_sectors") -d $_idx$(_head_args "$_head") -n $_idx:$_start:0 -t $_idx:$_guid"
     [ -z "$_uguid" ] || _gpt="$_gpt -u $_idx:$_uguid"
     [ -z "$_attrs" ] || _gpt="$_gpt -A $_idx:=:0x$_attrs"
+    _gpt="$_gpt$(printf '%s\n%s\n%s\n' "$_line" "$_tail" "$_head" | writemark_args -)"   # #1798: -d/-n rebuilt them unnamed
     # ‏0 בסוף = סוף השטח הפנוי הגדול ביותר, כלומר עד תחילת ה-swap החדשה.
     # shellcheck disable=SC2086 # הפיצול של $_gpt מכוון
     sgdisk $_gpt "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 \
@@ -260,34 +268,4 @@ _expand_candidate() {
             if (best == "" || $5 + 0 > k) { k = $5 + 0; best = $0 }
         }
         END { if (best != "") print best }'
-}
-
-_move_to_tail() {
-    # $1 = the plan lines that sit after the candidate, in any order (may be
-    # empty); $2 = disk sectors. PRINTS the sgdisk options that move them --
-    # expand_last runs them in its one call (#1714). Deleted first, then
-    # recreated from the disk's last one inwards, so that their order on the
-    # platter survives the move. Start aligned down to 2048 (SSD speed), size
-    # EXACT (#1467): `-n i:-N:0` let sgdisk align the start and keep the end, so
-    # the partition came out up to 2047 sectors larger than the source's.
-    # The index is kept: it is what the stream writes by (and mkswap).
-    printf '%s\n' "$1" | awk -F'|' '$1 != "" { printf " -d %s", $1 }'
-    # הסדר נקבע כאן, לפי start_sector יורד — ולא ב-sort(1), שאינו בשימוש
-    # בשום מקום אחר בסוכן. הרשימה שמגיעה לכאן היא בסדר אינדקסים, ובאימג'
-    # ענן זה אינו הסדר על הדיסק; מיון שגוי היה מחליף שתי מחיצות בשקט.
-    printf '%s\n' "$1" \
-        | awk -F'|' '{ a[NR] = $0; k[NR] = $5 + 0 }
-             END { for (i = 1; i <= NR; i++) for (j = i + 1; j <= NR; j++)
-                       if (k[j] > k[i]) { t = k[i]; k[i] = k[j]; k[j] = t
-                                          u = a[i]; a[i] = a[j]; a[j] = u }
-                   for (i = 1; i <= NR; i++) print a[i] }' \
-        | while IFS='|' read -r _si _sg _sr _sf _ss _sb _sfile _ssha _sexp _su _suuid _sa; do
-        [ -n "$_si" ] || continue
-        _sx=$(( (${_sx_end:-$(($2 - 34))} - _sb / 512 + 1) / 2048 * 2048 ))
-        printf ' -n %s:%s:%s -t %s:%s' "$_si" "$_sx" "$((_sx + _sb / 512 - 1))" "$_si" "$_sg"
-        # ה-GUID הייחודי שורד גם את ההזזה: ‏/etc/fstab עשוי להפנות ל-PARTUUID.
-        [ -z "$_su" ] || printf ' -u %s:%s' "$_si" "$_su"
-        [ -z "$_sa" ] || printf ' -A %s:=:0x%s' "$_si" "$_sa"
-        _sx_end=$((_sx - 1))
-    done
 }

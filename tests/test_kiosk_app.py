@@ -51,6 +51,7 @@ EXPECTED_KIOSK_ROUTES = frozenset({
     ("PUT", "/api/console/me/theme"),
     ("GET", "/api/console/groups"),
     ("GET", "/api/console/images"),
+    ("POST", "/api/console/images/{image_id}/system-partition"),   # #1896: C: of an old image (kiosk.py)
     ("GET", "/api/console/folders"),
     ("POST", "/api/console/folders"),
     ("POST", "/api/console/sessions"),

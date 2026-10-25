@@ -38,13 +38,14 @@ target_init() {
     : > "$_t/bytes.0"; ln -s "bytes.0" "$_t/bytes.raw"; echo 0 > "$_t/counter.index"
     echo "$_t/bytes.raw" > "$_t/counter"
     echo "$2" > "$_t/total"
-    rm -f "$_t/error" "$_t/crc_delta" "$_t/ata_log" "$_t/ata_log.json" "$_t/ident" "$_t/evidence_only" \
+    rm -f "$_t/error" "$_t/crc_delta" "$_t/temp_after" "$_t/ata_log" "$_t/ata_log.json" "$_t/ident" "$_t/evidence_only" \
         "$_t/boot_ca_state" "$_t/boot_ca_reason" "$_t/write_check_state" "$_t/write_check_reason" "$_t/write_check_mbps" \
-        "$_t/write_started" "$_t/ntfs_boot" "$_t/dead"
+        "$_t/write_started" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok"   # #1805; #1883; #1907; #1808/#1898
     target_ident_keep "$1"   # #1602: serial|port|ata while it is still in sysfs (failmark.sh)
     # ‏#874: מאיפה dmesg נספר בכשל -- ריק (אין /proc/uptime) = מההתחלה.
     cut -d' ' -f1 "$SYSROOT/proc/uptime" > "$_t/since" 2>/dev/null
 }
+job_reset() { echo waiting > "$RUN_DIR/state"; rm -f "$RUN_DIR/stage" "$RUN_DIR/drivers.json" "$RUN_DIR/udp_drops.json" "$RUN_DIR/udp_drops.sum" "$RUN_DIR/cdetail.txt" "$RUN_DIR/cdetail.txt.old"; for _jr in "$RUN_DIR"/targets/*/*; do case "${_jr##*/}" in shrunk*|shrink_id) ;; *) rm -rf "$_jr" ;; esac; done; }   # #1916: before a job's reporter starts, nothing of the last job's report is left (a disk left shrunk is not report: shrinkoffer.sh); udp_drops = the last round's (waits.sh); #1931: cdetail = the last capture's table (capturedetail.sh)
 
 target_write_started() {
     # The serial binds later failure cleanup to the disk this run wrote.
@@ -157,7 +158,7 @@ build_progress() {
     _state=$(cat "$RUN_DIR/state" 2>/dev/null || echo "waiting")
     _targets=""
     for _d in "$RUN_DIR"/targets/*/; do
-        [ -d "$_d" ] || continue
+        [ -f "$_d/state" ] || continue   # #1916: a target this job never initialised is not this job's
         _dev=$(basename "$_d")
         _tstate=$(cat "$_d/state" 2>/dev/null || echo "waiting")
         _total=$(cat "$_d/total" 2>/dev/null || echo 0)
@@ -165,11 +166,10 @@ build_progress() {
             "$_dev" "$(target_bytes "$_dev")" "$_total" "$_tstate")
         # ‏#435: רק בקליטה (task id). המכנה בציר הבלוקים, לצד bytes_* הדחוסים.
         [ -n "${3:-}" ] && _entry="$_entry$(_source_progress_json "$_dev")$(cd_json 2>/dev/null)"
-        if [ -f "$_d/error" ]; then
-            _entry="$_entry,\"error\":\"$(json_escape "$(cat "$_d/error")")\""
-        fi
-        # ‏#872: הפרש ה-CRC של הסבב -- רק כשנמדד; חסר = לא נקרא, לא 0 (עיקרון 5).
-        [ -f "$_d/crc_delta" ] && _entry="$_entry,\"crc_delta\":$(cat "$_d/crc_delta")"
+        [ -f "$_d/error" ] && _entry="$_entry,\"error\":\"$(json_escape "$(cat "$_d/error")")\""
+        [ -f "$_d/crc_delta" ] && _entry="$_entry,\"crc_delta\":$(cat "$_d/crc_delta")"   # ‏#872: רק כשנמדד; חסר = לא נקרא, לא 0
+        case "$(cat "$_d/readback" 2>/dev/null)" in verified|sampled|unverified) _entry="$_entry,\"readback\":\"$(cat "$_d/readback")\",\"readback_reason\":\"$(json_escape "$(cat "$_d/readback_reason" 2>/dev/null)")\""; if [ "$(cat "$_d/readback_why" 2>/dev/null)" = list_not_fetched ]; then _entry="$_entry,\"readback_why\":\"list_not_fetched\""; fi ;; esac   # #1805: absent = not read back (yet); #1907
+        case "$(cat "$_d/temp_after" 2>/dev/null)" in ''|*[!0-9]*) ;; *) _entry="$_entry,\"temp_c\":$(cat "$_d/temp_after")" ;; esac   # #1859: after the write
         if [ -s "$_d/boot_ca_state" ] && [ -s "$_d/boot_ca_reason" ]; then
             _entry="$_entry,\"boot_ca_preflight\":{\"state\":\"$(json_escape "$(cat "$_d/boot_ca_state")")\",\"reason\":\"$(json_escape "$(cat "$_d/boot_ca_reason")")\"}"
         fi
@@ -178,7 +178,7 @@ build_progress() {
         # ‏#874: יעד שנכשל נושא סידורי, חריץ ושורות ה-ATA (failmark.sh) -- הראיה, לא סיווג.
         [ -f "$_d/ata_log.json" ] && _entry="$_entry$(failure_json "$_dev")"
         [ -s "$_d/drivers.json" ] && _entry="$_entry,\"drivers\":$(tr -d '\n' < "$_d/drivers.json")"   # #1269
-        _entry="$_entry}"
+        _entry="$_entry$(target_extra_json "$_dev" 2>/dev/null)}"   # #1883: the stages, once final (datareport.sh)
         [ -n "$_targets" ] && _targets="$_targets,"
         _targets="$_targets$_entry"
     done
@@ -192,7 +192,7 @@ build_progress() {
     [ -s "$RUN_DIR/drivers.json" ] && _drivers="$_drivers,\"drivers\":$(tr -d '\n' < "$RUN_DIR/drivers.json")"
     [ -n "${3:-}" ] && [ -s "$RUN_DIR/stage" ] && _drivers="$_drivers,\"stage\":\"$(json_escape "$(cat "$RUN_DIR/stage")")\""   # #980 §4: task reports only
     printf '{%s,"mac":"%s","state":"%s","targets":[%s]%s}' \
-        "$_who" "$2" "$_state" "$_targets" "$_drivers"
+        "$_who" "$2" "$_state" "$_targets" "$_drivers$(machine_extra_json "$1" "${3:-}" 2>/dev/null)"   # #1885: cpu, once final
 }
 
 progress_send() {
@@ -239,10 +239,10 @@ progress_loop() {
         # ‏#557: `|| true` נשאר — דיווח שיחזור בעוד שתי שניות אינו חייב
         # תשובה. אבל **סבב שנסגר לא יפתח את עצמו מחדש** (08/09: 50 דקות על
         # סבב סגור). ברזל 17/10: והמסלול הראשי חייב לדעת -- הוא המשיך לכתוב
-        # מול שולח שכבר יצא. הסמן ב-$RUN_DIR עוצר אותו (drawers.sh).
+        # מול שולח שכבר יצא. הסמן ב-$RUN_DIR עוצר אותו (drawers.sh). #1928: והסיבה, לפני הסמן.
         if progress_refused_for_good; then
-            log "progress: the server says this session is closed -- stopping"
-            printf '%s\n' "$1" > "$RUN_DIR/session-closed"; return 0
+            _pl_w=$(json_get "$RUN_DIR/progress.reply" ".reason"); log "progress: the server says this session is closed ($_pl_w) -- stopping"
+            [ "$_pl_w" = null ] || printf '%s\n' "$_pl_w" > "$RUN_DIR/session-closed.why"; printf '%s\n' "$1" > "$RUN_DIR/session-closed"; return 0
         fi
         cancel_from_reply; sleep "${PROGRESS_INTERVAL_S:-2}"   # #1386: "בטל דיסק זה" (cancel.sh)
     done

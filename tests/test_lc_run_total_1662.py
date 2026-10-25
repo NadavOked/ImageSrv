@@ -10,7 +10,9 @@ denominator is partclone's: ``$LC/measure/<src>.copy.parts`` (lcsize.sh).
 
 Never one of each (the issue): partclone's numbers for every partition, or --
 not measured, another disk, another table (a shrunk layout) -- df's for every
-partition, as before, and the log says which and why.
+partition, as before, and the log says which and why ("approximate"). An
+identity check that cannot run is a "no", never a reuse (principle 5). A valid
+measurement with a hole in it keeps the hole: null, never filled from df.
 
 **Negative control:** with ``agent/lib/lcplan.sh`` and ``agent/lib/lcsize.sh``
 back at feat/1443-exact-size (a4e1a19a), ``test_the_run_total_is_the_number_shown_before_the_start``
@@ -82,6 +84,13 @@ def test_the_run_total_is_the_number_shown_before_the_start(tmp_path):
 @pytest.mark.parametrize("between,env,why", [
     # not measured: -1 (#1440) -- df's, as before, never a 0 or a partial sum
     ("", {"PCL_FAIL": "1"}, "not measured"),
+    # no measurement file at all (never measured, or lc_measure removed it)
+    ('rm "$LC/measure/sdc.copy"; ', {}, "not measured"),
+    # what it was measured on cannot be read: not "the same", never a reuse
+    ('rm "$LC/measure/sdc.copy.serial"; ', {}, "another disk"),
+    ('rm "$LC/measure/sdc.copy.table"; ', {}, "another table"),
+    # the comparison itself breaks (rc 2): a check that cannot run is a "no"
+    ("cmp() { return 2; }; ", {}, "another table"),
     # another table: the shrunk layout the run copies is not the one measured
     ("sed -i 's/|998244352$/|500000000/' \"$LC/run/parts.txt\"; ", {}, "another table"),
     # another disk in the same port: the serial measured is not the serial now
@@ -95,4 +104,22 @@ def test_no_valid_measurement_keeps_df_for_every_partition_aloud(tmp_path, betwe
     assert got["total"] == str(DF_TOTAL), got
     # never one of each: df's for all four
     assert [p.split("|")[1] for p in parts] == ["500000000", "16777216", "212000000000", "0"], parts
-    assert any("df" in l and why in l for l in logs), logs
+    assert any("df" in l and why in l and "approximate" in l for l in logs), logs
+
+
+@pytest.mark.parametrize("between", [
+    # a row missing, a -1, a word, the whole per-partition file gone -- while
+    # the source, the serial and the table are the ones measured
+    "sed -i '/^3|/d' \"$LC/measure/sdc.copy.parts\"; ",
+    "sed -i 's/^3|.*/3|-1/' \"$LC/measure/sdc.copy.parts\"; ",
+    "sed -i 's/^3|.*/3|x/' \"$LC/measure/sdc.copy.parts\"; ",
+    'rm "$LC/measure/sdc.copy.parts"; ',
+])
+def test_a_hole_in_the_measurement_stays_unknown_not_filled_from_df(tmp_path, between):
+    got, parts, logs = _run(tmp_path, between)
+    assert got["rc"] == "0", got
+    # #1440: not measured is null -- never 0, never the size, never df's 212 GB
+    assert got["total"] == "null", got
+    assert "3|null" in parts, parts
+    assert not any("212000000000" in p for p in parts), parts
+    assert not any("df" in l for l in logs), logs

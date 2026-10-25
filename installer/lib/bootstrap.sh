@@ -4,7 +4,6 @@
 TARGET="${TARGET:-/target}"
 CDROM="${CDROM:-/cdrom}"
 BOOTSTRAP_LOG="${BOOTSTRAP_LOG:-/run/imagectl/debootstrap.log}"
-MOUNT_DEV=0; MOUNT_PROC=0; MOUNT_SYS=0; MOUNT_CDROM=0; MOUNT_ESP=0; MOUNT_ROOT=0
 
 last_bootstrap_line() {
     [ -s "$BOOTSTRAP_LOG" ] || return 0
@@ -63,18 +62,18 @@ read_package_list() {
 
 mount_target_root() {
     must_run target-root-dir "could not create the target directory" mkdir -p "$TARGET"
-    must_run mount-root "could not mount the target root" mount "$ROOT_NODE" "$TARGET"; MOUNT_ROOT=1
+    must_run mount-root "could not mount the target root" mount "$ROOT_NODE" "$TARGET"
     must_run target-esp-dir "could not create the EFI mount point" mkdir -p "$TARGET/boot/efi"
-    must_run mount-esp "could not mount the EFI partition" mount "$ESP_NODE" "$TARGET/boot/efi"; MOUNT_ESP=1
+    must_run mount-esp "could not mount the EFI partition" mount "$ESP_NODE" "$TARGET/boot/efi"
 }
 
 bind_target_filesystems() {
     must_run target-dirs "could not create target bind points" mkdir -p \
         "$TARGET/dev" "$TARGET/proc" "$TARGET/sys" "$TARGET/cdrom"
-    must_run mount-dev "could not bind /dev" mount --bind /dev "$TARGET/dev"; MOUNT_DEV=1
-    must_run mount-proc "could not bind /proc" mount --bind /proc "$TARGET/proc"; MOUNT_PROC=1
-    must_run mount-sys "could not bind /sys" mount --bind /sys "$TARGET/sys"; MOUNT_SYS=1
-    must_run mount-cdrom "could not bind /cdrom" mount --bind "$CDROM" "$TARGET/cdrom"; MOUNT_CDROM=1
+    must_run mount-dev "could not bind /dev" mount --bind /dev "$TARGET/dev"
+    must_run mount-proc "could not bind /proc" mount --bind /proc "$TARGET/proc"
+    must_run mount-sys "could not bind /sys" mount --bind /sys "$TARGET/sys"
+    must_run mount-cdrom "could not bind /cdrom" mount --bind "$CDROM" "$TARGET/cdrom"
 }
 
 # The local repository is the ISO's pool and dists/ **together** (#1371).
@@ -177,22 +176,29 @@ install_target_packages() {
     write_installer_facts
 }
 
+# What is mounted under the target, deepest first, as the kernel lists it
+# (#2093). A child sorts after its parent's path, so the reverse order
+# unmounts every submount before the mount it sits on, and two mounts
+# stacked on one point are two lines. No output = nothing mounted; a table
+# that cannot be read is a failure (return 1), never an empty list.
+target_mounts() {
+    _tm_list=$(awk -v t="$TARGET" '$2 == t || index($2, t "/") == 1 { print $2 }' "$PROC_MOUNTS") || return 1
+    [ -n "$_tm_list" ] || return 0
+    printf '%s\n' "$_tm_list" | sort -r
+}
+
+# The release is decided by the kernel's mount table, not by flags kept for
+# the mounts this engine made (#2093): an efivarfs the engine never made (the
+# mdadm initramfs hook's, see finish.sh) sat under /target/sys, the flagged
+# `umount /target/sys` was "busy", the leftover pass then unmounted
+# everything -- and the flag still said "mounted", so a fully released target
+# failed at 88%. The verdict is the caller's: target_mounts read again after
+# this (principle 5).
 cleanup_mounts() {
     [ "$DRY_RUN" -eq 0 ] || return 0
-    if [ "$MOUNT_CDROM" -eq 1 ]; then if umount "$TARGET/cdrom"; then MOUNT_CDROM=0; else printf 'installer: [unmount-failed] %s\n' "$TARGET/cdrom" >&2; fi; fi
-    if [ "$MOUNT_SYS" -eq 1 ]; then if umount "$TARGET/sys"; then MOUNT_SYS=0; else printf 'installer: [unmount-failed] %s\n' "$TARGET/sys" >&2; fi; fi
-    if [ "$MOUNT_PROC" -eq 1 ]; then if umount "$TARGET/proc"; then MOUNT_PROC=0; else printf 'installer: [unmount-failed] %s\n' "$TARGET/proc" >&2; fi; fi
-    if [ "$MOUNT_DEV" -eq 1 ]; then if umount "$TARGET/dev"; then MOUNT_DEV=0; else printf 'installer: [unmount-failed] %s\n' "$TARGET/dev" >&2; fi; fi
-    # debootstrap mounts its own proc inside the target and leaves it
-    # (our bind stacked on top, so the flag-tracked umount peeled one layer
-    # and the root stayed busy -- ESXi, 21/09). Anything still mounted under
-    # the target that is not the ESP or the root goes now, deepest first,
-    # each one named.
-    _cm_leftover=$(awk -v t="$TARGET/" 'index($2, t) == 1 && $2 != t "boot/efi" { print $2 }' "$PROC_MOUNTS" 2>/dev/null | sort -r)
-    for _cm_mp in $_cm_leftover; do
-        if umount "$_cm_mp"; then printf 'installer: unmounted leftover %s\n' "$_cm_mp" >&2
+    _cm_list=$(target_mounts) || { printf 'installer: [unmount-unchecked] cannot read %s\n' "$PROC_MOUNTS" >&2; return 1; }
+    for _cm_mp in $_cm_list; do
+        if umount "$_cm_mp"; then printf 'installer: unmounted %s\n' "$_cm_mp" >&2
         else printf 'installer: [unmount-failed] %s\n' "$_cm_mp" >&2; fi
     done
-    if [ "$MOUNT_ESP" -eq 1 ]; then if umount "$TARGET/boot/efi"; then MOUNT_ESP=0; else printf 'installer: [unmount-failed] %s\n' "$TARGET/boot/efi" >&2; fi; fi
-    if [ "$MOUNT_ROOT" -eq 1 ]; then if umount "$TARGET"; then MOUNT_ROOT=0; else printf 'installer: [unmount-failed] %s\n' "$TARGET" >&2; fi; fi
 }

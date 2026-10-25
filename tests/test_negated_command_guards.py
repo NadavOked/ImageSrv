@@ -46,6 +46,9 @@ BARE_NEGATION = re.compile(r"(?:^|;|&&|\|\|)[ \t]*![ \t]+[^ \t;&|=]", re.MULTILI
 #: הסטטוס נצרך על ידי `if`/`while`, ו-`set -e` ממילא אינו אמור לחול.
 CONDITIONAL = re.compile(r"^(if|elif|while|until)\b")
 
+#: ‏`[[ … ]]` של bash: מה שבפנים הוא ביטוי, ו-`!` בו אינו פקודה (כמו `[ ! -f x ]`).
+TEST_EXPR = re.compile(r"\[\[.*?\]\]")
+
 #: מוצא מפורש שנסקר והוכרע. ריק היום, ובכוונה.
 ALLOWED: frozenset[str] = frozenset()
 
@@ -110,7 +113,8 @@ def _hits(text: str) -> list[tuple[int, str]]:
         # נחסם, וזה כתיב תקין.
         if CONDITIONAL.match(stripped):
             continue
-        if BARE_NEGATION.search(line):
+        # ‏`[[ -n $u && ! -f x ]] || continue` (#2111) הוא ביטוי, לא `! cmd`
+        if BARE_NEGATION.search(TEST_EXPR.sub("[[ ]]", line)):
             out.append((number, line.strip()))
     return out
 
@@ -222,3 +226,10 @@ def test_a_bare_negation_that_spans_a_backslash_is_still_caught(tmp_path):
     hits = _hits(bad.read_text(encoding="utf-8"))
     assert hits, "‏`! cmd` בהמשך שורה חמק מהסורק"
     assert hits[0][0] == 3, f"השורה הלוגית מתחילה ב-3, דווח {hits[0][0]}"
+
+
+def test_a_negation_inside_a_test_expression_is_not_a_command():
+    """‏`!` בתוך `[[ ]]` אינו פקודה; ‏`! cmd` אחרי `]] &&` עדיין נתפס."""
+    assert _hits('[[ -n "$u" && ! -f "install/$u" ]] || continue\n') == []
+    assert _hits('[[ -n "$u" ]] && ! grep -q x f\necho PASS\n') != []
+    assert _hits('setup && ! grep -q x f\n') != []

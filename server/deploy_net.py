@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .atomicfile import fsync_dir, write_atomic
 from .db import get_setting, set_settings
 
 SETTING_INTERFACE = "deploy:interface"
@@ -138,7 +139,8 @@ def write_grub_cfg(url: str, tftp_root: str | Path) -> str | None:
     path = Path(tftp_root) / "grub" / "grub.cfg"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render_bootstrap(GrubConfig(server_base=url)), encoding="ascii")
+        # ‏#1908: אטומי — grub.cfg חתוך הוא אף מחשב שלא מגיע לתפריט.
+        write_atomic(path, render_bootstrap(GrubConfig(server_base=url)), encoding="ascii")
     except (OSError, ValueError) as exc:
         return f"לא ניתן לכתוב את {path}: {exc}"
     return None
@@ -200,7 +202,7 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     conf = Path(conf)
     candidate = conf.with_name(conf.name + ".candidate")
     try:
-        candidate.write_text(ruleset, encoding="utf-8")
+        write_atomic(candidate, ruleset)   # ‏#1908: עם fsync, לפני ה-replace
     except OSError as exc:
         return f"לא ניתן לכתוב את {candidate}: {exc}"
     try:
@@ -215,6 +217,7 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
                        else f"והחזרת ה-ruleset הקודם נכשלה גם היא: {r_err}"))
         try:
             os.replace(candidate, conf)
+            fsync_dir(conf.parent)
         except OSError as exc:
             return f"חומת האש נטענה אך {conf} לא הוחלף: {exc}"
         return None

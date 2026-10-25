@@ -55,6 +55,10 @@ disk_link() {
                     { [ "$_dl_max" = null ] || [ "${_dl_w%.*}${_dl_w#*.}" -lt "${_dl_max%.*}${_dl_max#*.}" ]; } &&
                         _dl_max=$_dl_w
                 fi
+                # #1921: and the disk's own ceiling (smartctl -x: "SATA Version is: SATA 2.6, 3.0 Gb/s
+                # (current: ...)") -- a SATA II disk at 3.0 on a 6.0 port is not slow
+                _dl_d=$(sed -n 's/^SATA Version is:.*, \([0-9]\.[0-9]\) Gb\/s.*/\1/p' "$RUN_DIR/smart/$1.out" 2>/dev/null | head -n 1)
+                [ -n "$_dl_d" ] && [ "$_dl_max" != null ] && [ "${_dl_d%.*}${_dl_d#*.}" -lt "${_dl_max%.*}${_dl_max#*.}" ] && _dl_max=$_dl_d
             fi
             ;;
     esac
@@ -69,11 +73,9 @@ disk_link_json() {
     # as crc_delta_measure (crcdelta.sh); the cache holds 0 for the rest.
     _dl_crc=null
     if command -v smart_field >/dev/null 2>&1; then
-        case "$(smart_field "$1" 2)" in
-            ok|health_failed|uncorrectable|pending_sectors|no_health)   # #1366: the F1 reasons read it too
-                _dl_crc=$(smart_field "$1" 6)
-                case "$_dl_crc" in ''|*[!0-9]*) _dl_crc=null ;; esac ;;
-        esac
+        if smart_was_read "$1"; then   # #1366/#1859: the F1 and orange reasons read it too
+            _dl_crc=$(smart_field "$1" 6); case "$_dl_crc" in ''|*[!0-9]*) _dl_crc=null ;; esac
+        fi
     fi
     printf ',"link_gbps":%s,"link_max_gbps":%s,"crc":%s' "${_dl_sm% *}" "${_dl_sm#* }" "$_dl_crc"
 }

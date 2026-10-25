@@ -50,6 +50,7 @@ class FakeHooks:
         ]
         self.mounts: list[tuple] = []
         self.umounts: list[str] = []
+        self.mounted: set[str] = set()   # #1994: מה שבאמת מעוגן — לא "התיקייה קיימת"
         self.fstab: list[list] = []
         self.make_fs_calls: list[tuple] = []
         self.logins: list[tuple] = []
@@ -118,11 +119,16 @@ class FakeHooks:
         if self.mount_fail_substr and self.mount_fail_substr in target:
             return HookResult(FAILED, self.mount_reason)
         Path(target).mkdir(parents=True, exist_ok=True)
+        self.mounted.add(str(Path(target)))
         return HookResult(OK)
 
     def umount(self, target):
         self.umounts.append(target)
+        self.mounted.discard(str(Path(target)))
         return HookResult(OK)
+
+    def is_mount(self, target):
+        return str(Path(target)) in self.mounted
 
     def fstab_write(self, entries):
         self.fstab.append(list(entries))
@@ -155,6 +161,7 @@ class FakeHooks:
             "make_fs": self.make_fs,
             "mount": self.mount,
             "umount": self.umount,
+            "is_mount": self.is_mount,
             "fstab_write": self.fstab_write,
             "creds_write": self.creds_write,
             "creds_remove": self.creds_remove,
@@ -466,6 +473,56 @@ def test_disconnected_is_not_polled(env):
     assert sl.get(env["ctx"].conn, loc_id)["state"] == "disconnected"
 
 
+# --- #1994: ‏df על נקודת עיגון ריקה מודד את דיסק המערכת ----------------------
+
+def _create_smb(env, name="fileserver-images"):
+    return env["admin"].post("/api/console/storage-locations", json={
+        "name": name, "type": "smb", "params": _smb_params(), "tested": True,
+    })
+
+
+def _connected_iscsi(env):
+    created = _create_iscsi(env)
+    loc_id = created.json()["id"]
+    assert env["admin"].post(
+        f"/api/console/storage-locations/{loc_id}/iscsi-login").status_code == 200
+    env["fake"].disk_status = "fs"
+    return env["admin"].post(f"/api/console/storage-locations/{loc_id}/mount",
+                             json={"format": False})
+
+
+@pytest.mark.parametrize("make", [_create_nfs, _create_smb, _connected_iscsi],
+                         ids=["nfs", "smb", "iscsi"])
+def test_a_network_location_that_is_not_mounted_is_unreachable_not_connected(env, make):
+    """שרת שעלה כשה-NAS כבוי (‏`nofail`): התיקייה הריקה קיימת, ‏df עליה
+    "מצליח" ומודד את דיסק המערכת. נקודת עיגון אמיתית היא הראיה — במנטר
+    וב"בדוק" כאחד."""
+    made = make(env)
+    assert made.status_code == 200 and made.json()["state"] == "connected", made.text
+    loc_id, mount = made.json()["id"], made.json()["mount_point"]
+    fake = env["fake"]
+
+    fake.mounted.discard(str(Path(mount)))               # האתחול עבר בלי ה-NAS
+    sl.poll(env["ctx"].conn, env["ctx"].library, fake.as_dict())
+    row = sl.get(env["ctx"].conn, loc_id)
+    assert row["state"] == "unreachable" and "אינו מעוגן" in row["state_detail"], dict(row)
+
+    checked = env["admin"].post(f"/api/console/storage-locations/{loc_id}/check").json()
+    assert checked["state"] == "unreachable"
+
+    fake.mounted.add(str(Path(mount)))                   # ה-NAS חזר ועוגן
+    sl.poll(env["ctx"].conn, env["ctx"].library, fake.as_dict())
+    assert sl.get(env["ctx"].conn, loc_id)["state"] == "connected"
+
+
+def test_the_local_location_is_a_folder_and_needs_no_mountpoint(env):
+    """‏`loc_local` הוא תיקייה בתוך דיסק המערכת — לא נקודת עיגון, ו-is_mount
+    עליו שקרי. הוא נשאר מחובר."""
+    assert not env["fake"].is_mount(sl.get(env["ctx"].conn, sl.LOCAL_ID)["mount_point"])
+    sl.poll(env["ctx"].conn, env["ctx"].library, env["fake"].as_dict())
+    assert sl.get(env["ctx"].conn, sl.LOCAL_ID)["state"] == "connected"
+
+
 # --- אימג' על מיקום לא נגיש -------------------------------------------------
 
 def test_image_on_unreachable_is_unavailable_and_round_is_409(env):
@@ -663,6 +720,7 @@ def test_fstab_write_is_atomic(tmp_path: Path, monkeypatch):
     original = "UUID=abc / ext4 defaults 0 1\n"
     fstab.write_text(original, encoding="utf-8")
     monkeypatch.setattr(sl, "FSTAB_PATH", fstab)
+    monkeypatch.setattr(sl, "daemon_reload", lambda: HookResult(OK), raising=False)   # ‏#2122: לא PID 1 של המריץ
     entry = {"source": "10.44.10.20:/mnt/pool/images",
              "target": "/var/lib/imagectl/storage/nas", "fstype": "nfs",
              "opts": "vers=4.1,soft"}
@@ -781,6 +839,31 @@ def test_create_writes_fstab_before_mount_and_is_connected_only_with_both(env):
     assert created.json()["state"] == "connected"
 
 
+def test_create_network_location_is_unchecked_until_its_mount_succeeds(env):
+    """#1123 (4): השורה נולדת `unchecked`, ו-`connected` רק אחרי fstab **וגם**
+    mount. הטסט שלמעלה רואה רק את המצב הסופי — שורה שנולדה `connected` עוברת
+    אותו, וזה בדיוק מה שמי שקורא את הטבלה בזמן העיגון (סריקה, הקונסולה,
+    קריסה באמצע) היה רואה. המרגל קורא את המצב **בתוך** העיגון הקבוע:
+    ‏`FakeHooks.mount` שואל `if self.mount_fail_substr and ...` לפני כל עיגון."""
+    conn = env["ctx"].conn
+
+    class StateAtMount:
+        def __init__(self):
+            self.seen = []
+
+        def __bool__(self):
+            self.seen.extend(r["state"] for r in sl.list_rows(conn)
+                             if r["name"] == "nas-images")
+            return False                    # העיגון עצמו מצליח
+
+    spy = StateAtMount()
+    env["fake"].mount_fail_substr = spy
+    created = _create_nfs(env)
+    assert created.status_code == 200, created.text
+    assert spy.seen == ["unchecked"], spy.seen
+    assert created.json()["state"] == "connected"
+
+
 def test_create_fstab_failure_leaves_no_row_and_no_permanent_mount(env):
     env["fake"].fstab_status = FAILED
     r = _create_nfs(env)
@@ -811,6 +894,19 @@ def test_connect_with_fstab_failure_is_not_connected(env):
     row = sl.get(env["ctx"].conn, loc_id)
     assert row["state"] != "connected"
     assert env["fake"].umounts[-1] == row["mount_point"]
+
+
+def test_connect_after_disconnect_puts_the_network_fstab_line_back(env):
+    """‏#1993: ‏connect כתב את fstab כשהמצב עוד היה `disconnected` — השורה
+    דולגה, והמיקום "מחובר" לא שרד את האתחול הבא."""
+    loc_id = _create_nfs(env).json()["id"]
+    base = f"/api/console/storage-locations/{loc_id}"
+    assert env["admin"].post(base + "/disconnect").status_code == 200
+    assert not any(e["fstype"] == "nfs" for e in env["fake"].fstab[-1])
+    again = env["admin"].post(base + "/connect")
+    assert again.status_code == 200 and again.json()["state"] == "connected"
+    assert [e["source"] for e in env["fake"].fstab[-1] if e["fstype"] == "nfs"] == [
+        "10.44.10.20:/mnt/pool/images"], env["fake"].fstab[-1]
 
 
 # --- #1552: ארגז החול של השירות חייב לתת ל-iscsiadm לכתוב ----------------------

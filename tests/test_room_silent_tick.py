@@ -135,8 +135,13 @@ def test_a_fully_silent_running_wave_advances_from_the_background_sweep(room_ser
     assert "client_lost" in _events(ctx), "האובדן לא נרשם ביומן (עיקרון 5)"
 
 
-def test_future_wave_progress_is_swept_as_a_clock_step(room_server):
-    """#1771: future progress must not suppress the lost-member sweep."""
+def test_future_wave_progress_is_rebased_neither_lost_nor_frozen(room_server):
+    """#1771 + #1947: a stored stamp in the future -- a clock step this
+    process did not see, e.g. one before its first sample after a boot --
+    must not freeze the lost sweep (#1771). Until #1947 it was therefore
+    "lost at once", and that is what failed a whole wave when the lab clock
+    stepped back. Now it is rebased to now: a full LOST_SECONDS from now,
+    and lost after that if the machine stays silent."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     _open(room_server, target=4)
     wave = cloner_hello(anon, CLONER1, ["S1", "S2"])["session"]["id"]
@@ -147,6 +152,15 @@ def test_future_wave_progress_is_swept_as_a_clock_step(room_server):
     report(anon, wave, CLONER1, {"sda": "done", "sdb": "done"})
     _future(ctx, wave, [CLONER2], 3 * 60 * 60)
 
+    assert room_mod.sweep(ctx.conn, ctx.store) is True
+    assert _member_state(ctx, wave, CLONER2)[0] == "writing", "a future stamp lost a machine at once"
+    stamp = ctx.conn.execute(
+        "SELECT updated_at FROM session_members WHERE session_id = ? AND mac = ?",
+        (wave, CLONER2)).fetchone()["updated_at"]
+    assert datetime.fromisoformat(stamp) <= datetime.now(timezone.utc) + timedelta(seconds=5),         "the future stamp was left in the future -- the sweep would stay frozen"
+    assert "clock_jump" in _events(ctx), "the step was not journaled"
+
+    _age(ctx, wave, [CLONER2], _AGE)                 # then it really stays silent
     assert room_mod.sweep(ctx.conn, ctx.store) is True
     assert _member_state(ctx, wave, CLONER2)[0] == "lost"
     assert room(deploy)["round"] is not None

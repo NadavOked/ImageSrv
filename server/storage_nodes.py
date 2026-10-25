@@ -24,13 +24,13 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import re
 import sqlite3
 import uuid
 from pathlib import Path
 
-from . import interserver_auth
+from . import hostname_rule, interserver_auth
+from .atomicfile import write_atomic
 from .db import (_write_lock, get_setting, journal, now_iso, set_setting,
                  set_settings, update_one, writing)
 
@@ -310,7 +310,23 @@ def list_nodes(conn, user: tuple[str, str]) -> list[dict]:
         " LEFT JOIN storage_node_groups g ON g.id = n.group_id"
         " ORDER BY n.label, n.id"
     ).fetchall()
-    return [dict(r) for r in rows]
+    # ‏#1997: שם שנרשם לפני הכלל ואינו שם מחשב ("חיפה") — מוצג כמו שהוא, וכאן
+    # הסיבה, ל"דורש טיפול" בסקירה. ‏null = חוקי. אין מיגרציה שמשנה שם.
+    return [{**dict(r), "label_problem": hostname_rule.refusal(r["label"], "שם שרת המשנה")}
+            for r in rows]
+
+
+def check_label(label: str | None) -> str:
+    """‏#1997 (נדב, 22/10): שם של שרת משנה הוא שם מחשב — `hostname_rule`.
+    מחזיר את השם אחרי ``strip``, או ``ValueError`` בעברית שנוקבת בכלל.
+    נקרא ברישום (גם ב-route, **לפני** ה-pairing) ובעריכה."""
+    label = (label or "").strip()
+    if not label:
+        raise ValueError("שם שרת המשנה ריק")
+    problem = hostname_rule.refusal(label, "שם שרת המשנה")
+    if problem:
+        raise ValueError(problem)
+    return label
 
 
 #: סמן ל"השדה לא נכח בבקשה" — נבדל מ-``None`` המפורש (ניתוק קבוצה).
@@ -332,9 +348,13 @@ def edit_node(conn, node_id: str, user: tuple[str, str], *,
     """
     assert_can_manage_nodes(conn, user)
     if label is not _UNSET:
-        label = (label or "").strip()
-        if not label:
-            raise ValueError("שם שרת המשנה ריק")
+        # ‏#1997: שם קיים שאינו חוקי ("חיפה") שנשלח שוב כמו שהוא — עם שינוי
+        # הקבוצה בלבד — אינו נחסם; שם **חדש** חייב לעמוד בכלל.
+        current = conn.execute(
+            "SELECT label FROM storage_nodes WHERE id = ?", (node_id,)).fetchone()
+        stripped = (label or "").strip()
+        unchanged = current is not None and stripped == current["label"]
+        label = stripped if unchanged else check_label(label)
     if group_id is not _UNSET:
         group_id = group_id or None
         # קבוצה שאינה קיימת נדחית בקול — אחרת ה-FK היה זורק IntegrityError סתום.
@@ -633,15 +653,11 @@ def _is_ip(host: str) -> bool:
 
 
 def _write_0600(path: Path, data: bytes) -> None:
-    """כותב חומר רגיש (מפתח פרטי) ב-0600, בכתיבה אטומית."""
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.write(fd, data)
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    if os.name == "posix":
-        os.chmod(str(path), 0o600)
+    """כותב חומר רגיש (מפתח פרטי) ב-0600, בכתיבה אטומית.
+
+    ‏#1828: עד כאן התיעוד אמר "אטומית" והקוד היה ``O_TRUNC`` על הקובץ עצמו —
+    כתיבה שנקטעה השאירה מפתח חתוך. עכשיו זה ``write_atomic`` (‏#1908)."""
+    write_atomic(path, data, mode=0o600)
 
 
 def _identity_row(conn):
@@ -681,7 +697,7 @@ def ensure_identity(conn, data_dir, *, host_sans=()) -> dict:
     nid = interserver_auth.node_id_from_spki(spki)
     cert_path = directory / "server.crt"
     key_path = directory / "server.key"
-    cert_path.write_bytes(cert_pem)
+    write_atomic(cert_path, cert_pem)
     _write_0600(key_path, key_pem)
     with _write_lock, writing(conn):
         conn.execute(
@@ -846,9 +862,7 @@ def enroll_node(conn, user: tuple[str, str], *, label: str, base_url: str,
     ``credential_ref`` לקובץ ה-0600 שכבר נכתב. ‏#883: ``node_id`` חייב
     להיות בצורת ``sn_<16 hex>`` — הוא נגזר מ-SPKI, לא מהצהרה."""
     assert_can_manage_nodes(conn, user)
-    label = (label or "").strip()
-    if not label:
-        raise ValueError("שם שרת המשנה ריק")
+    label = check_label(label)
     if not valid_node_id(node_id):
         raise ValueError(f"מזהה משני לא תקין: {node_id!r}")
     if group_id and conn.execute(

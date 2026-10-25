@@ -88,9 +88,13 @@ def render_dnsmasq(ctx: ServerContext,
     gate = getattr(ctx, "nic_services", None)
     netboot = gate.netboot() if gate is not None else None
     per_nic = ({"netboot": netboot[0], "nics": netboot[1]} if netboot is not None else {})
+    # ‏#1802: כרטיס ההפצה מכל מקור — `cli` כשהיחידה נושאת ‎--interface‏ (המתקין
+    # מעביר אותו כשיש כרטיס הפצה), או מה שנרשם מהקונסולה. בלי שם — כמו היום.
+    unregistered_if = (deploy.state.interface
+                       if deploy is not None and deploy.state.configured else None)
     return (dhcp.render(configs, tftp_root=root,
                         deploy_interface=console_deploy_interface(deploy), pin_tftp=pin,
-                        **per_nic),
+                        unregistered_if=unregistered_if, **per_nic),
             dhcp.render_proxy(proxy_configs(configs), tftp_root=root))
 
 

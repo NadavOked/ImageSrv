@@ -21,6 +21,8 @@ import zlib
 from pathlib import Path
 from typing import Iterator
 
+from .atomicfile import fsync_dir, fsync_file
+
 from .images import (
     ImageLibrary, guarded_image_path, inside, streamed_partitions,
 )
@@ -332,7 +334,15 @@ def _admit(staging: Path, names: list[str], images_root: Path,
             if digest_of(path, key) != part["sha256"]:
                 raise ArchiveError(f"אימות נכשל: {_shown(name)} אינו תואם ל-sha256")
 
+        # ‏#1813: המחיצות, המניפסט והתיקייה לדיסק **לפני** שהמניפסט מקבל את
+        # שמו — אחרת נפילת חשמל משאירה מניפסט תקין מעל קבצים באורך 0.
+        for part in streamed_partitions(manifest):
+            fsync_file(target / part["file"])
+        fsync_file(target / UNVERIFIED)
+        fsync_dir(target)
         (target / UNVERIFIED).replace(target / "manifest.json")
+        fsync_dir(target)
+        fsync_dir(images_root)
         verified = True
     finally:
         if not verified:

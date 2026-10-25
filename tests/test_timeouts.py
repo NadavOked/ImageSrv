@@ -258,6 +258,9 @@ STUBS = {
     # ‏#1438: הקליטה והחדר מגבבים ומונים בתוך fanout (‏-S/‏-P), לא ב-tee.
     "fanout": (
         '#!/bin/sh\n'
+        # #1805: the read-back is not modelled by this stand-in (test_readback_agent_1805.py
+        # has its own) -- and the copy below would write its empty stdin over the "device".
+        'if [ "$1" = --readback ]; then cat > /dev/null; echo "fanout stub: --readback is not modelled" >&2; exit 2; fi\n'
         'shift\n'
         'tmp="$(mktemp)"\n'
         'cat > "$tmp"\n'
@@ -282,6 +285,7 @@ FANOUT_OPTIONS = (
     'while :; do case "$1" in\n'
     '  -S) _fo_S=$2; shift 2 ;;\n'
     '  -P) _fo_P=$2; shift 2 ;;\n'
+    '  -U) shift 2 ;;\n'                # drawerfeed.sh: the drawers' fanout, counter units
     '  -H) echo "fanout stub: -H is not modelled" >&2; exit 2 ;;\n'
     '  *) break ;;\n'
     'esac; done\n'
@@ -356,7 +360,7 @@ def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; echo \"rc=$?\""
@@ -469,7 +473,7 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         # ‏wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
         "eval \"orig_$(declare -f wait_progress)\"; "
         f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
@@ -558,7 +562,7 @@ def test_a_drawer_room_waits_out_a_late_second_partition_instead_of_the_stall_ce
         "WAIT_STREAM_START_S=20 WAIT_STREAM_START_LATER_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         # השולח ממתין לחדר לפני המחיצה השנייה: שקט ארוך מתקרת השקט.
         f'stream_source() {{ [ "$4" = p3.zst ] && sleep 5; cat {posix(payload)!r}; }}; '
         "target_init sda 4096; STREAMED_PARTITIONS=0; "

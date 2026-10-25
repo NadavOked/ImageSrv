@@ -27,7 +27,7 @@ from test_local_clone_agent import GUI_UP, LIBS as LC_LIBS, LIB, REPO
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = LC_LIBS + ("lcpull",)
+LIBS = LC_LIBS + ("lcpull", "syspartgui")   # #1896: lc_pull_images carries the C: records
 
 #: three drawers, disk numbers by the drawer mapping -- sdc is disk 1 (as on cloner 2)
 DRAWERS = ('list_drawers() { echo sda; echo sdb; echo sdc; }; '
@@ -132,7 +132,7 @@ def test_a_pull_of_attached_drawers_is_handed_to_the_controller(tmp_path):
 
 def test_a_removable_disk_is_never_a_drawer(tmp_path):
     """list_drawers is the only source: a USB stick in list_disks is not offered."""
-    out = run(tmp_path, 'list_disks() { echo sda; echo sdb; }; mkdir -p "$SYSROOT/sys/block/sda" "$SYSROOT/sys/block/sdb"; '
+    out = run(tmp_path, 'list_disks() { echo sda; echo sdb; }; mkdir -p "$SYSROOT/sys/block/sda/device" "$SYSROOT/sys/block/sdb/device"; '
               'echo 0 > "$SYSROOT/sys/block/sda/removable"; echo 1 > "$SYSROOT/sys/block/sdb/removable"; '
               'disk_port() { case "$1" in sda) echo 1;; sdb) echo 2;; esac; }; '
               'lc_pull_ports 1 && echo OK1; lc_pull_ports 2 || echo NO2', SYSROOT=posix(tmp_path / "root"))

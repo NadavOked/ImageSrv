@@ -57,7 +57,7 @@ function setup() {
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
   vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME={username:"admin",role:"admin",server_name:"srv",version:"v0.31.0",capabilities:{classrooms:true}}; current="images"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; };');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",version:"v0.31.0",capabilities:{classrooms:true}}; current="images"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; };');
   for(const [name,key] of [['OVERVIEW','/overview'],['IMAGES','/images'],['FOLDERS','/folders'],['CAPTURE_TASKS','/tasks']]) run(name+'='+JSON.stringify(fixtures[key]));
   return {run,node,requests,fixtures,ctx};
 }
@@ -419,4 +419,27 @@ test('classroom deploy button is hidden when classrooms are off (v1); when on, a
   assert.match(run('groupKpis({id:"grp_X",role:"classroom",label:"303"},[])'),/deployToGroup/);
   run('deployToGroup("grp_X")'); assert.equal(run('modal.t'),'כבר יש סבב פעיל'); assert.equal(run('n'),0);
   run('ME.capabilities={classrooms:false}; modal=null; deployToGroup("grp_X")'); assert.equal(run('modal'),null);
+});
+
+// ‏#1777: "הפץ" (תפריט השורה) ו"פתח סבב עם אימג' זה" (המגירה) — דרך חלון "התחל סבב" האמיתי, בלי להחליף
+// את openRoomRound/openModalContent/selectPageById: הטסטים שלמעלה מחליפים אותם, ולכן לא היו נופלים אילו
+// הכפתור חזר "רק לעבור לדף הסבב". כאן נבדק מה שהמפעיל רואה: החלון פתוח, האימג' הזה כבר נבחר בו,
+// ושום סבב לא נפתח (אין POST) — פתיחה רק בלחיצה המפורשת על "פתח סבב".
+test('#1777: both deploy buttons open the real round window with this image chosen, and start nothing', async () => {
+  const opened = {};
+  for (const call of ['deployImage("img_7f3a91")', 'openRoundWithImage("img_7f3a91")']) {
+    const {run,node,requests,fixtures}=setup();
+    fixtures['/room']={round:null,machines:[],disk_floor:null};
+    run('DEPLOY.form.image=""; current="images"');
+    await run(call);
+    const body=node('#modalBody').innerHTML;
+    assert.equal(run('current'),'deploy',call+': on the round page');
+    assert.equal(node('#modalTitle').textContent,'התחל סבב',call+': the round window is open, not just the page');
+    assert.match(body,/<option value="img_7f3a91"[^>]*selected>Office 2024 — סטנדרט/,call+': this image is already chosen');
+    assert.match(body,/<option value="Office" selected>Office \(2\)/,call+': its folder too');
+    assert.equal(node('#modalOk').textContent,'פתח סבב');
+    assert.deepEqual(requests.filter((r)=>(r.options.method||'GET')!=='GET').map((r)=>r.url),[],call+': nothing is started without the operator');
+    opened[call]=body;
+  }
+  assert.equal(opened['deployImage("img_7f3a91")'],opened['openRoundWithImage("img_7f3a91")'],'both buttons do the same thing');
 });

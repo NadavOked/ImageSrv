@@ -315,6 +315,7 @@ RESTORE_STUB = (
     'if [ "${RESTORE_RESULT:-ok}" = "ok" ]; then '
     'echo done > "$RUN_DIR/state"; target_set "$2" "done"; return 0; fi; '
     'echo failed > "$RUN_DIR/state"; target_set "$2" "failed" "${RESTORE_REASON:-no}"; return 1; }; '
+    'writemark_release_done() { :; }; '   # #1877: the mark is not what is tested here (test_writemark_postdeploy_1877.py)
 )
 
 #: ‏#1545: הגואי שמסך הכישלון מעלה — רושם מה קיבל ומה היה בקובץ המצב, ויוצא.
@@ -381,9 +382,10 @@ def station(tmp_path, *, pull_code: str = "200",
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/pull.sh; "
         f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/guibridge.sh; "   # #1545: gui_backend_args
         f". {posix(AGENT)}/lib/single_restore.sh; "   # #706: the GUI restore's write
-        f". {posix(AGENT)}/lib/srgui.sh; . {posix(AGENT)}/lib/clonergui.sh; "   # #1561: its progress on the GUI
+        f". {posix(AGENT)}/lib/srgui.sh; . {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; "   # #1561: its progress on the GUI
         f". {posix(AGENT)}/lib/slotnames.sh; disk_port() {{ echo 1; }}; "
         'pick_internal_disk() { echo sda; }; '
+        'sr_share_gate() { return 0; }; '   # #1898: the split question -- its own tests (test_single_restore_share_1898.py)
         'http_get() { cat "$RUN_DIR/manifest.src.json"; }; '
         'pull_post() { cp "$2" "$RUN_DIR/sent.json"; '
         'cp "$RUN_DIR/pull_answer.json" "$3"; '
@@ -511,7 +513,7 @@ def test_a_failed_restore_brings_the_gui_back_in_hebrew_with_the_reason(tmp_path
     result = station(tmp_path, restore="fail", keys=("1", "ERASE"), gui=True, reason=PLAN_REFUSED)
     run = tmp_path / "run"
     seen = (run / "gui.seen").read_text(encoding="utf-8") if (run / "gui.seen").exists() else ""
-    assert seen == f"message=השחזור נכשל — השאירו את המחשב דלוק ופנו ל-IT|\u200f{PLAN_REFUSED}\n", (seen, result["out"])
+    assert seen == f"message=השחזור נכשל — המחשב נשאר דלוק ומדווח לשרת|\u200f{PLAN_REFUSED}\n", (seen, result["out"])
     title, sub = seen[len("message="):].rstrip("\n").split("|")
     assert len(title.encode()) < 96 and len(sub.encode()) < 200   # msg_title[96], msg_sub[200] ב-ui.h
     args = (run / "gui.args").read_text(encoding="utf-8")

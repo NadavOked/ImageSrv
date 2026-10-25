@@ -16,7 +16,7 @@
 | F3 | משני ← ראשי `8443/tcp` "אתה שם?" | `server/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `install/nftables-rules.sh:184-188`; `docs/server-install.md:239-248` (DNAT באתר הראשי, 8081 לא בין אתרים) |
 | F4 | ‏NTP ‏`123/udp` | `installer/lib/finish.sh:86-90` (‏`systemd-timesyncd` מופעל, בלי שרת מוגדר → ברירת המחדל של Debian); `server/health.py:190-197` (בדיקת "סנכרון שעון"); `install/firewall-rules.md` כלל L4 |
 | F5 | ‏DNS ‏`53` | `installer/lib/finish.sh:101` (‏`servers_dns` באשף); `server/update.py:55-58` ("חומת אש או DNS") |
-| F6 | ‏`github.com:443` לעדכון | `server/update.py:54` (‏`PUBLIC_UPDATE_URL = https://github.com/NadavOked/ImageCtl.git`), `server/update.py:191` (‏`git ls-remote --tags`); `tools/server-upgrade.sh:152` (‏`git fetch --tags`), `tools/server-upgrade.sh:162-164` (אימות חתימה מול `install/release-signers`); `install/firewall-rules.md` כלל L5 |
+| F6 | ‏`github.com:443` לעדכון | `server/update.py:54` (‏`PUBLIC_UPDATE_URL = https://github.com/NadavOked/ImageSrv.git`), `server/update.py:191` (‏`git ls-remote --tags`); `tools/server-upgrade.sh:152` (‏`git fetch --tags`), `tools/server-upgrade.sh:162-164` (אימות חתימה מול `install/release-signers`); `install/firewall-rules.md` כלל L5 |
 | F7 | ‏VM ← אינטרנט `80/443` | היום: `server/vmnet.py:12-16,87-101` (יציאה דרך כרטיס הניהול בלבד, לכתובות לא-פרטיות; DNS לשרתי השמות בלבד). ‏v1: הכרעת נדב 16/10, ענף `feat/vm-own-mac` — **לא בריפו עדיין** |
 | F8 | ‏VM ← שיתוף רשת `445/tcp` | ‏v1 בלבד (בריף נדב 16/10). היום חסום: `server/vmnet.py:44-46` (‏`DENIED` כולל 10/8, ‏172.16/12, ‏192.168/16). הפורט 445 — הנחה של המדריך (SMB), לא מהקוד |
 
@@ -127,7 +127,7 @@
 | כפתור "בטל…" בקונסולה, `sheet()` רגיל בלי הקלדת מילה | `server/static/console.js` (הקומיט `188d3bcf`); #1270 |
 | אזור זמן: `timedatectl`, קריאה חוזרת, ‏DB ב-UTC, שדה בהתקנה | `server/timezone.py`; `server/static/console.js:7145` (‏`timezoneSheet`); `installer/lib/zones.txt`; הקומיט `c3b2e8f1` (#1447) |
 | הנפקת תעודה: `POST /tls/reissue`, ‏`CN=imagesrv-console`, ‏`console.crt.prev`, התנתקות | `server/console_hostcfg.py:134`; `server/static/console.js:7223` (‏`tlsReissueSheet`), ‏`:7208` (‏`tlsDetailsSheet`) |
-| ספירת 20 שניות: `END_POWEROFF_S=20`, ‏`END_HOLD_S=300`, "כבה עכשיו" (Enter), "עצור את הספירה" (Esc) | `agent/lib/idle.sh:108-109,125` (‏`end_countdown`); `native-gui/src/main.c:931-942`; ‏`native-gui/src/screens_ask.c:159` |
+| ספירת 20 שניות כשהכול ירוק: `END_POWEROFF_S=20`, "כבה עכשיו" (Enter); יעד עם בעיה — בלי ספירה ובלי תקרה עד "כבה" (#2024, ‏`END_HOLD_S` בוטל) | `agent/lib/idle.sh` (‏`end_countdown`, ‏`end_problem`); `native-gui/src/main.c` (‏`end_modal`); ‏`native-gui/src/screens_ask.c` (‏`draw_end_bar`) |
 | מחשב הבנייה שואל "כבה" / "חזרה לתפריט"; שיכפול מקומי שנעצר חוזר לבחירה | `CHANGELOG.md` סקשן `[Unreleased]` (#1560); זיכרון `no-black-screen-gui-always` (הכרעות 17/10 12:45) |
 | צבעי הדיסק: אדום SMART תקול ("כתוב בכל זאת", דלג כברירת מחדל), כתום "נכשל קודם", ירוק "עצירה" | `CHANGELOG.md` `[Unreleased]` (#1580, "צבעי הדיסק בשיכפול לפי הכרעת נדב 17/10"); `server/smart_ask.py:22`; `server/disk_events.py:24-26` |
 | דיסק איטי = אדום (סף 50MB/s או פחות מחצי מהחציון של האחרים) | `agent/lib/writecheck.sh:22,40,138-156` |
@@ -140,5 +140,17 @@
 | `drivers.linux`: בודק ולא משנה | הקומיט `886a6628` (#1331 T8); `agent/lib/linuxdrivers.sh` |
 | `Start=0`/`StartOverride=0` רק כשחבילה הונחה (הכרעת נדב 17/10) | זיכרון `night-1017-autonomous` (הכרעות ~21:00); `agent/lib/bootstorage.sh`; #1711 (ניסוי ה-VM) |
 | הספירה במשכפל נראתה על ברזל (rc2, שיכפול מקומי, 17/10); אחרי כשל — כיבוי תוך <80ש', הספירה לא נצפתה | ‏`C:\ImageCtl-Lab\evening-1015\metal-1017-results.md`, ס' "rc2" |
+
+## פרק 4.1–4.20: רשת מנוהלת בשלוש שכבות (22/10/2026)
+
+| מה | מקור |
+|---|---|
+| פורטי המולטיקאסט: `--portbase` (ברירת מחדל 9000, ו-`portbase+1`), `--interface`, בלי `--mcast-data-address` ובלי `--ttl` | `server/sender.py` (`command_for`, `DEFAULT_PORTBASE`) |
+| זרם מולטיקאסט אחד בכל המערכת | `server/sessions.py:54` |
+| WoL: UDP 9, broadcast `255.255.255.255`, מוצמד לכרטיס ההפצה | `server/wol.py` (`WOL_PORT`, `broadcast_sender`) |
+| אין IGMP querier בשרת (Issues #1543, #1972) | חיפוש `querier` ב-`server/`, `agent/` — אין תוצאות |
+| ערוץ הבקרה של udpcast ו-כתובת הקבוצה הנגזרת | דף man של `udp-sender` (Debian); לא נקבע בקוד |
+| TCN, תקלות DHCP snooping, EEE, duplex, LACP | `C:\ImageCtl-Lab\evening-1015esearch-new-failures-1022.md` (N01, N02, N05, N07, N09, N28) |
+| ~106MB/s, 1G, 10GbE בחדר השיכפולים | `docs/imagectl-spec.md` סעיף 6 ושורה 351 |
 
 </div>

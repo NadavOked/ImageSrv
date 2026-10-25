@@ -611,7 +611,9 @@ def test_proxy_closes_when_the_machine_rejects_the_secret(server):
             ws.receive_bytes()      # ‏#904: הסגירה מגיעה אחרי accept
 
     assert caught.value.code == monitor.WS_MACHINE_AUTH
-    assert "secret mismatch" in caught.value.reason
+    # ‏#1837: בעברית, בלי הסיבה האנגלית של LibVNCServer.
+    assert caught.value.reason == monitor.MACHINE_REJECTED_SECRET
+    assert "secret mismatch" not in caught.value.reason
     assert machine.closed is True
 
 
@@ -1033,7 +1035,8 @@ def test_power_endpoint_is_admin_only_and_verifies_the_server_side_name(server):
         assert websocket.receive_bytes() == SERVER_INIT
         wrong = client.post(path, json={"action": "poweroff", "confirm": "monitor"})
         assert wrong.status_code == 403
-        assert "השם שהוקלד" in wrong.json()["detail"]
+        assert "הוקלד" not in wrong.json()["detail"]   # #1850: מאז #1270 איש אינו מקליד
+        assert wrong.json()["detail"] == monitor.POWER_NAME_STALE
         assert not any(w.startswith(b"\x06") for w in machine.writes)
     assert journal_rows(server, "monitor_power") == []
 

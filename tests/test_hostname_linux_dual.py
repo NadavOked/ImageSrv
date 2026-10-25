@@ -61,7 +61,7 @@ def box(tmp_path: Path, plans: list[str], *, subvols: str = "", others: str = "h
         f'LOG_FILE={posix(run / "agent.log")!r} SUBVOLS={subvols!r} OTHER_SUBVOLS={others!r} '
         f'DEFAULT_ETC={("1" if default_etc else "")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {lines}; }}; '
         f'partition_node() {{ echo /dev/fake; }}; '
     )

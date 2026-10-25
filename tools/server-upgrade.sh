@@ -49,11 +49,16 @@ JOURNALD_DIR="${IMAGECTL_JOURNALD_DIR:-/etc/systemd/journald.conf.d}"
 FLAGS_FILE="${IMAGECTL_INITRD_FLAGS:-/etc/imagectl/initrd.flags}"
 ISO_MANIFEST="${IMAGECTL_ISO_MANIFEST:-/etc/imagectl/iso-release.json}"
 HTTP_ROOT="${IMAGECTL_HTTP_ROOT:-/srv/imagectl/boot}"
+UPGRADE_STATE="${IMAGECTL_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
 PREV=""         # התג הקודם — נקרא בשלב 1; ריק עד אז (set_status קורא אותו)
 INITRD_NOTE=""   # נקבע בחזרה — האם המטען הקודם הוחזר
 # ‏#1287: עותק המטען הקודם (initrd/vmlinuz) — מוחזר יחד עם הקוד בחזרה.
 PAYLOAD_SAVE="$HTTP_ROOT/.pre-upgrade"
 PAYLOAD_SAVED=0  # 1 רק אחרי שהעותק של **הריצה הזו** הושלם
+# ‏#1957: הטיימרים שהריצה הזו הפעילה — החזרה מכבה את אלה שאין בעץ הישן.
+ENABLED_TIMERS=()
+FAILED_TIMER=""
+TIMER_NOTE=""
 LOG="${IMAGECTL_UPGRADE_LOG:-/var/log/imagectl/server-upgrade.log}"
 CONSOLE_URL="${IMAGECTL_CONSOLE_URL:-https://127.0.0.1:8081}"
 LIVE_WAIT="${IMAGECTL_LIVE_WAIT:-90}"
@@ -125,18 +130,49 @@ if state in ("failed", "done"):
             doc["by"] or "server-upgrade")
 PYEOF
 }
-stage() { STAGE=$1; set_status running; }
-
-# 0. סבב פתוח/רץ? — אותה שאילתה של update._active_round; DB שלא נקרא = לא
-# יודעים = לא משדרגים (עיקרון 5: "לא הצלחנו לבדוק" אינו "אין סבב").
-ROUND="$(python3 - "$DB" <<'PYEOF'
-import sqlite3, sys
-conn = sqlite3.connect(sys.argv[1])
-row = conn.execute("SELECT 1 FROM sessions WHERE state IN ('open', 'running') LIMIT 1").fetchone()
-print("open" if row else "none")
+# ‏#1893: סמן עמיד (fsync + rename) של מה שהריצה הזו כבר עשתה — מה שיחידת
+# imagectl-upgrade-recover קוראת באתחול שאחרי הפסקת חשמל. ‏db_snap_ver ו-payload_saved
+# הם של **הריצה הזו** בלבד: עותק DB או מטען שנשארו מעדכון קודם אינם דרך חזרה ממנה.
+write_recovery_marker() {
+    python3 - "$UPGRADE_STATE" "$REPO_DIR" "$PREV" "$TAG" "$STAGE" "$HTTP_ROOT" \
+        "${DB_SNAP_VER:-}" "$PAYLOAD_SAVED" <<'PYEOF'
+import json, os, sys
+path, repo, previous, tag, stage, http_root, db_snap_ver, payload_saved = sys.argv[1:]
+tmp = path + ".tmp"
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump({"repo": repo, "previous": previous, "tag": tag, "stage": stage,
+               "http_root": http_root, "db_snap_ver": db_snap_ver,
+               "payload_saved": payload_saved == "1"}, f)
+    f.flush(); os.fsync(f.fileno())
+os.replace(tmp, path)
 PYEOF
-)" || die "לא הצלחתי לבדוק אם יש סבב פתוח ($DB) — לא משדרגים"
-[[ "$ROUND" == "none" ]] || { set_status failed "יש סבב פתוח/רץ — השדרוג לא התחיל" round "יש סבב פתוח/רץ — השדרוג לא התחיל"; die "יש סבב פתוח/רץ — לא משדרגים"; }
+}
+stage() { STAGE=$1; set_status running; write_recovery_marker; }
+
+# 0. השרת עסוק? — ‏#1891: אותה הגדרה בדיוק כמו "החל עדכון" והאתחול המתוזמן
+# (‏auto_reboot.busy_reason): סבב, סבב חדר גם בין גלים, קליטה רצה, שיכפול
+# מקומי. בלי בדיקת "עדכון רץ" — זה העדכון עצמו; ובלי עדכון VM — המצב שלו
+# חי בתהליך השרת, ו"החל עדכון" בדק אותו לפני ששיגר אותנו. DB שלא נקרא =
+# לא יודעים = לא משדרגים (עיקרון 5: "לא הצלחנו לבדוק" אינו "לא עסוק").
+# מנהל שלחץ "עדכן בכל זאת" (‏`forced` בסטטוס של **הריצה הזו** — running, אותו
+# תג) כבר ראה את החסימה ואישר; היא נרשמה ביומן, והסקריפט אינו מסרב שוב.
+ROUND="$(python3 - "$REPO_DIR" "$DB" "$TAG" <<'PYEOF'
+import sys, types
+repo, db, tag = sys.argv[1:4]
+sys.path.insert(0, repo)
+from server import auto_reboot, update
+from server.db import connect
+conn = connect(db)
+reason = auto_reboot.busy_reason(types.SimpleNamespace(conn=conn), include_update=False)
+doc = update.get_status(conn) or {}
+forced = doc.get("state") == "running" and doc.get("tag") == tag and doc.get("forced")
+if reason and forced:
+    print(f"server-upgrade: עסוק ({reason}) — ממשיכים: המנהל אישר מעל החסימה", file=sys.stderr)
+print("none" if not reason or forced else reason)
+PYEOF
+)" || die "לא הצלחתי לבדוק אם השרת עסוק ($DB) — לא משדרגים"
+[[ "$ROUND" == "none" ]] || { set_status failed "$ROUND — השדרוג לא התחיל" round "$ROUND — השדרוג לא התחיל"; die "$ROUND — לא משדרגים"; }
 
 # 1. התג הקודם — יעד החזרה. update.py שומר אותו לפני ה-checkout.
 PREV="$(python3 - "$REPO_DIR" "$DB" <<'PYEOF'
@@ -157,6 +193,7 @@ if ! PRE_HEAD="$(git rev-parse HEAD 2>&1)" || [[ -z "$PRE_HEAD" ]]; then
     set_status failed "$why" install "$why"
     die "$why"
 fi
+
 if [[ -z "$PREV" ]]; then
     echo "אין תג קודם שמור (update_previous) — יעד החזרה הוא הקומיט הנוכחי $PRE_HEAD"
     PREV="$PRE_HEAD"
@@ -172,6 +209,7 @@ stage fetch
 if ! git_error="$(git -C "$REPO_DIR" fetch --tags 2>&1)"; then
     why="git fetch --tags נכשל: $git_error"
     set_status failed "$why" fetch "$why"
+    rm -f "$UPGRADE_STATE"
     die "$why"
 fi
 # ‏#1277: התג חתום במפתח שהעץ **המותקן** סומך עליו — לפני ה-checkout, כלומר
@@ -187,18 +225,91 @@ if sig="$(python3 -I "$REPO_DIR/tools/verify-release-tag.py" "$REPO_DIR" "$TAG" 
 else
     why="התג $TAG לא אומת כחתום — העדכון נדחה, העץ לא הוחלף: ${sig:-המאמת לא החזיר דבר}"
     set_status failed "$why" signature "$why"
+    rm -f "$UPGRADE_STATE"
     die "$why"
 fi
+# ‏#1894: עותק עקבי של ה-DB (‏sqlite backup — נכון גם תחת WAL ושרת רץ) לפני
+# שקוד חדש נוגע בו. החזרה משחזרת אותו רק אם הגרסה החדשה באמת מיגרה (‏user_version
+# עלה) — אחרת אין סיבה לאבד את מה שנרשם בינתיים. בלי עותק — לא משדרגים.
+DB_SNAPSHOT="$DB.pre-upgrade"
+DB_NOTE=""
+if ! DB_SNAP_VER="$(python3 - "$DB" "$DB_SNAPSHOT" <<'PYEOF' 2>&1
+import os, sqlite3, sys
+src, dst = sys.argv[1:3]
+tmp = dst + ".tmp"
+if os.path.exists(tmp):
+    os.unlink(tmp)
+old = os.umask(0o077)          # הקובץ מחזיק סודות (סיסמאות, MFA, console_secret)
+try:
+    source, copy = sqlite3.connect(src), sqlite3.connect(tmp)
+    source.backup(copy)
+    version = copy.execute("PRAGMA user_version").fetchone()[0]
+    copy.close()
+    source.close()
+finally:
+    os.umask(old)
+os.replace(tmp, dst)
+print(version)
+PYEOF
+)" || [[ ! "$DB_SNAP_VER" =~ ^[0-9]+$ ]]; then
+    why="העתקת ה-DB לפני העדכון ($DB_SNAPSHOT) נכשלה — לא משדרגים בלי דרך חזרה: $DB_SNAP_VER"
+    set_status failed "$why" install "$why"
+    rm -f "$UPGRADE_STATE"
+    die "$why"
+fi
+echo "ה-DB הועתק ל-$DB_SNAPSHOT (גרסת סכמה $DB_SNAP_VER)"
+
 stage install
 if ! git_error="$(git -C "$REPO_DIR" checkout --detach "$TAG" 2>&1)"; then
     why="git checkout --detach $TAG נכשל: $git_error"
     set_status failed "$why" install "$why"
+    rm -f "$UPGRADE_STATE"
     die "$why"
 fi
+# ‏#1957: יחידות הגרסה — ‏*.service וגם *.timer. גרסה בלי טיימרים היא אפס
+# טיימרים (nullglob), לא glob מילולי שנכשל ב-install.
+timer_files() {
+    local files
+    shopt -s nullglob
+    files=(install/*.timer)
+    shopt -u nullglob
+    (( ${#files[@]} == 0 )) || printf '%s\n' "${files[@]}"
+}
+install_units() {
+    local timers
+    mapfile -t timers < <(timer_files)
+    install -m 0644 install/*.service "$UNIT_DIR/" || return 1
+    (( ${#timers[@]} == 0 )) || install -m 0644 "${timers[@]}" "$UNIT_DIR/" || return 1
+}
+# ‏#1957: טיימר שהגרסה מביאה (#1895: הגיבוי השעתי) מופעל גם בעדכון, לא רק
+# בהתקנה נקייה. ‏enable --now על טיימר שכבר פעיל אינו משנה דבר.
+enable_timers() {
+    local t name
+    while IFS= read -r t; do
+        name="${t##*/}"
+        ENABLED_TIMERS+=("$name")   # לפני הניסיון: גם הפעלה חלקית מכובה בחזרה
+        systemctl enable --now "$name" || { FAILED_TIMER="$name"; return 1; }
+    done < <(timer_files)
+}
+# ‏#1957: חזרה לגרסה שאין לה את הטיימר — הוא מכובה ומוסר, אחרת הוא ממשיך
+# להריץ יחידה מול מודול שאינו קיים. רץ אחרי ה-checkout לעץ הישן.
+drop_new_timers() {
+    local name
+    for name in "${ENABLED_TIMERS[@]}"; do
+        [[ ! -f "install/$name" ]] || continue
+        if ! { systemctl disable --now "$name" && rm -f "$UNIT_DIR/$name"; }; then
+            TIMER_NOTE="$TIMER_NOTE (כיבוי $name נכשל — הוא עדיין מופעל)"
+        fi
+    done
+}
+# ‏#2000: נקרא רק מתוך `if` ב-rollback, ושם `set -e` כבוי — בלי `||` בכל צעד,
+# כשל ב-install_units נבלע, ורק ה-restart קבע אם "החזרה הצליחה". הצעד שנכשל
+# נשמר בשמו ב-ROLLBACK_STEP, והחזרה מדווחת עליו (עיקרון 5).
+ROLLBACK_STEP=""
 install_units_and_restart() {
-    install -m 0644 install/*.service "$UNIT_DIR/"
-    systemctl daemon-reload
-    systemctl restart imagectl-server
+    install_units || { ROLLBACK_STEP="התקנת היחידות של $PREV ל-$UNIT_DIR"; return 1; }
+    systemctl daemon-reload || { ROLLBACK_STEP="systemctl daemon-reload"; return 1; }
+    systemctl restart imagectl-server || { ROLLBACK_STEP="systemctl restart imagectl-server"; return 1; }
 }
 
 # ‏#1287: הקבצים שהבנייה מחליפה — ה-vmlinuz וכל --output, באותו פענוח של
@@ -249,12 +360,42 @@ restore_payload() {
 # ‏#1301: <סוג> = ה-reason כשלא חזרנו — install (ברירת מחדל) או timeout (השרת החדש
 # לא ענה בזמן). חזרה שהצליחה היא reason=rollback, כי זה מה שהמפעיל צריך לדעת: השרת
 # עובד, על הגרסה הקודמת.
+# ‏#1894: הגרסה החדשה עלתה ומיגרה את ה-DB (‏user_version גבוה מזה של העותק) — הקוד
+# הישן מסרב לעלות על DB כזה (‏db.SchemaError), ולכן החזרה מחזירה גם אותו. השירות
+# נעצר קודם: אין כותב בזמן השחזור. מה שנרשם מאז העדכון אובד — וזה נאמר בסטטוס.
+restore_db_if_migrated() {
+    local now out
+    [[ -f "$DB_SNAPSHOT" && "${DB_SNAP_VER:-}" =~ ^[0-9]+$ ]] || return 0
+    if ! now="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("PRAGMA user_version").fetchone()[0])' "$DB" 2>&1)" \
+            || [[ ! "$now" =~ ^[0-9]+$ ]]; then
+        DB_NOTE=" (גרסת הסכמה של ה-DB לא נקראה — ה-DB לא הוחזר; העותק ב-$DB_SNAPSHOT)"
+        return 0
+    fi
+    (( now > DB_SNAP_VER )) || return 0
+    if systemctl stop imagectl-server && out="$(python3 - "$DB_SNAPSHOT" "$DB" <<'PYEOF' 2>&1
+import sqlite3, sys
+snap, live = sys.argv[1:3]
+source, target = sqlite3.connect(snap), sqlite3.connect(live)
+source.backup(target)
+print(target.execute("PRAGMA user_version").fetchone()[0])
+PYEOF
+)" && [[ "$out" == "$DB_SNAP_VER" ]]; then
+        DB_NOTE=" (ה-DB עבר מיגרציה בגרסה החדשה — סכמה $DB_SNAP_VER→$now — והוחזר לעותק שלפני העדכון; מה שנרשם מאז העדכון אבד)"
+    else
+        DB_NOTE=" (החזרת ה-DB לעותק שלפני העדכון נכשלה: ${out:-systemctl stop נכשל} — העותק ב-$DB_SNAPSHOT, והשרת הישן לא יעלה על ה-DB החדש)"
+    fi
+    echo "DB:$DB_NOTE"
+}
+
 rollback() {   # rollback <סיבה> [<סוג>]
     local why="$1" cause="${2:-install}"
     trap - ERR
     echo "--- $(date -Is) upgrade to $TAG FAILED: $why ---"
     echo "מחזיר ל-$PREV"
+    ROLLBACK_STEP="git checkout --detach $PREV"
     if git checkout --detach "$PREV"; then
+        drop_new_timers
+        restore_db_if_migrated
         # המטען חוזר לפני ה-restart: השרת הישן עולה כבר מול ה-initrd שלו.
         if [[ "$PAYLOAD_SAVED" == 1 ]]; then
             if restore_payload; then
@@ -265,12 +406,13 @@ rollback() {   # rollback <סיבה> [<סוג>]
             echo "מטען האתחול:$INITRD_NOTE"
         fi
         if install_units_and_restart; then
-            set_status failed "$why · הוחזר ל-$PREV$INITRD_NOTE" rollback "$why"
+            set_status failed "$why · הוחזר ל-$PREV$INITRD_NOTE$DB_NOTE$TIMER_NOTE" rollback "$why"
+            rm -f "$UPGRADE_STATE"
             die "$why — הוחזר ל-$PREV"
         fi
     fi
-    set_status failed "$why · והחזרה ל-$PREV נכשלה גם היא" "$cause" "$why"
-    die "$why — והחזרה ל-$PREV נכשלה"
+    set_status failed "$why · והחזרה ל-$PREV נכשלה גם היא: $ROLLBACK_STEP נכשל$INITRD_NOTE$DB_NOTE$TIMER_NOTE" "$cause" "$why"
+    die "$why — והחזרה ל-$PREV נכשלה ($ROLLBACK_STEP)"
 }
 
 # ‏#1185: מכאן העץ כבר על התג החדש — והוא מה שהשרת יריץ באתחול הבא. לכן
@@ -285,8 +427,14 @@ target=$(git rev-list -n 1 "$TAG" 2>&1) || rollback "git rev-list נכשל עב�
     || rollback "העץ ב-$REPO_DIR אינו על $TAG (HEAD הוא ${current:-ריק}, התג הוא ${target:-ריק})"
 
 # 3. יחידות + 4. initrd
-install -m 0644 install/*.service "$UNIT_DIR/" || rollback "התקנת יחידות systemd ל-$UNIT_DIR נכשלה"
+install_units || rollback "התקנת יחידות systemd ל-$UNIT_DIR נכשלה"
 systemctl daemon-reload || rollback "systemctl daemon-reload נכשל"
+enable_timers || rollback "הפעלת $FAILED_TIMER נכשלה (systemctl enable --now)"
+# ‏#1893: יחידת השחזור (בתוך install/*.service שלמעלה) מופעלת כאן — לא לפני ה-fetch: עד שהעץ
+# החתום נמשך ואומת לא נוגעים ב-systemd (#1193). היא שומרת על העדכון **הבא**; לעדכון הזה
+# היא כבר פעילה מההתקנה (setup-boot-server.sh) או מהעדכון הקודם. כשל = אזהרה גלויה, לא חזרה.
+systemctl enable imagectl-upgrade-recover.service \
+    || UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }יחידת השחזור של עדכון שנקטע (imagectl-upgrade-recover) לא הופעלה — הפסקת חשמל בעדכון הבא לא תוחזר באתחול"
 
 # 3א. ‏#1411: עדכוני האבטחה של Debian — רק מהמאגר שהגרסה החתומה נושאת
 # (install/security-upgrade.sh; הגיבוב שלו בעץ התג, שאומת למעלה). לפני בניית
@@ -299,7 +447,8 @@ if [[ -f "$SEC_UP" ]]; then
     sec_out="$(bash "$SEC_UP" "$TAG" "$REPO_DIR" 2>&1)" \
         || { echo "$sec_out"; rollback "$(printf '%s\n' "$sec_out" | tail -n 1)"; }
     echo "$sec_out"
-    sec_warn="$(sed -n 's/^אזהרה: //p' <<<"$sec_out" | tail -n 1)"
+    # כל האזהרות, לא רק האחרונה: שעון לא מסונכרן (#1773) וקרנל חדש יכולים לבוא יחד.
+    sec_warn="$(sed -n 's/^אזהרה: //p' <<<"$sec_out" | awk 'NR > 1 { printf " · " } { printf "%s", $0 }')"
     if [[ -n "$sec_warn" ]]; then
         UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$sec_warn"
         set_status running
@@ -319,7 +468,7 @@ if [[ -f "$VMU_HOST" ]]; then
         echo "$vmu_out"
         vmu_why="עדכון ב-VM לא זמין: $(printf '%s\n' "$vmu_out" | tail -n 1) (install/vmupdate-host.sh, קוד $vmu_rc)"
         echo "server-upgrade: $vmu_why"
-        UPGRADE_WARNING="$vmu_why"
+        UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$vmu_why"
         set_status running
     fi
 else
@@ -367,6 +516,7 @@ fi
 # נותן לו תקרה משלו. בלי זה `install` היה 8:43 מול תקרה של 10 דקות בלי מעבר שלב.
 stage payload
 save_payload || rollback "שמירת עותק של המטען הקודם ב-$PAYLOAD_SAVE נכשלה — לא בונים בלי דרך חזרה"
+write_recovery_marker   # #1893: from here a cut power restores this run's saved payload
 bash tools/boot-payload-build.sh --http-root "$HTTP_ROOT" --manifest "$ISO_MANIFEST" "${payload_args[@]}" \
     || rollback "בניית ה-initrd נכשלה (הפירוט ב-$LOG)"
 
@@ -424,6 +574,9 @@ fi
 
 echo "--- $(date -Is) upgrade to $TAG done and verified ---"
 STAGE="done"
+# ‏#1893: הסמן יורד **לפני** "done" — חשמל שנופל ביניהם משאיר `running` (נעשה stale
+# אחרי STALE_UPDATE_MINUTES), ולא מחזיר באתחול עדכון שכבר אומת.
+rm -f "$UPGRADE_STATE"
 set_status "done"
 # אחרי האימות בלבד. כשל כאן אינו כשל שדרוג (השרת החדש רץ ואומת) — נרשם
 # בלוג, והריצה הבאה מוחקת את העותק לפני שהיא שומרת חדש (PAYLOAD_SAVED).

@@ -29,6 +29,7 @@ import json
 import math
 import sqlite3
 
+from . import net_history
 from .db import _settle, _write_lock, now_iso, writing
 
 #: המפתחות שהממשק מגדיר (‏docs/interfaces.md, hello → probe). מפתח אחר
@@ -129,11 +130,15 @@ def record(conn: sqlite3.Connection, mac: str, probe: dict) -> bool:
             conn.execute(
                 "UPDATE machine_probe SET probe_json = ?, sampled_at = ? WHERE id = ?",
                 (text, now, row["id"]))
-            return False
-        conn.execute(
-            "INSERT INTO machine_probe (mac, seen_at, sampled_at, probe_json)"
-            " VALUES (?, ?, ?, ?)", (mac, now, now, text))
-    return True
+            new = False
+        else:
+            conn.execute(
+                "INSERT INTO machine_probe (mac, seen_at, sampled_at, probe_json)"
+                " VALUES (?, ?, ?, ?)", (mac, now, now, text))
+            new = True
+    # ‏#1888: מוני הכרטיס כאן נדרסים — ההיסטוריה שלהם נשמרת בנפרד (אחרי הנעילה; אינו זורק).
+    net_history.record_nic(conn, mac, probe)
+    return new
 
 
 def _row(row: sqlite3.Row) -> dict:

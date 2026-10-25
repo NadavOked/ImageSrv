@@ -297,14 +297,15 @@ def test_zero_partition_geometry_is_not_served(tmp_path, field):
     assert library.get(MANIFEST_256["id"]) is None
 
 
-def test_size_filtering_matches_the_family_rule(tmp_path, images_root):
-    """אימג' 256 מותר בכונן 256 ו-500; אימג' 500 רק ב-500 (סעיף 9)."""
+def test_size_filtering_is_by_size_not_family(tmp_path, images_root):
+    """‏#1863 (נדב 20/10): הגודל האמיתי מכריע, לא המשפחה. אימג' "500" שהפריסה
+    שלו (~255.4GB) נכנסת לכונן 256 — מוצע לו; כונן קטן מהפריסה — לא."""
     library = ImageLibrary(images_root)
+    disk_240 = [{"size_bytes": 240057409536, "removable": False}]
     disk_256 = [{"size_bytes": 256060514304, "removable": False}]
-    disk_500 = [{"size_bytes": 500107862016, "removable": False}]
     usb_only = [{"size_bytes": 999999999999, "removable": True}]
-    assert library.allowed_for_disks(disk_256) == ["img_7f3a91"]
-    assert library.allowed_for_disks(disk_500) == ["img_2c8e04", "img_7f3a91"]
+    assert library.allowed_for_disks(disk_240) == []
+    assert library.allowed_for_disks(disk_256) == ["img_2c8e04", "img_7f3a91"]
     assert library.allowed_for_disks(usb_only) == []
 
 

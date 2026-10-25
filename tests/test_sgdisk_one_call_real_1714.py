@@ -74,6 +74,8 @@ def _reference_table(img: Path) -> None:
     for i, t, _r, _fs, s, n, u, a in PARTS:
         _sg("-a", "1", "-n", f"{i}:{s}:{s + n - 1}", "-t", f"{i}:{t}", "-u", f"{i}:{u}",
             *(["-A", f"{i}:=:0x{a}"] if a else []), str(img))
+    for i, *_rest in PARTS:   # #1798: the incomplete-write mark rides in the same table call
+        _sg("-c", f"{i}:imagectl-incomplete", str(img))
     _sg("-U", DISK_GUID, str(img))
     _sg("-e", str(img))
 
@@ -87,6 +89,8 @@ def _reference_expand(img: Path) -> None:
         "-A", f"{i}:=:0x{a}", str(img))
     c, ct, _r, _fs, cs, _n, cu, _a = PARTS[2]
     _sg("-a", "1", "-d", str(c), "-n", f"{c}:{cs}:0", "-t", f"{c}:{ct}", "-u", f"{c}:{cu}", str(img))
+    for k in (c, i):   # #1798: -d/-n rebuilt them unnamed -- the mark again, candidate then tail
+        _sg("-c", f"{k}:imagectl-incomplete", str(img))
 
 
 def _agent(tmp_path: Path, call: str) -> str:
@@ -102,13 +106,14 @@ def _agent(tmp_path: Path, call: str) -> str:
         'log() { echo "LOG $*" >> "$LOG_FILE"; }\n'
         # waits.sh: apply_gpt/expand_last reread through reread_table (#1594). Without it
         # the call is "not found", and the log says the kernel refused.
-        + source_line("waits.sh", "restore.sh", "expand.sh")
+        + source_line("waits.sh", "restore.sh", "expand.sh", "expandshare.sh", "writemark.sh")
         + f'manifest_plan() {{ cat "{plan.as_posix()}"; }}\n'
         f'json_get() {{ case "$2" in .sector_size) echo 512 ;; .scheme) echo gpt ;; '
         f'.disk_guid) echo {DISK_GUID} ;; *) echo null ;; esac; }}\n'
         f'blockdev() {{ case "$1" in --getss) echo 512 ;; --getsz) echo {SECTORS} ;; *) return 0 ;; esac; }}\n'
         'target_write_started() { :; }\n'
         'verify_table() { :; }   # the read-back is the byte comparison below\n'
+        'share_tail() { printf "%s\\n" "$4"; }   # #1897: no shrunk tail here; test_expand_share_1897.py\n'
         f'if {call} sda manifest.json; then echo OK; else echo FAIL; fi\n'
     )
     return bb(tmp_path, body).strip()

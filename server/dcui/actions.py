@@ -71,6 +71,9 @@ class ActionResult:
     ok: bool
     message: str
     details: tuple[str, ...] = ()
+    #: #1988: the Hebrew sentence for the graphical screen when the backend
+    #: wrote one (tty1 is ASCII and shows ``message``).
+    he: str = ""
 
 
 def password_problem(password: str) -> str | None:
@@ -301,6 +304,8 @@ def default_network_hooks() -> dict[str, Callable]:
         **netcfg_host.default_hooks(),
         "boot_id": netcfg_rollback.boot_id,
         "now": time.time,
+        "sleep": time.sleep,
+        "monotonic": time.monotonic,
         "hostname": socket.gethostname,
         "read_resolv": _read_resolv,
     }
@@ -400,7 +405,10 @@ def restart_management_network(conn, interface: str, data_dir: Path,
         return ActionResult(False, "A previous network change still awaits confirmation.")
     active_hooks = {**default_network_hooks(), **(hooks or {})}
     error = active_hooks["netcfg_apply"](interface)
-    gaps = [] if error else netcfg_host.mismatches(cfg, active_hooks["netcfg_state"]())
+    # #2094: a DHCP read-back waits for the lease (dhcpcd -b returns at once)
+    gaps = [] if error else netcfg_host.settled_mismatches(
+        cfg, active_hooks["netcfg_state"], sleep=active_hooks.get("sleep", time.sleep),
+        clock=active_hooks.get("monotonic", time.monotonic))
     if error or gaps:
         journal(conn, "dcui_management_network_restart",
                 f"{interface} ok=false {'apply failed' if error else 'live state mismatch'}",
@@ -449,3 +457,48 @@ def request_network_rollback(conn, data_dir: Path,
             f"{marker.interface} ok={str(ok).lower()}", "dcui")
     return ActionResult(ok, "Network rollback requested." if ok
                         else "Network rollback could not be started.")
+
+
+# ---- #1988: "Add Disk" -- the same flow as the web console ------------------
+
+def blank_disks(hooks: dict | None = None) -> tuple[dict | None, ActionResult | None]:
+    """(listing, None) or (None, the reason it could not be read)."""
+    from server import storage_disks
+    from server import storage_locations as sl
+    try:
+        return storage_disks.blank_disks({**sl.default_hooks(), **(hooks or {})}), None
+    except storage_disks.AddDiskError as exc:
+        return None, ActionResult(False, exc.en, he=exc.message)
+
+
+def disk_name(conn, disk: dict) -> str:
+    """The location name for a disk added here (nothing is typed on tty1):
+    ``disk-<last 6 of the serial>`` (or the kernel name), unique."""
+    tail = (disk.get("serial") or disk.get("name") or "x")[-6:]
+    clean = "".join(ch for ch in tail if ch.isascii() and (ch.isalnum() or ch in "-_"))
+    base = "disk-" + (clean or "x")
+    name, n = base, 2
+    while conn.execute("SELECT 1 FROM storage_locations WHERE name = ?", (name,)).fetchone():
+        name, n = f"{base}-{n}", n + 1
+    return name
+
+
+def add_disk(conn, data_dir: Path, disk: dict, hooks: dict | None = None) -> ActionResult:
+    from server import storage_disks
+    from server import storage_locations as sl
+    if conn is None:
+        return ActionResult(False, "The server database is not available.")
+    name = disk_name(conn, disk)
+    try:
+        row = storage_disks.add_disk(
+            conn, {**sl.default_hooks(), **(hooks or {})}, data_dir,
+            device=disk.get("device") or "", serial=disk.get("serial") or "",
+            size_bytes=disk.get("size_bytes"), name=name, user="dcui")
+    except storage_disks.AddDiskError as exc:
+        return ActionResult(False, exc.en, he=exc.message)
+    mount = row["mount_point"]
+    return ActionResult(True, f"Disk {disk.get('device')} added as storage location {name}.",
+                        (f"Mounted at {mount} (UUID in /etc/fstab, nofail).",
+                         "Write/read-back check passed."),
+                        he=f"הכונן {disk.get('device')} נוסף כמיקום האחסון {name}, "
+                           f"מחובר קבוע ב-{mount}. קובץ בדיקה נכתב ונקרא בחזרה.")

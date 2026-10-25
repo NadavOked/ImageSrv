@@ -55,7 +55,7 @@ APP_DIR="/opt/imagectl"
 DATA_DIR="/var/lib/imagectl"
 IMAGES_DIR="/srv/imagectl/images"
 # הריפו שונה שמו ל-ImageCtl-archive ב-09/2026 והפך לפרטי; השם הישן
-# `NadavOked/ImageCtl` הוא הריפו הציבורי (פרסום נקי, קומיט יחיד, בלי היסטוריה), לא ריפו העבודה.
+# `NadavOked/ImageCtl` (היום `NadavOked/ImageSrv`) הוא הריפו הציבורי (פרסום נקי, קומיט יחיד, בלי היסטוריה), לא ריפו העבודה.
 # שרת האתחול מתקין מהארכיון הפרטי: ‏clone ממנו דורש אישורים ונכשל בקול
 # כשהם חסרים — וזה המצב הרצוי.
 REPO_URL="https://github.com/NadavOked/ImageCtl-archive"
@@ -548,6 +548,7 @@ say "כרטיס הפצה: ${IFACE:-לא עכשיו (מהקונסולה)} · כר
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PKGS=(shim-signed grub-efi-amd64-signed grub-pc-bin dnsmasq dhcpcd-base
+      chrony                                  # #1773: client + NTP server; conflicts with systemd-timesyncd
       python3-fastapi python3-uvicorn
       python3-qrcode                          # #1150: QR במסך הגדרת ה-MFA — בלעדיו הקונסולה מציגה סוד להקלדה ידנית
       python3-websockets                      # #904: uvicorn WebSocket — בלעדיו המוניטור (#690) מחזיר 500
@@ -555,11 +556,16 @@ PKGS=(shim-signed grub-efi-amd64-signed grub-pc-bin dnsmasq dhcpcd-base
       open-iscsi nfs-common cifs-utils        # #1066: יוזם iSCSI + לקוח NFS/SMB
       git                                     # #1185: כפתור העדכון = git describe/fetch/checkout על /opt/imagectl — גם כשהקוד הגיע מה-ISO
       rsync                                   # #1128: tools/backup-server.sh — אימג'ים ותיקיית הנתונים ליעד הגיבוי, מצטבר
-      ifenslave)                              # #1264: כרטיס שני לרשת ההפצה — bond-slaves ב-ifupdown; בלעדיו ifup bond0 נופל
+      nut-client nut-server                   # #1973: UPS — upsd ודרייבר ה-USB; השרת קורא בפרוטוקול NUT ומגדיר מהקונסולה
+      ifenslave                               # #1264: כרטיס שני לרשת ההפצה — bond-slaves ב-ifupdown; בלעדיו ifup bond0 נופל
+      dbus                                    # #1987: hostnamectl/timedatectl (‏console_hostcfg, ‏#1447) — עד היום הגיע רק כ-Recommends של libdbus-1-3
+      linux-image-amd64)                      # #1987: קרנל לא-cloud ל-build_initramfs (#904) ולמכשיר ה-guestfs — עד היום רק Recommends של supermin
 
+# ‏--no-install-recommends (‏#1987): רק מה שברשימה ומה שהוא חייב. תלות שהגיעה עד היום
+# דרך Recommends ובאמת נדרשת נרשמת כאן במפורש (dbus, ‏linux-image-amd64), לא חוזרת דרך apt.
 say "מתקין חבילות: ${PKGS[*]}"
 run env DEBIAN_FRONTEND=noninteractive apt-get update -qq
-run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${PKGS[@]}"
+run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${PKGS[@]}"
 
 # ‏#1334: עדכון אימג' ב-VM — החבילות (install/vmupdate-packages.txt, המקור
 # היחיד) ומשתמש המערכת imagectl-vm. אותו סקריפט מריץ העדכון מהכפתור
@@ -772,7 +778,7 @@ install_firewall() {
     fi
     local DEPLOY_FOR_NFT="${IFACE:-$CONSOLE_DEPLOY_IF}"
     say "מתקין ומפעיל חומת אש nftables (הפצה=${DEPLOY_FOR_NFT:-טרם הוגדר}, שרתים=$SERVERS_IF)"
-    run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables
+    run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends nftables
     NFT_GEN="$APP_DIR/install/nftables-rules.sh"
     [[ -f "$NFT_GEN" ]] || NFT_GEN="$SCRIPT_DIR/nftables-rules.sh"
     [[ -f "$NFT_GEN" ]] || die "חסר מחולל חומת האש: install/nftables-rules.sh"
@@ -948,6 +954,23 @@ for note in notes:
     print("    " + note)
 if error:
     sys.exit(error)
+# #2138 (rc3, Hyper-V 24/10): a static NIC has no DHCP client to write DNS,
+# and the interfaces file only names it in a comment -- so the server had no
+# /etc/resolv.conf at all. Written here, after the temporary DHCP clients on
+# the other NICs were stopped (their hook rewrites resolv.conf on the way
+# out), and read back. DHCP: dhcpcd's hook owns the file; not touched.
+if cfg.mode == netcfg.MODE_STATIC and cfg.dns:
+    resolv = netcfg.render_resolv([cfg])
+    error = netcfg_host.write_resolv(resolv, netcfg_host.RESOLV_CONF)
+    if error:
+        sys.exit(error)
+    try:
+        back = open(netcfg_host.RESOLV_CONF, encoding="utf-8").read()
+    except OSError as exc:
+        sys.exit("לא ניתן לקרוא בחזרה את %s: %s" % (netcfg_host.RESOLV_CONF, exc))
+    if back != resolv:
+        sys.exit("%s אינו מכיל את ה-DNS שנכתב (%s)" % (netcfg_host.RESOLV_CONF, ", ".join(cfg.dns)))
+    print("    נכתב %s: %s" % (netcfg_host.RESOLV_CONF, ", ".join(cfg.dns)))
 conn = connect("$DATA_DIR/imagectl.db")
 set_setting(conn, netcfg.SETTING_PREFIX + cfg.name, cfg.to_json())
 NETEOF
@@ -965,6 +988,12 @@ run install -m 0644 "$APP_DIR/install/imagectl-netrollback.service" \
     /etc/systemd/system/imagectl-netrollback.service
 run install -m 0644 "$APP_DIR/install/imagectl-netrollback.timer" \
     /etc/systemd/system/imagectl-netrollback.timer
+# ‏#1895 (נדב 22/10): גיבוי המסד כל שעה ליעד שנבחר בהגדרות (בלי יעד — לא עושה דבר,
+# והבריאות כתומה). מופעל כאן, כדי שבחירת יעד בקונסולה תספיק.
+run install -m 0644 "$APP_DIR/install/imagectl-backup.service" \
+    /etc/systemd/system/imagectl-backup.service
+run install -m 0644 "$APP_DIR/install/imagectl-backup.timer" \
+    /etc/systemd/system/imagectl-backup.timer
 # ‏#910 חלק ב': מסך השרת על tty1 (DCUI). getty@tty1 מוסווה — היחידה מכריזה
 # Conflicts= עליו, ובלי mask הוא היה חוזר בכל אתחול ומפיל את ה-DCUI.
 run rm -f /etc/systemd/system/imagectl-dcui.service.d/firstboot.conf
@@ -972,6 +1001,9 @@ run install -m 0644 "$APP_DIR/install/imagectl-dcui.service" \
     /etc/systemd/system/imagectl-dcui.service
 run install -m 0644 "$APP_DIR/install/imagectl-installer-gui.service" \
     /etc/systemd/system/imagectl-installer-gui.service
+# ‏#1893: מחזירה באתחול עדכון שנקטע בהפסקת חשמל (tools/server-upgrade-recover.sh).
+run install -m 0644 "$APP_DIR/install/imagectl-upgrade-recover.service" \
+    /etc/systemd/system/imagectl-upgrade-recover.service
 # ‏#1195: הודעות קרנל (‏`imagectl-drop` של nftables) הודפסו מעל ה-DCUI על tty1;
 # הן נשארות ביומן, הקונסולה מקבלת רק crit ומעלה. ‏sysctl -p — מעכשיו, לא רק
 # מהאתחול הבא; כישלון נאמר (מארח בלי /proc/sys/kernel/printk הוא מקרה שם).
@@ -1063,6 +1095,8 @@ TLSEOF
 fi
 run systemctl daemon-reload
 run systemctl enable --now imagectl-netrollback.timer
+run systemctl enable --now imagectl-backup.timer   # #1895
+run systemctl enable imagectl-upgrade-recover.service   # #1893: after the reload that made it known
 # ‏#910 חלק ב': ההתקנה מה-ISO כבר מפעילה את ה-DCUI; restart מחיל את
 # WorkingDirectory האמיתי אחרי הסרת ה-drop-in הזמני. בהרצה ידנית הוא מפעיל אותו.
 run systemctl mask getty@tty1.service
@@ -1095,6 +1129,15 @@ install_firewall
 # ‏#1088: הכתובת שמדפיסים היא זו של כרטיס השרתים **עכשיו**; בלקוח DHCP
 # היא יכולה להתחלף — ואז השם (hostname ב-DNS של המכללה) הוא הדרך היציבה.
 CONSOLE_SHOWN="${CONSOLE_TLS_HOST:-127.0.0.1}"
+# #2148: first boot (firstboot-answers.sh) runs this before the NIC has its
+# address and then restarts the server, which issues the certificate again for
+# that address -- the fingerprint printed here was replaced seconds later, and
+# the log told the operator to compare against it. There the DCUI shows the
+# one the console presents, once first boot is done.
+CONSOLE_FP_SHOWN="SHA-256 $CONSOLE_FP"
+if [[ "${IMAGECTL_CONSOLE_FP_ON_DCUI:-}" == 1 ]]; then
+    CONSOLE_FP_SHOWN="טביעת האצבע: במסך השרת (DCUI) בסוף האתחול הראשון"
+fi
 if [[ -n "$ADMIN_PASS" ]]; then
     ADMIN_LOGIN_MESSAGE="משתמש $ADMIN_USER נוצר עם הסיסמה שנקבעה בהתקנה"
 else
@@ -1107,7 +1150,7 @@ cat <<EOF
                  בלקוח DHCP הכתובת יכולה להתחלף, הקונסולה עוקבת אחריה (#1088)
                  $ADMIN_LOGIN_MESSAGE
                  תעודה עצמית — הדפדפן יבקש אישור פעם אחת; להשוות:
-                 SHA-256 $CONSOLE_FP
+                 $CONSOLE_FP_SHOWN
   רשת הפצה       ${IFACE:+$IFACE · $SERVER_URL}${IFACE:-לא הוגדרה — דף הרשת בקונסולה: בחר כרטיס → כתובת → DHCP}
   TFTP root      $TFTP_ROOT  (bootx64.efi -> grubx64.efi -> grub/grub.cfg)
   נתונים         $DATA_DIR · אימג'ים: $IMAGES_DIR

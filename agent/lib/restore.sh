@@ -114,10 +114,10 @@ node_is_block() {
 
 stream_source() {
     # $1 = mode, $2 = server URL, $3 = image id, $4 = file, $5 = תקרה עד הבייט הראשון.
-    if [ "$1" = "multicast" ]; then
-        udp-receiver --nokbd --portbase "$UDPCAST_PORTBASE" \
-            --start-timeout "${5:-${WAIT_STREAM_START_S:-600}}" \
-            --receive-timeout "$UDPCAST_STALL_TIMEOUT" 2>> "$LOG_FILE"
+    if [ "$1" = "multicast" ]; then   # #2039: the NIC DHCP answered on (net.conf), as directsend's sender; >&2: stdout is the stream
+        [ -n "${IFACE:-}" ] || log "udp-receiver: IFACE is empty -- no --interface, udpcast picks its default NIC (#2039)" >&2
+        udp-receiver --nokbd ${IFACE:+--interface "$IFACE"} --portbase "$UDPCAST_PORTBASE" \
+            --start-timeout "${5:-${WAIT_STREAM_START_S:-600}}" --receive-timeout "$UDPCAST_STALL_TIMEOUT" 2>> "$LOG_FILE"
     else
         http_get_stream "$2/api/v1/images/$3/files/$4"
     fi
@@ -167,17 +167,13 @@ restore_partition() {
     fi
 
     next_stream_ceiling   # #957: אחרי ה-swap — נספרים רק זרמים
-    rm -f "$_tdir/feed" "$_tdir/sha.out" "$_tdir/pipe.rc" "$_tdir/fanout.rc" "$_tdir/fanout.out"
+    rm -f "$_tdir/feed" "$_tdir/sha.out" "$_tdir/pipe.rc" "$_tdir/zstd.rc" "$_tdir/fanout.rc" "$_tdir/fanout.out"
     mkfifo "$_tdir/feed"
     # הצינור רץ ברקע כדי שתהיה עין שמסתכלת עליו: המונה (‏-P, פורמט pv -n)
     # הוא ההוכחה היחידה שמשהו זז, ו-wait_progress מודד בדיוק אותו. ‏#1444:
     # מונה וגיבוב בתוך fanout ולא pv|tee|sha256sum של busybox (‏#1438).
-    # shellcheck disable=SC2046 # דגלי partclone_mode הם רשימת מילים
     (
-        { zstd -dc < "$_tdir/feed" 2>> "$LOG_FILE" \
-            | "$_pcl" $(partclone_mode "$_pcl" -r) -s - -O "$_node" \
-                -L "$_tdir/partclone.log" 2>> "$LOG_FILE"
-          echo "$?" > "$_tdir/pipe.rc"; } &
+        restore_pipe "$_tdir" "$_pcl" "$_node" pipe.rc &   # #1906: zstd's rc too (drawers.sh), as the drawers'
         _wpid=$!
         stream_source "$1" "$2" "$3" "$7" "$STREAM_START_CEILING" \
             | fanout -S "$_tdir/sha.out" -P "$_tdir/bytes.raw" 16777216 "$_tdir/feed" \
@@ -191,6 +187,7 @@ restore_partition() {
             "$STREAM_START_CEILING" "$WAIT_STREAM_STALL_S" \
             "מחיצה $5 ($7) על $4" "$_tdir/feed"; then
         _rc=$(cat "$_tdir/pipe.rc" 2>/dev/null || echo 1)
+        [ "$_rc" -ne 0 ] || _rc=$(cat "$_tdir/zstd.rc" 2>/dev/null || echo 1)   # #1906: not recorded = not 0
         [ "$_rc" -ne 0 ] || _rc=$(cat "$_tdir/fanout.rc" 2>/dev/null || echo 1)
     else
         _rc="$WAIT_TIMED_OUT"
@@ -198,7 +195,10 @@ restore_partition() {
     rm -f "$_tdir/feed" "$_tdir/feed.bytes"
 
     if [ "$_rc" -ne 0 ]; then
-        restore_blame "$_tdir" "$8"; log "partition $5 ($7): write failed (rc=$_rc${RESTORE_BLAME:+, blamed on the stream})"   # #1601
+        if [ -f "$_tdir/writeback.failed" ]; then RESTORE_BLAME=""; log "partition $5 ($7): periodic fsync failed (write_error)"
+        else
+            restore_blame "$_tdir" "$8"; log "partition $5 ($7): write failed (rc=$_rc${RESTORE_BLAME:+, blamed on the stream})"   # #1601
+        fi
         return 1
     fi
 
@@ -240,6 +240,7 @@ run_restore() {
     fi
     # #1366: a disk that does not take a write, or writes below the floor, fails here by name.
     { write_check "$2" && write_speed_verdict "$2"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }
+    discard_before_restore "$2"; [ $? != 2 ] || { target_set "$2" failed "ה-TRIM לא הסתיים תוך $DISCARD_MAX_S שניות"; echo "failed" > "$RUN_DIR/state"; return 1; }   # #1969
 
     # הטבלה נקבעת עד תומה לפני שהנתונים מגיעים — כולל ההרחבה, כי היא זו
     # שמעבירה swap נגררת לזנב, וה-mkswap של הלולאה חייב לנחות על המקום
@@ -294,7 +295,6 @@ run_restore() {
         return 1
     fi
 
-    echo "verifying" > "$RUN_DIR/state"
-    finish_grow "$2" || { echo "failed" > "$RUN_DIR/state"; return 1; }
-    echo "done" > "$RUN_DIR/state"
-}
+    echo "verifying" > "$RUN_DIR/state"   # #1805: what the disk holds, before the filesystem grows
+    { RB_SERVER=$3 RB_IMAGE=$4 readback_drawers "$5" "$2" && finish_grow "$2" "" "$5"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }
+}   # #1935: still 'verifying' -- done is the caller's, after the name, the drivers and the mark

@@ -438,7 +438,16 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
             journal(ctx.conn, "net_config_unverified",
                     f"{name} {error or ' · '.join(gaps)[:200]}", who)
         if not armed:
+            # ‏#2076: כאן מגיע רק סמן שאינו ניתן לפענוח (סמן תקין נדחה ב-`_configure`).
+            # ‏`clear_pending` בולע כישלון מחיקה, ולכן — כמו באישור (#291/#1226) —
+            # "נוקה" נקבע לפי ראיה שהסמן איננו, ומה שנשאר נאמר בשמו.
             netcfg_rollback.clear_pending(state_dir)
+            stuck = netcfg_rollback.pending_path(state_dir)
+            if stuck.exists():
+                left = (f"ההגדרה הוחלה, אבל סמן ההחזרה הישן ({stuck}) לא נמחק — "
+                        "הוא יישאר עד שיימחק ידנית")
+                journal(ctx.conn, "net_rollback_marker_stuck", f"{name} {stuck}", who)
+                error = f"{error} · {left}" if error else left
         return {"ok": error is None and verified, "verified": verified,
                 "apply_error": error, "mismatches": gaps,
                 "interface": state_view(cfg, live, state),

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import room, update
+from .atomicfile import write_atomic
 from .db import get_setting, journal
 
 MODE = "auto_reboot"
@@ -97,7 +98,13 @@ def update_verdict(rt, now: datetime | None = None) -> tuple[bool, str | None]:
     return True, None
 
 
-def busy_reason(rt, now: datetime | None = None) -> str | None:
+def busy_reason(rt, now: datetime | None = None, *, include_update: bool = True) -> str | None:
+    """מה מונע restart של השרת עכשיו, או None. ההגדרה **היחידה** של "עסוק" —
+    האתחול המתוזמן, "החל עדכון", שינויי הגדרות שמחייבים אתחול
+    (‏`update.restart_blocker`) ו-`server-upgrade.sh` קוראים כולם כאן (#1891).
+
+    ‏``include_update=False``: למי שהוא עצמו העדכון — "החל עדכון" בודק עדכון
+    רץ בנפרד (עם התג בהודעה), והסקריפט רץ **בתוך** מצב "רץ" של עצמו."""
     conn = rt.conn
     if conn.execute("SELECT 1 FROM sessions WHERE state IN ('open','running') LIMIT 1").fetchone():
         return "יש סבב הפצה פתוח או רץ"
@@ -105,16 +112,24 @@ def busy_reason(rt, now: datetime | None = None) -> str | None:
         return "יש סבב חדר פתוח או רץ"
     if conn.execute("SELECT 1 FROM tasks WHERE type = 'capture' AND state = 'running' LIMIT 1").fetchone():
         return "קליטת אימג' רצה"
-    if update_verdict(rt, now)[0]:
+    if include_update and update_verdict(rt, now)[0]:
         return "עדכון שרת רץ"
     vm = getattr(rt, "vmupdate", None)
     if vm is not None:
         state = vm.status(None).get("state")
         if state not in ("idle", "saved", "error"):
             return f"עדכון VM במצב {state}"
-    rows = conn.execute("SELECT local_clone, last_seen FROM net_devices WHERE local_clone IS NOT NULL")
-    if any(room.local_copy_now(row["local_clone"], row["last_seen"]) for row in rows):
-        return "מחשב מדווח על שיכפול מקומי"
+    # ‏#1891 (סקירה): האות הזה מגיע מהמחשב עצמו. רק מחשב **רשום** נספר — ה-hello
+    # שכתב אותו עבר את שער הזהות (‏identity_gate) לפני net_seen; ‏MAC לא רשום
+    # אינו חוסם כלום. ורק דיווח טרי (`local_copy_now`, ‏AWAKE_SECONDS): מחשב
+    # ששתק אינו "כותב". הרשימה בהודעה — כדי שהמנהל יידע את מי לבדוק.
+    rows = conn.execute(
+        "SELECT n.mac, n.local_clone, n.last_seen FROM net_devices n"
+        " JOIN machines m ON m.mac = n.mac WHERE n.local_clone IS NOT NULL")
+    copying = [row["mac"] for row in rows
+               if room.local_copy_now(row["local_clone"], row["last_seen"])]
+    if copying:
+        return f"מחשב מדווח על שיכפול מקומי: {', '.join(copying)}"
     return None
 
 
@@ -170,7 +185,7 @@ class Scheduler:
         if ignored:
             journal(self.rt.conn, "auto_reboot", f"התעלמות — {ignored}")
         self.reboot()
-        (Path(self.rt.data_dir) / MARKER).write_text(current.isoformat(), encoding="ascii")
+        write_atomic(Path(self.rt.data_dir) / MARKER, current.isoformat(), encoding="ascii")
         journal(self.rt.conn, "auto_reboot", "בוצע — הפעלה מחדש לפי לוח הזמנים")
         self.due = next_occurrence(mode, at, weekday, current)
         self.first_deferred = self.retry_at = None

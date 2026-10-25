@@ -25,6 +25,7 @@ import pytest
 
 from native import requires_native
 from test_local_clone_engine import (  # noqa: F401 -- fanout_bin is a fixture
+    ENGINE_LOCK,
     LIB,
     LIBS,
     SBIN,
@@ -45,7 +46,7 @@ TAIL_SECTORS = (64 << 20) // 512
 pytestmark = requires_native(
     ("sudo -n", _sudo_ok()),
     *[(t, _tool(t)) for t in ("losetup", "sgdisk", "partclone.ntfs", "partclone.fat", "partclone.dd",
-                              "ntfsresize", "mkntfs", "mkfs.vfat", "ntfs-3g", "pv", "gcc", "jq", "curl")],
+                              "ntfsresize", "mkntfs", "mkfs.vfat", "ntfs-3g", "pv", "gcc", "jq", "curl", "flock")],
     posix=True,
     why="loop devices and partclone as root: the Testrunner",
 )
@@ -105,8 +106,11 @@ def _run(tmp_path: Path, fx: Path, fanout: Path, server: str) -> dict:
     script = tmp_path / "drive.sh"
     script.write_text(DRIVER % {"lib": LIB, "sources": "\n".join(f'. "$LIB_DIR/{n}.sh"' for n in LIBS)},
                       newline="\n")
+    # #2099: SHRINK=1 loads `brd` (the RAM view), a module of the whole machine -- the same
+    # turn-taking lock as test_local_clone_engine (#1594), or a parallel worker's engine run
+    # finds brd "already loaded, not by the clone" and refuses.
     run = _root(f"PATH={fanout}:{os.environ.get('PATH', '')}:{SBIN}", f"SERVER={server}", "STOP_AT=",
-                "LC_STALL_S=120", "sh", str(script), str(fx), "1", timeout=1500)
+                "LC_STALL_S=120", "flock", ENGINE_LOCK, "sh", str(script), str(fx), "1", timeout=1500)
     out = {"raw": run.stdout + run.stderr}
     for line in run.stdout.splitlines():
         key, _, val = line.partition(" ")

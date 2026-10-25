@@ -106,7 +106,7 @@ def test_a_capture_task_report_in_dashes_updates_the_task(server):
     """אותו באג ב-`_ingest_task`: ‏`tasks.mac` קנוני גם הוא."""
     mac = "aa:bb:cc:00:00:10"
     assert server["admin"].post("/api/console/machines", json={
-        "mac": mac, "name": "מחשב בנייה", "group_id": "grp_BUILD",
+        "mac": mac, "name": "BUILD-PC", "group_id": "grp_BUILD",
     }).status_code == 200
     created = server["admin"].post("/api/console/tasks/capture", json={
         "mac": mac, "disk": "sda", "name": "Windows 11 Base",

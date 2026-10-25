@@ -57,7 +57,7 @@ pytestmark = requires_native(
 
 # expand: diskfit calls _expand_candidate since #1354 (2b195230), as imagectl-agent sources it.
 LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "failmark", "verdict", "ntfsboot", "expand", "diskfit",
-        "bootcadb", "restore", "drawers", "clonergui", "writecheck")
+        "bootcadb", "restore", "drawers", "drawerfeed", "clonergui", "writecheck")
 
 SETUP = r'''
 set -eu
@@ -73,11 +73,17 @@ printf '0 65536 linear %s 0\n65536 32768 error\n98304 32768 linear %s 98304\n' "
 echo "err /dev/mapper/wcerr$ID" >> "$D/devs"
 echo '0 131072 zero' | dmsetup create "wczero$ID"
 echo "zero /dev/mapper/wczero$ID" >> "$D/devs"
+# #1805 (CLR-02): 96MiB reported, 32MiB real -- three segments onto one backing
+truncate -s 32M "$D/wrapback.img"; echo "wrapback $(losetup -f --show "$D/wrapback.img")" >> "$D/devs"
+wb=$(awk '$1 == "wrapback" { print $2 }' "$D/devs")
+printf '0 65536 linear %s 0\n65536 65536 linear %s 0\n131072 65536 linear %s 0\n' "$wb" "$wb" "$wb" \
+    | dmsetup create "wcwrap$ID"
+echo "wrap /dev/mapper/wcwrap$ID" >> "$D/devs"
 '''
 
 TEARDOWN = r'''
 D=$1; ID=$2
-dmsetup remove "wcerr$ID" 2>/dev/null; dmsetup remove "wczero$ID" 2>/dev/null
+dmsetup remove "wcerr$ID" 2>/dev/null; dmsetup remove "wczero$ID" 2>/dev/null; dmsetup remove "wcwrap$ID" 2>/dev/null
 [ -f "$D/devs" ] && while read -r n d; do case "$d" in /dev/loop*) losetup -d "$d" ;; esac; done < "$D/devs"
 umount "$D/full" 2>/dev/null
 # #1534: the cleanup is proven, not assumed -- read back that nothing this fixture
@@ -86,7 +92,7 @@ umount "$D/full" 2>/dev/null
 for _try in 1 2 3 4 5 6 7 8 9 10; do
     left=""
     dl=$(dmsetup ls) || left="$left dmsetup-ls-failed"
-    hit=$(printf '%s\n' "$dl" | awk -v a="wcerr$ID" -v b="wczero$ID" '$1 == a || $1 == b { printf " dm:%s", $1 }')
+    hit=$(printf '%s\n' "$dl" | awk -v a="wcerr$ID" -v b="wczero$ID" -v c="wcwrap$ID" '$1 == a || $1 == b || $1 == c { printf " dm:%s", $1 }')
     left="$left$hit"
     lo=$(losetup -a) || left="$left losetup-a-failed"
     case "$lo" in *"$D/"*) left="$left loop:$(printf '%s\n' "$lo" | grep -F "$D/" | cut -d: -f1 | tr '\n' ' ')" ;; esac
@@ -138,6 +144,7 @@ room)   # $@ = the selected ports (line numbers); every fixture disk is a drawer
     restore_partition_drawers() { shift 8; for d in "$@"; do
         [ "$(cat "$RUN_DIR/targets/$d/state")" = failed ] || { echo "fed $d" >> "$F/calls"; target_partition_done "$d"; }; done; }
     finish_grow() { target_set "$1" done; }
+    readback_drawers() { :; }   # #1805: the read-back has its own tests (test_readback_agent_1805.py)
     : > "$F/calls"
     # shellcheck disable=SC2086
     run_restore_drawers multicast http://127.0.0.1:9 img "$F/m.json" $_disks; echo "RR $?"
@@ -232,7 +239,14 @@ def test_a_good_disk_is_written_in_three_places_and_read_back(fx):
     start, mid, end = _region(img, 0, 16), _region(img, 128, 16), _region(img, 240, 16)
     assert start.count(0) < MIB and mid.count(0) < MIB and end.count(0) < MIB
     assert len({start, mid, end}) == 3
-    assert _region(img, 16, 112) == bytes(112 * MIB) and _region(img, 144, 96) == bytes(96 * MIB)
+    # #1805 (CLR-02): and a 4KiB random marker at every power-of-two MiB -- between
+    # the places that is 16, 32 and 64 MiB; nothing else between them was touched.
+    between = bytearray(_region(img, 16, 112))
+    for mib in (16, 32, 64):
+        off = (mib - 16) * MIB
+        assert between[off:off + 4096].count(0) < 4096, mib
+        between[off:off + 4096] = bytes(4096)
+    assert bytes(between) == bytes(112 * MIB) and _region(img, 144, 96) == bytes(96 * MIB)
     entry = next(t for t in json.loads((fx / "progress.json").read_text(encoding="utf-8"))["targets"])
     assert entry["write_preflight"]["state"] == "ok", entry
     # the speed, from dd's own summary: a number, measured (5b) -- never a made-up 0
@@ -254,6 +268,19 @@ def test_a_disk_that_does_not_take_the_write_fails_by_name(fx, name, place, deta
     assert entry["state"] == "failed" and entry["write_preflight"]["state"] == "failed"
     assert entry["error"] == t["error"]                       # the existing field the screens read
     assert entry["write_preflight"]["mbps"] is None           # no speed for a disk that did not take the write
+
+
+def test_a_disk_that_wraps_its_addresses_fails_before_its_table(fx):
+    """CLR-02 (#1805): 96MiB reported, 32MiB real -- every write lands at its
+    address modulo 32MiB. The three places (0, 48, 92 MiB -> 0, 16, 28 MiB of
+    what it has) do not overlap, so they alone read back fine -- the negative
+    control: before #1805 this disk was `ok`. The marker at 32 MiB (and 64)
+    lands on the one at 0, and that is read back as someone else's bytes."""
+    res = _agent(fx, "check", "wrap")
+    t = res["t"]["wrap"]
+    assert res["rc"]["wrap"] == 1, res["raw"][-3000:]
+    assert t["state"] == "failed" and t["wstate"] == "failed", t
+    assert t["error"] == HEAD + "סמן ב-0 MiB נקרא בחזרה שונה — הדיסק מחזיר תוכן של מקום אחר (קיבולת מזויפת?)", t
 
 
 def test_the_room_writes_only_the_selected_drawers(fx):

@@ -23,6 +23,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -34,7 +36,7 @@ from native import requires_native
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native-gui" / "src"
 
-ROLE, NETWORK, ADMIN, DISK = 2, 3, 5, 1
+ROLE, NETWORK, ADMIN, DISK, SUMMARY = 2, 3, 5, 1, 6
 
 
 def _pkgconfig(*pkgs: str) -> bool:
@@ -75,6 +77,10 @@ static const char *focus_name(const App *a) {
     case HIT_INSTALL_PASSWORD: return "password";
     case HIT_INSTALL_CONFIRM: return "confirm";
     case HIT_INSTALL_CURRENT_PASSWORD: return "current_password";
+#ifdef HIT_INSTALL_ROOT_PASSWORD
+    case HIT_INSTALL_ROOT_PASSWORD: return "root_password";
+    case HIT_INSTALL_ROOT_CONFIRM: return "root_confirm";
+#endif
     }
     if (a->focus >= HIT_INSTALL_NIC_BASE && a->focus < HIT_INSTALL_NIC_BASE + INSTALL_MAX_NICS) {
         snprintf(buf, sizeof buf, "nic%%d", a->focus - HIT_INSTALL_NIC_BASE);
@@ -108,7 +114,21 @@ int main(int argc, char **argv) {
         if (!strcmp(t, "only-disk-0")) { a->install.disks[1].iso = 1; show(a, t); continue; }
         if (!strcmp(t, "technical-open")) { a->install.technical_open = 1; show(a, t); continue; }
         if (!strcmp(t, "unchecked")) { a->install.primary_ok = a->install.primary_checked = 0; show(a, t); continue; }
+        /* #2147: the inventory through the bridge and parse_lines, as on a server */
+        if (!strcmp(t, "inventory")) { call(a, &b, "inventory", "{}"); show(a, t); continue; }
         if (!strcmp(t, "CHAR1")) { e.type = UIEV_CHAR; e.ch = '1'; install_handle(a, &b, &e); show(a, t); continue; }
+        /* #1632: root=VALUE / rootconfirm=VALUE set the fields (no-ops on a
+         * GUI without them); JSON prints what "next" would send, to stderr. */
+        if (!strncmp(t, "root=", 5) || !strncmp(t, "rootconfirm=", 12)) {
+#ifdef HIT_INSTALL_ROOT_PASSWORD
+            if (t[4] == '=') snprintf(a->install.root_password, sizeof a->install.root_password, "%%s", t + 5);
+            else snprintf(a->install.root_confirm, sizeof a->install.root_confirm, "%%s", t + 12);
+#endif
+            show(a, t[4] == '=' ? "root" : "rootconfirm"); continue;
+        }
+        if (!strncmp(t, "pw=", 3)) { snprintf(a->install.password, sizeof a->install.password, "%%s", t + 3); show(a, "pw"); continue; }
+        if (!strncmp(t, "pwconfirm=", 10)) { snprintf(a->install.confirm, sizeof a->install.confirm, "%%s", t + 10); show(a, "pwconfirm"); continue; }
+        if (!strcmp(t, "JSON")) { char json[4096]; config_json(a, json, sizeof json, 0); fprintf(stderr, "%%s\n", json); show(a, t); continue; }
         if (!strcmp(t, "SPACE")) { e.type = UIEV_CHAR; e.ch = ' '; }
         else {
             e.type = UIEV_KEY;
@@ -156,7 +176,8 @@ def _press(driver: Path, tmp_path: Path, view: int, *tokens: str) -> tuple[list[
         state = dict(pair.split("=", 1) for pair in pairs)
         state["key"] = tok
         states.append(state)
-    assert [s["key"] for s in states] == ["start", *tokens], proc.stdout
+    names = [x.split("=", 1)[0] for x in tokens]
+    assert [s["key"] for s in states] == ["start", *names], proc.stdout
     return states, log.read_text().split()
 
 
@@ -176,30 +197,35 @@ def test_role_arrows_switch_the_role_and_reach_the_url_and_the_check_button(driv
 
 
 @NATIVE
-def test_network_arrows_pick_the_nic_and_the_mode_and_reach_the_static_fields(driver, tmp_path):
+def test_network_arrows_pick_the_nic_and_pass_the_mode_without_changing_it(driver, tmp_path):
+    """‏#2096: DHCP/סטטי הוא עצירה **אחת** — האפשרות שנבחרה. ‏↑ מהשדות אל שורת
+    הכרטיס עבר דרך "DHCP" והחליף מצב (Hyper-V, 24/10); המצב מתחלף ברווח."""
     states, _ = _press(driver, tmp_path, NETWORK, "DOWN", "DOWN", "DOWN", "DOWN", "DOWN", "UP", "UP")
     assert _col(states, "focus") == [
-        "nic0", "nic1", "nic2", "dhcp", "static", "address", "static", "dhcp"]
-    assert _col(states, "nic") == ["0", "1", "2", "2", "2", "2", "2", "2"]
-    assert _col(states, "static") == ["0", "0", "0", "0", "1", "1", "1", "0"]
+        "nic0", "nic1", "nic2", "dhcp", "nic0", "nic1", "nic0", "dhcp"]
+    assert _col(states, "nic") == ["0", "1", "2", "2", "0", "1", "0", "0"]
+    assert _col(states, "static") == ["0"] * 8
 
 
 @NATIVE
 def test_network_space_flips_to_static_without_walking_past_the_other_nics(driver, tmp_path):
     """‏ens19 + כתובת סטטית: הליכה בחצים עד "סטטית" הייתה בוחרת את ens20
-    בדרך. רווח מחליף מצב במקום, והפוקוס עובר לשדה ה-IP."""
-    states, _ = _press(driver, tmp_path, NETWORK, "DOWN", "SPACE", "UP", "UP", "SPACE")
-    assert _col(states, "focus") == ["nic0", "nic1", "address", "static", "dhcp", "address"]
-    assert _col(states, "nic") == ["0", "1", "1", "1", "1", "1"]
-    assert _col(states, "static") == ["0", "0", "1", "1", "0", "1"]
+    בדרך. רווח מחליף מצב במקום, והפוקוס עובר לשדה ה-IP; ↑ מגיע לעצירת
+    המצב בלי להחליף אותו, ורווח שם מחזיר ל-DHCP."""
+    states, _ = _press(driver, tmp_path, NETWORK, "DOWN", "SPACE", "UP", "SPACE")
+    assert _col(states, "focus") == ["nic0", "nic1", "address", "static", "dhcp"]
+    assert _col(states, "nic") == ["0", "1", "1", "1", "1"]
+    assert _col(states, "static") == ["0", "0", "1", "1", "0"]
 
 
 @NATIVE
 def test_admin_arrows_move_between_the_fields_like_tab(driver, tmp_path):
-    """מסך 5: נמדד ש-Tab עובר מהמשתמש לסיסמה — אבל Tab לא מגיע מהדפדפן."""
-    states, _ = _press(driver, tmp_path, ADMIN, "DOWN", "DOWN", "DOWN", "UP", "TAB", "BTAB")
+    """מסך 5: נמדד ש-Tab עובר מהמשתמש לסיסמה — אבל Tab לא מגיע מהדפדפן.
+    ‏#1632: שני שדות ה-root באותו מסך, אחרי אימות סיסמת ה-admin."""
+    states, _ = _press(driver, tmp_path, ADMIN, "DOWN", "DOWN", "DOWN", "DOWN", "DOWN", "UP", "TAB", "BTAB")
     assert _col(states, "focus") == [
-        "admin_user", "password", "confirm", "admin_user", "confirm", "admin_user", "confirm"]
+        "admin_user", "password", "confirm", "root_password", "root_confirm", "admin_user",
+        "root_confirm", "admin_user", "root_confirm"]
 
 
 @NATIVE
@@ -267,3 +293,136 @@ def test_a_check_turns_green_only_on_ok_1_from_the_bridge(driver, tmp_path):
     assert bridge == ["check-primary"]
     assert (states[2]["ok"], states[2]["checked"]) == ("0", "1")
     assert states[-1]["view"] == str(ROLE)
+
+
+# --- #1632 (Nadav 24/10): root's password on the admin screen --------------------------
+
+@NATIVE
+@pytest.mark.parametrize(("root", "confirm"), [
+    ("Ab1!xyz", "Ab1!xyz"),             # 7 characters
+    ("abcdefgh!", "abcdefgh!"),         # no digit
+    ("abcdefg12", "abcdefg12"),         # no special character
+    ("R00t!haifa", "R00t!haifb"),       # the confirmation differs
+    ("", ""),                           # not filled at all
+])
+def test_next_on_the_admin_screen_waits_for_a_valid_root_password(driver, tmp_path, root, confirm):
+    """Enter is the only way forward on ESXi; a disabled button alone would not stop it."""
+    states, bridge = _press(driver, tmp_path, ADMIN, f"root={root}", f"rootconfirm={confirm}", "ENTER")
+    assert bridge == [], "the bridge was asked to validate a root password the screen should refuse"
+    assert states[-1]["view"] == str(ADMIN)
+
+
+@NATIVE
+def test_a_valid_root_password_goes_on_to_the_summary(driver, tmp_path):
+    """The guard: the demo's root password passes, so the rule is not 'refuse all'."""
+    states, bridge = _press(driver, tmp_path, ADMIN, "root=Other!pw9", "rootconfirm=Other!pw9", "ENTER")
+    assert bridge == ["validate"] and states[-1]["view"] == str(SUMMARY)
+
+
+@NATIVE
+def test_the_root_password_reaches_the_bridge_on_stdin_never_in_argv(driver, tmp_path):
+    """"Apply" on the summary: the bridge is a script that records its argv and
+    its stdin. The root password is in the JSON on stdin, and nowhere in argv."""
+    argv, stdin = tmp_path / "argv", tmp_path / "stdin"
+    script = tmp_path / "bridge.sh"
+    script.write_text(f'printf "%s\\n" "$*" >> "{argv}"\ncat >> "{stdin}"\n', encoding="utf-8")
+    proc = subprocess.run([str(driver), f"sh {script}", str(SUMMARY), "root=Picked!on5creen",
+                           "rootconfirm=Picked!on5creen", "JSON", "ENTER"],
+                          capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+    assert proc.returncode == 0, proc.stderr
+    assert '"root_password":"Picked!on5creen"' in proc.stderr and '"root_password_confirm":"Picked!on5creen"' in proc.stderr
+    assert argv.read_text().split() == ["apply"]
+    assert '"root_password":"Picked!on5creen"' in stdin.read_text()
+
+
+
+# --- one "special character" rule for the screen and the bridge (rc1, 24/10) ----------
+# The GUI counted only !@#$%^&*(),.?":{}|<> as special; gui-bridge.sh counts any
+# character that is not a letter or a digit. "-" and "_" (named under the user
+# name field) were refused on the screen and accepted by the server.
+
+def _bridge_accepts(field: str, pw: str) -> bool:
+    form = {"step": "4", "password": "Imag3ctl!haifa", "password_confirm": "Imag3ctl!haifa",
+            "root_password": "R00t!haifa", "root_password_confirm": "R00t!haifa"}
+    form[field] = form[field + "_confirm"] = pw
+    got = subprocess.run(["sh", str(REPO / "installer" / "gui-bridge.sh"), "validate"], input=json.dumps(form),
+                         capture_output=True, text=True, timeout=30, env={**os.environ, "LC_ALL": "C"})
+    assert got.returncode == 0, got.stderr
+    return not [line for line in got.stdout.splitlines() if line.startswith("errors.")]
+
+
+@NATIVE
+@pytest.mark.skipif(shutil.which("jq") is None or shutil.which("sh") is None, reason="the bridge needs sh + jq")
+@pytest.mark.parametrize("which", ["password", "root_password"])
+@pytest.mark.parametrize("pw", ["Abcdefg1-", "Abcdefg1_", "Abcdefg1 ", "Abcdefg1~", "Abcdefg1=",
+                                "Abcdefg1!", "Abcdefg1\u05d0", "Abcdefgh1"])
+def test_the_screen_and_the_bridge_agree_on_what_a_special_character_is(driver, tmp_path, which, pw):
+    tok = "pw" if which == "password" else "root"
+    _, bridge = _press(driver, tmp_path, ADMIN, f"{tok}={pw}", f"{tok}confirm={pw}", "ENTER")
+    screen_accepts = bridge == ["validate"]
+    assert screen_accepts == _bridge_accepts(which, pw), f"screen {screen_accepts}, bridge the opposite, for {pw!r}"
+    assert screen_accepts == (pw != "Abcdefgh1"), "any character that is not a letter or a digit is special"
+
+
+# --- #2147 (rc4, ESXi 24/10): two disks, and the installer chose one by itself ---------
+# The empty 20 GB sda was marked "will be erased" before anyone looked; ticking
+# "I understand" + Enter would have installed on it (the system disk was sdb).
+
+RC4_TWO_DISKS = ("disk=/dev/sda|model=Virtual disk|size=21474836480|bus=unknown|removable=0|has=empty|iso=0",
+                 "disk=/dev/sdb|model=Virtual disk|size=42949672960|bus=unknown|removable=0|"
+                 "has=gpt:3 partitions (ext4, vfat)|iso=0",
+                 "disk=/dev/sr0|model=VMware SATA CD|size=1073741824|bus=sata|removable=1|has=iso9660|iso=1",
+                 "virt=virtual")
+
+
+def _press_inventory(driver: Path, tmp_path: Path, inventory: tuple[str, ...], *tokens: str):
+    """Like _press, with a bridge that answers `inventory` with these lines; the
+    bridge log is every action the installer sent, and stderr carries JSON."""
+    log, inv = tmp_path / "bridge.log", tmp_path / "inventory"
+    log.write_text("")
+    inv.write_text("\n".join(inventory) + "\n", encoding="utf-8", newline="\n")
+    script = tmp_path / "bridge.sh"
+    script.write_text(f'echo "$1" >> "{log}"\n[ "$1" = inventory ] && cat "{inv}"\nexit 0\n',
+                      encoding="utf-8", newline="\n")
+    proc = subprocess.run([str(driver), f"sh {script}", str(DISK), "inventory", *tokens],
+                          capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+    assert proc.returncode == 0, proc.stderr
+    states = []
+    for line in proc.stdout.splitlines():
+        tok, *pairs = line.split()
+        states.append({"key": tok, **dict(pair.split("=", 1) for pair in pairs)})
+    assert [s["key"] for s in states] == ["start", "inventory", *tokens], proc.stdout
+    return states[1:], log.read_text().split(), proc.stderr
+
+
+@NATIVE
+def test_two_disks_start_with_no_choice_and_enter_goes_nowhere(driver, tmp_path):
+    """The rule: more than one disk the installer may use = no disk chosen.
+    Space ("I understand") and Enter do nothing until the person picks one."""
+    states, bridge, _ = _press_inventory(driver, tmp_path, RC4_TWO_DISKS, "SPACE", "ENTER", "SPACE", "ENTER")
+    assert _col(states, "disk") == ["-1"] * 5, "a disk was chosen without the person choosing it"
+    assert _col(states, "ack") == ["0"] * 5
+    assert _col(states, "view") == [str(DISK)] * 5
+    assert bridge == ["inventory"], "Enter with no disk chosen reached the bridge"
+
+
+@NATIVE
+def test_an_arrow_is_the_choice_and_then_ack_and_enter_go_on_with_that_disk(driver, tmp_path):
+    """The guard from the other side: the keyboard alone still installs -- on the
+    disk the person walked to, not on the first one listed."""
+    states, bridge, err = _press_inventory(driver, tmp_path, RC4_TWO_DISKS,
+                                           "DOWN", "DOWN", "SPACE", "JSON", "ENTER")
+    assert _col(states, "disk") == ["-1", "0", "1", "1", "1", "1"]
+    assert _col(states, "ack") == ["0", "0", "0", "1", "1", "1"]
+    assert '"disk":"/dev/sdb"' in err
+    assert bridge == ["inventory", "validate"] and states[-1]["view"] == str(ROLE)
+
+
+@NATIVE
+def test_one_disk_and_the_install_media_still_start_with_that_disk(driver, tmp_path):
+    """One disk the installer may use is that disk (allowed, as before) -- but the
+    "I understand" is still the person's own tick."""
+    states, bridge, _ = _press_inventory(driver, tmp_path, (RC4_TWO_DISKS[1], RC4_TWO_DISKS[2]), "ENTER", "SPACE")
+    assert _col(states, "disk") == ["0", "0", "0"]
+    assert _col(states, "ack") == ["0", "0", "1"]
+    assert bridge == ["inventory"]

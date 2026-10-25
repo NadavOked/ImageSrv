@@ -13,12 +13,10 @@ crc_delta_measure() {
     # הצליחו; אחרת הקובץ **לא נכתב** -- "לא נקרא" אינו 0 (עיקרון 5).
     # ‏target_init מוחק את הקובץ, ולכן ערך ישן לא שורד סבב חדש.
     for _cd_d in "$@"; do
+        command -v hw_refresh >/dev/null 2>&1 && hw_refresh "$_cd_d"   # #1937: a drawer that dropped DURING the write
         # המטמון נושא 199 רק כש-smartctl באמת קרא את הדיסק -- לא על unchecked
         # מכשל פתיחה / אין smartctl / אין SMART, שם ה-0 שנשמר אינו מדידה.
-        case "$(smart_field "$_cd_d" 2)" in
-            ok|health_failed|uncorrectable|pending_sectors|no_health) ;;   # #1366: the F1 reasons read it too
-            *) log "$_cd_d: crc delta not measured (no baseline)"; continue ;;
-        esac
+        smart_was_read "$_cd_d" || { log "$_cd_d: crc delta not measured (no baseline)"; continue; }   # #1366/#1859: F1 and orange read it too
         _cd_out="$RUN_DIR/smart/$_cd_d.after"
         # ‏#1367: בתקרה (waits.sh) -- אחרי הכתיבה ולפני הדוח, דיסק תקוע אינו
         # עוצר את report_final. bit 1 (rc & 2) = פתיחה נכשלה -> דרך SAT, אותו
@@ -35,6 +33,10 @@ crc_delta_measure() {
             continue
         fi
         _cd_after=$(_smart_int "$_cd_out" 199 UDMA_CRC_Error_Count)
+        # #1859: the temperature right after the write ("194 over a threshold while writing") -- the server
+        # keeps it on this round's row and asks next round when it was hot. Absent = not read, never 0.
+        _cd_t=$(command -v smart_temp_after >/dev/null 2>&1 && smart_temp_after "$_cd_out")
+        [ -z "$_cd_t" ] || echo "$_cd_t" > "$RUN_DIR/targets/$_cd_d/temp_after"
         echo $((_cd_after - $(smart_field "$_cd_d" 6))) > "$RUN_DIR/targets/$_cd_d/crc_delta"
     done
 }

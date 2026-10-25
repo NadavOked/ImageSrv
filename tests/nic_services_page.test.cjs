@@ -219,7 +219,7 @@ test('new + new-drawer: a connected NIC that was never set — a note, a tinted 
   const d=drawer(t);
   assert.match(d,/כרטיס שלא הוגדר — הכול כבוי.<\/b> זו ברירת המחדל הבטוחה/);
   assert.equal((d.match(/role="switch" checked/g)||[]).length,0,'all off');
-  assert.equal((d.match(/כבוי — השרת לא (מאזין|משדר) כאן/g)||[]).length,5);
+  assert.equal((d.match(/כבוי — השרת לא (מאזין|משדר) כאן/g)||[]).length,6);   // + NTP (#1773)
 });
 
 test('measured, not assumed: a service on in the setting that is not bound says so',async()=>{

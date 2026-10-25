@@ -84,7 +84,7 @@ def drawer_run(tmp_path, script_tail: str, stubs: dict, disks=("sda", "sdb"),
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         + "".join(f"target_init {d} {len(PAYLOAD)}; " for d in disks)
         + source + script_tail
     )
@@ -224,7 +224,7 @@ def station_run(tmp_path, sha: str, stubs: dict) -> tuple[Path, str]:
         "WAIT_POLL_S=1 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/ntfsboot.sh; . {posix(AGENT)}/lib/drawers.sh; "   # #1906: restore_pipe
         f"target_init sda {len(PAYLOAD)}; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "node_is_block() { true; }; "

@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import disk_reserve, vmdisk, vmnet
+from .atomicfile import write_atomic
 from .capture import validate_manifest_files
 from .db import get_setting, journal, now_iso, set_setting, set_settings
 from .images import (
@@ -464,9 +465,7 @@ class VmUpdate:
     def _save_state(self, state: dict) -> None:
         if not self.workdir.exists():
             return
-        tmp = self.workdir / "state.json.tmp"
-        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.workdir / "state.json")
+        write_atomic(self.workdir / "state.json", json.dumps(state, ensure_ascii=False, indent=2))
 
     def _set(self, **changes) -> None:
         with self._lock:
@@ -1238,8 +1237,7 @@ class VmUpdate:
             problem = validate_manifest_files(manifest, out) or ImageLibrary._validate(manifest)
             if problem:
                 raise vmdisk.DiskError("verify", f"הגרסה החדשה לא עברה את בדיקות הקליטה: {problem}")
-            (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2),
-                                               encoding="utf-8")
+            write_atomic(out / "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
             target = self.library.root / new_id
             with self._lock:
                 if target.exists() or self.library.get(new_id) is not None:

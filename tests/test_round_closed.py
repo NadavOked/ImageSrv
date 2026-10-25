@@ -122,7 +122,7 @@ def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path
         "WAIT_STREAM_START_S=40 WAIT_STREAM_STALL_S=40; "
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
         f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; "
+        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; "
         f". {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         "target_init sda 8192; "
         "stream_source() { sleep 120; }; "

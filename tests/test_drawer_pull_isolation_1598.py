@@ -110,7 +110,7 @@ def room(tmp_path: Path, fanout_dir: Path, death: str, source: str,
            f"FANOUT_BUFFER=2097152 WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=5 "
            f"WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S={stall_s}; ")
     libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in (
-        "common", "sysinfo", "waits", "progress", "restore", "drawers", "verdict",
+        "common", "sysinfo", "waits", "progress", "restore", "drawers", "drawerfeed", "verdict",
         "failmark", "ntfsboot"))
     started = time.monotonic()
     out = run_sh(

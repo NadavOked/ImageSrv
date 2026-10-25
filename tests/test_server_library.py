@@ -186,16 +186,22 @@ def test_manual_add_and_explicit_edit(server):
     assert machines["b4:2e:99:07:1a:c9"]["suffix"] == "INS"
 
 
-def test_cloner_machines_get_free_names(server):
+def test_cloner_machines_get_computer_names(server):
+    """‏#1997 (נדב, 22/10): גם מחשב שיכפול מקבל שם מחשב באנגלית — לא שם
+    חופשי. שם הקבוצה ("חדר שיכפולים") הוא תווית תצוגה ונשאר חופשי."""
     admin = server["admin"]
     assert admin.post("/api/console/groups",
                       json={"id": "grp_CLONE", "label": "חדר שיכפולים",
                             "role": "cloner"}).status_code == 200
-    # שם חופשי עם רווחים — חוקי למחשב שיכפול, דרך ההדבקה.
     r = admin.post("/api/console/machines/import",
                    json={"group_id": "grp_CLONE",
-                         "text": "aa:bb:cc:00:00:01 עמדה 1\naa:bb:cc:00:00:02 עמדה 2"})
+                         "text": "aa:bb:cc:00:00:01 PC-1\naa:bb:cc:00:00:02 PC-2"})
     assert r.json()["saved"] == 2
+    # שם עם עברית ורווח — נדחה, וההודעה נוקבת בכלל.
+    r = admin.post("/api/console/machines/import",
+                   json={"group_id": "grp_CLONE", "text": "aa:bb:cc:00:00:04 עמדה 4",
+                         "dry_run": True})
+    assert "אותיות אנגליות" in r.json()["preview"][0]["error"]
 
     # ובכיתה אותו שם היה נדחה.
     setup_classroom(server)

@@ -7,7 +7,7 @@
   שהדיווח האחרון שלה `writing`. בקשה שנייה — 409 עם מי שביטל.
 - הבקשה נמסרת לסוכן בתשובת דיווח ההתקדמות (`cancel: [{dev, who_he}]`).
 - "בוטל על ידי ‹משתמש›" נרשם ביומן כשהסוכן מדווח `cancelled` — לא לפני.
-- בוטל אינו נכשל: אין `disk_failures`, ובגל הבא הדיסק טרי (ירוק).
+- בוטל אינו נכשל: אין `disk_failures`, ובסבב הבא הדיסק ירוק. בסבב הזה הוא סגור (#1936).
 - ביטול ממסך מחשב השיכפול (בלי בקשה בשרת) נרשם כ"ממסך מחשב השיכפול".
 """
 
@@ -82,7 +82,10 @@ def test_cancel_reaches_the_agent_and_is_journaled_only_on_its_evidence(room_ser
     assert view["cancel"]["text_he"].startswith("בוטל ") and "labtech" in view["cancel"]["text_he"]
 
 
-def test_a_cancelled_drawer_is_not_a_failure_and_is_fresh_in_the_next_wave(room_server):
+def test_a_cancelled_drawer_is_not_a_failure_and_is_closed_in_this_round(room_server):
+    """Not a failure: no `disk_failures`, no red memory, not counted as written. And
+    (#1936, FI O2) not written again in a later wave of the same round -- the cancel is
+    final for the round; the *next round* writes it as a normal green disk."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     wave = _running(room_server)
     _progress(anon, wave, CLONER1, {"sda": "writing", "sdb": "writing"})
@@ -94,7 +97,8 @@ def test_a_cancelled_drawer_is_not_a_failure_and_is_fresh_in_the_next_wave(room_
     assert not answer.get("disk_failures")
     rnd = ctx.conn.execute("SELECT written_serials FROM room_rounds").fetchone()
     assert "S2" not in rnd["written_serials"]
-    assert _drawer(room(deploy), CLONER1, "sdb")["fresh"] is True
+    sdb = _drawer(room(deploy), CLONER1, "sdb")
+    assert (sdb["fresh"], sdb["cancelled_round"]) == (False, True), sdb
 
 
 def test_refusals_say_why(room_server):

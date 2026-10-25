@@ -92,7 +92,7 @@ def _colors(path: Path, box: tuple[int, int, int, int] | None = None) -> tuple[i
 @NATIVE
 def test_every_installer_screen_renders_with_visible_ink_at_both_target_sizes(tmp_path) -> None:
     binary = _build(tmp_path)
-    names = ("install-0-disk", "install-1-role", "install-1b-role-unchecked", "install-1c-role-failed",
+    names = ("install-0-disk", "install-0b-disk-unchosen", "install-1-role", "install-1b-role-unchecked", "install-1c-role-failed",
              "install-2-servers-net", "install-3-hostname",
              "install-4-admin", "install-5-summary", "install-5c-progress",
              "install-5b-apply-failed", "install-6-done")
@@ -169,7 +169,9 @@ def test_disk_contents_reach_the_screen_in_hebrew(tmp_path) -> None:
 @NATIVE
 def test_network_rows_reserve_an_untruncated_line_for_the_mac_at_1024(tmp_path) -> None:
     draw = (GUI / "src" / "screens_install_setup.c").read_text(encoding="utf-8")
-    assert 'install_text_ltr(cr,n->mac,11,400,r.x+r.w-210,r.y+31,180' in draw
+    # #2096: the second line is "name · MAC" at its natural width (never wrapped onto)
+    assert 'snprintf(ids,sizeof ids,"%s · %s",n->name,n->mac)' in draw
+    assert 'Text q=text_make(cr,FONT_MONO,11,400,ids,0,DIR_LTR)' in draw
     assert 'snprintf(model,sizeof model,"%s · %s"' not in draw
 
     binary = _build(tmp_path)

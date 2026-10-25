@@ -222,6 +222,20 @@ _ARCH_MATCH = [
     "",
 ]
 
+#: ‏#2040 (הכרעת נדב 23/10): ה-vendor class (אופציה 60) שה-udhcpc של הסוכן
+#: שולח (‏`-V` ב-`agent/init`). בכרטיס ההפצה רק לקוח עם התג הזה מקבל כתובת:
+#: קושחת PXE שולחת `PXEClient:Arch:...` (‏BIOS ו-UEFI, גם בבקשת החידוש),
+#: והסוכן שולח את זה. ‏Windows שעלה מהדיסק שולח `MSFT 5.0` ולא נענה —
+#: הכרטיס שלו ברשת ההפצה נשאר בלי כתובת. ‏dnsmasq משווה כתת-מחרוזת.
+AGENT_VENDOR_CLASS = "ImageSrv-agent"
+NETBOOT_TAG = "imagesrv-boot"
+_NETBOOT_MATCH = [
+    "# #2040: on the deploy NIC only network boot and the agent get an address.",
+    f"dhcp-vendorclass=set:{NETBOOT_TAG},PXEClient",
+    f"dhcp-vendorclass=set:{NETBOOT_TAG},{AGENT_VENDOR_CLASS}",
+    "",
+]
+
 
 def _guard_names(configs: list[InterfaceConfig]) -> None:
     """השער האחרון לפני הקובץ שדמון root קורא.
@@ -294,7 +308,8 @@ def _netboot_gate(netboot, nics, full, deploy_interface):
 
 def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
            deploy_interface: str | None = None, pin_tftp: bool = False,
-           netboot: list[str] | None = None, nics: list[str] = ()) -> str:
+           netboot: list[str] | None = None, nics: list[str] = (),
+           unregistered_if: str | None = None) -> str:
     """הקובץ של האינסטנס הראשי — ‏DEFAULT_CONF, בתוך /etc/dnsmasq.d.
 
     dnsmasq קורא את כל /etc/dnsmasq.d; קובץ ההתקנה (imagectl.conf) נותן את
@@ -321,6 +336,13 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
     ‏`netboot` (‏#705): הכרטיסים שבהם "אתחול מהרשת" דלוק, כשהמפעיל ערך
     שירותים לכרטיסים (`None` = ההתנהגות של היום, והפלט זהה בית-בבית);
     ‏`nics` — כל הכרטיסים שהשרת רואה, כדי שהכבויים יוחרגו בשם.
+
+    ‏`unregistered_if` (‏#1802): כרטיס ההפצה, מכל מקור (cli או קונסולה) — עליו
+    בלבד `dhcp-boot` אינו דורש `tag:known`, כדי שמכונה לא רשומה תגיע לסוכן
+    ותראה "המחשב הזה לא רשום" (פעם אחת — `server/unknown_screen.py`). כל
+    כרטיס אחר, ו-`None`, נשארים כמו ב-#141. ‏#2040: על אותו כרטיס בלבד
+    ‏dnsmasq עונה רק לאתחול רשת (‏`PXEClient`) ולסוכן (‏`AGENT_VENDOR_CLASS`)
+    — ‏Windows שעלה מהדיסק במחשב בנייה אינו מקבל כתובת ברשת ההפצה.
     """
     lines = _head("DHCP per interface")
     full, proxied = full_dhcp(configs), proxy_only(configs)
@@ -346,6 +368,8 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
         lines.append("# No interface hands out addresses -- TFTP only.")
         return _pinned(lines, tftp_root, pin_tftp)
     lines += _ARCH_MATCH
+    if unregistered_if in {c.name for c in full}:
+        lines += _NETBOOT_MATCH
     for cfg in full:
         tag = f"if-{cfg.name}"
         lines.append(f"# --- {cfg.name} ---")
@@ -354,11 +378,23 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
             f"dhcp-range=set:{tag},{cfg.range_start},{cfg.range_end},"
             f"{cfg.netmask},{cfg.lease}"
         )
+        if cfg.name == unregistered_if:
+            # ‏#2040: כרטיס ההפצה בלבד. כרטיס אחר (וילן כיתה שהשרת מחלק בו
+            # כתובות) נשאר כמו שהוא — שם Windows כן צריך כתובת.
+            # התג הוא **שם הכרטיס**, ש-dnsmasq מדליק בעצמו על כל בקשה, ולא
+            # `if-<שם>`: תג של dhcp-range עוד לא קיים כש-dhcp-ignore נבדק.
+            # נמדד על dnsmasq 2.91 ב-netns (23/10): עם `tag:if-<שם>` ‏`MSFT 5.0`
+            # קיבל DHCPOFFER; עם שם הכרטיס — ignored.
+            lines.append(f"dhcp-ignore=tag:{cfg.name},tag:!{NETBOOT_TAG}")
         if cfg.gateway:
             lines.append(f"dhcp-option=tag:{tag},option:router,{cfg.gateway}")
         if cfg.dns:
             lines.append(f"dhcp-option=tag:{tag},option:dns-server,{','.join(cfg.dns)}")
         lines.append(f"dhcp-option=tag:{tag},option:tftp-server,{cfg.server_ip}")
+        # ‏#1802 (הכרעת נדב 19/10): בכרטיס ההפצה בלבד גם מכונה לא רשומה
+        # מקבלת את קובץ האתחול — התפריט שלה נקבע בשרת (מסך "לא רשום" פעם
+        # אחת, ואז דיסק). בכל כרטיס אחר ההערה שלמטה בתוקף כפי שהיא.
+        known = "" if cfg.name == unregistered_if else "tag:known,"
         # ‏#141: `tag:known` נוסף לשתי שורות ה-boot — מכונה שאינה ברשימת
         # ה-MAC הרשומים (KNOWN_MACS_CONF, נטענת דרך dhcp-hostsfile
         # ב-imagectl.conf) לא מקבלת את התג, ולכן dnsmasq אינו עונה לה
@@ -368,10 +404,10 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
         # שמגיעה בכל זאת, למשל מרשת זרה שמפעילה proxy, עדיין נופלת שם
         # ל-unregistered).
         lines.append(
-            f"dhcp-boot=tag:{tag},tag:bios,tag:known,grub/i386-pc/core.0,,{cfg.server_ip}"
+            f"dhcp-boot=tag:{tag},tag:bios,{known}grub/i386-pc/core.0,,{cfg.server_ip}"
         )
         lines.append(
-            f"dhcp-boot=tag:{tag},tag:efi-x86_64,tag:known,bootx64.efi,,{cfg.server_ip}"
+            f"dhcp-boot=tag:{tag},tag:efi-x86_64,{known}bootx64.efi,,{cfg.server_ip}"
         )
         lines.append("")
     return "\n".join(lines) + "\n"

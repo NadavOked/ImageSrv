@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -74,6 +75,15 @@ def staging_dir(library_root: Path, task_id: str) -> Path:
     return Path(full)
 
 
+def discard_failed_staging(conn: sqlite3.Connection, library_root: Path, task_id: object) -> None:
+    """‏#1915: הסוכן דיווח `failed` (‏`/agent/progress`) — הדלת שבה BM-F04z
+    עבר בפועל, ו-`capture._fail` אינו בה. האזור נמחק כמו בביטול ובאימות
+    שנכשל — רק בקליטה, ורק כשהיא באמת `failed` עכשיו (השורה, לא הדיווח)."""
+    row = conn.execute("SELECT id, type, state FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if row is not None and row["type"] == "capture" and row["state"] == "failed":
+        shutil.rmtree(staging_dir(library_root, row["id"]), ignore_errors=True)
+
+
 def active_task(conn: sqlite3.Connection, mac: str) -> dict | None:
     """המשימה הפתוחה של המכונה, במבנה של שדה `task` בממשק 3."""
     row = conn.execute(
@@ -85,6 +95,9 @@ def active_task(conn: sqlite3.Connection, mac: str) -> dict | None:
         return None
     return {
         "id": row["id"], "type": row["type"], "disk": row["disk"],
+        # ‏#1901: ה-serial שנרשם בהזמנה; ``None`` = לא ידוע. הסוכן מסרב לקלוט
+        # כשה-serial של `/dev/<disk>` שונה (אחרת: שם ההתקן לבדו, ‏G18).
+        "disk_serial": row["disk_serial"],
         "image_id": row["image_id"], "name": row["name"],
         "description": row["description"], "folder": row["folder"],
         # ‏#530: ה-token נמסר **רק** למכונה שה-hello שלה תואם את ה-MAC

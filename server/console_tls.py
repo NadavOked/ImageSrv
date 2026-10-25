@@ -29,9 +29,10 @@ import os
 import shutil
 import socket
 import stat as stat_module
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from .atomicfile import write_atomic
 from .interserver_auth import (generate_self_signed, is_loopback,
                                write_credential_0600)
 
@@ -42,6 +43,10 @@ KEY_NAME = "console.key"
 #: ה-CN של התעודה; מה שהדפדפן מציג ב"הונפק ל".
 COMMON_NAME = "imagesrv-console"
 GENERATED_MARKER = "generated.sha256"
+#: ‏#2095: תת-התיקייה עם העותק ש-uvicorn טוען בפועל — נכתב בכל עליית שרת
+#: מהבייטים שטביעת האצבע חושבה מהם, ולכן ``/me`` = מה שמוגש, גם אם מישהו
+#: כותב את התעודה הקנונית אחרי העלייה.
+SERVING_DIRNAME = "serving"
 
 
 class ConsoleTLSError(RuntimeError):
@@ -64,6 +69,9 @@ class ConsoleTLS:
     self_signed: bool = True
     regenerated: bool = False
     previous_fingerprint_sha256: str | None = None
+    #: ‏#2095: הבייטים שטביעת האצבע חושבה מהם — מה ש-``uvicorn_kwargs`` מגיש.
+    cert_pem: bytes = field(default=b"", repr=False)
+    key_pem: bytes = field(default=b"", repr=False)
 
     def public_info(self) -> dict:
         """מה שהקונסולה מקבלת ב-``/me`` לשורת הסטטוס."""
@@ -71,8 +79,19 @@ class ConsoleTLS:
                 "fingerprint_sha256": self.fingerprint_sha256}
 
     def uvicorn_kwargs(self) -> dict:
-        """הארגומנטים ל-``uvicorn.Config`` של מאזין הקונסולה."""
-        return {"ssl_certfile": str(self.cert_path), "ssl_keyfile": str(self.key_path)}
+        """הארגומנטים ל-``uvicorn.Config`` של מאזין הקונסולה.
+
+        ‏#2095: uvicorn קורא את הקבצים כשהמאזין נבנה — ומאזין של כתובת שהגיעה
+        אחרי העלייה (#1088) נבנה דקות אחר כך. התעודה הקנונית הוחלפה בינתיים
+        על הדיסק (ה-DCUI הנפיק אותה מחדש), ו-``/me`` דיווח טביעה של תעודה
+        שאינה זו שמוגשת. לכן המאזין טוען **עותק** של הבייטים שבזיכרון, ב-
+        ``serving/``, ולא את הקובץ הקנוני."""
+        directory = self.cert_path.parent / SERVING_DIRNAME
+        directory.mkdir(parents=True, exist_ok=True)
+        cert_path, key_path = directory / CERT_NAME, directory / KEY_NAME
+        write_credential_0600(key_path, self.key_pem.decode("utf-8"))
+        cert_path.write_bytes(self.cert_pem)
+        return {"ssl_certfile": str(cert_path), "ssl_keyfile": str(key_path)}
 
 
 def check_tls_flag(mode: str, console_host: str) -> None:
@@ -147,7 +166,11 @@ def ensure_console_cert(data_dir, console_host: str,
         generated = directory / GENERATED_MARKER
         generated_fingerprint = generated.read_text(encoding="ascii").strip() \
             if generated.is_file() else ""
-        if (console_host not in existing_sans and _self_signed(existing_pem)
+        # ‏#2095: loopback אינו כתובת חדשה — זה מה שהשרת מעביר כשה-lease עוד
+        # לא הגיע. תעודה שנוצרה מחדש עליו התחלפה בכל אתחול שבו השרת עלה
+        # לפני ה-DHCP (ESXi, 24/10), והדפדפן נדרש לאשר שוב.
+        if (console_host not in existing_sans and not is_loopback(console_host)
+                and _self_signed(existing_pem)
                 and generated_fingerprint == fingerprint_sha256(existing_pem)):
             previous_fingerprint = fingerprint_sha256(existing_pem)
             shutil.copy2(cert_path, cert_path.with_name(CERT_NAME + PREV_SUFFIX))
@@ -165,9 +188,9 @@ def ensure_console_cert(data_dir, console_host: str,
         cert_pem, key_pem = generate_self_signed(
             COMMON_NAME, ip_sans=ip_sans, dns_sans=dns_sans)
         write_credential_0600(key_path, key_pem.decode())
-        cert_path.write_bytes(cert_pem)
-        (directory / GENERATED_MARKER).write_text(
-            fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
+        write_atomic(cert_path, cert_pem)
+        write_atomic(directory / GENERATED_MARKER,
+                     fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
     elif os.name == "posix":
         # המפתח הוא שלנו — מצב רחב מדי (umask, העתקה ביד) מוחזר ל-0600.
         mode = stat_module.S_IMODE(os.stat(key_path).st_mode)
@@ -178,7 +201,22 @@ def ensure_console_cert(data_dir, console_host: str,
                       fingerprint_sha256=fingerprint_sha256(cert_pem),
                       sans=cert_sans(cert_pem), self_signed=_self_signed(cert_pem),
                       regenerated=regenerated,
-                      previous_fingerprint_sha256=previous_fingerprint)
+                      previous_fingerprint_sha256=previous_fingerprint,
+                      cert_pem=cert_pem, key_pem=key_path.read_bytes())
+
+
+def presented_console_cert(address: tuple[str, int] = ("127.0.0.1", 8081),
+                           timeout: float = 1.0) -> bytes:
+    """‏#2148: התעודה שמאזין הקונסולה **מציג עכשיו** (PEM) — מה שהדפדפן יראה.
+
+    ‏#2095 קרא את ``serving/`` מהדיסק, וזה לא היה עדכני: אחרי restart העותק
+    שם נשאר של התהליך הקודם עד שהחדש בנה את המאזין, וה-DCUI הציג טביעה
+    שאף מאזין כבר לא הגיש (ESXi, 24/10). כאן אין עותק לסמוך עליו — לחיצת
+    יד TLS על loopback (הקונסולה מאזינה עליו תמיד, #904), בלי אימות: אנחנו
+    לא סומכים על התעודה, רק קוראים אותה. מאזין שלא עונה = ``OSError``, ולא
+    טביעה ישנה (עיקרון 5)."""
+    import ssl
+    return ssl.get_server_certificate(address, timeout=timeout).encode("ascii")
 
 
 # --- ‏#153: תעודה שהמפעיל מעלה מלשונית ההגדרות ---------------------------------
@@ -295,9 +333,7 @@ def install_upload(data_dir, cert_pem: bytes, key_pem: bytes) -> dict:
                               key_path.read_text(encoding="utf-8"))
     # כל קובץ מוחלף אטומית; בין שתי ההחלפות הזוג אינו תואם, וזה החלון היחיד.
     write_credential_0600(key_path, key_pem.decode())
-    tmp = cert_path.with_name(f".{CERT_NAME}.tmp")
-    tmp.write_bytes(cert_pem)
-    os.replace(tmp, cert_path)
+    write_atomic(cert_path, cert_pem)
     (directory / GENERATED_MARKER).unlink(missing_ok=True)
     return info
 
@@ -330,8 +366,6 @@ def reissue_self_signed(data_dir, hostname: str) -> dict:
     write_credential_0600(key_path.with_name(KEY_NAME + PREV_SUFFIX),
                           key_path.read_text(encoding="utf-8"))
     write_credential_0600(key_path, key_pem.decode())
-    tmp = cert_path.with_name(f".{CERT_NAME}.tmp")
-    tmp.write_bytes(cert_pem)
-    os.replace(tmp, cert_path)
-    (directory / GENERATED_MARKER).write_text(fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
+    write_atomic(cert_path, cert_pem)
+    write_atomic(directory / GENERATED_MARKER, fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
     return cert_details(cert_pem)

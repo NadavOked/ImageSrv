@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 
 from boot.grub_menu import decide
 
+from . import unknown_screen
 from .db import _write_lock, journal, now_iso, writing
 from .sessions import SessionStore
 
@@ -119,6 +120,10 @@ def note(conn: sqlite3.Connection, store: SessionStore, mac: str, answer: dict,
     נשאר בדיוק כפי שהוא.
     """
     try:
+        if answer.get("known") is not True and unknown_screen.served_recently(conn, mac, now):
+            # ‏#1802: השרת עצמו שלח אותה לסוכן — למסך "המחשב הזה לא רשום"
+            # בווילן ההפצה. ההגעה מוסברת, והאתחול הבא ממילא לדיסק.
+            return None
         verdict = unexplained(conn, store, answer, off_vlan=off_vlan)
         if verdict is None:
             # codeql[py/log-injection] false positive: ה-MAC עבר normalize_mac (hex ונקודתיים בלבד) (#291)

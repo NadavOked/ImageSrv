@@ -93,7 +93,7 @@ def prelude(box: Path, *, dd: bool = False) -> str:
         + f"export TMPDIR={posix(box)!r} RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=5 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20\n"
         f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/progress.sh\n"
-        f". {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh\n"
+        f". {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh\n"
         f". {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh\n"
         "ata_capture() { :; }\n"
     )

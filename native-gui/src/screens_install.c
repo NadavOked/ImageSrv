@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "screens_install.h"
+#include "install_raid.h"     /* #1989 */
 
 static const char *STEP_NAMES[]={"דיסק","תפקיד השרת","כתובת השרת","שם השרת","חשבון ניהול","החלה","סיום"};
 
@@ -56,7 +57,7 @@ void install_footer(App *a,cairo_t *cr,InstallLayout l,const char *primary,int p
  * Right-aligned clear of "הבא" (118) and "חזור" (up to 100), on every step. */
 static const char *install_keys(const InstallState *s){
     switch(s->view){
-    case INSTALL_DISK:return "↑↓  בחירת דיסק    רווח  אני מבין    Enter  הבא";
+    case INSTALL_DISK:return install_raid_offered(s)?"↑↓  בחירת דיסק    ←→  RAID    רווח  אני מבין    Enter  הבא":"↑↓  בחירת דיסק    רווח  אני מבין    Enter  הבא";
     case INSTALL_ROLE:return "↑↓ / Tab  מעבר    Enter  הבא    Esc  חזור";
     case INSTALL_NETWORK:return "↑↓ / Tab  מעבר    רווח  DHCP / סטטי    Enter  הבא    Esc  חזור";
     case INSTALL_HOSTNAME:case INSTALL_ADMIN:return "Tab / Shift-Tab  מעבר    Enter  הבא    Esc  חזור";
@@ -76,7 +77,8 @@ void screen_install(App *a,cairo_t *cr,double W,double H){InstallLayout l=instal
 
 /* #1310: the role step in its three states -- green (the demo), not yet
  * checked (next disabled), and a real failure with its reason. */
-static void role_variant(InstallState *s,const char *name){if(strstr(name,"-unchecked")){s->primary_checked=s->primary_ok=0;}
+static void role_variant(InstallState *s,const char *name){if(strstr(name,"-unchosen")){s->disk=-1;s->disk_ack=0;return;}   /* #2147: two disks, none chosen yet */
+    if(strstr(name,"-unchecked")){s->primary_checked=s->primary_ok=0;}
     else if(strstr(name,"-failed")){s->primary_checked=1;s->primary_ok=0;snprintf(s->primary_error,sizeof s->primary_error,"אין תשובה מ-192.168.68.250 בפורט 8443 תוך 5 שניות (timeout): חומת אש חוסמת בשקט, או שהכתובת שגויה");}}
-int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
+int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
     for(size_t i=0;i<sizeof cards/sizeof cards[0];i++){for(int t=0;t<2;t++){install_demo(a,cards[i].view);role_variant(&a->install,cards[i].name);a->theme=themes[t];cairo_surface_t *sf=cairo_image_surface_create(CAIRO_FORMAT_RGB24,w,h);cairo_t *cr=cairo_create(sf);double s=ui_scale(h);a->scale=s;cairo_scale(cr,s,s);screen_install(a,cr,w/s,h/s);cairo_destroy(cr);   /* the scale app_draw uses */char path[512];snprintf(path,sizeof path,"%s-%s-%s.png",prefix,cards[i].name,themes[t]->id);cairo_status_t st=cairo_surface_write_to_png(sf,path);cairo_surface_destroy(sf);if(st!=CAIRO_STATUS_SUCCESS){fprintf(stderr,"native-gui: %s: %s\n",path,cairo_status_to_string(st));return 1;}}}return 0;}

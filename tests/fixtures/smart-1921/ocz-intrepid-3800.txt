@@ -1,0 +1,31 @@
+smartctl 7.4 2023-08-01 r5530 [x86_64-linux-6.12.111+deb13-amd64] (local build)
+Copyright (C) 2002-23, Bruce Allen, Christian Franke, www.smartmontools.org
+# #1921: built to smartctl's format, not captured -- names from drivedb.h "OCZ Intrepid 3000 SSDs"
+
+=== START OF INFORMATION SECTION ===
+Model Family:     OCZ Intrepid 3000 SSDs
+Device Model:     OCZ-INTREPID-3800
+Serial Number:    FIXTURE0101
+Rotation Rate:    Solid State Device
+SATA Version is:  SATA 3.1, 6.0 Gb/s (current: 6.0 Gb/s)
+SMART support is: Available - device has SMART capability.
+SMART support is: Enabled
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+
+SMART Attributes Data Structure revision number: 18
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  5 Runtime_Bad_Block       0x0000   000   000   000    Old_age   Offline      -       0
+  9 Power_On_Hours          0x0000   100   100   000    Old_age   Offline      -       20412
+ 12 Power_Cycle_Count       0x0000   100   100   000    Old_age   Offline      -       341
+171 Avail_OP_Block_Count    0x0000   000   000   000    Old_age   Offline      -       58238016
+174 Pwr_Cycle_Ct_Unplanned  0x0000   000   000   000    Old_age   Offline      -       12
+195 Total_Prog_Failures     0x0000   000   000   000    Old_age   Offline      -       0
+196 Total_Erase_Failures    0x0000   000   000   000    Old_age   Offline      -       0
+197 Total_Unc_Read_Failures 0x0000   000   000   000    Old_age   Offline      -       0
+198 Host_Reads_GiB          0x0000   000   000   000    Old_age   Offline      -       48211
+199 Host_Writes_GiB         0x0000   000   000   000    Old_age   Offline      -       39007
+208 Average_Erase_Count     0x0000   000   000   000    Old_age   Offline      -       214
+210 SATA_CRC_Error_Count    0x0000   000   000   000    Old_age   Offline      -       3

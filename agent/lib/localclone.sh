@@ -46,7 +46,7 @@ local_clone_offer() {
         log "local clone: the GUI is not up -- from the server, as before"
         rm -f "$LC/screen"; return 0
     fi
-    LC_PAUSED=0
+    LC_PAUSED=0; [ "$(cut -d'|' -f2 "$LC/boot" 2>/dev/null)" = 2 ] && LC_PAUSED=2   # #2079: back from the wait (guibridge.sh choice-back) -- no count
     # #1367: the screens below wait for a person, and nothing else said hello
     # meanwhile -- the server drew the machine as off, a round opened without
     # it and the console's power-off was never delivered. The beat (attended.sh)
@@ -70,7 +70,7 @@ lc_boot_choice() {
     # the machine -- it is the server when the time is up.
     LC_CHOICE=server
     rm -f "$LC/boot.decision"
-    if [ "$LC_PAUSED" = 1 ]; then echo "0|1" > "$LC/boot"
+    if [ "${LC_PAUSED:-0}" != 0 ]; then echo "0|$LC_PAUSED" > "$LC/boot"
     else _bc_dl=0; _bc_w0=$(date +%s); echo "0|0" > "$LC/boot"; fi   # 0: counted from its first frame (lc_boot_due)
     echo boot > "$LC/screen"
     log "local clone: boot choice offered -- the ${LC_BOOT_S}s count starts with its first frame on the screen"
@@ -102,7 +102,7 @@ lc_boot_choice() {
 lc_session() {
     # The local flow until the person leaves it. Sets LC_END (back), or does
     # not return (power off).
-    LC_END=""
+    LC_END=""; identify_watch_stop; smart_selftest_cancel   # #1966/#1970: no read/self-test under a copy
     rm -rf "$LC/run"; rm -f "$LC/measure.req" "$LC/start.req" "$LC/stop.req" "$LC/end.req"
     echo idle > "$LC/phase"; echo local > "$LC/screen"
     attended_start "Local clone at the machine -- not from the server"
@@ -138,6 +138,7 @@ lc_session() {
             _ss_e=$(cat "$LC/end.req"); rm -f "$LC/end.req"; lc_quiet_reset
             case "$_ss_e" in
                 poweroff) lc_poweroff ;;
+                reboot) lc_reboot ;;   # #1914: the USB stick's result screen (usbclone.sh)
                 again) rm -rf "$LC/run"; rm -f "$LC/stop.req"; echo idle > "$LC/phase"; lc_inventory ;;
                 back) LC_END=back; rm -rf "$LC/run"; echo idle > "$LC/phase"; return 0 ;;
             esac
@@ -170,9 +171,10 @@ lc_run() {
     ( while :; do if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi; sleep 20; done ) < /dev/null > /dev/null 2>&1 &
     _lr_beat=$!
     echo copying > "$LC/phase"; date +%s > "$_lr_r/started"; echo "$_lr_src" > "$_lr_r/src"
-    for _lr_t in $2; do target_init "$_lr_t" 0; rm -f "$RUN_DIR/targets/$_lr_t/lc_ok" "$RUN_DIR/targets/$_lr_t/lc_table" "$RUN_DIR/targets/$_lr_t/lc_part"; echo "$_lr_t" >> "$_lr_r/targets"; done
+    for _lr_t in $2; do target_init "$_lr_t" 0; rm -f "$RUN_DIR/targets/$_lr_t/lc_ok" "$RUN_DIR/targets/$_lr_t/lc_table" "$RUN_DIR/targets/$_lr_t/lc_part" "$RUN_DIR/targets/$_lr_t/ntfs_note" "$RUN_DIR/targets/$_lr_t/rescued"; echo "$_lr_t" >> "$_lr_r/targets"; done
     _lr_all=$(tr '\n' ' ' < "$_lr_r/targets"); _lr_small=""
-    log "local clone: $_lr_src -> $_lr_all"
+    # shellcheck disable=SC2086 # #1914: the clone stick snapshots its disks' serials (RAM, usbdiag.sh)
+    log "local clone: $_lr_src -> $_lr_all"; [ "${IMAGECTL_MODE:-}" != usbclone ] || usb_serials_snap "$_lr_src" $_lr_all   # #1914 (RAM)
     # Fresh evidence, not the screen's 2-second-old picture (principle 5/7).
     if [ "$(lc_inv_field "$_lr_src" 12)" != 1 ] || [ "$(_lc_clean "$(disk_serial "$_lr_src")")" != "$(lc_inv_field "$_lr_src" 4)" ]; then
         _fail_alive "$_lr_all" "דיסק המקור אינו מה שנבדק — חזרו ובחרו שוב. לא נכתב דבר"; lc_end; return 1
@@ -205,7 +207,7 @@ EOF
     fi
     _any_alive "$_lr_all" || { lc_end; return 1; }
     lc_manifest "$_lr_src" "$_lr_r/parts.txt" || { _fail_alive "$_lr_all" "${LC_ERROR:-לא הצלחנו לתאר את המקור}"; lc_end; return 1; }
-    lc_run_total "$_lr_r/manifest.json" > "$_lr_r/total" 2>> "$LOG_FILE"
+    lc_run_total "$_lr_r/manifest.json" > "$_lr_r/total" 2>> "$LOG_FILE"; lc_ntfs_source "$_lr_src" "$_lr_r/manifest.json"   # #2009: the evidence, logged
     for _lr_t in $_lr_all; do
         [ "$(cat "$RUN_DIR/targets/$_lr_t/state")" = failed ] && continue
         cp "$_lr_r/total" "$RUN_DIR/targets/$_lr_t/total"
@@ -229,6 +231,8 @@ lc_end() {
     fi
     [ ! -f "$_lr_r/shrink_path" ] || echo $(( $(date +%s) - _le_t0 )) > "$_lr_r/restore_s"
     date +%s > "$_lr_r/ended"
+    # shellcheck disable=SC2086 # #2067: all done = success, else failure (a failed source fails them all); stopped by hand = none
+    [ -f "$_lr_r/stopped" ] || round_beep_result $_lr_all
     lc_report
     kill "$_lr_beat" 2>/dev/null; wait_pid "$_lr_beat" "$WAIT_HELPER_S" "local clone watchdog beat"
     # #1483: the result -- and its "כבה את המחשב" -- last: the loop that reads
@@ -245,8 +249,8 @@ lc_report() {
     # Nothing here can change the result on the screen.
     _rp_r="$LC/run"; _rp_t=""
     for _rp_d in $(cat "$_rp_r/targets" 2>/dev/null); do
-        _rp_s=$(cat "$RUN_DIR/targets/$_rp_d/state" 2>/dev/null); _rp_e=$(cat "$RUN_DIR/targets/$_rp_d/error" 2>/dev/null)
-        _rp_t="$_rp_t${_rp_t:+,}{\"dev\":\"$_rp_d\",\"port\":$(_lc_num "$(disk_port "$_rp_d")"),\"serial\":\"$(json_escape "$(disk_serial "$_rp_d")")\",\"state\":\"$_rp_s\",\"error\":\"$(json_escape "$_rp_e")\"}"
+        _rp_s=$(cat "$RUN_DIR/targets/$_rp_d/state" 2>/dev/null); _rp_e=$(cat "$RUN_DIR/targets/$_rp_d/error" 2>/dev/null); _rp_id=$(target_ident "$_rp_d"); _rp_pt=${_rp_id#*|}   # #2045: kept at target_init -- a pulled disk has no port in sysfs now
+        _rp_t="$_rp_t${_rp_t:+,}{\"dev\":\"$_rp_d\",\"port\":$(_lc_num "${_rp_pt%%|*}"),\"serial\":\"$(json_escape "${_rp_id%%|*}")\",\"state\":\"$_rp_s\",\"error\":\"$(json_escape "$_rp_e")\",\"ntfs_note\":\"$(json_escape "$(cat "$RUN_DIR/targets/$_rp_d/ntfs_note" 2>/dev/null)")\"}"
     done
     # #1466: which shrink ran, the view's release, and the stage times (P1) --
     # null = not measured, never 0.
@@ -259,10 +263,11 @@ lc_report() {
         "$([ -f "$_rp_r/stopped" ] && echo true || echo false)" "$(_lc_num "$(cat "$_rp_r/total" 2>/dev/null)")" \
         "$(( $(cat "$_rp_r/ended") - $(cat "$_rp_r/started") ))" "$_rp_p" \
         "$(json_escape "$(cat "$_rp_r/snap_teardown" 2>/dev/null)")" "$_rp_x" > "$_rp_r/report.json"
+    [ "${IMAGECTL_MODE:-}" != usbclone ] || { usb_report_save "$_rp_r"; return 0; }   # #1914: no server -- on the screen and the stick
     _rp_c=$(curl -s -o "$_rp_r/report.resp" -w '%{http_code}' --max-time 10 -H "Content-Type: application/json" \
         --data-binary "@$_rp_r/report.json" "${SERVER:-http://0.0.0.0}/api/v1/agent/local-clone" 2>/dev/null)
     if [ "$_rp_c" = 200 ]; then echo sent > "$_rp_r/report"; log "local clone: reported to the server journal"
-    else echo "failed|${_rp_c:-000}" > "$_rp_r/report"; log "local clone: the server did not take the report (http ${_rp_c:-000}) -- the copy stands"; fi
+    else echo "failed|${_rp_c:-000}" > "$_rp_r/report"; lc_report_keep; log "local clone: the server did not take the report (http ${_rp_c:-000}) -- the copy stands, kept to send again"; fi
 }
 
 lc_poweroff() {

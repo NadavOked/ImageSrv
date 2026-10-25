@@ -188,7 +188,7 @@ def test_the_idle_inventory_is_sorted_by_drawer_with_the_unmapped_last(tmp_path)
              + "disk_failure_cause() { return 1; }; disk_failures_refresh() { :; }; cloner_gui_state")
     assert out.returncode == 0, out.stderr
     cdisk = [l for l in (gui / "state").read_text(encoding="utf-8").splitlines() if l.startswith("cdisk=")]
-    assert [(l.split("|")[1], l.split("|")[-2], l.split("|")[-1]) for l in cdisk] == [
+    assert [(l.split("|")[1], l.split("|")[9], l.split("|")[10]) for l in cdisk] == [   # #1798: field 12 (the mark) follows
         ("sdc", "1", "SATA 2"), ("sda", "2", "SATA 0"), ("sdb", "0", "SATA 1")], cdisk
 
 

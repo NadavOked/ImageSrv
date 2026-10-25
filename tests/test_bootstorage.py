@@ -39,7 +39,7 @@ def test_a_raid_image_on_a_sata_disk_gets_storahci_boot_start_in_the_current_set
     assert box.sysval("ControlSet001/Services/storahci/Start") == "3", "Select\\Current=2"
     assert box.sysval(f"{SVC}/stornvme/Start") == "3", "רק השירות של הדיסק שנכתב"
     assert len(sys_writes(box)) == 2, box.calls()
-    assert box.state() == "done"
+    assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
 
 def test_an_nvme_disk_gets_stornvme(tmp_path):
@@ -85,7 +85,7 @@ def test_an_image_without_the_service_is_a_failure_not_a_skip(tmp_path):
     assert result["state"] == "staged", "החבילות הונחו — התוצאה שלהן נשארת"
     assert result["boot"]["state"] == "failed" and "באימג' אין את השירות stornvme" in result["boot"]["error"]
     assert sys_writes(box) == []
-    assert box.state() == "done"
+    assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
 
 def test_a_read_that_breaks_is_not_a_missing_service(tmp_path):

@@ -102,7 +102,8 @@ void lc_bay_linux(LcBay *y, const char *state, const char *module, const char *d
 
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     const Theme *t = a->theme;
-    int bad = g->kind == BAY_FAILED, ok = g->kind == BAY_DONE, ask = g->kind == BAY_SMART,
+    int dwarn = g->kind == BAY_DONE && g->done_warn;   /* #2009: done, orange -- drawn as the SMART question's orange */
+    int bad = g->kind == BAY_FAILED, ok = g->kind == BAY_DONE && !dwarn, ask = g->kind == BAY_SMART || dwarn,
         off = g->kind == BAY_SKIPPED || g->kind == BAY_CANCELED, going = g->kind == BAY_CANCELING;   /* #1386 */
     int bootbad = g->drv_tone == DRV_BAD, drvwarn = g->drv_tone == DRV_WARN || g->drv_tone == DRV_LWARN;   /* #1331 */
     int toned = g->toned && (g->kind == BAY_WRITING || g->kind == BAY_WAITING);
@@ -113,18 +114,30 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     int narrow = b.w < 700;
     double numw = narrow ? 64 : 96, ledw = narrow ? 34 : 48, namew = narrow ? 150 : 220, gap = narrow ? 12 : 22;
     double cy = b.y + b.h / 2;
-    Rgb edge = bad || bootbad ? t->danger : ask ? t->warn : t->hair;
-    cairo_save(cr); draw_rrect_path(cr, b, 4); cairo_clip(cr); draw_set(cr, t->surface); cairo_paint(cr);
-    cairo_rectangle(cr, b.x + b.w - numw, b.y, 1, b.h); cairo_rectangle(cr, b.x + ledw, b.y, 1, b.h); draw_set(cr, t->hair); cairo_fill(cr);
-    if (bad || bootbad) { cairo_rectangle(cr, b.x + b.w - 4, b.y, 4, b.h); draw_set(cr, t->danger); cairo_fill(cr); }
-    cairo_restore(cr); draw_border_rrect(cr, b, 4, edge, ask ? 2 : 1);
+    const int hl = g->flag;   /* #2024 */
+    /* #2050: amplify the existing status colours, including verified success.
+     * Red > orange > green; a healthy waiting disk is not a verified result. */
+    int health = g->toned && (toned || g->kind == BAY_DONE)
+        && !(g->tone.r == t->led_ok.r && g->tone.g == t->led_ok.g && g->tone.b == t->led_ok.b);
+    int red = bad || bootbad || hl == 2 || (health && g->tone.r == t->danger.r && g->tone.g == t->danger.g && g->tone.b == t->danger.b);
+    int orange = ask || drvwarn || hl == 1 || health || (ok && g->line_warn);
+    int emphasis = red || orange || ok;
+    Rgb edge = red ? t->danger : orange ? t->warn : ok ? t->led_ok : t->hair;
+    Rgb fill = red ? t->danger_soft : orange ? t->warning_soft : ok ? t->success_soft : t->surface;
+    Rgb number = red ? t->danger_fg : orange ? t->warning_ink : ok ? t->success_ink : off ? t->muted : t->ink;
+    cairo_save(cr); draw_rrect_path(cr, b, 4); cairo_clip(cr);
+    draw_set(cr, fill); cairo_paint(cr);
+    if (!emphasis) {
+        cairo_rectangle(cr, b.x + b.w - numw, b.y, 1, b.h); cairo_rectangle(cr, b.x + ledw, b.y, 1, b.h); draw_set(cr, t->hair); cairo_fill(cr);
+    }
+    cairo_restore(cr); draw_border_rrect(cr, b, 4, edge, emphasis ? 3 : 1);
 
     /* the drawer number */
     char num[16]; if (g->drawer > 0) snprintf(num, sizeof num, "%d", g->drawer); else snprintf(num, sizeof num, "%s", "—");
     double big = narrow ? 30 : 40;
     Text nb = text_make(cr, FONT_MONO, big, 600, num, 0, DIR_LTR), nl = text_make(cr, FONT_SANS, 11, 400, "מגירה", 0, DIR_RTL);
     double nr = b.x + b.w - (narrow ? 14 : 18), ny = cy - (big + 6 + nl.h) / 2;
-    text_draw_r(cr, &nb, nr, ny + (big - nb.h) / 2, off ? t->muted : t->ink);
+    text_draw_r(cr, &nb, nr, ny + (big - nb.h) / 2, number);
     text_draw_r(cr, &nl, nr, ny + big + 6, t->muted); text_free(&nb); text_free(&nl);
 
     /* the disk: name, size and model, and its pill */
@@ -135,19 +148,29 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     pango_layout_set_ellipsize(tsb.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tsb.layout, 0);
     Rgb pfg = bad ? t->danger : bootbad ? t->danger_fg : drvwarn ? t->warning_ink : ok ? t->led_ok : ask || going ? t->warning_ink : toned ? g->tone : t->muted;
     Rgb pbg = bad || bootbad ? t->danger_soft : drvwarn ? t->warning_soft : ok ? t->success_soft : ask || going ? t->warning_soft : toned ? tsoft : t->hover;
-    double pill_h = pill && narrow ? 22 : 0;
-    double bh = tn.h + 3 + tsb.h + pill_h;
+    if (emphasis) { pfg = t->on_ink; pbg = edge; }
+    /* #2030: the third line -- what is on the disk (before) or what was written (after). It needs
+     * the row to be tall enough; a crowded cage (many rows squeezed) drops it rather than overlap. */
+    Text tsu = { NULL, 0, 0 };
+    if (g->used[0] && b.h >= 72) {
+        tsu = text_make(cr, FONT_SANS, 12, 400, g->used, (int)namew, DIR_RTL);
+        pango_layout_set_ellipsize(tsu.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tsu.layout, 0);
+    }
+    double pill_h = pill && narrow ? (emphasis ? 30 : 24) : 0, used_h = tsu.layout ? 3 + tsu.h : 0;
+    double bh = tn.h + 3 + tsb.h + used_h + pill_h;
     text_draw_r(cr, &tn, fr, cy - bh / 2, off ? t->muted : t->ink);
     text_draw_r(cr, &tsb, fr, cy - bh / 2 + tn.h + 3, t->muted);
-    if (pill && narrow) sb_pill(cr, fr, cy - bh / 2 + tn.h + 3 + tsb.h + 12, pill, pfg, pbg);
-    else if (pill) sb_pill(cr, fr - tn.w - 10, cy - bh / 2 + tn.h / 2, pill, pfg, pbg);
+    if (tsu.layout) { text_draw_r(cr, &tsu, fr, cy - bh / 2 + tn.h + 3 + tsb.h + 3, t->muted); text_free(&tsu); }
+    if (pill && narrow) sb_bay_pill(cr, fr, cy - bh / 2 + tn.h + 3 + tsb.h + used_h + pill_h / 2, pill, pfg, pbg, emphasis);
+    else if (pill) sb_bay_pill(cr, fr - tn.w - 10, cy - bh / 2 + tn.h / 2, pill, pfg, pbg, emphasis);
     text_free(&tn); text_free(&tsb);
 
     /* .prog: what is happening, the percent, the bar */
     double px = fl, pw = fr - namew - 16 - fl;
     Text tp = text_make(cr, FONT_MONO, 14, 600, g->pct, 0, DIR_LTR);
-    Text tl = text_make(cr, FONT_SANS, 12, bad || ask || going ? 600 : 400, g->line, (int)fmax(10, pw - tp.w - 10), DIR_RTL);
-    pango_layout_set_ellipsize(tl.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tl.layout, 0);
+    Text tl = text_make(cr, FONT_SANS, 12, bad || ask || going || hl ? 600 : 400, g->line, (int)fmax(10, pw - tp.w - 10), DIR_RTL);
+    pango_layout_set_ellipsize(tl.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tl.layout, hl ? -2 : 0);
+    if (hl) pango_layout_get_pixel_size(tl.layout, NULL, &tl.h);   /* #2024: the reason gets two lines */
     Text td = { NULL, 0, 0 };   /* #1331: the drivers line under the bar */
     if (g->drv[0]) {
         td = text_make(cr, FONT_SANS, 12, g->drv_tone == DRV_WARN || g->drv_tone == DRV_BAD || g->drv_tone == DRV_LWARN ? 600 : 400, g->drv, (int)fmax(10, pw), DIR_RTL);
@@ -155,14 +178,14 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
         pango_layout_get_pixel_size(td.layout, NULL, &td.h);   /* one line now, not the wrapped height */
     }
     double ry = cy - (fmax(tl.h, tp.h) + 6 + 8 + (td.layout ? 6 + td.h : 0)) / 2;
-    text_draw_r(cr, &tl, px + pw, ry, bad ? t->danger_fg : ask || going ? t->warning_ink : g->line_warn ? t->warn
+    text_draw_r(cr, &tl, px + pw, ry, hl == 2 || bad ? t->danger_fg : hl || ask || going ? t->warning_ink : g->line_warn ? t->warn
                                       : g->kind == BAY_CANCELED ? t->ink : t->muted);
     text_draw(cr, &tp, px, ry, off ? t->muted : t->ink);
     Rect bar = { px, ry + fmax(tl.h, tp.h) + 6, pw, 8 };
     draw_fill_rrect(cr, bar, 4, t->track);
     double share = g->share < 0 ? 0 : fmin(1, g->share);
     if (share > 0) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - share), bar.y, bar.w * share, 8 }, 4,
-                                   bad ? t->danger : ok ? t->led_ok : warn ? g->tone : t->led_write);
+                                   bad ? t->danger : ok ? t->led_ok : dwarn ? t->warn : warn ? g->tone : t->led_write);
     if (td.layout) {
         Rgb dc = g->drv_tone == DRV_BAD ? t->danger_fg : g->drv_tone == DRV_WARN || g->drv_tone == DRV_LWARN ? t->warning_ink : g->drv_tone == DRV_OK ? t->ink : t->muted;
         text_draw_r(cr, &td, px + pw, bar.y + 8 + 6, dc); text_free(&td);
@@ -173,6 +196,7 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     double gx = b.x + ledw / 2;
     Rgb led = bad || bootbad ? t->danger : drvwarn ? t->warn : ok ? t->led_ok : ask || going ? t->warn : off ? t->led_idle : toned ? g->tone : t->led_write;
     Rgb soft = bad || bootbad ? t->danger_soft : drvwarn ? t->warning_soft : ok ? t->success_soft : ask || going ? t->warning_soft : toned ? tsoft : t->indigo_soft;
+    if (emphasis) { led = edge; soft = fill; }
     sb_led(cr, gx, cy - 15, 10, led, soft, !off, 1);
     for (int k = 0; k < 2; k++) draw_fill_rrect(cr, (Rect){ gx - 10, cy + 2 + k * 14, 20, 3 }, 1.5, t->mark_line);
 }
@@ -187,6 +211,31 @@ void lc_met(App *a, cairo_t *cr, Rect r, const char *l, const char *v, const cha
     text_draw_r(cr, &tl, right, r.y + 11, t->muted); text_draw_r(cr, &tv, right, r.y + 11 + tl.h + 1, t->ink);
     if (h && h[0]) { Text th = text_make(cr, FONT_SANS, 11, 400, h, (int)(r.w - 28), DIR_RTL); text_draw_r(cr, &th, right, r.y + 11 + tl.h + 1 + tv.h + 1, hc); text_free(&th); }
     text_free(&tl); text_free(&tv);
+}
+
+/* #2054: current states wrap inside the tile. Only the failed count is red. */
+void lc_disks_met(App *a, cairo_t *cr, Rect r, const char *value, const char *hint) {
+    const Theme *t = a->theme;
+    draw_fill_rrect(cr, r, 4, t->surface); draw_border_rrect(cr, r, 4, t->indigo, 1);
+    Text label = text_make(cr, FONT_SANS, 12, 400, "דיסקים", 0, DIR_RTL);
+    Text v = text_make(cr, FONT_SANS, 19, 600, value, (int)(r.w - 28), DIR_RTL);
+    PangoAttrList *attrs = pango_attr_list_new();
+    const char *failed = strstr(value, "נכשל");
+    if (failed) {
+        const char *start = value;
+        for (const char *p = value; (p = strstr(p, " · ")) && p < failed; p += strlen(" · ")) start = p + strlen(" · ");
+        const char *end = strstr(failed, " · ");
+        PangoAttribute *fg = pango_attr_foreground_new(t->danger_fg.r * 65535, t->danger_fg.g * 65535, t->danger_fg.b * 65535);
+        fg->start_index = (unsigned)(start - value); fg->end_index = end ? (unsigned)(end - value) : (unsigned)strlen(value);
+        pango_attr_list_insert(attrs, fg);
+    }
+    pango_layout_set_attributes(v.layout, attrs); pango_attr_list_unref(attrs);
+    double right = r.x + r.w - 14, y = r.y + 11;
+    text_draw_r(cr, &label, right, y, t->muted); y += label.h + 1;
+    text_draw_r(cr, &v, right, y, t->ink); y += v.h + 1;
+    Text h = text_make(cr, FONT_SANS, 11, 400, hint, (int)(r.w - 28), DIR_RTL);
+    text_draw_r(cr, &h, right, y, t->muted);
+    text_free(&label); text_free(&v); text_free(&h);
 }
 
 /* the hero of the local clone screen: a small label, the title and a line

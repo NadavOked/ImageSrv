@@ -245,12 +245,14 @@ message=<title>|<sub>
 
 # #1569: the one failure screen (agent/lib/failscreen.sh; mockup PR #1550).
 # fail= opens the block; a non-empty title routes to it before everything.
-fail=<tone bad|warn>|<hold 0/1>|<title>|<sub>|<role>   # all Hebrew; the English line is in fail_code only
+fail=<tone bad|warn|inf>|<hold 0/1>|<title>|<sub>|<role>   # all Hebrew; the English line is in fail_code only
+                                    # inf (#1802): not a failure -- ui_unknown, "המחשב הזה לא רשום" (blue, an i)
 fail_why=<text>  fail_safe=<text>   # "מה קרה" / "מה בטוח"
 fail_ctx=<label>|<value>            # 4: machine · disk/drawers · image · stage; a capitals/digits value is mono
 fail_row=<label>|<sub>|<ok|wn|bad|off>|<pill>   # up to 8, one per target
-fail_step=<text>                    # up to 4; fail_code=<line> up to 12 (folded; Enter)
-fail_at=<epoch>                     # die_local only: the reboot moment (the pill counts)
+fail_step=<text>                    # up to 4: the sentence, then muted lines; fail_code=<line> up to 12 (not drawn, #2068)
+fail_btn=<action>|<label>            # up to 3 (#2068): the first is Enter; a press writes fail.action (hold.sh)
+fail_at=<epoch>                     # die_local and ui_unknown: the reboot moment (the pill counts)
 
 # #st-menu: the "הפצה לכיתות" card only when the edition flag AND the
 # operator switch are on (#1081 classrooms + #880 class_deploy_enabled
@@ -358,9 +360,19 @@ drawer=<port>|<dev>|<state>|<bytes>|<total>|<error>|<rate_bps>|<eta_s>|<drawer>|
                                     # yet: "מבטל…"). State `cancelled` = grey row, "בוטל", an empty bar
                                     # #1331: |<state>|<detail>|<boot state>|<boot service>|<boot error> --
                                     # fields 13-17, targets/<dev>/drivers.json (drvgui.sh); absent = did not run
-cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>
+                                    # #2055: <rate_bps> 0 = measured still -- a writing drawer whose bytes did not
+                                    # move for CLONER_STALL_S (10 s): "ממתין לזרם מהשרת · 0 MB/s", orange.
+                                    # Display only: the write goes on (a 30 s cut came back on metal, 23/10)
+drawer_moved=<dev>|<epoch>          # #2055: after that drawer's drawer=, while it writes: when its bytes last
+                                    # moved. The cloner head's "עודכן לפני N" counts from the newest of these,
+                                    # not from updated= (which is rewritten every tick); absent = updated=
+cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>|<mark>|<hw>
                                     # the idle inventory (no round targets) -- see the #1304 table below;
                                     # #1495: fields 10-11 as drawer= fields 9-10
+                                    # #1859: <cause> also carries why a `warn` disk is orange (a smart.sh
+                                    # SMART_WARN_REASONS word, said by smart_reason_text)
+cused=<dev>|<size>|<used>           # #2030: size and bytes in use of a disk (diskused.sh), round or idle;
+                                    # used -1 = not measured -> "לא נמדד", never 0. See docs/interfaces.md
 cdrawer_slot=<drawer>|<conn>|<name> # #1495: one per drawer of the hello's drawer_slots, empty ones too. With
                                     # them the cloner screens lay out drawers 1..N of the mapping (the cage
                                     # size is no longer a guess); without them -- an older server, no answer
@@ -485,7 +497,7 @@ make png STATE=/tmp/state.txt # the same cards from a real state file
 ```
 
 Cards: `login menu pick progress done room room-live class class-live
-cloner standby message restore direct tools tools-confirm tools-output failure failure-open
+cloner standby message restore direct tools tools-confirm tools-output failure
 shrink logout restore-folder room-images restore-confirm room-drivers pick-hebrew` (`logout` is the menu with the question Esc opens; `restore-folder`/`room-images` are the folder-first image pickers inside a folder and open; `restore-confirm` is the #1270 confirm dialog; `room-drivers` (#1269) is the room setup with "להוסיף דרייברים" on, in pick mode, one disk set to "בלי"; `pick-hebrew` (#1245) is the capture form with the description focused and the typing-language chip on "עב"). Since the
 10/10 mockup every screen is laid out in logical pixels and drawn at
 `ui_scale(H)` = clamp(H/800, 1, 1.4) in quarter steps: 1024x768 and 1280x800
@@ -510,10 +522,13 @@ status bar, no background art. What each part is drawn from:
 | green dot "מחובר. ממתין לסבב." / red X "השרת לא עונה" / grey dot "ממתין לתשובה מהשרת" | `hello_rc`/`hello_age`: 200 at most 120 s old / anything else / no hello yet |
 | "מחובר אל imagectl-ta" | `server_name=`, else `server_addr=` (#1252) |
 | "מאז 12:41" (server down) | only when the last code was a 200 that went stale -- `hello.state` keeps the last *attempt*, so after a failed one the last success is not known and the line is left out |
-| bay name, "דיסק N · SATA n" | the bay is drawer N of the mapping (`cdrawer_slot=`, #1495); its name is the slot name there (or `cslot_name=` without a mapping, #704), else "דיסק N"; the connection is that record's `conn`. A disk whose `cdisk=` drawer is 0 is an extra row after the bays: "—" / "לא ממופה" in the number box, "SATA n (לא ממופה)" as its name. A `coptical=` drive is "כונן CD/DVD" in its bay (or an extra row), never "ריק" |
+| bay mapping and name source (#1495; since #2030 the card's name is the connection, see below) | the bay is drawer N of the mapping (`cdrawer_slot=`, #1495); its name is the slot name there (or `cslot_name=` without a mapping, #704), else "דיסק N"; the connection is that record's `conn`. A disk whose `cdisk=` drawer is 0 is an extra row after the bays: "—" / "לא ממופה" in the number box, "SATA n (לא ממופה)" as its name. A `coptical=` drive is "כונן CD/DVD" in its bay (or an extra row), never "ריק" |
 | size, model | `cdisk=` fields 3–4; the size in market units (500107862016 → "500 GB") |
+| the card's name (#2030) | the connection -- "SATA 0", "NVMe 03:00.0" -- not "דיסק N" next to the big drawer number; the operator's slot name still wins (#704); a disk outside the mapping is "<conn> (לא ממופה)". Never a device name ("sda"). Size: `cused=` (round and idle) else `cdisk=` field 4 |
+| the card's third line (#2030) | before the write "תפוס עכשיו: X" (`cused=` used: what it will erase), writing "נכתב עד כה: X", done "נכתב: X" (`drawer=` field 4); no measurement, a cancelled write, or no `cused=` record at all is "לא נמדד" -- never 0. Dropped in a crowded cage (rows under 72px) |
 | SMART chip, its colour, the bar on the bay, the orange/red line under the cage | `cdisk=` field 5 by the #872 rule: `failed_last` red, `fail` (and an old agent's `warn`) orange, the rest green; `unchecked` says "SMART לא נבדק" |
 | the reason under the name | `fail` → "ה-BIOS יעצור ב-F1 — SMART: …" by field 6, the SMART reason (#1366: `health_failed` / `pending_sectors` 197 / `uncorrectable` 198); `fail` with `readonly` (#1742) → "הדיסק במצב קריאה בלבד"; `failed_last` → field 6, the server's cause (כבל/חריץ, הדיסק) |
+| the hardware note (#1921) | `cdisk=` field 13: the sentence of `agent/lib/data/hw-issues.tsv` (a link reset, a drawer that dropped, USB 2.0 -- CRC and the link keep fields 9/7-8). Drawn like the CRC line: the bay's bar orange, the sentence under the name and under the cage; the SMART chip stays SMART -- never the disk's colour. `lc_disk=` field 17 is the same note on the local/USB screen, after the SATA line |
 | the CRC line (#1366) | `cdisk=` field 9: the CRC count when over the hello's `crc_warn_threshold` (empty = not over, not read, or an older server). The bay orange like a slow link, "כבל או מגירה חשודים — N שגיאות" under the name (when SMART and the link have no reason of their own), and a line under the cage |
 | the link, "· 6.0 Gb/s" after SATA N-1, and its orange line (#432) | `cdisk=` fields 7–8 (`disk_link`: the speed and the port's maximum, `null` = not read → "קישור לא ידוע", never blank and never green). Below the maximum: the bay's bar and border orange, "קישור 1.5 מתוך 6.0 Gb/s — לבדוק כבל" under the name (when SMART has no reason of its own), and a line under the cage. The SMART chip and LED stay SMART |
 | IP, MAC | `--ip` / `--mac` (the kiosk's) |

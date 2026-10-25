@@ -16,14 +16,15 @@ import shutil
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
-from . import (auth, capabilities, console_login, console_mfa, console_presence, crcwarn, minfree,
-               dhcp, disk_failures, disk_reserve, drawer_slots, drive_rates, identity, inventory,
+from . import (auth, backup_target, capabilities, console_login, console_mfa, console_presence, crcwarn, minfree,
+               dhcp, disk_failures, disk_reserve, drawer_slots, drive_rates, hostname_rule,
+               identity, inventory,
                nic_speed, probe,
-               ports, registry, room,
-               shrink_records, slot_names,
-               storage_locations, storage_nodes, transfer_cap, users)
+               ports, readbackhash, registry, room,
+               shrink_records, slot_names, smart_history,
+               storage_locations, storage_nodes, timezone, transfer_cap, users)
 from .api import ServerContext
 from .db import (_write_lock, get_setting, journal, now_iso, set_settings,
                  update_one, writing)
@@ -33,7 +34,9 @@ from .journal_he import EVENTS_HE, JournalTranslator, severity
 from .session_view import label as session_label
 from .sessions import SessionError
 from .station import ROUND_OPENER_ROLES
-from . import auto_reboot
+from . import auto_reboot, igmp_querier
+from . import model_slots   # #2001
+from . import held   # #2031
 
 #: נדב 18/10: ניתוק אוטומטי בחוסר פעילות. השדה נשאר בשניות (‏#1243, ברירת מחדל 600);
 #: ‏0 = כבוי (אין ניתוק — העוגייה עדיין פגה ב-auth.TTL_SECONDS, ו-logout עובד), אחרת
@@ -60,7 +63,7 @@ def _idle_seconds(raw) -> int | None:
 WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   # נדב 18/10: חיוב MFA למנהלים — כבוי כברירת מחדל.
                   console_mfa.SETTING,
-                  "console_idle_seconds", "class_deploy_enabled",
+                  "console_idle_seconds", "class_deploy_enabled", "cloner_beep",
                   # ‏#748: כפתור "עדכן" — כבוי כברירת מחדל (נדב, 16/09).
                   "update_enabled",
                   # ‏#855: שומר הזהות (MAC + חכירת DHCP). חסר = דלוק; "false"
@@ -74,7 +77,100 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   minfree.SETTING,
                   # ‏#1473: תקרת קצב להעברות בין אתרים, Mb/s (0 = ללא הגבלה).
                   transfer_cap.SETTING,
+                  # ‏#1864 (נדב 20/10): אימות מלא אחרי הכתיבה; כבוי = מדגם.
+                  readbackhash.SETTING,
+                  # ‏#1972 (נדב 22/10): השרת כ-IGMP querier ברשת ההפצה. חסר = דלוק.
+                  igmp_querier.SETTING,
                   auto_reboot.MODE, auto_reboot.TIME, auto_reboot.WEEKDAY}
+
+BOOLEAN_SETTINGS = {
+    "recovery_require_login": "שחזור מהשרת בלי סבב דורש כניסה",
+    console_mfa.SETTING: "חיוב אימות דו-שלבי למנהלים",
+    "class_deploy_enabled": "הפצה לכיתה ממסך התחנה",
+    "cloner_beep": "צליל בסיום סבב שיכפול",
+    "update_enabled": "עדכון גרסה מהקונסולה",
+    identity.SETTING: "אימות מחשבים לפי כתובת ה-DHCP",
+    drive_rates.SETTING: "קצב שידור אוטומטי לפי הכוננים בחדר",
+}
+
+
+def _setting_integer(raw: object, label: str, minimum: int,
+                     maximum: int | None = None) -> str:
+    """Canonical decimal integer accepted by the console's number controls."""
+    if isinstance(raw, bool):
+        value = None
+    elif isinstance(raw, int):
+        value = raw
+    elif isinstance(raw, str) and re.fullmatch(r"0|-?[1-9][0-9]*", raw):
+        value = int(raw)
+    else:
+        value = None
+    if value is None or value < minimum or (maximum is not None and value > maximum):
+        limit = f"{minimum}–{maximum}" if maximum is not None else f"{minimum} לפחות"
+        raise HTTPException(400, f"{label}: מספר שלם, {limit}")
+    return str(value)
+
+
+def _validate_write_settings(body: dict) -> dict[str, str]:
+    """Validate and normalize every generic writable setting before any write."""
+    normalized: dict[str, str] = {}
+    for key, value in body.items():
+        if key in BOOLEAN_SETTINGS:
+            if isinstance(value, bool):     # JSON true/false מלקוח API -- כמו "true"/"false" של הקונסולה
+                value = "true" if value else "false"
+            if value not in ("true", "false"):
+                raise HTTPException(400, f"{BOOLEAN_SETTINGS[key]}: נדרש true או false")
+            normalized[key] = value
+        elif key == "session_wait_seconds":
+            normalized[key] = _setting_integer(value, "המתנה מהמצטרף האחרון", 30)
+        elif key == IDLE_SETTING:
+            idle = _idle_seconds(value)
+            if idle is None:
+                raise HTTPException(400, IDLE_REFUSAL_HE)
+            normalized[key] = str(idle)
+        elif key == crcwarn.SETTING:
+            limit = crcwarn.parse(value)
+            if limit is None:
+                raise HTTPException(400, f"סף CRC: מספר שלם 0–{crcwarn.MAXIMUM}")
+            normalized[key] = str(limit)
+        elif key == minfree.SETTING:
+            gb = minfree.parse_gb(value)
+            if gb is None:
+                raise HTTPException(
+                    400, f"מינימום מקום פנוי: מספר שלם 0–{minfree.MIN_FREE_GB_MAX}")
+            normalized[key] = str(gb)
+        elif key == transfer_cap.SETTING:
+            mbps = transfer_cap.parse(value)
+            if mbps is None:
+                raise HTTPException(
+                    400, f"הגבלת קצב בין אתרים: מספר שלם 0–{transfer_cap.MAXIMUM} (Mb/s)")
+            normalized[key] = str(mbps)
+        elif key == readbackhash.SETTING:
+            full = readbackhash.parse_setting(value)
+            if full is None:
+                raise HTTPException(400, "אימות מלא אחרי הכתיבה: true או false")
+            normalized[key] = full
+        elif key == igmp_querier.SETTING:
+            querier = igmp_querier.parse_setting(value)
+            if querier is None:
+                raise HTTPException(400, "IGMP querier: true או false")
+            normalized[key] = querier
+        elif key == auto_reboot.MODE:
+            if not isinstance(value, str) or value not in auto_reboot.MODES:
+                raise HTTPException(400, "הפעלה מחדש אוטומטית: מצב לא מוכר")
+            normalized[key] = value
+        elif key == auto_reboot.TIME:
+            if auto_reboot.parse_time(value) is None:
+                raise HTTPException(400, "שעת הפעלה מחדש: נדרש HH:MM")
+            normalized[key] = value
+        elif key == auto_reboot.WEEKDAY:
+            day = auto_reboot.parse_weekday(value)
+            if day is None:
+                raise HTTPException(400, "יום הפעלה מחדש: מספר שלם 0–6")
+            normalized[key] = str(day)
+        else:  # WRITE_SETTINGS and this validator must stay exhaustive together.
+            raise RuntimeError(f"missing settings validator: {key}")
+    return normalized
 
 #: #406: השדות שעריכת מכונה מכירה. שדה מחוץ לרשימה = טעות של הקורא,
 #: והוא נדחה ב-400 במקום להיבלע ולהחזיר ``{"ok": True}`` שלא שינה כלום.
@@ -265,12 +361,18 @@ def create_console_router(
             # ‏#936: שם השרת הראשי לצומת העליון בעץ — שם המארח (‏ports.server_name:
             # שם אחד לתצוגה ולרשת, נדב 17/10). לכל משתמש מחובר.
             "server_name": ports.server_name(ctx.conn),
+            # ‏#1997: שם מארח שאינו שם מחשב חוקי (עברית, ארוך מ-15, נקודות) —
+            # ל"דורש טיפול" בסקירה, עם קישור לשינוי השם. ‏null = חוקי.
+            "server_name_problem": hostname_rule.refusal(ports.server_name(ctx.conn), "שם השרת"),
             # ‏#968: שורת-המשנה בסקירה — "פעיל 6 ימים 3 שעות" ו-"10.44.12.1".
             # ‏uptime של המכונה (‏/proc/uptime); ‏null = לא נקרא → "לא נבדק".
             # ‏deploy_ip = הכתובת שב-GRUB ובקרנל של התחנות (‏server_base);
             # ‏null = רשת ההפצה לא הוגדרה (#1088) → מוצג בשם, לא 127.0.0.1.
             "uptime_seconds": uptime() if uptime else None,
             "deploy_ip": deploy_ip() if deploy_ip else None,
+            # ‏#1933: האזור שהקונסולה מציגה בו כל זמן — ההגדרה של #1447, ובלעדיה
+            # ‏Asia/Jerusalem (שאליו ``apply_on_start`` מיישר את המערכת). לא UTC בשקט.
+            "timezone": timezone.zone_name(ctx.conn),
             "capabilities": {
                 "interbranch_transfer":
                     storage_nodes.can_interbranch_transfer(ctx.conn, user[1]),
@@ -336,13 +438,18 @@ def create_console_router(
             "session": session_view,
             # משיכות היוניקאסט שרצות עכשיו. הן אינן "הסבב" — אבל הן
             # עבודה אמיתית על השרת, ושרת שעובד לא ייראה פנוי (#60).
-            "pulls": [with_extras(row) for row in ctx.store.active_pulls()],
+            # ‏#1843: לכל משיכה גם `forecast` — הזמן הצפוי לפי המשיכות הקודמות של המכונה.
+            "pulls": [{**with_extras(row), "forecast": sv.pull_forecast(ctx.store, row, ctx.library)}
+                      for row in ctx.store.active_pulls()],
             "room": room_module.status_view(ctx)["round"],
             "sender": ctx.sender.status() if ctx.sender else None,
             "machines": machines,
             "images": len(ctx.library.scan()),
             "storage": storage,
             "now": now_iso(),
+            # ‏#1932: זמן הפעילות של המכונה גם כאן — ‏/me אינו עובר בערוץ הבין-שרתי
+            # (הוא של המשתמש בראשי), ו-/overview כן. ‏null = לא נקרא → "לא נבדק".
+            "uptime_seconds": uptime() if uptime else None,
         }
 
     # אימג'ים ותיקיות — ב-console_library.py.
@@ -491,7 +598,8 @@ def create_console_router(
             " d.disk_probe,"   # #402: למה אפס דיסקים (NULL = סוכן ישן)
             " d.firmware, d.secure_boot,"   # #500: כפי שהסוכן מדד (NULL = לא דווח)
             " d.agent_version,"   # #1257: גרסת ה-initrd מה-hello האחרון (NULL = לא דווח)
-            " d.local_clone"   # #1367: שיכפול מקומי כותב (נגזר ל-local_copy למטה)
+            " d.local_clone,"   # #1367: שיכפול מקומי כותב (נגזר ל-local_copy למטה)
+            " d.held_at, d.held_json"   # #2031: מחזיק תוצאות עד "כבה" (נגזר ל-held למטה)
             " FROM machines m LEFT JOIN net_devices d ON d.mac = m.mac"
             + (" WHERE m.group_id = ?" if group else "")
             + " ORDER BY m.group_id, m.suffix"
@@ -506,6 +614,8 @@ def create_console_router(
         last_captures = _last_captures()
         # ‏#704: השם לכל חיבור של כונן. ‏{} = אין שמות — כל המסכים מציגים "דיסק N".
         names = slot_names.all_by_mac(ctx.conn)
+        # ‏#2001: מיפוי לפי דגם — מכונה ← דגם ← ברירת מחדל.
+        model_maps, models = model_slots.all_maps(ctx.conn), model_slots.models_by_mac(ctx.conn)
         crc_limit = crcwarn.threshold(ctx.conn)   # #1366
         result = []
         for r in rows:
@@ -513,7 +623,14 @@ def create_console_router(
             disks_json = row.pop("disks_json")
             row["disks"] = json.loads(disks_json) if disks_json is not None else None
             stored_slots = row.pop("drawer_slots")
-            row["drawer_slots"] = drawer_slots.effective(row["drawer_count"], stored_slots)
+            row["slot_model"] = models.get(row["mac"])
+            model_map = model_maps.get(row["slot_model"])
+            row["model_slot_map"] = ({"slots": model_map["slots"], "names": model_map["names"]}
+                                     if model_map else None)
+            row["slot_map_source"] = ("machine" if stored_slots is not None
+                                      else "model" if model_map else "default")
+            row["drawer_slots"] = drawer_slots.effective(
+                row["drawer_count"], stored_slots, model_map["slots"] if model_map else None)
             row["drawer_slots_custom"] = stored_slots is not None
             optical_json = row.pop("optical_json")
             row["optical"] = json.loads(optical_json) if optical_json is not None else None
@@ -534,8 +651,13 @@ def create_console_router(
             row["nic_speed"] = nic_speed.view(ctx.conn, row["mac"], row["probe"], sampled=True)
             row["last_capture"] = last_captures.get(row["mac"])
             row["slot_names"] = names.get(row["mac"], {})
+            # ‏#1997: שם שנרשם לפני הכלל ואינו שם מחשב — מוצג כמו שהוא, וכאן
+            # הסיבה, ל"דורש טיפול" בסקירה. ‏null = חוקי. אין מיגרציה שמשנה שם.
+            row["name_problem"] = hostname_rule.refusal(row["suffix"], "שם המחשב")
             # ‏#1367: באמצע שיכפול מקומי עכשיו — "אתחל" שואל לפני (room.local_copy_now)
             row["local_copy"] = room.local_copy_now(row.pop("local_clone"), row["disks_reported_at"])
+            # ‏#2031: "דלוק — מחכה ללחיצה" (#2024): ‏{at, problems} מדיווח held טרי, או None
+            row["held"] = held.view(row.pop("held_at"), row.pop("held_json"))
             result.append(row)
         return result
 
@@ -704,6 +826,50 @@ def create_console_router(
                 f"{canonical} {slot} " + (f'name="{name}"' if name else "cleared"), user[0])
         return {"ok": True, "slot": slot, "name": name}
 
+    @router.put("/machines/{mac}/slot-map")
+    async def put_slot_map(mac: str, request: Request, user=Depends(admin_only)):
+        """‏#2001: חלון "מיפוי חיבורים" — שמירה אחת: ``{"scope": "machine"|"model",
+        "slots": [...] | null, "names": {key: name}}``. ‏``slots: null`` = "החזר
+        לברירת המחדל" באותו היקף. הכול נבדק לפני כל כתיבה."""
+        body = await request.json()
+        if (not isinstance(body, dict) or not {"scope", "slots"} <= set(body)
+                or set(body) - {"scope", "slots", "names", "replace_machine_maps"}):
+            raise HTTPException(400, 'הגוף חייב להיות {"scope", "slots", "names", "replace_machine_maps"}')
+        replace = body.get("replace_machine_maps", False)
+        if not isinstance(replace, bool):
+            raise HTTPException(400, "replace_machine_maps: true או false")
+        if body["scope"] not in ("machine", "model"):
+            raise HTTPException(400, 'scope: "machine" או "model"')
+        try:
+            if body["slots"] is None:
+                if body.get("names"):
+                    raise ValueError("בחזרה לברירת המחדל אין שמות")
+                slots, names = None, None
+            else:
+                slots, names = model_slots.clean(body["slots"], body.get("names"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        canonical = registry.normalize_mac(mac)
+        if canonical is None:
+            raise HTTPException(404, "מכונה לא רשומה")
+        try:
+            done = model_slots.save(ctx.conn, canonical, body["scope"], slots, names, user[0],
+                                    replace_machine_maps=replace)
+        except model_slots.MachineMaps as exc:
+            # נדב 22/10: הקונסולה שואלת "ל-N מחשבים מהדגם יש מיפוי משלהם — הוא יוחלף"
+            return JSONResponse(status_code=409, content={
+                "code": "machine_maps", "message_he": str(exc), "detail": str(exc),
+                "machines": exc.macs})
+        except LookupError as exc:
+            raise HTTPException(404, str(exc))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        target = f"model={done['model']} machines={len(done['machines'])}"             if done["scope"] == "model" else canonical
+        what = ("default" if slots is None else ",".join(
+            k + (f'="{names[k]}"' if k in names else "") for k in slots))
+        journal(ctx.conn, "machine_slot_map", f"{target} {what}", user[0])
+        return {"ok": True, **done}
+
     @router.delete("/machines/{mac}")
     def del_machine(mac: str, user=Depends(admin_only)):
         canonical = registry.normalize_mac(mac)
@@ -718,6 +884,22 @@ def create_console_router(
     @router.get("/machines.csv")
     def machines_csv(user=Depends(admin_only)):
         return PlainTextResponse(registry.export_csv(ctx.conn), media_type="text/csv")
+
+    @router.get("/machines/{mac}/smart")
+    def machine_smart(mac: str, user=Depends(current_user)):
+        """‏#1859: כל מאפייני ה-SMART של דיסקי המכונה, בעברית, מול הסבב הקודם של כל סידורי.
+        ‏`disks: null` = המכונה מעולם לא דיווחה דיסקים (לא "אין")."""
+        canonical = registry.normalize_mac(mac)
+        if canonical is None:
+            raise HTTPException(400, "MAC לא תקין")
+        row = ctx.conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (canonical,)).fetchone()
+        try:
+            disks = json.loads(row["disks_json"]) if row is not None and row["disks_json"] else None
+        except (TypeError, ValueError):
+            disks = None
+        return {"mac": canonical, "no_history_he": smart_history.NO_HISTORY_HE,
+                "disks": None if not isinstance(disks, list) else
+                [smart_history.describe(ctx.conn, d) for d in disks if isinstance(d, dict)]}
 
     # --- #874: דיסקים אדומים — זיכרון כשלי הכתיבה בשרת ---------------------------
 
@@ -1118,6 +1300,11 @@ def create_console_router(
         values[minfree.SETTING] = str(minfree.min_free_gb(ctx.conn))
         # ‏#1473: הערך שבתוקף — "0" (ללא הגבלה) כשלא נקבע או כשהשמור פגום.
         values[transfer_cap.SETTING] = str(transfer_cap.cap_mbps(ctx.conn))
+        # ‏#1864: הערך שבתוקף — "false" (מדגם) כשלא נקבע.
+        values[readbackhash.SETTING] = "true" if readbackhash.mode(ctx.conn) == "full" else "false"
+        # ‏#1956: יעד גיבוי המסד — לקריאה בלבד כאן (בלי סוד); בוחרים ב-POST /backup-target, שכותב
+        # ומקריא קובץ בדיקה. ‏`backup_dest` אינו ב-WRITE_SETTINGS — אין דרך לעקוף את הבדיקה.
+        values[backup_target.SETTING] = backup_target.describe(ctx.conn)
         mode, at, weekday = auto_reboot.settings(ctx.conn)
         values.update({auto_reboot.MODE: mode, auto_reboot.TIME: at,
                        auto_reboot.WEEKDAY: str(weekday)})
@@ -1134,52 +1321,9 @@ def create_console_router(
         unknown = next((key for key in body if key not in WRITE_SETTINGS), None)
         if unknown is not None:
             raise HTTPException(400, f"הגדרה לא מוכרת: {unknown}")
-        # #1406: validate the complete request before writing any key.
-        if isinstance(body, dict) and auto_reboot.MODE in body:
-            if body[auto_reboot.MODE] not in auto_reboot.MODES:
-                raise HTTPException(400, "הפעלה מחדש אוטומטית: מצב לא מוכר")
-        if isinstance(body, dict) and auto_reboot.TIME in body:
-            if auto_reboot.parse_time(body[auto_reboot.TIME]) is None:
-                raise HTTPException(400, "שעת הפעלה מחדש: נדרש HH:MM")
-        if isinstance(body, dict) and auto_reboot.WEEKDAY in body:
-            day = auto_reboot.parse_weekday(body[auto_reboot.WEEKDAY])
-            if day is None:
-                raise HTTPException(400, "יום הפעלה מחדש: מספר שלם 0–6")
-            body[auto_reboot.WEEKDAY] = str(day)
-        # ‏#1366: הסף נבדק **לפני** שנכתב דבר — גם לא מפתח אחר מאותה בקשה.
-        if isinstance(body, dict) and crcwarn.SETTING in body:
-            limit = crcwarn.parse(body[crcwarn.SETTING])
-            if limit is None:
-                raise HTTPException(400, f"סף CRC: מספר שלם 0–{crcwarn.MAXIMUM}")
-            body[crcwarn.SETTING] = str(limit)
-        # ‏#1354: הערך שהסוכן יקבל נבדק **לפני** שנכתב דבר — גם לא מפתח אחר מאותה בקשה.
-        if isinstance(body, dict) and minfree.SETTING in body:
-            gb = minfree.parse_gb(body[minfree.SETTING])
-            if gb is None:
-                raise HTTPException(
-                    400, f"מינימום מקום פנוי: מספר שלם 0–{minfree.MIN_FREE_GB_MAX}")
-            body[minfree.SETTING] = str(gb)
-        # נדב 18/10: ניתוק בחוסר פעילות — 0 = כבוי, אחרת 1–1440 דקות (ה-API בשניות;
-        # הקונסולה מציגה ושולחת דקות × 60). נבדק לפני שנכתב דבר.
-        if IDLE_SETTING in body:
-            idle = _idle_seconds(body[IDLE_SETTING])
-            if idle is None:
-                raise HTTPException(400, IDLE_REFUSAL_HE)
-            body[IDLE_SETTING] = str(idle)
-        # ‏#1473: אותו דפוס — נבדק לפני שנכתב דבר.
-        if transfer_cap.SETTING in body:
-            mbps = transfer_cap.parse(body[transfer_cap.SETTING])
-            if mbps is None:
-                raise HTTPException(
-                    400, f"הגבלת קצב בין אתרים: מספר שלם 0–{transfer_cap.MAXIMUM} (Mb/s)")
-            body[transfer_cap.SETTING] = str(mbps)
-        normalized = {}
-        for key, value in body.items():
-            if isinstance(value, bool):
-                # ‏JSON true → "True", שנקרא ככבוי (עיקרון 5): מנרמלים
-                # למה שהקוראים משווים אליו — "true"/"false".
-                value = "true" if value else "false"
-            normalized[key] = str(value)
+        # ‏#1794: validate the complete request before writing any key. The
+        # validator is deliberately exhaustive over WRITE_SETTINGS.
+        normalized = _validate_write_settings(body)
         set_settings(ctx.conn, normalized)
         for key, value in normalized.items():
             journal(ctx.conn, "setting_change", f"{key}={value}", user[0])

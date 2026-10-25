@@ -28,15 +28,18 @@ typedef struct {
     int active, demo, view, rerun, ndisks, disk, disk_ack, existing_disk;
     int nnics, nic, secondary, static_mode, primary_ok, primary_checked;
     int progress_pct, output_scroll, technical_open, show_password, show_confirm;
+    int show_root, show_root_confirm;   /* #1632 */
+    int virt, raid;   /* #1989: INSTALL_VIRT_*, RAID_* (install_raid.h) */
     char primary_url[192], hostname[64], password[128], confirm[128], current_password[128];
     char admin_user[64];
+    char root_password[128], root_confirm[128];   /* #1632: root's, chosen here (Nadav 24/10) */
     char timezone[64];   /* #1447: tzdata zone, default Asia/Jerusalem */
     char address[48], netmask[48], gateway[48], dns[96];
     char primary_name[96], primary_version[32], primary_fingerprint[128], primary_error[256];
     char phase[48], title[160], log[256], job[64], error[256], console_url[192], user[64];
     double reboot_at;   /* #1250: monotonic deadline of the auto restart; 0 = not counting (cancelled or fired) */
     int reboot_left;    /* seconds shown on the done screen */
-    char field_error[15][256];   /* 14 = timezone (#1447) */
+    char field_error[17][256];   /* 14 = timezone (#1447), 15/16 = root_password/_confirm (#1632) */
     char output[INSTALL_OUTPUT_MAX];
     InstallDisk disks[INSTALL_MAX_DISKS];
     InstallNic nics[INSTALL_MAX_NICS];

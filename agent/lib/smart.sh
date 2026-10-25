@@ -18,27 +18,35 @@
 # (#1211: פוצל לפני קיר 300 השורות).
 
 SMARTCTL="${SMARTCTL:-smartctl}"
+#: ‏#1859 (נדב 20/10): מילות הכתום, החמורה ראשונה -- הראשונה שמתקיימת היא שנאמרת. ‏#1921: גם מילות
+#: הכתום של טבלת הידע (smartjudge.sh, ‏data/smart-knowledge.tsv); 197/198 כתומים, לא אדומים (נדב 20/10).
+SMART_WARN_REASONS="critical_rose downshift_rose timeout_rose hot pending_sectors uncorrectable reported_uncorrectable unc_logged media_errors reallocated bad_blocks realloc_event program_fail data_path selftest_failed spin_retry nvme_reliability ssd_worn spare_exhausted hot_now"
+
+smart_was_read() {
+    # $1 = disk. 0 when the cached record is smartctl's reading of the disk -- its counters are
+    # numbers it printed, not the 0 stored for a disk it never read (crcdelta.sh, disklink.sh, smartattrs.sh).
+    _swr=$(smart_field "$1" 2)
+    case " ok health_failed media_readonly no_table no_health $SMART_WARN_REASONS " in *" $_swr "*) [ -n "$_swr" ] ;; *) return 1 ;; esac
+}
 
 smart_classify() {
-    # $1=health(PASSED|FAILED|unknown) $2=realloc $3=pending
+    # $1=health(PASSED|FAILED|UNREAD|unknown) $2=realloc $3=pending
     # $4=uncorrectable $5=crc. מדפיס "<verdict> <reason>". פונקציה טהורה,
     # נבדקת שורה-שורה בלי smartctl.
     #
     # ‏#872 (נדב 16/09): **שורת הבריאות לבדה מכריעה** — מה שה-BIOS מציג.
-    # המונים 5/197/198/199 נקראים ונשמרים (מידע) ואינם צובעים: על 6 דיסקי
+    # המונים 5/197/198/199 נקראים ונשמרים (מידע) ואינם צובעים (‏#1859: 5 ושאר הכתום -- smart_warn_static, אחרי הסיווג הזה): על 6 דיסקי
     # הכיתה CRC הוא 137–55,242 והם משכפלים מושלם — מונה מצטבר מספר על
     # ההיסטוריה של הכבלים, ושאלה שנשאלת על 6/6 דיסקים אינה אומרת כלום.
     #
-    # ‏#1366 (נדב 13/10): **מה שעוצר BIOS של HP על "SMART error, press F1"**
-    # הוא `fail` — שורת הבריאות FAILED, או 198/197 מעל 0 בדיסק ש-PASSED.
-    # ‏`fail` הוא **כתום** (שואל; בלי תשובה כותב — כמו Clonezilla במכללה,
-    # וחלק מהדיסקים האלה ממשיכים לעבוד), לא אדום. 5 ו-199 עדיין אינם צובעים.
+    # ‏#1921 (נדב 20/10, סופי): **אדום = הדיסק עצמו מדווח FAILED** (‏SMART RETURN STATUS -- מה
+    # שעוצר BIOS של HP על F1). ‏197/198 מעל 0 בדיסק ש-PASSED הם כתום, מטבלת הידע
+    # (smartjudge.sh), כמו שאר הכתום -- לא כאן. המונים נשמרים כמידע.
     if [ "$1" = "FAILED" ]; then echo "fail health_failed"; return; fi
-    if [ "$1" = "PASSED" ]; then
-        [ "${4:-0}" -gt 0 ] && { echo "fail uncorrectable"; return; }
-        [ "${3:-0}" -gt 0 ] && { echo "fail pending_sectors"; return; }
-        echo "ok ok"; return
-    fi
+    if [ "$1" = "PASSED" ]; then echo "ok ok"; return; fi
+    # ‏#2078: smartctl's own UNKNOWN! -- the status *and* the table did not read (aborted). The BIOS stops on F1
+    # there (870 EVO, 24/10): red, never written -- "we could not read" is not orange (principle 5).
+    if [ "$1" = "UNREAD" ]; then echo "fail health_unread"; return; fi
     # ‏-H לא PASSED ולא FAILED = לא קראנו בריאות; **אינו** `ok` (עיקרון 5).
     echo "unchecked no_health"
 }
@@ -68,6 +76,9 @@ _smart_store() {
     _ss_d="$RUN_DIR/smart"; mkdir -p "$_ss_d"
     printf '%s %s %s %s %s %s\n' \
         "$2" "$3" "${4:-0}" "${5:-0}" "${6:-0}" "${7:-0}" > "$_ss_d/$1.v"
+    _ss_s=$(disk_serial "$1")
+    if [ -n "$_ss_s" ]; then printf '%s\n' "$_ss_s" > "$_ss_d/$1.serial"
+    else rm -f "$_ss_d/$1.serial"; fi
 }
 
 smart_field() {
@@ -113,26 +124,33 @@ smart_ro_stale() {
 
 smart_probe() {
     # $1 = disk name. מריץ smartctl פעם אחת, מסווג, ושומר רשומה. מדפיס
-    # את ה-verdict. לעולם אינו חוסם: כל כשל בקריאת SMART הוא `unchecked`,
-    # שנכתב. תוצאה נשמרת במטמון — קריאה שנייה על אותו דיסק לא מריצה שוב.
+    # את ה-verdict. דיסק שלא נפתח / בלי SMART הוא `unchecked`, שנכתב; ‏UNKNOWN! של
+    # smartctl (הדיסק דחה את הקריאה) אדום (#2078). תוצאה נשמרת במטמון — קריאה שנייה על אותו דיסק לא מריצה שוב.
     # ‏#1742: לפני הכול smart_ro_check -- דיסק לקריאה בלבד אדום בלי smartctl.
     _sp_d="$1"; _sp_dev="$DEVROOT/$1"
     mkdir -p "$RUN_DIR/smart"
     smart_ro_check "$1"; _sp_ro=$?
     [ "$_sp_ro" = 0 ] && { echo fail; return; }
-    if [ -f "$RUN_DIR/smart/$1.v" ]; then smart_field "$1" 1; return; fi
+    _sp_serial=$(disk_serial "$1")
+    if [ -f "$RUN_DIR/smart/$1.v" ] && [ -n "$_sp_serial" ] &&
+            [ "$(cat "$RUN_DIR/smart/$1.serial" 2>/dev/null)" = "$_sp_serial" ]; then
+        smart_field "$1" 1; return
+    fi
+    rm -f "$RUN_DIR/smart/$1.v" "$RUN_DIR/smart/$1.serial"
     if ! command -v "$SMARTCTL" >/dev/null 2>&1; then
         _smart_store "$1" unchecked no_smartctl; echo unchecked; return
     fi
     _sp_out="$RUN_DIR/smart/$1.out"
     # ‏#1367: בתקרה (waits.sh). דיסק שלא ענה הוא `timeout` -- "לא נבדק", נשמר
     # במטמון כמו כל תשובה: עוד 30 שניות על אותו דיסק תקוע לא יביאו ראיה.
-    capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -H -A -n never "$_sp_dev"; _sp_rc=$?
+    # ‏#1921 (נדב 20/10): `-x` -- היומנים, devstat וה-WCTEMP; ‏`-f old` שומר את טבלת המאפיינים
+    # בצורה שכל קוראיה מכירים (‏-x לבדו מדפיס brief; ‏smartjudge.sh קורא את שתיהן).
+    capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -x -f old -n never "$_sp_dev"; _sp_rc=$?
     [ "$CAPPED_TIMED_OUT" = 1 ] && { _smart_store "$1" unchecked timeout; echo unchecked; return; }
     # bit 1 (rc & 2) = פתיחת ההתקן נכשלה. רק אז מנסים דרך שכבת ה-SAT
     # (גשר USB-SATA); שאר הסיביות (בעיקר bit 3 = הדיסק נכשל) הן תשובה.
     if [ "$((_sp_rc / 2 % 2))" -eq 1 ]; then
-        capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -d sat -H -A -n never "$_sp_dev"
+        capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -d sat -x -f old -n never "$_sp_dev"
         _sp_rc=$?
         [ "$CAPPED_TIMED_OUT" = 1 ] && { _smart_store "$1" unchecked timeout; echo unchecked; return; }
         if [ "$((_sp_rc / 2 % 2))" -eq 1 ]; then
@@ -149,20 +167,41 @@ smart_probe() {
     case "$(grep -iE 'overall-health|SMART Health Status' "$_sp_out" 2>/dev/null)" in
         *FAIL*|*BAD*) _sp_h=FAILED ;;
         *PASS*|*OK*)  _sp_h=PASSED ;;
+        *UNKNOWN!*)   _sp_h=UNREAD ;;   # #2078
         *)            _sp_h=unknown ;;
     esac
     [ "$((_sp_rc / 8 % 2))" -eq 1 ] && _sp_h=FAILED
-    _sp_re=$(_smart_int "$_sp_out" 5 Reallocated_Sector_Ct Reallocated_Event_Count)
-    _sp_pe=$(_smart_int "$_sp_out" 197 Current_Pending_Sector)
-    _sp_un=$(_smart_int "$_sp_out" 198 Offline_Uncorrectable Media_and_Data_Integrity_Errors)
-    _sp_cr=$(_smart_int "$_sp_out" 199 UDMA_CRC_Error_Count)
-    # ‏#1366: 198 עוצר BIOS על F1 ב-ATA. ב-NVMe המונה הזה הוא `Media and Data
-    # Integrity Errors` — נשמר, אבל אינו צובע: שם ה-BIOS נשען על Critical
-    # Warning, שהוא כבר שורת הבריאות (FAILED!).
-    _sp_unv=$_sp_un; grep -q 'Media and Data Integrity Errors' "$_sp_out" 2>/dev/null && _sp_unv=0
+    # ‏#1903: PASSED לבדו אינו קריאה -- bit 2 (rc & 4) = פקודת SMART נכשלה, ובלי טבלה (שורות ATA,
+    # ‏NVMe Health, רשימת פגמים של SCSI) המונים הם 0 של _smart_int ולא מספר שהודפס. unchecked, לא ok.
+    # שורת ATA: FLAG של -f old (0x0033) או FLAGS של brief (PO--CK) -- ‏-x של #1921 מדפיס את שתיהן.
+    _sp_u=; if [ "$_sp_h" = PASSED ]; then
+        [ "$((_sp_rc / 4 % 2))" -eq 1 ] && _sp_u=cmd_failed
+        [ -n "$_sp_u" ] || grep -qE '^ *[0-9]+ +[A-Za-z_]+ +(0x[0-9a-fA-F]+|[-POSRCK]{6}) |^SMART/Health Information|grown defect list' "$_sp_out" 2>/dev/null || _sp_u=no_attrs
+    fi
+    # ‏#1921 ס2: FAILED ש-smartctl חישב מהמאפיינים (הדיסק אינו תומך ב-RETURN STATUS) אינו ה-F1 --
+    # מידע, "לא נבדק ע״י הדיסק". ‏NVMe: ‏FAILED! הוא כל ביט ב-Critical Warning, והביטים מכריעים (ס1).
+    grep -q 'This result is based on an Attribute check' "$_sp_out" 2>/dev/null && _sp_h=unknown
+    # #1922: by (id, name) -- 198/199 of an OCZ Intrepid are the bytes it read and wrote, not a counter of faults
+    _sp_re=$(_smart_int "$_sp_out" Reallocated_Sector_Ct Reallocated_Event_Count)
+    _sp_pe=$(_smart_int "$_sp_out" Current_Pending_Sector)
+    _sp_un=$(_smart_int "$_sp_out" Offline_Uncorrectable Media_and_Data_Integrity_Errors)
+    _sp_cr=$(_smart_int "$_sp_out" UDMA_CRC_Error_Count CRC_Error_Count SATA_CRC_Error_Count)
+    _sp_j=no_table; command -v smart_judge_disk >/dev/null 2>&1 && { _sp_j=$(smart_judge_disk "$_sp_d") || _sp_j=no_table; }
+    _sp_g=2; [ "$_sp_h" = FAILED ] && grep -q '^Critical Warning:' "$_sp_out" 2>/dev/null &&
+        grep -Eq '^(orange|red)[|][a-z_]+[|]nvmebit[|]' "$RUN_DIR/smart/$_sp_d.find" 2>/dev/null &&
+        { _sp_g=0; grep -Eq '^unknown[|]-[|](nvmebit|nvme[|]critical_warning)[|]' "$RUN_DIR/smart/$_sp_d.find" 2>/dev/null || _sp_g=$?; }
+    [ "$_sp_g" = 1 ] && _sp_h=PASSED   # every bit set is known and judged (grep 1, not 2 #231); one bit not known keeps FAILED -- red (review, 20/10)
     # shellcheck disable=SC2046 # פיצול המילים מכוון — ל-$1/$2
-    set -- $(smart_classify "$_sp_h" "$_sp_re" "$_sp_pe" "$_sp_unv" "$_sp_cr")
+    set -- $(smart_classify "$_sp_h" "$_sp_re" "$_sp_pe" "$_sp_un" "$_sp_cr")
+    case "$_sp_j" in
+        "red "*) [ "$1" = fail ] || set -- fail "${_sp_j#red }" ;;   # NVMe read-only (ס1): never a target
+        "orange "*) [ "$1" = fail ] || set -- warn "${_sp_j#orange }" ;;   # an early sign; the disk works
+        no_table) [ "$1" = ok ] && set -- unchecked no_table ;;   # no table = nothing judged, never "fine"
+    esac
+    [ -n "$_sp_u" ] && [ "$1" != fail ] && set -- unchecked "$_sp_u"   # #1903 after the judge: never ok/warn; red stays red
     [ "$_sp_ro" = 2 ] && [ "$1" = ok ] && set -- unchecked ro_unread   # #1742: ro לא נקרא
+    [ "$1" = fail ] && [ "$2" = media_readonly ] && set -- fail media_readonly   # the word, for the scans (#1861)
+    command -v hw_refresh >/dev/null 2>&1 && hw_refresh "$_sp_d"   # #1921: the drawer's note, beside the colour
     _smart_store "$_sp_d" "$1" "$2" "$_sp_re" "$_sp_pe" "$_sp_un" "$_sp_cr"
     echo "$1"
 }
@@ -176,6 +215,48 @@ SMART_RO_HE="הדיסק במצב קריאה בלבד"
 smart_red_he() {
     # $1 = disk. המשפט של הסירוב על דיסק אדום, לפי הסיבה שבמטמון (smart_probe).
     if [ "$(smart_field "$1" 2)" = readonly ]; then printf '%s' "$SMART_RO_HE"; else printf '%s' "$SMART_RED_HE"; fi
+}
+
+smart_reason_he() {
+    # $1 = a reason word -- smart_classify/_smart_store's, or the server's cause of a
+    # failed clone (ata_cause.py CAUSES) -> the operator's words. The same words as
+    # console.js SMART_REASON_HE/FAILURE_CAUSE_HE and native-gui smart_reason_text;
+    # tests/test_reasons_he_1861.py keeps the three in step with what smart.sh writes.
+    case "$1" in
+        ok|'') ;;
+        health_failed) printf 'בדיקת הבריאות נכשלה' ;;   pending_sectors) printf 'סקטורים ממתינים (197)' ;;
+        uncorrectable) printf 'סקטורים שלא ניתנים לתיקון (198)' ;;   readonly) printf '%s' "$SMART_RO_HE" ;;
+        no_health) printf 'הדיסק אינו מדווח על בריאות' ;;   no_smartctl) printf 'smartctl חסר ב-initramfs' ;;
+        timeout) printf 'smartctl לא ענה בזמן' ;;   open_failed) printf 'smartctl לא הצליח לפתוח את הדיסק' ;;
+        no_smart) printf 'הדיסק אינו תומך ב-SMART' ;;   ro_unread) printf 'לא נקרא אם הדיסק במצב קריאה בלבד' ;;
+        cmd_failed) printf 'פקודת SMART לדיסק נכשלה' ;;   no_attrs) printf 'הדיסק לא החזיר טבלת מאפייני SMART' ;;   # #1903
+        health_unread) printf 'ה-SMART לא נקרא — ה-BIOS עלול לעצור ב-F1' ;;   # #2078
+        critical_rose) printf 'מאפיין קריטי עלה מאז הסבב הקודם — להחליף את הדיסק' ;;   # #1859: the server learned it
+        downshift_rose) printf 'ירידות מהירות SATA (183) עלו מאז הסבב הקודם' ;;   timeout_rose) printf 'פקודות שנתקעו (188) עלו מאז הסבב הקודם' ;;
+        hot) printf 'הדיסק התחמם בכתיבה בסבב הקודם' ;;   reported_uncorrectable) printf 'שגיאות שלא תוקנו (187)' ;;
+        reallocated) printf 'סקטורים שהועברו (5)' ;;   realloc_event) printf 'אירועי העברה (196)' ;;   spin_retry) printf 'ניסיונות סיבוב חוזרים (10)' ;;
+        ssd_worn) printf 'הדיסק שחוק — 90%% או יותר' ;;   spare_exhausted) printf 'הרזרבה של הדיסק נגמרה' ;;
+        # #1921 (נדב 20/10): כתום -- סימן מוקדם, הדיסק עובד; משפט שאומר למה. אדום: NVMe לקריאה בלבד.
+        hot_now) printf 'הדיסק חם מעבר לסף שלו עכשיו — לבדוק אוורור' ;;   bad_blocks) printf 'הדיסק מצא בלוקים פגומים בזמן עבודה (183)' ;;
+        unc_logged) printf 'ביומן הדיסק יש קריאה שלא תוקנה (UNC)' ;;   media_errors) printf 'הדיסק דיווח על שגיאות נתונים שלא תוקנו (NVMe)' ;;
+        program_fail) printf 'הזיכרון של ה-SSD נכשל בכתיבה או במחיקה' ;;   data_path) printf 'שגיאות בנתיב הנתונים בתוך הדיסק' ;;
+        selftest_failed) printf 'הבדיקה העצמית האחרונה של הדיסק נכשלה' ;;   nvme_reliability) printf 'הבקר מדווח שהאמינות של הדיסק נפגעה (NVMe)' ;;
+        media_readonly) printf 'הבקר נעל את הדיסק לקריאה בלבד (NVMe)' ;;   no_table) printf 'טבלת הידע של SMART חסרה — לא נבדק' ;;
+        cable) printf 'כבל/חריץ' ;;   disk) printf 'הדיסק' ;;   removed) printf 'המגירה נשלפה' ;;   write_error) printf 'שגיאת כתיבה לדיסק' ;;   unclassified) printf 'לא סווג' ;;
+        *) printf 'סיבה לא מוכרת' ;;   # the word itself stays in the log and the disk_event
+    esac
+}
+
+smart_why_he() {
+    # $1 = verdict (warn|failed_last|fail|...), $2 = reason -> one Hebrew phrase for the
+    # question, the skip and the replace lines (smartgate.sh) -- never the raw words.
+    _sw_r=$(smart_reason_he "$2")
+    case "$1" in
+        failed_last) printf 'נכשל בשיכפול הקודם%s' "${_sw_r:+ — סיבה: $_sw_r}" ;;
+        warn) printf 'SMART אזהרה%s' "${_sw_r:+ ($_sw_r)}" ;;
+        fail) printf 'SMART תקול%s' "${_sw_r:+ ($_sw_r)}" ;;
+        *) printf 'SMART לא נבדק' ;;
+    esac
 }
 
 smart_red() {

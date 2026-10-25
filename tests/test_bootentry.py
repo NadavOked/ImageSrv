@@ -226,8 +226,9 @@ def test_an_empty_efivars_directory_is_a_mount_that_failed(tmp_path):
 
 def test_the_stage_hook_runs_the_boot_entry_after_the_drivers():
     post = (AGENT / "lib" / "postdeploy.sh").read_text(encoding="utf-8")
-    body = post[post.index("stage_drivers() {") :]
-    assert body.index('_stage_drivers "$@"') < body.index('ensure_boot_entry "$@"') < body.index('echo "done" > "$RUN_DIR/state"')
+    body = post[post.index("stage_drivers() {") : post.index("_stage_drivers() {")]
+    assert body.index('_stage_drivers "$@"') < body.index('ensure_boot_entry "$@"')
+    assert "done" not in body.split("return 0")[0].split('ensure_boot_entry "$@"')[1]   # #1935: done is the caller's
     # הטעינה היא ברשימה המפורשת של imagectl-agent (test_every_lib_file_is_loaded_and_packed),
     # לפני postdeploy.sh שקורא ל-ensure_boot_entry — לא self-sourcing מתוך lib.
     main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")

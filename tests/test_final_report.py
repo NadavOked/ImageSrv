@@ -187,10 +187,12 @@ def sourced_libs() -> str:
     קיימת**: בקרה שלילית ש-`git stash` הוריד בה את קוד הסוכן חייבת
     ליפול על ההתנהגות ולא על קובץ חסר."""
     names = ["common.sh", "waits.sh", "jsonq.sh", "progress.sh", "pull.sh",   # waits: capped_run (#1367)
+             "streamid.sh",   # #1826: session_stream, between the manifest fetch and the write
              "ui.sh", "hold.sh", "clonergui.sh",   # #708: resolve_target_drawers (#701) lives here
              "smart.sh", "crcdelta.sh"]   # #872: crc_delta_after sits on the write line of do_restore
     names += ["attended.sh", "shrinkplan.sh"]   # attended beats; the capture's shrink plan
     names += ["idle.sh"]   # #1560: end_countdown / end_failed_round -- the end of a cloner round
+    names += ["verdict.sh"]   # #1935: _machine_state -- do_restore_drawers writes the final word itself
     return "".join(f". {posix(AGENT)}/lib/{n}; "
                    for n in names if (AGENT / "lib" / n).exists())
 
@@ -214,6 +216,9 @@ STUBS = (
     # לבודד את מסלול הדיווח מבדיקת ה-SMART: מעביר את כל הדיסקים הלאה
     # (בריאים) ומחזיר 0. ה-SMART עצמו נבדק ב-test_smart.py.
     'smart_gate() { shift; echo "$@"; }; '
+    # #1808/#1898: the drawer questions after it (drawergate.sh) -- the same
+    # isolation; their own tests are test_raid_drawer_1808 / test_head_share_1898.
+    'drawer_gates() { echo "$@"; }; '
     'pick_internal_disk() { echo sda; }; '
     'list_drawers() { echo "sdb sdc"; }; '
     # ‏#1410: resolve_target_drawers ממפה כל פורט שנבחר לדיסק אחד בדיוק
@@ -222,6 +227,7 @@ STUBS = (
     'name_this_machine() { echo "NAMED" >> "$RUN_DIR/trace"; '
     'echo done > "$RUN_DIR/state"; }; '
     'hold_beat() { echo "BEAT" >> "$RUN_DIR/trace"; }; '
+    'writemark_release_done() { :; }; '   # #1877: the mark is not what is tested here (test_writemark_postdeploy_1877.py)
     '_end() { [ "${RESTORE_RC:-0}" = "0" ] && echo done || echo failed; }; '
     'run_restore() { echo "RESTORE" >> "$RUN_DIR/trace"; '
     'target_set "$2" "$(_end)"; _end > "$RUN_DIR/state"; '
@@ -230,6 +236,13 @@ STUBS = (
     'for _t in sdb sdc; do target_set "$_t" "$(_end)"; done; '
     '_end > "$RUN_DIR/state"; return "${RESTORE_RC:-0}"; }; '
 )
+
+#: #2024: a round with a problem -- a failed round, or a done drawer whose read-back
+#: is not recorded (the STUBS above write none) -- holds its results until "כבה",
+#: no count and no ceiling. The hold's first tick starts the held beat (#2031,
+#: hold.sh); standing in for it, "כבה" is pressed (end.now) and the hold ends at the
+#: next tick, into finish_and_stop -- what a person at the machine does.
+PRESS_OFF = 'held_beat_start() { echo "PRESSED" >> "$RUN_DIR/trace"; : > "$RUN_DIR/end.now"; }; '
 
 
 def run_path(tmp_path: Path, server: str, call: str, *, tries: int = 2,

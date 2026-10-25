@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlsplit
 
-from server import login_guard, users
+from server import hostname_rule, login_guard, users
+from server.atomicfile import write_atomic
 from server.console_tls import ensure_console_cert
 from server.interserver_auth import generate_self_signed
 
@@ -179,6 +180,9 @@ def validate_config(config: WizardConfig, interface_names: set[str], *, rerun: b
         errors["hostname"] = "חובה להזין שם שרת."
     elif not HOSTNAME_RE.fullmatch(config.hostname):
         errors["hostname"] = "שם השרת יכול להכיל אותיות אנגליות קטנות, ספרות ומקפים בלבד; אסור להתחיל או לסיים במקף."
+    elif hostname_rule.refusal(config.hostname):
+        # ‏#1997: שם השרת הוא שם מחשב — עד 15 תווים, כמו בקונסולה ובמתקין.
+        errors["hostname"] = hostname_rule.refusal(config.hostname, "שם השרת")
     try:
         users.validate_password(config.password)
     except ValueError as exc:
@@ -342,14 +346,21 @@ class WizardState:
         conn = sqlite3.connect(db)
         conn.row_factory = sqlite3.Row
         try:
+            row = conn.execute(
+                "SELECT username FROM users WHERE role = 'admin' AND is_builtin = 1"
+                " AND disabled_at IS NULL ORDER BY created_at, username LIMIT 1"
+            ).fetchone()
+            if row is None:   # #1745: no one to check against is not a wrong password
+                return "לא נמצא ב-DB מנהל ההתקנה (משתמש admin מקומי פעיל) — אין מול מי לאמת את הסיסמה."
+            username = row["username"]
             try:
-                login_guard.check(conn, "admin", ip)
+                login_guard.check(conn, username, ip)
             except login_guard.LoginBlocked as exc:
                 return exc.message
-            if users.verify(conn, "admin", password) == "admin":
-                login_guard.clear(conn, "admin", ip)
+            if users.verify(conn, username, password) == "admin":
+                login_guard.clear(conn, username, ip)
                 return None
-            login_guard.record_failure(conn, "admin", ip)
+            login_guard.record_failure(conn, username, ip)
             return wrong
         finally:
             conn.close()
@@ -415,19 +426,17 @@ class WizardState:
 
     def _status_done(self, config: WizardConfig) -> bool:
         self.paths.status_file.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.paths.status_file.with_suffix(".tmp")
-        tmp.write_text(
+        write_atomic(
+            self.paths.status_file,
             f"state=done\ntimestamp={utc_now()}\nservers_if={config.interface}\nrole={config.role}\n",
-            encoding="utf-8",
         )
-        os.replace(tmp, self.paths.status_file)
         return read_fact(self.paths.status_file).get("state") == "done"
 
     def _fail(self, state: str, message: str, config: WizardConfig) -> None:
         self.paths.status_file.parent.mkdir(parents=True, exist_ok=True)
-        self.paths.status_file.write_text(
+        write_atomic(
+            self.paths.status_file,
             f"state={state}\ntimestamp={utc_now()}\nmessage={message}\nservers_if={config.interface}\nrole={config.role}\n",
-            encoding="utf-8",
         )
         self._set(state, error=message)
 

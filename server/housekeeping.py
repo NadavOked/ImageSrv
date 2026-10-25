@@ -37,6 +37,20 @@
   השינוי היחיד שאינו אפס: תוקף ששתק 90 יום מתחיל שוב מ-5 ניסיונות בלי השהיה.
   בלעדיו הטבלה גדלה לכל צירוף שם-משתמש+IP שנוסה אי פעם.
 * ‏`mfa_challenges` — אתגר שפג (‏`expires_at`). אינו שמיש ממילא.
+* ‏`port_history` (‏#1844) — 90 יום, **חוץ** מ-`learn_ports.WINDOW` התצפיות האחרונות
+  לכל חיבור ולכל דיסק — מהן `learn_ports.verdict` מכריע "כבל" או "דיסק".
+* ‏`model_speeds` (‏#1845) — 90 יום, **חוץ** מ-`learn_models.WINDOW` המדידות האחרונות
+  לכל דגם (הבסיס) והאחרונה של כל דיסק (מה שהוא נמדד בפעם הקודמת).
+* ‏`wol_wakes` (‏#1847) — 90 יום, **חוץ** מ-`learn_wol.WINDOW` ההערות האחרונות לכל מכונה.
+* ‏`boot_step_times` (‏#1848) — 90 יום, **חוץ** מ-`learn_boot.WINDOW`+1 המדידות האחרונות לכל
+  (מכונה, שלב) — הבסיס והאחרונה.
+* ‏`agent_logs` (‏#1882) — 90 יום. התקרה במספר שורות (למכונה ובסך הכול) — בכל הכנסה.
+* ‏`restore_stages` (‏#1883) — 90 יום.
+* ‏`server_io` (‏#1884) — 90 יום.
+* ‏`storage_usage` (‏#1886) — ‏`storage_history.KEEP_DAYS` (400) יום; ‏1000 דגימות למיקום בכל הכנסה.
+  **וגם** הדגימה היומית עצמה: ‏`run` דוגם כל מיקום מחובר (‏`storage_history.sample_all`).
+* ‏`pxe_events` (‏#1887) — ‏`pxe_log.KEEP_DAYS` (14) יום; ‏20000 שורות בכל הכנסה.
+* ‏`ip_history` (‏#1888) — 365 יום, 50 למכונה; ‏`nic_history` — 90 יום, 500 למכונה (בכל הכנסה).
 
 **מה במכוון לא כאן:** טבלאות הפעולות (‏`tasks`, ‏`sessions`,
 ‏`session_members`, ‏`room_rounds`, ‏`storage_transfers`, ‏`shrink_records`,
@@ -57,7 +71,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import drive_rates, login_guard, room_precheck, work_areas
+from . import drive_rates, learn_boot, learn_models, learn_ports, learn_wol, login_guard, room_precheck, work_areas
+from . import pxe_log, storage_history   # #1886, #1887
 from .db import _write_lock, journal, writing
 
 log = logging.getLogger("imagectl.housekeeping")
@@ -71,7 +86,7 @@ RETENTION_DAYS = 90
 #: יומן האירועים — שנה. יומן ביקורת (נדב, 18/10).
 JOURNAL_DAYS = 365
 
-_CRC_READ = room_precheck._CRC_READ_VERDICTS
+_CRC_READ = (*room_precheck._CRC_READ_VERDICTS, *room_precheck._CRC_READ_FAIL_REASONS)   # #2083
 
 
 def _iso(now: datetime, days: int) -> str:
@@ -104,7 +119,8 @@ def _rules(now: datetime) -> list[tuple[str, str, tuple]]:
     """(שם, SQL, פרמטרים) לכל טבלה. ‏`julianday` ולא השוואת מחרוזות: חותמת
     שאינה ISO נקראת NULL — וההשוואה נכשלת לכיוון **השמירה**."""
     old = _iso(now, RETENTION_DAYS)
-    qual = ("{t}.serial IS NOT NULL AND ({t}.verdict IN (?, ?, ?)"
+    qual = ("{t}.serial IS NOT NULL AND ({t}.verdict IN (?, ?)"
+            " OR ({t}.verdict = 'fail' AND COALESCE({t}.reason, '') IN (?, ?))"   # #2083
             " OR ({t}.verdict = 'unchecked' AND COALESCE({t}.reason, '') = 'no_health'))")
     return [
         ("journal", "DELETE FROM journal WHERE julianday(ts) < julianday(?)",
@@ -123,6 +139,10 @@ def _rules(now: datetime) -> list[tuple[str, str, tuple]]:
          + " AND disk_events.updated_at = (SELECT MAX(e.updated_at) FROM disk_events e"
            " WHERE e.serial = disk_events.serial AND " + qual.format(t="e") + "))",
          (old, *_CRC_READ, *_CRC_READ)),
+        # ‏#1859: הסבבים הישנים של כל סידורי — חוץ מהאחרון, שממנו נלמד "עלה מאז הסבב הקודם".
+        ("smart_history",
+         "DELETE FROM smart_history WHERE julianday(at) < julianday(?)"
+         " AND at < (SELECT MAX(h.at) FROM smart_history h WHERE h.serial = smart_history.serial)", (old,)),
         ("disk_failures",
          "DELETE FROM disk_failures WHERE cleared_at IS NOT NULL"
          " AND julianday(cleared_at) < julianday(?)", (old,)),
@@ -136,6 +156,49 @@ def _rules(now: datetime) -> list[tuple[str, str, tuple]]:
          "DELETE FROM wave_rates WHERE julianday(at) < julianday(?)"
          " AND rowid NOT IN (SELECT rowid FROM wave_rates ORDER BY rowid DESC LIMIT ?)",
          (old, drive_rates.MEMORY_SCAN)),
+        # ‏#1844: ‏`learn_ports.verdict` קורא את WINDOW התצפיות האחרונות לכל חיבור ולכל דיסק.
+        ("port_history",
+         "DELETE FROM port_history WHERE julianday(at) < julianday(?)"
+         " AND rowid NOT IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER"
+         " (PARTITION BY mac, port ORDER BY at DESC) AS rn FROM port_history) WHERE rn <= ?)"
+         " AND rowid NOT IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER"
+         " (PARTITION BY serial ORDER BY at DESC) AS rn FROM port_history) WHERE rn <= ?)",
+         (old, learn_ports.WINDOW, learn_ports.WINDOW)),
+        # ‏#1845: ‏`learn_models` קורא את WINDOW המדידות האחרונות לכל דגם, ואת האחרונה לכל דיסק.
+        ("model_speeds",
+         "DELETE FROM model_speeds WHERE julianday(at) < julianday(?)"
+         " AND rowid NOT IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER"
+         " (PARTITION BY model ORDER BY at DESC) AS rn FROM model_speeds) WHERE rn <= ?)"
+         " AND rowid NOT IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER"
+         " (PARTITION BY serial ORDER BY at DESC) AS rn FROM model_speeds) WHERE rn = 1)",
+         (old, learn_models.WINDOW)),
+        # ‏#1847: ‏`learn_wol.stats` קורא את WINDOW ההערות האחרונות לכל מכונה.
+        ("wol_wakes",
+         "DELETE FROM wol_wakes WHERE julianday(sent_at) < julianday(?)"
+         " AND id NOT IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER"
+         " (PARTITION BY mac ORDER BY sent_epoch DESC) AS rn FROM wol_wakes) WHERE rn <= ?)",
+         (old, learn_wol.WINDOW)),
+        # ‏#1848: ‏`learn_boot.regression` קורא את WINDOW+1 האחרונות לכל (מכונה, שלב).
+        ("boot_step_times",
+         "DELETE FROM boot_step_times WHERE julianday(at) < julianday(?)"
+         " AND rowid NOT IN (SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER"
+         " (PARTITION BY mac, step ORDER BY rowid DESC) AS rn FROM boot_step_times) WHERE rn <= ?)",
+         (old, learn_boot.WINDOW + 1)),
+        # ‏#1882: התקרה במספר שורות נאכפת בכל הכנסה (`agent_logs._trim`); כאן — הזמן.
+        ("agent_logs", "DELETE FROM agent_logs WHERE julianday(at) < julianday(?)", (old,)),
+        # ‏#1883: ‏`learn_eta` קורא רק את הגלים בחלון שלו — 90 יום מספיקים.
+        ("restore_stages", "DELETE FROM restore_stages WHERE julianday(at) < julianday(?)", (old,)),
+        # ‏#1884: גל/קליטה — הצילום והתוצאה; ‏`bound` נקרא רק לגלים בחלון של הלמידה.
+        ("server_io", "DELETE FROM server_io WHERE julianday(started_at) < julianday(?)", (old,)),
+        # ‏#1886: ההיסטוריה של המקום הפנוי — שנה ומעט (מגמה עונתית); התקרה בשורות בכל הכנסה.
+        ("storage_usage", "DELETE FROM storage_usage WHERE julianday(at) < julianday(?)",
+         (_iso(now, storage_history.KEEP_DAYS),)),
+        # ‏#1887: לוג ה-DHCP/PXE — 14 יום (ההכרעה היא על העלייה האחרונה); התקרה בשורות בכל הכנסה.
+        ("pxe_events", "DELETE FROM pxe_events WHERE julianday(at) < julianday(?)",
+         (_iso(now, pxe_log.KEEP_DAYS),)),
+        # ‏#1888: היסטוריית IP — שנה; מוני הכרטיס — 90 יום. התקרה בשורות בכל הכנסה.
+        ("ip_history", "DELETE FROM ip_history WHERE julianday(at) < julianday(?)", (_iso(now, 365),)),
+        ("nic_history", "DELETE FROM nic_history WHERE julianday(at) < julianday(?)", (old,)),
         ("mfa_challenges", "DELETE FROM mfa_challenges WHERE expires_at < ?",
          (now.timestamp(),)),
     ]
@@ -181,6 +244,7 @@ def run(conn, roots: Callable[[], list[Path]], now: datetime | None = None) -> d
         result["tables"] = purge_tables(conn, now)
     except Exception:                                        # noqa: BLE001
         log.exception("retention purge failed")
+    result["storage_samples"] = storage_history.sample_all(conn, "daily")   # ‏#1886; אינו זורק
     try:
         paths = roots()
     except Exception as exc:                                 # noqa: BLE001

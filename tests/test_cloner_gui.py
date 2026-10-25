@@ -70,7 +70,7 @@ PRELUDE = (
     f'. {posix(AGENT)}/lib/guistate.sh; '   # #1252: gui_server_addr -- gui_libs loads it first too
     f'. {posix(AGENT)}/lib/askgui.sh; '   # 11/10: gui_ask_state, as gui_libs loads it
     f'. {posix(AGENT)}/lib/slotnames.sh; '   # #704: slot names -- gui_libs loads it too
-    f'. {posix(AGENT)}/lib/clonergui.sh; '
+    f'. {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; '
 )
 
 
@@ -130,6 +130,7 @@ def test_state_carries_the_image_name(tmp_path):
     assert "cloner=Office 2024" in state_lines(tmp_path)
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_state_records_a_wave_lost_when_the_server_restarted(tmp_path):
     assert "server_restarted_wave=1" in state_lines(tmp_path, restarted=True)
 
@@ -171,6 +172,7 @@ def test_state_omits_a_missing_or_invalid_drawer_count(tmp_path, hello):
                    for line in state_lines(tmp_path, hello=hello))
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_a_drawer_record_reports_the_local_bytes_and_port(tmp_path):
     """התקדמות פר-מגירה נקראת מ-target_bytes (base+counter), לא מהשרת.
 
@@ -221,6 +223,7 @@ def test_a_drawer_that_stopped_writing_drops_its_anchor_and_reports_unmeasured(t
     assert not (gui / "pace.sda").exists()
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_a_pending_smart_request_becomes_a_prompt_record(tmp_path):
     """כשהסוכן כתב smart-request, המצב נושא smart_prompt — וזה מה
     שמצייר את הפאנל הדומיננטי בצד ה-C. ה-request הוא nonce|port|verdict|
@@ -230,6 +233,7 @@ def test_a_pending_smart_request_becomes_a_prompt_record(tmp_path):
     assert "smart_prompt=12-2|2|fail|pending" in lines
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_no_smart_request_means_no_prompt(tmp_path):
     """הצד החיובי: בלי בקשה אין פאנל, אחרת כל דיסק היה נראה פגום."""
     assert not any(l.startswith("smart_prompt=") for l in state_lines(tmp_path))
@@ -279,13 +283,15 @@ def test_the_kiosk_load_chain_carries_the_cached_smart_verdict(tmp_path):
     # ‏#432: 7/8 = הקישור — ‏null כשהדיסק אינו מאחורי libata (כאן: תיקייה, לא קישור).
     # #1495: 10/11 = the drawer and the connection -- a disk with no ATA port and no
     # NVMe address is not in any mapping: 0, connection unknown (never a guessed number)
-    assert any(l.startswith("cdisk=") and l.endswith("|passed||null|null||0|") for l in lines), lines   # #1366: field 9, no CRC colour
+    assert any(l.startswith("cdisk=") and l.endswith("|passed||null|null||0||unchecked|") for l in lines), lines   # #1366: field 9, no CRC colour; #1798: 12 -- no disk to read the mark from = unchecked; #1921: 13 -- no hw note
 
 
 # --- ‏#867/#874: המלאי הממתין — ממוין לפי מספר הדיסק, ונושא את זיכרון השרת ----
 
 #: ‏sgdisk מזויף למסך הממתין: רושם בלבד. עד #874 המסך קרא ממנו את הסימון
-#: של #845 (‏`sgdisk -p`); מאז הזיכרון בשרת, ו-`sgdisk.calls` נשאר ריק.
+#: של #845 (‏`sgdisk -p`); מאז הזיכרון בשרת. ‏#1798 (נדב 19/10): המסך קורא
+#: שוב `sgdisk -p` -- **קריאה בלבד** -- לסימן "כתיבה לא הושלמה" (שדה 12);
+#: טבלה ריקה = `clean`. הוא לעולם אינו כותב.
 IDLE_SGDISK = """#!/bin/sh
 printf '%s\\n' "$*" >> "{box}/sgdisk.calls"
 exit 0
@@ -328,10 +334,12 @@ def idle_state(tmp_path: Path, ports: dict[str, str], failed: dict[str, str] | N
     out = sh(script)
     assert out.returncode == 0, out.stderr
     assert "not found" not in out.stderr, out.stderr
-    assert not (box / "sgdisk.calls").exists(), "המסך הממתין נגע ב-sgdisk (#845 הוסר)"
+    calls = (box / "sgdisk.calls").read_text().splitlines() if (box / "sgdisk.calls").exists() else []
+    assert all(c.startswith("-p ") for c in calls), f"המסך הממתין כתב ב-sgdisk: {calls}"   # #1798: -p only
     return [l for l in (gui / "state").read_text().splitlines() if l.startswith("cdisk=")]
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_idle_disks_are_sorted_by_disk_number_not_device_name(tmp_path):
     """‏#867: במחשב 2 המיפוי הוא sda→3, sdb→1, sdc→2, והמסך הציג "דיסק 3,
     1, 2". נדב מדבר ב"דיסק 1/2/3 לפי SATA" — הרשומות ממוינות לפי השדה
@@ -342,6 +350,7 @@ def test_idle_disks_are_sorted_by_disk_number_not_device_name(tmp_path):
     assert [l.split("|")[1] for l in lines] == ["sdb", "sdc", "sda"], lines
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_an_idle_disk_without_a_slot_sorts_last_and_keeps_the_others_ordered(tmp_path):
     """דיסק ש-`disk_port` לא גזר לו חריץ (USB, בקר זר) אינו שובר את
     המיון: הוא מגיע **אחרי** הממוספרים, והם עדיין 1,2."""
@@ -350,6 +359,7 @@ def test_an_idle_disk_without_a_slot_sorts_last_and_keeps_the_others_ordered(tmp
     assert lines[-1].startswith("cdisk=0|sdb|"), lines
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_a_disk_the_server_remembers_reports_failed_last_with_its_cause(tmp_path):
     """‏#867/#874: דיסק 1 במחשב 2 נכשל בלילה (כבל, לפי שורות ה-ATA), והוא
     עובר SMART (‏`ok` במטמון). המסך הציג אותו ירוק. שדה ה-smart של הרשומה
@@ -357,10 +367,11 @@ def test_a_disk_the_server_remembers_reports_failed_last_with_its_cause(tmp_path
     לצדו נשאר `passed` בלי סיבה. ‏sgdisk אינו נקרא. בקרה שלילית: על main
     שניהם `passed` (הזיוף לא מדפיס טבלה), ו-`sgdisk -p` נקרא."""
     lines = idle_state(tmp_path, {"sda": "1", "sdb": "2"}, failed={"sda": "cable"})
-    assert lines[0] == "cdisk=1|sda|Model sda|512000|failed_last|cable|null|null||1|SATA 0", lines
-    assert lines[1] == "cdisk=2|sdb|Model sdb|512000|passed||null|null||2|SATA 1", lines
+    assert lines[0] == "cdisk=1|sda|Model sda|512000|failed_last|cable|null|null||1|SATA 0|clean|", lines   # #1921: 13 -- no hw note
+    assert lines[1] == "cdisk=2|sdb|Model sdb|512000|passed||null|null||2|SATA 1|clean|", lines
 
 
+@requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_the_memory_is_read_from_the_last_hello_every_second(tmp_path):
     """‏cloner_gui_state רץ פעם בשנייה וקורא את זיכרון השרת מתשובת ה-hello
     האחרונה — "נקה" בקונסולה מגיע למסך בלי ריבוט. שתי ריצות: האדום נשאר
@@ -573,7 +584,7 @@ def bridge_setup(tmp_path: Path, screen: str) -> tuple[str, Path]:
              f'. {posix(AGENT)}/lib/buildcapture.sh; '
              f'. {posix(AGENT)}/lib/roomflow.sh; '
              f'. {posix(AGENT)}/lib/guistate.sh; . {posix(AGENT)}/lib/askgui.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
-             f'. {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/clonergui.sh; '
+             f'. {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; '
              f'. {posix(AGENT)}/lib/guibridge.sh; '
              'gui_role() { echo GUI_ROLE_CALLED >&2; return 1; }; '
              'disk_slot_records() { :; }; ')   # #1495: disk numbering is test_drawer_map_gui_1495's
@@ -793,6 +804,180 @@ def _count_color(px, ch, rgb, tol=26) -> int:
     return n
 
 
+# #2050/#2054: actual cairo pixels and actual text from the approved mockup 07.
+# The driver links the production sources, wrapping only text/geometry for observation.
+EMPHASIS_DRIVER = r'''
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "lcui.h"
+#include "state.h"
+#include "screens_rounds.h"
+int app_typing_lang(const App *a) { (void)a; return LANG_NONE; }
+Text __real_text_make(cairo_t *, Font, double, int, const char *, int, Dir);
+Text __wrap_text_make(cairo_t *cr, Font f, double px, int w, const char *s, int wp, Dir d) {
+    printf("T %s\n", s);
+    return __real_text_make(cr, f, px, w, s, wp, d);
+}
+void __real_draw_border_rrect(cairo_t *, Rect, double, Rgb, double);
+void __wrap_draw_border_rrect(cairo_t *cr, Rect r, double rad, Rgb c, double lw) {
+    if (r.w > 300 && r.h > 50)
+        printf("B %.0f %.0f %.0f %.0f %.0f %.0f %.0f\n", r.x, r.y, r.w, r.h, c.r*255, c.g*255, c.b*255);
+    __real_draw_border_rrect(cr, r, rad, c, lw);
+}
+int main(int argc, char **argv) {
+    if (argc != 5) return 2;
+    static App a; a.theme = !strcmp(argv[2], "dark") ? &THEME_DARK : &THEME_LIGHT;
+    a.force_cloner = 1;
+    cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 1280, 1100);
+    cairo_t *cr = cairo_create(s);
+    draw_set(cr, a.theme->porcelain); cairo_paint(cr);
+    if (!strcmp(argv[1], "bays")) {
+        const int kinds[] = {BAY_FAILED, BAY_SMART, BAY_DONE, BAY_DONE, BAY_DONE, BAY_WAITING, BAY_WRITING, BAY_DONE};
+        for (int i = 0; i < 8; i++) {
+            LcBay g = {0}; g.kind = kinds[i]; g.drawer = i + 1;
+            g.done_warn = i == 3; g.drv_tone = i == 4 ? DRV_BAD : DRV_NONE;
+            g.line_warn = i == 7;
+            snprintf(g.name, sizeof g.name, "דיסק %d", i + 1);
+            snprintf(g.line, sizeof g.line, "הסיבה נשארת במילים");
+            g.pill = i == 0 ? "נכשל" : i == 1 ? "אזהרה" : "הושלם";
+            lc_bay_draw(&a, cr, (Rect){20, 20 + i * 120, 940, 104}, &g);
+        }
+    } else {
+        FILE *f = fopen(argv[3], "r"); if (!f) return 3;
+        state_parse(&a.st, f); fclose(f);
+        if (!strcmp(argv[1], "standby")) screen_standby(&a, cr, 1280, 800, 48);
+        else if (!strcmp(argv[1], "local")) lc_draw_done(&a, cr, 1280, 1000, 48);
+        else screen_cloner(&a, cr, 1280, 800, 48);
+    }
+    cairo_status_t status = cairo_surface_write_to_png(s, argv[4]);
+    cairo_destroy(cr); cairo_surface_destroy(s);
+    return status == CAIRO_STATUS_SUCCESS ? 0 : 4;
+}
+'''
+
+
+@pytest.fixture(scope="module")
+def emphasis_driver(tmp_path_factory):
+    d = tmp_path_factory.mktemp("emphasis2050")
+    driver = d / "driver.c"
+    driver.write_text(EMPHASIS_DRIVER, encoding="utf-8", newline="\n")
+    sources = subprocess.run(["make", "-s", "-f", "Makefile", "print-gui-src"], cwd=GUI,
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
+    assert sources.returncode == 0, sources.stderr
+    srcs = [posix(GUI / s) for s in sources.stdout.split() if not s.endswith("main.c")]
+    assert srcs
+    binary = d / "driver"
+    build = subprocess.run([BASH, "-c",
+        'cc -O1 -Wall -Wextra -std=c11 -D_GNU_SOURCE -I"$1/src" '
+        '$(pkg-config --cflags pangocairo cairo libdrm) '
+        '-Wl,--wrap=text_make,--wrap=draw_border_rrect -o "$2" "$3" "${@:4}" '
+        '$(pkg-config --libs pangocairo cairo libdrm) -lm',
+        "_", posix(GUI), posix(binary), posix(driver), *srcs],
+        capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+    assert build.returncode == 0, build.stderr
+    return binary
+
+
+EMPHASIS_NATIVE = requires_native(
+    ("cc", shutil.which("cc") or shutil.which("gcc")),
+    ("pango/cairo/libdrm", _pkgconfig("pangocairo", "cairo", "libdrm")),
+    why="approved bay render and text checks require the VM lab",
+)
+
+
+def _emphasis_frame(binary, tmp_path, mode, theme="light", state=""):
+    source, png = tmp_path / "state.txt", tmp_path / "emphasis.png"
+    source.write_text(state, encoding="utf-8", newline="\n")
+    result = subprocess.run([str(binary), mode, theme, posix(source), posix(png)],
+                            capture_output=True, text=True, encoding="utf-8", timeout=120,
+                            stdin=subprocess.DEVNULL,
+                            env=dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf")))
+    assert result.returncode == 0, result.stderr
+    return result.stdout.splitlines(), _png_rgb(png)
+
+
+def _assert_emphasized_frame(image, rect, colour, soft):
+    width, height, ch, px = image
+    x, y, w, h = rect
+    assert 0 <= x < x+w <= width and 0 <= y < y+h <= height
+    def pixel(xx, yy):
+        p = (yy * width + xx) * ch
+        return tuple(px[p:p+3])
+    # All three pixels of each straight edge, not just a red stripe at one end.
+    for i in range(3):
+        for point in [(x+w//2, y+i), (x+w//2, y+h-1-i),
+                      (x+i, y+h//2), (x+w-1-i, y+h//2)]:
+            assert pixel(*point) == colour, (point, pixel(*point), colour)
+    # Immediately inside every edge is soft fill, proving exactly 3px and no tab.
+    for point in [(x+w//2, y+3), (x+w//2, y+h-4), (x+3, y+h//2), (x+w-4, y+h//2)]:
+        assert pixel(*point) == soft, (point, pixel(*point), soft)
+
+
+@EMPHASIS_NATIVE
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_approved_bay_frame_is_three_pixels_on_all_sides_with_soft_fill(emphasis_driver, tmp_path, theme):
+    _, image = _emphasis_frame(emphasis_driver, tmp_path, "bays", theme)
+    for i, tone in [(0, "danger"), (1, "warning"), (2, "success"), (3, "warning"), (4, "danger"), (7, "warning")]:
+        _assert_emphasized_frame(image, (20, 20+i*120, 940, 104),
+                                 _token("--clr-"+tone, theme), _token("--clr-"+tone+"-soft", theme))
+    # Healthy waiting / writing have a one-pixel neutral edge and no tinted fill.
+    width, _, ch, px = image
+    for i in (5, 6):
+        for dy, token in [(0, "--clr-border"), (1, "--clr-surface"), (4, "--clr-surface")]:
+            p = ((20+i*120+dy)*width + 490)*ch
+            assert tuple(px[p:p+3]) == _token(token, theme)
+
+
+@EMPHASIS_NATIVE
+@pytest.mark.parametrize("mode,state,tones", [
+    ("standby", "drawer_count=2\ncdisk=1|sda|Bad|500000000000|fail\ncdisk=2|sdb|Warning|500000000000|warn\n", ["danger", "warning"]),
+    ("local", "lc_phase=done\nlc_tgt=sda|done|100|1|1||||100\nlc_tgt=sdb|failed|10|1|0|write failed|||100\n", ["success", "danger"]),
+])
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_approved_emphasis_at_standby_and_local_result_calls(emphasis_driver, tmp_path, mode, state, tones, theme):
+    lines, image = _emphasis_frame(emphasis_driver, tmp_path, mode, theme, state)
+    for tone in tones:
+        colour, soft = _token("--clr-"+tone, theme), _token("--clr-"+tone+"-soft", theme)
+        frames = [tuple(map(int, line.split()[1:])) for line in lines if line.startswith("B ")]
+        frames = [f[:4] for f in frames if f[4:] == colour]
+        assert frames, (mode, tone, lines)
+        for rect in frames:
+            _assert_emphasized_frame(image, rect, colour, soft)
+    if mode == "standby":   # mockup 07: the cage's caption counts the drawers the frames mark
+        assert "T 2 מתוך 2 עם דיסק · ‏2 עם בעיה" in lines, [l for l in lines if "עם דיסק" in l]
+
+
+@EMPHASIS_NATIVE
+@pytest.mark.parametrize("first,second,expected", [
+    ("writing", "failed", "1 כותב · 1 נכשל"),
+    ("verifying", "failed", "1 מאמת · 1 נכשל"),
+    ("waiting", "failed", "1 ממתין · 1 נכשל"),
+    ("asking", "writing", "1 כותב · 1 ממתין להחלטה"),
+    ("done", "writing", "1 כותב · 1 הושלם"),
+    ("done", "failed", "1 מתוך 2 נכתבו · 1 נכשל"),
+    ("done", "done", "2 מתוך 2 נכתבו"),
+    ("cancelled", "skipped", "0 מתוך 2 נכתבו · 1 דולג · 1 בוטל"),
+])
+def test_disks_tile_counts_current_states_and_only_summarizes_written_at_end(emphasis_driver, tmp_path, first, second, expected):
+    state = ("cloner=Office\n"
+             f"drawer=1|sda|{first}|27|100||24000000|600|1|SATA 0\n"
+             f"drawer=2|sdb|{second}|4|100||-1|-1|2|SATA 1\n")
+    lines, _ = _emphasis_frame(emphasis_driver, tmp_path, "cloner", state=state)
+    texts = [line[2:].lstrip("\u200f") for line in lines if line.startswith("T ")]
+    assert expected in texts, texts
+    ended = first in ("done", "failed", "skipped", "cancelled") and second in ("done", "failed", "skipped", "cancelled")
+    if not ended:
+        assert not any("נכתבו" in text for text in texts), texts
+
+
+@EMPHASIS_NATIVE
+def test_empty_disks_tile_does_not_invent_written_disks(emphasis_driver, tmp_path):
+    lines, _ = _emphasis_frame(emphasis_driver, tmp_path, "cloner", state="cloner=Office\n")
+    assert "T אין דיסקים" in lines
+    assert not any("נכתבו" in text for text in lines)
+
+
 # ‏#1090: לגואי אין פלטה משלו — כל צבע הוא טוקן של הקונסולה (design-tokens.css),
 # ו-theme.c מעתיק אותו. הטסטים קוראים את הטוקן מהקובץ, לא ערך קשיח: כשהקונסולה
 # תשנה צבע, הטסט ייפול אם הגואי לא זז איתה.
@@ -893,6 +1078,14 @@ def test_standby_shows_connected_disks_and_empty_cloner_port(tmp_path):
         encoding="utf-8", newline="\n",
     )
     without_disks.write_text(common, encoding="utf-8", newline="\n")
+    # #2099: a state file older than 10s draws the "הסוכן לא מעדכן מצב" toast (state.c,
+    # `now - st_mtime > 10`) -- dark ink of its own. The second render starts only after the
+    # first one drew every screen, so on a busy host the toast landed in one image and not
+    # the other (measured: 6093 vs 12967, failing alone as well). Both files are dated ahead,
+    # so neither is stale and the two images differ in the cdisk rows only, as intended.
+    ahead = time.time() + 3600
+    for state in (with_disks, without_disks):
+        os.utime(state, (ahead, ahead))
     _png(binary, tmp_path / "1170-with", with_disks)
     _png(binary, tmp_path / "1170-without", without_disks)
 

@@ -103,7 +103,7 @@ def test_hello_unknown_known_cloner_and_state_carry_tz(server, tmp_path, monkeyp
 
     mac = "b4:2e:99:07:1a:c1"
     added = server["admin"].post("/api/console/machines", json={
-        "mac": mac, "name": "Cloner 1", "group_id": "grp_CLONERS"})
+        "mac": mac, "name": "Cloner1", "group_id": "grp_CLONERS"})
     assert added.status_code == 200, added.text
     known = server["anon"].post("/api/v1/agent/hello", json=hello_body(mac)).json()
     assert known["known"] is True and known["tz"] == expected
@@ -156,4 +156,4 @@ def test_installer_sets_the_chosen_zone_before_timesyncd():
     link = 'chroot "$TARGET" ln -sf "/usr/share/zoneinfo/$ANSWER_TIMEZONE" /etc/localtime'
     assert link in finish
     assert 'write_target 0644 /etc/timezone "$ANSWER_TIMEZONE' in finish
-    assert finish.index(link) < finish.index("systemctl enable systemd-timesyncd.service")
+    assert finish.index(link) < finish.index("systemctl enable chrony.service")

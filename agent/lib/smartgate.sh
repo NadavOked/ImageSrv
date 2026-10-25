@@ -29,8 +29,8 @@ smart_ask() {
     # הטקסט עשה על EOF (נדב 16/09): כתום כותב, אדום מדלג; הברירה מגיעה מהקורא
     # (‏$6), וריק = skip.
     # תשובה מפורשת מבוצעת כמות שהיא (#1580): עד 17/10 ‏rescue על failed_last
-    # הונמך כאן בשקט ל-skip. רק כתום נשאל ("נסה שוב"; בלי תשובה כותב) --
-    # אדום (SMART תקול) אינו נשאל בכלל (#1732, smart_preflight).
+    # הונמך כאן בשקט ל-skip. אדום (SMART תקול) אינו נשאל בכלל (#1732), ומאז
+    # #2042 (נדב 23/10) גם כתום אינו נשאל -- smart_preflight אינו קורא לכאן עוד.
     if [ "$#" -ge 5 ] &&
             _sc_gui=$(gui_smart_choice "$3" "$4" "$5"); then
         printf '%s\n' "$_sc_gui"
@@ -48,10 +48,10 @@ smart_event_json() {
     _ej_port=$(disk_port "$2"); [ -n "$_ej_port" ] || _ej_port=null
     _ej_ser=$(disk_serial "$2")
     _ej_ser_j="null"; [ -n "$_ej_ser" ] && _ej_ser_j="\"$(json_escape "$_ej_ser")\""
-    printf '{"session_id":"%s","mac":"%s","disk":"%s","port":%s,"serial":%s,"smart":{"verdict":"%s","reason":"%s","realloc":%s,"pending":%s,"uncorrectable":%s,"crc":%s},"write_state":"%s","decision":%s}' \
+    printf '{"session_id":"%s","mac":"%s","disk":"%s","port":%s,"serial":%s,"smart":{"verdict":"%s","reason":"%s","realloc":%s,"pending":%s,"uncorrectable":%s,"crc":%s,"attrs":%s},"write_state":"%s","decision":%s}' \
         "$1" "${MAC:-}" "$2" "$_ej_port" "$_ej_ser_j" \
         "$3" "$4" "$(smart_field "$2" 3)" "$(smart_field "$2" 4)" \
-        "$(smart_field "$2" 5)" "$(smart_field "$2" 6)" "$5" "$_ej_dec"
+        "$(smart_field "$2" 5)" "$(smart_field "$2" 6)" "$(command -v smart_attrs_json >/dev/null 2>&1 && smart_attrs_json "$2" 1 || printf null)" "$5" "$_ej_dec"   # #1859: attrs
 }
 
 smart_send_event() {
@@ -70,17 +70,18 @@ smart_send_event() {
 
 smart_preflight() {
     # $1 = session id, $2.. = disks. השער לפני כתיבה: probe לכל דיסק,
-    # disk_event לכל דיסק, שאלה על warn/failed_last (בתור, אחד-אחד); fail מדולג.
-    # מדפיס את רשימת הדיסקים שייכתבו בפועל (skipped ו-replace מוסרים).
+    # disk_event לכל דיסק; fail (אדום) מדולג; warn/failed_last (כתום) נכתב
+    # בלי שאלה עם הערה (#2042). מדפיס את רשימת הדיסקים שייכתבו בפועל.
     # ‏ok/unchecked לא נשאלים — unchecked נכתב, זה קריטי (עיקרון 5).
     _pf_ses="$1"; shift
     rm -f "$RUN_DIR/smart/awaiting_replace"
     disk_failures_refresh || :   # #874: זיכרון השרת מה-hello האחרון; כשל = הקובץ הקודם
+    command -v smart_learned_refresh >/dev/null 2>&1 && { smart_learned_refresh || :; }   # #1859: what the server learned, the same way
     _pf_write=""
     for _pf_d in "$@"; do
         # תיקיית היעד קיימת כבר מ-target_init; ה-mkdir הופך את השער לעצמאי --
         # target_set חייב תיקייה, וקפיאה על היעדרה תהיה כשל שקט (עיקרון 5).
-        mkdir -p "$RUN_DIR/targets/$_pf_d"
+        mkdir -p "$RUN_DIR/targets/$_pf_d"; rm -f "$RUN_DIR/targets/$_pf_d/smart_note"   # #2042: this round's note only
         _pf_v=$(smart_probe "$_pf_d")
         _pf_r=$(smart_field "$_pf_d" 2)
         # SMART תקול (‏fail) = **אדום**. נכשל בשיכפול הקודם (זיכרון השרת, ‏#874)
@@ -91,6 +92,10 @@ smart_preflight() {
         # מדולג בגלוי. מותר רק כמקור (העתקה ממנו, קליטה, חילוץ).
         if [ "$_pf_v" != fail ] && _pf_c=$(disk_failure_cause "$_pf_d"); then
             _pf_v=failed_last; _pf_r="$_pf_c"
+        # #1859: what rose since this serial's previous round (the server compared) -- orange, asked
+        elif { [ "$_pf_v" = ok ] || [ "$_pf_v" = warn ]; } && command -v smart_learned_reason >/dev/null 2>&1 &&
+                _pf_l=$(smart_learned_reason "$_pf_d"); then
+            _pf_v=warn; _pf_r="$_pf_l"
         fi
         case "$_pf_v" in
             ok|unchecked)
@@ -98,34 +103,44 @@ smart_preflight() {
                 _pf_write="$_pf_write $_pf_d"
                 ;;
             fail)
-                target_set "$_pf_d" "skipped" "$(smart_red_he "$_pf_d")$([ "$_pf_r" = readonly ] || printf ' (%s)' "$_pf_r")"   # #1742
+                target_set "$_pf_d" "skipped" "$(smart_red_he "$_pf_d")$([ "$_pf_r" = readonly ] || printf ' (%s)' "$(smart_reason_he "$_pf_r")")"   # #1742; #1861: no raw word
                 smart_send_event "$_pf_ses" "$_pf_d" "$_pf_v" "$_pf_r" skipped skip
                 log "$(smart_disk_label "$_pf_d"): SMART failed ($_pf_r) -- never written (#1732), skipped" >&2
                 ;;
             warn|failed_last)
-                _pf_dec=$(smart_choice "$(smart_disk_label "$_pf_d" דיסק)" \
-                    "$([ "$_pf_v" = failed_last ] && echo 'נכשל בשיכפול הקודם' || echo "SMART $_pf_v ($_pf_r)")" \
-                    "$_pf_d" "$_pf_v" "$_pf_r" rescue)
-                case "$_pf_dec" in
-                    rescue)
-                        smart_send_event "$_pf_ses" "$_pf_d" "$_pf_v" "$_pf_r" rescue rescue
-                        _pf_write="$_pf_write $_pf_d"
-                        ;;
-                    skip)
-                        target_set "$_pf_d" "skipped" "המפעיל דילג ($_pf_v: $_pf_r)"
-                        smart_send_event "$_pf_ses" "$_pf_d" "$_pf_v" "$_pf_r" skipped skip
-                        ;;
-                    replace)
-                        target_set "$_pf_d" "replacing" "ממתין להחלפת הדיסק ($_pf_v: $_pf_r)"
-                        smart_send_event "$_pf_ses" "$_pf_d" "$_pf_v" "$_pf_r" replacing replace
-                        echo "$_pf_d" >> "$RUN_DIR/smart/awaiting_replace"
-                        ;;
-                esac
+                # #2042 (נדב 23/10): כתום נכתב **בלי שאלה** -- סבב, שחזור, משיכה והפצה ישירה. שאלה
+                # על WD אחד (187=1682) עצרה גל שלם 113 ש'. אין הכרעת אדם: decision null. ההערה
+                # הכתומה נשמרת כאן ונצמדת ליעד שהסתיים done (smart_note_apply) -- "הושלם עם אזהרה".
+                smart_send_event "$_pf_ses" "$_pf_d" "$_pf_v" "$_pf_r" pending ""
+                smart_note_he "$_pf_v" "$_pf_r" > "$RUN_DIR/targets/$_pf_d/smart_note"
+                log "$(smart_disk_label "$_pf_d"): orange ($_pf_v $_pf_r) -- written without asking (#2042)" >&2
+                _pf_write="$_pf_write $_pf_d"
                 ;;
         esac
     done
     # רווח מוביל מוסר; מילה אחת או ריק חוזרים כמות שהם.
     echo $_pf_write
+}
+
+smart_note_he() {
+    # $1 = verdict (warn|failed_last), $2 = reason. #2042: the orange note of a disk written
+    # without asking -- the reason in words (smart_reason_he: the knowledge table's), never the raw word.
+    if [ "$1" = failed_last ]; then smart_why_he "$1" "$2"; return 0; fi
+    _sn_r=$(smart_reason_he "$2"); printf 'SMART: %s' "${_sn_r:-אזהרה}"
+}
+
+smart_note_apply() {
+    # $@ = disks. #2042: a target that ended done and was orange before the write carries
+    # its note in `error` -- "done with a warning" (#856/#943), after an earlier warning.
+    # Not done (failed, cancelled) = its own reason stands.
+    for _na_d in "$@"; do
+        _na_t="$RUN_DIR/targets/$_na_d"
+        [ -s "$_na_t/smart_note" ] && [ "$(cat "$_na_t/state" 2>/dev/null)" = done ] || continue
+        _na_w=$(cat "$_na_t/smart_note")
+        [ -s "$_na_t/error" ] && _na_w="$(cat "$_na_t/error") | $_na_w"
+        target_set "$_na_d" done "$_na_w"
+    done
+    return 0
 }
 
 smart_awaiting_replace() {

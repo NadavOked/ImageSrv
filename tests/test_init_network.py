@@ -25,12 +25,45 @@ def _network_block(net: Path, uptime: Path, short_deadline: bool = False) -> str
     end = next(i for i, line in enumerate(lines) if line.startswith("IP=$(ip -4 addr show"))
     block = "\n".join(lines[start:end]).replace("/sys/class/net", posix(net))
     block = block.replace("/proc/uptime", posix(uptime))
+    block = block.replace("/run/imagectl", posix(net.parent / "run"))   # #2040: the probe file
     if short_deadline:
         block = block.replace("+ 90 ))", "+ 2 ))")
     tick = next((line for line in lines if line.startswith("poll_tick()")), "")
     mark = next((line for line in lines if line.startswith("boot_mark()")), "")
     mark = mark.replace("/proc/uptime", posix(uptime))
     return tick + '\n_up=""\n' + mark + "\n" + block
+
+
+#: ‏#2040: ה-host של imagectl.server, וה-server-id של DHCP זר (רשת הכיתות).
+SERVER_IP = "10.44.9.10"
+FOREIGN_SID = "192.168.50.1"
+
+
+def udhcpc_prelude(net: Path, log: Path, ok_ifs: str, foreign_ifs: str = "") -> str:
+    """‏udhcpc ו-ip מזויפים ללולאה האמיתית של init. כרטיס ב-`ok_ifs` מקבל
+    חכירה; ה-probe (‏`-q`) רושם server-id כמו ה-hook האמיתי (‏udhcpc.probe) —
+    כרטיס ב-`foreign_ifs` מקבל אותה משרת זר, והשאר מהשרת שלנו. הלוג:
+    ‏`udhcpc <כרטיס> probe|lease`; ה-argv המלא ב-`<log>.args`; ‏`ip link` ב-`<log>.ip`."""
+    (net.parent / "run").mkdir(exist_ok=True)
+    return f"""
+LIB_DIR=/nonexistent-lib
+IMAGECTL_SERVER=http://{SERVER_IP}:8080
+NET={posix(net)!r}
+LOG={posix(log)!r}
+RUN={posix(net.parent / "run")!r}
+OK_IFS={ok_ifs!r}
+FOREIGN_IFS={foreign_ifs!r}
+ip() {{ case "$1" in link) echo "ip $*" >> "$LOG.ip" ;; esac; }}
+udhcpc() {{
+    echo "$*" >> "$LOG.args"
+    case " $* " in *" -q "*) _role=probe ;; *) _role=lease ;; esac
+    echo "udhcpc $2 $_role" >> "$LOG"
+    case " $OK_IFS " in *" $2 "*) ;; *) return 1 ;; esac
+    case " $FOREIGN_IFS " in *" $2 "*) _sid={FOREIGN_SID} ;; *) _sid={SERVER_IP} ;; esac
+    [ "$_role" = probe ] && printf 'serverid=%s\\n' "$_sid" > "$RUN/dhcp-probe.$2"
+    return 0
+}}
+"""
 
 
 def _make_net(net: Path, carriers: dict[str, int]) -> None:
@@ -40,22 +73,22 @@ def _make_net(net: Path, carriers: dict[str, int]) -> None:
         (interface / "carrier").write_text(f"{carrier}\n", encoding="utf-8", newline="\n")
 
 
-def _run(net: Path, ok_ifs: str, extra: str = "", short_deadline: bool = False):
+def _run(net: Path, ok_ifs: str, extra: str = "", short_deadline: bool = False,
+         foreign_ifs: str = ""):
     log = net.parent / "dhcp.log"
     uptime = net.parent / "uptime"
     uptime.write_text("12.34 50.00\n", encoding="utf-8", newline="\n")
-    prelude = f"""
-LIB_DIR=/nonexistent-lib
-NET={posix(net)!r}
-LOG={posix(log)!r}
-OK_IFS={ok_ifs!r}
+    prelude = udhcpc_prelude(net, log, ok_ifs, foreign_ifs) + f"""
 fail() {{ echo "FAIL: $1"; echo "UP=$_up"; exit 3; }}
-ip() {{ :; }}
-udhcpc() {{ echo "udhcpc $2" >> "$LOG"; case " $OK_IFS " in *" $2 "*) return 0 ;; esac; return 1; }}
 {extra}
 """
     script = prelude + _network_block(net, uptime, short_deadline) \
         + '\necho "IFACE=$IFACE"\necho "UP=$_up"\n'
+    if short_deadline:
+        # #2099: `_deadline=$(( $(date +%s) + 2 ))` counts whole seconds -- started at .9 of
+        # a second, the script had ~1.1 s and not 2 (extra 1.16 / 1.24; serial r4 too). Start
+        # at the top of a second, so the 2 s are 2 s and the bound in the test holds as written.
+        time.sleep(1.0 - time.time() % 1.0)
     started = time.monotonic()
     proc = subprocess.run(
         [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
@@ -88,7 +121,8 @@ def test_only_an_interface_with_carrier_gets_dhcp(tmp_path):
     proc, _, log = _run(net, "eth0 eth1")
     assert proc.returncode == 0
     assert "IFACE=eth1" in proc.stdout
-    assert log.read_text(encoding="utf-8").splitlines() == ["udhcpc eth1"]
+    assert log.read_text(encoding="utf-8").splitlines() == ["udhcpc eth1 probe",
+                                                            "udhcpc eth1 lease"]
 
 
 def test_a_failed_lease_moves_on_to_the_next_interface(tmp_path):
@@ -97,7 +131,8 @@ def test_a_failed_lease_moves_on_to_the_next_interface(tmp_path):
     proc, _, log = _run(net, "eth1")
     assert proc.returncode == 0
     assert "IFACE=eth1" in proc.stdout
-    assert log.read_text(encoding="utf-8").splitlines() == ["udhcpc eth0", "udhcpc eth1"]
+    assert log.read_text(encoding="utf-8").splitlines() == [
+        "udhcpc eth0 probe", "udhcpc eth1 probe", "udhcpc eth1 lease"]
 
 
 def test_no_carrier_anywhere_still_ends_in_fail_at_the_deadline(tmp_path):

@@ -14,6 +14,7 @@ const NICSVC_ICONS = {
   multicast: '<circle cx="12" cy="12" r="2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/>',
   netboot: '<path d="M12 3v9M6.5 6.5a8 8 0 1 0 11 0"/>',
   interserver: '<path d="M4 6h15l-4-4M20 18H5l4 4M20 6v6M4 18v-6"/>',
+  ntp: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   warn: '<path d="M12 4 2.8 20h18.4z"/><path d="M12 10v4.5M12 17.5h.01"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
@@ -34,6 +35,7 @@ const NICSVC_DEF = [
   { k: "multicast", n: "שידור", pt: "multicast UDP", d: "שליחת אימג' לכמה מחשבים בבת אחת. תעבורה כבדה — רק ברשת של מחשבי השיכפול." },
   { k: "netboot", n: "אתחול מהרשת", pt: "DHCP 67 · TFTP 69", d: "מחשב שעולה מהרשת מקבל מהשרת כתובת ותפריט אתחול. השרת מחלק כתובות ברשת הזאת." },
   { k: "interserver", n: "בין-שרתים", port: "interserver", d: "הקו בין השרת הראשי לשרת המשנה — אימג'ים והגדרות." },
+  { k: "ntp", n: "שרת זמן (NTP)", pt: "UDP 123", d: "השרת מספק שעה למחשבים ברשת של הכרטיס." },
 ];
 const NICSVC_NAME = Object.fromEntries(NICSVC_DEF.map((s) => [s.k, s.n]));
 
@@ -72,6 +74,7 @@ function nicsvcPort(id, fallback) {
 function nicsvcPt(s) {
   if (s.k === "console") return nicsvcPort("http_console", "8081/tcp");
   if (s.k === "interserver") return nicsvcPort("interserver", "8443/tcp");
+  if (s.k === "ntp") return "123/udp";
   return s.pt || "";
 }
 /* תפקיד הכרטיס לצורך אזהרות: ניהול · הפצה · משרדים (יש כתובת) · אחר */

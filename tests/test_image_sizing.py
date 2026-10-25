@@ -191,18 +191,47 @@ def test_the_golden_vm_image_is_offered_to_the_physical_lenovo(tmp_path):
         [{"size_bytes": NVME_256, "removable": False}]) == ["img_000000"]
 
 
-def test_a_five_hundred_image_is_still_refused_on_a_smaller_drive(tmp_path):
-    """אפיון סעיף 13 שריר גם אחרי #82: המשפחה היא תקרה נפרדת, והיא
-    חוסמת אימג' 500 על כונן 256 גם כשהגיאומטריה לבדה הייתה מרשה."""
+def test_a_five_hundred_image_that_fits_a_smaller_drive_is_offered(tmp_path):
+    """‏#1863 (נדב 20/10) הופך את הכלל הישן: המשפחה **אינה** תקרה. אימג' 500
+    שהגיאומטריה שלו נכנסת לכונן 256 מוצע לו — מאז הכיווץ (#1171) זה המקרה
+    הרגיל, והמשפחה הסתירה אותו ממסך המשכפל בזמן שהקונסולה אישרה."""
     small_500 = json.loads(json.dumps(GOLDEN_FROM_VM))
     small_500["family"] = 500
     library = library_with(tmp_path, small_500)
     assert sorted(library.scan()) == ["img_000000"]
     assert required_bytes(small_500) < NVME_256, "הגיאומטריה כאן דווקא נכנסת"
     assert library.allowed_for_disks(
-        [{"size_bytes": NVME_256, "removable": False}]) == []
+        [{"size_bytes": NVME_256, "removable": False}]) == ["img_000000"]
     assert library.allowed_for_disks(
         [{"size_bytes": 500107862016, "removable": False}]) == ["img_000000"]
+
+
+def test_the_list_counts_the_minimum_free_space_as_the_console_does(tmp_path):
+    """‏#1863: "נכנס" ברשימה = ‏`required_bytes` + ‏min_free (‏#1354), אותו מספר
+    שהקונסולה מציגה ("נכנס לדיסק מ-X") ו-`fit_refusal` אוכף. מחיצת Windows
+    עם 10GB פנויים: עם min_free=20 היא צריכה לגדול, ולכן דיסק שגדול מהפריסה
+    ב-5GB אינו מספיק, ודיסק שגדול ב-15GB כן."""
+    image = json.loads(json.dumps(GOLDEN_FROM_VM))
+    win = image["partitions"][1]
+    win["used_bytes"] = win["size_bytes"] - 10 * 10 ** 9
+    library = library_with(tmp_path, image)
+    layout = required_bytes(image)
+    near = [{"size_bytes": layout + 5 * 10 ** 9, "removable": False}]
+    roomy = [{"size_bytes": layout + 15 * 10 ** 9, "removable": False}]
+    assert library.allowed_for_disks(near, 0) == ["img_000000"]
+    assert library.allowed_for_disks(near, 20) == []
+    assert library.allowed_for_disks(roomy, 20) == ["img_000000"]
+
+
+def test_an_unmeasured_system_partition_is_not_offered_while_min_free_is_on(tmp_path):
+    """‏#1494/#1863: ‏`used_bytes` חסר = הכלל אינו ניתן לבדיקה — הסוכן מסרב בכל
+    מגירה והקונסולה משביתה. גם הרשימה לא מציעה (עיקרון 5); בכלל כבוי — כן."""
+    image = json.loads(json.dumps(GOLDEN_FROM_VM))
+    image["partitions"][1]["used_bytes"] = None
+    library = library_with(tmp_path, image)
+    disk = [{"size_bytes": NVME_256, "removable": False}]
+    assert library.allowed_for_disks(disk, 20) == []
+    assert library.allowed_for_disks(disk, 0) == ["img_000000"]
 
 
 def test_the_family_alone_would_have_admitted_an_image_that_does_not_fit(tmp_path):
@@ -303,6 +332,7 @@ def fits_box(tmp_path, blockdev_body: str, image=TINY11):
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; '
         f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/diskfit.sh; '   # #1217
+        "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
     )
     return run, path, prelude
 

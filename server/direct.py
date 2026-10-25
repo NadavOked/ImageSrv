@@ -21,6 +21,7 @@ build_disk`, גל רגיל על `grp_CLONERS`, אותם דיווחי התקדמ�
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import re
@@ -118,6 +119,9 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
     if room.active_round(ctx.conn) is not None:
         raise SessionError("כבר יש סבב חדר פעיל")
 
+    # ‏#1955: הזהות של הדיסק שנבחר, כמו בקליטה (#1901) — סדר `sda`/`sdb` מתחלף.
+    from .capture import _reported_serial  # noqa: PLC0415 — capture→api→direct
+    serial = _reported_serial(ctx.conn, mac, disk)
     image_id = new_live_id()
     roster = [item["mac"] for item in selected]
     # הגל תופס את חריץ השידור היחיד ומעיר **רק את הנבחרים** — ‏roster הוא
@@ -134,10 +138,10 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
     # במסלול בקשה (#272/#313) — ‏store.open כבר סגר את הטרנזאקציה שלו.
     with _write_lock, writing(ctx.conn):
         ctx.conn.execute(
-            "INSERT INTO tasks (id, mac, type, disk, image_id, name, description,"
+            "INSERT INTO tasks (id, mac, type, disk, disk_serial, image_id, name, description,"
             " folder, created_by, created_at, updated_at, token, origin)"
-            " VALUES (?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?)",
-            (task_id, mac, DIRECT_SEND, disk, image_id,
+            " VALUES (?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?)",
+            (task_id, mac, DIRECT_SEND, disk, serial, image_id,
              f"{machine['suffix']}:{disk}", user, now, now, new_token(), origin),
         )
         ctx.conn.execute(
@@ -151,7 +155,7 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
              wave_id, user, now, BUILD_DISK, mac, disk, task_id),
         )
     journal(ctx.conn, "room_open_direct",
-            f"{round_id} source={mac}:{disk} task={task_id} target={count}"
+            f"{round_id} source={mac}:{disk} serial={serial or '-'} task={task_id} target={count}"
             + (f" drivers={len(chosen_drivers)}" if chosen_drivers else ""), user)
     return {"id": round_id, "wave_session_id": wave_id,
             "task_id": task_id, "image_id": image_id}
@@ -236,12 +240,51 @@ def round_for_task(conn: sqlite3.Connection, task_id: str) -> sqlite3.Row | None
     ).fetchone()
 
 
+#: ‏#1952: תקרה לרשימת הכתובות ב-`direct_finished` — גל אמיתי הוא עשרות.
+FINISHED_MAX = 256
+
+
+def clean_finished(body: dict) -> tuple[bool, list[str] | None]:
+    """‏#1952: השדה `direct_finished` של ה-hello (ממשק 2) — (דווח?, הכתובות).
+
+    מחשב הבנייה שולח אותו לפני כל מחיצה מהשנייה: מי קיבל את הקודמת עד
+    סופה, מהלוג של ה-udp-sender **שלו** (לשרת אין את הלוג הזה במסלול
+    הישיר). היעדר = לא דווח (המחיצה הראשונה, סוכן ישן). ‏`null`, או צורה
+    פגומה — דווח ש"לא נבדק" (‏None): עיקרון 5, לא "אף אחד"."""
+    if "direct_finished" not in body:
+        return False, None
+    raw = body["direct_finished"]
+    if (not isinstance(raw, list) or len(raw) > FINISHED_MAX
+            or not all(isinstance(item, str) for item in raw)):   # ip_address(7) = 0.0.0.7
+        return True, None
+    try:
+        return True, [str(ipaddress.ip_address(item)) for item in raw]
+    except (TypeError, ValueError):
+        return True, None
+
+
+def _lost_still_receiving(conn: sqlite3.Connection, store, session_id: str,
+                          finished: list[str] | None) -> int:
+    """‏#1952 — הכלל של #1950 (‏`SenderEngine._receivers`) במסלול הישיר: חבר
+    `lost` שכתובתו קיבלה את המחיצה הקודמת עד סופה יתחבר גם לבאה, ובלי
+    לספור אותו הוא "ממלא" את `--min-receivers` והשולח יוצא בלי החבר החי.
+    חבר שנזרק — לא נספר (‏#1432). ‏`finished` None (לא נבדק) או כתובת לא
+    ידועה — נספר: המחיר הוא המתנה של `--max-wait`, לא מגירה חיה ריקה."""
+    still = [ip for ip in store.lost_ips(session_id)
+             if finished is None or ip is None or ip in finished]
+    if still:
+        journal(conn, "send_counts_lost", f"{session_id} {' '.join(ip or '?' for ip in still)}")
+    return len(still)
+
+
 def task_block(conn: sqlite3.Connection, store, task: dict,
-               multicast: dict | None) -> dict:
+               multicast: dict | None, finished_reported: bool = False,
+               finished: list[str] | None = None) -> dict:
     """השדה `task.direct` של ממשק 3: מצב הגל, כמה הצטרפו, ופרמטרי השידור.
 
     ‏`multicast` הוא `SenderEngine.multicast_params()` — אותם ערכים שהמנוע
     היה משדר בהם; ‏`min_receivers` נגזר כאן, מהגל, כמו ב-`_run` של המנוע.
+    ‏`finished_reported`/`finished` — ‏`clean_finished` של ה-hello (‏#1952).
     """
     round_row = round_for_task(conn, task["id"])
     wave = None
@@ -275,7 +318,9 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
         ).fetchone()
         journal(conn, "direct_failed", f'{task["id"]} {reason}')
     params = dict(multicast or default_multicast())
-    params["min_receivers"] = max(1, receivers)
+    still = (_lost_still_receiving(conn, store, wave["id"], finished)
+             if finished_reported and wave is not None and wave["state"] == "running" else 0)
+    params["min_receivers"] = max(1, receivers + still)
     # קצב אוטומטי: מה שנבחר לגל כשיצא, ולפני כן קצב הפתיחה — לא "בלי תקרה".
     params["max_bitrate"] = drive_rates.direct_bitrate(
         conn, wave["id"] if wave is not None else None, params.get("max_bitrate"))

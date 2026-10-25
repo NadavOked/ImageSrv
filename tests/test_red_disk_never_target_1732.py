@@ -71,11 +71,11 @@ def test_the_gate_writes_the_healthy_sibling_and_never_the_red_one(tmp_path):
 
 
 @bash_only
-def test_an_orange_disk_is_still_asked_and_retry_writes_it(tmp_path):
-    """שומר מפני תיקון-יתר (עובר בשני המצבים): כתום (נכשל בשיכפול הקודם, SMART
-    תקין) נשאר עם "נסה שוב"."""
+def test_an_orange_disk_is_still_written(tmp_path):
+    """שומר מפני תיקון-יתר: כתום (נכשל בשיכפול הקודם, SMART תקין) נשאר יעד.
+    ‏#2042 (נדב 23/10): בלי שאלה (עד 23/10 — "נסה שוב")."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), gui=["rescue"], failed=("sda",))
-    assert written == "sda" and asked(run) == ["sda"], err
+    assert written == "sda" and asked(run) == [], err
 
 
 # --- הסוכן: "שחזור לדיסק הזה" -----------------------------------------------------

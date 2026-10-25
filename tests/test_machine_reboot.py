@@ -43,7 +43,7 @@ def server(tmp_path, images_root):
     deploy.post("/api/console/login", json={"username": "labtech", "password": "deploy-pass-1"})
     assert admin.post("/api/console/groups", json={
         "id": "grp_LAB1", "label": "כיתה 1", "role": "classroom"}).status_code == 200
-    for mac, name, group in ((BUILD, "בנייה 1", "grp_BUILD"), (CLONER, "מחשב 1", "grp_CLONERS"),
+    for mac, name, group in ((BUILD, "BUILD-1", "grp_BUILD"), (CLONER, "CLONER-1", "grp_CLONERS"),
                              (STATION, "01", "grp_LAB1")):
         assert admin.post("/api/console/machines", json={
             "mac": mac, "name": name, "group_id": group}).status_code == 200
@@ -67,7 +67,7 @@ def reboot(server, mac: str, name: str | None, who: str = "admin"):
     return server[who].post(f"/api/console/machines/{mac}/reboot", json=body)
 
 
-@pytest.mark.parametrize("mac, name", [(BUILD, "בנייה 1"), (CLONER, "מחשב 1")])
+@pytest.mark.parametrize("mac, name", [(BUILD, "BUILD-1"), (CLONER, "CLONER-1")])
 def test_reboot_rides_the_next_hello_of_that_machine_once(server, mac, name):
     response = reboot(server, mac, name)
     assert response.status_code == 200, response.text
@@ -84,7 +84,7 @@ def test_reboot_rides_the_next_hello_of_that_machine_once(server, mac, name):
     assert shown["machine_reboot"].startswith(name) and mac not in shown["machine_reboot"]
 
 
-@pytest.mark.parametrize("name", [None, "", "בנייה", "בנייה 1 "])
+@pytest.mark.parametrize("name", [None, "", "BUILD", "BUILD-1 "])
 def test_reboot_without_the_machine_name_is_refused(server, name):
     assert reboot(server, BUILD, name).status_code == 400
     assert "power_action" not in hello(server, BUILD)
@@ -107,7 +107,7 @@ def test_a_machine_with_an_open_task_is_not_rebooted(server):
         "INSERT INTO tasks (id, mac, type, disk, image_id, name, created_by, created_at, updated_at)"
         " VALUES ('tsk_1', ?, 'capture', 'sda', 'img_1', 'x', 'noc', 't', 't')", (BUILD,))
     conn.commit()
-    assert reboot(server, BUILD, "בנייה 1").status_code == 409
+    assert reboot(server, BUILD, "BUILD-1").status_code == 409
 
 
 def test_a_cloner_is_not_rebooted_while_a_room_round_is_writing(server):
@@ -116,14 +116,14 @@ def test_a_cloner_is_not_rebooted_while_a_room_round_is_writing(server):
         "INSERT INTO room_rounds (id, image_id, target_drives, state, opened_by, created_at)"
         " VALUES ('rr_1', 'img_1', 2, 'active', 'noc', '2026-10-11T08:00:00+00:00')")
     conn.commit()
-    assert reboot(server, CLONER, "מחשב 1").status_code == 409
+    assert reboot(server, CLONER, "CLONER-1").status_code == 409
     # מחשב הבנייה אינו בגל של החדר.
-    assert reboot(server, BUILD, "בנייה 1").status_code == 200
+    assert reboot(server, BUILD, "BUILD-1").status_code == 200
 
 
 def test_deploy_and_anonymous_cannot_reboot(server):
     for who in ("deploy", "anon"):
-        assert reboot(server, BUILD, "בנייה 1", who).status_code in (401, 403), who
+        assert reboot(server, BUILD, "BUILD-1", who).status_code in (401, 403), who
     assert "power_action" not in hello(server, BUILD)
 
 

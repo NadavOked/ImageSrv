@@ -78,7 +78,8 @@ lc_end_count() {
     elif [ "$_et_ok" -gt 0 ]; then _lk=partial; else _lk=failed; fi
     # the result screen's own buttons (end.req: power off, again, back) stay the person's
     END_ABORT_FILE="$LC/end.req"
-    end_countdown "$_lk" "local clone ended ($_et_ok of $_et_n)" "$_et_ok" "$_et_n"; _lk=$?
+    # shellcheck disable=SC2046 # #2024: every target's result decides (none = a problem, held)
+    end_countdown "$_lk" "local clone ended ($_et_ok of $_et_n)" "$_et_ok" "$_et_n" $(cat "$LC/run/targets" 2>/dev/null); _lk=$?
     END_ABORT_FILE=""; return "$_lk"
 }
 
@@ -124,4 +125,45 @@ lc_power_check() {
     [ -s "$RUN_DIR/power.resp" ] && mv "$RUN_DIR/power.resp" "$RUN_DIR/power.taken" || return 0
     log "local clone: the console asked to $(json_get "$RUN_DIR/power.taken" .power_action) -- carrying it out"
     _pk_r="${RESP:-}"; RESP="$RUN_DIR/power.taken"; power_check; RESP="$_pk_r"
+}
+
+#: #1913 (S7b, 20/10): a report the server did not take -- it was down -- is
+#: kept and sent again after a hello the server answered, at most this often.
+LC_REPORT_TRIES="${LC_REPORT_TRIES:-30}"
+
+lc_report_keep() {
+    # After lc_report's POST failed. Kept only when nobody answered (000) or
+    # the server failed (5xx): a 4xx is an answer, and the same body would get
+    # it again. The file is named <started>_<ended>, the run's own clock.
+    case "$_rp_c" in ''|000|5??) ;; *) return 0 ;; esac
+    mkdir -p "$LC/pending" && cp "$_rp_r/report.json" "$LC/pending/$(cat "$_rp_r/started")_$(cat "$_rp_r/ended").json" ||
+        log "local clone: the report could not be kept to send again -- it is lost"
+}
+
+lc_report_resend() {
+    # Called after a hello the server answered (the main loop, the attended
+    # beat). Each kept report goes once more, marked late: late_s = seconds
+    # from the copy's end to now, by this machine's clock. Claimed by mv, so
+    # the beat and the main loop never send the same one twice. 200 = gone,
+    # and the result screen says "reported"; LC_REPORT_TRIES failures = given
+    # up aloud -- never a retry for ever.
+    for _rr_f in "${LC:-/nonexistent}"/pending/*.json; do
+        [ -f "$_rr_f" ] && mv "$_rr_f" "$_rr_f.sending" 2>/dev/null || continue
+        _rr_n=${_rr_f##*/}; _rr_n=${_rr_n%.json}; _rr_b=$(cat "$_rr_f.sending")
+        printf '%s' "${_rr_b%\}},\"late_s\":$(( $(date +%s) - ${_rr_n#*_} ))}" > "$_rr_f.body"
+        _rr_c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H "Content-Type: application/json" \
+            --data-binary "@$_rr_f.body" "${SERVER:-http://0.0.0.0}/api/v1/agent/local-clone" 2>/dev/null)
+        rm -f "$_rr_f.body"
+        if [ "$_rr_c" = 200 ]; then
+            rm -f "$_rr_f.sending" "$_rr_f.tries"; log "local clone: the kept report reached the server journal (late)"
+            [ "$(cat "$LC/run/started" 2>/dev/null)" != "${_rr_n%_*}" ] || echo sent > "$LC/run/report"
+            continue
+        fi
+        _rr_t=$(( $(cat "$_rr_f.tries" 2>/dev/null || echo 0) + 1 ))
+        if [ "$_rr_t" -ge "$LC_REPORT_TRIES" ]; then
+            rm -f "$_rr_f.sending" "$_rr_f.tries"
+            log "local clone: the kept report was refused $_rr_t times (http ${_rr_c:-000}) -- given up, it is not in the journal"
+        else echo "$_rr_t" > "$_rr_f.tries"; mv "$_rr_f.sending" "$_rr_f"; fi
+    done
+    return 0   # the hello it follows succeeded; a report never fails it
 }

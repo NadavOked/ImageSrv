@@ -109,7 +109,8 @@ int dcui_feed(DcuiFrame *f, char *line) {
             {"d.p", DEL_P}, {"d.field", DEL_FIELD}, {"d.hint", DEL_HINT}, {"d.note", DEL_NOTE},
             {"d.opt", DEL_OPT}, {"d.radio", DEL_RADIO}, {"d.alert", DEL_ALERT},
             {"d.bullet", DEL_BULLET}, {"d.kv", DEL_KV}, {"d.error", DEL_ERROR}, {"d.btn", DEL_BTN},
-            {"d.code", DEL_CODE},
+            {"d.code", DEL_CODE}, {"d.conn", DEL_CONN}, {"d.addlink", DEL_ADDLINK}, {"d.add", DEL_ADD},
+            {"d.foot", DEL_FOOT},
         };
         for (size_t i = 0; i < sizeof T / sizeof T[0]; i++) {
             if (strcmp(k, T[i].name)) continue;
@@ -127,6 +128,15 @@ int dcui_feed(DcuiFrame *f, char *line) {
                 COPY(e->b, c[1]); COPY(e->a, c[2]); e->f1 = atoi(c[3]); break;
             case DEL_BTN:    /* label cap kind focused */
                 COPY(e->a, c[1]); COPY(e->c, c[2]); COPY(e->d, c[3]); e->f1 = atoi(c[4]); break;
+            case DEL_CONN:   /* #2001: label pci model size tag name placeholder focus(0|1 name|2 switch) active kind */
+                COPY(e->c, c[1]); COPY(e->d, c[2]); COPY(e->b, c[3]); COPY(e->e, c[4]); COPY(e->g, c[5]);
+                COPY(e->a, c[6]); COPY(e->h, c[7]); e->f1 = atoi(c[8]); e->f2 = atoi(c[9]); COPY(e->k, c[10]); break;
+            case DEL_ADDLINK: /* #2001: label hint */
+                COPY(e->a, c[1]); COPY(e->b, c[2]); break;
+            case DEL_ADD:    /* #2001: type(SATA|NVMe) number name focus(0 type|1 number|2 name) help */
+                COPY(e->c, c[1]); COPY(e->d, c[2]); COPY(e->a, c[3]); e->f1 = atoi(c[4]); COPY(e->b, c[5]); break;
+            case DEL_FOOT:   /* #2001: status dirty */
+                COPY(e->a, c[1]); COPY(e->b, c[2]); break;
             case DEL_CODE:   /* code timer_label timer timer_kind (16/10: F4 on a secondary) */
                 COPY(e->a, c[1]); COPY(e->b, c[2]); COPY(e->c, c[3]); COPY(e->d, c[4]); break;
             case DEL_ALERT:  /* text_m kind ("" = danger, "warn" = yellow) */

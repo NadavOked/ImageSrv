@@ -485,7 +485,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         if name is None:
             raise HTTPException(404, "המכונה אינה רשומה בשרת המשנה")
         if body.get("confirm") != name:
-            raise HTTPException(403, "השם שהוקלד אינו זהה לשם המחשב")
+            raise HTTPException(403, monitor.POWER_NAME_STALE)   # #1850: איש אינו מקליד
         writer = tunnels.get(f"{nid}/{canonical}")
         if writer is None:
             raise HTTPException(
@@ -634,7 +634,14 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
     @router.post("/storage-nodes/enroll/preview")
     async def enroll_preview(request: Request, user=Depends(require_standalone)):
         """קורא את ה-SPKI של המשני שבכתובת, להשוואה ידנית מול תצוגת המשני."""
-        url = (await request.json()).get("url", "")
+        body = await request.json()
+        url = body.get("url", "")
+        # ‏#1997: השם נבדק כבר כאן (שלב 1 בחלון), לא אחרי שהמפעיל הקליד את הקוד.
+        if "label" in body:
+            try:
+                storage_nodes.check_label(body["label"])
+            except ValueError as exc:
+                raise HTTPException(400, str(exc))
         try:
             host, port, _ = interserver_auth.parse_interserver_url(url)
         except interserver_auth.InterserverURLError as exc:
@@ -657,6 +664,12 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         expected_spki = str(body.get("expected_secondary_spki") or "")
         if not expected_spki:
             raise HTTPException(400, "חסר expected_secondary_spki (הצמד את ה-SPKI של שרת המשנה)")
+        # ‏#1997: שם שרת המשנה הוא שם מחשב — נבדק **לפני** ה-pairing. אחרי
+        # ה-pairing המשני כבר קשור, ורשומה שנופלת על השם משאירה אותו קשור.
+        try:
+            storage_nodes.check_label(body.get("label"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
         try:
             _host, enroll_port, _ = interserver_auth.parse_interserver_url(url)
         except interserver_auth.InterserverURLError as exc:

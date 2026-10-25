@@ -400,10 +400,10 @@ def test_a_slow_cloner_nic_still_caps_the_climb(conn):
 
 
 def test_from_fewer_drawers_the_climb_does_not_explore(conn):
-    """נלמד עם מגירה אחת; עכשיו שתיים — לכל היותר השיא שהוכח, לא +100m."""
+    """נלמד עם מגירה אחת; עכשיו שתיים — לא +100m, אלא השיא שהוכח × 0.75 (‏#1842)."""
     _seed(conn, "482m", loss=0.0147, wall=375, drawers=1)
     got = _next(conn, drawers=2)
-    assert got["max_bitrate"] == "482m" and got["basis"] == "held"
+    assert got["max_bitrate"] == "361m" and got["basis"] == "drawers"
 
 
 def test_the_minimum_over_machines_still_rules(conn):

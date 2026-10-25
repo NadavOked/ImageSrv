@@ -39,17 +39,22 @@ gui_restore_parent() {
 
 # #410: rate and ETA of one drawer, from the local counter (the same truth
 # the record is built from). Sets _cg_rate (bytes/s) and _cg_eta (seconds);
-# -1 = not measured -- never 0, which would read "stopped" (rule 5). The
+# -1 = not measured -- 0 only when measured still (#2055 below; rule 5). The
 # rate is the average since the first sample this kiosk saw with bytes on
 # the drawer ($GUI_DIR/pace.<dev> = "epoch bytes"); a drawer that is not
 # writing drops its anchor so the next wave starts a new average.
 cloner_gui_pace() {
     # $1 = dev, $2 = state, $3 = bytes, $4 = total
-    _cg_rate=-1; _cg_eta=-1
+    _cg_rate=-1; _cg_eta=-1; _cg_moved=
     if [ "$2" != writing ] || [ "$3" -le 0 ]; then
-        rm -f "$GUI_DIR/pace.$1"; return 0
+        rm -f "$GUI_DIR/pace.$1" "$GUI_DIR/moved.$1"; return 0
     fi
-    _cg_now=$(date +%s)
+    _cg_now=$(date +%s); _cg_mb=   # #2055: the bytes last moved at _cg_moved (moved.<dev> = "epoch bytes"); still
+    # for CLONER_STALL_S = rate 0, measured: "waiting for the stream". The write goes on (display only).
+    [ -r "$GUI_DIR/moved.$1" ] && read -r _cg_moved _cg_mb < "$GUI_DIR/moved.$1"
+    case "$_cg_moved" in ''|*[!0-9]*) _cg_mb= ;; esac
+    [ "$_cg_mb" = "$3" ] || { _cg_moved=$_cg_now; printf '%s %s\n' "$_cg_now" "$3" > "$GUI_DIR/moved.$1"; }
+    [ $((_cg_now - _cg_moved)) -lt "${CLONER_STALL_S:-10}" ] || { _cg_rate=0; return 0; }
     _cg_t0=; _cg_b0=
     [ -r "$GUI_DIR/pace.$1" ] && read -r _cg_t0 _cg_b0 < "$GUI_DIR/pace.$1"
     case "$_cg_t0:$_cg_b0" in
@@ -116,12 +121,17 @@ cloner_gui_state() {
             "$_cg_rate" "$_cg_eta" "$(disk_drawer "$_cg_dev" "$_cg_port")" \
             "$(cat "$_cg_dir/cancel" 2>/dev/null | tr -d '\r\n|')" "$(cat "$_cg_dir/cancelled_at" 2>/dev/null)" "$_cg_drv" >> "$_cg_next" ||
             return 1
+        [ -z "$_cg_moved" ] || printf 'drawer_moved=%s|%s\n' "$_cg_dev" "$_cg_moved" >> "$_cg_next" || return 1   # #2055: the screen's age
+        # #1907: done, not verified -- the server's check list did not come down (readback.sh): orange on the row
+        [ "$(cat "$_cg_dir/readback_why" 2>/dev/null)" != list_not_fetched ] || printf 'drawer_rb=%s|list_not_fetched\n' "$_cg_dev" >> "$_cg_next" || return 1
     done
 
+    stream_beep_tick   # #2067: one stream sample across all writing drawers, in the background
     # Idle -- no round targets yet: what is plugged in, not a bare "waiting".
     if [ "$_cg_any" = 0 ]; then
         cloner_cdisks "$(list_disks)" >> "$_cg_next" || return 1
     fi
+    if command -v disk_used_records > /dev/null 2>&1; then disk_used_records "$(list_disks)" >> "$_cg_next" || return 1; fi   # #2030: cused= -- size and bytes in use per disk; none = "not measured" (guibridge.sh loads it, a test pins that)
 
     if [ -f "$GUI_DIR/smart-request" ]; then
         # ‏smart-request הוא nonce|port|verdict|reason|model|serial (16/10: _cg_reason נושא את שלושתם). ה-nonce **זורם
@@ -135,12 +145,13 @@ cloner_gui_state() {
             return 1
     fi
 
+    gui_ask_state >> "$_cg_next" || return 1   # #1808/#1898: a drawer's question (drawergate.sh, askgui.sh)
     # #410: when this snapshot was taken -- the screen shows its age.
     printf 'updated=%s\n' "$(date +%s)" >> "$_cg_next" || return 1
     mv "$_cg_next" "$GUI_DIR/state"
 }
 
-# cdisk=port|dev|model|size|smart|cause|link|link_max|crc (#432/#1366; not the build's disk=, #688) of
+# cdisk=port|dev|model|size|smart|cause|link|link_max|crc|drawer|conn|mark|hw (#432/#1366; #1798; #1921; not the build's disk=, #688) of
 # the disks in $1: all on the idle screen, the drawers on the restore screen (lcpull.sh).
 # #867: by disk number (sda can be disk 3), a disk with no slot last; the prefix after the sort.
 cloner_cdisks() {
@@ -166,13 +177,15 @@ cloner_cdisks() {
         # או חריץ) עובר SMART. השדה השישי הוא הסיבה שהשרת סיווג (cable/disk),
         # ריק כשירוק. ‏disk_failure_cause יושב ב-failmark.sh: גם השער קורא אותו.
         [ "$_cg_dsmart" != fail ] && _cg_dcause=$(disk_failure_cause "$_cg_d") && _cg_dsmart=failed_last   # #1580: red SMART wins
-        [ "$_cg_dsmart" = fail ] && _cg_dcause=$(smart_field "$_cg_d" 2)   # #1366: why F1 -- field 6
+        case "$_cg_dsmart" in fail|warn) _cg_dcause=$(smart_field "$_cg_d" 2) ;; esac   # #1366: why F1; #1859: why orange -- field 6
         # #1366: 199 only when smartctl read it (disk_link_json's rule), over the hello's threshold
         _cg_crc=$(disk_link_json "$_cg_d" | sed -n 's/.*"crc":\([0-9][0-9]*\).*/\1/p')
         case "$_cg_crcmax" in ''|0|*[!0-9]*) _cg_crc= ;; *) [ -n "$_cg_crc" ] && [ "$_cg_crc" -gt "$_cg_crcmax" ] || _cg_crc= ;; esac
         _cg_link=$(disk_link "$_cg_d")   # #432: "<speed> <max>", null = not read -- fields 7/8
-        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
-            "$_cg_dmodel" "$_cg_dsize" "$_cg_dsmart" "$_cg_dcause" "${_cg_link% *}" "${_cg_link#* }" "$_cg_crc" "$_cg_dn" >> "$_cg_idle" || return 1
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
+            "$_cg_dmodel" "$_cg_dsize" "$_cg_dsmart" "$_cg_dcause" "${_cg_link% *}" "${_cg_link#* }" "$_cg_crc" "$_cg_dn" \
+            "$(writemark_state "$_cg_d")" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_cg_d" "crc link_slow")" \
+            >> "$_cg_idle" || return 1   # #1798: field 12 -- incomplete|clean|unchecked; #1921: 13 -- the drawer's hw note (crc/link have 7-9)
     done
     sort -t'|' -k1,1n -k2,2n -k3,3n "$_cg_idle" > "$_cg_idle.sorted" || return 1
     sed 's/^[01]|[0-9]*|/cdisk=/' "$_cg_idle.sorted"
@@ -180,12 +193,14 @@ cloner_cdisks() {
 
 cloner_gui_state_loop() {
     while :; do
+        rm -f "$GUI_DIR/disk-event"   # #1971: consumed kernel inventory notification
         if lc_gui_active; then   # #1322: the boot choice / local clone own the screen
             lc_gui_state || printf 'native-gui: local clone state could not be verified\n' >&2
         elif ! cloner_gui_state; then
             printf 'native-gui: cloner state could not be verified\n' >&2
         fi
-        sleep 1
+        _cg_wait=0
+        while [ "$_cg_wait" -lt 10 ] && [ ! -e "$GUI_DIR/disk-event" ]; do sleep 0.1; _cg_wait=$((_cg_wait + 1)); done
     done
 }
 

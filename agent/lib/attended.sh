@@ -53,6 +53,7 @@ attended_hello() {
     printf '%s' "$_ah_body" > "$RUN_DIR/attended.json" || return 1
     http_post_json "$SERVER/api/v1/agent/hello" "$RUN_DIR/attended.json" > "$RUN_DIR/attended.resp" || return 1
     attended_keep "$RUN_DIR/attended.resp"
+    if command -v lc_report_resend >/dev/null; then lc_report_resend; fi   # #1913: the server answers again
     [ -n "$_ah_nonce" ] || return 0
     # The console answered: hand it to the GUI wait loop as if the button was
     # pressed -- same file, same nonce binding (clonergui.sh gui_smart_choice).
@@ -149,8 +150,14 @@ attended_start() {
     attended_stop
     _at_beat=$(attended_secs ATTENDED_BEAT_S "$ATTENDED_BEAT_S" 10)
     _at_ask=$(attended_secs ATTENDED_ASK_BEAT_S "$ATTENDED_ASK_BEAT_S" 3)
+    _at_agent=$$   # the agent's own shell, also from inside a $( ) (POSIX $$)
     (
         while :; do
+            # #1929 (M3): a beat whose agent is gone (kill -9) stops. Orphaned
+            # (ppid 1), it went on saying hello and feeding the watchdog's
+            # lease for a dead agent -- the machine looked alive, and the
+            # watchdog never rebooted it.
+            kill -0 "$_at_agent" 2>/dev/null || exit 0
             if command -v watchdog_beat >/dev/null; then watchdog_beat; fi
             attended_hello "$1" || :
             # A SMART question on the GUI is answerable from the console

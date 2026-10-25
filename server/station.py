@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 from .progress_view import capture_progress
 from .agent_version import server_version
-from . import capabilities, ports, storage_locations, timezone
+from . import capabilities, minfree, ports, storage_locations, timezone
 from .api import ServerContext, _error, agent_credentials, identity_gate
 from .db import journal
 from .hello import class_deploy_enabled
@@ -137,7 +137,8 @@ def create_station_router(ctx: ServerContext,
         # restore screen offers a picker instead of the crashing text flow.
         # {id,name,folder} per image; the server filters (interface rule 3).
         allowed_images = []
-        for _iid in ctx.library.allowed_for_disks(disks):
+        # #1863: by size only (required_bytes + min_free), as hello and the console.
+        for _iid in ctx.library.allowed_for_disks(disks, minfree.min_free_gb(ctx.conn)):
             _m = ctx.library.get(_iid)
             if _m:
                 allowed_images.append({"id": _iid, "name": _m["name"],
@@ -152,6 +153,9 @@ def create_station_router(ctx: ServerContext,
             "group_label": machine["label"] if machine else None,
             "disks": disks,
             "allowed_images": allowed_images,
+            # ‏#1896: אימג' ישן עם שתי מחיצות windows שוות — "לא נבדק" במסך, עם
+            # סימון C: (‏{id,name,folder,candidates}); מסומן — עובר ל-allowed_images.
+            "unchecked_images": ctx.library.unmarked_images(minfree.min_free_gb(ctx.conn)),
             # #1081: edition flag, same as hello. Missing = off. v2 turns this on.
             "classrooms": capabilities.classrooms(),
             # v1 without the toolbox (Nadav, 19/09), same as hello. v1.1 turns this on.

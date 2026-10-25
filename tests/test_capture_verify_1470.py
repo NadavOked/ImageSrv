@@ -63,9 +63,12 @@ class Gate:
         self.wait_s = wait_s
 
     def __call__(self, path, on_bytes=None):
-        self.entered.set()
+        # #2099: progress first, then `entered` -- the test reads the row as soon as
+        # `entered` fires; set the other way round, a busy host let it read before
+        # on_bytes wrote (verify_bytes 0 != 19, in a parallel run).
         if on_bytes is not None:
             on_bytes(path.stat().st_size)
+        self.entered.set()
         self.release.wait(self.wait_s)
         self.order.append("released")
         return REAL_SHA256(path)
@@ -122,6 +125,13 @@ def test_hello_is_answered_on_the_same_event_loop_while_a_capture_verifies(serve
             return hello, await put
 
     hello, put = asyncio.run(scenario())
+    # #2099: the PUT answered 202 when the verify began; "released" is appended by the
+    # verify thread after `release` -- on a busy host the order was read before it ran
+    # (['hello']). Wait for it, bounded; the old bug (#1461) still reads released-first.
+    for _ in range(200):
+        if "released" in gate.order:
+            break
+        time.sleep(0.05)
     assert hello.status_code == 200, hello.text
     assert gate.order[:2] == ["hello", "released"], (gate.order,
         "ה-hello נענה רק אחרי שהגיבוב השתחרר — השרת קפא לכל משך האימות (#1461)")

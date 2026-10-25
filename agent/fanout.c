@@ -13,21 +13,25 @@
  * sender down (#23, #660). A slow drawer is never dropped -- the whole
  * machine follows it, the way udp-sender waits for a slow receiver rather
  * than evicting it (#657). Only a write error -- a reader that has gone,
- * EPIPE -- fails a single target, while the others carry on.
+ * EPIPE -- fails a single target, while the others carry on. "Slow" has a
+ * floor, though: a drawer that holds the reader for BLOCK_EVICT_MS while a
+ * sibling has room is not slow, it is the one stopping the machine (#1796).
  *
  * The rule that shapes the whole program: never discard a block and let the
  * target continue. Multicast cannot resend, so a target that missed bytes can
  * only be a failed target. A drive that is quietly short a few megabytes in
  * the middle is far worse than one that visibly failed.
  *
- * Usage:  fanout [-H hash-file] [-S sha256-file] [-P progress-file]
+ * Usage:  fanout [-H hash-file] [-S sha256-file] [-P progress-file] [-U units-counter]
  *                <bytes-per-target-buffer> <out1> [out2] [out3] ...
  *         fanout --xxh64 | --sha256
  * -H writes XXH64 and -S writes SHA-256 after a clean EOF; -P appends input bytes.
+ * -U puts every "<path>.bytes" in the units of another counter (see units_now).
  * SHA-256 runs in the kernel (AF_ALG) when it can, else in-process; stderr says
  * which. FANOUT_SHA_ENGINE=builtin|kernel forces one (#1596).
  * --xxh64 hashes stdin and writes the 16-digit lowercase digest to stdout.
  * --sha256 hashes stdin and writes the 64-digit lowercase digest to stdout.
+ *         fanout --readback [-x [-s <seed> <permille>]] <device> [<raw-bytes>]   (#1805)
  * Input:  stdin.
  * Output: one line per finished target on stdout: "<path> ok" | "<path> failed <reason>"
  *         plus, for each target, a running byte count appended to "<path>.bytes".
@@ -57,8 +61,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <linux/fs.h>
 #include <linux/if_alg.h>
 #include <time.h>
 #include <unistd.h>
@@ -80,12 +86,31 @@
  * shell watchdog (wait_progress() in agent/lib/waits.sh) and partclone's exit
  * status remain the machine-level ceilings; this one isolates the responsible
  * drawer before they fire, so its healthy siblings are not taken down with it.
+ *
+ * That clock alone is not enough (#1796, metal 19/10): while make_room()
+ * waits, stdin is not read, udp-receiver blocks on its pipe and stops
+ * answering, and udp-sender drops the whole machine after ~190s of silence
+ * (--retries-until-drop 200). 146s of a held stdin burnt nearly all of that,
+ * and the stream never recovered -- both drawers failed for one stopped zstd.
+ * And a drawer that trickles (4KiB every 500ms) resets the stall clock with
+ * every write, so it held stdin with no ceiling at all. So a second clock
+ * runs on the reader itself: once make_room() has held stdin for
+ * BLOCK_EVICT_MS, every drawer that is still the reason -- full, having
+ * not freed room for one read (READ_CHUNK = 1MiB unless FANOUT_CHUNK) since
+ * the clock started -- is evicted, provided a sibling has room and so gains
+ * from it. Nothing is queued while make_room() waits, so "still full" IS
+ * "freed under one read": the effective floor is 1MiB/45s = ~23KB/s, four
+ * orders under the ~210MB/s a cloner drive takes from dd (18/10), and far
+ * under any drive that still works. One drawer, or every drawer blocked
+ * at once, frees nobody: there the stall clock and the shell stay the
+ * ceilings, as before. Not at EOF either -- the sender is done by then.
  */
 #define MAX_TARGETS 8
 #define READ_CHUNK (1024 * 1024)
 #define OPEN_RETRY_MS 5000      /* how long to wait for a reader on a fifo */
 #define ROOM_POLL_MS 20
 #define STALL_EVICT_MS 150000   /* full drawer, no FIFO write progress; override for tests */
+#define BLOCK_EVICT_MS 45000    /* stdin held by full drawers (#1796); FANOUT_BLOCK_EVICT_MS */
 #define COUNTER_SUFFIX ".bytes" /* the per-target progress counter, next to the fifo */
 #define COUNTER_MS 1000         /* how often it is refreshed (the report goes out every 2s) */
 #define PIPE_BYTES (1 << 20)     /* FANOUT_PIPE_BYTES overrides (local clone experiments, 18/10) */
@@ -104,15 +129,20 @@ struct target {
     long long taken;    /* bytes handed to this target's pipeline, for the counter */
     long long queued;   /* of those, bytes that waited in the ring (the pipe was full) */
     long long last_progress_ms; /* monotonic ms of the last accepted FIFO write (#674) */
+    long long taken_at_block;   /* `taken` when make_room() began holding stdin (#1796) */
     int cfd;            /* the counter file, or -1 when it could not be opened */
+    long long shown;    /* -U: the last scaled count written; frozen once the target fails */
 };
 
 static struct target targets[MAX_TARGETS];
 static int target_count;
 static long long stall_evict_ms = STALL_EVICT_MS;
+static long long block_evict_ms = BLOCK_EVICT_MS;
 static long long expected_bytes;          /* 0 = unknown; FANOUT_EXPECTED_BYTES */
 static long long pipe_bytes = PIPE_BYTES; /* FANOUT_PIPE_BYTES */
 static char stream_reason[96];            /* short/long stream, one string for all */
+static const char *units_path;            /* -U: the counter whose units the targets report in */
+static long long stdin_total;             /* bytes read from stdin so far */
 
 static long long now_ms(void);
 
@@ -482,6 +512,503 @@ static int hash_only(int use_sha256)
     return 0;
 }
 
+/* --- #1805: read-back verification -------------------------------------------
+ *
+ * `fanout --readback <device>` answers "what is on the disk now" for a
+ * partition this machine has just written. Until #1805 a drawer was `done` on
+ * evidence from the STREAM -- the sha256 of the compressed bytes before zstd
+ * and partclone, partclone's exit code -- and nothing ever read the disk:
+ * RAM without ECC, a zstd/partclone bug, or SSD firmware that acknowledges a
+ * write it never made all ended `done` (CLR-01).
+ *
+ * The evidence is the SHA-256 of the partition's used blocks, in block order,
+ * read back from the device with O_DIRECT -- the page cache that partclone
+ * just wrote through is not a disk, and a read that it answers proves nothing.
+ * The server takes the same digest of the image when it enters the library
+ * (server/readbackhash.py): the data section of the partclone image with its
+ * header, bitmap and checksums stripped. The two meet only if every used
+ * block on the disk holds the image's bytes.
+ *
+ * Which blocks are used comes from partclone itself: stdin is
+ * `partclone.<fs> -c -s <device>`, of which only the 110-byte image_desc_v2
+ * header and the bitmap (+ its CRC-32) are read; stdin is then closed and
+ * partclone ends on EPIPE. That map is derived from the WRITTEN filesystem's
+ * own metadata, so a corrupted bitmap or superblock is a different map, a
+ * different set of blocks and a different digest -- never a pass.
+ *
+ * `fanout --readback <device> <raw-bytes>`: a partition partclone.dd copied
+ * whole (no header, no map). The first <raw-bytes> of the device are hashed.
+ *
+ * Output: "<64 hex> <bytes hashed>\n", exit 0.
+ * Exit 3: the map on stdin is not a whole, self-consistent partclone v2
+ *         header + bitmap (magic, version, endianness, header CRC, bitmap CRC,
+ *         used count) -- the disk was not judged.
+ * Exit 4: the device could not be read uncached (O_DIRECT refused, a read
+ *         error, the device ended early) -- the disk was not judged either,
+ *         and the agent fails the drawer on it all the same (principle 5).
+ * Exit 2: usage, memory, or the hash engine gave no digest.
+ *
+ * FANOUT_READBACK_CACHED=1 lets a TEST whose temporary directory refuses
+ * O_DIRECT (tmpfs) read through the cache, and says so on stderr. The agent
+ * never sets it (tests/test_readback_1805.py checks that). */
+#define RB_HEAD 110
+#define RB_WINDOW (8 * 1024 * 1024)   /* data bytes per read */
+#define RB_GAP (1024 * 1024)          /* free space read through rather than skipped */
+
+static uint32_t rb_crc_table[256];
+
+/* partclone's CRC-32: reflected 0xEDB88320, seed 0xFFFFFFFF, no final XOR
+ * (server/usedbackfill.py; = zlib.crc32(x) ^ 0xFFFFFFFF). */
+static uint32_t rb_crc32(const unsigned char *p, size_t n)
+{
+    uint32_t crc = 0xFFFFFFFFu;
+    if (!rb_crc_table[1])
+        for (uint32_t i = 0; i < 256; i++) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; k++)
+                c = (c & 1) ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            rb_crc_table[i] = c;
+        }
+    while (n--)
+        crc = rb_crc_table[(crc ^ *p++) & 0xFFu] ^ (crc >> 8);
+    return crc;
+}
+
+static uint64_t rb_le(const unsigned char *p, int n)
+{
+    uint64_t v = 0;
+    while (n-- > 0)
+        v = v << 8 | p[n];
+    return v;
+}
+
+static int rb_read_all(int fd, unsigned char *p, size_t n)
+{
+    while (n > 0) {
+        ssize_t r = read(fd, p, n);
+        if (r > 0) {
+            p += r;
+            n -= (size_t)r;
+        } else if (!(r < 0 && errno == EINTR)) {
+            return -1;               /* EOF or an error: it did not arrive whole */
+        }
+    }
+    return 0;
+}
+
+static int rb_bit(const unsigned char *bm, uint64_t i)
+{
+    return (bm[i >> 3] >> (i & 7)) & 1;
+}
+
+/* The first used block at or after i, or `limit` when there is none before it. */
+static uint64_t rb_next(const unsigned char *bm, uint64_t i, uint64_t limit)
+{
+    while (i < limit) {
+        if ((i & 7) == 0 && bm[i >> 3] == 0) {
+            i += 8;
+            continue;
+        }
+        if (rb_bit(bm, i))
+            return i;
+        i++;
+    }
+    return limit;
+}
+
+/* Reads [off, off + len) of the device into buf from an O_DIRECT-aligned start.
+ * Returns how far into buf the first wanted byte is, or -1 (said on stderr). */
+static long long rb_pread(int fd, unsigned char *buf, uint64_t off, uint64_t len,
+                          uint64_t align, const char *dev)
+{
+    uint64_t a0 = off & ~(align - 1);
+    uint64_t want = (off - a0) + len;
+    uint64_t span = (want + align - 1) & ~(align - 1);
+    uint64_t got = 0;
+    while (got < span) {
+        ssize_t r = pread(fd, buf + got, (size_t)(span - got), (off_t)(a0 + got));
+        if (r > 0) {
+            got += (uint64_t)r;
+        } else if (r == 0) {
+            break;                   /* the end of the device (or of a test's file) */
+        } else if (errno != EINTR) {
+            fprintf(stderr, "fanout: readback: read error on %s at byte %llu: %s\n",
+                    dev, (unsigned long long)(a0 + got), strerror(errno));
+            return -1;
+        }
+    }
+    if (got < want) {
+        fprintf(stderr, "fanout: readback: %s ended at byte %llu, before byte %llu\n",
+                dev, (unsigned long long)(a0 + got), (unsigned long long)(off + len));
+        return -1;
+    }
+    return (long long)(off - a0);
+}
+
+/* Nadav, 20/10 (#1864, measured on cloner 2): sha256 of every used block cost
+ * ~8 minutes a round of 4 drawers (176GB at ~390MB/s, the i5-650's two cores).
+ * `-x` is the decided form: the used-data stream (the used blocks in order)
+ * cut into RB_CHUNK pieces, XXH64 of each -- "c <index> <16 hex>" a line, and
+ * "n <chunks> <bytes>" last. The server keeps the same list per partition
+ * (server/readbackhash.py), and the agent compares line by line.
+ * `-s <seed> <permille>`: only a sample of the chunks -- the first, the middle,
+ * the last, and the rest drawn by splitmix64(seed) until permille/1000 of them
+ * -- and only their blocks are read. The same seed draws the same chunks. */
+#define RB_CHUNK (4ULL << 20)
+
+struct rb_chunks {
+    int on;                 /* -x */
+    unsigned char *pick;    /* NULL = every chunk */
+    uint64_t n, cur, in, picked, want;
+    struct xxh64 h;
+};
+
+static int rb_selected(const struct rb_chunks *c, uint64_t k)
+{
+    return !c->pick || ((c->pick[k >> 3] >> (k & 7)) & 1);
+}
+
+static void rb_chunk_end(struct rb_chunks *c)
+{
+    if (rb_selected(c, c->cur)) {
+        printf("c %llu %016llx\n", (unsigned long long)c->cur, (unsigned long long)xxh_digest(&c->h));
+        c->picked++;
+    }
+    c->cur++;
+    c->in = 0;
+    xxh_init(&c->h);
+}
+
+/* p == NULL: bytes of chunks nobody asked for -- counted, not read, not hashed. */
+static void rb_feed(struct rb_chunks *c, const unsigned char *p, uint64_t n)
+{
+    while (n > 0) {
+        uint64_t take = RB_CHUNK - c->in;
+        if (take > n)
+            take = n;
+        if (p && rb_selected(c, c->cur))
+            xxh_update(&c->h, p, (size_t)take);
+        if (p)
+            p += take;
+        c->in += take;
+        n -= take;
+        if (c->in == RB_CHUNK)
+            rb_chunk_end(c);
+    }
+}
+
+static int rb_pick(struct rb_chunks *c, uint64_t seed, uint64_t permille)
+{
+    uint64_t want, have = 0, x = seed, fixed[3];
+    if (c->n == 0)
+        return 0;
+    c->pick = calloc((size_t)(c->n / 8 + 1), 1);
+    if (!c->pick)
+        return -1;
+    want = (c->n * permille + 999) / 1000;
+    if (want < 3)
+        want = 3;
+    if (want > c->n)
+        want = c->n;
+    fixed[0] = 0;
+    fixed[1] = c->n / 2;
+    fixed[2] = c->n - 1;
+    for (int i = 0; i < 3; i++)
+        if (!((c->pick[fixed[i] >> 3] >> (fixed[i] & 7)) & 1)) {
+            c->pick[fixed[i] >> 3] |= (unsigned char)(1u << (fixed[i] & 7));
+            have++;
+        }
+    c->want = want;
+    while (have < want) {               /* splitmix64: the same seed, the same chunks */
+        uint64_t z = (x += UINT64_C(0x9E3779B97F4A7C15));
+        z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+        z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
+        z ^= z >> 31;
+        uint64_t k = z % c->n;
+        if (!((c->pick[k >> 3] >> (k & 7)) & 1)) {
+            c->pick[k >> 3] |= (unsigned char)(1u << (k & 7));
+            have++;
+        }
+    }
+    return 0;
+}
+
+static int readback(int argc, char **argv)
+{
+    const char *dev;
+    unsigned char head[RB_HEAD], *bm = NULL, *buf = NULL, *out = NULL;
+    uint64_t total = 0, used = 0, bs = 0, raw = 0, hashed = 0, win = RB_WINDOW, align = 4096;
+    uint64_t seed = 0, permille = 0;
+    struct sha_engine sha = { .kfd = -1 };
+    struct rb_chunks ck;
+    void *mem = NULL;
+    char line[65];
+    int fd, lss = 0, rc = 2, ai = 2, sample = 0;
+
+    memset(&ck, 0, sizeof ck);
+    xxh_init(&ck.h);
+    if (ai < argc && strcmp(argv[ai], "-x") == 0) {
+        ck.on = 1;
+        ai++;
+        if (ai + 2 < argc && strcmp(argv[ai], "-s") == 0) {
+            char *e1, *e2;
+            errno = 0;
+            seed = strtoull(argv[ai + 1], &e1, 10);
+            permille = strtoull(argv[ai + 2], &e2, 10);
+            if (errno || *e1 || *e2 || e1 == argv[ai + 1] || e2 == argv[ai + 2] ||
+                permille < 1 || permille > 1000) {
+                fprintf(stderr, "fanout: readback: bad sample '%s %s'\n", argv[ai + 1], argv[ai + 2]);
+                return 2;
+            }
+            sample = 1;
+            ai += 3;
+        }
+    }
+    if (argc - ai != 1 && argc - ai != 2) {
+        fprintf(stderr, "usage: fanout --readback [-x [-s <seed> <permille>]] <device> [<raw-bytes>]\n");
+        return 2;
+    }
+    dev = argv[ai];
+    if (argc - ai == 2) {
+        char *end;
+        errno = 0;
+        unsigned long long v = strtoull(argv[ai + 1], &end, 10);
+        if (errno || end == argv[ai + 1] || *end || v == 0) {
+            fprintf(stderr, "fanout: readback: bad byte count '%s'\n", argv[ai + 1]);
+            return 2;
+        }
+        raw = v;
+    } else {
+        if (rb_read_all(STDIN_FILENO, head, RB_HEAD) != 0) {
+            fprintf(stderr, "fanout: readback: the partclone header did not arrive whole\n");
+            return 3;
+        }
+        if (memcmp(head, "partclone-image", 15) != 0 || memcmp(head + 30, "0002", 4) != 0 ||
+            rb_le(head + 34, 2) != 0xC0DE || rb_le(head + 92, 2) != 2 || head[105] != 1) {
+            fprintf(stderr, "fanout: readback: not a partclone v2 image with a bit map\n");
+            return 3;
+        }
+        if (rb_crc32(head, RB_HEAD - 4) != (uint32_t)rb_le(head + RB_HEAD - 4, 4)) {
+            fprintf(stderr, "fanout: readback: the partclone header failed its CRC\n");
+            return 3;
+        }
+        total = rb_le(head + 60, 8);
+        used = rb_le(head + 76, 8);
+        bs = rb_le(head + 84, 4);
+        if (bs == 0 || bs > (64u << 20) || used > total || total == 0 ||
+            (total + 7) / 8 > (1ULL << 31)) {
+            fprintf(stderr, "fanout: readback: implausible map (%llu of %llu blocks of %llu)\n",
+                    (unsigned long long)used, (unsigned long long)total, (unsigned long long)bs);
+            return 3;
+        }
+        size_t bm_len = (size_t)((total + 7) / 8);
+        unsigned char crc[4];
+        bm = malloc(bm_len);
+        if (!bm) {
+            fprintf(stderr, "fanout: readback: no memory for a %zu-byte map\n", bm_len);
+            return 2;
+        }
+        if (rb_read_all(STDIN_FILENO, bm, bm_len) != 0 || rb_read_all(STDIN_FILENO, crc, 4) != 0) {
+            fprintf(stderr, "fanout: readback: the bit map did not arrive whole\n");
+            rc = 3;
+            goto done;
+        }
+        close(STDIN_FILENO);         /* partclone is done for: EPIPE on its next write */
+        if (rb_crc32(bm, bm_len) != (uint32_t)rb_le(crc, 4)) {
+            fprintf(stderr, "fanout: readback: the bit map failed its CRC\n");
+            rc = 3;
+            goto done;
+        }
+        uint64_t seen = 0;
+        for (size_t j = 0; j < (size_t)(total >> 3); j++)
+            seen += (uint64_t)__builtin_popcount(bm[j]);
+        if (total & 7)
+            seen += (uint64_t)__builtin_popcount(bm[total >> 3] & ((1u << (total & 7)) - 1));
+        if (seen != used) {
+            fprintf(stderr, "fanout: readback: the map marks %llu blocks, its header %llu\n",
+                    (unsigned long long)seen, (unsigned long long)used);
+            rc = 3;
+            goto done;
+        }
+        if (bs > win)
+            win = bs;
+    }
+    if (ck.on) {
+        uint64_t bytes = raw ? raw : used * bs;
+        ck.n = (bytes + RB_CHUNK - 1) / RB_CHUNK;
+        if (sample && rb_pick(&ck, seed, permille) != 0) {
+            fprintf(stderr, "fanout: readback: no memory for the sample\n");
+            goto done;
+        }
+    }
+
+    fd = open(dev, O_RDONLY | O_DIRECT | O_CLOEXEC);
+    if (fd < 0 && errno == EINVAL && getenv("FANOUT_READBACK_CACHED") &&
+        strcmp(getenv("FANOUT_READBACK_CACHED"), "1") == 0) {
+        fd = open(dev, O_RDONLY | O_CLOEXEC);
+        fprintf(stderr, "fanout: readback: %s read THROUGH THE CACHE (FANOUT_READBACK_CACHED=1)"
+                " -- a test's evidence, not a disk's\n", dev);
+    }
+    if (fd < 0) {
+        fprintf(stderr, "fanout: readback: cannot open %s uncached: %s\n", dev, strerror(errno));
+        rc = 4;
+        goto done;
+    }
+    if (ioctl(fd, BLKSSZGET, &lss) == 0 && lss >= 512 && lss <= 65536 && (lss & (lss - 1)) == 0)
+        align = (uint64_t)lss;
+    if (posix_memalign(&mem, 4096, (size_t)(win + 2 * align)) == 0)
+        buf = mem;
+    if (!buf || (!raw && !(out = malloc((size_t)win)))) {
+        fprintf(stderr, "fanout: readback: no memory for the read buffers\n");
+        close(fd);
+        goto done;
+    }
+    if (!ck.on && sha_engine_open(&sha) != 0) {
+        close(fd);
+        goto done;
+    }
+
+    if (raw) {
+        uint64_t step = ck.on ? RB_CHUNK : win;   /* -x: a read never crosses a chunk */
+        for (uint64_t off = 0; off < raw; off += step) {
+            uint64_t len = raw - off < step ? raw - off : step;
+            if (ck.on && !rb_selected(&ck, off / RB_CHUNK)) {
+                rb_feed(&ck, NULL, len);
+                hashed += len;
+                continue;
+            }
+            long long at = rb_pread(fd, buf, off, len, align, dev);
+            if (at < 0) {
+                rc = 4;
+                break;
+            }
+            if (ck.on)
+                rb_feed(&ck, buf + at, len);
+            else
+                sha_engine_update(&sha, (const char *)buf + at, (size_t)len);
+            hashed += len;
+        }
+    } else {
+        /* -x: windows never cross a chunk of the used-data stream, so a chunk
+         * nobody asked for is never read (cb = used blocks a chunk). */
+        uint64_t maxblk = win / bs, b = rb_next(bm, 0, total), ord = 0;
+        uint64_t cb = (ck.on && RB_CHUNK % bs == 0) ? RB_CHUNK / bs : 0;
+        while (b < total) {
+            uint64_t s = b, e = b, wo = 0;
+            /* A window: used blocks from s, free gaps under RB_GAP read through
+             * (one read instead of a seek each), at most maxblk blocks. */
+            while (e < total && e - s < maxblk) {
+                if (cb && wo && (ord + wo) % cb == 0)
+                    break;
+                if (rb_bit(bm, e)) {
+                    e++;
+                    wo++;
+                    continue;
+                }
+                uint64_t n = rb_next(bm, e, total);
+                if (n >= total || (n - e) * bs > RB_GAP || n - s >= maxblk)
+                    break;
+                e = n;
+            }
+            if (cb && ck.pick && !rb_selected(&ck, ord / cb)) {
+                rb_feed(&ck, NULL, wo * bs);     /* a chunk nobody asked for: not read */
+                hashed += wo;
+                ord += wo;
+                b = rb_next(bm, e, total);
+                continue;
+            }
+            long long at = rb_pread(fd, buf, s * bs, (e - s) * bs, align, dev);
+            if (at < 0) {
+                rc = 4;
+                break;
+            }
+            if (ck.on) {                         /* the used runs, in order, into the chunks */
+                for (uint64_t x = s; x < e; ) {
+                    if (!rb_bit(bm, x)) {
+                        x = rb_next(bm, x, e);
+                        continue;
+                    }
+                    uint64_t y = x;
+                    while (y < e && rb_bit(bm, y))
+                        y++;
+                    rb_feed(&ck, buf + at + (x - s) * bs, (y - x) * bs);
+                    hashed += y - x;
+                    x = y;
+                }
+                ord += wo;
+                b = rb_next(bm, e, total);
+                continue;
+            }
+            uint64_t r = s;
+            while (r < e && rb_bit(bm, r))
+                r++;
+            if (r == e) {            /* no gap in the window: hash it where it lies */
+                sha_engine_update(&sha, (const char *)buf + at, (size_t)((e - s) * bs));
+                hashed += e - s;
+            } else {                 /* the used runs, side by side, one hash call */
+                size_t o = 0;
+                for (uint64_t x = s; x < e; ) {
+                    if (!rb_bit(bm, x)) {
+                        x = rb_next(bm, x, e);
+                        continue;
+                    }
+                    uint64_t y = x;
+                    while (y < e && rb_bit(bm, y))
+                        y++;
+                    memcpy(out + o, buf + at + (x - s) * bs, (size_t)((y - x) * bs));
+                    o += (size_t)((y - x) * bs);
+                    hashed += y - x;
+                    x = y;
+                }
+                sha_engine_update(&sha, (const char *)out, o);
+            }
+            ord += wo;
+            b = rb_next(bm, e, total);
+        }
+        if (rc != 4 && hashed != used) {
+            fprintf(stderr, "fanout: readback: hashed %llu blocks of %llu\n",
+                    (unsigned long long)hashed, (unsigned long long)used);
+            rc = 3;
+        }
+        hashed *= bs;
+    }
+    close(fd);
+    if (rc == 2 && ck.on) {
+        if (ck.in > 0)
+            rb_chunk_end(&ck);
+        if (ck.cur != ck.n) {
+            fprintf(stderr, "fanout: readback: %llu chunks of %llu\n",
+                    (unsigned long long)ck.cur, (unsigned long long)ck.n);
+            rc = 3;
+        } else if (ck.pick && ck.picked != ck.want) {
+            /* A sample that hashed fewer chunks than it drew read nothing it can
+             * vouch for: no list at all, never "sampled" (principle 5). */
+            fprintf(stderr, "fanout: readback: the sample hashed %llu of the %llu chunks it drew\n",
+                    (unsigned long long)ck.picked, (unsigned long long)ck.want);
+            rc = 3;
+        } else if (printf("n %llu %llu\n", (unsigned long long)ck.n, (unsigned long long)hashed) < 0 ||
+                   fflush(stdout) != 0) {
+            fprintf(stderr, "fanout: readback: could not write the list\n");
+        } else {
+            rc = 0;
+        }
+    } else if (rc == 2) {
+        if (sha_engine_hex(&sha, line) != 0) {
+            fprintf(stderr, "fanout: readback: no digest\n");
+        } else if (printf("%s %llu\n", line, (unsigned long long)hashed) < 0 || fflush(stdout) != 0) {
+            fprintf(stderr, "fanout: readback: could not write the digest\n");
+        } else {
+            rc = 0;
+        }
+    }
+done:
+    free(bm);
+    free(buf);
+    free(out);
+    free(ck.pick);
+    return rc;
+}
+
 /* Opening a fifo for writing fails with ENXIO until a reader arrives, and
  * the per-drawer pipelines are started moments earlier by the shell. Rather
  * than depend on that race, wait briefly for the reader to show up -- but
@@ -667,23 +1194,75 @@ static int open_counter(const char *path)
     return fd;
 }
 
+/* -U (drawerfeed.sh, one decoder for the whole machine): this fanout sits
+ * after zstd, so what it hands a drawer is decompressed -- but the drawer's
+ * counter is read against the image's *compressed* total, by the console bar
+ * and by the server's drive rates (#25, drive_rates.py). The fanout before
+ * zstd counts the compressed bytes it handed the decoder ("<mid>.bytes"); a
+ * drawer that took a share of the decompressed stream has written the same
+ * share of those. A drawer that took everything shows exactly that counter,
+ * whose final value the upstream fanout wrote before it closed the decoder's
+ * input -- so at EOF the number is exact, not an estimate.
+ * The counter's last whole number, or -1: not read is not zero (principle 5). */
+static long long units_now(void)
+{
+    char tail[64];
+    long long v = -1, cur = -1;
+    struct stat st;
+    /* codeql[cpp/path-injection] false positive: same as open_counter (#291) */
+    int fd = open(units_path, O_RDONLY);
+    if (fd < 0)
+        return -1;
+    if (fstat(fd, &st) == 0 && st.st_size > 0) {
+        off_t at = st.st_size > (off_t)sizeof tail ? st.st_size - (off_t)sizeof tail : 0;
+        ssize_t n = pread(fd, tail, sizeof tail, at);
+        for (ssize_t i = 0; i < n; i++) {
+            if (tail[i] >= '0' && tail[i] <= '9')
+                cur = (cur < 0 ? 0 : cur * 10) + (tail[i] - '0');
+            else {
+                if (tail[i] == '\n' && cur >= 0)
+                    v = cur;              /* only a line that was finished counts */
+                cur = -1;
+            }
+        }
+    }
+    close(fd);
+    return v;
+}
+
+/* A drawer's share of `units`. Frozen once the drawer fails (its share of a
+ * stream it no longer gets is not progress), and never lower than before:
+ * a chunk queued but not yet written dips the ratio for a moment. */
+static long long scaled_count(struct target *t, long long units)
+{
+    if (t->alive) {
+        long long s = t->taken >= stdin_total ? units :
+            (long long)((double)units * (double)t->taken / (double)stdin_total);
+        if (s > t->shown)
+            t->shown = s;
+    }
+    return t->shown;
+}
+
 /* Append each target's count. A counter that cannot be written is closed and
  * said so once: the drawer itself is fine, and a drive is never failed over
  * a progress bar -- but the silence is not left unexplained either. */
 static void write_counters(int force)
 {
     static long long last_written;
-    long long now = now_ms();
+    long long now = now_ms(), units = -1;
     if (!force && now - last_written < COUNTER_MS)
         return;
     last_written = now;
+    if (units_path && (units = units_now()) < 0)
+        return;                           /* nothing in the right units yet: write nothing */
     for (int i = 0; i < target_count; i++) {
         struct target *t = &targets[i];
         char line[32];
         int n;
         if (t->cfd < 0)
             continue;
-        n = snprintf(line, sizeof line, "%lld\n", t->taken);
+        n = snprintf(line, sizeof line, "%lld\n", units_path ? scaled_count(t, units) : t->taken);
         if (n > 0 && write(t->cfd, line, (size_t)n) != n) {
             fprintf(stderr, "fanout: progress counter for %s stopped: %s\n",
                     t->path, strerror(errno));
@@ -705,14 +1284,21 @@ static void write_counters(int force)
  * A drawer that is full AND has taken no bytes for stall_evict_ms is a hung
  * consumer, not a slow one, and is failed here so its siblings are not held
  * behind it forever (#674). Any accepted write in flush_target() refreshes
- * last_progress_ms, so a slow-but-draining drawer never trips this. */
-static void make_room(size_t n)
+ * last_progress_ms, so a slow-but-draining drawer never trips this.
+ *
+ * While `reading` (not the EOF drain), the time stdin is held is a ceiling of
+ * its own (#1796, see BLOCK_EVICT_MS above): a drawer still full after
+ * block_evict_ms, while a sibling has room, is the one holding the stream. */
+static void make_room(size_t n, int reading)
 {
+    long long blocked_since = -1;
     for (;;) {
-        int blocked = 0;
+        int blocked = 0, roomy = 0;
         for (int i = 0; i < target_count; i++) {
             struct target *t = &targets[i];
             flush_target(t);
+            if (t->alive && t->len <= t->cap - n)
+                roomy = 1;                /* a sibling an eviction would free */
             if (!(t->alive && t->len > t->cap - n))
                 continue;                 /* not live, or has room */
             long long idle = now_ms() - t->last_progress_ms;
@@ -728,6 +1314,23 @@ static void make_room(size_t n)
         write_counters(0);
         if (!blocked)
             return;
+        long long held = blocked_since < 0 ? 0 : now_ms() - blocked_since;
+        if (blocked_since < 0) {
+            blocked_since = now_ms();
+            for (int i = 0; i < target_count; i++)
+                targets[i].taken_at_block = targets[i].taken;
+        } else if (reading && roomy && held >= block_evict_ms) {
+            for (int i = 0; i < target_count; i++) {
+                struct target *t = &targets[i];
+                if (!(t->alive && t->len > t->cap - n))
+                    continue;
+                fprintf(stderr,
+                        "fanout: %s stalled, took %lld bytes while stdin was held %lld ms -- evicting\n",
+                        t->path, t->taken - t->taken_at_block, held);
+                fail_target(t, "stalled the stream (too slow to drain)");
+            }
+            continue;                     /* the siblings take the next read now */
+        }
         wait_writable(ROOM_POLL_MS);
     }
 }
@@ -747,25 +1350,30 @@ int main(int argc, char **argv)
 
     if (argc == 2 && (strcmp(argv[1], "--xxh64") == 0 || strcmp(argv[1], "--sha256") == 0))
         return hash_only(strcmp(argv[1], "--sha256") == 0);
-    while (argi < argc && (strcmp(argv[argi], "-H") == 0 || strcmp(argv[argi], "-S") == 0 || strcmp(argv[argi], "-P") == 0)) {
+    if (argc >= 2 && strcmp(argv[1], "--readback") == 0)
+        return readback(argc, argv);
+    while (argi < argc && (strcmp(argv[argi], "-H") == 0 || strcmp(argv[argi], "-S") == 0 ||
+                           strcmp(argv[argi], "-P") == 0 || strcmp(argv[argi], "-U") == 0)) {
         const char **slot = strcmp(argv[argi], "-H") == 0 ? &hash_path :
-                            strcmp(argv[argi], "-S") == 0 ? &sha_path : &progress_path;
+                            strcmp(argv[argi], "-S") == 0 ? &sha_path :
+                            strcmp(argv[argi], "-U") == 0 ? &units_path : &progress_path;
         if (++argi >= argc) {
-            fprintf(stderr, "usage: fanout [-H file] [-S file] [-P file] <buffer-bytes> <out> [out...]\n");
+            fprintf(stderr, "usage: fanout [-H file] [-S file] [-P file] [-U file] <buffer-bytes> <out> [out...]\n");
             return 2;
         }
         *slot = argv[argi++];
     }
 
-    /* The stall ceiling is a production constant; the env var exists so the
+    /* The stall ceilings are production constants; the env vars exist so the
      * negative-control tests can trip eviction in milliseconds instead of
-     * minutes, and so a single reader that legitimately waits longer
-     * (udp-sender before its receivers join, directsend.sh, #1444) can
-     * leave the ceiling to the shell. FANOUT_EXPECTED_BYTES is the length
+     * minutes (both clocks, #674 and #1796), and so a single reader that
+     * legitimately waits longer (udp-sender before its receivers join,
+     * directsend.sh, #1444) can leave the ceiling to the shell. FANOUT_EXPECTED_BYTES is the length
      * check that separates an empty stdin, a producer that died mid-stream,
      * and a complete image -- without it those three share one EOF path and
      * all look like ok (#427). */
     stall_evict_ms = env_ll("FANOUT_STALL_EVICT_MS", STALL_EVICT_MS);
+    block_evict_ms = env_ll("FANOUT_BLOCK_EVICT_MS", BLOCK_EVICT_MS);
     expected_bytes = env_ll("FANOUT_EXPECTED_BYTES", 0);
     /* Block sizes for measuring on metal (18/10): the pipes fanout widens and
      * the size of one read. Defaults are the measured ones; a chunk is never
@@ -778,7 +1386,7 @@ int main(int argc, char **argv)
     long long chunk_bytes = env_ll("FANOUT_CHUNK", READ_CHUNK);
 
     if (argc - argi < 2) {
-        fprintf(stderr, "usage: fanout [-H file] [-S file] [-P file] <buffer-bytes> <out> [out...]\n");
+        fprintf(stderr, "usage: fanout [-H file] [-S file] [-P file] [-U file] <buffer-bytes> <out> [out...]\n");
         return 2;
     }
     long long cap = atoll(argv[argi]);
@@ -806,6 +1414,7 @@ int main(int argc, char **argv)
         t->reason = NULL;
         t->taken = 0;
         t->queued = 0;
+        t->shown = 0;
         t->cfd = open_counter(t->path);
         if (!t->buf) {
             fprintf(stderr, "fanout: out of memory\n");
@@ -842,7 +1451,6 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    long long stdin_got = 0;
     for (;;) {
         if (alive_count() == 0)
             break;                        /* nobody left to write to */
@@ -858,19 +1466,19 @@ int main(int argc, char **argv)
             free(chunk);
             return 2;
         }
-        stdin_got += (long long)got;
+        stdin_total += (long long)got;
         /* Only what was asked for (#1492): the room round and capture pass -S
          * alone, and an XXH64 nobody writes is a second pass over every byte. */
         if (hash_path) xxh_update(&hash, chunk, (size_t)got);
         if (sha_path) sha_engine_update(&sha, chunk, (size_t)got);
         if (progress_fd >= 0 && now_ms() - progress_last >= COUNTER_MS) {
             progress_last = now_ms();
-            if (append_count(progress_fd, stdin_got, progress_path) < 0) {
+            if (append_count(progress_fd, stdin_total, progress_path) < 0) {
                 close(progress_fd);
                 progress_fd = -1;
             }
         }
-        make_room((size_t)got);
+        make_room((size_t)got, 1);
         for (int i = 0; i < target_count; i++)
             send_chunk(&targets[i], chunk, (size_t)got);
         write_counters(0);
@@ -878,7 +1486,7 @@ int main(int argc, char **argv)
     free(chunk);
 
     if (progress_fd >= 0 && reached_eof) {
-        append_count(progress_fd, stdin_got, progress_path);
+        append_count(progress_fd, stdin_total, progress_path);
         close(progress_fd);
         progress_fd = -1;
     }
@@ -930,21 +1538,21 @@ int main(int argc, char **argv)
      * has stopped taking bytes entirely for stall_evict_ms is failed by the
      * same health rule rather than blocking every sibling from finishing
      * (#674); a merely slow one keeps draining and is waited on to the end. */
-    make_room((size_t)cap);
+    make_room((size_t)cap, 0);
 
     /* Length before "ok": empty, short, and complete must not share a path.
      * Expected length from FANOUT_EXPECTED_BYTES (tests, and a future
      * per-file compressed size); without it, empty stdin is still failed
      * because that is one of the three states and needs no number (#427). */
     if (alive_count() > 0) {
-        if (expected_bytes > 0 && stdin_got != expected_bytes) {
+        if (expected_bytes > 0 && stdin_total != expected_bytes) {
             snprintf(stream_reason, sizeof stream_reason,
                      "%s stream (got %lld of %lld)",
-                     stdin_got < expected_bytes ? "short" : "long",
-                     stdin_got, expected_bytes);
+                     stdin_total < expected_bytes ? "short" : "long",
+                     stdin_total, expected_bytes);
             for (int i = 0; i < target_count; i++)
                 fail_target(&targets[i], stream_reason);
-        } else if (expected_bytes == 0 && stdin_got == 0) {
+        } else if (expected_bytes == 0 && stdin_total == 0) {
             for (int i = 0; i < target_count; i++)
                 fail_target(&targets[i], "empty stream");
         }

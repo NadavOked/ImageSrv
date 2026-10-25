@@ -83,7 +83,39 @@ _wc_body() {
             *) echo "unchecked|$_wb_p: ההשוואה לא רצה (cmp rc=$_wb_rc)"; return ;;
         esac
     done
-    echo "ok|נכתבו ונקראו בחזרה ${WRITECHECK_MIB}MiB בהתחלה, באמצע ובסוף"
+    _wc_alias "$_wb_n" "$_wb_w" "$_wc_mib" || return   # #1805, CLR-02
+    echo "ok|נכתבו ונקראו בחזרה ${WRITECHECK_MIB}MiB בהתחלה, באמצע ובסוף, וסמנים בכל חזקה של 2 MiB"
+}
+
+_wc_alias() {
+    # $1 = node, $2 = work dir, $3 = the disk in MiB. CLR-02 (#1805): a counterfeit
+    # disk reports more than it holds and maps an address past its real end back
+    # onto one it has -- most drop the high address bits, a power of two. The
+    # three places above can all land in what it really has (3 x 32MiB of one
+    # backing passes them). So a 4KiB random marker at 0, at every power-of-two
+    # MiB below the end and in the last 4KiB: all written, then all read back. A
+    # marker that a higher one overwrote is the wrap itself. Prints a line, 1 = a verdict.
+    _wa_o=0; _wa_m=1
+    while [ "$_wa_m" -lt "$3" ]; do _wa_o="$_wa_o $((_wa_m * 256))"; _wa_m=$((_wa_m * 2)); done
+    _wa_o="$_wa_o $(($3 * 256 - 1))"; _wa_i=0   # 4KiB blocks
+    for _wa_b in $_wa_o; do
+        _wa_i=$((_wa_i + 1)); head -c 4096 /dev/urandom > "$2/mk.$_wa_i" 2>/dev/null
+        [ "$(wc -c < "$2/mk.$_wa_i" 2>/dev/null | tr -d ' ')" = 4096 ] || { echo "unchecked|לא נוצר סמן לבדיקה (urandom)"; return 1; }
+        dd if="$2/mk.$_wa_i" of="$1" bs=4096 seek="$_wa_b" count=1 oflag=direct conv=fsync 2> "$2/err" \
+            || { echo "failed|סמן ב-$((_wa_b / 256)) MiB: $(_wc_why "$2/err" 'הכתיבה נכשלה')"; return 1; }
+    done
+    _wa_i=0
+    for _wa_b in $_wa_o; do
+        _wa_i=$((_wa_i + 1))
+        dd if="$1" of="$2/back" bs=4096 skip="$_wa_b" count=1 iflag=direct 2> "$2/err" \
+            || { echo "failed|סמן ב-$((_wa_b / 256)) MiB: הקריאה החוזרת נכשלה: $(_wc_why "$2/err" 'dd')"; return 1; }
+        cmp -s "$2/mk.$_wa_i" "$2/back"; _wa_rc=$?
+        case "$_wa_rc" in
+            0) ;;
+            1) echo "failed|סמן ב-$((_wa_b / 256)) MiB נקרא בחזרה שונה — הדיסק מחזיר תוכן של מקום אחר (קיבולת מזויפת?)"; return 1 ;;
+            *) echo "unchecked|סמן ב-$((_wa_b / 256)) MiB: ההשוואה לא רצה (cmp rc=$_wa_rc)"; return 1 ;;
+        esac
+    done
 }
 
 _wc_finish() { # disk, state, reason
@@ -167,7 +199,7 @@ write_check_round() {
     _wr_m=$1; shift
     for _wr_d in "$@"; do
         target_set "$_wr_d" writing
-        disk_fits "$_wr_d" "$_wr_m" && write_check "$_wr_d"
+        disk_fits "$_wr_d" "$_wr_m" && { [ ! -s "$RUN_DIR/targets/$_wr_d/raid_wipe" ] || raid_wipe "$_wr_d"; } && write_check "$_wr_d"   # #1808: the old RAID metadata the operator let go, before the first test write
     done
     write_speed_verdict "$@" || :
 }

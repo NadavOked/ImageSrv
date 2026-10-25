@@ -46,7 +46,8 @@ def rig(tmp_path):
     svc = NicServices(conn, Baseline(**TODAY.__dict__), {
         "interfaces": lambda: [dict(n) for n in NICS], "now": clock,
         "boot_id": lambda: boot["id"], "schedule": lambda s, fn: scheduled.append((s, fn)),
-        "listeners": step("listeners"), "dnsmasq": step("dnsmasq"), "firewall": step("firewall")})
+        "listeners": step("listeners"), "dnsmasq": step("dnsmasq"),
+        "timesync": step("timesync"), "firewall": step("firewall")})
     return {"svc": svc, "conn": conn, "clock": clock, "scheduled": scheduled,
             "calls": calls, "fail": rig_state["fail"], "boot": boot}
 
@@ -100,11 +101,21 @@ def test_a_save_on_another_nic_applies_all_three_steps_and_journals(rig):
     svc = rig["svc"]
     out = svc.set("ens35", ["console", "monitor"], user_id="noc", local_address="10.10.10.8")
     assert out["ok"] and out["services"] == ["console", "monitor"]
-    assert [c[0] for c in rig["calls"]] == ["listeners", "dnsmasq", "firewall"]
+    assert [c[0] for c in rig["calls"]] == ["listeners", "dnsmasq", "timesync", "firewall"]
     plan = rig["calls"][0][1]
     assert plan["hosts"]["http_console"] == ["10.10.10.8", "10.20.0.8"]
     assert svc.edited() and events(rig["conn"]) == ["nic_services_set"]
     assert svc.pending() is None
+
+
+def test_ntp_is_default_off_and_can_be_enabled_per_nic(rig):
+    svc = rig["svc"]
+    assert all("ntp" not in row["services"] for row in svc.view()["nics"])
+    out = svc.set("ens34", ["multicast", "netboot", "ntp"], local_address="10.10.10.8")
+    assert out["ok"]
+    plans = {name: plan for name, plan in rig["calls"]}
+    assert plans["timesync"]["nics"]["ntp"] == ["ens34"]
+    assert plans["firewall"]["nics"]["ntp"] == ["ens34"]
 
 
 def test_services_are_validated(rig):

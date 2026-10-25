@@ -80,6 +80,7 @@ static void lb_card(App *a, cairo_t *cr, Rect r, int local, int paused, int focu
     if (!local) sb_pill(cr, right - tt.w - 10, y + tt.h / 2.0, "ברירת מחדל", t->action_fg, t->indigo_soft);
     y += tt.h + 10; text_free(&tt);
     Text ds = text_make(cr, FONT_SANS, 14, 400, local ? "מעתיקים דיסק אחד שבמחשב לדיסקים האחרים שבו — בלי שרת."
+                                                      : a->st.lc.boot_paused == 2 ? "המחשב חוזר להמתנה לסבב. כך הוא עובד בכל יום."   /* #2079 */
                                                       : "המחשב מתחבר לשרת ומחכה לסבב. כך הוא עובד בכל יום.", (int)inner, DIR_RTL);
     text_draw_r(cr, &ds, right, y, t->muted); text_free(&ds);
     double bottom = r.y + r.h - 22;
@@ -90,6 +91,7 @@ static void lb_card(App *a, cairo_t *cr, Rect r, int local, int paused, int focu
         if (off) { cairo_pop_group_to_source(cr); cairo_paint_with_alpha(cr, .5); }
         return;
     }
+    if (a->st.lc.boot_paused == 2) return;   /* #2079 (mockup 02): back from the wait -- there is no count to show */
     /* .cd: the count -- the words, the seconds, the bar that empties toward the left */
     double left = lb_left(a), share = left / 20.0;
     if (paused) {
@@ -145,7 +147,8 @@ void screen_lcboot(App *a, cairo_t *cr, double W, double H, double head_h) {
     Text h1 = text_make(cr, FONT_SANS, 30, 600, "איך להפעיל את המחשב?", 0, DIR_RTL);
     text_draw(cr, &h1, (W - h1.w) / 2, y + (34.5 - h1.h) / 2, t->ink); y += 34.5 + 8; text_free(&h1);
     const char *rnote = lc_round_note(a);   /* #1367: a round opened on the server -- said in the lead's place */
-    Text lead = text_make(cr, FONT_SANS, 14, rnote ? 600 : 400, rnote ? rnote : paused ? "הספירה נעצרה. בחרו אחת מהאפשרויות."
+    Text lead = text_make(cr, FONT_SANS, 14, rnote ? 600 : 400, rnote ? rnote : a->st.lc.boot_paused == 2 ? "חזרתם ממסך ההמתנה. בחרו אחת מהאפשרויות."   /* #2079 */
+                                                         : paused ? "הספירה נעצרה. בחרו אחת מהאפשרויות."
                                                          : "אם לא תבחרו — המחשב יעבוד מהשרת, כרגיל.", 0, DIR_RTL);
     text_draw(cr, &lead, (W - lead.w) / 2, y + (18.2 - lead.h) / 2, rnote ? t->warn : t->muted); y += 18.2 + 34; text_free(&lead);
     lb_card(a, cr, (Rect){ x0 + cw - cardw, y, cardw, LB_CARD_H }, 0, paused, a->lcu.boot_focus == 0);

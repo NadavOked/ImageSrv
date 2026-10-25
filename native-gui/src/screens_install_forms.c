@@ -7,7 +7,7 @@ static void kv(App *a,cairo_t *cr,Rect box,const char *key,const char *value,int
 
 static void hostname(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y;   /* the one column (mockup 10/10) */
     install_field_draw(a,cr,(Rect){x,y,w,56},"שם השרת (hostname)",s->hostname,0,HIT_INSTALL_HOSTNAME,1);y+=65;
-    install_text_r(cr,t,"אותיות באנגלית, ספרות ומקפים בלבד; עד 63 תווים; לא מתחיל ולא מסתיים במקף.",12,400,x+w,y,w,t->muted);y+=36;
+    install_text_r(cr,t,"שם מחשב — באנגלית, עד 15 תווים: אותיות, ספרות ומקפים; לא מתחיל ולא מסתיים במקף.",12,400,x+w,y,w,t->muted);y+=36;
     if(s->field_error[9][0]){install_text_r(cr,t,s->field_error[9],12,600,x+w,y,w,t->danger_fg);y+=30;}
     /* #1447 (Nadav 17/10): the server's timezone -- the same field as the name above */
     install_field_draw(a,cr,(Rect){x,y,w,56},"אזור זמן",s->timezone,0,HIT_INSTALL_TIMEZONE,1);y+=65;
@@ -31,11 +31,19 @@ static void admin_screen(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a-
     else{install_text_r(cr,t,"אותיות קטנות באנגלית, ספרות והסימנים . _ -",11,400,x+w,y,w,t->muted);y+=22;}
     if(s->rerun){install_field_draw(a,cr,(Rect){x,y,w,56},"סיסמת admin הקיימת",s->current_password,1,HIT_INSTALL_CURRENT_PASSWORD,1);y+=68;}
     password_field(a,cr,(Rect){x,y,w,56},"סיסמה",s->password,HIT_INSTALL_PASSWORD,HIT_INSTALL_SHOW_PASSWORD,s->show_password);y+=66;
-    int letter=0,digit=0,special=0;for(const char *p=s->password;*p;p++){letter|=(*p>='A'&&*p<='Z')||(*p>='a'&&*p<='z');digit|=*p>='0'&&*p<='9';special|=strchr("!@#$%^&*(),.?\":{}|<>",*p)!=NULL;}
+    int letter,digit,special;install_password_rules(s->password,&letter,&digit,&special);
     rule(a,cr,x+w,y,"לפחות 8 תווים",strlen(s->password)>=8);rule(a,cr,x+w-190,y,"אותיות",letter);y+=28;rule(a,cr,x+w,y,"ספרות",digit);rule(a,cr,x+w-190,y,"תו מיוחד",special);y+=42;
     password_field(a,cr,(Rect){x,y,w,56},"אימות הסיסמה",s->confirm,HIT_INSTALL_CONFIRM,HIT_INSTALL_SHOW_CONFIRM,s->show_confirm);y+=63;
     if(s->confirm[0]&&strcmp(s->password,s->confirm))install_text_r(cr,t,"הסיסמאות שהזנת אינן תואמות.",12,600,x+w,y,w,t->danger_fg);
     else if(s->field_error[11][0]||s->field_error[12][0])install_text_r(cr,t,s->field_error[s->field_error[12][0]?12:11],12,600,x+w,y,w,t->danger_fg);
+    /* #1632 (Nadav 24/10): root's password -- the local login on the server's
+     * own screen -- is chosen here, under the admin's rules; the ISO has none. */
+    y+=34;password_field(a,cr,(Rect){x,y,w,56},"סיסמת root (כניסה מקומית למסך השרת)",s->root_password,HIT_INSTALL_ROOT_PASSWORD,HIT_INSTALL_SHOW_ROOT,s->show_root);y+=66;
+    install_password_rules(s->root_password,&letter,&digit,&special);
+    rule(a,cr,x+w,y,"לפחות 8 תווים",strlen(s->root_password)>=8);rule(a,cr,x+w-190,y,"אותיות",letter);rule(a,cr,x+w-380,y,"ספרות",digit);rule(a,cr,x+w-570,y,"תו מיוחד",special);y+=42;
+    password_field(a,cr,(Rect){x,y,w,56},"אימות סיסמת root",s->root_confirm,HIT_INSTALL_ROOT_CONFIRM,HIT_INSTALL_SHOW_ROOT_CONFIRM,s->show_root_confirm);y+=63;
+    if(s->root_confirm[0]&&strcmp(s->root_password,s->root_confirm))install_text_r(cr,t,"סיסמאות ה-root שהזנת אינן תואמות.",12,600,x+w,y,w,t->danger_fg);
+    else if(s->field_error[15][0]||s->field_error[16][0])install_text_r(cr,t,s->field_error[s->field_error[16][0]?16:15],12,600,x+w,y,w,t->danger_fg);
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_password_ready(s)&&(!s->rerun||s->current_password[0]));
 }
 

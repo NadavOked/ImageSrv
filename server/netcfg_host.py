@@ -23,10 +23,12 @@ from __future__ import annotations
 import ipaddress
 import os
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import netcfg
+from .atomicfile import write_atomic
 
 INTERFACES_DIR = "/etc/network/interfaces.d"
 INTERFACES_MAIN = "/etc/network/interfaces"
@@ -70,7 +72,7 @@ def write_conf(name: str, text: str | None,
             path.unlink(missing_ok=True)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
+            write_atomic(path, text)   # ‏#1908
     except OSError as exc:
         return f"לא ניתן לכתוב את {path}: {exc.strerror or exc}"
     return None
@@ -78,7 +80,7 @@ def write_conf(name: str, text: str | None,
 
 def write_resolv(text: str, path: str | Path = RESOLV_CONF) -> str | None:
     try:
-        Path(path).write_text(text, encoding="utf-8")
+        write_atomic(path, text)   # ‏#1908
     except OSError as exc:
         return f"לא ניתן לכתוב את {path}: {exc.strerror or exc}"
     return None
@@ -215,13 +217,13 @@ def adopt_interface(name: str, text: str, *, main: str | Path = INTERFACES_MAIN,
             suffix = backup_suffix or datetime.now().strftime("%Y%m%d%H%M%S")
             backup = main_path.with_name(main_path.name + f".pre-imagectl.{suffix}")
             try:
-                backup.write_text(main_text, encoding="utf-8")
+                write_atomic(backup, main_text)   # ‏#1908
             except OSError as exc:
                 return notes, f"לא ניתן לגבות את {main_path}: {exc.strerror or exc}"
             notes.append(f"{main_path}: גיבוי ב-{backup.name}")
         try:
             main_path.parent.mkdir(parents=True, exist_ok=True)
-            main_path.write_text(new_text, encoding="utf-8")
+            write_atomic(main_path, new_text)   # ‏#1908
         except OSError as exc:
             return notes, f"לא ניתן לכתוב את {main_path}: {exc.strerror or exc}"
         if stanza_changed:
@@ -432,6 +434,26 @@ def mismatches(cfg: netcfg.NetConfig, state: LiveState) -> list[str]:
         if server not in state.nameservers:
             found.append(f"‏{server} אינו ב-{RESOLV_CONF}")
     return found
+
+
+#: ‏#2094: כמה זמן קריאה חוזרת של DHCP מחכה ל-lease. ‏``dhcpcd -b`` חוזר מיד
+#: (‏render), וה-lease הגיע ~7 שניות אחר כך (הצעה + 5 שניות של בדיקת ARP,
+#: ESXi 24/10) — קריאה מיידית אמרה "לא אומת" על הפעלה מחדש שהצליחה.
+DHCP_LEASE_WAIT_S = 30
+
+
+def settled_mismatches(cfg: netcfg.NetConfig, read_state, *,
+                       wait_s: float = DHCP_LEASE_WAIT_S,
+                       sleep=time.sleep, clock=time.monotonic) -> list[str]:
+    """``mismatches`` — ובכרטיס DHCP נקרא שוב כל שנייה עד שה-lease מגיע או
+    עד ``wait_s``. סטטי נקרא פעם אחת: כתובת סטטית יושבת כשה-ifup חוזר.
+    הפסקה בזמן היא עדיין הפער האחרון שנקרא, לא "בסדר" (עיקרון 5)."""
+    deadline = clock() + (wait_s if cfg.mode == netcfg.MODE_DHCP else 0)
+    while True:
+        gaps = mismatches(cfg, read_state())
+        if not gaps or clock() >= deadline:
+            return gaps
+        sleep(1)
 
 
 # --- ‏#1264: מצב ה-bond -------------------------------------------------------

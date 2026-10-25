@@ -10,9 +10,11 @@
 # ‏#1411: המארח הבונה **חייב** לכלול trixie-security במקורות שלו — אחרת ה-pool
 # (וכל שרת שיותקן ממנו) קפוא על הגרסאות של יום ההוצאה, והסקריפט נכשל בשמו.
 #
-# ‏--security (‏#1411): רק החבילות מאותה סגירה שהגרסה שלהן מגיעה מ-
-# trixie-security, ארוזות ל-tar אחד (‏imagectl-security-pool-<תאריך>.tar) עם
-# ‏security-pool.json לידו — הגיבוב, הגודל והתאריך. את ה-json מעתיקים ל-
+# ‏--security (‏#1411, ‏#1803): **כל** אותה סגירה, בגרסת המועמד — של trixie-security
+# כשיש — ארוזה ל-tar אחד (‏imagectl-security-pool-<תאריך>.tar) עם
+# ‏security-pool.json לידו — הגיבוב, הגודל והתאריך. כל הסגירה ולא רק עדכוני האבטחה:
+# כפתור העדכון מתקין ממנו גם חבילה שנוספה ל-packages.txt אחרי שהשרת הותקן (#1803).
+# את ה-json מעתיקים ל-
 # ‏install/security-pool.json (קומיט, תג), ו-publish-to-public.sh מצמיד את ה-tar
 # ל-Release של התג. כפתור העדכון מתקין ממנו בלבד (install/security-upgrade.sh).
 #
@@ -27,8 +29,10 @@
 # יותר ממה שהמותקן צריך (הבסיס מגיע מה-netinst עצמו) ואינו מזיק: אותו
 # קובץ באותה גרסה מחליף את עצמו.
 #
-# ‏Recommends נכללים: כך `apt-get install` של המתקין מתקין על שרת רגיל,
-# וה-ISO צריך להתקין את אותו דבר (נמדד 19/09: ‏+45MB, ואין MTA בסגירה).
+# ‏Recommends נכללים ב-pool — אבל **אף התקנה אינה מתקינה אותם** (‏#1987:
+# ‏`--no-install-recommends` בכל מקום, נבדק ב-tests/test_no_install_recommends_1987.py).
+# ה-pool נשאר על-קבוצה בכוונה: שרת רגיל שהותקן לפני #1987 עם Recommends ממשיך
+# לקבל דרכו את עדכוני האבטחה שלהם (‏--security). חבילה ב-pool אינה מותקנת.
 #
 # הפלט (‏--out DIR):
 #   DIR/pool/{main,contrib,...}/imagectl/*.deb   לפי ה-Section של החבילה
@@ -62,7 +66,7 @@ ImageSrv — בניית ה-repo המקומי של ה-ISO.
   --out DIR         לאן להוריד (pool/ + dists/ נכתבים מתחתיו)
   --packages FILE   ברירת מחדל: tools/iso/packages.txt
   --index-only DIR  רק dists/ מעל DIR/pool קיים (בלי apt)
-  --security        רק עדכוני trixie-security של הסגירה, כ-tar + security-pool.json (#1411)
+  --security        כל הסגירה (עם עדכוני trixie-security), כ-tar + security-pool.json (#1411, #1803)
 EOF
 }
 
@@ -226,12 +230,28 @@ if [[ -n "$SECURITY" ]]; then
     sim=$(apt-get -s -o Dir::State::status="$EMPTY_STATUS" -o Debug::NoLocking=1 \
               -o APT::Install-Recommends=true install "${PKGS[@]}" 2>&1) \
         || { printf '%s\n' "$sim" | tail -n 5 >&2; die "apt-get -s על הסגירה המלאה נכשל"; }
+    # ‏#1803: **כל** הסגירה, בגרסת המועמד (זו של trixie-security כשיש) — כך כפתור העדכון
+    # מתקין גם חבילה שנוספה ל-packages.txt אחרי שהשרת הותקן (ifenslave/#1264).
+    mapfile -t ALL < <(sed -nE 's/^Inst ([^ ]+) (\[[^]]*\] )?\(([^ ]+) .*$/\1=\3/p' <<<"$sim")
     mapfile -t SEC < <(sed -nE 's/^Inst ([^ ]+) (\[[^]]*\] )?\(([^ ]+) [^)]*-[Ss]ecurity[, ][^)]*\).*$/\1=\3/p' <<<"$sim")
     # אפס הוא כמעט בוודאות פענוח שנשבר, לא "אין עדכונים" (עיקרון 5).
     (( ${#SEC[@]} )) || die "אף חבילה בסגירה אינה מ-trixie-security — הפענוח של apt-get -s נשבר, או שהמקור לא נקרא"
-    printf 'make-pool: %d חבילות מ-trixie-security\n' "${#SEC[@]}"
-    ( cd "$DL" && apt-get download "${SEC[@]}" ) || die "apt-get download נכשל"
-    for spec in "${SEC[@]}"; do      # ראיה חיובית: קובץ לכל חבילה=גרסה (נקודתיים = %3a)
+    declare -A IN_CLOSURE=()
+    for spec in "${ALL[@]}"; do IN_CLOSURE[${spec%%=*}]=1; done
+    missing=()       # ראיה חיובית: כל שם ב-packages.txt בסגירה, אחרת השרת לא יוכל להתקין אותו
+    for p in "${PKGS[@]}"; do [[ -n "${IN_CLOSURE[$p]:-}" ]] || missing+=("$p"); done
+    (( ${#missing[@]} == 0 )) || die "חבילות מ-packages.txt אינן בסגירה של apt-get -s: ${missing[*]}"
+    # ‏#1773: בשרת שמתעדכן chrony מחליפה את systemd-timesyncd (install/timesync-swap.sh), ודרך
+    # החזרה היא systemd-timesyncd מאותו מאגר — בגרסה של systemd שבסגירה, כי היא תלויה בו
+    # בגרסה מדויקת. מחוץ לסימולציה: שתיהן מתנגשות, ו-apt-get -s לא היה בוחר את שתיהן.
+    if [[ -n "${IN_CLOSURE[chrony]:-}" ]]; then
+        sysd=$(printf '%s\n' "${ALL[@]}" | sed -n 's/^systemd=//p')
+        [[ -n "$sysd" ]] || die "chrony בסגירה ו-systemd לא — אין גרסה ל-systemd-timesyncd של דרך החזרה (#1773)"
+        ALL+=("systemd-timesyncd=$sysd")
+    fi
+    printf 'make-pool: %d חבילות בסגירה, %d מהן מ-trixie-security\n' "${#ALL[@]}" "${#SEC[@]}"
+    ( cd "$DL" && apt-get download "${ALL[@]}" ) || die "apt-get download נכשל"
+    for spec in "${ALL[@]}"; do      # ראיה חיובית: קובץ לכל חבילה=גרסה (נקודתיים = %3a)
         p=${spec%%=*}; v=${spec#*=}
         found=$(find "$DL" -maxdepth 1 -name "${p}_${v//:/%3a}_*.deb" -print -quit)
         [[ -n "$found" ]] || die "ההורדה הסתיימה בלי $p $v"
@@ -244,8 +264,8 @@ if [[ -n "$SECURITY" ]]; then
         -cf "$OUT/$ASSET" -C "$OUT" pool dists pool-date || die "אריזת $ASSET נכשלה"
     sha=$(sha256sum "$OUT/$ASSET" | cut -d' ' -f1) && size=$(stat -c %s "$OUT/$ASSET") \
         || die "הגיבוב של $ASSET לא חושב"
-    printf '{\n "asset": "%s",\n "date": "%s",\n "packages": %d,\n "sha256": "%s",\n "size": %d,\n "suite": "trixie-security"\n}\n' \
-        "$ASSET" "$POOL_DATE" "${#SEC[@]}" "$sha" "$size" > "$OUT/security-pool.json"
+    printf '{\n "asset": "%s",\n "date": "%s",\n "packages": %d,\n "security": %d,\n "sha256": "%s",\n "size": %d,\n "suite": "trixie+trixie-security"\n}\n' \
+        "$ASSET" "$POOL_DATE" "${#ALL[@]}" "${#SEC[@]}" "$sha" "$size" > "$OUT/security-pool.json"
     # ראיה חיובית: ה-json נקרא באותו קורא שהשרת והפרסום מריצים.
     lock_out=$(python3 -I "$SCRIPT_DIR/../../install/security-pool-lock.py" "$OUT/security-pool.json" 2>&1) \
         || die "security-pool.json שנכתב אינו עובר את install/security-pool-lock.py: $lock_out"

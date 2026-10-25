@@ -6,6 +6,7 @@
 #include <string.h>
 #include "lcui.h"
 #include "screens_rounds.h"
+#include "smartdlg.h"   /* #2017: the orange source's notice card */
 
 /* #1437: a share as the screen says it -- floored, so 100% is only the end,
  * and one decimal under 10%: 1 GB of 500 is "0.2%", not "0%". */
@@ -59,6 +60,14 @@ void lc_gb(char *out, size_t n, double b) {
     else snprintf(out, n, "\xE2\x81\xA8%.0f MB\xE2\x81\xA9", b / 1e6);
 }
 
+void card_used_text(int mode, long long bytes, char *out, size_t n) {
+    const char *lead = mode == USED_NOW ? "תפוס עכשיו" : mode == USED_WRITTEN ? "נכתב" : "נכתב עד כה";
+    int none = bytes < 0 || (mode == USED_WRITTEN && bytes == 0);
+    char g[64];
+    if (none) snprintf(g, sizeof g, "לא נמדד"); else lc_gb(g, sizeof g, (double)bytes);
+    snprintf(out, n, RLM "%s: %s", lead, g);
+}
+
 /* #1443 (Nadav 17/10: "לפני העתקה אני רוצה מספר מדויק"): the bytes the copy
  * moves, as the agent measured them before it starts -- partclone's used
  * blocks (lcsize.sh), one decimal like partclone's own "203.1 GB". Only for
@@ -72,15 +81,22 @@ void lc_copy_text(const LcState *l, const LcDisk *src, char *out, size_t n) {
     else { char u[48]; lc_gb(u, sizeof u, (double)l->src_copy); snprintf(out, n, RLM "%s יועתקו", u); }
 }
 
+void lc_disk_card_name(const LcDisk *d, char *out, size_t n) {
+    card_name(d->name, eff_drawer(d->drawer, d->port), d->conn, d->port, out, n);   /* #2001: the operator's slot name when it has one */
+}
+
 void lc_disk_label(const LcDisk *d, char *out, size_t n) {
     int drawer = eff_drawer(d->drawer, d->port);
-    if (drawer > 0) snprintf(out, n, "דיסק %d", drawer);
-    else unmapped_label("", d->conn, d->port, d->dev, out, n);
+    if (drawer > 0 && d->name[0]) snprintf(out, n, "%s", d->name);   /* #2001: the name, as cloner_slot_label */
+    else if (drawer > 0) snprintf(out, n, "דיסק %d", drawer);
+    else unmapped_label(d->name, d->conn, d->port, d->dev, out, n);
 }
 
 void lc_has_text(const LcDisk *d, char *out, size_t n) {
     char used[160], os[96], u[64];
     if (!d->nparts) { snprintf(out, n, "%s", d->why[0] ? d->why : "ריק"); return; }
+    /* #1798: a cut write (or a mark that could not be read) -- what is on it is not a Windows to copy */
+    if (d->mark[0] && d->why[0]) { snprintf(out, n, "%s", d->why); return; }
     lc_gb(u, sizeof u, (double)d->used);
     bidi_isolate(d->os[0] ? d->os : "בלי מערכת מוכרת", os, sizeof os);
     if (d->used < 0) snprintf(used, sizeof used, "בשימוש: לא נמדד");
@@ -104,6 +120,17 @@ const char *lc_round_note(const App *a) {
     return "נפתח סבב בשרת";
 }
 
+/* Nadav 22/10: the source's SMART already counts sectors it could not read (lcraw.sh
+ * lc_smart_unread: 197/198, or NVMe media errors). An orange line on the choice, before
+ * the copy -- no question, nothing blocked. Only about the source the person chose;
+ * SMART not read or 0 = no line, never "0". */
+int lc_unread_text(const App *a, char *out, size_t n) {
+    const LcState *l = &a->st.lc; int s = lc_source_index(a);
+    if (s < 0 || l->unread < 1 || strcmp(l->disks[s].dev, l->unread_dev)) return 0;
+    snprintf(out, n, "דיסק המקור כבר נתקל ב-%lld נקודות שלא הצליח לקרוא — ייתכן שבזמן השיכפול תופיע השאלה 'להמשיך?'", l->unread);
+    return 1;
+}
+
 static const char *lc_status_base(const App *a, Rgb *dot);
 
 const char *lc_status_word(const App *a, Rgb *dot) {
@@ -124,6 +151,8 @@ static const char *lc_status_base(const App *a, Rgb *dot) {
     int view = lc_view(a), nf = failed_targets(a);
     if (view == LCVIEW_SOURCE) { *dot = t->warn; return l->inv_done ? "בוחרים מקור" : "בודק את הדיסקים"; }
     if (view == LCVIEW_DONE) {
+        int nw = 0; for (int i = 0; i < l->ntgts; i++) nw += strcmp(l->tgts[i].state, "failed") && l->tgts[i].note[0];
+        if (!nf && nw) { *dot = t->warn; return "הסתיים · עם הערה"; }   /* #2009: orange, not green -- the card says why */
         if (!nf) { *dot = t->led_ok; return "הסתיים"; }
         *dot = t->danger;
         if (nf == 1) return "הסתיים · יעד אחד נכשל";
@@ -146,6 +175,7 @@ const char *lc_status_keys(const App *a) {
         : "↓ ↑  מעבר    Enter  בחירה    1  מהשרת    3  שחזור אימג' מהשרת";
     int view = lc_view(a);
     if (view == LCVIEW_SOURCE) return a->lcu.confirm ? "Tab / → ←  מעבר    Enter  בחירה    Esc  חזרה"
+                                                     : a->st.lc.usb ? "↑ ↓  מגירה    → ←  תפקיד    1 2 3  קבע כמקור    Tab  כפתורים    F4  הגדרות"   /* #1914; mockup 01 */
                                                      : "↑ ↓  מגירה    → ←  תפקיד    1 2 3  קבע כמקור    Tab  כפתורים    Esc  חזרה";
     if (view == LCVIEW_PROGRESS) return a->lcu.stop ? "Tab / → ←  מעבר    Enter  בחירה    Esc  המשך להעתיק" : "Esc  עצירה";
     return "Enter  כיבוי    Tab  מעבר";
@@ -156,7 +186,9 @@ const char *lc_status_keys(const App *a) {
 const char *const LC_PNG_CARDS[] = { "lcboot", "lcboot-paused", "lcsource", "lcsource-measuring", "lcsource-blocked",
                                      "lcsource-shrink", "lcconfirm", "lcconfirm-shrink", "lcprogress", "lcprogress-fail",
                                      "lcstop", "lcdone", "lcdone-ok", "lcboot-round", "lcsource-round",   /* -round: #1367 */
-                                     "lcboot-one", "lcboot-pull", "lcpull", "lcpull-confirm", "lcpull-keys" };   /* 16/10: one disk; restore from the server */
+                                     "lcsource-usb", "lcprogress-usb",   /* #2030: the clone stick (lc_usb=1) -- the same drawer cards */
+                                     "lcboot-one", "lcboot-pull", "lcpull", "lcpull-confirm", "lcpull-keys",
+                                     "lcsource-orange", "lcconfirm-usb", "lcboot-back" };   /* #2079: back from the wait */   /* #2017: an orange source -- the notice, "המשך" alone */   /* 16/10: one disk; restore from the server */
 const int LC_PNG_NCARDS = (int)(sizeof LC_PNG_CARDS / sizeof LC_PNG_CARDS[0]);
 
 static void disk(LcState *l, int port, const char *dev, const char *model, unsigned long long size, const char *smart,
@@ -204,18 +236,20 @@ void lc_sample(State *s, const char *card) {
     if (!strncmp(card, "lcboot", 6)) {
         l->screen = LC_SCREEN_BOOT; l->boot_now = 1000; l->boot_deadline = 1017;
         l->local_ok = strcmp(card, "lcboot-one") != 0;   /* 16/10: one disk -- the local card is off */
-        l->boot_paused = !strcmp(card, "lcboot-paused") || l->round_open;
+        l->boot_paused = !strcmp(card, "lcboot-back") ? 2 : !strcmp(card, "lcboot-paused") || l->round_open;
         return;
     }
     l->screen = LC_SCREEN_LOCAL; l->inv_done = 1; snprintf(l->phase, sizeof l->phase, "idle");
+    l->usb = strstr(card, "-usb") != NULL;   /* #2030 */
     disk(l, 1, "sda", "Samsung SSD 870 EVO", 500107862016ULL, "ok", "ok", "Windows 10", 3, 212400000000LL);
     /* #1732 (owner 18/10): a red disk is never a target. The approved mockup's confirm
      * (lcconfirm) writes disk 2 with its SMART alert row and "הוצא את דיסק 2"; the target
      * that still carries that row is orange (a SMART warning), so on that card disk 2 is
      * orange -- the same dialog, the same height; elsewhere it stays red. */
-    int keep2 = !strcmp(card, "lcconfirm");
+    int keep2 = !strcmp(card, "lcconfirm") || !strcmp(card, "lcconfirm-usb");
     disk(l, 2, "sdb", "WDC WD5000AAKX", 500107862016ULL, keep2 ? "warn" : "fail", "health_failed", "Ubuntu 22.04", 2, 38000000000LL);
-    disk(l, 3, "sdc", "Crucial MX500", 480103981056ULL, "ok", "ok", "Windows 11 Pro", 4, 148600000000LL);
+    const int orange = !strcmp(card, "lcsource-orange");   /* #2017: 187 > 0 on the source */
+    disk(l, 3, "sdc", "Crucial MX500", 480103981056ULL, orange ? "warn" : "ok", orange ? "reported_uncorrectable" : "ok", "Windows 11 Pro", 4, 148600000000LL);
     int blocked = !strcmp(card, "lcsource-blocked"), shrink = !strcmp(card, "lcsource-shrink") || !strcmp(card, "lcconfirm-shrink");
     snprintf(l->src, sizeof l->src, "%s", blocked || shrink ? "sda" : "sdc");
     snprintf(l->src_measure, sizeof l->src_measure, "%s", blocked || shrink ? "done" : "none");
@@ -273,12 +307,18 @@ int lc_png_setup(App *a, const char *card) {
         for (int i = 0; i < 3; i++) { snprintf(u->role_dev[i], sizeof u->role_dev[i], "%s", dev[i]); u->role[i] = r[i]; }
         u->nroles = 3; u->bay = 0;
     }
-    if (!strcmp(card, "lcconfirm") || !strcmp(card, "lcconfirm-shrink")) {
+    if (!strcmp(card, "lcconfirm") || !strcmp(card, "lcconfirm-shrink") || !strcmp(card, "lcconfirm-usb")) {
         for (int i = 0; i < u->nroles; i++) if (!strcmp(u->role_dev[i], "sdb")) u->role[i] = LCR_TARGET;   /* the person kept disk 2 */
         u->confirm = 1; u->focus = LCF_CANCEL;
+        if (!strcmp(card, "lcconfirm-usb")) { a->st.lc.usb = 1; u->focus = LCF_GO; }   /* #2008 (Nadav 22/10): the stick opens on "מחק והעתק" */
     }
     if (!strcmp(card, "lcprogress") || !strcmp(card, "lcprogress-fail")) u->focus = LCF_STOP;
     if (!strcmp(card, "lcstop")) { u->stop = 1; u->focus = LCF_STOP_NO; }
     if (!strncmp(card, "lcdone", 6)) u->focus = LCF_OFF;
+    if (!strcmp(card, "lcsource-orange")) {   /* #2017: "המשך לאישור" pressed on the orange source (drawer 3) */
+        const LcDisk *d = &a->st.lc.disks[2]; char label[48]; lc_disk_label(d, label, sizeof label);
+        snprintf(a->st.lc.disks[2].serial, sizeof a->st.lc.disks[2].serial, "2236E6A1B2C3");
+        sdlg_open(a, SDLG_LC_SOURCE, 2, d->dev, label, d->smart, d->smart_reason, d->model, d->serial);
+    }
     return 1;
 }

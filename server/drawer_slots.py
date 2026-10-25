@@ -9,6 +9,9 @@ PORT_MAX = 32
 DRAWER_MAX = 8
 _SATA = re.compile(r"sata:([1-9][0-9]?)\Z")
 _NVME = re.compile(r"nvme:[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]\Z")
+#: ‏#2001: "NVMe n" שנוסף ידנית לפני שנראה בו כונן — בלי כתובת PCI (נדב 22/10).
+#: ה-hello הראשון שמדווח NVMe n-י (לפי סדר כתובות ה-PCI) משלים אותו ל-nvme:<PCI>.
+_NVME_ORD = re.compile(r"nvme#([1-8])\Z")
 _OPTICAL_DEV = re.compile(r"sr[0-9]{1,2}\Z")
 
 
@@ -18,9 +21,33 @@ def _key(raw: object) -> str | None:
     sata = _SATA.fullmatch(raw)
     if sata and int(sata.group(1)) <= PORT_MAX:
         return raw
-    if _NVME.fullmatch(raw):
+    if _NVME.fullmatch(raw) or _NVME_ORD.fullmatch(raw):
         return raw
     return None
+
+
+def order(key: str) -> tuple:
+    """סדר החיבורים (#2001: "אין גרירה — הסדר הוא סדר החיבורים"): SATA לפי
+    הפורט, אחריהם NVMe לפי כתובת ה-PCI, ואחריהם NVMe שעוד לא נראה."""
+    if key.startswith("sata:"):
+        return (0, int(key[5:]), "")
+    if key.startswith("nvme:"):
+        return (1, 0, key)
+    return (2, int(key[5:]), "")
+
+
+def resolve_ordinals(slots: list[str], disks) -> list[str]:
+    """‏``nvme#n`` → ‏``nvme:<PCI>`` של ה-NVMe ה-n-י שהמכונה מדווחת (לפי סדר
+    הכתובות), כשהוא קיים ואינו כבר במיפוי. השאר — כמו שהם."""
+    pcis = sorted({f"nvme:{d['pci']}" for d in disks or []
+                   if isinstance(d, dict) and isinstance(d.get("pci"), str)
+                   and _NVME.fullmatch(f"nvme:{d['pci']}")})
+    out = list(slots)
+    for i, key in enumerate(out):
+        m = _NVME_ORD.fullmatch(key)
+        if m and int(m.group(1)) <= len(pcis) and pcis[int(m.group(1)) - 1] not in out:
+            out[i] = pcis[int(m.group(1)) - 1]
+    return out
 
 
 def parse(raw) -> list[str]:
@@ -30,7 +57,7 @@ def parse(raw) -> list[str]:
     for item in raw:
         key = _key(item)
         if key is None:
-            raise ValueError("חיבור לא תקין — sata:1..32 או nvme:<כתובת PCI>")
+            raise ValueError("חיבור לא תקין — sata:1..32, nvme:<כתובת PCI> או nvme#1..8")
         if key in result:
             raise ValueError(f"חיבור כפול: {key}")
         result.append(key)
@@ -41,8 +68,12 @@ def default(count: int) -> list[str]:
     return [f"sata:{port}" for port in range(1, count + 1)]
 
 
-def effective(drawer_count: int, stored_json: str | None) -> list[str]:
-    return default(drawer_count) if stored_json is None else parse(json.loads(stored_json))
+def effective(drawer_count: int, stored_json: str | None,
+              model_slots: list[str] | None = None) -> list[str]:
+    """‏#2001: מכונה (‏``stored_json``) ← דגם (‏``model_slots``) ← "מגירה k = ‏sata:k"."""
+    if stored_json is not None:
+        return parse(json.loads(stored_json))
+    return list(model_slots) if model_slots else default(drawer_count)
 
 
 def key_of(disk: dict) -> str | None:

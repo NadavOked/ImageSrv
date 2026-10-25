@@ -57,7 +57,7 @@ function setup() {
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
   vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME={username:"admin",role:"admin",server_name:"imagectl-srv",version:"v0.30.0",uptime_seconds:532802,deploy_ip:"10.44.12.1",capabilities:{enroll_secondary:true}}; current="home";');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"imagectl-srv",version:"v0.30.0",uptime_seconds:532802,deploy_ip:"10.44.12.1",capabilities:{enroll_secondary:true}}; current="home";');
   return {run,node,requests,fixtures};
 }
 function balanced(html) {

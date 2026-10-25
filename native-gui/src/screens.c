@@ -10,6 +10,7 @@
 #include "lcui.h"   /* #1322 */
 #include "smartdlg.h"   /* 16/10 */
 #include "canceldlg.h"  /* #1386 */
+#include "dcui.h"       /* #1914: the USB stick's settings are the DCUI's settings screen */
 
 /* #1252: a value the state file did not carry is said as unknown -- the
  * header once showed the mockup's server, address and version
@@ -82,6 +83,31 @@ static void draw_theme_toggle(App *a,cairo_t *cr,double W,double head_h){
     hit_add(a,b,HIT_THEME);
 }
 
+/* mockup 01 section 2 (Nadav 24/10): the USB stick's "הגדרות" moved from the content's corner
+ * (#1914) to the top bar, next to the theme switch, with F4. The fixed buttons sit left to right
+ * in the order of their keys -- F2, (F3 "כלים", #649, not yet), F4 -- so a tools button goes in
+ * between. Only where "הגדרות" was: the stick's source screen. */
+int app_usbset_here(const App *a){
+    return a->screen==SCREEN_LOCAL&&a->st.lc.usb&&a->st.lc.screen!=LC_SCREEN_USBSET&&lc_view(a)==LCVIEW_SOURCE&&!a->lcu.confirm;
+}
+static double draw_usbset_btn(App *a,cairo_t *cr,double x){
+    const Theme *t=a->theme;
+    Text l=text_make(cr,FONT_SANS,13,500,"הגדרות",0,DIR_RTL), k=text_make(cr,FONT_MONO,11,600,"F4",0,DIR_LTR);
+    Rect b={x,(N_HEADER_H-THEME_BTN_H)/2,8+k.w+8+l.w+6+14+10,THEME_BTN_H};
+    Rect o={b.x+.5,b.y+.5,b.w-1,b.h-1};
+    draw_set_a(cr,t->header_text,.45);draw_rrect_path(cr,o,RADIUS_SM);cairo_set_line_width(cr,1);cairo_stroke(cr);
+    text_draw(cr,&k,b.x+8,b.y+(b.h-k.h)/2,t->header_text);
+    text_draw(cr,&l,b.x+8+k.w+8,b.y+(b.h-l.h)/2,t->header_text);
+    double cx=b.x+b.w-10-7,cy=b.y+b.h/2;            /* the gear: a ring and eight teeth */
+    draw_set(cr,t->header_text);cairo_set_line_width(cr,1.4);
+    cairo_new_sub_path(cr);cairo_arc(cr,cx,cy,2.2,0,2*M_PI);cairo_stroke(cr);
+    for(int i=0;i<8;i++){double an=i*M_PI/4;cairo_move_to(cr,cx+4.0*cos(an),cy+4.0*sin(an));cairo_line_to(cr,cx+6.4*cos(an),cy+6.4*sin(an));}
+    cairo_stroke(cr);
+    hit_add(a,b,HIT_LC_USBSET);
+    text_free(&l);text_free(&k);
+    return b.w;
+}
+
 static double draw_header(App *a, cairo_t *cr, double W) {
     const Theme *t=a->theme;
     Rect bar={0,0,W,N_HEADER_H}; draw_fill_rrect(cr,bar,0,t->header);
@@ -115,10 +141,11 @@ static double draw_header(App *a, cairo_t *cr, double W) {
         right-=v.w+18;
         text_free(&k);text_free(&v);
     }
-    if(local){
-        Text m=text_make(cr,FONT_SANS,12,600,"שיכפול מקומי · בלי שרת",0,DIR_RTL);
+    int survey=a->st.lc.usb&&a->st.lc.survey;   /* #1914/#1921: the survey stick, said on every screen of it */
+    if(local||survey){
+        Text m=text_make(cr,FONT_SANS,12,600,survey?"דיסק-און-קי · איסוף נתונים":"שיכפול מקומי · בלי שרת",0,DIR_RTL);
         Rect mp={right-m.w-18,(N_HEADER_H-20)/2,m.w+18,20};
-        draw_fill_rrect(cr,mp,10,t==&THEME_DARK?(Rgb){.76,.33,0}:(Rgb){.76,.33,0});
+        draw_fill_rrect(cr,mp,10,survey?(Rgb){.42,.25,.68}:(Rgb){.76,.33,0});
         text_draw_r(cr,&m,right-9,mp.y+(20-m.h)/2,(Rgb){1,1,1});right=mp.x-22;text_free(&m);
     }
     const char *av=a->st.agent_version, *sv=a->st.server_version;
@@ -129,7 +156,8 @@ static double draw_header(App *a, cairo_t *cr, double W) {
     int mismatch=ak&&sk&&strcmp(av,sv);
     char versions[360];
     if(local&&!sk)   /* #1437: no server answered -- not an unknown server version */
-        snprintf(versions,sizeof versions,"סוכן %s%s · שרת: לא מחובר (שיכפול מקומי)",ak?"v":"",ak?av:"לא ידוע");
+        snprintf(versions,sizeof versions,a->st.lc.usb?"סוכן %s%s":"סוכן %s%s · שרת: לא מחובר (שיכפול מקומי)",   /* #1914: the stick never has one */
+                 ak?"v":"",ak?av:"לא ידוע");
     else snprintf(versions,sizeof versions,"סוכן %s%s · שרת %s%s",
              ak?"v":"",ak?av:"לא ידוע",sk?"v":"",sk?sv:"לא ידוע");
     double vw=right-90-theme_btn_w(W)-12; if(vw<100)vw=100;   /* #1499: the clock moved over by the switch */
@@ -149,6 +177,9 @@ static double draw_header(App *a, cairo_t *cr, double W) {
 #else
     else if(now!=(time_t)-1 && localtime_r(&now,&tmv)) strftime(clock_s,sizeof clock_s,a->st.tz[0]?"%H:%M":"%H:%M UTC",&tmv);
 #endif
+    /* #1914 (Nadav, college 20/10): no clock on the stick -- a Windows machine keeps its RTC
+       in local time, there is no server to set it by, and a wrong hour is worse than none */
+    if(a->st.lc.usb){if(app_usbset_here(a))draw_usbset_btn(a,cr,N_HEADER_PAD+theme_btn_w(W)+8);return N_HEADER_H;}   /* mockup 01 */
     Text clock=text_make(cr,FONT_MONO,14,400,clock_s,0,DIR_LTR);
     text_draw(cr,&clock,N_HEADER_PAD+theme_btn_w(W)+12,(N_HEADER_H-clock.h)/2,t->header_text); text_free(&clock);   /* #1499: after the corner switch */
     return N_HEADER_H;
@@ -157,7 +188,8 @@ static double draw_header(App *a, cairo_t *cr, double W) {
 static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
     const State *s=&a->st; *dot=a->theme->led_ok;
     if(s->shrink_pending){*dot=a->theme->warn;return "ממתין להחלטת כיווץ";}   /* #928: the modal owns the screen */
-    if(s->ask_pending){*dot=a->theme->warn;return s->ask_kind==ASK_GROWBACK?"ממתין להחלטה על הדיסק":"הקליטה הסתיימה";}   /* 11/10 */
+    if(s->ask_pending){*dot=a->theme->warn;return s->ask_kind==ASK_GROWBACK||s->ask_kind==ASK_RAID?"ממתין להחלטה על הדיסק"
+                                                   :s->ask_kind==ASK_SHARE?"ממתין לאישור חלוקת המקום":s->ask_kind==ASK_BADSECT?"ממתין להחלטה על דיסק המקור":"הקליטה הסתיימה";}   /* 11/10; #1808/#1898 */
     if(a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL)return lc_status_word(a,dot);   /* #1322 */
     switch(a->screen){
     case SCREEN_LOGIN:return "ממתין לאימות";
@@ -193,10 +225,16 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
 /* mockup 10/10: the keys a screen lists are the keys main.c handle() acts on
  * there -- nothing it ignores. */
 static const char *status_keys(const App *a,char *buf,size_t n){
-    if(a->sdlg.kind)return "Tab / ← →  מעבר    Enter  הכפתור המסומן    Esc  דלג";   /* 16/10: the SMART window */
+    if(a->st.idle_poweroff_at>0)return "Esc  השאר דלוק    Enter  כבה עכשיו";   /* mockup 10: the idle window, over every screen */
+    if(a->sdlg.kind)return sdlg_notice(&a->sdlg)?"Enter / Esc  המשך"   /* #2017: the orange source's notice */
+                          :"Tab / ← →  מעבר    Enter  הכפתור המסומן    Esc  דלג";   /* 16/10: the SMART window */
     if(a->st.shrink_pending)return a->st.shrink_direct?"1  כווץ ושלח    2  שלח בלי כיווץ"   /* #1171 */
                                                       :"1  כווץ וקלוט    2  קלוט בלי כיווץ    3 / Esc  בטל קליטה";   /* #928 */
-    if(a->st.ask_pending)return a->st.ask_kind==ASK_GROWBACK?"1  החזר לגודל    2 / Esc  השאר":"1 / Esc  כבה    2  חזרה לתפריט";   /* 11/10 */
+    if(a->st.ask_pending)return a->st.ask_kind==ASK_GROWBACK?"1  החזר לגודל    2 / Esc  השאר"
+                               :a->st.ask_kind==ASK_RAID?"1  כתוב ומחק את המידע    2 / Esc  דלג על הדיסק"   /* #1808 */
+                               :a->st.ask_kind==ASK_SHARE?"1  אשר וכתוב    2 / Esc  דלג"                     /* #1898 */
+                               :a->st.ask_kind==ASK_BADSECT?"Enter / 1  המשך בכל זאת    2 / Esc  עצור"     /* #2017: Enter = the default */
+                               :"1 / Esc  כבה    2  חזרה לתפריט";   /* 11/10 */
     if(a->confirm)return "Enter  אישור    Esc  ביטול";   /* #1270: the confirm dialog */
     if(a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL)return lc_status_keys(a);   /* #1322 */
     if(a->cdlg.open)return a->cdlg.picker?"↑ ↓  בחירת דיסק    Del  בטל את הדיסק    Esc  המשך לכתוב"
@@ -220,7 +258,7 @@ static const char *status_keys(const App *a,char *buf,size_t n){
         if(!a->st.smart_pending){   /* #1386: the drawers' own numbers cancel them */
             CancelPick p[MAX_CANCEL_PICKS]; int k=cloner_cancel_picks(a,p,MAX_CANCEL_PICKS); size_t u=0; buf[0]=0;
             for(int i=0;i<k&&u+8<n;i++)if(p[i].drawer>0&&p[i].drawer<10)u+=snprintf(buf+u,n-u,"%s%d",u?" / ":"",p[i].drawer);
-            if(!u)return "אין פעולה במסך הזה";
+            if(!u)return a->st.end_kind!=END_NONE&&a->st.end_held?"Enter  כיבוי":"אין פעולה במסך הזה";   /* #2081: the held end's button */
             snprintf(buf+u,n-u,"  בטל דיסק…");
             return buf;
         }
@@ -237,14 +275,14 @@ static const char *status_keys(const App *a,char *buf,size_t n){
         return a->pick_in_folder   /* owner 10/10: folder-first */
         ? "1–9 / [ ]  בחירת אימג'    Esc / Backspace  לתיקיות    Enter  מחק ושחזר…"
         : "1–9  בחירת תיקייה    Enter  מחק ושחזר…    Esc  חזרה";
-    case SCREEN_STANDBY:return "אין פעולה במסך הזה";   /* "דיסקים: 1 · 2 · 3 SMART" sat where keys go */
+    case SCREEN_STANDBY:return standby_back_locked(a)?"אין פעולה במסך הזה":"Esc  חזרה למסך הבחירה";   /* #2079 */   /* "דיסקים: 1 · 2 · 3 SMART" sat where keys go */
     case SCREEN_PICK:return a->chosen_disk>=0?"Tab / Shift-Tab  מעבר    Alt+Shift  שפה    Enter  התחלה    Esc  חזרה":"Esc  חזרה";   /* #1245 */
     case SCREEN_CLASS:return a->st.has_session?"Enter  התחל עכשיו":"Esc  חזרה";
     case SCREEN_DONE:return "Enter  קליטה נוספת";
     case SCREEN_PROGRESS:return "אין פעולה במסך הזה";   /* mockup 10/10: it said "Esc חזרה" and Esc did nothing */
     case SCREEN_TOOLS:return a->tools_view==TOOLS_CONFIRM?"Tab / Shift-Tab  מעבר    Esc  חזרה":"Esc  חזרה";
     case SCREEN_INSTALL:return "Tab / Shift-Tab  מעבר    Enter  אישור    Esc  חזרה";
-    case SCREEN_FAILURE:return a->fail_open?"Enter  סגירת הפרטים הטכניים":"Enter  פרטים טכניים";   /* #1569 */
+    case SCREEN_FAILURE:{static char k[96];if(!a->st.nfail_btns)return "";snprintf(k,sizeof k,"Enter  %s",a->st.fail_btns[0].label);return k;}   /* #2068: the first button */
     default:return "אין פעולה במסך הזה";   /* message: there is no way out to offer */
     }
 }
@@ -561,15 +599,60 @@ static void draw_state_warning(App *a,cairo_t *cr,double W,double H){
     Rect b={(W-v.w-32)/2,H-N_STATUS_H-36,v.w+32,28};draw_fill_rrect(cr,b,t->radius,t->warning_soft);draw_border_rrect(cr,b,t->radius,t->warn,1);text_draw(cr,&v,b.x+16,b.y+(b.h-v.h)/2,t->warn);text_free(&v);
 }
 
-/* #434: the power-off countdown, over every screen: the agent found nobody
- * here for IDLE_POWEROFF_S; any key cancels (the GUI emits "touch"). */
+/* mockup 10 (#1858, Nadav 24/10): a cloner drawer whose disk is known to stop the BIOS on F1 --
+ * SMART red because its health failed or could not be read (#2078). Nothing else is a reason to
+ * name F1: "מאושר רק אם אנחנו יודעים שיש F1 לדיסק". 1 = found, its drawer and model in d. */
+static int app_f1_disk(const App *a,const IdleDisk **d){
+    for(int i=0;i<a->st.nidisks;i++){const IdleDisk *x=&a->st.idisks[i];
+        if(strcmp(x->smart,"fail"))continue;
+        if(!x->cause[0]||!strcmp(x->cause,"health_failed")||!strcmp(x->cause,"health_unread")){if(d)*d=x;return 1;}}
+    return 0;
+}
+
+/* #434 / mockup 10: the power-off window, over every screen: the agent found nobody here for
+ * IDLE_POWEROFF_S. Any key keeps the machine on (the GUI emits "touch"); Enter or "כבה עכשיו"
+ * powers off now (idle-poweroff). A drawer with a disk that stops the BIOS on F1 says so. */
 static void draw_idle_countdown(App *a,cairo_t *cr,double W,double H){
     if(a->st.idle_poweroff_at<=0)return;
-    long long left=a->st.idle_poweroff_at-(long long)time(NULL); if(left<0)left=0;
-    char msg[160];snprintf(msg,sizeof msg,"אין פעילות — המחשב יכבה בעוד %lld שניות · כל מקש מבטל",left);
     const Theme *t=a->theme;
-    Text v=text_make(cr,FONT_SANS,14,600,msg,0,DIR_RTL);
-    Rect b={(W-v.w-40)/2,H-N_STATUS_H-80,v.w+40,40};draw_fill_rrect(cr,b,t->radius,t->warning_soft);draw_border_rrect(cr,b,t->radius,t->warn,2);text_draw(cr,&v,b.x+20,b.y+(b.h-v.h)/2,t->warn);text_free(&v);
+    long long left=a->fixed_clock?30:a->st.idle_poweroff_at-(long long)time(NULL); if(left<0)left=0;
+    cairo_rectangle(cr,0,N_HEADER_H,W,H-N_HEADER_H-N_STATUS_H);draw_set_a(cr,(Rgb){0,0,0},.35);cairo_fill(cr);
+    char ttl[96],sub[160],f1[400];
+    snprintf(ttl,sizeof ttl,"המחשב ייכבה בעוד %lld שניות",left);
+    int m=a->st.idle_poweroff_s/60;
+    if(m>0)snprintf(sub,sizeof sub,"%d דקות בלי פעילות. כל מקש משאיר אותו דלוק.",m);
+    else snprintf(sub,sizeof sub,"אין פעילות במחשב. כל מקש משאיר אותו דלוק.");
+    const IdleDisk *fd=NULL;int f1on=app_f1_disk(a,&fd);
+    double bw=fmin(560,W-48),in=bw-2*24;
+    Text tt=text_make(cr,FONT_SANS,18,600,ttl,(int)in,DIR_RTL),ts=text_make(cr,FONT_SANS,13,400,sub,(int)in,DIR_RTL);
+    Text fh={0},fb={0};
+    if(f1on){
+        char drw[32];if(fd->drawer>0)snprintf(drw,sizeof drw,"במגירה %d",fd->drawer);else snprintf(drw,sizeof drw,"במחשב");
+        snprintf(f1,sizeof f1,"%s יש דיסק שה-BIOS עוצר עליו: \u2066%s\u2069, \u200fSMART אדום. הוציאו אותו לפני ההדלקה הבאה, או לחצו F1 ליד המחשב כשהוא נדלק.",drw,fd->model[0]?fd->model:"דיסק");
+        fh=text_make(cr,FONT_SANS,13,700,"בהדלקה הבאה ה-BIOS יעצור על F1",(int)(in-24-36),DIR_RTL);
+        fb=text_make(cr,FONT_SANS,12.5,400,f1,(int)(in-24-36),DIR_RTL);
+    }
+    double fbh=f1on?12+fh.h+4+fb.h+12:0;
+    double h=24+tt.h+6+ts.h+(f1on?14+fbh:0)+18+38+22;
+    Rect b={(W-bw)/2,N_HEADER_H+(H-N_HEADER_H-N_STATUS_H-h)/2,bw,h};
+    draw_fill_rrect(cr,b,t->radius,t->surface);draw_border_rrect(cr,b,t->radius,t->hair,1);
+    double y=b.y+24,xr=b.x+b.w-24;
+    text_draw_r(cr,&tt,xr,y,t->ink);y+=tt.h+6;text_draw_r(cr,&ts,xr,y,t->muted);y+=ts.h;
+    if(f1on){
+        y+=14;Rect fr={b.x+24,y,in,fbh};
+        draw_fill_rrect(cr,fr,RADIUS_SM,t->warning_soft);draw_border_rrect(cr,fr,RADIUS_SM,t->warn,1);
+        double cx=fr.x+fr.w-12-10,cy=fr.y+12+10;
+        cairo_arc(cr,cx,cy,10,0,2*M_PI);draw_set(cr,t->warn);cairo_fill(cr);
+        Text ex=text_make(cr,FONT_SANS,13,700,"!",0,DIR_LTR);text_draw(cr,&ex,cx-ex.w/2,cy-ex.h/2,t->on_ink);text_free(&ex);
+        text_draw_r(cr,&fh,fr.x+fr.w-12-24,fr.y+12,t->warn);text_draw_r(cr,&fb,fr.x+fr.w-12-24,fr.y+12+fh.h+4,t->ink);
+        y+=fbh;text_free(&fh);text_free(&fb);
+    }
+    y+=18;   /* the buttons at the end (left): "השאר דלוק" the primary, "כבה עכשיו" beside it */
+    double kw=lc_btn_width(cr,"השאר דלוק","Esc"),ow=lc_btn_width(cr,"כבה עכשיו","Enter");
+    double r=b.x+24+ow+10+kw;
+    lc_btn(a,cr,r,y,38,"השאר דלוק","Esc",BTN_PRIMARY,HIT_IDLE_KEEP,0);
+    lc_btn(a,cr,b.x+24+ow,y,38,"כבה עכשיו","Enter",BTN_PLAIN,HIT_IDLE_OFF,0);
+    text_free(&tt);text_free(&ts);
 }
 
 /* #1270 (owner, 10/10): no typed-word confirmation anywhere. A destructive
@@ -679,7 +762,7 @@ double ui_scale(int H){double s=floor(H/800.0*4)/4;return s<1?1:s>1.4?1.4:s;}
 
 /* The screen in logical pixels: W x H = the framebuffer / a->scale. */
 static void app_draw_logical(App *a,cairo_t *cr,double W,double H){
-    a->nhits=0;a->clip_on=0;app_route(a);draw_station_background(cr,a->theme,W,H);
+    a->nhits=0;a->clip_on=0;a->end_off_own=0;app_route(a);draw_station_background(cr,a->theme,W,H);
     if(a->screen==SCREEN_INSTALL){screen_install(a,cr,W,H);return;}
     double head_h=a->screen==SCREEN_LOGIN?0:draw_header(a,cr,W);
     switch(a->screen){
@@ -703,17 +786,32 @@ static void app_draw_logical(App *a,cairo_t *cr,double W,double H){
     draw_state_warning(a,cr,W,H);draw_idle_countdown(a,cr,W,H);
     draw_shrink_dialog(a,cr,W,H);   /* #928: modal, over every screen but the status bar */
     draw_ask_dialog(a,cr,W,H);      /* 11/10: the agent's question, the same way */
+    if(a->screen==SCREEN_RESTORE)draw_syspart_dialog(a,cr,W,H);   /* #1896: the C: picker */
     draw_confirm_dialog(a,cr,W,H);  /* #1270 */
     sdlg_draw(a,cr,W,H);            /* 16/10: the SMART warning window -- over all of them */
     cdlg_draw(a,cr,W,H);            /* #1386: "בטל דיסק זה" */
     draw_end_dialog(a,cr,W,H);      /* #1560: the end-of-task count to power-off -- the last word */
+    draw_power_dialog(a,cr,W,H);    /* #1918: the power button during a write -- over all of them */
     draw_status(a,cr,W,H);draw_toast(a,cr,W,H);
     draw_theme_toggle(a,cr,W,head_h);   /* #1499: last -- over every screen and dialog, and its hit wins */
 }
 
 /* mockup 10/10 / audit finding 4: one factor for the whole screen, so a
  * 1080p screen is not a 1024x768 layout with more empty space. */
+static DcuiFrame usbset_f;   /* #1914: the USB stick's settings frame, as last drawn */
+int app_usbset_window(const App *a){
+    return a->screen==SCREEN_LOCAL&&a->st.lc.screen==LC_SCREEN_USBSET&&usbset_f.valid&&usbset_f.dialog&&!strcmp(usbset_f.dlg_kind,"map");
+}
 void app_draw(App *a,cairo_t *cr,int W,int H){
+    app_route(a);   /* #1914: this frame's screen, before the choice below */
+    if(a->screen==SCREEN_LOCAL&&a->st.lc.screen==LC_SCREEN_USBSET&&a->tools_dir[0]){
+        /* #1914 (Nadav 20/10): the USB stick's settings ARE the server's settings screen (screens_dcui.c
+           settings_body/dialog); only the data differs -- <GUI_DIR>/usbset.frame, written by lcgui.sh */
+        DcuiFrame *f=&usbset_f;char path[600];snprintf(path,sizeof path,"%s/usbset.frame",a->tools_dir);
+        if(dcui_load(f,path)==0){a->nhits=0;
+            snprintf(f->lang_chip,sizeof f->lang_chip,"%s",a->lang_he?"עב":"EN");   /* #2001: the name's typing language (Alt+Shift) */
+            dcui_draw(f,a->theme,cr,W,H);return;}
+    }
     double s=ui_scale(H);a->scale=s;
     cairo_save(cr);cairo_scale(cr,s,s);
     app_draw_logical(a,cr,W/s,H/s);

@@ -182,7 +182,7 @@ def declared_subdirs() -> list[str]:
         names += code.split(")", 1)[0].split()
         if closed:
             break
-    assert len(names) == 22, names   # #1441: + kernel/drivers/cpufreq
+    assert len(names) == 23, names   # #1441: + kernel/drivers/cpufreq; #1914: + kernel/drivers/pci/controller (vmd)
     return names
 
 
@@ -263,7 +263,8 @@ def run_firmware(tmp_path: Path, dirs: list[str], present: list[str]):
         (fw / name / f"{name}.fw").write_bytes(b"blob")
     # only the source side (`"/lib/firmware/$fw"`), not `$ROOT/lib/firmware`
     snippet = firmware_snippet().replace('"/lib/firmware/', '"' + bash_path(fw) + "/")
-    done = run(tmp_path, f"ROOT={bash_path(root)!r}\nFIRMWARE_DIRS=({' '.join(dirs)})\n{snippet}\n")
+    # RADEON_LEGACY_FW: declared 0 at the script's top (#1937); the region reads it under set -u
+    done = run(tmp_path, f"ROOT={bash_path(root)!r}\nFIRMWARE_DIRS=({' '.join(dirs)})\nRADEON_LEGACY_FW=0\n{snippet}\n")
     return done, root
 
 

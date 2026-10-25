@@ -1,0 +1,26 @@
+# hw-issues.tsv -- the hardware table: cable, drawer, controller (never the disk's colour)
+# #1921 (Nadav 20/10, final). One row a line, TAB-separated, '-' = empty. Read by the agent
+# (agent/lib/smartjudge.sh, awk) and by the server (server/smart_names.py) -- the same file.
+# kind: ata (id + the name smartctl printed) | devstat | nvme | nvmebit | selftest | errlog | hw
+# field: raw | value (normalized) | temp (raw degrees C) ; op/value: the rule, '-' = none (info)
+# value 'crc' = the crc_warn_threshold setting (default 500); 'wctemp' = the NVMe disk's own WCTEMP
+# verdict when the rule holds: orange | red | hw | info ; a name in neither table = 'לא מוכר'
+# word: the reason word the agent stores (smart.sh SMART_WARN_REASONS) ; media: ssd|hdd|any
+hw	link_slow	drawer	-	-	-	hw	link_slow	any	מהירות קישור שירדה	הקישור למגירה איטי ממה שהבקר והדיסק תומכים בו — כבל או מגירה, לא הדיסק
+hw	link_reset	drawer	-	-	-	hw	link_reset	any	קישור שמתאפס	הקישור למגירה התאפס — כבל או מגירה, לא הדיסק
+hw	drawer_gone	drawer	-	-	-	hw	drawer_gone	any	מגירה שמתנתקת	המגירה התנתקה בזמן העבודה — מגירה או כבל, לא הדיסק
+hw	usb2	drawer	-	-	-	hw	usb2	any	USB 2.0	מחובר ב-USB 2.0 — איטי; לחבר ליציאת USB 3
+hw	ide	machine	-	-	-	hw	ide	any	בקר במצב IDE	הבקר במצב IDE — שינוי ל-AHCI ב-BIOS יכפיל בערך את המהירות
+hw	icrc_logged	drawer	-	-	-	hw	icrc_logged	any	שגיאת CRC ביומן הדיסק	הדיסק רשם ביומן השגיאות שלו שגיאת CRC בממשק — כבל או מגירה חשודים, לא הדיסק
+hw	crc	drawer	-	-	-	hw	crc	any	שגיאות CRC	שגיאות CRC רבות בקישור — כבל או מגירה חשודים, לא הדיסק
+ata	199	UDMA_CRC_Error_Count	raw	>	crc	hw	crc	any	שגיאות CRC	נתונים שהשתבשו בדרך בכבל — כמעט תמיד כבל או מגירה, לא הדיסק.
+ata	199	CRC_Error_Count	raw	>	crc	hw	crc	any	שגיאות CRC	נתונים שהשתבשו בדרך בכבל — כמעט תמיד כבל או מגירה, לא הדיסק.
+ata	199	SATA_CRC_Error_Count	raw	>	crc	hw	crc	any	שגיאות CRC	נתונים שהשתבשו בדרך בכבל — כמעט תמיד כבל או מגירה, לא הדיסק.
+ata	199	SATA_CRC_Error	raw	>	crc	hw	crc	any	שגיאות CRC	נתונים שהשתבשו בדרך בכבל — כמעט תמיד כבל או מגירה, לא הדיסק.
+ata	199	SATA_FIS_CRC_Errors	raw	>	crc	hw	crc	any	שגיאות CRC	נתונים שהשתבשו בדרך בכבל — כמעט תמיד כבל או מגירה, לא הדיסק.
+ata	210	SATA_CRC_Error_Count	raw	>	crc	hw	crc	any	שגיאות CRC	שגיאות CRC בכבל (OCZ/Toshiba).
+ata	218	CRC_Error_Count	raw	>	crc	hw	crc	any	שגיאות CRC	שגיאות CRC בכבל (Phison, Seagate SSD).
+ata	218	SATA_CRC_Error_Count	raw	>	crc	hw	crc	any	שגיאות CRC	שגיאות CRC בכבל (Phison, Seagate SSD).
+ata	218	CRC_Errors	raw	>	crc	hw	crc	any	שגיאות CRC	שגיאות CRC בכבל (Phison, Seagate SSD).
+devstat	-	Number of Interface CRC Errors	value	>	crc	hw	crc	any	שגיאות CRC	אותו מונה כמו 199.
+errlog	-	ICRC	-	has	-	hw	icrc_logged	any	שגיאת CRC ביומן הדיסק	שגיאה מסוג ICRC ביומן השגיאות של הדיסק — כבל או מגירה, לא הדיסק.

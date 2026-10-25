@@ -48,9 +48,9 @@ from fastapi.responses import JSONResponse
 from . import dhcp, netcfg_rollback
 from .db import get_setting, journal, set_setting, set_settings
 
-SERVICES = ("console", "monitor", "multicast", "netboot", "interserver")
+SERVICES = ("console", "monitor", "multicast", "netboot", "interserver", "ntp")
 SERVICES_HE = {"console": "קונסולה", "monitor": "מוניטור", "multicast": "שידור",
-               "netboot": "אתחול מהרשת", "interserver": "בין-שרתים"}
+               "netboot": "אתחול מהרשת", "interserver": "בין-שרתים", "ntp": "שרת זמן"}
 #: מה שמאזין של התהליך נקשר אליו לכל שירות (`plan`).
 LISTENER_OF = {"console": "http_console", "netboot": "http_boot",
                "interserver": "interserver"}
@@ -411,7 +411,7 @@ class NicServices:
         """שלושת שלבי האכיפה, כל אחד נאמר בנפרד. ריק = הכול הוחל."""
         errors = []
         for key, label in (("listeners", "מאזינים"), ("dnsmasq", "אתחול מהרשת (dnsmasq)"),
-                           ("firewall", "חומת אש")):
+                           ("timesync", "שרת זמן (chrony)"), ("firewall", "חומת אש")):
             step = self.hooks.get(key)
             if step is None:
                 errors.append(f"{label}: אין מנגנון אכיפה בתהליך הזה")

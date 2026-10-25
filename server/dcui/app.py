@@ -22,6 +22,7 @@ MENU_ITEMS = (
     "Restart Services",
     "Display TLS Certificate",
     "Primary-Visible Address",
+    "Add Disk",                       # #1988
 )
 
 
@@ -271,6 +272,9 @@ def render_menu(snapshot: Snapshot, selected: int = 0, seconds: int = 90) -> lis
         ("Display TLS Certificate", "Shows SHA-256, certificate SANs and", "the not-after date read from the cert."),
         ("Primary-Visible Address", "The address at which the primary", "server reaches this secondary (port",
          "8443); behind NAT, the outside one.", "F4 shows it on the pairing screen."),
+        ("Add Disk", "An EMPTY disk in this server becomes", "an image storage location: GPT, ext4,",
+         "mounted by UUID (fstab, nofail).", "Only disks with no partition table,",
+         "no signature and zeroed head/tail.", "ALL DATA ON THE DISK IS ERASED."),
     )
     for row, line in enumerate(descriptions[selected], start=4):
         canvas.put(row, 38, line, 39)
@@ -376,6 +380,50 @@ def render_message(title: str, message: str, details: tuple[str, ...] = (),
     canvas.put(6, 5, message, 68)
     for index, detail in enumerate(details[:8]):
         canvas.put(8 + index, 7, detail, 66)
+    return canvas.lines()
+
+
+def _disk_line(disk: dict) -> str:
+    size = disk.get("size_bytes")
+    gb = f"{size / 1e9:.0f} GB" if isinstance(size, int) else "size ?"
+    return f"{disk.get('device', '?'):<14} {gb:>8}  {(disk.get('model') or '')[:20]:<20} {disk.get('serial') or ''}"
+
+
+def render_disks(listing: dict | None, selected: int = 0, seconds: int = 90,
+                 message: str = "") -> list[str]:
+    """#1988: the empty disks (selectable) and the others with the reason."""
+    canvas = Canvas(_title("Add Disk", f"admin  (auto-logout in {seconds} s)"),
+                    "<Up/Down> Select  <Enter> Continue  <F5> Re-read  <Esc> Back")
+    if listing is None:
+        canvas.put(5, 4, "The disk list could not be read - this is NOT 'no empty disk'.", 72)
+        canvas.put(7, 4, message, 72)
+        return canvas.lines()
+    items, hidden = listing.get("items") or [], listing.get("hidden") or []
+    canvas.put(3, 3, "Empty disks (no partition table, no signature, zeroed head/tail):")
+    if not items:
+        canvas.put(5, 5, "No empty disk was found in this server.")
+    for index, disk in enumerate(items[:6]):
+        canvas.put(5 + index, 3, ("> " if index == selected else "  ") + _disk_line(disk), 74)
+    canvas.put(12, 3, f"Not offered ({len(hidden)}):")
+    for index, disk in enumerate(hidden[:6]):
+        reason = disk.get("reason") or ""
+        reason = reason if reason.isascii() else "has data or could not be read"
+        canvas.put(13 + index, 5, f"{disk.get('device', '?'):<14} {reason}", 72)
+    canvas.put(20, 3, message or "Nothing is changed until you confirm on the next screen.", 74)
+    return canvas.lines()
+
+
+def render_disk_confirm(disk: dict, seconds: int = 90, focus: str = "cancel") -> list[str]:
+    canvas = Canvas(_title("Add Disk - confirm", f"admin  (auto-logout in {seconds} s)"),
+                    "<Tab> Switch button  <Enter> Run marked button  <Esc> Cancel")
+    canvas.put(5, 4, "WARNING: ALL DATA ON THIS DISK WILL BE ERASED.")
+    canvas.put(7, 6, _disk_line(disk), 70)
+    canvas.put(9, 4, "The server will: create a GPT with one partition, make ext4,")
+    canvas.put(10, 4, "mount it by UUID (/etc/fstab, nofail), and check a written file")
+    canvas.put(11, 4, "reads back. A failure is shown and no location is left behind.")
+    cancel = ">> <Cancel>" if focus != "act" else "   <Cancel>"
+    act = ">> <Erase and add>" if focus == "act" else "   <Erase and add>"
+    canvas.put(14, 6, f"{cancel}    {act}", 60)
     return canvas.lines()
 
 
@@ -515,6 +563,12 @@ class Runtime:
     pair_error: str = ""
     paired: dict = field(default_factory=dict)
     advert: str = ""
+    # #1988: "Add Disk" -- the listing read on entry (None = not read, with
+    # the reason in message), the selected row and the confirm focus.
+    storage_hooks: dict | None = None
+    disks: dict | None = None
+    disk_index: int = 0
+    disk_focus: str = "cancel"
 
     def seconds(self, now: float) -> int:
         return max(0, actions.AUTH_IDLE_SECONDS - int(now - self.last_key_at))
@@ -586,6 +640,10 @@ def _current_lines(runtime: Runtime, now: float) -> list[str]:
                              if runtime.conn is not None else "")
     if runtime.screen == "advertised":
         return render_advertised(runtime.advert, seconds, runtime.message)
+    if runtime.screen == "disk":
+        return render_disks(runtime.disks, runtime.disk_index, seconds, runtime.message)
+    if runtime.screen == "disk_confirm" and _chosen_disk(runtime):
+        return render_disk_confirm(_chosen_disk(runtime), seconds, runtime.disk_focus)
     result = runtime.result or actions.ActionResult(False, runtime.message or "No result.")
     return render_message("Action Result", result.message, result.details, seconds)
 
@@ -708,6 +766,44 @@ def _open_menu_item(runtime: Runtime) -> None:
         current = pairing.advertised(runtime.conn)
         runtime.advert = current.removeprefix("https://")
         runtime.screen = "advertised"
+    elif item == 5:
+        _load_disks(runtime)
+        runtime.screen = "disk"
+
+
+def _load_disks(runtime: Runtime) -> None:
+    runtime.disks, failure = actions.blank_disks(runtime.storage_hooks)
+    runtime.disk_index, runtime.disk_focus = 0, "cancel"
+    runtime.message = failure.message if failure else ""
+    runtime.result = failure
+
+
+def _chosen_disk(runtime: Runtime) -> dict | None:
+    items = (runtime.disks or {}).get("items") or []
+    return items[runtime.disk_index] if 0 <= runtime.disk_index < len(items) else None
+
+
+def _disk_key(runtime: Runtime, key: object, enter: bool, curses_module) -> None:
+    if runtime.screen == "disk":
+        count = len((runtime.disks or {}).get("items") or [])
+        if key == curses_module.KEY_F5:
+            _load_disks(runtime)
+        elif key == curses_module.KEY_UP and count:
+            runtime.disk_index = (runtime.disk_index - 1) % count
+        elif key == curses_module.KEY_DOWN and count:
+            runtime.disk_index = (runtime.disk_index + 1) % count
+        elif enter and _chosen_disk(runtime):
+            runtime.screen, runtime.disk_focus, runtime.message = "disk_confirm", "cancel", ""
+        return
+    if key in (9, "\t", curses_module.KEY_BTAB, curses_module.KEY_LEFT, curses_module.KEY_RIGHT):
+        runtime.disk_focus = "act" if runtime.disk_focus == "cancel" else "cancel"
+    elif enter and runtime.disk_focus == "act" and _chosen_disk(runtime):
+        runtime.result = actions.add_disk(runtime.conn, runtime.data_dir, _chosen_disk(runtime),
+                                          runtime.storage_hooks)
+        runtime.screen, runtime.disks = "result", None
+    elif enter:
+        # the focus starts on Cancel -- a stray <Enter> erases nothing
+        runtime.screen, runtime.message = "disk", "Cancelled; nothing was erased."
 
 
 #: Never logged out after 90 s: no admin session behind them, and the code
@@ -958,6 +1054,8 @@ def _handle_key(runtime: Runtime, key: object, curses_module) -> bool:
             # #1203: the focus starts on Cancel -- a stray <Enter> runs nothing.
             runtime.screen = "main"
             runtime.message = "Restart/shutdown cancelled; nothing was done."
+    elif runtime.screen in {"disk", "disk_confirm"}:
+        _disk_key(runtime, key, enter, curses_module)
     elif runtime.screen in {"result", "tls"} and enter:
         runtime.screen = "menu"
     return True

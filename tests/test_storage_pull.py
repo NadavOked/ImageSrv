@@ -82,7 +82,7 @@ def paired(server, secondary, tmp_path):
     cred_path = cred_dir / f"{result['secondary_id']}.token"
     interserver_auth.write_credential_0600(cred_path, result["token"])
     nid = storage_nodes.enroll_node(
-        server["ctx"].conn, ("noc", "admin"), label="חיפה", base_url=url,
+        server["ctx"].conn, ("noc", "admin"), label="HAIFA", base_url=url,
         node_id=result["secondary_id"], pinned_spki=secondary["ident"]["server_spki"],
         client_cert_ref=interserver_auth.certificate_ref(ident["cert_pem"]),
         credential_ref=str(cred_path), protocol_version="2.1")
@@ -640,4 +640,37 @@ def test_secondary_manifest_cannot_write_outside_incoming(
     root = Path(server["ctx"].library.root)
     assert not (root / "escape.bin").exists()
     assert not (root.parent / "escape.bin").exists()
+    assert PULL_ID not in server["ctx"].library.scan()
+
+
+def test_a_secondary_manifest_that_fails_validate_is_refused_before_any_byte(
+        server, secondary, paired, monkeypatch):
+    """‏#1627, החצי השני של "גמור": מניפסט המשני עובר `ImageLibrary._validate`
+    **לפני** ההורדה. שמות הקבצים כאן תקינים — רק `family` פסול — ולכן השומר
+    על `file` לבדו אינו עוצר אותו; בלי `_validate` ההורדה מתחילה."""
+    write_image(secondary["root"], PULL)
+    real_get_json = storage_client.PinnedMTLSClient.get_json
+
+    def tampered(self, path, token, *a, **kw):
+        answer = real_get_json(self, path, token, *a, **kw)
+        if path.endswith("/manifest") and isinstance(answer, dict):
+            answer = {**answer, "family": 999}
+        return answer
+
+    dests: list[Path] = []
+
+    def recording(self, path, token, dest, **kw):
+        dests.append(Path(dest))
+        raise AssertionError("get_stream before the manifest was validated")
+
+    monkeypatch.setattr(storage_client.PinnedMTLSClient, "get_json", tampered)
+    monkeypatch.setattr(storage_client.PinnedMTLSClient, "get_stream", recording)
+    admin = server["admin"]
+    resp = admin.post(f"/api/console/storage-nodes/{paired}/pull",
+                      json={"image_id": PULL_ID})
+    assert resp.status_code == 200, resp.text
+    row = _wait(admin, paired, resp.json()["id"])
+    assert row["state"] == "failed", row
+    assert "מניפסט המשני נפסל" in row["error"] and "family" in row["error"], row["error"]
+    assert dests == []
     assert PULL_ID not in server["ctx"].library.scan()

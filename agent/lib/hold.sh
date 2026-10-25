@@ -65,6 +65,44 @@ hold_new_task() {
     HOLD_YIELD_TASK=""; HOLD_PROMPT=""
 }
 
+# --- #2031: the end-of-task hold (idle.sh end_countdown, #2024), said ---------
+# A cloner holding its results until "כבה" sends no hello: a "seen" cloner
+# would join no wave, yet stop #1721's re-wake from failing the round by name.
+# Without a word, though, the console drew it "not connected". So a light
+# report on the progress path, with no session and no task --
+# {"mac","state":"held","problems":[{disk,level,reason}]} from end.problems --
+# every HELD_BEAT_S (the idle poll's ceiling, POLL_MAX). The server keeps it
+# as a sign of life (progress_seen), never as last_seen, and answers with the
+# console's power_action: kept in power.resp, as attended_keep does, for the
+# hold loop's attended_power_check. A failed report is not retried faster.
+HELD_BEAT_S="${HELD_BEAT_S:-15}"
+
+held_report() {
+    [ -n "${SERVER:-}" ] && [ -n "${MAC:-}" ] || return 1
+    { cat "$RUN_DIR/end.problems" 2>/dev/null || :; } | jq -Rn --arg mac "$MAC" \
+        '{mac: $mac, state: "held", problems: [inputs | split("|") | select(length >= 3)
+          | {disk: .[0], level: .[1], reason: (.[2:] | join("|"))}]}' > "$RUN_DIR/held.json" || return 1
+    http_post_json "$SERVER/api/v1/agent/progress" "$RUN_DIR/held.json" > "$RUN_DIR/held.resp" || return 1
+    case "$(jq -r '.power_action // empty' "$RUN_DIR/held.resp" 2>/dev/null)" in
+        poweroff|reboot) cp "$RUN_DIR/held.resp" "$RUN_DIR/power.resp.next" && mv "$RUN_DIR/power.resp.next" "$RUN_DIR/power.resp" ;;
+    esac
+}
+
+held_beat_start() {
+    # One beat, started once per hold; every descriptor to /dev/null (attended_start).
+    [ -z "${HELD_PID:-}" ] || return 0
+    _hb_s=$(attended_secs HELD_BEAT_S "$HELD_BEAT_S" 15); _hb_agent=$$
+    (
+        while kill -0 "$_hb_agent" 2>/dev/null; do   # #1929: no orphan beat for a dead agent
+            held_report || :
+            sleep "$_hb_s"
+        done
+    ) < /dev/null > /dev/null 2>&1 &
+    HELD_PID=$!
+}
+
+held_beat_stop() { [ -n "${HELD_PID:-}" ] || return 0; kill "$HELD_PID" 2>/dev/null; HELD_PID=""; }
+
 hold_watch() {
     # $1 = the heartbeat command, or "" for a hold whose caller deliberately
     # left its progress loop running instead. Returns only through
@@ -124,6 +162,48 @@ hold_watch() {
                 fi
             fi
         fi
-        sleep "$HOLD_BEAT_S"
+        _hw_t=0   # #2068: the screen's buttons, every second between two beats
+        while [ "$_hw_t" -lt "$HOLD_BEAT_S" ]; do
+            hold_action; _hw_a=$?
+            [ "$_hw_a" = 0 ] && return 0; [ "$_hw_a" = 2 ] && break
+            sleep 1; _hw_t=$((_hw_t + 1))
+        done
     done
+}
+
+# --- #2068 (Nadav 24/10): the failure screen's buttons --------------------------
+# "A failure screen does with what can be done without going to another screen."
+# The GUI leaves fail.action (its first line, the action) next to its state file,
+# as power.press (powerbtn.sh); the agent decides. Its result, when it has one to
+# say, is one more line on the same screen (fail_note) -- never silence.
+fail_note() {
+    [ -s "$RUN_DIR/fail.state" ] || return 0
+    printf 'fail_step=%s
+' "$1" >> "$RUN_DIR/fail.state"
+}
+
+hold_action() {
+    # 0 = leave the hold (standby), 2 = beat now, 1 = nothing / stay.
+    mv "${GUI_DIR:-$RUN_DIR/gui}/fail.action" "$RUN_DIR/fail.action.taken" 2>/dev/null || return 1
+    _ha=$(head -n 1 "$RUN_DIR/fail.action.taken" | tr -d '
+')
+    log "failure screen: '$_ha' pressed"
+    case "$_ha" in
+        off) safe_poweroff "failure screen: power off" ||
+                 fail_note "המחשב לא כובה: Wake-on-LAN לא נדרך בכרטיס הרשת. כבו אותו בכפתור ההפעלה." ;;
+        retry|reboot) sync; reboot -f ;;
+        beat) return 2 ;;
+        standby) [ "${D_ROLE:-}" = cloner ] || { log "failure screen: 'standby' is a cloner's only"; return 1; }
+              rm -f "$RUN_DIR/fail.state"; HOLD_PROMPT=""; return 0 ;;
+        smart) _ha_d=$(for _ha_t in "$RUN_DIR"/targets/*/; do [ -d "$_ha_t" ] && { _ha_t=${_ha_t%/}; echo "${_ha_t##*/}"; break; }; done)
+               if [ -z "$_ha_d" ] || ! command -v smart_probe >/dev/null 2>&1; then fail_note "SMART של דיסק המקור לא נבדק."
+               else _ha_v=$(smart_probe "$_ha_d"); case "$_ha_v" in
+                   ok) fail_note "SMART של דיסק המקור תקין." ;;
+                   *) fail_note "דיסק המקור: $(smart_why_he "$_ha_v" "$(smart_field "$_ha_d" 2)")." ;; esac; fi ;;
+        windows) _ha_b=$(boot_next_local 2>/dev/null); case "$_ha_b" in
+                     set:*) log "failure screen: BootNext $_ha_b -- rebooting to Windows"; sync; reboot -f ;;
+                     *) fail_note "אי אפשר לבחור מכאן את Windows (${_ha_b#*:}). כבו והדליקו, ובחרו בדיסק המקומי." ;; esac ;;
+        *) log "failure screen: an action this agent does not know ($_ha)" ;;
+    esac
+    return 1
 }

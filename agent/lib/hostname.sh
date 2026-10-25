@@ -32,6 +32,13 @@ _mount_windows() {
     # גם מחיצת OEM/נתונים שיושבת לפני C:, ו"הראשונה" היא אז מחיצה בלי
     # מערכת. נבחרת זו ש-Windows\System32 יושבת בה; אין כזו — הראשונה, כמו
     # קודם, והקורא אומר בשמו מה חסר (no_hive). מניפסט חדש: מועמדת אחת.
+    # ‏#1875: מחיצת המערכת (system_partition, diskfit.sh — הכלל של min-free)
+    # נבדקת ראשונה; עד כאן מחיצת ה-OEM הקטנה עוגנה לכתיבה לפני C:.
+    # לא נקבעה (מניפסט לא נקרא) = הסדר הקודם; הראיה למטה מכריעה בכל מקרה.
+    _sys=$(system_partition "$2") || { log "the system partition could not be read from $2" >&2; _sys=""; }
+    _rest=$(printf '%s\n' "$_idxs" | awk -v s="$_sys" '$1 != s')
+    [ "$_rest" = "$_idxs" ] || _idxs="$_sys
+$_rest"
     _first=""
     for _idx in $_idxs; do
         [ -n "$_first" ] || _first="$_idx"
@@ -92,14 +99,16 @@ write_hostname() {
     _disk="$1"; _manifest="$2"; _name="$3"
 
     case "$_name" in
-        *[!A-Za-z0-9-]*|"")
-            printf '{"ok":false,"error":"שם המחשב אינו תקין","code":"bad_hostname"}\n'
+        *[!A-Za-z0-9-]*|""|-*|*-)
+            # #1977: the name and the rule. #1997: the same rule as server/hostname_rule.py
+            # (a test compares them) -- a name registered before it ("עמדה 3") lands here.
+            printf '{"ok":false,"error":"%s","code":"bad_hostname"}\n' "$(json_escape "שם המחשב '$_name' אינו חוקי ב-Windows — מותרים אותיות אנגליות, ספרות ומקף בלבד, לא בהתחלה ולא בסוף")"
             return 1 ;;
     esac
     # NetBIOS caps names at 15 characters; a longer one is silently truncated
     # by Windows and the machine ends up with a name nobody expects.
     [ "${#_name}" -le 15 ] || {
-        printf '{"ok":false,"error":"שם המחשב ארוך מ-15 תווים","code":"bad_hostname"}\n'
+        printf '{"ok":false,"error":"%s","code":"bad_hostname"}\n' "$(json_escape "שם המחשב '$_name' ארוך מ-15 תווים — Windows היה מקצר אותו")"
         return 1
     }
 
@@ -196,6 +205,8 @@ _write_hostname_windows() {
                 Hostname 2>> "$LOG_FILE")
     _back_nv=$(hivewrite -g "$_hive" "$_cs\\Services\\Tcpip\\Parameters" \
                 "NV Hostname" 2>> "$LOG_FILE")
+    # #1976: a sysprepped image renames itself in specialize -- the answer file carries the name too.
+    sysprep_name "$_mnt" "$_name" "$_cs"; _sprc=$?
     _umount_checked "$_mnt"
     _umrc=$?
 
@@ -207,6 +218,10 @@ _write_hostname_windows() {
     fi
     if [ "$_umrc" -ne 0 ]; then
         printf '{"ok":false,"error":"לא הצלחנו לנתק את המחיצה אחרי עריכת הרג׳יסטרי","code":"umount_failed"}\n'
+        return 1
+    fi
+    if [ "$_sprc" -ne 0 ]; then
+        printf '{"ok":false,"error":"%s","code":"unattend_failed"}\n' "$(json_escape "השם נכתב לרג׳יסטרי, אך לא לקובץ התשובות של sysprep: ${UNATTEND_ERROR:-rc=$_sprc}")"
         return 1
     fi
     printf '{"ok":true,"hostname":"%s","method":"%s"}\n' "$_name" "$HOSTNAME_METHOD"
@@ -253,5 +268,4 @@ name_this_machine() {
         [ -s "$_errf" ] && _why="$(cat "$_errf") | $_why"
         target_set "$1" "done" "$_why"
     fi
-    echo "done" > "$RUN_DIR/state"
 }

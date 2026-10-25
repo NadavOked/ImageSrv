@@ -9,7 +9,7 @@ FB_DEV="${FB_DEV:-/dev/fb0}"
 # #839/#1077: the session secret. 5900 listens on the distribution address,
 # so the RFB handshake is the gate -- and the secret behind it is drawn
 # HERE, on the machine, reported in hello, and rewritten by imagectl-monitor
-# after every authenticated session. Direction matters: hello is
+# at every successful authentication (#1837). Direction matters: hello is
 # unauthenticated, so a secret the server handed out in its answer could be
 # fetched by anyone posting this machine's MAC. The reverse flow only lets
 # a rogue hello overwrite the row (monitor DoS until the next real hello),
@@ -68,12 +68,47 @@ _monitor_spawn() {
         done
     ' sh "$@" </dev/null >> "$LOG_FILE" 2>&1 &
     _monitor_pid=$!
+    echo "$_monitor_pid" > "$RUN_DIR/monitor.pid"   # #1849: the waiter spawns in a subshell
+}
+
+# #1849: a supervisor is up -- spawned here or by the background waiter.
+_monitor_alive() {
+    [ -n "${_monitor_pid:-}" ] && kill -0 "$_monitor_pid" 2>/dev/null && return 0
+    read -r _mpf < "$RUN_DIR/monitor.pid" 2>/dev/null &&
+        [ -n "$_mpf" ] && kill -0 "$_mpf" 2>/dev/null
+}
+
+# #1849: the main loop calls monitor_start once per hello round, and a round
+# whose answer is `restore`/`task` blocks in do_restore/do_task until the
+# work ends -- before the GUI it starts there has created fb.mem. So the
+# waiting is handed to one background waiter: it retries _monitor_launch
+# every second, up to MONITOR_FB_WAIT_S (0 = no waiter), and its pid sits in
+# a marker file so the main loop neither starts a second one nor spawns a
+# second supervisor beside it. No network, no hello: it only looks at a file.
+_monitor_waiter() {
+    _mw="$RUN_DIR/monitor.waiter"
+    _mw_cap=${MONITOR_FB_WAIT_S:-300}
+    case "$_mw_cap" in ''|*[!0-9]*) _mw_cap=300 ;; esac
+    [ "$_mw_cap" -gt 0 ] || return 0
+    (
+        _mw_t=0
+        while [ "$_mw_t" -lt "$_mw_cap" ]; do
+            sleep 1 || break
+            _mw_t=$((_mw_t + 1))
+            _monitor_launch && { rm -f "$_mw"; exit 0; }
+        done
+        log "monitor: no frame to serve ${_mw_cap}s after the first try; the next hello round tries again"
+        rm -f "$_mw"
+    ) </dev/null >/dev/null 2>&1 &
+    echo "$!" > "$_mw"
+    log "monitor: waiting in the background for the GUI's frame (up to ${_mw_cap}s)"
 }
 
 monitor_start() {
     [ "${IMAGECTL_MONITOR:-0}" = 1 ] || return 0
-    [ -n "${_monitor_pid:-}" ] &&
-        kill -0 "$_monitor_pid" 2>/dev/null && return 0
+    _monitor_alive && return 0
+    read -r _mwp < "$RUN_DIR/monitor.waiter" 2>/dev/null &&
+        [ -n "$_mwp" ] && kill -0 "$_mwp" 2>/dev/null && return 1   # #1849: it is waiting
 
     case "${D_ROLE:-}" in
         build|cloner)   # #1454: a cloner has a keyboard and mouse too (owner 16/10)
@@ -107,11 +142,18 @@ monitor_start() {
         log "monitor: cannot parse server IP from IMAGECTL_SERVER=${IMAGECTL_SERVER:-}; not starting"
         return 1
     }
+    _monitor_launch && return 0
+    _monitor_waiter
+    return 1
+}
 
+# The frame to serve and the spawn; 1 = nothing to serve yet (monitor_start).
+_monitor_launch() {
     # #835: no framebuffer device (no display attached -- cloner 2): the GUI
     # draws into $RUN_DIR/fb.mem and the monitor serves that file. Until the
-    # GUI has created it there is nothing to serve; the poll loop calls back
-    # here every round, so wait quietly rather than restart-loop a FATAL.
+    # GUI has created it there is nothing to serve; the poll loop -- and the
+    # #1849 waiter -- call back here, so wait quietly rather than restart-loop
+    # a FATAL.
     # #1475: with a screen too, the GUI mirrors every frame into the same
     # file (--fb-mirror, guibridge.sh): RAM, plus a seqlock that says when
     # nothing changed. Serving /dev/fb0 itself is a full read of

@@ -78,7 +78,7 @@ def box(tmp_path: Path, stubs: dict[str, str], plan: str = WIN_PLAN) -> tuple[st
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "agent.log")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake; }}; '
     )
@@ -146,7 +146,8 @@ def test_hostname_json_is_valid_json_after_a_successful_name(tmp_path):
     text = (run / "hostname.json").read_text(encoding="utf-8")
     assert not text.startswith("imagectl:"), text
     assert json.loads(text) == {"ok": True, "hostname": "LAB1-05", "method": "offline-registry"}
-    assert (run / "state").read_text().strip() == "done"
+    # #1935: name_this_machine leaves 'naming'; done is the caller's, after the drivers and the mark
+    assert (run / "state").read_text().strip() == "naming"
 
 
 def test_a_failed_verify_prints_only_the_error_object(tmp_path):

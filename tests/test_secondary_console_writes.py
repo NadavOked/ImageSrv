@@ -57,7 +57,7 @@ def test_a_user_is_created_on_the_secondary_and_journaled_on_both_sides(server, 
         "הראשי לא נגע במשתמשים שלו"
     primary_rows = _journal(server["ctx"].conn)
     assert primary_rows and primary_rows[-1][0] == "noc"
-    assert "חיפה" in primary_rows[-1][1] and "POST /users → 200" in primary_rows[-1][1]
+    assert "HAIFA" in primary_rows[-1][1] and "POST /users → 200" in primary_rows[-1][1]
     assert _journal(secondary["conn"])[-1] == ("primary:noc", "POST /users → 200")
     # הנתיב עצמו רושם בשם מי שביצע — ‏primary:noc, לא משתמש מקומי של המשני
     assert any(u == "primary:noc" for u, _ in secondary["conn"].execute(

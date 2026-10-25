@@ -34,7 +34,7 @@ def server(tmp_path, images_root, clock):
     admin, deploy = TestClient(app), TestClient(app)
     admin.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"})
     deploy.post("/api/console/login", json={"username": "labtech", "password": "deploy-pass-1"})
-    for mac, name, group in ((OLD, "בנייה 1", "grp_BUILD"), (OTHER, "01", "grp_CLONERS")):
+    for mac, name, group in ((OLD, "BUILD-1", "grp_BUILD"), (OTHER, "01", "grp_CLONERS")):
         assert admin.post("/api/console/machines", json={
             "mac": mac, "name": name, "group_id": group}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "deploy": deploy, "fake": fake}
@@ -52,7 +52,7 @@ def test_the_row_moves_to_the_new_mac_and_keeps_its_name_and_group(server):
     assert r.json() == {"ok": True, "mac": NEW, "network": {"applied": True, "error": None}}
     after = rows(server)
     assert OLD not in after
-    assert after[NEW]["suffix"] == "בנייה 1" and after[NEW]["group_id"] == "grp_BUILD"
+    assert after[NEW]["suffix"] == "BUILD-1" and after[NEW]["group_id"] == "grp_BUILD"
     # ‏known-macs נכתב מחדש: החדשה מקבלת GRUB, הישנה כבר לא (#141).
     text = server["fake"]["applied"][-1]
     assert f"{NEW},set:known" in text and OLD not in text

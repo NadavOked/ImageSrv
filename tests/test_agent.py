@@ -216,7 +216,7 @@ def test_hello_matches_the_interface(fake_machine):
     assert hello["mac"] == "b4:2e:99:07:1a:c4"
     assert hello["all_macs"] == ["b4:2e:99:07:1a:c4", "b4:2e:99:07:1a:c5"]
     assert hello["ip"] == "10.44.12.187"
-    assert hello["hostname_current"] is None
+    assert "hostname_current" not in hello   # #1924: never read, never used -- gone
     assert hello["uuid"].startswith("4C4C4544-0037")
     assert hello["firmware"] == "uefi"
     assert hello["secure_boot"] is True
@@ -228,8 +228,8 @@ def test_hello_matches_the_interface(fake_machine):
     assert disk["model"] == "Samsung SSD 870 EVO 250GB"   # בלי הרווחים
     assert disk["serial"] is None                          # SATA בלי sysfs serial
     assert disk["removable"] is False
-    assert disk["scheme"] == "gpt"
-    assert disk["has_data"] is True
+    # #1924: what is on the disk is not the server's -- only a build machine says it (test_disk_scheme)
+    assert "scheme" not in disk and "has_data" not in disk
     # אין ataN בנתיב (כמו על VM עם SCSI) — אין חריץ, והדיווח יוצא כרגיל.
     assert disk["port"] is None
     # ‏#652: בלי smart.sh (ובלי probe) שדה הבריאות הוא `unchecked` —
@@ -635,8 +635,26 @@ def test_the_product_image_packs_no_ssh():
              "tools/iso/build-iso.sh": (REPO / "tools" / "iso" / "build-iso.sh").read_text(encoding="utf-8")}
     files.update({str(p.relative_to(REPO)): p.read_text(encoding="utf-8") for p in SH_FILES})
     hits = [f"{name}: {ln.strip()}" for name, text in files.items()
-            for ln in _code_lines(text) if NO_SSH.search(ln)]
+            for ln in _code_lines(text) if NO_SSH.search(_without_clone_hostkeys(name, ln))]
     assert not hits, "\n".join(hits)
+
+
+#: ‏#1979: ‏`grow.sh` מוחק את מפתחות ה-SSH **של המערכת המשוחזרת** ומתקין לה יחידה
+#: שיוצרת חדשים — זה ניקוי המשוכפל, לא SSH במוצר. רק האסימונים האלה, ורק שם;
+#: כל אזכור אחר באותה שורה עדיין נתפס.
+CLONE_HOSTKEYS = re.compile(r"/ssh/ssh_host_\*|ssh-keygen|ssh-hostkeys|sshd?\.service"
+                            r"|SSH host keys|מפתחות ה-SSH")
+
+
+def _without_clone_hostkeys(name: str, line: str) -> str:
+    return CLONE_HOSTKEYS.sub("", line) if name.replace("\\", "/") == "agent/lib/grow.sh" else line
+
+
+def test_the_clone_hostkeys_allowance_still_catches_packing_ssh():
+    """ההיתר של #1979 אינו פותח את grow.sh ל-dropbear או למפתח טכנאי."""
+    for line in ('dropbear -R -p 22', 'cp authorized_keys "$ROOT"', 'ssh -i key root@x',
+                 'rm -f "$1"/ssh/ssh_host_* && dropbear'):
+        assert NO_SSH.search(_without_clone_hostkeys("agent/lib/grow.sh", line)), line
 
 
 def test_the_builder_copies_the_overlay_and_packs_its_binaries(tmp_path):
@@ -731,7 +749,7 @@ def test_the_gui_sign_in_leaves_no_password_on_tmpfs(tmp_path):
 )
 def test_hostname_composition(prefix, suffix, expected):
     """סעיף 10: קידומת-סיומת, ו-INS תמיד באותיות גדולות."""
-    out = sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; '
+    out = sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
              f'compose_hostname {prefix!r} {suffix!r}')
     assert out.strip() == expected
 
@@ -747,7 +765,7 @@ def test_a_bad_hostname_is_refused_before_touching_the_disk(tmp_path, name):
     out = sh(
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; '
+        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
         f'write_hostname sda /nonexistent.json {name!r} || true'
     )
     result = json.loads(out.strip().splitlines()[-1])
@@ -757,7 +775,7 @@ def test_a_bad_hostname_is_refused_before_touching_the_disk(tmp_path, name):
 
 def test_the_hostname_result_matches_the_interface():
     """מבנה הפלט של סעיף 5 — נבנה ידנית, ולכן נבדק כ-JSON אמיתי."""
-    out = sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; '
+    out = sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
              f'printf \'{{"ok":true,"hostname":"%s","method":"%s"}}\\n\' '
              f'"LAB1-05" "$HOSTNAME_METHOD"')
     assert json.loads(out) == {
@@ -826,7 +844,7 @@ def test_a_linux_image_is_named_through_etc_hostname(tmp_path):
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(tmp_path / "nodev")!r} '
         f'LOG_FILE={posix(run / "log")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
         f'write_hostname sda {posix(manifest)!r} LAB1-05 || true'
     )
     result = json.loads(out.strip().splitlines()[-1])
@@ -885,7 +903,7 @@ def test_a_linux_hostname_write_that_cannot_unmount_is_not_success(tmp_path):
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake2; }}; '
         f'write_hostname sda /dev/null LAB1-05 || true'
@@ -922,7 +940,7 @@ def test_a_windows_hostname_write_that_cannot_unmount_is_not_success(tmp_path):
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; '
+        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake1; }}; '
         f'write_hostname sda /dev/null LAB1-05 || true'
@@ -962,7 +980,7 @@ def test_an_unreadable_control_set_fails_instead_of_defaulting_to_001(tmp_path):
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; '
+        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake1; }}; '
         f'write_hostname sda /dev/null LAB1-05 || true'
@@ -1104,7 +1122,7 @@ def test_dev(tmp_path) -> str:
     return f"{posix(tmp_path / 'box' / 'run')}/dev"
 
 
-def run_expand(tmp_path, plan, disk_sectors, override=None):
+def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share_ok=False):
     """מריץ expand_last מול sgdisk מזויף ומחזיר (rc, שורות הפקודה, סימון).
 
     ‏manifest_plan נדרס אחרי ה-source כדי לא לדרוש jq בסביבת הבדיקה —
@@ -1122,8 +1140,16 @@ def run_expand(tmp_path, plan, disk_sectors, override=None):
     (box / "sys" / "block" / "sda" / "size").write_text(f"{disk_sectors}\n")
     run = box / "run"
     run.mkdir()
+    if share_ok:   # #1898: the operator approved the split on the cloner (drawergate.sh)
+        (run / "targets" / "sda").mkdir(parents=True)
+        (run / "targets" / "sda" / "share.ok").write_text("")
     plan_file = box / "plan"
     plan_file.write_text("\n".join(plan) + "\n")
+    # ‏#1897: ‏share_tail קורא את `shrunk_from_bytes` מהמניפסט עצמו; בלי מניפסט — /dev/null.
+    manifest_path = "/dev/null"
+    if manifest is not None:
+        (box / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        manifest_path = posix(box / "manifest.json")
     calls = box / "calls"
     # ‏chmod חובה: ‏cat > יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
     # עובר בווינדוס (שם כל קובץ "בר-הרצה") ונופל ב-CI בלבד.
@@ -1145,7 +1171,7 @@ def run_expand(tmp_path, plan, disk_sectors, override=None):
         f'export SYSROOT={posix(box)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; ' + override_export
         + f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; '
+        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; '
         f'manifest_plan() {{ cat {posix(plan_file)!r}; }}; '
         # הבדיקות האלה על *הגיאומטריה* של הטבלה, לא על הראיה שהיא הגיעה
         # לדיסק — זו נבדקת בפני עצמה ב-test_restore_evidence.py, ושם גם
@@ -1155,12 +1181,20 @@ def run_expand(tmp_path, plan, disk_sectors, override=None):
         # אותו דבר לקריאה החוזרת של GUID המחיצות (#1212): היא נבדקת, גם
         # אחרי הרחבה, ב-test_partition_guid.py מול sgdisk שזוכר את `-u`.
         "verify_unique_guids() { true; }; "
-        f'expand_last sda /dev/null >/dev/null 2>&1; echo "rc=$?"'
+        f'expand_last sda {manifest_path!r} >/dev/null 2>&1; echo "rc=$?"'
     )
     marker = run / "targets" / "sda" / "expanded"
+    # #1798: the incomplete-write mark rides in the same call (writemark.sh) --
+    # every partition the call rebuilds (-n) is named again; the geometry
+    # assertions below compare the rest of the call.
+    geometry = []
+    for c in calls.read_text().splitlines() if calls.exists() else []:
+        assert sorted(re.findall(r" -c (\d+):imagectl-incomplete", c)) \
+            == sorted(re.findall(r" -n (\d+):", " " + c)), c
+        geometry.append(re.sub(r" -c \d+:imagectl-incomplete", "", c))
     return (
         out.strip(),
-        calls.read_text().splitlines() if calls.exists() else [],
+        geometry,
         marker.read_text().strip() if marker.exists() else None,
     )
 
@@ -1438,7 +1472,7 @@ def test_the_filesystem_grows_only_for_the_partition_that_was_widened(tmp_path):
     lib = (
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run / "log")!r}; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; '
+        f'. {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; '
         f'grow_filesystem() {{ echo "grow:$1:$2"; }}; '
     )
     assert sh(lib + 'grow_expanded sda; echo "rc=$?"').strip() == "rc=0"
@@ -1506,7 +1540,7 @@ def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_pat
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r} WAIT_POLL_S=1; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-        f'. {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; '
+        f'. {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/drawers.sh; '   # #1906: restore_pipe
         "stream_source() { printf 'recovery-bytes'; }; "
         # ‏/dev/sda4 אינו קיים בסביבת הבדיקה, ובדיקת ההתקן היא הבדיקה
         # הראשונה בצינור (#51). היא מוחלפת כאן ונבדקת בנפרד.
@@ -1560,7 +1594,7 @@ def swap_box(tmp_path, disks=("sda",)):
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
         f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
         f'. {posix(AGENT)}/lib/progress.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; '
+        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; '
         "log() { :; }; "
         # ‏/dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
         # של כל כתיבה (#51). היא נבדקת בנפרד ב-test_restore_evidence.py.
@@ -1791,7 +1825,7 @@ def _fanout_buffer_for(tmp_path, mem_available_kb, drawers):
     )
     out = sh(
         f"export SYSROOT={posix(root)!r}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
         f"_fanout_buffer {drawers}"
     )
     return int(out.strip())
@@ -1985,7 +2019,12 @@ def test_monitor_does_not_start_without_a_boot_secret(tmp_path):
 
 
 def test_monitor_does_not_start_without_a_server_ip(tmp_path):
-    """בלי imagectl.server אין למי להגביל את 5900 — לא עולים."""
+    """בלי imagectl.server אין למי להגביל את 5900 — לא עולים.
+
+    ‏MONITOR_MIRROR_WAIT_S=0 כמו ב-`_monitor_spawn_args` (#1475): בלעדיו,
+    מוניטור שעולה בטעות ממתין קודם למראת ה-GUI, וה-`assert` רץ לפני ה-spawn
+    ועובר. בבקרה הרטרואקטיבית של #1077 (24/10) הסרת השומר לא הפילה את
+    הטסט — רק את ניקוי התהליכים בסופו."""
     out = tmp_path / "spawn-args"
     run = tmp_path / "run"
     run.mkdir()
@@ -1995,6 +2034,7 @@ def test_monitor_does_not_start_without_a_server_ip(tmp_path):
         'export IMAGECTL_MONITOR=1 IMAGECTL_SERVER=; '
         'export RUN_DIR=' + repr(posix(run)) + '; '
         'export D_ROLE=build IP=10.0.0.9 MONITOR_BIN=/bin/sh FB_DEV=/dev/null; '
+        'export MONITOR_MIRROR_WAIT_S=0; '
         'log() { :; }; '
         '. ' + posix(AGENT) + '/lib/monitor.sh; '
         '_monitor_spawn() { echo "$@" > "$OUT"; _monitor_pid=4242; }; '

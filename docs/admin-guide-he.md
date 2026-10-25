@@ -2,7 +2,7 @@
 
 **מה צריך להגדיר מחוץ למוצר: חומת האש, הרשת, המתגים וההיפרווייזר**
 
-שם המוצר בקוד ובריפו: `ImageCtl` · גרסת המסמך: 18/10/2026 · פרקים 1–12 נכתבו מול `integration/v0743-speed` (17/10); פרק 13 נכתב מול `integration/v0760-rc6` (`fdbbca8c`, גרסה `v0.76.0`) · Issues `#1474`, `#1563`
+שם המוצר בקוד ובריפו: `ImageCtl` · גרסת המסמך: 18/10/2026 (פרק 4 עודכן ב-22/10/2026: שלוש שכבות Cisco) · פרקים 1–12 נכתבו מול `integration/v0743-speed` (17/10); פרק 13 נכתב מול `integration/v0760-rc6` (`fdbbca8c`, גרסה `v0.76.0`) · Issues `#1474`, `#1563`
 
 > **למי המדריך:** איש IT שמקים את השרת במכללה ומגדיר את מה שמסביבו. לא צריך
 > לקרוא קוד. כל פורט וכל כלל כאן נלקחו מהקוד עצמו — המיפוי לקובץ ולשורה
@@ -173,8 +173,14 @@
 
 ## 4. וילן ההפצה — הגדרות במתג
 
-**המסירה נבדקה עם מתג לא מנוהל (גיגה בכל הפורטים, כולל פורט השרת — פורט
-100Mb אחד מאט את כל הסבב לכ-11MB/s). זו התצורה המומלצת ל-v1.**
+**המסירה נבדקה במעבדה עם מתג לא מנוהל (גיגה בכל הפורטים, כולל פורט השרת — פורט
+100Mb אחד מאט את כל הסבב לכ-11MB/s). זו התצורה המומלצת ל-v1 כשאפשר.**
+
+> **תיקון (22/10/2026, לפי נדב):** במכללה בפועל אין מתג לא מנוהל אחד. יש **שלוש שכבות של
+> סוויצ'י Cisco מנוהלים** (ליבה, קומה, כיתה) עם trunks ביניהן, **וילן הפצה אחד**
+> ו-**VTP** פעיל. לכן הטבלה למטה היא הדרישה, וסעיפים 4.1 עד 4.20 הם איך מממשים
+> אותה על Cisco בשלוש שכבות. מה שבפרק הזה נכתב קודם כ"מתג" בודד נקרא עכשיו
+> "כל סוויץ' בנתיב".
 
 המערכת שולטת במי **משתתף** (MAC רשום, בחירה בקונסולה, בדיקת sha256 לכל
 אימג'). היא **אינה** שולטת במי **מחובר לכבל** — זה תפקיד המתג.
@@ -182,13 +188,13 @@
 | הגדרה | מה לעשות | למה |
 |---|---|---|
 | **וילן נפרד** | פורטי access רק לשרת (כרטיס ההפצה), למחשבי הבנייה ולמחשבי השיכפול. בלי ניתוב | כל שירותי ההפצה חיים רק שם |
-| **IGMP snooping + querier** | snooping דלוק בכל מתג בנתיב; **querier אחד** בוילן (המתג); ‏IGMP v2 עקבי | בלי querier טבלת החברות במתג פוקעת אחרי 125–260 שניות והשידור **נופל באמצע שיכפול**. בלי snooping — המולטיקאסט מוצף לכל הפורטים בוילן |
-| **DHCP snooping** | פורט השרת = trusted; כל השאר untrusted | השרת הוא ה-DHCP היחיד בוילן. ‏DHCP זר שובר גם את זיהוי המכונות וגם את ה-PXE |
+| **IGMP snooping + querier** | snooping דלוק בכל מתג בנתיב (ליבה, קומה, כיתה); **querier אחד** בוילן — בסוויץ' **הליבה**, שהשרת מחובר אליו; ‏IGMP v2 עקבי (4.4, 4.12) | בלי querier טבלת החברות במתג פוקעת אחרי 125–260 שניות והשידור **נופל באמצע שיכפול**. בלי snooping — המולטיקאסט מוצף לכל הפורטים בוילן |
+| **DHCP snooping** | פורט השרת = trusted; כל השאר untrusted, עם `limit rate` גבוה (כ-100) כדי שכיתה שעולה ב-PXE לא תנעל פורט (4.5). ה-trunks בין הסוויצ'ים = trusted, אם snooping פעיל בכל השכבות [[הסקה]] | השרת הוא ה-DHCP היחיד בוילן. ‏DHCP זר שובר גם את זיהוי המכונות וגם את ה-PXE |
 | **בלי 802.1X** בפורטי ההפצה | לא להפעיל | מחשב שעולה מהרשת עוד אין לו מערכת שתזדהה — הפורט לא יעלה |
-| **Port security** | פורט ↔ MAC אחד (sticky); פורט פנוי — כבוי | התחליף ל-802.1X: מחשב זר בפורט של מחשב שיכפול — הפורט נסגר |
-| **פורט מהיר לעלייה** | ‏PortFast / edge port בפורטי התחנות | המלצה כללית ל-PXE: המתנת STP בעליית הקישור עלולה להפיל את בקשת ה-DHCP הראשונה ‏[[לא נמדד אצלנו]] |
+| **Port security** | פורט ↔ MAC אחד (sticky); פורט פנוי — כבוי | התחליף ל-802.1X: מחשב זר בפורט של מחשב שיכפול — הפורט נסגר. **מחיר:** החלפת מכונה בפורט = פורט err-disabled עד איפוס (4.11, ‏N07 במחקר הכשלים); לא ידוע אם המכללה מפעילה את זה |
+| **פורט מהיר לעלייה** | ‏PortFast / edge port בפורטי התחנות בלבד; **לא** ב-trunks | המתנת STP בעליית הקישור עלולה להפיל את בקשת ה-DHCP הראשונה ‏[[לא נמדד אצלנו]]. בשלוש שכבות יש סיבה שנייה: פורט בלי PortFast שעולה/יורד יוצר TCN שמוחק טבלאות ומציף מולטיקאסט בכל הרשת (4.15) |
 | **תיוג פיזי** | על כל פורט: איזו מכונה יושבת בו | "מחשב 2 לא מקבל" — לדעת מיד אם זה כבל, פורט או תוכנה |
-| **מהירות** | ‏10GbE לשרת מומלץ | ב-1GbE השידור מוגבל לכ-110MB/s; נמדד במעבדה 106MB/s |
+| **מהירות** | ‏10GbE לשרת ול-uplinks בין השכבות מומלץ (4.16) | ב-1GbE השידור מוגבל לכ-110MB/s; נמדד במעבדה 106MB/s |
 
 **הקונסולה מזהירה ואינה חוסמת:** מסך הרשת מסמן באדום שרת DHCP זר או
 כתובות זרות בוילן ההפצה, ומסך הבריאות מסמן מכונה שפונה לשרת מרשת אחרת.
@@ -196,54 +202,1008 @@
 [[לא אומת על ברזל]] התנהגות IGMP על מתג מנוהל אמיתי במכללה. המעבדה רצה על
 מתגים וירטואליים, שאין להם IGMP אמיתי.
 
-### 4.1 אם מעבירים למתג Cisco מנוהל
+**תיקון לכתוב קודם:** כאן נכתב "querier אחד בוילן (המתג)". בשלוש שכבות זה **הליבה בלבד** (4.12); ‏querier בסוויצ'י קומה או כיתה מייצר בחירה מיותרת. ולגבי v1.1: ה-querier בשרת הוא Issue ‏#1543, וקיים גם ‏#1972 באותו נושא (נראה ככפול).
 
-[[לא אומת על ברזל]] — הפקודות למטה **לא נבדקו מול Cisco אמיתי**. הן
-לסדרת Catalyst, והתחביר עלול להשתנות בין דגמים (למשל 2960 מול 9200) —
-לבדוק מול התיעוד של הדגם שבמכללה. בדוגמה: וילן ההפצה = `<N>`, פורטי
-התחנות = `Gi1/0/1-24`.
+### 4.1 הטופולוגיה במכללה: ליבה, קומות וכיתות
 
-**IGMP snooping + querier** — גלובלי, או לוילן ההפצה בלבד (לפי הדגם):
+[[לא אומת על ברזל]] — **כל הפקודות בסעיפים 4.3 עד 4.19 לא נבדקו מול Cisco אמיתי.** הן לסדרת Catalyst (IOS / IOS-XE), והתחביר משתנה בין דגמים (למשל 2960 מול 9200 מול 9300). לבדוק מול `?` ומול התיעוד של הדגם שבמכללה.
+
+**הטופולוגיה (תשובת נדב, 22/10):** שלוש שכבות של סוויצ'י Cisco, **וילן הפצה אחד**
+לכולן, ו-VTP פעיל ("הסוויצ'ים לומדים אחד מהשני").
+
+```
+                 SERVER ROOM
+            +--------------------+
+ ImageSrv --| CORE switch        |  <- IGMP querier, STP root,
+ (dist NIC) |                    |     server port: access, DHCP trust
+            +----+----------+----+
+        trunk (uplink)   trunk (uplink)
+          |                  |
+   +------+-------+  +-------+------+
+   | FLOOR 1      |  | FLOOR 2      |   <- IGMP snooping only, no querier
+   +--+--------+--+  +--+--------+--+
+      |trunk   |trunk   |trunk   |trunk
+  +---+---+ +--+----+ +-+-----+ +-+-----+
+  | CLASS | | CLASS | | CLASS | | CLASS |  <- snooping only
+  |   A   | |   B   | |   C   | |   D   |     edge ports: access, portfast,
+  +-+-+-+-+ +-+-+-+-+ +-+-+-+-+ +-+-+-+-+     bpduguard
+    | | |     | | |     | | |     | | |
+  cloners / build machines / stations (VLAN 44)
+```
+
+מספר הקומות והכיתות בציור הוא איור בלבד (SERVER ROOM = חדר שרתים, CORE = ליבה, FLOOR = קומה, CLASS = כיתה). השרת **בליבה**, והמשכפלים
+והבנייה **בכיתות**, כלומר המולטיקאסט חוצה שני trunk-ים בדרך (ליבה → קומה →
+כיתה). סעיפים 4.3-4.11 תקפים לפורטי ה-edge בכיתות ולפורט השרת בליבה.
+**חלק ב' (סעיפים 4.12-4.19)** מוסיף מה שייחודי לשלוש שכבות: trunks, ‏querier וה-
+mrouter, ‏VTP, ‏STP, רוחב פס ובדיקה מקצה לקצה.
+
+הפקודות מניחות:
+
+- ‏VLAN ההפצה הוא **VLAN 44** כדוגמה (**מספר בדוי**, החלף במספר האמיתי).
+- פורט השרת (בליבה): `Gi1/0/1`. פורטי משכפלים ומחשבי בנייה (בסוויץ'י
+  הכיתה): `Gi1/0/2 - 24`. (מספרי פורטים בדויים; ‏`interface range` מקצר.)
+- הסוויץ' ב-L2 בלבד לוילן הזה, בלי SVI שמנתב מולטיקאסט (**הנחה, טרם אושרה**).
+- **כל פקודה בפרק רצה על הסוויץ' שהיא מתייחסת אליו.** סעיפים 4.3, 4.6, 4.7, 4.8, 4.10
+  על סוויצ'י הכיתה (ועל פורט השרת בליבה); ‏4.4 ו-4.12 עד 4.19 לפי השכבה שמצוינת שם.
+
+```
+! הגדרת הפרמטרים לפי המכללה. עדכן לפני העתקה.
+! VLAN של הפצה: 44   פורט שרת: Gi1/0/1   פורטי מכונות: Gi1/0/2-24
+conf t
+ vlan 44
+  name IMAGESRV-DIST
+ exit
+end
+```
+
+
+**איך לקרוא את הסעיפים:**
+
+כל סעיף: "מה ולמה" בעברית, ואחריו בלוק פקודות להעתקה. בסוף כל סעיף יש
+שני סימונים:
+
+- **נבדק במקור**: הטענה כתובה במקור שצוין (תיעוד Cisco, דף man של udpcast,
+  או קוד הפרויקט).
+- **הסקה**: מסקנה שלי מתוך המקורות. לא נבדקה על סוויץ' אמיתי.
+
+**לא הרצתי שום פקודה על הסוויץ' שלך.** כל מה שכאן הוא מחקר שולחני. הבדיקה
+האמיתית היא סעיפים 4.18 ו-4.19 בסוף הפרק.
+
+### 4.2 מה ImageSrv עושה ברשת (העובדות שמניעות את ההגדרות)
+
+| דבר | פרט | מקור |
+|---|---|---|
+| DHCP ו-TFTP | dnsmasq על כרטיס וילן ההפצה, ‏UDP ‏67/68 ו-69, ופורט proxy-DHCP ‏4011 | `server/ports.py`, `CLAUDE.md` |
+| מולטיקאסט | `udp-sender` עם `--portbase 9000`, כלומר פורטים UDP ‏9000 ו-9001. מוצמד לכרטיס ההפצה עם `--interface` | `server/sender.py` (שורות 35, 556-560), `server/main.py` |
+| כתובת קבוצה | **השרת לא מעביר `--mcast-data-address`**, ולכן udpcast גוזר אותה מכתובת ה-IP של השרת (ראו סעיף 4.4) | `server/sender.py`, `command_for` |
+| WoL | UDP ‏9, ‏broadcast `255.255.255.255`, נשלח מהכרטיס של וילן ההפצה בלבד (`SO_BINDTODEVICE`) | `server/wol.py` |
+| HTTP | GRUB, kernel ו-initrd | `CLAUDE.md` |
+
+**דרישות שכבר רשומות באפיון** (`docs/imagectl-spec.md` סעיף 6): ‏IGMP snooping
+על כל סוויץ' בנתיב, ‏querier אחד לוילן, ו-IGMP בגרסה עקבית. המדריך הזה
+מפרט איך עושים את זה על Cisco.
+
+
+### 4.3 פורטי משכפלים ומחשבי בנייה (access)
+
+**מה ולמה.** כל מכונה שמבצעת PXE מתחברת לפורט access בוילן ההפצה.
+
+- `switchport mode access` + `switchport access vlan` קובעים שהפורט לא יהפוך
+  לטראנק בטעות (ופותרים DTP).
+- `spanning-tree portfast` גורם לפורט לעבור ל-forwarding מיד, בלי 30 שניות
+  של learning. בלי זה, מכונה שמדליקה את הכרטיס ב-BIOS מאבדת את ה-DHCP
+  הראשון, וה-PXE נכשל או מתעכב. הפרויקט אוסף עדות לכך: במחקר האתחול
+  (`research-boot.md`) מצוין שבלי PortFast "איפוס קישור של דרייבר עלול לעלות
+  30 שניות של STP re-learn". ‏`udhcpc -t 4 -T 3` של הסוכן לא ישרוד את זה.
+- `spanning-tree bpduguard enable` מכבה (err-disable) פורט שמקבל BPDU.
+  מי שמחבר סוויץ' ביתי למכונה בכיתה לא יפיל את העץ.
+- **לא** `portfast trunk` ולא על פורט שמחובר לסוויץ'.
+
+**שני חידודים:**
+
+1. **TCN (הסיבה האמיתית שחשוב לעשות את זה גם בפורטי תלמידים).** פורט בלי
+   PortFast שעולה או יורד יוצר Topology Change Notification. ב-Catalyst,
+   TCN גורם ל-IGMP snooping להציף מולטיקאסט זמנית (ראו סעיף 4.4). בכיתה שבה
+   מכונות נדלקות ונכבות תוך כדי סבב, זה יכול להאט את הזרם של **כולם**.
+   (`research-new-failures-1022.md`, ‏N01: **מוסק**, ללא מדידה במעבדה, כי
+   ב-ESXi אין STP אמיתי.)
+2. **BPDU guard בפורט שרת.** פורט השרת מחובר למכונת ESXi/Hyper-V או לכרטיס
+   פיזי. אם יש שם vSwitch שמעביר BPDU, ה-guard יכבה את הפורט. לכן לשרת
+   נותנים `portfast` בלי `bpduguard` רק אם ידוע שזה מארח וירטואלי. ברירת
+   מחדל: להשאיר `bpduguard` גם בשרת פיזי.
 
 ```
 conf t
-ip igmp snooping
-ip igmp snooping querier
-! או, בדגמים שבהם זה לפי וילן:
-ip igmp snooping vlan <N>
-ip igmp snooping vlan <N> querier
+ ! ברירת מחדל גלובלית: כל פורט access הוא edge. אופציונלי, חוסך שורות.
+ ! spanning-tree portfast default
+ ! spanning-tree portfast bpduguard default
+
+ interface range GigabitEthernet1/0/2 - 24
+  description IMAGESRV-STATIONS
+  switchport mode access
+  switchport access vlan 44
+  switchport nonegotiate
+  spanning-tree portfast
+  spanning-tree bpduguard enable
+ exit
+
+ ! פורט השרת (כרטיס וילן ההפצה)
+ interface GigabitEthernet1/0/1
+  description IMAGESRV-SERVER
+  switchport mode access
+  switchport access vlan 44
+  switchport nonegotiate
+  spanning-tree portfast
+  spanning-tree bpduguard enable
+ exit
+end
 ```
 
-**עלייה מהירה של הפורט (PortFast)** — על פורטי התחנות בלבד, לא על
-up-link:
+אם הגרסה שלך ישנה ואינה מקבלת `spanning-tree portfast` על פורט access ללא
+אזהרה, תראה הודעה על "PortFast has been configured on ... but will only have
+effect when the interface is in a non-trunking mode". זו אזהרה רגילה.
+
+- **נבדק במקור:** תיעוד Cisco (דוגמת WoL, מסמך 91672) מציג PortFast על פורט
+  שמחובר למארח יחיד ומזהיר מפני לולאות כשמחברים סוויצ'ים או האבים. הערה
+  בקהילת Cisco: PortFast משפיע רק בפורט שאינו trunk.
+- **הסקה:** ההמלצה על `bpduguard` בפורטי הכיתה, וההחלטה לא לשים portfast
+  בפורט שרת וירטואלי בלי בדיקה.
+
+
+### 4.4 IGMP snooping ו-querier
+
+**מה ולמה.** שידור המולטיקאסט של udpcast שולח בלוקים לכתובת קבוצה אחת.
+
+- **בלי IGMP snooping:** הסוויץ' מתייחס למולטיקאסט כ-broadcast ומציף **כל
+  פורט בוילן**, כולל מכונות שאינן חלק מהסבב. הזרם עובד, אבל מכונה שלא
+  משתתפת מקבלת ~110MB/s (כמעט כל רוחב הפס של Gigabit) לשווא.
+- **עם snooping ובלי querier:** הסוויץ' לומד חברות מדוחות IGMP של
+  המשכפלים, אבל החברות **פוקעת** אחרי כ-2-4 דקות אם אף אחד לא שולח
+  General Query. ‏`docs/imagectl-spec.md` סעיף 6 מתאר את זה בדיוק: "הזרם
+  נופל באמצע" אחרי 125-260 שניות. **שני המצבים נראים כמו באג בקוד**
+  (`docs/lab-test-plan.md` שורה 763).
+
+**מי עושה querier?** יש שתי אפשרויות, ו**רק אחת** צריכה להיות פעילה בכל
+וילן:
+
+| אפשרות | מתי | הערה |
+|---|---|---|
+| **א. הסוויץ' (מומלץ עד שיצא #1972)** | ברירת המחדל היום | פקודות למטה. ב-IOS צריך להפעיל במפורש. |
+| **ב. השרת (Issue #1972)** | כשהתכונה תיכנס לקוד | **בקוד של היום אין עדיין שום querier בשרת** (חיפוש `querier` ב-`server/` ו-`agent/` לא מוצא כלום). כשהתכונה תופעל, לכבות את ה-querier בסוויץ'. |
+
+**אם שניהם פעילים:** מתקיימת בחירה, והמנצח הוא מי שכתובת המקור שלו **נמוכה
+יותר**. אם הסוויץ' ינצח, השרת ישתוק, ולהיפך. שניהם עובדים. הבעיה היחידה
+היא הפתעה: הסוויץ' מנצח "בשקט" וצריך לדעת מי המנצח. בדיקה: `show ip igmp
+snooping querier`. (**הסקה** מתוך הכלל המתועד של בחירת querier בין סוויצ'ים;
+התנהגות שרת לינוקס מול סוויץ' Cisco לא נבדקה.)
+
+**כתובת הקבוצה של ImageSrv.** השרת לא מציין `--mcast-data-address`, ולכן
+udpcast גוזר אותה מכתובת השרת. **דפי ה-man של udpcast סותרים זה את זה:**
+הגרסה העדכנית (Debian testing) אומרת "שומרים 17 הביטים האחרונים של ה-IP
+ומוסיפים 233.254 בהתחלה", וגרסה ישנה יותר אומרת "27 ביטים אחרונים ו-232".
+**לא ידוע לי איזו גרסה רצה אצלכם.** כדי לא להסתמך על ניחוש:
+
+1. להריץ סבב קצר.
+2. בסוויץ': `show ip igmp snooping groups vlan 44`.
+3. הכתובת שמופיעה היא האמיתית.
+
+**השלכה שנבדקה:** שני הטווחים (232.x ו-233.254.x) **אינם** ב-`224.0.0.x`
+(טווח שמוצף תמיד, גם עם snooping: מסמך Catalyst 6500 ‏10559) ואינם ב-`224.128.0.x`.
+בנוסף, 32 כתובות IP חולקות כל MAC מולטיקאסט, כך שאם יש בוילן שירות אחר
+שמשתמש בכתובת עם אותם 23 ביטים תחתונים, הוא יחלוק פורטים (ראו N09 ב-
+`research-new-failures-1022.md`). ההסקה על 233.254: בשני הצדדים ה-23 ביטים
+התחתונים של 224.0.0.x הם `0.0.x`, ואילו של 233.254.a.b הם `126.a.b`, ולכן
+אין חפיפה. **מוסק, לא נבדק בסוויץ'.**
+
+**ערוץ הבקרה של udpcast.** לפי דף ה-man, כתובת ה-rendezvous (`mcast-rdv-
+address`) היא **broadcast של Ethernet כש-ttl הוא 1**, ו-`224.0.0.1` אחרת. ה-
+TTL שברירת המחדל שלו לא כתובה בדף ה-man, והשרת לא מעביר `--ttl`. לכן
+**ייתכן שערוץ הבקרה של הסבב (hello/הצטרפות) הוא broadcast**. זו עוד סיבה
+שב-storm-control (סעיף 4.6) לא להגביל broadcast בפורט השרת והמשכפלים.
+(**הסקה:** ברירת מחדל של ttl לא אומתה, ‏`research-multicast.md` מציין שהפרויקט
+משאיר את ברירת המחדל של rdv בכוונה.)
+
+**TCN.** אם PortFast לא מוגדר על כל הפורטים (סעיף 4.3), TCN מוחק טבלאות
+ומציף. אפשר להפחית עם:
+
+- `no ip igmp snooping tcn flood` על פורט (בדיווח של משתמש ב-Cisco
+  Community זה הפתרון להצפה אחרי TCN ב-3750).
+- `ip igmp snooping tcn flood query count 2` (שיטה אחרת: הצפה נעצרת אחרי N
+  שאילתות).
+
+אלה **שכבת הגנה**, לא תחליף ל-PortFast.
 
 ```
-interface range Gi1/0/1-24
- spanning-tree portfast
- ! בדגמים חדשים יותר (למשל 9200):
- spanning-tree portfast edge
+conf t
+ ! 1. הפעלה גלובלית (בדרך כלל כבר פעיל כברירת מחדל)
+ ip igmp snooping
+
+ ! 2. הפעלה בוילן ההפצה
+ ip igmp snooping vlan 44
+
+ ! 3. querier. משתמשים בו רק אם השרת עדיין לא עושה querier (#1972).
+ !    הכתובת חייבת להיות כתובת IP בתוך תת-הרשת של הוילן ושלא תתנגש עם איש.
+ !    אם אין SVI, חובה להגדיר כתובת querier ידנית.
+ ip igmp snooping querier
+ ip igmp snooping querier address 10.44.0.2
+ ip igmp snooping vlan 44 querier
+ ip igmp snooping vlan 44 querier address 10.44.0.2
+
+ ! 4. עקביות גרסה: ImageSrv/udpcast משתמש ב-IGMPv2 בפועל (הסקה). אל תפעיל
+ !    v3-only. אם הסוויץ' בתמיכת v3 מלאה, השאר את ברירת המחדל.
+
+ ! 5. הגנה מ-TCN: להפחית הצפה אחרי שינוי טופולוגיה
+ ip igmp snooping tcn flood query count 2
+ interface range GigabitEthernet1/0/1 - 24
+  no ip igmp snooping tcn flood
+ exit
+end
 ```
 
-**storm-control** — לוודא שאין סף מולטיקאסט נמוך על הפורטים האלה; שידור
-אימג' הוא מולטיקאסט רציף בקצב הקו, וסף נמוך יחתוך אותו:
+**שים לב:** לא כל פלטפורמה מקבלת את כל השורות. בדגמים רבים מספיקה אחת משתי
+הצורות של ה-querier (גלובלית או פר-VLAN). אם ה-CLI דוחה שורה, השתמש ב-`?` או
+בדוק את תיעוד הדגם. ‏`ip igmp snooping querier` בדף העזר של Catalyst 9300
+מופיע בצורה הגלובלית, ופוסטים בפורום מראים `ip igmp snooping vlan <id> querier`.
+בקהילה דווח על שגיאה "snooping is disabled on this VLAN" כש-snooping לא הופעל
+קודם על ה-VLAN.
+
+**מקורות:**
+
+- **נבדק במקור:** השפעת snooping בלי querier (אפיון הפרויקט, סעיף 6); דף
+  ה-man של udpcast על כתובת הקבוצה וה-rendezvous
+  (<https://manpages.debian.org/testing/udpcast/udp-sender.1.en.html>); בחירת
+  querier לפי כתובת נמוכה, ופקודות `tcn flood`/`tcn query solicit` מתועדות
+  בתיעוד Cisco IOS-XE
+  (<https://www.cisco.com/en/US/docs/ios/ios_xe/ipmulti/configuration/guide/imc_igmp_static_rng_xe.html>)
+  ובשרשור Cisco Community
+  (<https://community.cisco.com/t5/switching/3750-switch-flooding-multicast-traffic/td-p/1382687>).
+- **הסקה:** כתובת המקור של ה-querier, גרסת IGMP, והחפיפה בין כתובות.
+
+
+### 4.5 DHCP snooping
+
+**מה ולמה.** אם הסוויץ' מפעיל DHCP snooping (**לא ידוע אם כן**, ראו שאלות),
+הוא חוסם תשובות DHCP מפורט שאינו trusted. בלי `trust` בפורט השרת, ה-OFFER
+של dnsmasq נחסם והתחנות לא מקבלות כתובת.
+
+**שתי הגדרות חובה:**
+
+1. פורט השרת: `ip dhcp snooping trust`. בלי זה, אף תחנה לא מקבלת כתובת.
+2. **Rate limit** בפורטי המכונות. ל-snooping יש מגבלת קצב על חבילות DHCP שהפורט
+   מקבל. חריגה => הפורט **נכנס ל-err-disabled** ומתנתק עד התערבות. מכונה
+   שמבצעת PXE שולחת DHCPDISCOVER בתפרצות (ושוב בסוכן, ‏`udhcpc` על כמה
+   ממשקים). בכיתה שלמה שעולה ביחד זה צפוי. דיווח אמיתי: Linux שעולה כבה
+   את הפורט אחרי 100 חבילות (שרשור Cisco Community
+   <https://community.cisco.com/t5/switching/linux-device-boot-up-causing-dhcp-snooping-enabled-port-to-shut/m-p/1192682/highlight/true>),
+   וגם Specops מתעדים PXE-E18 כתוצאה מ-snooping
+   (<https://specopssoft.com/blog/pxe-e18-server-response-timeout>).
+
+**הערך.** אל תשים 5 או 15. נסיון שדווח: ‏`limit rate 25` על Catalyst 2960X גרם
+ל-err-disable חוזר מ-DHCP burst. ‏Cisco ב-Networkers המליצה על 100 pps.
+**אני ממליץ 100 על פורטי המכונות, ו-`no ip dhcp snooping limit rate`
+(בלי הגבלה) על פורט השרת.** (**הסקה:** המספר 100 מתבסס על המלצה ישנה
+מהפורום ועל דיווח אחד. ברירת המחדל של היצרן, 15 pps לפי זיכרון, **לא אומתה**
+במקורות שמצאתי; היא משתנה בין פלטפורמות.)
+
+**התאוששות אוטומטית.** גם אם הגדרת נכון, כדאי שפורט שנכבה יחזור לבד:
+`errdisable recovery cause dhcp-rate-limit`. (Cisco מתעד שהזיהוי של
+dhcp-rate-limit פעיל כברירת מחדל, והשחזור האוטומטי לא.)
+
+**Option 82.** ‏snooping מוסיף Option 82 ל-DISCOVER. ‏`ip dhcp snooping
+information option` אפשר לכבות. כשהשרת (dnsmasq) מקבל Option 82 עם
+`giaddr=0`, ייתכן שיפעל לא כצפוי. **לא נמצא מקור** על התנהגות dnsmasq,
+והבדיקה בהמשך (N06 ב-`research-new-failures-1022.md`) עוד לא בוצעה. לכן
+**מומלץ לכבות** את ההוספה: `no ip dhcp snooping information option`.
+(**הסקה** זהירה: כיבוי מבטל את הסיכון בלי לפגוע בהגנה על השרת.)
 
 ```
-show running-config interface Gi1/0/1 | include storm-control
+conf t
+ ip dhcp snooping
+ ip dhcp snooping vlan 44
+ no ip dhcp snooping information option
+
+ ! פורט השרת: trusted, בלי הגבלת קצב
+ interface GigabitEthernet1/0/1
+  ip dhcp snooping trust
+ exit
+
+ ! פורטי המכונות: untrusted, עם תקרה גבוהה
+ interface range GigabitEthernet1/0/2 - 24
+  ip dhcp snooping limit rate 100
+ exit
+
+ ! שחזור פורט שנכבה מחריגת קצב
+ errdisable recovery cause dhcp-rate-limit
+ errdisable recovery interval 60
+end
 ```
 
-אם מופיעה שורת `storm-control multicast level ...` עם ערך נמוך — להסיר
-אותה (`no storm-control multicast level`) או להעלות את הסף.
+אם **אין** DHCP snooping בסוויץ' היום, אל תפעיל אותו רק בגללי. הוא אינו
+דרישה של ImageSrv. זו הגנה מפני DHCP שרת לא מורשה. אם מפעילים, מפעילים עם
+כל מה שלמעלה.
 
-**PXE נתקע בעליית הקישור** — אם מחשב לא מקבל כתובת בעלייה מהרשת, לכבות
-EEE ‏(Energy Efficient Ethernet) על פורטי התחנות:
+
+### 4.6 storm-control
+
+**מה ולמה.** ‏storm-control חותך תעבורה כשהיא עוברת אחוז מרוחב הפס. ‏**מולטיקאסט
+של udpcast מגיע לכ-110MB/s**, כלומר כמעט 90% מהקו. ‏`storm-control multicast
+level 80` יחתוך את הזרם. ‏WoL הוא broadcast קצר ולא בעייתי בדרך כלל, אבל
+ערוץ הבקרה של udpcast עשוי להיות broadcast (סעיף 4.4).
+
+**המלצה:**
+
+- **פורט שרת ופורטי משכפלים:** **בלי** `storm-control multicast`, ובלי
+  `storm-control broadcast` נמוך. אם מוכרחים (מדיניות מכללה): ‏broadcast
+  ברמה 5-10%.
+- **פורטי תלמידים (אם הם באותו VLAN):** broadcast מוגבל בסדר, ‏multicast לא.
+- ב-Catalyst, כשעוברים את הסף **כל** חבילות הסוג נזרקות עד שהקצב יורד
+  (לפי תיעוד Meraki שמשווה ל-Catalyst), ולפורט יש רמה אחת לכל סוגי
+  התעבורה שהופעלו.
 
 ```
-interface range Gi1/0/1-24
- no power efficient-ethernet
+conf t
+ interface range GigabitEthernet1/0/1 - 24
+  no storm-control multicast level
+  no storm-control broadcast level
+  no storm-control action
+ exit
+ ! אם מוכרחים broadcast בפורטי תלמידים בלבד (לא שרת/משכפלים):
+ ! interface range GigabitEthernet1/0/10 - 24
+ !  storm-control broadcast level 10.00
+ !  storm-control action trap
+ ! exit
+end
 ```
 
-ב-v1.1 מתוכנן שהשרת עצמו ישמש IGMP querier בוילן ההפצה בזמן סבב, כך
-שלא יהיה תלוי בהגדרת querier במתג (Issue ‏#1543).
+- **נבדק במקור:** ‏storm control כבוי כברירת מחדל; מגבלה אחת לכל הסוגים; התנהגות
+  חיתוך (תוצאות חיפוש: Cisco Community, Meraki
+  <https://documentation.meraki.com/Switching/MS_-_Switches/Operate_and_Maintain/How-Tos/Storm_Control_for_MS>).
+- **הסקה:** שהמולטיקאסט של ImageSrv יחצה סף כזה (110MB/s מול ~125MB/s קו;
+  מספר מ-`docs/imagectl-spec.md`, מעבדה 17/09 ‏106MB/s).
+
+
+### 4.7 EEE (Energy Efficient Ethernet)
+
+**מה ולמה.** ‏EEE מכניס את הקישור למצב Low Power Idle כשאין תעבורה. בזרמי
+מולטיקאסט עם הפסקות (המתנה לכתיבה, בין מחיצות) זה עלול לגרום לאובדן
+חבילות בתחילת פרץ ולניתוקי קישור. נמצא דיווח של ניתוקי פורט כל כשתיים
+שניות ב-2960X שנפתרו ב-`no power efficient-ethernet` (באג CSCus35889, שנוי
+בין גרסאות). בפרויקט הנושא רשום כ-CLR-19.
+
+```
+conf t
+ interface range GigabitEthernet1/0/1 - 48
+  no power efficient-ethernet
+ exit
+end
+```
+
+אם הפקודה לא מתקבלת, כנראה שהדגם אינו תומך ב-EEE או שהיא קיימת בפורמט אחר.
+ב-IOS-XE חדש בדוק `power efficient-ethernet auto` / `no power efficient-
+ethernet`. זה בסדר: אין צורך במאמץ נוסף.
+
+- **נבדק במקור:** שרשור Cisco Community על 2960X ו-`no power efficient-ethernet`
+  (<https://community.cisco.com/t5/cisco-bug-discussions/2960x-interfaces-intermittent-disconnects-in-stack-quot-no-power/m-p/4099662>).
+  **לא נמצא** תיעוד רשמי של Cisco ל-9300.
+- **הסקה:** שזה רלוונטי לשיכפול. הקשר ישיר בין EEE לאובדן מולטיקאסט לא
+  נמצא במקור.
+
+**חשוב: PoE אינו EEE.** אל תכבה `power inline` בפורטי מכונות בטעות. המכונות
+אינן צורכות PoE, אבל אין סיבה להשבית אותו.
+
+
+### 4.8 מהירות ו-duplex
+
+**מה ולמה.** השאר **auto בשני הצדדים** (סוויץ' ומכונה). הכללה: Gigabit דורש
+auto-negotiation לפי התקן (1000BASE-T). הבעיה הקלאסית היא פורט שהוקשח
+ל-100/full בצד אחד בלבד: הצד השני נופל ל-half ויש late collisions ואובדן
+חבילות חד-כיווני. ב-UDP שאינו מתאושש זה נראה כזרם איטי או כמקבל שנשר.
+(`research-new-failures-1022.md`, ‏N28: מקורות Stratus ו-Cisco Community;
+דיווח אחד על 90% איבוד.)
+
+**בדיקת "החלמה":** אם מכונה מתחברת ב-100Mbps במקום 1000, בדרך כלל זה כבל
+או פורט ולא הגדרה. ‏udpcast מחכה לאיטי מכולם, ואז כל הכיתה מאטה. ‏`show
+interfaces status` מראה את זה מיד (סעיף 4.18).
+
+```
+conf t
+ interface range GigabitEthernet1/0/1 - 24
+  speed auto
+  duplex auto
+ exit
+end
+```
+
+(`speed auto` ו-`duplex auto` הם ברירת המחדל. אם הפורט הוקשח ידנית בעבר,
+זו הפקודה שמחזירה אותו.)
+
+- **נבדק במקור:** הסבר אי-ההתאמה (מקורות N28 לעיל).
+- **הסקה:** ההשלכה על udpcast ועל "הכיתה מאטה בגלל אחד".
+
+
+### 4.9 LACP / bonding
+
+**מה ולמה.** **לא נדרש, ולא מומלץ.** סיבות:
+
+1. ‏`udp-sender` מוצמד לכרטיס אחד (`--interface`), ולכן bond לא יעשה אותו
+   מהיר יותר. הזרם כולו יוצא על כרטיס אחד.
+2. ב-bond מסוג 802.3ad (LACP) תעבורה לכתובת יעד אחת נשלחת בקישור **אחד**
+   לפי hash (Red Hat: <https://access.redhat.com/solutions/372813>). ‏מולטיקאסט
+   לקבוצה אחת הוא תעבורה לכתובת יעד אחת, כך שאין חלוקת עומס.
+3. אחרי failover של קישור, הסוויץ' עלול לשכוח את הנתיב של הקבוצה עד
+   שמגיע דוח IGMP חדש. תוצאה: הזרם "שותק" כמה שניות עד דקות
+   (N02 ב-`research-new-failures-1022.md`; **מוסק**, כי המקור הוא כללי
+   ל-bond ולא ל-udpcast).
+4. ב-port-channel בסוויץ' ובשרת, דוחות IGMP עלולים להגיע רק בקישור אחד.
+
+**שים לב לעיצוב.** במוקאפ של הקונסולה (`docs/design/apple-mockups/console-
+full.html`, קומיט `51b18ddb`) יש "שני הכרטיסים עובדים יחד על אותה כתובת".
+זה מוקאפ בלבד, והמימוש עוד לא קיים. אם הוא יממש bond, חובה לבדוק מולטיקאסט
+תחת failover בסוויץ' אמיתי **לפני** שמסתמכים עליו. ‏`balance-alb` של Linux
+נחשב בפרויקט לבעייתי בנפרד (SVR-13).
+
+**המלצה לסוויץ':** אל תגדיר `channel-group` על פורטי ההפצה.
+
+```
+conf t
+ interface range GigabitEthernet1/0/1 - 24
+  no channel-group
+ exit
+end
+```
+
+אם בכל זאת מגדירים port-channel לשרת (שני כרטיסים), הנה המינימום וחובה לבדוק
+בסעיף 4.18 שהקבוצה עדיין מוצגת אחרי ניתוק קישור אחד:
+
+```
+conf t
+ interface range GigabitEthernet1/0/1 - 2
+  channel-group 1 mode active
+ exit
+ interface Port-channel1
+  switchport mode access
+  switchport access vlan 44
+  spanning-tree portfast
+ exit
+end
+```
+
+(**הסקה:** פקודות ה-LACP הן תחביר IOS סטנדרטי. לא נבדק מול הדגם ולא מול
+ImageSrv.)
+
+
+### 4.10 Jumbo / MTU
+
+**מה ולמה.** **לא נדרש. השאר 1500.**
+
+- ‏udpcast שולח בלוקים של 1456 בייט (`research-multicast.md` שורה 60: "112
+  בלוקים × 1456B"), שנכנסים בנוחות ב-MTU 1500.
+- ‏PXE, ‏TFTP וה-initramfs אינם תומכים ב-jumbo בקושחת הרשת.
+- הפעלת jumbo בסוויץ' בלי הגדרה זהה בכל מכונה לא תשפר דבר, ויכולה לגרום
+  לחבילות גדולות להיזרק.
+- בפרויקט CLR-22 מסווג jumbo כרעיון שנפסל.
+
+```
+! אין מה להגדיר. לוודא שלא הוגדר jumbo עבר:
+show system mtu
+```
+
+(בדגמי Catalyst ישנים `system mtu jumbo` דורש reload. אם הערך אינו 1500,
+החזר ל-1500: `system mtu 1500`.)
+
+- **נבדק במקור:** גודל הבלוק בפרויקט.
+- **הסקה:** ש-jumbo אינו מועיל כאן.
+
+
+### 4.11 Wake-on-LAN
+
+**מה ולמה.** ‏WoL של ImageSrv הוא **UDP ‏9 ב-broadcast `255.255.255.255`** מכרטיס
+וילן ההפצה, ובתוך אותו VLAN. זה broadcast של L2: אין צורך בנתב, ב-
+`ip directed-broadcast` או ב-`ip helper-address`. (אלה נדרשים רק כשה-magic
+packet נשלח מרשת אחרת; תיעוד Cisco 91672.)
+
+**מה כן צריך בסוויץ':**
+
+1. **המכונה והשרת באותו VLAN.** אם יש VLAN נפרד לכל כיתה, השרת חייב נוכחות
+   בכל VLAN (או trunk), כי broadcast לא חוצה VLAN. **זו השאלה החשובה לנדב.**
+2. **הפורט נשאר מחובר כשהמכונה כבויה.** ה-NIC נשאר מונע (standby), והסוויץ'
+   מדווח "up". ‏PoE אינו קשור לכך.
+3. **אל תכבה את הפורט** (`shutdown`) ואל תגדיר `power inline` כך שיכבה אותו.
+4. ‏**אל תגביל broadcast** (סעיף 4.6).
+5. ‏PortFast (סעיף 4.3). אחרי ה-magic packet ה-NIC מעיר את המכונה, אבל קישור שעולה
+   מחדש עובר דרך STP.
+6. **ללא port-security שחוסם MAC חדש** (או `maximum` נאות). ‏port security
+   sticky יכבה פורט כשמחליפים מכונה (N07).
+
+**צד המכונה (לא בסוויץ', רק להזכיר):** ‏WoL ב-BIOS, ו"Remote Wakeup Boot
+Source" ל-Network (N18). זה באחריות נדב לפי הקוד.
+
+```
+! אין הגדרה ייעודית. בדיקה שהפורט למכונה כבויה נשאר up:
+show interfaces GigabitEthernet1/0/5 status
+show mac address-table interface GigabitEthernet1/0/5
+
+! אם יש port-security, ודא שאינו חוסם:
+show port-security interface GigabitEthernet1/0/5
+```
+
+- **נבדק במקור:** יעד ה-broadcast והפורט (קוד `server/wol.py`); ההבהרה
+  שהתיעוד של Cisco על directed-broadcast רלוונטי רק ל-WoL בין רשתות
+  (91672: <https://www.cisco.com/c/en/us/support/docs/switches/catalyst-3750-series-switches/91672-catl3-wol-vlans.html>).
+- **הסקה:** כל שאר הסעיף. החיפוש לא העלה תיעוד שקושר STP או link-down
+  לאובדן WoL, ולכן 5 הוא זהירות ולא עובדה.
+
+
+### 4.12 IGMP snooping בשלוש שכבות
+
+**מכאן והלאה (4.12 עד 4.19): מה שנוסף כשיש שלוש שכבות, trunks ו-VTP.** סעיפים 4.3 עד 4.11 מתארים פורט בודד.
+
+**מה ולמה.** בשכבה אחת snooping ו-querier פשוטים. בשלוש שכבות יש עוד דרישה:
+**כל סוויץ' בנתיב חייב snooping פעיל, ובכל סוויץ' חייב להיות ידוע איזה
+פורט מוביל ל-querier.** פורט כזה נקרא mrouter port.
+
+**איפה ה-querier: בליבה.** השרת מחובר לליבה, ולכן הליבה היא המקום הטבעי.
+**ב-querier רק סוויץ' אחד לוילן.** אל תפעיל `querier` בסוויצ'י הקומה והכיתה.
+(אם הפעלת, מתקיימת בחירה והנמוך ב-IP מנצח; זה עובד אבל אי אפשר לדעת מי
+המנצח בלי לבדוק. **הסקה** מתוך כלל הבחירה.)
+
+**איך ה-trunk נהיה mrouter port.** סוויץ' קומה או כיתה לא מנתב ולא מריץ
+PIM, ולכן הוא לומד שהפורט מוביל "לנתב" מתוך **ה-General Query שמגיע ממנו**.
+בקהילת Cisco מתואר ש-querier של סוויץ' שולח רק General Query בלי PIM, והסוויץ'
+המקבל מסמן את הפורט שממנו הגיעה השאילתה כ-mrouter. מדריך הפתרון-תקלות של
+Cisco ל-Catalyst 9300 מראה ב-debug את אותו מנגנון: "IGMPv2 General Query
+received on Vlan..., port ..." ויצירת router port.
+(<https://www.cisco.com/c/fr_ca/support/docs/switches/catalyst-9300-switch/222250-troubleshoot-igmp-snooping-on-cisco-swit.html>)
+**לכן אין צורך להגדיר mrouter ידנית כל עוד ה-querier חי.** כך נוצר הנתיב:
+
+1. משכפל בכיתה שולח IGMP Report (הצטרפות לקבוצה).
+2. סוויץ' הכיתה מעביר את ה-Report **רק ל-mrouter port** (ה-uplink לקומה).
+3. סוויץ' הקומה עושה אותו דבר מול הליבה.
+4. הליבה לומדת: "הקבוצה G נמצאת מאחורי trunk לקומה 1". המולטיקאסט מהשרת
+   יורד רק לשם, ואז רק לכיתה הנכונה. (**הסקה** מתוך הכלל שדוחות נשלחים
+   ל-mrouter ports; הדגמה בסעיף 4.19.)
+
+**מה קורה כשאין querier (או כשהוא לא מגיע לכל הסוויצ'ים):**
+
+- אין שאילתות => אין mrouter ports => ה-Reports של הכיתה **לא עולים** מעלה
+  => הקומה והליבה לא יודעות שיש חברים מאחור.
+- התוצאה תלויה בפלטפורמה והגדרה: מולטיקאסט שלא ידוע לו נמען **מוצף** לכל
+  הפורטים בוילן (בכל הקומות; ‏unknown multicast flooding) או **נזרק**. ‏
+  הסוויץ' המקומי בכיתה, שיש בו חברים ידועים, ימשיך להעביר, אבל הקומה והליבה
+  לא בהכרח. (**הסקה:** המקורות שמצאתי אינם קובעים איזו מההתנהגויות תקרה
+  בדגם שלך. לכן הבדיקה בסעיף 4.19 היא חובה.)
+- גם אם הכול עובד בהתחלה, ללא querier החברות פוקעת (2-4 דקות, ראו סעיף 4.4)
+  והזרם נופל באמצע.
+
+**אם הליבה אינה הסוויץ' היחיד שמחובר לשרת** (למשל שרת משני): ה-querier
+נשאר בליבה, ואין צורך בכלום נוסף.
+
+```
+! ===== ליבה (core): snooping + querier =====
+conf t
+ ip igmp snooping
+ ip igmp snooping vlan 44
+ ip igmp snooping querier
+ ip igmp snooping querier address 10.44.0.2
+ ip igmp snooping vlan 44 querier
+ ip igmp snooping vlan 44 querier address 10.44.0.2
+ ! שליחת שאילתה מיידית אחרי TCN, שהקבוצות יילמדו מחדש מהר
+ ip igmp snooping tcn query solicit
+ ip igmp snooping tcn flood query count 2
+end
+
+! ===== סוויץ' קומה: snooping בלבד, בלי querier =====
+conf t
+ ip igmp snooping
+ ip igmp snooping vlan 44
+ no ip igmp snooping querier
+ ip igmp snooping tcn flood query count 2
+end
+
+! ===== סוויץ' כיתה: snooping בלבד, בלי querier =====
+conf t
+ ip igmp snooping
+ ip igmp snooping vlan 44
+ no ip igmp snooping querier
+ ip igmp snooping tcn flood query count 2
+ interface range GigabitEthernet1/0/2 - 24
+  no ip igmp snooping tcn flood
+ exit
+end
+
+! ===== רק אם הלמידה האוטומטית של mrouter לא עובדת בדגם =====
+! (הפורט שפונה לליבה בלבד. אל תעשה את זה כברירת מחדל.)
+! ip igmp snooping vlan 44 mrouter interface TenGigabitEthernet1/1/1
+```
+
+**סימנים שאין querier באף מקום:** ‏`show ip igmp snooping querier` ריק
+בסוויץ'י הקומה והכיתה, ו-`show ip igmp snooping mrouter` ריק. ‏הגדרות
+כמו `ip igmp snooping querier address` ‏דורשות כתובת בתוך תת-הרשת של הוילן;
+בלי SVI חובה להגדיר אותה ידנית (בסעיף 4.4 כבר מוסבר).
+
+- **נבדק במקור:** למידת mrouter מתוך General Query (Cisco Community
+  <https://community.cisco.com/t5/switching/igmp-snooping-querier-switch-w-o-receivers-receiving-multicast/td-p/3067622>,
+  ומדריך Cisco 222250 לעיל); הפקודות `tcn query solicit` ו-`tcn flood query
+  count` (Cisco IOS-XE, קישור בסעיף 4.4).
+- **הסקה:** כל התיאור של זרימת ה-Reports מעלה, וההתנהגות בלי querier בדגם
+  שלך.
+
+
+### 4.13 ה-trunks (ליבה-קומה, קומה-כיתה)
+
+**מה ולמה:**
+
+- **VLAN ההפצה חייב להיות ב-allowed list.** טעות נפוצה: `switchport trunk
+  allowed vlan 44` **מחליף** את כל הרשימה ומפיל VLAN-ים אחרים. השתמש ב-
+  `add`. ‏וגם אם VLAN 44 לא מופיע ב-allowed, הוא לא יעבור, והמולטיקאסט
+  ייעצר בקומה.
+- **`switchport mode trunk` + `switchport nonegotiate`:** בלי DTP.
+- **native VLAN:** לא 44 ולא VLAN 1. הצע VLAN ריק לא בשימוש (למשל 999) **זהה בשני
+  קצות כל trunk**. אי-התאמה ב-native VLAN גורמת להודעות CDP ולבעיות STP.
+  (**הסקה** ממדריכי Cisco כלליים; לא נבדק מול הדגם.) אם ה-trunks כבר עובדים
+  עם native VLAN אחר, אל תשנה בלי צורך; רק ודא שהוא זהה בשני הצדדים.
+- **בלי `portfast` על trunk** (ראו סעיף 4.15). ‏PortFast על trunk בין סוויצ'ים
+  עלול ליצור לולאה זמנית.
+- **storm-control על trunk:** לא להפעיל. ‏trunk נושא את כל התעבורה של כל
+  הכיתות, ובפרט את המולטיקאסט (~110MB/s). אם מדיניות המכללה כופה, רק על
+  `broadcast` בסף גבוה (10%+), לא על multicast. ‏ב-Catalyst חריגה חותכת
+  **כל** חבילות הסוג (סעיף 4.6).
+- **VTP pruning:** ‏VTP pruning (אם מופעל) מגזים את הסוף של VLAN-ים בלי פורטים
+  פעילים. ב-VLAN אחד בלבד זה מיותר. **המלצה:** ‏`no vtp pruning`, ובמקום זה
+  רשימת allowed מפורשת. (**הסקה**; מקור ישיר על אינטראקציה pruning/מולטיקאסט
+  לא נמצא.)
+
+```
+! על כל קצה של כל trunk (ליבה-קומה וקומה-כיתה). בדוגמה Te1/1/1.
+conf t
+ interface TenGigabitEthernet1/1/1
+  description TRUNK-to-<neighbor>
+  switchport mode trunk
+  switchport nonegotiate
+  switchport trunk native vlan 999
+  switchport trunk allowed vlan add 44
+  no storm-control multicast level
+  no storm-control broadcast level
+  no spanning-tree portfast
+  no spanning-tree bpduguard enable
+ exit
+end
+```
+
+(אם ה-trunk ב-`Gi` ולא ב-`Te`, החלף שם. אם הדגם דורש `switchport trunk
+encapsulation dot1q` לפני `mode trunk` (בדגמי Catalyst ישנים), הוסף אותו.)
+
+- **נבדק במקור:** תיעוד Cisco על PortFast מוגבל למצב non-trunk (סעיף 4.3).
+- **הסקה:** כל השאר בסעיף: ‏allowed, ‏native, ‏pruning, ‏storm-control.
+
+
+### 4.14 VTP: מה בטוח ומה לא
+
+**מה ולמה.** נדב אמר "הסוויצ'ים לומדים אחד מהשני". זה VTP, ובמצבו הנפוץ
+(server/client, גרסה 1 או 2) יש סיכון ידוע: **סוויץ' עם `configuration
+revision` גבוה יותר, שמחברים לרשת, מחליף את מסד ה-VLAN של כולם**, גם אם
+הוא ב-mode client, ועלול למחוק VLAN-ים (כולל VLAN 44). שרשורי Cisco Community
+מתארים בדיוק את זה: מחיקת כל מסד ה-VLAN ברשת בגלל סוויץ' חדש (או שעבר בין
+רשתות) עם revision גבוה.
+(<https://community.cisco.com/t5/switching/vtp-question/m-p/1270818>,
+<https://community.cisco.com/t5/other-network-architecture-subjects/vtp-client-and-revision-numbers/td-p/4139867>)
+בכיתות זה סיכון מוחשי: סוויץ' כיתה שמוחלף, נבדק במעבדה, או עובר בין
+כיתות, נושא איתו revision.
+
+**מה בטוח ממה (לפי מה שנמצא במקורות):**
+
+| מצב | התנהגות | מסקנה |
+|---|---|---|
+| **server / client (v1, v2)** | לומד ומפיץ מסד VLAN. revision גבוה יותר מנצח. | **הסיכון המתואר.** מותר רק עם משמעת קפדנית (איפוס revision לפני חיבור). |
+| **transparent** | לא לומד ולא מפיץ (מעביר פרסומים הלאה), ה-VLAN-ים מקומיים. revision נשאר 0. לפי השרשורים, מעבר ל-transparent מאפס את ה-revision. | **הכי בטוח לסוויצ'י כיתה.** המחיר: צריך ליצור את VLAN 44 ידנית בכל סוויץ' כזה. |
+| **VTP v3** | לפי השרשורים, ב-v3 מסד ה-VLAN לא נמחק בקלות וקיימת הגנה נוספת (סיסמה, ושרת "primary" יחיד שמורשה לשנות). | **בטוח יותר מ-v1/v2 אם כל הדגמים תומכים.** תנאי: כל הסוויצ'ים בדומיין תומכים ב-v3 (לא נבדק). |
+| **off** | VTP כבוי לגמרי. | אפשרות (תלוי בדגם ובגרסה). |
+
+**ההמלצה (הסקה מתוך המקורות):**
+
+1. **כיתות: mode transparent** (או off). בכיתה אין סיבה ללמוד VLAN-ים,
+   ו-VLAN 44 כבר מוגדר. מקטין את הסיכון לאפס מבחינה זו.
+2. **ליבה וקומות:** אם הכול תומך, ‏**VTP v3** עם סיסמה ושרת primary אחד
+   (הליבה). אם לא, ‏server בליבה בלבד ו-client בקומות, **עם סיסמת דומיין**.
+3. **לפני חיבור כל סוויץ' למערכת** (מחליף, מהמעבדה): ‏`show vtp status`, ובדיקה
+   ש-`Configuration Revision` הוא 0. אם לא: להעביר ל-transparent ובחזרה
+   (לפי המקורות זה מאפס), או לאפס את ה-VLAN database.
+4. **לפני מעבר סוויץ' ל-transparent:** ודא ש-VLAN 44 קיים בו (`show vlan id
+   44`). אחרת הוא ייעלם מה-trunk allowed של אותו סוויץ'.
+5. **לגבות לפני כל שינוי:** ‏`show running-config`, ‏`show vlan brief`,
+   ‏`show vtp status` לכל סוויץ' (שמור לקובץ).
+
+**אל תשנה את ה-VTP בלי חלון תחזוקה.** מעבר מ-server/client ל-transparent אינו
+אמור להפיל VLAN-ים קיימים (הם נשארים בתצורה), אבל זו **הסקה** שלא אימתתי
+בדגם שלך.
+
+```
+! ===== בדיקה לפני כל שינוי (בכל סוויץ') =====
+show vtp status
+show vlan brief
+show running-config | include vtp
+
+! ===== סוויץ' כיתה: transparent =====
+conf t
+ ! ודא קודם: show vlan id 44 מחזיר VLAN קיים
+ vtp mode transparent
+ ! אם הדגם תומך (חלק מהדגמים, "vtp mode off")
+end
+
+! ===== ליבה (אם v3 נתמך בכל הדומיין) =====
+conf t
+ vtp version 3
+ vtp password <סיסמה-של-המכללה>
+end
+! ואז, במצב privileged EXEC, הליבה הופכת ל-primary:
+! vtp primary vlan
+
+! ===== ללא v3: server בליבה, client בקומות, עם סיסמה =====
+! ליבה:  vtp mode server  / vtp domain <שם>  / vtp password <סיסמה>
+! קומה:  vtp mode client  / vtp domain <שם>  / vtp password <סיסמה>
+```
+
+(הפקודות `vtp version 3` ו-`vtp primary` תלויות בדגם ובגרסה. אל תעתיק
+`vtp password` מהפרק; בחר סיסמה משלך ושמור אותה במקום מאובטח.)
+
+- **נבדק במקור:** סיכון ה-revision ב-v1/v2 (שרשורי Cisco Community לעיל),
+  מעבר ל-transparent כמאפס revision, ו-v3 כבטוח יותר.
+- **הסקה:** ההמלצה המלאה וההנחה שמעבר ל-transparent שומר VLAN-ים. **המקורות
+  הם פורומים, לא מדריך VTP רשמי של Cisco**, ולכן כדאי לקרוא את מדריך ה-VTP
+  של הדגם לפני שינוי.
+
+
+### 4.15 STP בשלוש שכבות
+
+**מה ולמה:**
+
+- **root bridge בליבה.** ‏STP בוחר root לפי עדיפות נמוכה. בלי הגדרה, הסוויץ'
+  עם ה-MAC הנמוך (לפעמים הישן ביותר בכיתה) הופך ל-root והתנועה מתעקלת.
+  קבע במפורש `root primary` בליבה, ו-`root secondary` בסוויץ' ליבה/קומה
+  נוסף אם יש.
+- **PortFast ו-BPDU guard רק בפורטי edge בכיתות** (פורטי מכונות, סעיף 4.3),
+  ולא בשום trunk. ‏**בפורט השרת בליבה:** ‏PortFast כן, ‏BPDU guard בהתאם
+  לסעיף 4.3.
+- **מצב:** ‏`rapid-pvst` (RSTP) מסיים התכנסות מהר יותר מ-PVST הרגיל. ‏**הסקה**
+  מידע כללי של Cisco; אם ה-STP כבר עובד, אל תחליף מצב בלי חלון תחזוקה.
+- **למה זה חשוב למולטיקאסט (N01).** פורט **בלי** PortFast שעולה או יורד
+  יוצר TCN. ה-TCN מתפשט ל-**כל** הסוויצ'ים בוילן (דרך ה-root), וגורם:
+  (1) מחיקה מוקדמת של טבלאות MAC בכולם; (2) ב-IGMP snooping, הצפת מולטיקאסט
+  זמנית בכל הרשת, עד שה-General Query הבא מחזיר את הקבוצות. כלומר מכונה אחת
+  בכיתה A שנדלקת בלי PortFast **מאטה את הסבב בכיתה D**. בכיתה בה מכונות
+  נדלקות ונכבות במהלך סבב זה בדיוק התרחיש. (הדיווח ב-Cisco Community על 3750,
+  והפתרון `no ip igmp snooping tcn flood`: סעיף 4.4. **מוסק:** לא נמדד אצלכם.)
+- **root guard (אופציונלי)** בפורטי ה-downlink של הקומה לכיתות, שמונע מסוויץ'
+  כיתה להפוך ל-root.
+
+```
+! ===== ליבה =====
+conf t
+ spanning-tree mode rapid-pvst
+ spanning-tree vlan 44 root primary
+end
+
+! ===== קומה (גיבוי root, אם יש ליבה שנייה/קומה נבחרת) =====
+conf t
+ spanning-tree mode rapid-pvst
+ ! spanning-tree vlan 44 root secondary
+end
+
+! ===== קומה: root guard בפורטים שיורדים לכיתות =====
+conf t
+ interface TenGigabitEthernet1/1/2
+  spanning-tree guard root
+ exit
+end
+
+! ===== כיתה: פורטי edge (כבר בסעיף 4.3) =====
+! spanning-tree portfast / spanning-tree bpduguard enable
+! ו-trunk לקומה: בלי portfast.
+```
+
+אם הסוויצ'ים כבר מריצים `spanning-tree mode pvst`, הפקודות עדיין תקפות
+(חוץ מ-`mode rapid-pvst`). בדוק מי ה-root היום: `show spanning-tree root`.
+
+- **נבדק במקור:** ‏PortFast משפיע רק בפורט שאינו trunk; ‏TCN גורם להצפת
+  מולטיקאסט ב-snooping (שרשורי Cisco Community בסעיף 4.4).
+- **הסקה:** הכל על רמת ה-root, ‏rapid-pvst ו-root guard.
+
+
+### 4.16 רוחב פס
+
+**מה ולמה.**
+
+- **היתרון:** מולטיקאסט עובר **פעם אחת** בכל uplink, גם כשיש כמה כיתות
+  מאחוריו. ‏unicast היה עובר פעם לכל מכונה. ‏ה-IGMP snooping מבטיח
+  שהזרם יורד רק ל-uplink-ים שמאחוריהם יש חברים (סעיף 4.12).
+- **שרת אחד, זרם אחד:** בפרויקט יש מולטיקאסט יחיד בכל המערכת
+  (`server/sessions.py`, שורה 54), כך ש-uplink נושא זרם אחד.
+- **הגודל:** הזרם נמדד במעבדה ב-**~106MB/s ≈ 850Mbps** (`docs/imagectl-spec.md`
+  סעיף 6, 17/09). ‏**uplink של 1Gb נתפס כמעט לגמרי** על ידי הזרם, ללא מרווח
+  לתעבורה אחרת (PXE, ‏HTTP של קבצי אתחול, ניהול). זה עובד אבל על הקצה.
+- **המלצה (הסקה):** ‏uplinks של **10Gb** בין ליבה לקומות, ו-1Gb לפחות
+  בין קומה לכיתה (קטע שנושא זרם אחד פלוס אתחול של הכיתה). ‏10GbE בשרת מוזכר
+  בפרויקט כיעד בחדר השיכפולים (`docs/imagectl-spec.md` סעיף 6 ושורה 351).
+- **EtherChannel בין סוויצ'ים (אם יש):** המולטיקאסט לקבוצה אחת הוא יעד
+  אחד, ולכן hash של port-channel שולח אותו על קישור **אחד**. שני קישורי 1Gb
+  לא נותנים 2Gb לזרם (אותו עיקרון כמו בסעיף 4.9; **הסקה**).
+- **הגנה על הקו:** `--max-bitrate` ב-udp-sender קיים בקוד (`server/sender.py`,
+  ‏`command_for`) ויכול להגביל את הזרם אם uplink משותף נחנק. זו הגדרה של
+  השרת, לא של הסוויץ'.
+- **אתחול כיתה שלמה:** ‏30 מכונות שמורידות kernel ו-initrd ב-HTTP (unicast)
+  עוברות דרך אותו uplink. ‏initrd של כמה עשרות MB כפול 30 הוא נפח משמעותי,
+  גם אם קצר. (**הסקה**, לא נמדד.)
+
+אין פקודות הגדרה לסעיף הזה, רק מדידה:
+
+```
+! באמצעות 'load-interval' מקצרים את חלון המדידה ל-30 שניות
+conf t
+ interface range TenGigabitEthernet1/1/1 - 2
+  load-interval 30
+ exit
+end
+show interfaces TenGigabitEthernet1/1/1 | include rate
+```
+
+
+### 4.17 קווים מנחים להפעלה בטוחה (סדר עבודה)
+
+1. גיבוי: ‏`show running-config`, ‏`show vlan brief`, ‏`show vtp status`,
+   ‏`show spanning-tree root` מכל סוויץ' (קובץ לכל סוויץ').
+2. ‏VTP (סעיף 4.14). קודם, כי יכול למחוק VLAN-ים.
+3. ‏STP: ‏root בליבה (סעיף 4.15).
+4. ‏trunks: ‏allowed עם `add`, ‏native זהה (סעיף 4.13).
+5. ‏snooping בכל סוויץ', ‏querier **רק** בליבה (סעיף 4.12).
+6. פורטי edge (סעיפים 4.3, 4.5-4.8).
+7. בדיקה מקצה לקצה בזמן סבב (סעיף 4.19).
+
+**כל שינוי ב-trunk או ב-STP מתבצע בחלון תחזוקה.** שינוי שגוי ב-trunk מנתק
+קומה שלמה, ושינוי ב-root גורם להתכנסות של כל הרשת.
+
+
+### 4.18 בדיקה בסוויץ' בודד (פקודות ותוצאות)
+
+הרץ את אלה **בזמן סבב אמיתי** (לפחות 3 משכפלים), ולא בסוויץ' ריק.
+
+```
+! סיכום מצב ה-VLAN והפורטים (מהירות/duplex/err-disabled)
+show interfaces status
+show interfaces status err-disabled
+show vlan id 44
+
+! IGMP
+show ip igmp snooping
+show ip igmp snooping vlan 44
+show ip igmp snooping querier
+show ip igmp snooping groups vlan 44
+show ip igmp snooping mrouter
+
+! STP/PortFast
+show spanning-tree interface GigabitEthernet1/0/2 detail
+show spanning-tree summary
+show spanning-tree vlan 44 detail | include occurr|from
+
+! DHCP snooping
+show ip dhcp snooping
+show ip dhcp snooping statistics
+show errdisable recovery
+show errdisable detect
+
+! storm-control, EEE, MTU
+show storm-control
+show interfaces GigabitEthernet1/0/2 counters errors
+show power efficient-ethernet status
+show system mtu
+```
+
+**מה לחפש:**
+
+| בדיקה | תוצאה תקינה | אם לא |
+|---|---|---|
+| `show ip igmp snooping` | ‏snooping `Enabled` גלובלית ובוילן 44 | להריץ סעיף 4.4 |
+| `show ip igmp snooping querier` | יש querier לוילן 44, עם כתובת (של הסוויץ' **או** של השרת) | בלי querier הזרם נופל אחרי דקות |
+| `show ip igmp snooping groups vlan 44` | בזמן סבב: כתובת הקבוצה, ופורטי השרת והמשכפלים ברשימה. **רשום את הכתובת** | אם הקבוצה לא מופיעה: המשכפלים לא מצטרפים או IGMP נחסם |
+| `show spanning-tree interface ... detail` | ‏`The port is in the portfast mode` | להריץ סעיף 4.3 |
+| `show spanning-tree vlan 44 detail` | **מספר `topology changes` לא עולה** תוך כדי סבב. השווה לפני ואחרי | פורט בלי portfast |
+| `show ip dhcp snooping` | פורט השרת `Trusted` | להריץ סעיף 4.5 |
+| `show interfaces status err-disabled` | ריק | פורט נכבה: ראו `errdisable` ובדוק סיבה |
+| `show interfaces status` | כל פורטי המכונות `a-full` ו-`a-1000` | פורט ב-100: כבל או פורט, לא הגדרה |
+| `show storm-control` | ריק או רמות גבוהות | להריץ סעיף 4.6 |
+| `show interfaces ... counters errors` | אפס CRC/late-collision | duplex או כבל |
+
+**בדיקה הדרגתית:**
+
+1. סבב עם משכפל אחד. ודא `groups vlan 44`.
+2. סבב עם 3 משכפלים והעבר זרם 5 דקות לפחות (**יותר מ-260 שניות**: זה
+   ה-timeout של החברות). אם הזרם נופל סביב 3-4 דקות, ה-querier חסר.
+3. במהלך הסבב, `shutdown` ואחר כך `no shutdown` על פורט של מכונה אחרת
+   ב-VLAN, בלי PortFast (או עם), ובדוק ש-`re-xmit` בלוג השולח לא קופץ
+   (N01). **אל תעשה את זה על פורט של מכונה שמשתתפת.**
+4. כיבוי והדלקה דרך הקונסולה (WoL) של מכונה בודדת.
+
+
+### 4.19 בדיקה מקצה לקצה (בזמן סבב, בכל שכבה)
+
+הרץ **תוך כדי סבב אמיתי** של לפחות 3 משכפלים, ורצוי ביותר מכיתה אחת.
+מומלץ סבב של **יותר מ-5 דקות**, כדי לעבור את חלון תפוגת החברות.
+
+```
+! ===== ליבה =====
+show ip igmp snooping querier
+show ip igmp snooping groups vlan 44
+show ip igmp snooping mrouter vlan 44
+show spanning-tree root
+show spanning-tree vlan 44 detail | include occurr|from
+show interfaces trunk
+show interfaces TenGigabitEthernet1/1/1 counters
+show interfaces TenGigabitEthernet1/1/1 | include rate|multicast|drops
+
+! ===== קומה =====
+show ip igmp snooping querier
+show ip igmp snooping groups vlan 44
+show ip igmp snooping mrouter vlan 44
+show interfaces trunk
+show interfaces TenGigabitEthernet1/1/1 | include rate|multicast|drops
+show interfaces TenGigabitEthernet1/1/2 | include rate|multicast|drops
+
+! ===== כיתה =====
+show ip igmp snooping groups vlan 44
+show ip igmp snooping mrouter vlan 44
+show spanning-tree interface GigabitEthernet1/0/2 detail
+show interfaces status err-disabled
+show interfaces GigabitEthernet1/0/2 | include rate|drops
+show interfaces GigabitEthernet1/0/2 counters errors
+
+! ===== כל הסוויצ'ים =====
+show vtp status
+show vlan id 44
+```
+
+**מה לצפות לראות:**
+
+| שכבה | פקודה | תוצאה תקינה |
+|---|---|---|
+| ליבה | `show ip igmp snooping querier` | הליבה היא ה-querier, עם הכתובת שהגדרת |
+| ליבה | `... groups vlan 44` | כתובת הקבוצה, ובפורטים **רק** ה-trunk-ים לקומות שיש בהן חברים (לא כל ה-trunk-ים) |
+| קומה | `... mrouter vlan 44` | ה-uplink לליבה מופיע כ-mrouter (נלמד דינמית) |
+| קומה | `... groups vlan 44` | הקבוצה, והפורטים: ה-trunk לכיתה עם חברים |
+| כיתה | `... mrouter vlan 44` | ה-uplink לקומה מופיע כ-mrouter |
+| כיתה | `... groups vlan 44` | הקבוצה, והפורטים: המשכפלים שמשתתפים |
+| uplink | `show interfaces ... \| include rate` | ‏`output rate` ‏~850Mbps ב-uplink שבדרך לסבב; ‏**קרוב לאפס ב-uplink של קומה שאין בה סבב** (זה המבחן שה-snooping עובד) |
+| uplink | `... counters` | מונה multicast יוצא עולה רק ב-uplink-ים הנכונים; `drops` ו-`errors` אפס |
+| STP | `... detail \| include occurr` | מספר ה-topology changes **לא עולה** במהלך הסבב |
+| כל הסוויצ'ים | `show vtp status`, ‏`show vlan id 44` | ‏VLAN 44 קיים בכולם; ה-revision לא השתנה |
+
+**תוצאות שמעידות על בעיה:**
+
+- ה-groups ריק בקומה או בליבה, והזרם בכל זאת עובר => הצפה (snooping או
+  querier חסרים באחד הסוויצ'ים).
+- ה-mrouter ריק בקומה או בכיתה => ה-querier לא מגיע (בדוק allowed vlan ב-
+  trunk, סעיף 4.13).
+- ‏`output rate` גבוה ב-uplink לקומה שאין בה מכונות בסבב => הצפה.
+- ‏topology changes עולה בזמן הסבב => מישהו בלי PortFast (סעיף 4.15).
+- הזרם נופל אחרי 2-4 דקות => ה-querier חדל לשלוח או שאין (סעיף 4.12).
+
+### 4.20 מקורות לפרק 4 ומגבלות המחקר
+
+- דף man של `udp-sender` (Debian): <https://manpages.debian.org/testing/udpcast/udp-sender.1.en.html>
+- Cisco IOS-XE, IGMP snooping: <https://www.cisco.com/en/US/docs/ios/ios_xe/ipmulti/configuration/guide/imc_igmp_static_rng_xe.html>
+- Cisco Community, 3750 flooding / TCN: <https://community.cisco.com/t5/switching/3750-switch-flooding-multicast-traffic/td-p/1382687>
+- Cisco, WoL בין VLAN-ים (91672): <https://www.cisco.com/c/en/us/support/docs/switches/catalyst-3750-series-switches/91672-catl3-wol-vlans.html>
+- Cisco Community, DHCP snooping ו-Linux: <https://community.cisco.com/t5/switching/linux-device-boot-up-causing-dhcp-snooping-enabled-port-to-shut/m-p/1192682/highlight/true>
+- Specops, PXE-E18: <https://specopssoft.com/blog/pxe-e18-server-response-timeout>
+- Cisco Community, EEE ב-2960X: <https://community.cisco.com/t5/cisco-bug-discussions/2960x-interfaces-intermittent-disconnects-in-stack-quot-no-power/m-p/4099662>
+- Red Hat, 802.3ad ושליחה בקישור אחד: <https://access.redhat.com/solutions/372813>
+- Meraki, storm control (השוואה ל-Catalyst): <https://documentation.meraki.com/Switching/MS_-_Switches/Operate_and_Maintain/How-Tos/Storm_Control_for_MS>
+- ליבה/trunks/VTP: שרשורי Cisco Community על VTP revision (<https://community.cisco.com/t5/switching/vtp-question/m-p/1270818>, <https://community.cisco.com/t5/other-network-architecture-subjects/vtp-client-and-revision-numbers/td-p/4139867>); למידת mrouter מ-General Query (<https://community.cisco.com/t5/switching/igmp-snooping-querier-switch-w-o-receivers-receiving-multicast/td-p/3067622>, <https://www.cisco.com/c/fr_ca/support/docs/switches/catalyst-9300-switch/222250-troubleshoot-igmp-snooping-on-cisco-swit.html>).
+- בפרויקט: `docs/imagectl-spec.md` סעיף 6, ‏`docs/lab-test-plan.md` שורות 79 ו-763,
+  ‏`server/sender.py`, ‏`server/wol.py`, ‏`C:\ImageCtl-Lab\evening-1015\research-new-failures-1022.md`
+  (N01, N02, N05, N06, N07, N09, N28), ‏`research-multicast.md`, ‏`research-boot.md`.
+
+**מגבלת המחקר:** תוצאות החיפוש הן תקצירים. לא פתחתי כל מסמך Cisco במלואו.
+רוב המקורות לפקודות הם פורומים וקהילה ולא מדריך רשמי לדגם שלך. אימות מול
+`?` בסוויץ' ומול מדריך הדגם הוא חלק מהתהליך.
 
 ## 5. DHCP relay / helper — מה כן ומה לא
 
@@ -456,15 +1416,21 @@ interface range Gi1/0/1-24
 
 **רשת ומתגים**
 
-- [ ] מתג לא מנוהל גיגה בכל הפורטים (במסירה)
+- [ ] מתג לא מנוהל גיגה בכל הפורטים (במסירה, במעבדה) **או** שלוש שכבות Cisco מנוהלות לפי פרק 4.1–4.20
 - [ ] וילן הפצה נפרד, ללא ניתוב, ללא `ip helper-address`, ללא DHCP אחר
 - [ ] כרטיס ההפצה של השרת בפורט access בוילן ההפצה; 10GbE אם אפשר
 - [ ] כרטיס הניהול בפורט access בוילן הניהול (או ברשת המכללה — עם ACL ל-`8081`)
 - [ ] אין bridge ואין ניתוב בין כרטיסי השרת
-- [ ] IGMP snooping דלוק ו-querier אחד פעיל בוילן ההפצה (IGMP v2)
+- [ ] IGMP snooping דלוק ו-querier אחד פעיל בוילן ההפצה (IGMP v2); בשלוש שכבות: snooping בכל סוויץ', querier **רק** בליבה (4.12)
 - [ ] DHCP snooping: פורט השרת trusted
 - [ ] אין 802.1X בפורטי ההפצה; port security במקומו; פורטים פנויים כבויים
-- [ ] PortFast/edge בפורטי התחנות
+- [ ] PortFast/edge בפורטי התחנות; **לא** ב-trunks (4.3, 4.13)
+- [ ] (Cisco, שלוש שכבות) trunks: VLAN ההפצה ב-`allowed` עם `add`, native VLAN זהה בשני הקצוות, בלי storm-control על multicast/broadcast (4.13)
+- [ ] (Cisco) VTP: מצב ה-VTP ו-`Configuration Revision` נבדקו לפני חיבור כל סוויץ' חדש/מוחלף; כיתות ב-transparent או VTP v3 (4.14)
+- [ ] (Cisco) root bridge בליבה; ‏`topology changes` לא עולה בזמן סבב (4.15)
+- [ ] (Cisco) DHCP snooping: ‏`limit rate` בפורטי התחנות ו-`errdisable recovery` (4.5); ‏EEE כבוי (4.7); ‏duplex/מהירות auto (4.8)
+- [ ] (Cisco) uplinks מספיקים לזרם של ~850Mbps בכל קטע (4.16)
+- [ ] (Cisco) בדיקה מקצה לקצה בזמן סבב בכל שכבה: ‏`groups`, ‏`mrouter`, ‏`counters` על ה-uplink (4.19)
 - [ ] כל פורט בוילן ההפצה מתויג פיזית בשם המכונה
 
 **חומת אש**
@@ -514,6 +1480,9 @@ interface range Gi1/0/1-24
 | תקרת קצב להעברה בין אתרים | הקוד בפיתוח (`feat/wave-rate-by-machine`) |
 | מקום פנוי פי 1 בצד המקבל | בענף `#1457`, טרם מוזג |
 | PortFast/edge ו-STP | המלצה כללית, לא נמדדה אצלנו |
+| כל הפקודות של 4.3–4.19 על Cisco אמיתי, ושלוש השכבות (למידת mrouter ב-trunks, ‏VTP, ‏TCN בין שכבות) | נכתבו ממקורות (תיעוד Cisco, פורומים) ומקוד הפרויקט; לא הורצו על ציוד המכללה |
+| כתובת קבוצת המולטיקאסט של udpcast (233.254.x או 232.x, נגזרת מ-IP השרת) | דפי man סותרים; נקבע רק בבדיקה: `show ip igmp snooping groups` בזמן סבב |
+| ערוץ הבקרה של udpcast (rendezvous): broadcast או 224.0.0.1 | תלוי ב-TTL, וברירת המחדל שלו לא אומתה |
 | `Remote Wakeup Boot Source = Remote Server` | נבדק על דגם אחד בלבד (‏HP Compaq 8100). בדגמים אחרים השם וההתנהגות לא נבדקו |
 | כיבוי בכפתור הפיזי שובר את ה-WoL הבא | תצפית, לא ניסוי מבוקר. המנגנון לא ידוע |
 | ‏WoL במחשב הבנייה | לא עובד כרגע, והשורש לא ידוע (‏#1562) |
@@ -542,6 +1511,15 @@ interface range Gi1/0/1-24
 5. **`deb.debian.org` מ-`#1371`:** הוסר (`#1459`, לפי הכרעת 15/10 ב-`#1411`).
 6. **NAT בין האתרים:** האם הכתובת שמוזנת למשני היא תמיד כתובת ה-NAT של האתר
    הראשי? (משפיע על כלל ה-`8443` שבשרת המשני.)
+7. **דגם וגרסת IOS / IOS-XE בכל שכבה** (ליבה, קומה, כיתה): `show version`, `show inventory`. ייתכן שהם שונים בין השכבות, והפקודות בפרק 4 תלויות בדגם.
+8. **VTP היום:** `show vtp status` בליבה, בקומה ובכיתה: גרסה (1/2/3), מצב (server/client/transparent), שם דומיין, האם יש סיסמה, ו-`Configuration Revision`. מי אמור להיות ה-server.
+9. **uplinks:** סוג ומהירות של כל trunk (1G/10G), האם יש port-channel, וכמה סוויצ'י כיתה על כל קומה.
+10. **האם יש SVI או PIM בוילן ההפצה** (בליבה), ו-`show ip igmp snooping querier` היום, לפני שינוי? אם הליבה כבר מנתבת מולטיקאסט, היא ה-querier ואין צורך בהגדרה.
+11. **מה כבר מופעל** (`show running-config | include snooping|port-security|dot1x|storm|portfast`): DHCP snooping, ‏port-security, ‏802.1X, ‏storm-control.
+12. **VLAN-ים אחרים על אותם trunks** (כיתות, ניהול): שינוי ב-VTP, ב-allowed או ב-STP משפיע עליהם. צריך חלון תחזוקה ואיך מגבים.
+13. **מספר VLAN וטווח כתובות** של וילן ההפצה (בפרק: 44 ו-10.44.0.x כדוגמה), ואם השרת פיזי או וירטואלי (ESXi) ופורטו trunk או access.
+14. **שני כרטיסי הרשת בשרת "על אותה כתובת"** (מוקאפ הקונסולה): האם זה bond/LACP? ראו 4.9; אם כן, נדרשת בדיקת failover מול מולטיקאסט לפני.
+15. **‏#1543 ו-#1972** פתוחים שניהם על "השרת כ-IGMP querier". לאחד.
 
 
 <!-- pagebreak -->
@@ -705,7 +1683,7 @@ interface range Gi1/0/1-24
 | צבע | מתי | מה קורה | מה עושים |
 |---|---|---|---|
 | **ירוק** | SMART תקין; והכשל הקודם (אם היה) היה עצירה באמצע — הסבב נעצר, המכונה כובתה, הזרם לא הגיע, או **מגירה שנשלפה** | נכתב, בלי שאלה | כלום |
-| **כתום** | (א) נכשל בשיכפול הקודם **ו-SMART תקין**; או (ב) מונה ה-CRC מעל הסף שבהגדרות (13.1) — כבל או מגירה חשודים; או (ג) מצב ש-BIOS עוצר עליו ב-F1 | חלון עם הסיבה. **"נסה שוב" כותב.** בלי תשובה — **כותב** | לבדוק כבל/מגירה; להחליט |
+| **כתום** | (א) נכשל בשיכפול הקודם **ו-SMART תקין**; או (ב) מונה ה-CRC מעל הסף שבהגדרות (13.1) — כבל או מגירה חשודים; או (ג) מצב ש-BIOS עוצר עליו ב-F1 | **נכתב בלי שאלה** (‏#2042, נדב 23/10 — גם בסבב מהשרת; עד אז נשאל), ובסוף מקבל הערה כתומה עם הסיבה: "הושלם — SMART: …" במסך המשכפל ושורה כתומה מתחת למגירה בקונסולה | לבדוק כבל/מגירה; להחליף כשנוח |
 | **אדום** | ה-SMART אומר שהדיסק **תקול**; או דיסק איטי במדידת הכתיבה שלפני הגל (הוא מעכב את כל הגל) | חלון עם הסיבה, הדגם והסידורי, והמשפט **"הדיסק תקול לפי SMART — הכתיבה עלולה להיכשל או להשחית נתונים"**. **ברירת המחדל: דלג.** רק הכפתור האדום **"כתוב בכל זאת"** כותב. Enter אינו כותב | להחליף דיסק; כתיבה על אדום היא החלטה מודעת |
 
 חשוב:

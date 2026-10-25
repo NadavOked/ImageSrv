@@ -1817,6 +1817,19 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
 /* #1331 (מוקאפ 17/10, גרסה 2): מה קרה לדרייברים של הדיסק — שורה מתחת לפס, ברוחב השורה כולה */
 .page .mach .dsk .dline{grid-column:1/-1;min-width:0;white-space:normal;overflow-wrap:break-word;font-size:var(--t-xs);line-height:1.4;color:var(--clr-muted)}
 .page .mach .dsk .dline.warn{color:var(--clr-warning-fg)}.page .mach .dsk .dline.bad{color:var(--clr-danger-fg);font-weight:600}
+/* #2050 (mockup 07, Nadav 24/10): a drawer with a problem -- and one written and read back -- is a
+   3px frame all round and a soft fill in its colour; never a side stripe (#2061). The number takes the
+   colour and the status becomes a bigger chip. Plain rows (a healthy disk waiting or writing) are a thin
+   line on white. The colours themselves are bayEmphasis/slotClass's -- unchanged. After .dsk.bad b. */
+.page .mach .dsk{border:1px solid var(--clr-border);border-radius:var(--r-sm);background:var(--clr-surface);padding:6px 8px}
+.page .slots .disk:not(.bay-emphasis):not(.empty){border-color:var(--clr-border);background:var(--clr-surface)}
+.page .bay-emphasis.err{--bay:var(--clr-danger);--bay-soft:var(--clr-danger-soft);--bay-fg:var(--clr-danger-fg)}
+.page .bay-emphasis.warn{--bay:var(--clr-warning);--bay-soft:var(--clr-warning-soft);--bay-fg:var(--clr-warning-fg)}
+.page .bay-emphasis.ok{--bay:var(--clr-success);--bay-soft:var(--clr-success-soft);--bay-fg:var(--clr-success-fg)}
+.page .mach .dsk.bay-emphasis,.page .slots .disk.bay-emphasis{border:3px solid var(--bay);background:var(--bay-soft)}
+.page .mach .dsk.bay-emphasis>span:first-child,.page .slots .disk.bay-emphasis>b{color:var(--bay-fg);font-weight:600}
+.page .mach .dsk.bay-emphasis>b,.page .slots .disk.bay-emphasis>.bay-chip{display:inline-flex;align-items:center;gap:5px;justify-self:end;border-radius:999px;font-size:var(--t-base);padding:3px 12px;background:var(--bay);color:var(--on-ink);font-weight:600;white-space:nowrap}
+.page .mach .dsk.bay-emphasis>b::before,.page .slots .disk.bay-emphasis>.bay-chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
 .page .drv-legend{font-size:var(--t-xs);color:var(--clr-muted);margin-bottom:10px}
 .page .mach.err{border-color:var(--clr-danger);background:var(--clr-danger-soft)}
 .page .mach.off{opacity:.75;border-style:dashed}
@@ -1841,11 +1854,9 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
 .disk-map .cap{font-size:var(--t-xs);color:var(--clr-muted)}
 .disk-map .mono{font-family:var(--font-mono);direction:ltr;unicode-bidi:isolate}
 .disk-map .muted{color:var(--clr-muted)}
-.win .disk-map .conn-sel{display:inline-block;height:30px;width:auto;min-width:118px;padding-block:0;padding-inline:10px 30px;font-size:var(--t-sm)}
 .disk-map .acts-cell{white-space:nowrap;text-align:end;font-size:var(--t-sm)}
 .disk-map .acts-cell a{color:var(--clr-action-fg);cursor:pointer;text-decoration:none}
 .map-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
-.map-dirty{margin-top:12px;font-size:var(--t-xs);color:var(--warn-ink)}
 .map-help{font-size:var(--t-xs);color:var(--clr-muted);margin-top:10px}
 /* S211: בקר מקטעים בתוך sheet — היה מעוצב רק תחת .page, וב-sheet יצא בסגנון ברירת המחדל של הדפדפן */
 .win .n-seg{display:inline-flex;padding:2px;background:var(--clr-hover);border-radius:var(--r-sm);max-width:100%;flex-wrap:wrap}
@@ -1883,3 +1894,48 @@ body.tasks-open .sidebar{--dock-h:calc(34px + var(--task-h,220px))}
 .sidebar .nav-full,.sidebar .rail{bottom:var(--dock-h)}
 .sidebar .rail{padding-bottom:8px}
 body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
+/* ‏#2001: חלון "מיפוי חיבורים" — המוקאפ המאושר (slot-map-2001.html, ‏surface=console). רכיבי המערכת
+   (‏n-seg, ‏n-sw, ‏n-in) ולא חדשים; כאן רק הטבלה, ההערה והוספת חיבור. */
+.map-src{font-size:var(--t-xs);color:var(--clr-muted)}
+.win .smap{margin-inline:-24px}
+.smap-scope{display:flex;align-items:center;gap:10px;padding:0 24px 12px;font-size:var(--t-base);color:var(--clr-muted);flex-wrap:wrap}
+.smap-scope .smap-why{font-size:var(--t-xs)}
+.smap-note{margin:0 24px 10px;padding:9px 12px;border-radius:var(--r-sm);background:var(--clr-action-soft);color:var(--clr-text);font-size:var(--t-base);line-height:1.45;border-inline-start:3px solid var(--clr-action)}
+.smap-note.err{background:var(--clr-danger-soft);border-inline-start-color:var(--clr-danger)}
+.smap-note.err b{color:var(--clr-danger-fg)}
+.smap-t{width:100%;border-collapse:collapse;font-size:var(--t-base)}
+.smap-t tbody tr,.smap-t tbody tr:nth-child(even),.smap-t thead tr{background:none}
+.smap-t th{background:none;font-size:var(--t-sm);font-weight:600;color:var(--clr-muted);text-align:start;padding:8px 10px;border-bottom:1px solid var(--clr-border);white-space:nowrap}
+.smap-t td{padding:7px 10px;border-bottom:1px solid var(--clr-row-border);vertical-align:middle;height:46px}
+.smap-t th:first-child,.smap-t td:first-child{padding-inline-start:24px}
+.smap-t th:last-child,.smap-t td:last-child{padding-inline-end:24px;text-align:end;width:72px}
+.smap-t td.conn{width:118px;white-space:nowrap}
+.smap-t td.conn b{font-weight:600}
+.smap-t td.conn .pci{display:block;font-size:var(--t-xs);color:var(--clr-muted);margin-top:1px}
+.smap-t .mono{font-family:var(--font-mono);direction:ltr;unicode-bidi:isolate}
+.smap-t td.now .sz{font-family:var(--font-mono);direction:ltr;unicode-bidi:isolate;font-weight:600}
+.smap-t td.now .model{color:var(--clr-muted)}
+.smap-t td.now .vac,.smap-t .na{color:var(--clr-muted);opacity:.85}
+.smap-t td.now .tag{display:inline-block;font-size:var(--t-xs);padding:1px 7px;border-radius:10px;background:var(--clr-warning-soft);color:var(--clr-warning-fg);margin-inline-start:6px}
+.smap-t td.name{width:236px}
+.smap-t tr.off td.conn b,.smap-t tr.off td.now{color:var(--clr-muted)}
+.smap-t tr.new td{background:var(--clr-action-soft)}
+.win .smap-t .n-in{height:32px;font-size:var(--t-base);margin:0}
+.win .smap-t .n-in.bad{border-color:var(--clr-danger);box-shadow:0 0 0 3px color-mix(in srgb,var(--clr-danger) 18%,transparent)}
+.smap-t .ferr,.smap-add .ferr{font-size:var(--t-sm);color:var(--clr-danger-fg);margin:3px 0 0}
+.win .smap-t .smap-sw{display:inline-flex;vertical-align:middle;margin:0}
+.win .smap-t .na-sw{cursor:default}.win .smap-t .na-sw .track{opacity:.45}
+.smap-t tr.addrow td{border-bottom:0;height:auto;padding-block:10px;text-align:start}
+.smap-t .addrow .link{border:0;background:none;color:var(--clr-action-fg);font-weight:600;font-size:var(--t-base);padding:0;cursor:pointer;margin-inline-end:10px}
+.smap-t .addrow .link:focus-visible{outline:2px solid var(--clr-action);outline-offset:2px;border-radius:2px}
+.smap-add{margin:4px 24px;padding:12px;border:1px solid var(--clr-action);border-radius:var(--r);background:var(--clr-action-soft);display:grid;grid-template-columns:auto 110px 1fr auto;gap:10px 12px;align-items:end}
+.smap-add .lbl{display:block;font-size:var(--t-sm);font-weight:600;color:var(--clr-muted);margin-bottom:4px}
+.win .smap-add .n-in{height:32px;margin:0}
+.smap-add .acts{display:flex;gap:8px}
+.smap-add .help,.smap-add .ferr{grid-column:1 / -1;margin:0}
+.smap-add .help{font-size:var(--t-sm);color:var(--clr-muted)}
+.smap-help{font-size:var(--t-sm);color:var(--clr-muted);padding:8px 24px 0;margin:0}
+.win .n-hint .smap-dirty{color:var(--clr-warning-fg)}
+.win .n-f-bar .btn.ghost{border-color:transparent;color:var(--clr-action-fg);margin-inline-start:auto}
+.win .n-f-bar .btn.ghost[hidden]{display:none}
+@media (max-width:720px){.smap-t td.name{width:auto}.smap-add{grid-template-columns:1fr 1fr}.smap-add .acts{grid-column:1 / -1}}

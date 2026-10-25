@@ -86,6 +86,7 @@ def run_agent(tmp_path: Path, script: str, *, targets: dict[str, tuple[str, str]
         d.mkdir(parents=True, exist_ok=True)
         (d / "size").write_text(f"{sectors}" + chr(10), encoding="utf-8")
         (d / "removable").write_text("0" + chr(10), encoding="utf-8")
+        (d / "device").mkdir(exist_ok=True)   # #1909: an internal disk hangs somewhere (disk_internal)
     for dev, (state, error) in (targets or {}).items():
         d = run / "targets" / dev
         d.mkdir(exist_ok=True)
@@ -99,7 +100,7 @@ def run_agent(tmp_path: Path, script: str, *, targets: dict[str, tuple[str, str]
         stub.chmod(0o755)
         gui_env = f"FAIL_GUI_BIN={shlex.quote(posix(stub))} "
     libs = "".join(f". {posix(AGENT)}/lib/{n}; "
-                   for n in ("common.sh", "jsonq.sh", "progress.sh", "guistate.sh", "hold.sh", "ui.sh", "failscreen.sh")
+                   for n in ("common.sh", "sysinfo.sh", "jsonq.sh", "progress.sh", "guistate.sh", "hold.sh", "ui.sh", "failscreen.sh")
                    if (AGENT / "lib" / n).exists())
     full = (
         f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC} IP=10.44.0.82 IMAGECTL_TEST=1 "
@@ -142,7 +143,8 @@ def test_a_failed_capture_hold_becomes_a_hebrew_screen_with_the_reason(tmp_path)
     assert ("fail_ctx", "שלב|העלאה לשרת · 95%") in r["recs"], r["recs"]
     assert ("fail_ctx", "דיסק מקור|פנימי · 500GB") in r["recs"], r["recs"]
     assert values(r["recs"], "fail_safe") == ["הדיסק של המחשב הזה לא שונה — קליטה רק קוראת ממנו. אפשר להתחיל מחדש."]
-    assert len(values(r["recs"], "fail_step")) == 3
+    assert len(values(r["recs"], "fail_step")) == 1   # #2068: one sentence ...
+    assert values(r["recs"], "fail_btn") == ["retry|נסה שוב", "off|כבה את המחשב"]   # ... and the buttons
     assert "[agent] ui_error_hold: capture did not complete" in values(r["recs"], "fail_code")
     assert "targets/sdb/error upload rc=22 (HTTP 503) -> manifest upload failed" in values(r["recs"], "fail_code")
     assert ("fail_ctx", f"מכונה|{MAC}") in r["recs"]              # בלי jq: ה-MAC ולא שם מומצא
@@ -192,7 +194,7 @@ def test_a_pipe_or_newline_in_a_reason_cannot_break_a_record(tmp_path):
     r = run_agent(tmp_path, 'ui_error_hold "restore did not complete" hold_beat',
                   targets={"sda": ("failed", "a|b\nsecond line")})
     for k, v in r["recs"]:
-        assert v.count("|") == (4 if k == "fail" else 3 if k == "fail_row" else 1 if k == "fail_ctx" else 0), (k, v)
+        assert v.count("|") == (4 if k == "fail" else 3 if k == "fail_row" else 1 if k in ("fail_ctx", "fail_btn") else 0), (k, v)
     assert "targets/sda/error ab" in values(r["recs"], "fail_code")   # הקו נמחק (כמו #1548), לא שובר שדה
 
 
@@ -216,7 +218,8 @@ def test_die_local_shows_the_hebrew_reason_with_a_reboot_count_then_reboots(tmp_
     ("restore: manifest fetch failed", "לא ניתן היה לקרוא מהשרת את פרטי האימג׳"),
     ("no internal disk found", "לא נמצא דיסק פנימי"),
     ("server unreachable", "השרת לא ענה"),
-    ("a line nobody translated", "המחשב נעצר: a line nobody translated"),
+    # #1861: an unmapped line is said without its English -- the line itself is in fail_code
+    ("a line nobody translated", "המחשב נעצר בשלב שאין לו הסבר כאן"),   # #2068: no details box to point at
 ])
 def test_every_known_fatal_line_has_hebrew_and_an_unknown_one_still_gets_a_screen(tmp_path, english, he):
     r = run_agent(tmp_path, f'die_local {shlex.quote(english)}')
@@ -292,13 +295,14 @@ def test_the_two_entry_points_call_the_screen_and_the_agent_loads_it():
     assert 'cat "$RUN_DIR/fail.state"' in _lib("guistate.sh")
 
 
-def test_the_unknown_machine_is_a_documented_todo_not_an_implementation():
-    """הכרעה פתוחה ב-#1550: "מכונה לא מוכרת" אינה כישלון -- לא ממומש, מתועד."""
-    fs = _lib("failscreen.sh")
-    assert "TODO" in fs and "#1550" in fs
+def test_the_unknown_machine_is_not_a_failure_and_draws_its_own_records():
+    """‏#1550 השאיר את "מכונה לא מוכרת" פתוחה; ‏#1802 (נדב 19/10) הכריע: מקרה 8
+    במוקאפ, ‏tone ‏inf. היא אינה כישלון ולכן אינה עוברת ב-`fail_screen` (שם
+    הכותרת אדומה) -- ‏`ui_unknown` כותב את הרשומות ומציג אותן ב-`fail_show`."""
+    assert "TODO (#1550" not in _lib("failscreen.sh")
     ui = _lib("ui.sh")
     unknown = ui[ui.index("ui_unknown() {"):ui.index("ui_error_hold() {")]
-    assert "fail_screen" not in unknown
+    assert "fail_screen" not in unknown and "fail_show" in unknown
 
 
 def test_the_native_side_routes_parses_and_renders_the_block():
@@ -310,16 +314,17 @@ def test_the_native_side_routes_parses_and_renders_the_block():
     assert "case SCREEN_FAILURE:return failure_status_word(a,dot);" in screens
     state = _src("state.c")
     block = state[state.index('KEY("fail")'):state.index('KEY("fail_why")')]
-    assert "s->nfail_ctx = s->nfail_rows = s->nfail_steps = s->nfail_code = 0;" in block, "fail= אינו מאפס את הרשימות"
-    for key in ("fail_why", "fail_safe", "fail_at", "fail_ctx", "fail_row", "fail_step", "fail_code"):
+    assert "s->nfail_ctx = s->nfail_rows = s->nfail_steps = s->nfail_code = s->nfail_btns = 0;" in block, "fail= אינו מאפס את הרשימות"
+    for key in ("fail_why", "fail_safe", "fail_at", "fail_ctx", "fail_row", "fail_step", "fail_code", "fail_btn"):
         assert f'KEY("{key}")' in state, key
     main = _src("main.c")
-    assert '"failure", "failure-open"' in main and "SCREEN_FAILURE, SCREEN_FAILURE" in main
-    assert "HIT_FAIL_DETAILS" in main and "a->fail_open = !a->fail_open" in main
+    assert '"failure",' in main and '"failure-open"' not in main   # #2068: the details box went
+    assert 'power_drop(a, "fail.action", a->st.fail_btns[b].action)' in main   # the buttons: the agent acts (hold.sh)
     assert "src/screens_failure.c" in (REPO / "native-gui" / "Makefile").read_text(encoding="utf-8")
     failure = _src("screens_failure.c")
-    for text in ("מה קרה", "מה עושים עכשיו", "פרטים טכניים", "המחשב מחכה — לא יכבה לבד", "אין קשר עם השרת"):
+    for text in ("מה קרה", "מה אפשר לעשות", "המחשב נשאר דלוק — לא ייכבה לבד", "אין קשר עם השרת"):
         assert text in failure, text
+    assert "פרטים טכניים" not in failure and "טכנאי" not in failure   # #2068
 
 
 def test_the_records_are_documented_where_the_state_file_is():
@@ -344,18 +349,17 @@ def _state_for_png(tmp_path: Path, english: str, hello_rc: str = "200") -> Path:
 
 @GUI_BUILD
 @pytest.mark.parametrize("size", ["1920x1080", "1024x768"])
-def test_the_failure_screen_renders_in_both_themes_with_the_badge_and_the_fold(tmp_path, size):
+def test_the_failure_screen_renders_in_both_themes_with_the_badge(tmp_path, size):
     """הרשומות שהסוכן האמיתי כתב, מצוירות: התג האדום (60×60 ב---clr-danger-soft),
-    שני המצבים, שתי הערכות, והכרטיס הפתוח שונה מהמקופל."""
+    שתי הערכות. ‏#2068: אין עוד כרטיס "פתוח" -- הפרטים הטכניים ירדו."""
     binary = _build_gui(tmp_path)
     state = _state_for_png(tmp_path, "capture did not complete")
     _png(binary, tmp_path / "card", state, size=size)
     for th in ("light", "dark"):
-        assert (tmp_path / f"card-failure-{th}.png").exists() and (tmp_path / f"card-failure-open-{th}.png").exists()
+        assert (tmp_path / f"card-failure-{th}.png").exists() and not (tmp_path / f"card-failure-open-{th}.png").exists()
         w, h, ch, px = _png_rgb(tmp_path / f"card-failure-{th}.png")
         # tol=4: --clr-danger-soft (#FCEDEA) is 3/18/21 from white -- the default tolerance counts the whole surface
         assert _count_color(px, ch, _token("--clr-danger-soft", th), tol=4) > 1500, f"אין תג אדום ({th}, {size})"
-    assert (tmp_path / "card-failure-light.png").read_bytes() != (tmp_path / "card-failure-open-light.png").read_bytes()
 
 
 @GUI_BUILD

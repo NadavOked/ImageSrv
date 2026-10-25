@@ -10,15 +10,19 @@
 ‏`min_free_check`) — מה שכאן הוא התאום שהקונסולה מציגה ממנו "נכנס לדיסק
 מ-X GB", וחדר השיכפולים מסרב ממנו לפני שנפתח גל.
 
-**מחיצת המערכת** = מחיצת ה-`windows` הראשונה על הפלטה, ואם אין — ה-`linux`
-הראשונה (הבחירה של hostname.sh, ממשקים סעיף 1). היא גדלה על היעד רק כשהיא
+**מחיצת המערכת** = `system_partition` (‏#1875): המסומנת `"system": true`
+בקליטה, אחרת מחיצת ה-`windows` הגדולה ביותר, ואם אין — ה-`linux` הראשונה.
+אותו כלל בסוכן (`system_part`, ‏diskfit.sh) וב-hostname.sh. היא גדלה על היעד רק כשהיא
 המחיצה שהשחזור מותח (‏`expandable_candidate`) ורק מעבר לסף של 1GiB של
-`expand_last`. ‏`used_bytes` חסר = **לא נבדק**, לא "נכנס" (עיקרון 5).
+`expand_last` — ובחלקה בלבד: ‏#1897 מחלק את המקום הנוסף בינה לבין המחיצות
+המכווצות שאחריה לפי היחס במקור (`grow_share`). ‏`used_bytes` חסר = **לא נבדק**,
+לא "נכנס" (עיקרון 5).
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import sqlite3
 
 from .db import get_setting
@@ -65,15 +69,112 @@ def min_free_gb(conn: sqlite3.Connection) -> int:
     return value
 
 
+#: ‏#1875: "לא ידוע איזו מחיצה היא C:" — ספק אמיתי, ולא ניחוש. הסוכן מחזיר
+#: באותו מצב `ambiguous`, ושניהם אומרים את אותן מילים (‏AMBIGUOUS_WHY).
+AMBIGUOUS: dict = {"role": "windows", "ambiguous": True}
+AMBIGUOUS_WHY = "לא ידוע איזו מחיצת windows היא C: (אין סימון מהקליטה, ואין אחת גדולה מכולן)"
+#: ‏#1899: יותר ממחיצת linux אחת בלי סימון — ‏/boot נפרד. "הראשונה" הייתה /boot.
+AMBIGUOUS_LINUX: dict = {"role": "linux", "ambiguous": True}
+AMBIGUOUS_LINUX_WHY = "לא ידוע איזו מחיצת לינוקס היא השורש (אין סימון מהקליטה, ויש יותר מאחת)"
+
+
 def system_partition(manifest: dict) -> dict | None:
+    """מחיצת המערכת — התאום של `system_part` ב-`agent/lib/diskfit.sh` (‏#1875).
+
+    ראיה קודם: הקליטה מסמנת `"system": true` על המחיצה שכוורת
+    ‏`Windows/System32/config/SYSTEM` יושבת בה. מניפסט בלי הסימון (נקלט לפני
+    #1875): מחיצת ה-`windows` **הגדולה ביותר** — מחיצת OEM/כלים קטנה, ‏C:
+    מחזיקה את המערכת (‏Vm: ‏3GB לפני 223GB). שתיים בגודל העליון, או אחת בלי
+    גודל = ‏`AMBIGUOUS`, שהקוראים מדווחים "לא נבדק" ולא "לא נכנס" שגוי
+    (עיקרון 5). אין `windows` — ה-`linux` הראשונה על הפלטה. אין — `None`."""
     parts = [p for p in manifest.get("partitions") or []
              if isinstance(p, dict) and _whole(p.get("start_sector")) is not None]
-    for role in ("windows", "linux"):
-        found = sorted((p for p in parts if p.get("role") == role),
-                       key=lambda p: p["start_sector"])
-        if found:
-            return found[0]
-    return None
+    wins = [p for p in parts if p.get("system") is True] \
+        or [p for p in parts if p.get("role") == "windows"]
+    if len(wins) == 1:
+        return wins[0]
+    if wins:
+        doubt = AMBIGUOUS_LINUX if wins[0].get("role") == "linux" else AMBIGUOUS
+        sizes = [_whole(p.get("size_bytes")) for p in wins]
+        if None in sizes:
+            return doubt
+        top = [p for p, size in zip(wins, sizes) if size == max(sizes)]
+        return top[0] if len(top) == 1 else doubt
+    linux = [p for p in parts if p.get("role") == "linux"]
+    if len(linux) > 1:
+        return AMBIGUOUS_LINUX     # ‏#1899: לא "הראשונה על הדיסק" — היא /boot
+    return linux[0] if linux else None
+
+
+#: ‏#1896: הסימון של המפעיל (`system_source`). סימון בלי השדה — של הקליטה, מראיה (‏#1875).
+OPERATOR = "operator"
+
+
+def system_candidates(manifest: dict) -> list[dict]:
+    """‏#1896 (הכרעת נדב 22/10): המחיצות שהמפעיל בוחר ביניהן את C: — אותו ספק
+    של `system_partition`, **בלי** הסימון: מחיצות ה-`windows` בגודל העליון (או
+    כולן, כשלאחת אין גודל); בלי `windows` — כל מחיצות ה-`linux` (‏#1899, ‏/boot
+    נפרד). פחות משתיים = אין בין מה לבחור, `[]`. בסדר שעל הדיסק."""
+    parts = [p for p in manifest.get("partitions") or []
+             if isinstance(p, dict) and _whole(p.get("start_sector")) is not None]
+    wins = [p for p in parts if p.get("role") == "windows"]
+    if len(wins) > 1:
+        sizes = [_whole(p.get("size_bytes")) for p in wins]
+        pool = wins if None in sizes else [p for p, s in zip(wins, sizes) if s == max(sizes)]
+    else:
+        pool = [] if wins else [p for p in parts if p.get("role") == "linux"]
+    return sorted(pool, key=lambda p: _whole(p.get("start_sector"))) if len(pool) > 1 else []
+
+
+def markable(manifest: dict) -> bool:
+    """אפשר לסמן: יש בין מה לבחור, ואין סימון **של הקליטה** (`system: true` בלי
+    `system_source`) — ראיה מהדיסק אינה נדרסת. סימון של מפעיל אפשר לשנות."""
+    if not system_candidates(manifest):
+        return False
+    return not any(isinstance(p, dict) and p.get("system") is True and p.get("system_source") != OPERATOR
+                   for p in manifest.get("partitions") or [])
+
+
+def unmarked(manifest: dict) -> bool:
+    """‏#1896: "לא נבדק" עד שמסמנים — אפשר לסמן, ועוד לא סומן."""
+    return markable(manifest) and not any(
+        isinstance(p, dict) and p.get("system") is True for p in manifest.get("partitions") or [])
+
+
+def candidates_view(manifest: dict) -> list[dict]:
+    """מה שהקונסולה, מחשב הבנייה והמשכפל מציגים לבחירה."""
+    return [{"index": _whole(p.get("index")), "role": p.get("role"), "fs": p.get("fs") or "",
+             "size_bytes": _whole(p.get("size_bytes")), "used_bytes": _whole(p.get("used_bytes")),
+             "system": p.get("system") is True}
+            for p in system_candidates(manifest)]
+
+
+def grow_share(manifest: dict, cand: dict, part: dict | None = None) -> tuple[int, int]:
+    """‏#1897 (הכרעת נדב 22/10): (גודל המקור של `part` — ברירת המחדל: המועמד —
+    סכום גודלי המקור של כל מי שחולק במקום שהשחזור מוסיף). חולקים: המועמד, וכל
+    מחיצה על הדיסק שהקליטה כיווצה (`shrunk_from_bytes`) — ‏#1898: גם **לפניו**
+    (‏C: לפני שורש הלינוקס). כל אחת מקבלת `share(grow, own, total)`. התאום של
+    `share_tail`/`share_head` (‏agent/lib/expandshare.sh) ושל `system_free_after`
+    (‏diskfit.sh)."""
+    c_own = _whole(cand.get("shrunk_from_bytes")) or _whole(cand.get("size_bytes")) or 0
+    others = sum(_whole(p.get("shrunk_from_bytes")) or 0
+                 for p in manifest.get("partitions") or []
+                 if isinstance(p, dict) and p.get("index") != cand.get("index"))
+    if part is None or part.get("index") == cand.get("index"):
+        return c_own, c_own + others
+    return _whole(part.get("shrunk_from_bytes")) or 0, c_own + others
+
+
+def shares_room(cand: dict | None, part: dict) -> bool:
+    """‏#1898: האם `part` גדלה בשחזור — המועמד עצמו, או מחיצה שהקליטה כיווצה."""
+    return cand is not None and (cand.get("index") == part.get("index")
+                                 or _whole(part.get("shrunk_from_bytes")) is not None)
+
+
+def share(grow: int, own: int, total: int) -> int:
+    """החלק של המועמד ב-`grow` — ‏floor(grow × (own / total)), בדיוק סדר הפעולות
+    של jq בסוכן (שני כפל/חילוק IEEE), כדי שהתאומים יאמרו אותו בייט."""
+    return math.floor(grow * (own / total)) if total > 0 else grow
 
 
 def free_after(manifest: dict, disk_bytes: int) -> tuple[int | None, str] | None:
@@ -89,8 +190,11 @@ def free_after(manifest: dict, disk_bytes: int) -> tuple[int | None, str] | None
         return None, sys_part["role"]
     cand = expandable_candidate(manifest)
     grow = disk_bytes - need
-    grows = cand is not None and cand.get("index") == sys_part.get("index") and grow > EXPAND_THRESHOLD
-    return size - used + (grow if grows else 0), sys_part["role"]
+    grows = shares_room(cand, sys_part) and grow > EXPAND_THRESHOLD
+    if not grows:
+        return size - used, sys_part["role"]
+    own, total = grow_share(manifest, cand, sys_part)
+    return size - used + share(grow, own, total), sys_part["role"]
 
 
 def min_disk_bytes(manifest: dict, gb: int) -> int | None:
@@ -110,18 +214,23 @@ def min_disk_bytes(manifest: dict, gb: int) -> int | None:
     if short <= 0:
         return need
     cand = expandable_candidate(manifest)
-    if cand is None or cand.get("index") != sys_part.get("index"):
+    if not shares_room(cand, sys_part):
         return None    # המחיצה לא תגדל באף דיסק — אין גודל שבו הוא נכנס
-    return need + max(short, EXPAND_THRESHOLD + 1)
+    own, total = grow_share(manifest, cand, sys_part)   # ‏#1897/#1898: היא מקבלת רק את חלקה
+    room = -(-short * total // own) if own > 0 and total > 0 else short
+    while share(room, own, total) < short:   # עיגול ה-float — לכל היותר צעד או שניים
+        room += 1
+    return need + max(room, EXPAND_THRESHOLD + 1)
 
 
 def where(role: str) -> str:
     return "במחיצת הלינוקס הראשית" if role == "linux" else "ב-C:"
 
 
-def _unchecked_text(gb: int, role: str) -> str:
-    return (f"לא נבדק אם יישארו {gb}GB פנויים {where(role)} — "
-            f"לא נמדד כמה תפוס בה (used_bytes חסר)")
+def _unchecked_text(gb: int, role: str, ambiguous: bool = False) -> str:
+    why = (AMBIGUOUS_LINUX_WHY if role == "linux" else AMBIGUOUS_WHY) if ambiguous \
+        else "לא נמדד כמה תפוס בה (used_bytes חסר)"
+    return f"לא נבדק אם יישארו {gb}GB פנויים {where(role)} — {why}"
 
 
 def unchecked(manifest: dict, gb: int) -> str | None:
@@ -135,7 +244,7 @@ def unchecked(manifest: dict, gb: int) -> str | None:
     sys_part = system_partition(manifest)
     if sys_part is None or _whole(sys_part.get("used_bytes")) is not None:
         return None
-    return _unchecked_text(gb, sys_part["role"])
+    return _unchecked_text(gb, sys_part["role"], bool(sys_part.get("ambiguous")))
 
 
 def refusal(manifest: dict, disk_bytes: int, gb: int) -> str | None:
@@ -148,7 +257,7 @@ def refusal(manifest: dict, disk_bytes: int, gb: int) -> str | None:
         return None
     free, role = result
     if free is None:
-        return _unchecked_text(gb, role)
+        return _unchecked_text(gb, role, bool((system_partition(manifest) or {}).get("ambiguous")))
     if free >= gb * GIB:
         return None
     return f"לא נכנס — יישארו רק {free / GIB:.1f} GB פנויים {where(role)}, המינימום {gb}GB"

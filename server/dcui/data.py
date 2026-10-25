@@ -353,14 +353,31 @@ def _preinstall_snapshot(rows: list[dict], runner: Runner, sys_net: Path,
     )
 
 
-def _certificate_not_after(cert_path: Path) -> str:
-    """Read OpenSSL's decoded notAfter using the stdlib ssl module."""
+#: #2148: where the DCUI asks the console which certificate it presents
+#: (the console always listens on loopback too, #904).
+CONSOLE_LOCAL = ("127.0.0.1", 8081)
+#: the fingerprint while first boot still runs: none, rather than one that the
+#: end of first boot replaces (the server is restarted there, #2095).
+FIRST_BOOT_PENDING = "pending (first boot still running)"
+
+
+def _console_certificate(status_file: Path) -> tuple[str, tuple[str, ...], str]:
+    """#2148: (fingerprint, SANs, notAfter) of the certificate the console
+    presents now -- the one the browser sees. The copy in serving/ outlived a
+    restart, and first boot replaces the certificate it issued before the NIC
+    had its address: the operator compared the screen with the browser and
+    saw a mismatch (rc4, ESXi and Hyper-V, 24/10)."""
+    if _read_key_values(status_file).get("state") == "installing":
+        return FIRST_BOOT_PENDING, (), "unknown (first boot still running)"
     try:
-        import ssl
-        decoded = ssl._ssl._test_decode_cert(str(cert_path))  # type: ignore[attr-defined]
-        return str(decoded.get("notAfter") or "unknown")
-    except (OSError, ValueError, AttributeError, TypeError):
-        return "unknown"
+        details = console_tls.cert_details(console_tls.presented_console_cert(CONSOLE_LOCAL))
+    except (console_tls.ConsoleTLSError, OSError, ValueError, ImportError):
+        # A broken certificate is shown as unavailable; it must not remove the
+        # physical password-reset/reboot recovery path along with the web UI.
+        return ("unavailable (the console did not present a certificate)", (),
+                "unknown (certificate read failed)")
+    not_after = datetime.fromisoformat(details["not_after"]).strftime("%b %d %H:%M:%S %Y GMT")
+    return details["fingerprint_sha256"], tuple(details["sans"]), not_after
 
 
 def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
@@ -387,19 +404,9 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
         if deploy_state.configured else None
     address = management.address.split("/")[0] if management.address else ""
     console_url = f"https://{address or '127.0.0.1'}:8081"
-    try:
-        tls = console_tls.ensure_console_cert(
-            data_dir, address or management.name or "127.0.0.1",
-            hostname=socket.gethostname())
-        fingerprint = tls.fingerprint_sha256
-        certificate_sans = tls.sans
-        certificate_not_after = _certificate_not_after(tls.cert_path)
-    except (console_tls.ConsoleTLSError, OSError, ValueError, ImportError):
-        # A broken certificate is shown as unavailable; it must not remove the
-        # physical password-reset/reboot recovery path along with the web UI.
-        fingerprint = "unavailable (certificate read failed)"
-        certificate_sans = ()
-        certificate_not_after = "unknown (certificate read failed)"
+    # #2095: read, never issue -- this screen re-issued the certificate for
+    # whatever address it saw, behind the running server's back.
+    fingerprint, certificate_sans, certificate_not_after = _console_certificate(status_file)
     marker = netcfg_rollback.read_pending(data_dir / "netcfg")
     seconds = max(0, int(marker.deadline - current.timestamp())) if marker else 0
     services = {name: service_state(name, runner) for name in (

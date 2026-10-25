@@ -11,7 +11,7 @@
  </style>
 </defs>
 <rect width="1760" height="1110" fill="#fff"/>
-<text x="880" y="50" text-anchor="middle" class="title" direction="rtl" unicode-bidi="plaintext">ImageCtl v1 — מהדורת שיכפול</text>
+<text x="880" y="50" text-anchor="middle" class="title" direction="rtl" unicode-bidi="plaintext">ImageSrv — זרימה בזמן</text>
 <text x="880" y="79" text-anchor="middle" class="sub" direction="rtl" unicode-bidi="plaintext">תרשים זרימה בזמן: מדיסק המקור ועד דיסקים משוכפלים</text>
 
 <!-- timeline line -->
@@ -94,11 +94,11 @@
 <text x="545" y="718" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">🟢 ירוק — SMART תקין, אין היסטוריה</text>
 <text x="545" y="741" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">כותבים</text>
 <rect x="355" y="765" width="380" height="75" rx="12" class="warn"/>
-<text x="545" y="793" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">🟠 כתום — SMART מזהיר</text>
-<text x="545" y="817" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">"להחליף או להמשיך?" · בלי תשובה = ממשיכים</text>
+<text x="545" y="793" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">🟠 כתום — SMART מזהיר / נכשל בשיכפול קודם</text>
+<text x="545" y="817" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">כותבים בלי שאלה · הערה כתומה עם הסיבה</text>
 <rect x="355" y="850" width="380" height="82" rx="12" class="bad"/>
-<text x="545" y="878" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">🔴 אדום — נכשל בכתיבה בסבב קודם</text>
-<text x="545" y="902" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">"להחליף או להמשיך?" · בלי תשובה = מדלגים</text>
+<text x="545" y="878" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">🔴 אדום — SMART נכשל / דיסק לקריאה בלבד</text>
+<text x="545" y="902" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">לעולם לא יעד · מדולג בגלוי, בלי שאלה</text>
 <text x="545" y="950" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">S/N + פורט · "נקה" אחרי החלפת דיסק/כבל</text>
 
 <!-- multicast -->
@@ -116,13 +116,15 @@
 <!-- post write -->
 <rect x="1200" y="630" width="270" height="330" rx="18" class="purple"/>
 <text x="1335" y="665" text-anchor="middle" class="h" direction="rtl" unicode-bidi="plaintext">אחרי הכתיבה</text>
-<text x="1335" y="705" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">מתיחת NTFS</text>
-<text x="1335" y="733" text-anchor="middle" class="s">256 / 512GB</text>
+<text x="1335" y="705" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">הרחבת מערכת הקבצים</text>
+<text x="1335" y="733" text-anchor="middle" class="s">NTFS · ext4 · btrfs</text>
 <text x="1335" y="770" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">שם מחשב</text>
 <text x="1335" y="798" text-anchor="middle" class="s">Windows registry offline</text>
 <text x="1335" y="823" text-anchor="middle" class="s">Linux hostname</text>
-<text x="1335" y="860" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">אימות partition table</text>
-<text x="1335" y="900" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">Secure Boot מנובא מראש</text>
+<text x="1335" y="850" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">אימות partition table</text>
+<text x="1335" y="882" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">אימות קריאה-חוזרת</text>
+<text x="1335" y="904" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">מדגם, או מלא בהגדרות</text>
+<text x="1335" y="940" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">Secure Boot מנובא מראש</text>
 
 <!-- finish -->
 <rect x="1500" y="630" width="220" height="330" rx="18" class="good"/>
@@ -133,7 +135,7 @@
 <text x="1610" y="830" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">המפעיל מוציא</text>
 <text x="1610" y="854" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">דיסקים ומכניס חדשים</text>
 <text x="1610" y="905" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">תמיד אדם ליד המכונות</text>
-<text x="1610" y="930" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">לא אוטומטי</text>
+<text x="1610" y="930" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">דיסק בעייתי → נשאר דלוק עד "כבה"</text>
 
 <!-- side paths -->
 <rect x="70" y="850" width="230" height="180" rx="18" class="purple"/>
@@ -144,7 +146,7 @@
 <text x="185" y="1000" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">לא נשמר אימג' בשרת</text>
 
 <rect x="330" y="985" width="430" height="45" rx="12" class="warn"/>
-<text x="545" y="1013" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">כבל SATA מזוהה מ-dmesg → מסווג "כבל", לא "דיסק"</text>
+<text x="545" y="1013" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">שגיאות CRC בקישור → מסווג "כבל/מחבר", לא "דיסק"</text>
 
 <rect x="790" y="985" width="930" height="45" rx="12" class="bad"/>
 <text x="1255" y="1013" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">🔴 כל מצב לא ברור → דיסק מקומי · אין כתיבה בלי משימה מפורשת · בדיקה שנכשלה = כישלון גלוי</text>

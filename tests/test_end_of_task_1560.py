@@ -101,6 +101,11 @@ POWER_STUB = (
 def countdown(tmp_path: Path, body: str, env: str = "") -> tuple[subprocess.CompletedProcess, Path]:
     run = tmp_path / "run"
     (run / "gui").mkdir(parents=True, exist_ok=True)
+    # #2024: the count is for a clean end -- one target done and read back (the
+    # calls below name it, sdb); a problem holds instead (test_end_hold_2024.py)
+    (run / "targets" / "sdb").mkdir(parents=True, exist_ok=True)
+    (run / "targets" / "sdb" / "state").write_text("done\n", newline="\n")
+    (run / "targets" / "sdb" / "readback").write_text("sampled\n", newline="\n")
     script = (
         f"export RUN_DIR={q(run)} LOG_FILE={q(run / 'agent.log')} MAC=aa:bb:cc:dd:ee:ff "
         f"IMAGECTL_TEST=0 END_POWEROFF_S=20 {env}; "
@@ -117,7 +122,7 @@ def test_the_count_runs_its_seconds_on_the_screen_and_then_powers_off(tmp_path):
     out, run = countdown(tmp_path, (
         'sleep() { [ -f "$RUN_DIR/seen" ] || cp "$RUN_DIR/end.poweroff" "$RUN_DIR/seen"; '
         'echo SLEEP >> "$RUN_DIR/trace"; }; '
-        'end_countdown drawers "drawers complete"; echo "rc=$?"'))
+        'end_countdown drawers "drawers complete" "" "" sdb; echo "rc=$?"'))
     trace = trace_of(run)
     assert out.stdout.strip().endswith("rc=0"), out.stdout + out.stderr
     assert trace.count("SLEEP") == 20 and trace[-1] == "POWEROFF", trace
@@ -136,7 +141,7 @@ def test_the_button_from_the_kiosk_powers_off_at_once_and_an_old_press_does_not_
     (run / "end.now").write_text("")
     out, run = countdown(tmp_path, (
         'sleep() { echo SLEEP >> "$RUN_DIR/trace"; : > "$RUN_DIR/end.now"; }; '
-        'end_countdown localclone "local clone ended"; echo "rc=$?"'))
+        'end_countdown localclone "local clone ended" "" "" sdb; echo "rc=$?"'))
     assert trace_of(run) == ["SLEEP", "POWEROFF"], trace_of(run)
     assert "'כבה עכשיו' pressed" in (run / "agent.log").read_text(encoding="utf-8")
     assert not (run / "end.now").exists()
@@ -145,7 +150,7 @@ def test_the_button_from_the_kiosk_powers_off_at_once_and_an_old_press_does_not_
 def test_a_refused_power_off_returns_and_leaves_the_reason_on_every_screen(tmp_path):
     """‏WoL לא נדרך: לא כבה (#587), חוזר עם 1 — והסיבה ב-power.fail, שכל מסך
     מצייר (gui_hello_state). הספירה עצמה ירדה מהמסך."""
-    out, run = countdown(tmp_path, 'sleep() { :; }; end_countdown drawers "drawers complete"; echo "rc=$?"',
+    out, run = countdown(tmp_path, 'sleep() { :; }; end_countdown drawers "drawers complete" "" "" sdb; echo "rc=$?"',
                          env="PO_RC=1")
     assert out.stdout.strip().endswith("rc=1"), out.stdout + out.stderr
     assert "Wake-on-LAN" in (run / "power.fail").read_text(encoding="utf-8")
@@ -192,29 +197,37 @@ def test_the_count_can_be_stopped_only_when_something_failed(tmp_path, kind, hel
     assert not (bridge_token(tmp_path / "off", "end-hold", False) / "end.hold").exists()
 
 
-def test_a_stopped_count_holds_the_results_and_still_powers_off(tmp_path):
-    """עצירה: הרשומה עוברת ל-held=1 עם END_HOLD_S, ובסופה — כיבוי. אין מסך
-    שנשאר בלי פעולה (ברזל 17/10, 09:19Z: 27 דקות על מסך "נכשל")."""
+def test_a_stopped_count_holds_the_results_until_the_button(tmp_path):
+    """עצירה: הרשומה עוברת ל-held=1, והכיבוי — בכפתור. **#2024 (נדב 22/10)
+    החליף את התקרה של END_HOLD_S (300 ש')**: עצירה היא ההחזקה בלי תקרה, כמו
+    יעד עם בעיה. עדיין יש פעולה על המסך — הכפתור (ברזל 17/10, 09:19Z: 27
+    דקות על מסך "נכשל" בלי כפתור)."""
     out, run = countdown(tmp_path, (
         'sleep() { n=$((${n:-0} + 1)); [ "$n" != 2 ] || : > "$RUN_DIR/end.hold"; '
-        '[ "$n" != 4 ] || cp "$RUN_DIR/end.poweroff" "$RUN_DIR/seen"; echo SLEEP >> "$RUN_DIR/trace"; }; '
-        'end_countdown partial "drawers complete (1 of 2)" 1 2; echo "rc=$?"'), env="END_HOLD_S=7")
+        '[ "$n" != 4 ] || cp "$RUN_DIR/end.poweroff" "$RUN_DIR/seen"; '
+        '[ "$n" != 400 ] || : > "$RUN_DIR/end.now"; echo SLEEP >> "$RUN_DIR/trace"; }; '
+        'end_countdown drawers "drawers complete (2 of 2)" 2 2 sdb; echo "rc=$?"'))
     trace = trace_of(run)
-    # 2 seconds of the first count, then 7 held
-    assert trace.count("SLEEP") == 2 + 7 and trace[-1] == "POWEROFF", trace
-    _at, kind, done, total, held = (run / "seen").read_text().strip().split("|")
-    assert (kind, done, total, held) == ("partial", "1", "2", "1")
-    assert "stopped to read the results" in (run / "agent.log").read_text(encoding="utf-8")
+    # 2 seconds of the count, then held past the old 300 s ceiling -- off only on the button
+    assert trace.count("SLEEP") == 400 and trace[-1] == "POWEROFF", trace
+    at, kind, done, total, held = (run / "seen").read_text().strip().split("|")
+    assert (at, kind, done, total, held) == ("0", "drawers", "2", "2", "1")
+    assert "the count was stopped" in (run / "agent.log").read_text(encoding="utf-8")
 
 
-def watch(tmp_path: Path, room: object, *, fetch_ok: bool = True,
-          seen_ago: int = 0) -> tuple[subprocess.CompletedProcess, Path]:
+def watch(tmp_path: Path, room: object, *, fetch_ok: bool = True, seen_ago: int = 0,
+          frozen: bool = False) -> tuple[subprocess.CompletedProcess, Path]:
     run = tmp_path / "run"
     (run / "gui").mkdir(parents=True)
-    (run / "room.watch").write_text(f"room_ab12cd34|{int(time.time()) - seen_ago}\n", newline="\n")
+    now = int(time.time())
+    (run / "room.watch").write_text(f"room_ab12cd34|{now - seen_ago}\n", newline="\n")
     (run / "room.src.json").write_text(json.dumps(room), encoding="utf-8")
     get = ('gui_get() { cp "$RUN_DIR/room.src.json" "$2"; }; ' if fetch_ok
            else 'gui_get() { return 1; }; ')
+    # ‏frozen: ‏`date +%s` של הסוכן מחזיר את השנייה שנכתבה — גבול של שנייה אחת
+    # ‏(599 מול 600) אינו תלוי בכמה זמן עלה ה-shell (Testrunner תחת עומס, 21/10).
+    if frozen:
+        get += f"date() {{ echo {now}; }}; "
     out = bash(f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')} LOG_FILE={q(run / 'agent.log')}; "
                f". {posix(AGENT)}/lib/common.sh; "
                f". {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/roomflow.sh; "
@@ -240,7 +253,7 @@ def test_the_round_watch_hands_over_only_a_round_that_ended(tmp_path, room, watc
 
 @with_jq
 def test_a_room_that_could_not_be_read_is_not_an_end(tmp_path):
-    out, run = watch(tmp_path, {"round": None}, fetch_ok=False, seen_ago=599)
+    out, run = watch(tmp_path, {"round": None}, fetch_ok=False, seen_ago=599, frozen=True)
     assert out.stdout.strip() == "rc=1"
     assert (run / "room.watch").exists() and not (run / "room.ended").exists()
 
@@ -389,7 +402,8 @@ def test_a_round_where_every_drawer_was_skipped_counts_down_too(tmp_path, report
                       stubs=COUNT_STUB + HOLD_STUB + 'smart_gate() { return 1; }; ',
                       env="IMAGECTL_TEST=0 D_ROLE=cloner")
     trace = result["trace"]
-    assert "COUNTDOWN failed 0/0" in trace and "HOLD all drawers skipped" not in trace, trace
+    # #2024: the skipped drawers are the end's targets too (_all) -- "0 of 2", each with its reason
+    assert "COUNTDOWN failed 0/2" in trace and "HOLD all drawers skipped" not in trace, trace
     assert reports.received, "the failure is reported before the count"
 
 

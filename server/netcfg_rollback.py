@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import netcfg_host
+from .atomicfile import write_atomic
 
 PENDING_NAME = "pending.json"
 CRUMB_SUFFIX = ".rollback.json"
@@ -128,7 +129,7 @@ def write_pending(state_dir: str | Path, marker: Pending) -> str | None:
     path = pending_path(state_dir)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(marker.to_json(), encoding="utf-8")
+        write_atomic(path, marker.to_json())
     except OSError as exc:
         return f"לא ניתן לכתוב את סמן ההחזרה {path}: {exc.strerror or exc}"
     return None
@@ -181,10 +182,10 @@ def write_crumb(state_dir: str | Path, interface: str, reason: str,
     path = Path(state_dir) / f"{at.replace(':', '-')}{CRUMB_SUFFIX}"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(
+        write_atomic(path, json.dumps(
             {"schema": SCHEMA, "interface": interface, "reason": reason,
              "at": at, "errors": errors, "setting": setting},
-            ensure_ascii=False), encoding="utf-8")
+            ensure_ascii=False))
     except OSError:
         # מכוון (ה-docstring): ההחזרה כבר קרתה, ו-`main` מדפיס אותה ליומן
         # של systemd גם כשהפירור לא נכתב.

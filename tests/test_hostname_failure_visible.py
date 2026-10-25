@@ -65,7 +65,7 @@ def test_a_failed_hostname_write_ends_done_with_a_visible_warning(tmp_path):
     out = sh(script + 'name_this_machine sda sess1; echo "rc=$?"')
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip().endswith("rc=0"), out.stdout          # לא fatal
-    assert (run / "state").read_text().strip() == "done"           # השחזור הושלם
+    assert (run / "state").read_text().strip() == "naming"         # #1935: done is the caller's, after the drivers and the mark
     assert (run / "targets/sda/state").read_text().strip() == "done"
     err = target_error(run)
     assert err.startswith("שם המחשב לא נכתב: "), err

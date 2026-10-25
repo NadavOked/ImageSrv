@@ -39,7 +39,7 @@ def module_list_snippet() -> str:
     return "\n".join(lines[start:end + 1])
 
 
-def generate(tmp_path: Path, phy: list[str], ethernet: list[str]) -> list[str]:
+def generate(tmp_path: Path, phy: list[str], ethernet: list[str], pre: str = "") -> list[str]:
     root = tmp_path / "root"
     for sub, names in (("phy", phy), ("ethernet", ethernet)):
         d = root / "lib" / "modules" / KVER / "kernel" / "drivers" / "net" / sub
@@ -48,7 +48,7 @@ def generate(tmp_path: Path, phy: list[str], ethernet: list[str]) -> list[str]:
             (d / f"{name}.ko.xz").write_bytes(b"")
     (root / "etc" / "imagectl").mkdir(parents=True, exist_ok=True)
 
-    script = f'ROOT={root.as_posix()!r}\nKVER={KVER!r}\nWITH_GUI=0\n' + module_list_snippet()
+    script = f'ROOT={root.as_posix()!r}\nKVER={KVER!r}\nWITH_GUI=0\n' + pre + module_list_snippet()
     subprocess.run(["sh", "-c", script], check=True, stdin=subprocess.DEVNULL,
                    capture_output=True)
     out = root / "etc" / "imagectl" / "modules"
@@ -438,7 +438,15 @@ SHA_LAYOUT = {
     "sha256-ssse3": "kernel/arch/x86/crypto",
 }
 
-LAYOUT = {**PLATFORM_LAYOUT, **FS_LAYOUT, **LC_LAYOUT, **SHA_LAYOUT}
+#: #1918: the ACPI power button, as a module (BUILTIN_FUSE does not list it as
+#: built in). Not a measurement of Debian's kernel: the builder reads
+#: modules.builtin for that, and both answers are tested below.
+BUTTON_LAYOUT = {"button": "kernel/drivers/acpi"}
+
+#: #1967: the cloner's audible round result -- the PC speaker, declared required.
+BEEP_LAYOUT = {"pcspkr": "kernel/drivers/input/misc"}
+
+LAYOUT = {**PLATFORM_LAYOUT, **FS_LAYOUT, **LC_LAYOUT, **SHA_LAYOUT, **BUTTON_LAYOUT, **BEEP_LAYOUT}
 
 
 def declared(array: str) -> list[str]:
@@ -465,10 +473,11 @@ BUILTIN_FUSE = "kernel/fs/fuse/fuse.ko\nkernel/fs/fuse/virtiofs.ko\n"
 
 
 def run_required(tmp_path: Path, present, kver: str = KVER,
-                 builtin: str | None = BUILTIN_FUSE):
+                 builtin: str | None = BUILTIN_FUSE, pre: str = ""):
     """מריץ את ההעתקה-לפי-שם האמיתית על עץ שבו קיימים רק `present`.
 
-    ‏`builtin` = תוכן modules.builtin; ‏None = הקובץ אינו קיים."""
+    ‏`builtin` = תוכן modules.builtin; ‏None = הקובץ אינו קיים. ‏`pre` = מה
+    שנקבע לפני האזור (‏#1918: ‏BUTTON_MOD / _btn_miss של בדיקת כפתור ההפעלה)."""
     src, root = tmp_path / "src", tmp_path / "root"
     for mod in present:
         directory = src / LAYOUT[mod]
@@ -481,7 +490,7 @@ def run_required(tmp_path: Path, present, kver: str = KVER,
 
     script = (f"ROOT={root.as_posix()!r}\nKVER={kver!r}\n"
               f"MODSRC={src.as_posix()!r}\nWITH_GUI=0\nMODULE_SUBDIRS=()\n"
-              + required_snippet())
+              + pre + required_snippet())
     done = subprocess.run([BASH, "-c", script], stdin=subprocess.DEVNULL,
                           capture_output=True, encoding="utf-8", errors="replace",
                           timeout=90)
@@ -660,6 +669,68 @@ def test_the_build_stops_when_fuse_is_not_built_in(tmp_path: Path, builtin, name
 def test_a_kernel_with_fuse_built_in_builds(tmp_path: Path):
     done, _ = run_required(tmp_path, list(LAYOUT))
     assert done.returncode == 0, done.stderr
+
+
+# --- #1918: the ACPI power button --------------------------------------------------
+# button.ko turns a short press into the "Power Button" input device the GUI
+# reads. Built in or a module is the kernel's config: read from
+# modules.builtin, never assumed -- both answers, and the third (neither).
+
+NO_BUTTON = [m for m in LAYOUT if m != "button"]
+
+
+def button_detect_snippet() -> str:
+    """The modules.builtin read, as it is in the script (next to MODSRC)."""
+    lines = BUILDER.read_text(encoding="utf-8").split("\n")
+    start = next(i for i, l in enumerate(lines) if l.startswith("# #1918: the power button."))
+    end = next(i for i, l in enumerate(lines[start:], start) if l == "esac")
+    return "\n".join(lines[start:end + 1])
+
+
+@requires_native("bash", why="the builder's region is bash")
+@pytest.mark.parametrize("builtin,want", [
+    (BUILTIN_FUSE + "kernel/drivers/acpi/button.ko\n", "mod=[] miss=[]"),    # built in
+    (BUILTIN_FUSE, "mod=[button] miss=[]"),                                    # a module
+    (None, "mod=[] miss=[ button(modules.builtin-unreadable)]"),               # not read
+], ids=["built-in", "module", "unreadable"])
+def test_the_power_button_is_read_from_modules_builtin(tmp_path: Path, builtin, want):
+    src = tmp_path / "src"; src.mkdir()
+    if builtin is not None:
+        (src / "modules.builtin").write_text(builtin, encoding="utf-8")
+    done = subprocess.run([BASH, "-c", f"MODSRC={src.as_posix()!r}\nKVER={KVER!r}\n" + button_detect_snippet()
+                           + '\necho "mod=[$BUTTON_MOD] miss=[$_btn_miss]"'],
+                          stdin=subprocess.DEVNULL, capture_output=True, encoding="utf-8", timeout=60)
+    assert done.stdout.strip().splitlines()[-1] == want, done.stdout + done.stderr
+
+
+@requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
+def test_the_power_button_module_is_packed_when_it_is_not_built_in(tmp_path: Path):
+    done, packed = run_required(tmp_path, list(LAYOUT), pre="BUTTON_MOD=button\n")
+    assert done.returncode == 0, done.stderr
+    assert (packed / "kernel/drivers/acpi/button.ko.xz").is_file()
+
+
+@requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
+@pytest.mark.parametrize("pre,named", [
+    ("BUTTON_MOD=button\n", " button"),                                        # a module, and missing
+    ("_btn_miss=' button(modules.builtin-unreadable)'\n", "button(modules.builtin-unreadable)"),
+], ids=["module-missing", "builtin-unreadable"])
+def test_the_build_stops_without_the_power_button(tmp_path: Path, pre, named):
+    done, _ = run_required(tmp_path, NO_BUTTON, pre=pre)
+    assert done.returncode != 0, "no power button driver and the build passed"
+    assert "missing required modules:" in done.stderr and named in done.stderr, done.stderr
+
+
+@requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
+def test_a_kernel_with_the_power_button_built_in_packs_nothing_for_it(tmp_path: Path):
+    done, packed = run_required(tmp_path, NO_BUTTON)     # BUTTON_MOD empty: built in
+    assert done.returncode == 0, done.stderr
+    assert not list(packed.rglob("button.ko*"))
+
+
+def test_the_power_button_is_loaded_at_boot_only_when_it_is_a_module(tmp_path: Path):
+    assert "button" in generate(tmp_path / "m", phy=["realtek"], ethernet=["r8169"], pre="BUTTON_MOD=button\n")
+    assert "button" not in generate(tmp_path / "b", phy=["realtek"], ethernet=["r8169"], pre='BUTTON_MOD=""\n')
 
 
 def test_the_declared_filesystems_are_exactly_the_ones_in_the_load_list(tmp_path: Path):
