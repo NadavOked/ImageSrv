@@ -6,7 +6,14 @@
 # את מה שאמיתי (355 פתוחות ב-24/10, ואף אחת מה-Critical/High לא בקוד שנפרס
 # הייתה ממשית). הערות `# codeql[...]` בקוד **אינן** משתיקות התראות ב-GitHub;
 # false positive בקוד שנפרס מבוטל ידנית עם נימוק, ולא כאן.
+#
+# server/static/vendor (#2160): קוד צד שלישי (noVNC ו-pako, עותק מחבילת Debian
+# ללא שינוי — ראו server/static/vendor/novnc/README.md). 19 התראות עליו נבעו
+# מ-crc32.js של pako שמייצא את makeTable במקום crc32, בנתיב gzip בלבד; noVNC
+# קורא ל-deflateInit/inflateInit (zlib, לא gzip) ולכן הנתיב לא רץ אצלנו, ואנחנו
+# לא מתקנים קוד ספק — זה היה פורק את "ללא שינוי" ומתבטל בכל רענון של הספק.
 paths-ignore:
   - tests
   - docs/design
   - docs/research
+  - server/static/vendor

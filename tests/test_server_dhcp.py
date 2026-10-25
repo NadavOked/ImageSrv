@@ -375,7 +375,8 @@ def dhcp_server(tmp_path: Path, images_root: Path, clock):
             fake["service_active"] if fake["service_readable"] else None),
     }
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
-                     now_fn=clock, dhcp_hooks=hooks)
+                     now_fn=clock, dhcp_hooks=hooks,
+                     nic_hooks={"firewall": lambda nic: None})  # #1829: no host firewall in tests
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     users.create(app.state.ctx.conn, "labtech", "deploy-pass-1", "deploy", by="test", check_policy=False)
     admin = TestClient(app)

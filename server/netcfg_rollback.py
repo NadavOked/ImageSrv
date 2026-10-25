@@ -129,7 +129,8 @@ def write_pending(state_dir: str | Path, marker: Pending) -> str | None:
     path = pending_path(state_dir)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        write_atomic(path, marker.to_json())
+        # ‏#2160: הסמן מעתיק את טקסט ההגדרה ואת resolv.conf — ‏0600, לא 0644 של קובץ חדש.
+        write_atomic(path, marker.to_json(), mode=0o600)
     except OSError as exc:
         return f"לא ניתן לכתוב את סמן ההחזרה {path}: {exc.strerror or exc}"
     return None

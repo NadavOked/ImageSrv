@@ -34,7 +34,7 @@ import pytest
 pytest.importorskip("cryptography")
 
 from cryptography import x509
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 import server.main
 from server import console_tls
@@ -50,6 +50,24 @@ FP_RE = re.compile(r"^([0-9A-F]{2}:){31}[0-9A-F]{2}$")
 
 
 # ---------- התעודה על הדיסק ----------
+
+@pytest.mark.parametrize("issuance", ["first-start", "address-change", "reissue"])
+def test_console_certificate_has_server_auth_eku_1815(tmp_path: Path, issuance):
+    data = tmp_path / "data"
+    tls = console_tls.ensure_console_cert(data, "10.0.0.1", "srv")
+    first = tls.cert_path.read_bytes()
+    if issuance == "address-change":
+        tls = console_tls.ensure_console_cert(data, "10.0.0.2", "srv")
+    elif issuance == "reissue":
+        console_tls.reissue_self_signed(data, "renamed-srv")
+    pem = tls.cert_path.read_bytes()
+    # כל נתיב הנפקה נבדק בתעודה שהוא עצמו כתב — לא בזו של ההפעלה הראשונה.
+    assert (pem == first) == (issuance == "first-start")
+
+    cert = x509.load_pem_x509_certificate(pem)
+    eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    assert set(eku) == {ExtendedKeyUsageOID.SERVER_AUTH}
+
 
 def test_first_start_creates_cert_and_0600_key_with_the_management_sans(tmp_path: Path):
     tls = console_tls.ensure_console_cert(tmp_path / "data", "10.0.0.1", "imagectl-srv")

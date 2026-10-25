@@ -14,7 +14,7 @@
 # אילו שירותים השרת נותן דרך כל כרטיס, והכללים נגזרים מזה בלבד — במקום
 # שני התפקידים הקבועים למעלה. בלי הדגלים הפלט זהה בית-בבית לקודם.
 #   console     — tcp קונסולה (המוניטור עובר בה, אין לו פורט משלו)
-#   netboot     — udp 67 + udp 69 + tcp סוכן
+#   netboot     — udp 67 + udp 69 + tcp סוכן; proxy mode also opens udp 4011
 #   multicast   — udp טווח udpcast
 #   interserver — tcp 8443 (במשני: רק מכתובת הראשי)
 #
@@ -36,6 +36,7 @@ AGENT_PORT="8080"
 INTERSERVER_PORT="8443"
 PER_NIC=""
 SERVICE_SPECS=""
+PROXY_IFS=" "
 
 die() { printf '%s\n' "nftables-rules: $*" >&2; exit 2; }
 
@@ -47,6 +48,8 @@ Usage: nftables-rules.sh --servers-if IF [--deploy-if IF] [options]
                           נכתבים כללי וילן השרתים בלבד, וההפצה סגורה
   --servers-if IF         כרטיס וילן השרתים (חובה)
   --primary-ip IP         כתובת הראשי — רק במשני; פותח 8443 ממנה בלבד
+  --proxy-if IF           PXE proxy enabled on IF (repeatable); opens UDP 4011
+                          only on --deploy-if or a per-NIC netboot interface
   --mcast-ports A-B       טווח UDP של udpcast (ברירת מחדל 9000-9001)
   --console-port N        קונסולה (ברירת מחדל 8081)
   --agent-port N          סוכן (ברירת מחדל 8080)
@@ -62,6 +65,12 @@ while [ $# -gt 0 ]; do
         --deploy-if)        DEPLOY_IF="${2:?}"; shift 2 ;;
         --servers-if)       SERVERS_IF="${2:?}"; shift 2 ;;
         --primary-ip)       PRIMARY_IP="${2:?}"; shift 2 ;;
+        --proxy-if)
+            proxy_if="${2:?}"
+            case "$proxy_if" in
+                *[!A-Za-z0-9_.:-]*) die "proxy interface name is not safe for nftables" ;;
+            esac
+            PROXY_IFS="${PROXY_IFS}${proxy_if} "; shift 2 ;;
         --mcast-ports)      MCAST_PORTS="${2:?}"; shift 2 ;;
         --console-port)     CONSOLE_PORT="${2:?}"; shift 2 ;;
         --agent-port)       AGENT_PORT="${2:?}"; shift 2 ;;
@@ -137,6 +146,9 @@ if [ -n "$PER_NIC" ]; then
                 netboot)
                     add_rule "iifname \"${nic}\" udp dport 67 accept"
                     add_rule "iifname \"${nic}\" udp dport 69 accept"
+                    case "$PROXY_IFS" in
+                        *" ${nic} "*) add_rule "iifname \"${nic}\" udp dport 4011 accept" ;;
+                    esac
                     add_rule "iifname \"${nic}\" tcp dport ${AGENT_PORT} accept" ;;
                 multicast)
                     add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} accept"
@@ -174,6 +186,10 @@ if [ -n "$DEPLOY_IF" ]; then
 		# IGMP (#1972): השרת הוא ה-querier, ושומע querier אחר לפי השאילתות שלו.
 		iifname \"${DEPLOY_IF}\" ip protocol igmp accept
 		# WoL (UDP 9) הוא יוצא — chain output ב-accept, אין כלל כניסה."
+    case "$PROXY_IFS" in
+        *" ${DEPLOY_IF} "*) DEPLOY_RULES="${DEPLOY_RULES}
+		iifname \"${DEPLOY_IF}\" udp dport 4011 accept" ;;
+    esac
 else
     DEPLOY_RULES="		# --- וילן ההפצה: טרם הוגדר (#1088) ---
 		# אין כרטיס הפצה — DHCP/TFTP/סוכן/מולטיקאסט סגורים. הקונסולה

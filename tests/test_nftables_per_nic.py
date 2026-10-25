@@ -64,6 +64,22 @@ def test_no_service_anywhere_closes_everything_but_loopback(shell) -> None:
 
 
 @needs_bash
+@pytest.mark.parametrize("shell", SHELLS)
+def test_proxy_1829_requires_both_proxy_mode_and_netboot_on_each_nic(shell) -> None:
+    args = ("--per-nic", "--service", "ens33:console,interserver",
+            "--service", "ens34:netboot", "--service", "ens35:netboot",
+            "--service", "ens36:")
+    proc = run(shell, *args, "--proxy-if", "ens34", "--proxy-if", "ens36")
+    assert proc.returncode == 0, proc.stderr
+    assert [r for r in rules(proc.stdout) if "dport 4011" in r] == [
+        'iifname "ens34" udp dport 4011 accept']
+    assert 'iifname "ens35" udp dport 69 accept' in rules(proc.stdout)
+    off = run(shell, *args)
+    assert off.returncode == 0, off.stderr
+    assert "dport 4011" not in off.stdout
+
+
+@needs_bash
 @pytest.mark.parametrize("args", [
     ("--service", "ens33:console,ssh"),          # שירות לא מוכר — סירוב, לא השמטה
     ("--service", 'ens"33:console'),             # שם שובר ציטוט

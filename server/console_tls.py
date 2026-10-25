@@ -19,6 +19,14 @@
 **למה stdlib ssl ולא pyOpenSSL:** ‏uvicorn מקבל ``ssl_certfile``/
 ``ssl_keyfile`` ובונה ``ssl.SSLContext`` בעצמו; לקונסולה אין תעודת-לקוח
 ואין exporter, ולכן אין צורך ב-terminator של pyOpenSSL כמו ב-8443.
+
+**‏EKU ותוקף (#1815):** התעודה העצמית נושאת EKU ‏``serverAuth`` בלבד — היא
+מוגשת לדפדפן ואינה משמשת כתעודת-לקוח. **התוקף נשאר 3650 יום, וזו מגבלה
+ידועה:** ‏Apple ‏(support.apple.com/103769, iOS 13 / macOS 10.15 ואילך) דורשת
+מ**כל** תעודת שרת TLS תוקף של 825 יום לכל היותר, בלי הבחנה בין שורש מובנה
+לאמון שהמשתמש הוסיף. כלומר ה-EKU לבדו כנראה **אינו** מספיק ל-Safari. קיצור
+התוקף מחייב חידוש אוטומטי (ושינוי טביעת האצבע שהמפעיל אישר) — הכרעה פתוחה.
+תעודה שנוצרה לפני #1815 אינה מוחלפת אוטומטית; "הנפקת תעודה חדשה" מוסיפה לה EKU.
 """
 
 from __future__ import annotations
@@ -179,6 +187,8 @@ def ensure_console_cert(data_dir, console_host: str,
             have_cert = have_key = False
             regenerated = True
     if not have_cert:
+        from cryptography.x509.oid import ExtendedKeyUsageOID
+
         directory.mkdir(parents=True, exist_ok=True)
         hostname = hostname or socket.gethostname()
         ip_sans = [console_host] if _is_ip(console_host) else []
@@ -186,7 +196,8 @@ def ensure_console_cert(data_dir, console_host: str,
         if hostname and hostname not in dns_sans:
             dns_sans.append(hostname)
         cert_pem, key_pem = generate_self_signed(
-            COMMON_NAME, ip_sans=ip_sans, dns_sans=dns_sans)
+            COMMON_NAME, ip_sans=ip_sans, dns_sans=dns_sans,
+            eku=(ExtendedKeyUsageOID.SERVER_AUTH,))
         write_credential_0600(key_path, key_pem.decode())
         write_atomic(cert_path, cert_pem)
         write_atomic(directory / GENERATED_MARKER,
@@ -345,6 +356,8 @@ def reissue_self_signed(data_dir, hostname: str) -> dict:
     ``hostname`` — כך שהכתובת שהמפעיל משתמש בה ממשיכה להיות מכוסה. הזוג הקודם נשמר
     כ-``.prev`` כמו בהעלאה; התעודה החדשה נטענת רק באתחול השרת. תעודה חתומה (שהועלתה)
     אינה מוחלפת כאן — ``UploadRefused``, שום קובץ לא השתנה."""
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
     directory = Path(data_dir) / CONSOLE_TLS_DIRNAME
     cert_path, key_path = directory / CERT_NAME, directory / KEY_NAME
     if not (cert_path.exists() and key_path.exists()):
@@ -358,7 +371,8 @@ def reissue_self_signed(data_dir, hostname: str) -> dict:
         sans.append(hostname)
     cert_pem, key_pem = generate_self_signed(
         COMMON_NAME, ip_sans=[h for h in sans if _is_ip(h)],
-        dns_sans=[h for h in sans if not _is_ip(h)])
+        dns_sans=[h for h in sans if not _is_ip(h)],
+        eku=(ExtendedKeyUsageOID.SERVER_AUTH,))
     error = _ssl_loads(cert_pem, key_pem, directory)
     if error:
         raise UploadRefused(f"השרת לא הצליח לטעון את הזוג ל-TLS: {error}")

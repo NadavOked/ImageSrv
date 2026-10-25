@@ -349,6 +349,43 @@ def test_list_images_and_manifest_from_disk(paired_ctx):
     assert man["id"] == PULL_ID and "_dir" not in man
 
 
+# --- #2160: קובץ שלא נמדד אינו אפס --------------------------------------------
+
+def _rows_with_stat_failing_for(ctx, peer, token, monkeypatch, victim: str):
+    """``list_images`` כשה-``stat`` של קובץ אחד נכשל (EIO) — השאר נמדדים."""
+    from server import images as images_mod
+
+    real = images_mod.guarded_image_path
+
+    class _Unreadable:
+        def stat(self):
+            raise OSError(5, "Input/output error")
+
+    def guarded(directory, name):
+        return _Unreadable() if name == victim else real(directory, name)
+
+    monkeypatch.setattr(images_mod, "guarded_image_path", guarded)
+    return interserver_api.list_images(ctx, peer, **_creds(token))
+
+
+def test_a_partition_file_that_cannot_be_measured_makes_size_bytes_none(paired_ctx, monkeypatch):
+    ctx, peer, token = paired_ctx
+    write_image(Path(ctx.library.root), PULL)
+    victim = PULL["partitions"][0]["file"]
+    rows = _rows_with_stat_failing_for(ctx, peer, token, monkeypatch, victim)
+    assert len(rows) == 1 and rows[0]["id"] == PULL_ID
+    assert rows[0]["size_bytes"] is None, "a partial sum is not a size"
+    assert rows[0]["sha256"], "the row itself is still listed"
+
+
+def test_a_missing_partition_file_makes_size_bytes_none(paired_ctx):
+    ctx, peer, token = paired_ctx
+    write_image(Path(ctx.library.root), PULL)
+    (Path(ctx.library.root) / PULL_ID / PULL["partitions"][0]["file"]).unlink()
+    rows = interserver_api.list_images(ctx, peer, **_creds(token))
+    assert rows[0]["size_bytes"] is None
+
+
 # --- #1456: חידוש אחרי ניתוק בקובץ השלישי ------------------------------------
 #
 # קובץ שכבר שלם שולח ``Range: bytes=<size>-``; המשני עונה 416 וסוגר את

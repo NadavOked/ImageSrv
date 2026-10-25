@@ -14,7 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FACE = ["README.md", "docs/architecture-v1.svg", "docs/architecture-v1-dark.svg",
-        "docs/flow-v1.svg", "docs/flow-v1-dark.svg"]
+        "docs/flow-v1.svg", "docs/flow-v1-dark.svg",
+        "docs/usb-clone.svg", "docs/usb-clone-dark.svg"]
 # מורכבים מחלקים כדי שהקובץ הזה לא יתפוס את עצמו.
 BANNED = ["ImageCtl" + " v1", "v1 היא" + " מסירת", "מה ב-v1" + " ומה לא", "ארגז כלים** — **v3"]
 
@@ -38,5 +39,6 @@ def test_face_files_exist_and_have_no_stale_version() -> None:
 
 def test_light_and_dark_diagrams_say_the_same() -> None:
     for a, b in (("docs/architecture-v1.svg", "docs/architecture-v1-dark.svg"),
-                 ("docs/flow-v1.svg", "docs/flow-v1-dark.svg")):
+                 ("docs/flow-v1.svg", "docs/flow-v1-dark.svg"),
+                 ("docs/usb-clone.svg", "docs/usb-clone-dark.svg")):
         assert _texts(a) == _texts(b), f"{a} ו-{b} נסחפו"

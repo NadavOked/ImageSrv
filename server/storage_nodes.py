@@ -686,12 +686,15 @@ def ensure_identity(conn, data_dir, *, host_sans=()) -> dict:
     row = _identity_row(conn)
     if row is not None:
         return _identity_with_pem(dict(row))
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
     directory = Path(data_dir) / INTERSERVER_DIRNAME
     directory.mkdir(parents=True, exist_ok=True)
     cert_pem, key_pem = interserver_auth.generate_self_signed(
         "imagectl-node",
         ip_sans=[h for h in host_sans if _is_ip(h)],
         dns_sans=[h for h in host_sans if not _is_ip(h)],
+        eku=(ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH),
     )
     spki = interserver_auth.spki_sha256(cert_pem)
     nid = interserver_auth.node_id_from_spki(spki)

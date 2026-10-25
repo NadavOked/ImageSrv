@@ -531,18 +531,17 @@ def main() -> None:
 
     # ‏#1088: מה שהקונסולה צריכה כדי להשלים את ההתקנה בהדלקת DHCP —
     # ומה שמסך הבריאות מציג על רשת ההפצה ועל כתובת כרטיס השרתים.
-    primary_ip = None
-    if args.primary_url:
-        primary_host = urllib.parse.urlsplit(args.primary_url).hostname or ""
-        try:
-            ipaddress.ip_address(primary_host)
-            primary_ip = primary_host
-        except ValueError:
-            pass
+    # ‏#2160: שם מארח נפתר כאן ל-IPv4 (כמו המתקין); כשלון הוא סיבה בשם, לא None שקט.
+    primary_ip, primary_ip_error = (deploy_net.primary_ip_of(args.primary_url)
+                                    if args.primary_url else (None, None))
+    if primary_ip_error:
+        print(f"warning: {primary_ip_error} — חומת האש לא תחולל מחדש עד שהשם ייפתר "
+              "(הפעלה מחדש של השרת), או ש-‏--primary-url יהיה כתובת IP")
     deploy_ctx = deploy_net.DeployContext(
         state=deploy, agent_port=args.port, tftp_root=Path(args.tftp_root),
         repo_dir=Path(args.repo_dir) if args.repo_dir else Path(__file__).resolve().parents[1],
-        servers_interface=console_iface, primary_ip=primary_ip)
+        servers_interface=console_iface, primary_ip=primary_ip,
+        primary_ip_error=primary_ip_error)
 
     def servers_nic_status():
         if not console_iface:

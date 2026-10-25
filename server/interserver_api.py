@@ -390,16 +390,20 @@ def list_images(ctx, peer: TlsPeer, *, token: str, protocol_version: str,
             continue
         directory = Path(manifest["_dir"])
         sha = {}
-        size = 0
+        size: int | None = 0
         for part in streamed_partitions(manifest):
             name = part["file"]
             sha[name] = part.get("sha256") or ""
+            # ‏#2160: ``size_bytes`` הוא סכום של **כל** הקבצים או ``None`` — קובץ
+            # שלא נמדד (נעלם, סימלינק, stat נכשל) לא נספר כאפס. סכום חלקי נראה
+            # כגודל שנמדד, והראשי היה בודק מקום פנוי מול מספר קטן מדי; ``None``
+            # גורם לו להיכשל בשם (`_check_pull_space`, "לא דיווח את הגודל").
             try:
                 path = guarded_image_path(directory, name)
-                if path is not None:
-                    size += path.stat().st_size
+                measured = path.stat().st_size if path is not None else None
             except OSError:
-                pass
+                measured = None
+            size = size + measured if size is not None and measured is not None else None
         rows.append({
             "id": manifest["id"],
             "name": manifest["name"],

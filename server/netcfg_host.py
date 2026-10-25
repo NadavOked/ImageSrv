@@ -217,7 +217,9 @@ def adopt_interface(name: str, text: str, *, main: str | Path = INTERFACES_MAIN,
             suffix = backup_suffix or datetime.now().strftime("%Y%m%d%H%M%S")
             backup = main_path.with_name(main_path.name + f".pre-imagectl.{suffix}")
             try:
-                write_atomic(backup, main_text)   # ‏#1908
+                # ‏#2160: ‏0600 — הגיבוי הוא קובץ חדש, ו-write_atomic נותן לקובץ חדש 0644;
+                # מקור שהמנהל נעל (‏wpa-psk וכו') היה מקבל עותק קריא לכולם.
+                write_atomic(backup, main_text, mode=0o600)   # ‏#1908
             except OSError as exc:
                 return notes, f"לא ניתן לגבות את {main_path}: {exc.strerror or exc}"
             notes.append(f"{main_path}: גיבוי ב-{backup.name}")

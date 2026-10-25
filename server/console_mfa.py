@@ -178,6 +178,9 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             row = ctx.conn.execute(
                 "SELECT mfa_secret, mfa_enabled FROM users WHERE username = ?", (username,),
             ).fetchone()
+            # #2114: setup must not bypass the authenticated MFA disable flow.
+            if row is not None and row["mfa_enabled"]:
+                raise HTTPException(409, "MFA כבר מופעל — יש לבטל אותו לפני הגדרה מחדש")
             since = _pending_since.get(username)
             if (row is not None and not row["mfa_enabled"] and row["mfa_secret"]
                     and since is not None and 0 <= now - since < PENDING_TTL):

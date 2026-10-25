@@ -159,6 +159,25 @@ def test_mfa_setup_refresh_keeps_the_pending_secret(server):
     assert en.json()["mfa_enabled"] is True
 
 
+def test_2114_mfa_setup_rejects_active_mfa_without_changing_it(server):
+    """A session alone must not reset an enrolled admin's MFA through setup."""
+    c, secret = _mfa_user(server, "active_mfa")
+    conn = server["ctx"].conn
+    before = users.lookup(conn, "active_mfa")
+    assert before["mfa_enabled"] == 1
+    assert before["mfa_secret"] == secret
+    assert secret
+
+    response = c.post("/api/console/me/mfa/setup")
+
+    assert response.status_code == 409, response.text
+    after = users.lookup(conn, "active_mfa")
+    assert after["mfa_enabled"] == 1
+    assert after["mfa_secret"] == secret
+    assert after["mfa_enrolled_at"] == before["mfa_enrolled_at"]
+    assert "secret" not in response.json()
+
+
 def test_mfa_pending_secret_expires(server, monkeypatch):
     """‏#2101: הסוד הממתין מוגבל בזמן — אחרי `PENDING_TTL` בלי אישור, setup מגריל חדש."""
     from server import console_mfa

@@ -130,7 +130,9 @@ def inflate(body: bytes) -> str:
         if unpack.unconsumed_tail:
             raise BadLog("inflated log too large")
     except zlib.error as exc:
-        raise BadLog(f"not gzip: {exc}") from exc
+        # ‏#2160: הודעה קבועה לרשת (פורט הסוכן, בלי כניסה); הפירוט של zlib — ליומן השרת.
+        log.warning("agent log upload is not gzip: %s", exc)
+        raise BadLog("not gzip") from exc
     text = raw.decode("utf-8", errors="replace")
     return "".join(ch for ch in text if ch in "\n\t" or ch >= " ")
 

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from server import netcfg, netcfg_rollback
+from server import netcfg_rollback
 from server.db import connect
 
 from . import actions, pairing
@@ -839,8 +838,11 @@ def _f4(runtime: Runtime) -> None:
 
 def _leave_pair(runtime: Runtime, message: str = "") -> None:
     if runtime.pair_stage == "code" and runtime.conn is not None and runtime.pair:
-        pairing.close_code(runtime.conn, runtime.pair)
-        message = message or "Pairing code cancelled; it can no longer be used."
+        if pairing.close_code(runtime.conn, runtime.pair):
+            message = message or "Pairing code cancelled; it can no longer be used."
+        else:
+            message = ("The pairing code could not be cancelled; "
+                       "it stays valid until it expires.")
     runtime.pair = None
     runtime.screen, runtime.message = "main", message
 

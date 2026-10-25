@@ -585,6 +585,79 @@ def test_regenerate_firewall_keeps_the_old_file_and_restores_the_old_ruleset_whe
     assert not conf.with_name("nftables.conf.candidate").exists()
 
 
+@pytest.mark.parametrize("services", [None, [("eth1", ["netboot"]), ("eth0", ["console"])]])
+def test_proxy_1829_regeneration_passes_interface_flags(tmp_path, monkeypatch, services):
+    conf = tmp_path / "nftables.conf"
+    conf.write_text("# ImageCtl old\n", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(deploy_net, "_run", _fake_nft(calls))
+    error = deploy_net.regenerate_firewall(
+        REPO, deploy_if="eth1", servers_if="eth0", conf=conf,
+        primary_ip="10.1.2.3", services=services, proxy_interfaces=["eth1", "eth2"])
+    assert error is None
+    assert calls[0][-6:] == ["--primary-ip", "10.1.2.3", "--proxy-if", "eth1", "--proxy-if", "eth2"]
+    assert ("--per-nic" in calls[0]) is (services is not None)
+    assert conf.read_text(encoding="utf-8") == "table inet imagectl { }\n"
+
+
+@pytest.mark.parametrize("classrooms", [False, True])
+def test_proxy_1829_saved_modes_and_installer_use_the_same_edition_gate(
+        tmp_path, monkeypatch, capsys, classrooms):
+    from server import capabilities
+    from server.db import connect, set_setting
+    monkeypatch.setattr(capabilities, "CLASSROOMS", classrooms)
+    db_path = tmp_path / "imagectl.db"
+    conn = connect(db_path)
+    for cfg in (dhcp.InterfaceConfig("eth1", proxy=True),
+                dhcp.InterfaceConfig("eth2", enabled=True),
+                dhcp.InterfaceConfig("eth3", enabled=True, proxy=True),
+                dhcp.InterfaceConfig("eth4")):
+        set_setting(conn, dhcp.SETTING_PREFIX + cfg.name, cfg.to_json())
+    assert deploy_net.firewall_proxy_interfaces(conn) == (["eth1"] if classrooms else [])
+    text = INSTALLER.read_text(encoding="utf-8")
+    snippet = text.split("<<'PROXYFWEOF'\n", 1)[1].split("\nPROXYFWEOF", 1)[0]
+    monkeypatch.setattr("sys.argv", ["-", str(REPO), str(db_path)])
+    exec(compile(snippet, str(INSTALLER), "exec"), {})
+    assert capsys.readouterr().out == ("eth1\n" if classrooms else "")
+    assert 'PROXY_FOR_NFT="$(console_proxy_interfaces_from_db)" || die' in text
+    assert 'NFT_ARGS+=(--proxy-if "$PROXY_NIC")' in text
+    conn.close()
+
+
+@pytest.mark.parametrize("raw,name", [("{broken", "eth1"), ('{"proxy": true}', "eth1\neth0")])
+def test_proxy_1829_unreadable_or_unsafe_settings_stop_completion(tmp_path, monkeypatch, raw, name):
+    from server import capabilities
+    from server.db import connect, set_setting
+    monkeypatch.setattr(capabilities, "CLASSROOMS", True)
+    conn = connect(tmp_path / "imagectl.db")
+    set_setting(conn, dhcp.SETTING_PREFIX + name, raw)
+    calls = []
+    result = deploy_net.complete(_complete_ctx(tmp_path, _complete_hooks(calls)), conn,
+                                 interface="eth1", server_ip="10.44.9.10")
+    assert result["ok"] is False and "proxy" in result["errors"][0]
+    assert calls == []
+    assert deploy_net.stored(conn) == (None, None)
+    conn.close()
+
+
+def test_proxy_1829_completion_preserves_existing_proxy_rules(tmp_path, monkeypatch):
+    from server import capabilities
+    from server.db import connect, set_setting
+    monkeypatch.setattr(capabilities, "CLASSROOMS", True)
+    conn = connect(tmp_path / "imagectl.db")
+    set_setting(conn, "dhcp:eth2", dhcp.InterfaceConfig("eth2", proxy=True).to_json())
+    calls, firewalls = [], []
+    hooks = _complete_hooks(calls)
+    hooks["firewall"] = lambda repo, **kw: firewalls.append(kw)
+    ctx = _complete_ctx(tmp_path, hooks)
+    ctx.services = lambda interface: [(interface, ["netboot"]), ("eth2", ["netboot"])]
+    result = deploy_net.complete(ctx, conn, interface="eth1", server_ip="10.44.9.10")
+    assert result["ok"] is True
+    assert firewalls[0]["proxy_interfaces"] == ["eth2"]
+    assert firewalls[0]["services"] == [("eth1", ["netboot"]), ("eth2", ["netboot"])]
+    conn.close()
+
+
 def test_restart_is_scheduled_under_a_unique_transient_unit(monkeypatch):
     """‏#1121 ס' 3: שתי השלמות בתוך חלון ה-3 ש' — שתי יחידות שונות, לא
     "Unit imagectl-deploy-restart already exists"."""
@@ -769,6 +842,62 @@ def console(tmp_path: Path, images_root: Path, clock):
         client.post("/api/console/login", json={"username": "noc", "password": "Admin-pass-123!"})
         return client, app.state.ctx, ctx
     return build, fake
+
+
+@pytest.mark.parametrize("per_nic", [False, True])
+def test_proxy_1829_console_toggle_regenerates_and_removes_rule(console, monkeypatch, per_nic):
+    from server import capabilities
+    from server.db import set_setting
+    monkeypatch.setattr(capabilities, "CLASSROOMS", True)
+    build, fake = console
+    client, ctx, _deploy = build("cli")
+    if per_nic:
+        from server import nic_services
+        set_setting(ctx.conn, nic_services.SETTING_PREFIX + "eth1", json.dumps({"services": ["netboot"]}))
+    for proxy in (True, False):
+        response = client.put("/api/console/net/interfaces/eth1", json={
+            "proxy": proxy, "server_ip": "10.44.9.10", "confirm": "eth1",
+            "confirm_proxy_broken": True})
+        assert response.status_code == 200, response.text
+        assert response.json()["ok"] is True, response.text
+        fw = [args for kind, args in fake["deploy_calls"] if kind == "fw"]
+        assert len(fw) == (1 if proxy else 2)
+        assert fw[-1].get("proxy_interfaces", []) == (["eth1"] if proxy else [])
+        assert ("services" in fw[-1]) is per_nic
+
+
+@pytest.mark.parametrize("failure", ["return", "raise", "missing"])
+def test_proxy_1829_console_reports_firewall_failure(console, monkeypatch, failure):
+    from server import capabilities
+    monkeypatch.setattr(capabilities, "CLASSROOMS", True)
+    build, fake = console
+    client, ctx, _deploy = build("cli")
+    if failure == "return":
+        fake["fw_error"] = "nft refused candidate"
+    elif failure == "raise":
+        def broken(_nic):
+            raise OSError("firewall settings unreadable")
+        ctx.nic_services.hooks["firewall"] = broken
+    else:
+        ctx.nic_services.hooks.pop("firewall")
+    response = client.put("/api/console/net/interfaces/eth1", json={
+        "proxy": True, "server_ip": "10.44.9.10", "confirm": "eth1", "confirm_proxy_broken": True})
+    assert response.status_code == 200, response.text
+    assert response.json()["ok"] is False
+    assert "חומת אש" in response.json()["apply_error"]
+
+
+def test_proxy_1829_forgetting_an_interface_removes_its_firewall_rule(console, monkeypatch):
+    from server import capabilities
+    from server.db import set_setting
+    monkeypatch.setattr(capabilities, "CLASSROOMS", True)
+    build, fake = console
+    client, ctx, _deploy = build("cli")
+    set_setting(ctx.conn, "dhcp:eth1", dhcp.InterfaceConfig("eth1", proxy=True).to_json())
+    response = client.delete("/api/console/net/interfaces/eth1")
+    assert response.status_code == 200 and response.json()["ok"] is True
+    fw = [args for kind, args in fake["deploy_calls"] if kind == "fw"]
+    assert len(fw) == 1 and fw[0].get("proxy_interfaces", []) == []
 
 
 def test_first_dhcp_enable_completes_the_install_and_restarts(console):

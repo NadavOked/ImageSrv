@@ -485,3 +485,40 @@ def test_the_code_window_is_ten_minutes_and_the_api_range_still_refuses_beyond(c
     assert interserver_auth.verify_and_consume_code(
         conn, code, now=now + timedelta(seconds=599)) is True
 
+
+
+# ---- #2160: a close that failed is never announced as a cancelled code ----------
+
+def test_a_close_that_failed_is_reported_false_and_a_clean_one_true(conn, monkeypatch):
+    import sqlite3
+    _secondary(conn)
+    _result, code = pairing.open_code(conn)
+
+    def broken(*a, **k):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(storage_nodes, "close_physical_pairing", broken)
+    assert pairing.close_code(conn, code) is False
+    assert _windows(conn) == 1                       # the window really is still open
+    monkeypatch.undo()
+    assert pairing.close_code(conn, code) is True
+    assert _windows(conn) == 0
+    # a window that is no longer this code's (replaced) is "void", not a failure
+    assert pairing.close_code(conn, code) is True
+
+
+def test_esc_with_a_failed_close_does_not_say_the_code_was_cancelled(tmp_path, conn, monkeypatch):
+    import sqlite3
+    _secondary(conn)
+    runtime = _runtime(tmp_path, conn)
+    _press(runtime, KEYS.KEY_F4)
+
+    def broken(*a, **k):
+        raise sqlite3.OperationalError("disk I/O error")
+    monkeypatch.setattr(storage_nodes, "close_physical_pairing", broken)
+    _press(runtime, "\x1b")
+    assert runtime.screen == "main" and _windows(conn) == 1
+    assert "cancelled" not in runtime.message.lower().replace("could not be cancelled", "")
+    assert runtime.message == ("The pairing code could not be cancelled; "
+                               "it stays valid until it expires.")
+    assert view.he(runtime.message) != runtime.message          # reads in Hebrew
+    assert "בוטל" not in view.he(runtime.message).replace("לבטל", "")

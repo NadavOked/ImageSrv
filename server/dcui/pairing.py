@@ -85,14 +85,17 @@ def state(conn, code: Code, now: float) -> str:
     return "expired" if now >= code.expires else "closed"
 
 
-def close_code(conn, code: Code) -> None:
+def close_code(conn, code: Code) -> bool:
     """The code screen was left: its code is void (a newer window opened by
-    the API is left alone).  Best effort -- a failure here leaves a window
-    that still expires on its own."""
+    the API is left alone).  ``True`` = the close ran without error (closed,
+    or it was not this code's window any more).  ``False`` = it failed: the window
+    stays open until it expires on its own, and the screen must say so
+    (principle 5) rather than announce a cancelled code."""
     try:
         storage_nodes.close_physical_pairing(conn, code.window)
     except (storage_nodes.NotSecondaryError, sqlite3.Error):
-        pass
+        return False
+    return True
 
 
 def paired_details(conn) -> dict:

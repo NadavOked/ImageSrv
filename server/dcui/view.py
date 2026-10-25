@@ -219,6 +219,8 @@ _EXACT = {
     "Pairing code opened.": "קוד הצימוד נפתח.",
     "Pairing code cancelled; it can no longer be used.":
         "קוד הצימוד בוטל — אי אפשר להשתמש בו עוד.",
+    "The pairing code could not be cancelled; it stays valid until it expires.":
+        "לא הצלחנו לבטל את קוד הצימוד — הוא תקף עד שיפוג.",
     "Paired with the primary server.": "השרת מצומד לשרת הראשי.",
     "The code's state could not be read from the DB.":
         "לא הצלחנו לבדוק את מצב הקוד מול מסד הנתונים.",

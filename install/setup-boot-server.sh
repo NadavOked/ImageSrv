@@ -714,6 +714,17 @@ $DNSMASQ_IFACE_LINES
 # נכתב ונקרא-מחדש (SIGHUP, לא restart) על ידי השרת עצמו — server/dhcp_host.py.
 dhcp-hostsfile=/etc/imagectl/known-macs
 EOF
+# #1816: a USB NIC / VLAN may appear after network.target. Keep the strict
+# interface binding (#1078), and retry even after a long absence of the NIC.
+write_file /etc/systemd/system/dnsmasq.service.d/imagectl-restart.conf <<'EOF'
+[Unit]
+StartLimitIntervalSec=0
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+EOF
+run systemctl daemon-reload
 if [[ -n "$IFACE" ]]; then
     run systemctl enable dnsmasq
     if (( ! DRY_RUN )); then
@@ -771,6 +782,19 @@ firewall_exit() {
     return "$rc"
 }
 
+console_proxy_interfaces_from_db() {
+    [[ -f "$DATA_DIR/imagectl.db" ]] || return 0
+    python3 - "$APP_DIR" "$DATA_DIR/imagectl.db" <<'PROXYFWEOF'
+import sqlite3, sys
+sys.path.insert(0, sys.argv[1])
+from server.deploy_net import firewall_proxy_interfaces
+with sqlite3.connect(sys.argv[2]) as conn:
+    conn.row_factory = sqlite3.Row
+    for name in firewall_proxy_interfaces(conn):
+        print(name)
+PROXYFWEOF
+}
+
 install_firewall() {
     if (( NO_FIREWALL )); then
         warn "ללא חומת אש — R20-F1"
@@ -788,6 +812,12 @@ install_firewall() {
     # הייתה סוגרת את וילן ההפצה.
     NFT_ARGS=(--servers-if "$SERVERS_IF")
     [[ -n "$DEPLOY_FOR_NFT" ]] && NFT_ARGS+=(--deploy-if "$DEPLOY_FOR_NFT")
+    # #1829: a reinstall must preserve proxy mode selected in the console.
+    local PROXY_FOR_NFT PROXY_NIC
+    PROXY_FOR_NFT="$(console_proxy_interfaces_from_db)" || die "לא ניתן לקרוא הגדרות proxy לחומת האש"
+    while IFS= read -r PROXY_NIC; do
+        [[ -z "$PROXY_NIC" ]] || NFT_ARGS+=(--proxy-if "$PROXY_NIC")
+    done <<< "$PROXY_FOR_NFT"
     if [[ "$STORAGE_ROLE" == "secondary" ]]; then
         PRIMARY_IP="${PRIMARY_URL#http://}"
         PRIMARY_IP="${PRIMARY_IP#https://}"

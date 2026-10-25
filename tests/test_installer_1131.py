@@ -256,6 +256,7 @@ FIREWALL_PRELUDE = (
     "set -euo pipefail\n" + HELPERS + "DRY_RUN=0\nNO_FIREWALL=0\nLAST_BACKUP=''\n"
     "IFACE=eth1\nCONSOLE_DEPLOY_IF=''\nSERVERS_IF=eth0\nSTORAGE_ROLE=standalone\nPRIMARY_URL=''\n"
     f"APP_DIR='{posix(REPO)}'\nSCRIPT_DIR='{posix(REPO / 'install')}'\n"
+    "DATA_DIR='/nonexistent-imagectl-data'\n"           # #1829: no DB, no proxy interfaces
     + installer_function("write_file")
 )
 

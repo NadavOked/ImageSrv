@@ -519,7 +519,7 @@ NOT_BEFORE_BACKDATE = timedelta(hours=24)
 
 
 def generate_self_signed(common_name: str, *, ip_sans=(), dns_sans=(),
-                         days: int = 3650) -> tuple[bytes, bytes]:
+                         days: int = 3650, eku=None) -> tuple[bytes, bytes]:
     """‏(cert_pem, key_pem) — תעודת EC P-256 חתומה-עצמית לזהות בין-שרתית.
 
     ‏EC P-256: מפתח קטן, מהיר, ונתמך ב-TLS 1.3. ה-SANs נדרשים כדי
@@ -532,7 +532,7 @@ def generate_self_signed(common_name: str, *, ip_sans=(), dns_sans=(),
     import datetime
     from ipaddress import ip_address
     from cryptography import x509
-    from cryptography.x509.oid import NameOID
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -552,6 +552,10 @@ def generate_self_signed(common_name: str, *, ip_sans=(), dns_sans=(),
     if sans:
         builder = builder.add_extension(
             x509.SubjectAlternativeName(sans), critical=False)
+    # EKU accepts ExtendedKeyUsageOID values; default to both mTLS roles.
+    if eku is None:
+        eku = (ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH)
+    builder = builder.add_extension(x509.ExtendedKeyUsage(eku), critical=False)
     cert = builder.sign(key, hashes.SHA256())
     cert_pem = cert.public_bytes(serialization.Encoding.PEM)
     key_pem = key.private_bytes(

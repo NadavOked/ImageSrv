@@ -20,10 +20,6 @@ from .db import _write_lock, journal, now_iso, writing
 _ITERATIONS = 200_000
 _SCHEME = "pbkdf2"
 
-#: ‏`|` מפריד בין השדות בטוקן של הקונסולה (`auth.check`), ולכן שם
-#: שמכיל אותו מייצר חשבון שאי אפשר להתחבר אליו לעולם.
-_FORBIDDEN_IN_USERNAME = "|"
-
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(conn)`` — שני
 #: המנגנונים של `db.py`, מאותה סיבה שבגללה `net_seen` קיבל אותם (#272,
 #: ‏#356, ‏#313): כתיבה שנכשלה בלי ``rollback`` משאירה את החיבור בתוך

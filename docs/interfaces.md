@@ -3687,6 +3687,15 @@ nftables — שרת קיים לא ינותק.
 ומדפיס `table inet imagectl`: input **drop**, output **accept**, forward
 **drop** (השרת אינו נתב). ‏`nft -c -f` נכשל = המתקין עוצר בקול.
 
+#1829: repeatable `--proxy-if IF` carries the saved PXE proxy mode to the
+generator. UDP 4011 opens only when IF is also `--deploy-if`, or offers
+`netboot` in `--per-nic` mode. Without this flag it stays closed. Callers use
+the same `dhcp:<IF>` settings (`proxy` true, `enabled` false) and classrooms
+edition gate as the proxy dnsmasq instance. Console proxy changes (including
+forgetting an interface), deploy completion, per-NIC service changes and
+installer reruns preserve this selection. A firewall apply failure is reported
+as `ok: false` with `apply_error`; unreadable settings are not treated as off.
+
 | כרטיס | מה נפתח | למה |
 |---|---|---|
 | loopback | הכול | pairing מקומי, קונסולה על 127.0.0.1 |
@@ -4139,7 +4148,9 @@ push — אחרי כל מנה של ה-tar ששולחים, ממתינים עד ש
 
 → `[{id, name, size_bytes, sha256, created_at, manifest_summary}]` מהדיסק
 (עיקרון 3). `sha256` הוא מפת `שם-קובץ → hex` של המחיצות שזורמות;
-`size_bytes` הוא סכום גדלי הקבצים על הדיסק; `manifest_summary` =
+`size_bytes` הוא סכום גדלי הקבצים על הדיסק — או `null` כשקובץ אחד לפחות
+לא נמדד (נעלם, סימלינק, `stat` נכשל; ‏#2160): סכום חלקי אינו גודל, והראשי
+נכשל בשם במקום לבדוק מקום מול מספר קטן מדי; `manifest_summary` =
 `{family, os, partitions, folder}`. המשני **רק עונה** — אין POST/PUT
 לנתיב הזה.
 

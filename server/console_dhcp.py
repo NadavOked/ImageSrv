@@ -208,8 +208,21 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
     def all_configs() -> list[dhcp.InterfaceConfig]:
         return load_configs(ctx.conn)
 
-    def apply_all(what: str, user_id) -> str | None:
-        return apply_dnsmasq(ctx, hooks, deploy, what, user_id)
+    def apply_all(what: str, user_id, *, proxy_changed: bool = False) -> str | None:
+        error = apply_dnsmasq(ctx, hooks, deploy, what, user_id)
+        # #1829: changing/removing proxy mode must also open/close UDP 4011 now.
+        if proxy_changed:
+            nic = getattr(ctx, "nic_services", None)
+            firewall = nic.hooks.get("firewall") if nic is not None else None
+            try:
+                fw_error = (firewall(nic) if firewall is not None
+                            else "אין מנגנון אכיפה לחומת האש בתהליך הזה")
+            except Exception as exc:                          # noqa: BLE001
+                fw_error = str(exc) or type(exc).__name__
+            if fw_error:
+                error = " · ".join(e for e in (error, f"חומת אש: {fw_error}") if e)
+                journal(ctx.conn, "dhcp_apply_failed", f"{what} {error}", user_id)
+        return error
 
     def dhcp_live_state(name: str, cfg: dhcp.InterfaceConfig,
                         conf_text: str | None, svc_active: bool | None) -> dict:
@@ -493,7 +506,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
             journal(ctx.conn, "dhcp_proxy_risk",
                     f"{name} dnsmasq={risky_proxy}", user[0])
 
-        error = apply_all(name, user[0])
+        error = apply_all(name, user[0], proxy_changed=cfg.proxy or before.proxy)
         out = {"ok": error is None,
                "interface": view(cfg, live.get(name),
                                  hooks["read_active_conf"](),
@@ -611,7 +624,8 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                          (dhcp.SETTING_PREFIX + name, DESC_PREFIX + name))
         ctx.conn.commit()
         journal(ctx.conn, "nic_forget", name, user[0])
-        error = apply_all(name, user[0]) if (was.enabled or was.proxy) else None
+        error = (apply_all(name, user[0], proxy_changed=was.proxy)
+                 if (was.enabled or was.proxy) else None)
         return {"ok": error is None, "apply_error": error}
 
     return router

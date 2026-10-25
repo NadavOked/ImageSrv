@@ -122,6 +122,12 @@ VERSION_ERRORS = ("git-missing", "not-a-git-tree", "dubious-ownership",
                   "no-tag", "git-failed", "not-wired")
 
 
+class UpgradeLaunchError(RuntimeError):
+    """‏#2160: ``systemd-run`` של סקריפט השדרוג נכשל, ולא בגלל "היחידה כבר
+    רצה". הסטטוס כבר נכתב ``failed``; הנתיב מחזיר את זה כשגיאה בשם, לא 409
+    "עדכון קודם עוד רץ"."""
+
+
 class VersionError(RuntimeError):
     """כישלון קריאת הגרסה: ``category`` מתוך ``VERSION_ERRORS``, והסיבה
     המלאה (עם נתיב ו-stderr) ב-``str(exc)``."""
@@ -498,7 +504,8 @@ def status_with_verification(conn, hooks: Hooks, repo_dir: str | Path,
 def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
                          user: str, forced: str | None = None) -> bool:
     """‏``False`` = יחידת שדרוג כבר רצה (#1273): הסטטוס הקודם חוזר כמו שהיה,
-    ו-failed **אינו** נכתב — המפעיל היה רואה "נכשל" בזמן שהעדכון רץ."""
+    ו-failed **אינו** נכתב — המפעיל היה רואה "נכשל" בזמן שהעדכון רץ.
+    כל כשל אחר בהפעלה: ``failed`` נכתב ו-``UpgradeLaunchError`` נזרק (#2160)."""
     prior = get_status(conn)
     previous = current_version(hooks, repo_dir)
     if previous:
@@ -528,7 +535,7 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
         _set_status(conn, {"state": "failed", "tag": tag,
                            "error": f"הפעלת tools/server-upgrade.sh נכשלה: {err}"})
         journal(conn, "update_apply_failed", f"{tag}: script — {err}", user)
-        return
+        raise UpgradeLaunchError(f"הפעלת tools/server-upgrade.sh נכשלה: {err}")
 
     # ‏#748 סעיף 5: "אומת" נקבע רק ב-``status_with_verification`` אחרי
     # שהשרת עלה מחדש עם התג — לא כאן. ``running`` נשאר עד אז; הסקריפט
@@ -645,7 +652,11 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
             if now.get("state") == "running":
                 raise HTTPException(409, f"עדכון ל-{now.get('tag')} כבר רץ — ממתינים "
                                          "שיסתיים (השרת יאותחל) לפני עדכון נוסף")
-            if not start_apply(ctx, hooks, repo_dir, tag, user[0], forced=blocker or None):
+            try:
+                started = start_apply(ctx, hooks, repo_dir, tag, user[0], forced=blocker or None)
+            except UpgradeLaunchError as exc:
+                raise HTTPException(500, str(exc)) from exc
+            if not started:
                 raise HTTPException(409, f"יחידת השדרוג ({UPGRADE_UNIT}) כבר רצה — "
                                          "עדכון קודם עוד לא הסתיים")
         if blocker:

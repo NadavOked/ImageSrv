@@ -637,3 +637,45 @@ def test_dcui_list_that_could_not_be_read_says_so(tmp_path, dcui_conn):
     assert "NOT 'no empty disk'" in "\n".join(_current_lines(runtime, time.monotonic()))
     _press(runtime, keys, "\n")                               # אין מה לאשר
     assert runtime.screen == "disk" and fake.prepared == []
+
+
+# --- #2160: כתיבה שנכשלה למנעול אינה משאירה fd פתוח ואינה משאירה מנעול יתום -----
+
+def test_a_failed_write_to_the_lock_closes_the_fd_and_leaves_no_lock_behind(tmp_path, monkeypatch):
+    import errno
+
+    class _OS:
+        """``os`` של המודול: `write` נכשל (דיסק מלא), `open`/`close` נרשמים."""
+
+        def __init__(self):
+            self.opened: list[int] = []
+            self.closed: list[int] = []
+
+        def __getattr__(self, name):
+            return getattr(os, name)
+
+        def open(self, *args, **kwargs):
+            fd = os.open(*args, **kwargs)
+            self.opened.append(fd)
+            return fd
+
+        def write(self, fd, data):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        def close(self, fd):
+            self.closed.append(fd)
+            os.close(fd)
+
+    fake_os = _OS()
+    monkeypatch.setattr(storage_disks, "os", fake_os)
+    with pytest.raises(storage_disks.AddDiskError) as caught:
+        storage_disks._acquire(tmp_path)
+    assert caught.value.status == 503 and "No space left" in caught.value.message
+    assert len(fake_os.opened) == 1 and fake_os.closed == fake_os.opened, "the fd was leaked"
+    assert not (tmp_path / storage_disks.LOCK_NAME).exists(), "an empty O_EXCL lock was left behind"
+    monkeypatch.undo()
+    # the next add is not refused with "another disk is being added"
+    lock = storage_disks._acquire(tmp_path)
+    assert lock.read_text(encoding="utf-8") == str(os.getpid())
+    storage_disks._release(lock)
+    assert not lock.exists()

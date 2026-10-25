@@ -134,6 +134,52 @@ def test_deploy_opens_dhcp_tftp_and_not_ssh() -> None:
 
 
 @needs_bash
+def test_proxy_1829_opens_udp_4011_only_on_the_deploy_interface() -> None:
+    from server import ports
+
+    got = generate(*PRIMARY_ARGS, "--proxy-if", "eth-deploy")
+    rules = [line.strip() for line in got.splitlines() if "dport 4011" in line]
+    assert rules == ['iifname "eth-deploy" udp dport 4011 accept']
+    assert ports.network_of("pxe_proxy") == "deploy"
+    assert ports.port_firewall(got, "udp", "4011")[0] == "open"
+    assert ports.ELSEWHERE["pxe_proxy"] == "/api/console/net/interfaces/{name}"
+    assert got.count("policy drop") == 2
+
+
+@needs_bash
+@pytest.mark.parametrize("args", [
+    PRIMARY_ARGS,
+    (*PRIMARY_ARGS, "--proxy-if", "eth-other"),
+    ("--servers-if", "eth-srv", "--proxy-if", "eth-deploy"),
+])
+def test_proxy_1829_stays_closed_without_an_eligible_deploy_interface(args) -> None:
+    assert "dport 4011" not in generate(*args)
+
+
+@needs_bash
+@pytest.mark.parametrize("name", ['eth"1', "eth1\n", "eth1 eth2", ""])
+def test_proxy_1829_rejects_unsafe_interface_names_before_output(name) -> None:
+    proc = subprocess.run(
+        [BASH, str(GEN), *PRIMARY_ARGS, "--proxy-if", name],
+        capture_output=True, text=True, encoding="utf-8", stdin=subprocess.DEVNULL,
+    )
+    assert proc.returncode != 0 and proc.stdout == ""
+
+
+@needs_bash
+@requires_native("nft", why="proxyDHCP rules require nft syntax validation")
+@pytest.mark.parametrize("args", [
+    PRIMARY_ARGS,
+    ("--per-nic", "--service", "eth-deploy:netboot", "--service", "eth-srv:console"),
+])
+def test_proxy_1829_rules_are_accepted_by_nft(tmp_path, args) -> None:
+    candidate = tmp_path / "proxy.conf"
+    candidate.write_text(generate(*args, "--proxy-if", "eth-deploy"), encoding="utf-8")
+    proc = _nft_check(candidate)
+    assert proc.returncode == 0, proc.stderr
+
+
+@needs_bash
 def test_without_deploy_if_only_the_servers_vlan_opens() -> None:
     """‏#1088: במסירה רשת ההפצה טרם הוגדרה — המחולל רץ בלי --deploy-if,
     פותח את הקונסולה בוילן השרתים ו**סוגר** את SSH ואת כל פורטי ההפצה.

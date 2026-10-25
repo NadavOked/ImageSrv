@@ -78,11 +78,11 @@ tag_units() {
 # The units of the tree on disk now ($PREV) -- *.service and *.timer, so a timer
 # the interrupted version changed goes back too. No timers = none, not an error.
 install_prev_units() {
-    local units
+    local prev_units
     shopt -s nullglob
-    units=(install/*.service install/*.timer)
+    prev_units=(install/*.service install/*.timer)
     shopt -u nullglob
-    install -m 0644 "${units[@]}" "$UNIT_DIR/"
+    install -m 0644 "${prev_units[@]}" "$UNIT_DIR/"
 }
 
 case "$STAGE" in

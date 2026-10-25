@@ -566,6 +566,8 @@ def tftp_switch(conn, installer_conf: str | None) -> dict:
 
 
 #: שורות שהמתג שלהן חי במקום אחר — ‏`/ports` מצביע לשם.
+#: #1829: proxy toggles also regenerate the interface-scoped UDP 4011 rule;
+#: port_firewall reads that explicit accept rule instead of assuming it is open.
 ELSEWHERE = {
     "dhcp": "/api/console/net/interfaces/{name}",
     "pxe_proxy": "/api/console/net/interfaces/{name}",

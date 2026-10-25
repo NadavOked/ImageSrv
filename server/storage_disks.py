@@ -72,8 +72,15 @@ def _acquire(data_dir: Path) -> Path:
         except FileNotFoundError:
             pass
         fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        os.write(fd, str(os.getpid()).encode())
-        os.close(fd)
+        try:
+            os.write(fd, str(os.getpid()).encode())
+        except OSError:
+            # ‏#2160: הקובץ כבר קיים (O_EXCL) וריק. בלי להסיר אותו, כל הוספה עד
+            # LOCK_STALE_S הייתה חוטפת "כונן אחר נוסף עכשיו" על מנעול ללא בעלים.
+            lock.unlink(missing_ok=True)
+            raise
+        finally:
+            os.close(fd)
     except FileExistsError:
         _thread_lock.release()
         raise AddDiskError(409, "הוספת כונן אחרת רצה עכשיו (מהקונסולה או ממסך השרת)",

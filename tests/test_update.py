@@ -532,6 +532,21 @@ def test_any_other_launch_failure_is_still_failed(update_server):
     assert status["state"] == "failed" and "Failed to connect to bus" in status["error"]
 
 
+def test_a_launch_failure_answers_with_the_real_error_not_the_409_of_a_running_unit(update_server):
+    """‏#2160: כשל הפעלה שאינו "היחידה כבר רצה" נכתב failed — והתשובה לבקשה
+    אמרה בכל זאת 409 "יחידת השדרוג כבר רצה" (``return`` בלי ערך = None = "לא
+    התחיל"). המפעיל קיבל הסבר הפוך מהאמת, באותה בקשה שבה הסטטוס כבר היה failed."""
+    admin = update_server["admin"]
+    _enable(admin)
+    update_server["state"]["run_ok"] = False
+    update_server["state"]["run_err"] = "Failed to connect to bus: No such file or directory"
+    r = admin.post("/api/console/update/apply", json={"tag": "v0.25.0"})
+    assert r.status_code == 500, r.text
+    assert "Failed to connect to bus" in r.json()["detail"]
+    assert "כבר רצה" not in r.json()["detail"]
+    assert admin.get("/api/console/update/status").json()["state"] == "failed"
+
+
 def test_two_simultaneous_applies_start_the_script_once(update_server):
     """שתי בקשות שמגיעות יחד (thread pool): השומר והכתיבה של running אטומיים —
     השנייה ממתינה ומקבלת 409, ולא עוברת את השומר לפני שהראשונה כתבה."""

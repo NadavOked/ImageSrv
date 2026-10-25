@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="640" viewBox="0 0 1760 640">
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#cbd5e1"/></marker>
+  <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#60a5fa"/></marker>
+  <style>
+    text{font-family:"Segoe UI",Arial,sans-serif;fill:#e5e7eb}
+    .title{font-size:32px;font-weight:700}.subtitle{font-size:16px;fill:#aab4c3}
+    .h{font-size:20px;font-weight:700}.body{font-size:14px}.small{font-size:12px}
+    .box{stroke-width:2}.server{fill:#12324a;stroke:#38bdf8}.net{fill:#2b2148;stroke:#a78bfa}
+    .img{fill:#123522;stroke:#4ade80}.safe{fill:#3a2414;stroke:#fb923c}.chain{fill:#3f3212;stroke:#fbbf24}
+    .secondary{fill:#202b3a;stroke:#718096}.port{fill:#0b1220;stroke:#cbd5e1;stroke-width:1.5}
+    .line{stroke:#cbd5e1;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+    .blue{stroke:#60a5fa;stroke-width:3;fill:none;marker-end:url(#arrowBlue)}
+    .dash{stroke-dasharray:8 7}
+  </style>
+</defs>
+<rect width="1760" height="640" fill="#0b1220"/>
+<text x="880" y="55" text-anchor="middle" class="title" direction="rtl" unicode-bidi="plaintext">ImageSrv — התקן שיכפול USB</text>
+<text x="880" y="84" text-anchor="middle" class="subtitle" direction="rtl" unicode-bidi="plaintext">מחשב שיכפול שעולה מ-USB: שיכפול מקומי בלי שרת, בלי רשת ובלי DHCP</text>
+<g transform="translate(0 -420)">
+<!-- cloners -->
+<rect x="650" y="650" width="500" height="340" rx="22" class="net box"/>
+<text x="900" y="688" text-anchor="middle" class="h" direction="rtl" unicode-bidi="plaintext">מחשבי שיכפול (cloners)</text>
+<text x="900" y="716" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">אתחול מ-USB → סוכן + GUI · בדיקת דיסקים לפני הכתיבה</text>
+<g transform="translate(0 30)">
+ <rect x="690" y="750" width="130" height="145" rx="15" class="safe box"/>
+ <text x="755" y="780" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">דיסק 1</text><text x="755" y="805" text-anchor="middle" class="small">SMART</text><text x="755" y="830" text-anchor="middle" class="small">🟢 / 🟠 / 🔴</text><text x="755" y="855" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">התקדמות</text>
+ <rect x="835" y="750" width="130" height="145" rx="15" class="safe box"/>
+ <text x="900" y="780" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">דיסק 2</text><text x="900" y="805" text-anchor="middle" class="small">SMART</text><text x="900" y="830" text-anchor="middle" class="small">🟢 / 🟠 / 🔴</text><text x="900" y="855" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">התקדמות</text>
+ <rect x="980" y="750" width="130" height="145" rx="15" class="safe box"/>
+ <text x="1045" y="780" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">דיסק 3</text><text x="1045" y="805" text-anchor="middle" class="small">SMART</text><text x="1045" y="830" text-anchor="middle" class="small">🟢 / 🟠 / 🔴</text><text x="1045" y="855" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">התקדמות</text>
+</g>
+<text x="900" y="955" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">partclone → fanout → partclone · כל היעדים במקביל</text>
+<text x="900" y="977" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">אימות קריאה-חוזרת אחרי הכתיבה · כשל במגירה אינו עוצר אחרות</text>
+
+<path d="M755 780 C755 742 1045 742 1045 780" class="line"/>
+<text x="900" y="770" class="small" text-anchor="middle" direction="rtl" unicode-bidi="plaintext">מקומי · דיסק לדיסק, בלי שרת</text>
+</g>
+<rect x="180" y="350" width="300" height="100" rx="18" class="chain box"/>
+<text x="330" y="388" text-anchor="middle" class="h" direction="rtl" unicode-bidi="plaintext">התקן USB</text>
+<text x="330" y="418" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">אתחול ישיר למסך השיכפול המקומי</text>
+<path d="M480 400 L650 400" class="line"/>
+<text x="565" y="386" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">אתחול</text>
+<text x="880" y="615" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">ImageSrv · תרשים התקן USB</text>
+</svg>

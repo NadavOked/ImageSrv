@@ -27,9 +27,12 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
+import socket
 import subprocess
+import urllib.parse
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +57,30 @@ SERVER_UNIT = "imagectl-server"
 RESTART_DELAY_SECONDS = 3
 
 Hooks = dict[str, Callable]
+
+
+def primary_ip_of(url: str, resolve: Callable | None = None) -> tuple[str | None, str | None]:
+    """הכתובת שחומת האש של משני פותחת לה את 8443 → ‏``(ip, None)`` או ``(None, סיבה)``.
+
+    ‏#2160: ‏``--primary-url`` עם שם מארח השאיר ``primary_ip=None`` בשקט, והמחולל
+    בלי ``--primary-ip`` פותח את 8443 מכל הכרטיס — חומת אש רחבה שנראית תקינה.
+    כמו המתקין (``getent ahostsv4``, הראשונה): שם נפתר ל-IPv4. שם שלא נפתר
+    אינו "בלי הגבלה" — זו סיבה, וחומת האש לא מחוללת מחדש עד שהיא נפתרת."""
+    host = urllib.parse.urlsplit(url or "").hostname or ""
+    if not host:
+        return None, f"אין שם מארח בכתובת השרת הראשי ({url!r})"
+    try:
+        ipaddress.ip_address(host)
+        return host, None
+    except ValueError:
+        pass
+    try:
+        infos = (resolve or socket.getaddrinfo)(host, None, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError as exc:
+        return None, f"השם {host} של השרת הראשי לא נפתר לכתובת ({exc})"
+    for info in infos or ():
+        return info[4][0], None
+    return None, f"השם {host} של השרת הראשי לא נפתר לכתובת IPv4"
 
 
 @dataclass(frozen=True)
@@ -166,13 +193,16 @@ def firewall_installed(conf: str | Path = NFTABLES_CONF) -> bool | None:
 def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_if: str | None,
                         primary_ip: str | None = None,
                         conf: str | Path = NFTABLES_CONF,
-                        services: list[tuple[str, list[str]]] | None = None) -> str | None:
+                        services: list[tuple[str, list[str]]] | None = None,
+                        proxy_interfaces: list[str] | None = None) -> str | None:
     """מריץ שוב את `install/nftables-rules.sh` עם שני הכרטיסים, בודק תחביר
     (`nft -c`), כותב ומטעין. חומת אש שלא הותקנה — לא נוגעים; הותקנה
     וכרטיס השרתים אינו ידוע — שגיאה בשם (הכללים לוילן ההפצה לא ייכתבו).
 
     ‏`services` (‏#705): ‏[(כרטיס, [שירותים])] — המפעיל בחר שירותים לכל כרטיס,
-    והכללים נגזרים מהם בלבד (‏`--per-nic`); אז שני הכרטיסים אינם נדרשים."""
+    והכללים נגזרים מהם בלבד (‏`--per-nic`); אז שני הכרטיסים אינם נדרשים.
+    `proxy_interfaces` (#1829) names the interfaces configured for PXE proxy;
+    UDP 4011 additionally requires a deploy/netboot rule for that interface."""
     installed = firewall_installed(conf)
     if installed is None:
         return f"לא ניתן לקרוא את {conf} — חומת האש לא עודכנה"
@@ -192,6 +222,8 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
             args[2:2] = ["--deploy-if", deploy_if]
     if primary_ip:
         args += ["--primary-ip", primary_ip]
+    for nic in proxy_interfaces or []:
+        args += ["--proxy-if", nic]
     ok, ruleset, err = _run(args)
     if not ok or not ruleset.strip():
         return f"מחולל חומת האש נכשל: {err or 'פלט ריק'}"
@@ -247,6 +279,20 @@ def default_hooks() -> Hooks:
     }
 
 
+def firewall_proxy_interfaces(conn) -> list[str]:
+    """#1829: same saved mode and edition gate as the proxy dnsmasq instance.
+
+    Unreadable settings propagate an error; they must not look like proxy off.
+    """
+    from . import console_dhcp, dhcp
+    configs = console_dhcp.proxy_configs(console_dhcp.load_configs(conn))
+    names = []
+    for cfg in dhcp.proxy_only(configs):
+        dhcp.validate_name(cfg.name)
+        names.append(cfg.name)
+    return names
+
+
 @dataclass
 class DeployContext:
     """מה שהקונסולה צריכה כדי להשלים את ההתקנה — נבנה ב-`main` ומוזרק
@@ -264,6 +310,9 @@ class DeployContext:
     #: לכרטיסים, או None (ההתנהגות של היום). בלעדיו ההשלמה הייתה כותבת חומת
     #: אש לפי שני תפקידים — ודורסת בשקט את מה שהמפעיל בחר לכל כרטיס.
     services: Callable[[str], list | None] | None = None
+    #: ‏#2160: משני שכתובת הראשי שלו לא נפתרה — חומת האש **לא** מחוללת מחדש
+    #: (הכללים הקיימים נשארים), והסיבה חוזרת כשגיאה. ‏None = אין מה לחסום.
+    primary_ip_error: str | None = None
 
 
 def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dict:
@@ -284,9 +333,19 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dic
         ("dnsmasq", hooks["enable_dnsmasq"]),
     ]
     per_nic = ctx.services(interface) if ctx.services is not None else None
-    steps.append(("חומת אש", lambda: hooks["firewall"](
+    # #2160 before #1829: an unresolved primary refuses the firewall by name, and
+    # nothing else (the proxy read included) runs first and answers in its place.
+    proxy = None
+    if not ctx.primary_ip_error:
+        try:
+            proxy = firewall_proxy_interfaces(conn)
+        except Exception as exc:                          # noqa: BLE001
+            result["errors"].append(f"חומת אש: לא ניתן לקרוא הגדרות proxy: {exc}")
+            return result
+    steps.append(("חומת אש", lambda: ctx.primary_ip_error or hooks["firewall"](
         ctx.repo_dir, deploy_if=interface, servers_if=ctx.servers_interface,
         primary_ip=ctx.primary_ip,
+        **({"proxy_interfaces": proxy} if proxy else {}),
         **({"services": per_nic} if per_nic is not None else {}))))
     for label, call in steps:
         err = call()

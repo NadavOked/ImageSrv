@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import re
 import socket
 import subprocess
 import urllib.request
@@ -57,10 +58,10 @@ def _sha256(path) -> str:
         return ""
 
 
-def _run(cmd: list[str]) -> str:
+def _run(cmd: list[str], *, check: bool = False) -> str:
     try:
         return subprocess.run(cmd, capture_output=True, text=True,
-                              timeout=5, check=False).stdout
+                              timeout=5, check=check).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
 
@@ -79,6 +80,10 @@ def default_hooks() -> dict:
         "installer_conf": dhcp.read_installer_conf,
         "shim_src": lambda: "/usr/lib/shim/shimx64.efi.signed",
         "unit_active": lambda name: _run(["systemctl", "is-active", name]).strip(),
+        # #1816: only this boot's dnsmasq messages, bounded and without a pager.
+        "dnsmasq_journal": lambda: _run([
+            "journalctl", "-b", "-u", "dnsmasq.service", "-t", "dnsmasq",
+            "-n", "20", "--no-pager", "--quiet", "-o", "cat"], check=True),
         "timesync_status": lambda: timesync.status(timesync.default_hooks()),
         "http_get": _http_probe,
         "http_size": _http_size,
@@ -111,6 +116,23 @@ def default_hooks() -> dict:
         "mdstat": lambda: raid_status.read_optional(raid_status.MDSTAT_PATH),
         "raid_declared": lambda: raid_status.read_optional(raid_status.RAID_FACT_PATH),
     }
+
+
+def _dnsmasq_down_detail(active: str, journal: str) -> str:
+    """Use the latest diagnostic, not an old missing NIC before a later start."""
+    for line in reversed(journal.splitlines()):
+        message = line.strip().removeprefix("dnsmasq: ")
+        # dnsmasq logs this generic footer after the actual startup error.
+        if not message or message == "FAILED to start up":
+            continue
+        missing = re.fullmatch(r"unknown interface (\S+)", message)
+        if missing:
+            return f"dnsmasq down: unknown interface {missing[1]}"
+        break
+    detail = f"מצב: {active}"
+    if not journal.strip():
+        detail += " · dnsmasq journal unavailable or empty — cause not checked"
+    return detail
 
 
 def _db_free(data_dir) -> int | None:
@@ -407,7 +429,8 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         else check("dnsmasq", "שירות dnsmasq", "ok", "רץ") if active == "active"
         else check("dnsmasq", "שירות dnsmasq", "off",
                    "אי אפשר לבדוק כאן (systemctl לא זמין)") if not active
-        else check("dnsmasq", "שירות dnsmasq", "bad", f"מצב: {active}"))
+        else check("dnsmasq", "שירות dnsmasq", "bad",
+                   _dnsmasq_down_detail(active, hooks.get("dnsmasq_journal", lambda: "")())))
 
     # שרשרת האתחול, משני קצותיה: הקבצים על שורש ה-TFTP, ומיד אחריהם
     # הקרנל וה-initramfs כפי שהתחנה מושכת אותם ב-HTTP (#333).

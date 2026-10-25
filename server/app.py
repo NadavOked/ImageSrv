@@ -52,7 +52,6 @@ from . import wol
 from . import direct
 from . import smart_ask
 from .sender import SenderEngine
-from .station import create_station_router
 from .console_library import create_library_router
 from .console_drivers import create_agent_drivers_router, create_drivers_router   # #720
 from .console_tools import create_tools_router   # #649 שלב 1
@@ -730,14 +729,18 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
         hooks["dnsmasq"] = dnsmasq_step
     if "firewall" not in hooks and deploy is not None:
         def firewall_step(nic):
+            if deploy.primary_ip_error:      # ‏#2160: לא פותחים 8443 לכל הכרטיס בשקט
+                return deploy.primary_ip_error
             regenerate = (deploy.hooks or {}).get("firewall", deploy_net.regenerate_firewall)
             per = nic.firewall_services()
+            proxy = deploy_net.firewall_proxy_interfaces(ctx.conn)
+            proxy_args = {"proxy_interfaces": proxy} if proxy else {}
             if per is None:      # חזרנו ל"היום" — הכללים לפי שני התפקידים
                 return regenerate(deploy.repo_dir, deploy_if=deploy.state.interface,
                                   servers_if=deploy.servers_interface,
-                                  primary_ip=deploy.primary_ip)
+                                  primary_ip=deploy.primary_ip, **proxy_args)
             return regenerate(deploy.repo_dir, deploy_if=None, servers_if=None,
-                              primary_ip=deploy.primary_ip, services=per)
+                              primary_ip=deploy.primary_ip, services=per, **proxy_args)
         hooks["firewall"] = firewall_step
     if "timesync" not in hooks and apply_timesync:
         chrony_hooks = timesync.default_hooks()

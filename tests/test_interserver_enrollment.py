@@ -31,6 +31,37 @@ except Exception:                                             # noqa: BLE001
 UTC = timezone.utc
 
 
+def test_pairing_certificate_has_both_eku_roles_and_keeps_identity_1815(tmp_path):
+    from cryptography import x509
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
+    conn = db.connect(tmp_path / "identity.db")
+    try:
+        ident = storage_nodes.ensure_identity(conn, tmp_path / "node",
+                                              host_sans=["127.0.0.1"])
+        cert = x509.load_pem_x509_certificate(ident["cert_pem"])
+        eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+        assert set(eku) == {ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH}
+        assert cert.not_valid_after_utc - cert.not_valid_before_utc == (
+            timedelta(days=3650) + interserver_auth.NOT_BEFORE_BACKDATE)
+        loaded = storage_nodes.ensure_identity(conn, tmp_path / "node")
+        assert loaded["cert_pem"] == ident["cert_pem"]
+        assert loaded["key_pem"] == ident["key_pem"]
+        assert loaded["server_spki"] == ident["server_spki"]
+    finally:
+        conn.close()
+
+
+def test_default_generator_certificate_supports_both_mtls_roles_1815():
+    from cryptography import x509
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
+    cert_pem, _ = interserver_auth.generate_self_signed("pairing-peer")
+    cert = x509.load_pem_x509_certificate(cert_pem)
+    eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    assert set(eku) == {ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH}
+
+
 # --- (א) פרימיטיבים ללא-TLS: קוד, טוקן, URL, loopback -----------------------
 
 def test_pairing_code_roundtrips_and_normalizes():

@@ -16,7 +16,7 @@
 </defs>
 <rect width="1760" height="1110" fill="#ffffff"/>
 <text x="880" y="55" text-anchor="middle" class="title" direction="rtl" unicode-bidi="plaintext">ImageSrv — ארכיטקטורה</text>
-<text x="880" y="84" text-anchor="middle" class="subtitle" direction="rtl" unicode-bidi="plaintext">כל מה שבתרשים רץ היום. כיתות (תחנות תלמיד) — גרסה 2.0 · ארגז הכלים — בדרך.</text>
+<text x="880" y="84" text-anchor="middle" class="subtitle" direction="rtl" unicode-bidi="plaintext">כל מה שבתרשים רץ היום. מחשב שיכפול מקבל משלושה מקורות: השרת, מחשב הבנייה (ישיר) ומקומי, דיסק לדיסק.</text>
 
 <!-- legend -->
 <g transform="translate(90 115)">
@@ -67,14 +67,14 @@
 <text x="300" y="718" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">דיסק מקור → PXE → סוכן ב-initramfs (RAM)</text>
 <rect x="125" y="745" width="350" height="105" rx="15" class="server box"/>
 <text x="300" y="775" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">GUI גרפי · כניסה עם משתמש הקונסולה</text>
-<text x="300" y="802" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">[ קליטה לשרת ]  [ הפצה ישירה ]</text>
+<text x="300" y="802" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">[ קליטה ]  [ שחזור ]  [ הפצה ישירה ]</text>
 <text x="300" y="827" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">עולה ישר למסך הקליטה · בלי תפריט GRUB</text>
 
 <!-- cloners -->
-<rect x="650" y="650" width="500" height="310" rx="22" class="net box"/>
+<rect x="650" y="650" width="500" height="340" rx="22" class="net box"/>
 <text x="900" y="688" text-anchor="middle" class="h" direction="rtl" unicode-bidi="plaintext">מחשבי שיכפול (cloners)</text>
 <text x="900" y="716" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">PXE ישר לסוכן + GUI · בדיקת דיסקים לפני הכתיבה</text>
-<g>
+<g transform="translate(0 30)">
  <rect x="690" y="750" width="130" height="145" rx="15" class="safe box"/>
  <text x="755" y="780" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">דיסק 1</text><text x="755" y="805" text-anchor="middle" class="small">SMART</text><text x="755" y="830" text-anchor="middle" class="small">🟢 / 🟠 / 🔴</text><text x="755" y="855" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">התקדמות</text>
  <rect x="835" y="750" width="130" height="145" rx="15" class="safe box"/>
@@ -82,8 +82,8 @@
  <rect x="980" y="750" width="130" height="145" rx="15" class="safe box"/>
  <text x="1045" y="780" text-anchor="middle" class="body" direction="rtl" unicode-bidi="plaintext">דיסק 3</text><text x="1045" y="805" text-anchor="middle" class="small">SMART</text><text x="1045" y="830" text-anchor="middle" class="small">🟢 / 🟠 / 🔴</text><text x="1045" y="855" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">התקדמות</text>
 </g>
-<text x="900" y="925" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">udp-receiver → zstd → partclone · fanout במקביל</text>
-<text x="900" y="947" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">אימות קריאה-חוזרת אחרי הכתיבה · כשל במגירה אינו עוצר אחרות</text>
+<text x="900" y="955" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">udp-receiver → zstd → partclone · fanout במקביל</text>
+<text x="900" y="977" text-anchor="middle" class="small" direction="rtl" unicode-bidi="plaintext">אימות קריאה-חוזרת אחרי הכתיבה · כשל במגירה אינו עוצר אחרות</text>
 
 <!-- secondary -->
 <rect x="1300" y="180" width="360" height="380" rx="22" class="secondary box"/>
@@ -102,9 +102,16 @@
 <!-- arrows -->
 <path d="M500 325 L650 325" class="line"/>
 <path d="M500 415 C560 415 590 500 680 500" class="line"/>
-<path d="M300 650 L300 470" class="blue"/>
 <path d="M510 775 L650 775" class="blue"/>
 <path d="M900 580 L900 650" class="blue"/>
+<path d="M470 650 L690 583" class="line"/>
+<path d="M740 583 L520 650" class="line"/>
+<path d="M755 780 C755 742 1045 742 1045 780" class="line"/>
+<text x="480" y="624" class="small" text-anchor="middle" direction="rtl" unicode-bidi="plaintext">קליטה (העלאה)</text>
+<text x="650" y="640" class="small" text-anchor="middle" direction="rtl" unicode-bidi="plaintext">שחזור</text>
+<text x="580" y="762" class="small" text-anchor="middle" direction="rtl" unicode-bidi="plaintext">ישיר (לא דרך השרת)</text>
+<text x="1010" y="625" class="small" text-anchor="middle" direction="rtl" unicode-bidi="plaintext">הפצה (מולטיקאסט)</text>
+<text x="900" y="770" class="small" text-anchor="middle" direction="rtl" unicode-bidi="plaintext">מקומי · דיסק לדיסק, בלי שרת</text>
 <path d="M1150 330 L1300 330" class="line"/>
 <path d="M1300 470 L1150 470" class="line"/>
 <text x="1220" y="314" class="small" text-anchor="end" direction="rtl" unicode-bidi="plaintext">אימג'ים →</text>

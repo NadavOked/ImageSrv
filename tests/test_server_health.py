@@ -49,7 +49,7 @@ def health_server(tmp_path: Path, images_root: Path, clock):
     for name in ("bootx64.efi", "grubx64.efi", "grub/grub.cfg"):
         (tftp / name).write_bytes(b"x")
 
-    fake = {"ss": SS_DNSMASQ, "active": "active", "http": 200,
+    fake = {"ss": SS_DNSMASQ, "active": "active", "http": 200, "journal": "",
             "interfaces": [{"name": "eth0", "state": "up", "mac": "aa", "addresses": []}],
             # ‏vmlinuz ו-initrd.img כפי שהתחנה מושכת אותם (#333): קוד
             # וגודל, כי 404 של ‎/boot הוא גוף בן תשעה בייטים (#332).
@@ -71,6 +71,7 @@ def health_server(tmp_path: Path, images_root: Path, clock):
         "ss": lambda: fake["ss"],
         "nft_ruleset": lambda: fake["nft_ruleset"],
         "unit_active": lambda name: fake["active"],
+        "dnsmasq_journal": lambda: fake["journal"],
         "http_get": lambda url: fake["http"],
         "http_size": lambda url: fake["assets"].get(url.rsplit("/", 1)[-1],
                                                     (404, 9)),
@@ -91,6 +92,69 @@ def health_server(tmp_path: Path, images_root: Path, clock):
 
 def by_id(rows):
     return {r["id"]: r for r in rows}
+
+
+@pytest.mark.parametrize("active", ["failed", "activating", "inactive"])
+@pytest.mark.parametrize("nic", ["enx001122334455", "enp2s0.100"])
+def test_1816_dnsmasq_names_the_missing_interface(health_server, active, nic):
+    health_server["fake"].update(
+        active=active,
+        journal=f"dnsmasq: unknown interface {nic}\nFAILED to start up\n")
+    response = health_server["admin"].get("/api/console/health")
+    assert response.status_code == 200
+    row = by_id(response.json())["dnsmasq"]
+    assert row["state"] == "bad"
+    assert row["detail"] == f"dnsmasq down: unknown interface {nic}"
+
+
+@pytest.mark.parametrize("latest", [
+    "started, version 2.91 cachesize 150\nexiting on receipt of SIGTERM\n",
+    "failed to create listening socket: Address already in use\nFAILED to start up\n",
+])
+def test_1816_dnsmasq_does_not_report_an_old_missing_interface(health_server, latest):
+    health_server["fake"].update(
+        active="failed", journal="unknown interface old0\nFAILED to start up\n" + latest)
+    row = by_id(health_server["admin"].get("/api/console/health").json())["dnsmasq"]
+    assert row["state"] == "bad"
+    assert "unknown interface" not in row["detail"]
+
+
+def test_1816_missing_journal_keeps_dnsmasq_red_and_says_not_checked(health_server):
+    health_server["fake"].update(active="failed", journal="")
+    row = by_id(health_server["admin"].get("/api/console/health").json())["dnsmasq"]
+    assert row["state"] == "bad"
+    assert "cause not checked" in row["detail"]
+
+
+def test_1816_recovered_dnsmasq_does_not_read_old_errors(health_server):
+    class UnreadJournal(str):
+        def splitlines(self):
+            pytest.fail("active dnsmasq must not parse the journal")
+
+    health_server["fake"].update(
+        active="active", journal=UnreadJournal("unknown interface old0\n"))
+    row = by_id(health_server["admin"].get("/api/console/health").json())["dnsmasq"]
+    assert row["state"] == "ok"
+
+
+@pytest.mark.parametrize("failure", ["exit", "timeout", "missing"])
+def test_1816_journal_command_failure_discards_partial_output(monkeypatch, failure):
+    import subprocess
+    from server import health
+
+    def failed_run(cmd, **kwargs):
+        assert cmd == ["journalctl", "-b", "-u", "dnsmasq.service", "-t", "dnsmasq",
+                       "-n", "20", "--no-pager", "--quiet", "-o", "cat"]
+        assert kwargs["check"] is True
+        assert kwargs["timeout"] == 5
+        if failure == "exit":
+            raise subprocess.CalledProcessError(1, cmd, output="unknown interface stale0\n")
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(cmd, 5)
+        raise FileNotFoundError("journalctl")
+
+    monkeypatch.setattr(health.subprocess, "run", failed_run)
+    assert health.default_hooks()["dnsmasq_journal"]() == ""
 
 
 def test_a_healthy_server_is_all_green(health_server):
