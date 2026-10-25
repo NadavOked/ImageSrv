@@ -135,10 +135,10 @@ smart_note_apply() {
     # Not done (failed, cancelled) = its own reason stands.
     for _na_d in "$@"; do
         _na_t="$RUN_DIR/targets/$_na_d"
-        [ -s "$_na_t/smart_note" ] && [ "$(cat "$_na_t/state" 2>/dev/null)" = done ] || continue
+        [ -s "$_na_t/smart_note" ] && [ "$(cat "$_na_t/state" 2>/dev/null)" = "done" ] || continue
         _na_w=$(cat "$_na_t/smart_note")
         [ -s "$_na_t/error" ] && _na_w="$(cat "$_na_t/error") | $_na_w"
-        target_set "$_na_d" done "$_na_w"
+        target_set "$_na_d" "done" "$_na_w"
     done
     return 0
 }

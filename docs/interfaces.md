@@ -7123,7 +7123,7 @@ broadcast/0.0.0.0/שמורה); תשובה אחרת נספרת כ"נדחתה" ו�
    אחרת — בשמה; לא MSR ולא BIOS boot); מחיצה ש-partclone סירב לה בזמן ההעתקה (`lc_stream`
    מחזיר 3 כש-partclone נכשל ולפחות יעד אחד קיבל את כל מה שנקרא — `lc_stream_any` מסמן ומזרים
    שוב ב-partclone.dd); ‏`"raw_why": "rescue"` — "המשך בכל זאת" (או בלי תשובה תוך דקה / בלי גואי) אחרי שגם הקריאה הגולמית נכשלה
-   (קוד 4): ‏`busybox dd conv=noerror,sync`, ‏bs ‏4096 כשהמחיצה בכפולות של 4KiB ואחרת 512, והספירה
+   (קוד 4): ‏`busybox dd iflag=direct conv=noerror,sync` (‏direct -- #2158: דרך ה-page cache קריאה שנכשלה מאפסת את יחידת הקריאה של הקרנל, לא bs), ‏bs ‏4096 כשהמחיצה בכפולות של 4KiB ואחרת 512, והספירה
    היא B של "A+B records in" כפול bs/512 (‏`$LC/run/rescued`: ‏`idx|sectors`). מחיצה גולמית
    לעולם אינה `expandable` (‏`lc_raw_fix`; אם היא המועמדת — שום מחיצה לא גדלה), ומחיצה שהפכה
    גולמית אחרי שהטבלה הוגדלה — מערכת הקבצים שלה לא מוגדלת (‏`lc_raw_nogrow`). ה-readback

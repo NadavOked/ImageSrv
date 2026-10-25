@@ -71,7 +71,7 @@ single_restore_run() {
         writemark_release_done "$_sr_disk" || { _sr_rc=1; echo failed > "$RUN_DIR/state"; }   # #1877: after the last write; a mark that stays = failed
     fi
     if [ "$_sr_rc" -eq 0 ]; then
-        echo done > "$RUN_DIR/state"
+        echo "done" > "$RUN_DIR/state"
         pull_close "$_sr_ppid" "$PULL_SESSION" "$MAC" "$SERVER"
         sr_gui_done
         return 0

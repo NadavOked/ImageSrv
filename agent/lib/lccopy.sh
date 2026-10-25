@@ -139,10 +139,11 @@ lc_stream() {
     [ "$_ls_pcl" = partclone.dd ] || _ls_ign="$_ls_ign -a0 -z ${LC_SRC_Z:-524288}"   # lctune.sh
     # #1466: a partition shrunk through a RAM view is read from the view (lc_src_node).
     # #2017: the operator's "continue anyway" (lcraw.sh) reads through bad sectors: zeros, counted.
+    # #2158: direct -- via the page cache one bad sector zeroed the kernel's read unit (4096 on 6.18), not bs
     rm -f "$_ls_r/rescue.err"
     (
         if [ "${LC_RESCUE:-0}" = 1 ]; then
-            busybox dd if="$(lc_src_node "$_ls_src" "$_ls_i")" bs="$LC_RESCUE_BS" conv=noerror,sync > "$_ls_r/src.fifo" 2> "$_ls_r/rescue.err" &
+            busybox dd if="$(lc_src_node "$_ls_src" "$_ls_i")" bs="$LC_RESCUE_BS" iflag=direct conv=noerror,sync > "$_ls_r/src.fifo" 2> "$_ls_r/rescue.err" &
         else
             # shellcheck disable=SC2046 # partclone_mode flags are a word list
             "$_ls_pcl" $(partclone_mode "$_ls_pcl" -c) $_ls_ign -s "$(lc_src_node "$_ls_src" "$_ls_i")" \
@@ -271,7 +272,7 @@ lc_finish() {
         lc_unhibernate_target "$_lf_t" "$_lf_m"; _lf_u=$?   # #2009: on the copy, before its grow; 1 = failed by name
         [ "$_lf_u" = 0 ] || { [ "$_lf_u" = 1 ] || fail_written_target "$_lf_t" "מצב ההשהיה של Windows בעותק לא נבדק (rc=$_lf_u)"; continue; }
         lc_raw_nogrow "$_lf_t" "$_lf_m"; finish_grow "$_lf_t" "$LC/run/entries" "$_lf_m" || continue
-        [ "$(cat "$RUN_DIR/targets/$_lf_t/state")" != done ] || lc_ntfs_note "$_lf_t" "$_lf_m"   # #2009: orange, not green
+        [ "$(cat "$RUN_DIR/targets/$_lf_t/state")" != "done" ] || lc_ntfs_note "$_lf_t" "$_lf_m"   # #2009: orange, not green
         _lf_n=$(lc_raw_note "$_lf_t" "$_lf_m"); _lf_e=$(cat "$RUN_DIR/targets/$_lf_t/error" 2>/dev/null)   # #2017: orange, why raw
         [ -z "$_lf_n" ] || target_set "$_lf_t" "done" "$_lf_n${_lf_e:+ · $_lf_e}"
     done

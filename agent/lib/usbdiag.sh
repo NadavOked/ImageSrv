@@ -136,7 +136,9 @@ usb_report_save() {
     # serial is known; otherwise it is replaced, said -- the numbers, states and
     # times stay (fail closed, as the diag; review of 1e79ace0).
     # shellcheck disable=SC2046 # the report's disks are a word list
-    _rs_ok=true; usb_serials "$RUN_DIR/usb.serials" $(cat "$1/src" "$1/targets" 2>/dev/null) || _rs_ok=false
+    _rs_ok=true
+    # shellcheck disable=SC2046 # the device list splits into one argument per device, on purpose
+    usb_serials "$RUN_DIR/usb.serials" $(cat "$1/src" "$1/targets" 2>/dev/null) || _rs_ok=false
     mkdir -p "$USB_DATA_DIR/reports" \
         && jq --argjson m "$(usb_machine_json)" --arg c "$(cat "$RUN_DIR/usb.ctrl" 2>/dev/null)" \
             --argjson ok "$_rs_ok" --arg r "הוסר — לא ניתן לוודא שאין בו serial" --arg re "$USB_ID_RE" --arg g "$USB_ID_GONE" \
@@ -240,7 +242,9 @@ usb_diag() {
     _dg_f="$USB_DATA_DIR/$_dg_n"   # one file a boot: written again with what came since (the screen, a clone)
     # 0: dmesg and agent.log stay out. The clone's disks too: one pulled since is still in the log.
     # shellcheck disable=SC2046 # a word list
-    _dg_ft=1; usb_serials "$RUN_DIR/usb.serials" $(cat "${LC:-$RUN_DIR/lc}/run/src" "${LC:-$RUN_DIR/lc}/run/targets" 2>/dev/null) || _dg_ft=0
+    _dg_ft=1
+    # shellcheck disable=SC2046 # the device list splits into one argument per device, on purpose
+    usb_serials "$RUN_DIR/usb.serials" $(cat "${LC:-$RUN_DIR/lc}/run/src" "${LC:-$RUN_DIR/lc}/run/targets" 2>/dev/null) || _dg_ft=0
     _dg_out="הוסר — לא ניתן לוודא שאין בו serial (removed: cannot verify it holds no serial)"
     {
         echo "ImageSrv USB ${AGENT_VERSION:-unknown} -- diagnostic report ($1)"

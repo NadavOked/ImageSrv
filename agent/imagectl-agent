@@ -197,7 +197,7 @@ do_restore() {
         name_this_machine "$_disk" "$_ses"; stage_drivers "$_disk" "$RUN_DIR/manifest.json"   # #720
         WRITEMARK_HOLD=0; writemark_release_done "$_disk" \
             || { echo failed > "$RUN_DIR/state"; round_beep failure; ui_error_hold "the incomplete-write mark did not come off the disk" hold_beat; return 1; }
-        echo done > "$RUN_DIR/state"
+        echo "done" > "$RUN_DIR/state"
         report_final "$_ppid" "$_ses" "$MAC" "$SERVER" \
             || { hold_unheard "$_ses"; return 1; }
         round_beep success; [ "${IMAGECTL_TEST:-0}" = "1" ] && exit 0   # #2067: the build machine too (a classroom logs "not heard")

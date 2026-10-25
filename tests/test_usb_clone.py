@@ -301,7 +301,7 @@ def test_the_defaults_are_nadavs():
 
 # --- the settings: the server's settings screen, the stick's data (Nadav 20/10) ------------------
 
-FRAMES = REPO / "docs" / "design" / "native" / "usb-clone" / "frames"
+FRAMES = REPO / "tests" / "fixtures" / "usb-clone-frames"   # #2158: with the test, so the public tree has them
 KIOSK = 'LC="$RUN_DIR/lc"; GUI_DIR="$RUN_DIR/gui"; mkdir -p "$LC" "$GUI_DIR"; AGENT_VERSION=v0.77.3; '
 
 

@@ -402,8 +402,15 @@ def preflight(tmp_path, body, gui=(), disks="sda", failed=(), extra="", keys="1\
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     dev = tmp_path / "dev"; dev.mkdir(exist_ok=True)
     box = tmp_path / "box"; (box / "bin").mkdir(parents=True, exist_ok=True)
+    # #2158: a sysfs of our own with ro=0 for each disk. Without it smart_ro_check read the
+    # HOST's /sys/block/<d>/ro: on the lab VM sda exists (ro=0, the gate saw "ok"); where it
+    # cannot be read (Windows, measured; the public runner fails the same four tests) the
+    # record was `unchecked ro_unread` and what the server learned (#1859) was never consulted.
+    sysro = tmp_path / "sysro"
     for d in disks.split():
         (dev / d).write_bytes(b"\x00")
+        blk = sysro / "sys" / "block" / d; blk.mkdir(parents=True, exist_ok=True)
+        (blk / "ro").write_text("0\n", newline="\n")
     # ‏#874: `failed` הוא dev → cause (מחרוזת = cable); הרשומה מגיעה מהשרת.
     failed = {d: "cable" for d in failed} if not isinstance(failed, dict) else failed
     (run / "response.json").write_text('{"schema":1}', newline="\n")
@@ -413,7 +420,7 @@ def preflight(tmp_path, body, gui=(), disks="sda", failed=(), extra="", keys="1\
     sc = make_smartctl(tmp_path, body)
     keys_printf = keys.replace("\n", "\\n")
     out = sh(f'chmod +x {posix(box)}/bin/sgdisk; export PATH="$(cd {posix(box)}/bin && pwd):$PATH"; '
-             + env(run, dev, smartctl=sc) + PRELUDE + extra
+             + env(run, dev, sysroot=sysro, smartctl=sc) + PRELUDE + extra
              + f"printf '{keys_printf}' | smart_preflight sess1 {disks}")
     assert out.returncode == 0, out.stderr
     return out.stdout.strip(), run, out.stderr

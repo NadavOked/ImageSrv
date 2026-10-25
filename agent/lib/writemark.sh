@@ -109,7 +109,7 @@ writemark_release_done() {
     # here, after them. 1 = at least one mark stayed (that target is failed now).
     _wr_rc=0
     for _wr_d in "$@"; do
-        [ "$(cat "$RUN_DIR/targets/$_wr_d/state" 2>/dev/null)" = done ] || continue
+        [ "$(cat "$RUN_DIR/targets/$_wr_d/state" 2>/dev/null)" = "done" ] || continue
         writemark_release "$_wr_d" || _wr_rc=1
     done
     return "$_wr_rc"

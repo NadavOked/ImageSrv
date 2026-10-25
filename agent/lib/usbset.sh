@@ -25,7 +25,7 @@ USBSET_LAST=5   # the last item's index
 
 _us_text() {
     # $1 = id, $2 = pane|dlg|short|field. The words of the server's settings screen
-    # for this item (the approved frames, docs/design/native/usb-clone/frames).
+    # for this item (the approved frames, tests/fixtures/usb-clone-frames).
     _us_q="'"   # the approved frames' ASCII quote, never between two Hebrew letters in this file (test_hebrew_screen_strings)
     case "$1:$2" in
         min_free_gb:pane) echo "יעד שיישאר עם פחות מזה יוצג כ${_us_q}לא נכנס${_us_q}. 0 = הכלל כבוי. 0–500." ;;

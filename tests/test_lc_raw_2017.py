@@ -255,6 +255,18 @@ def test_continue_reads_with_dd_noerror_and_keeps_its_count(tmp_path):
     assert "err=dd: " in out and "7+1 records in" in out, out
 
 
+def test_the_rescue_read_bypasses_the_page_cache(tmp_path):
+    """#2158: through the page cache a failed read loses the kernel's whole read unit, not bs --
+    2 bad sectors zeroed 4096 on kernel 6.18 (WSL, measured 25/10) and 256 on the public runner
+    (run 40159245308), 8 on the lab's 6.12. iflag=direct makes it bs on every kernel. The
+    behavioural test (test_bad_sectors_ask_...) only tells the two apart on a newer kernel."""
+    stub = BUSYBOX.replace('cat "$src";', 'echo "$*" > "$STUB_BOX/dd.args"; cat "$src";')
+    out = _stream(tmp_path, "raw", {"busybox": stub}, rescue=True)
+    assert "rc=0" in out, out
+    args = (tmp_path / "box" / "dd.args").read_text().split()
+    assert "iflag=direct" in args and "bs=4096" in args and "conv=noerror,sync" in args, args
+
+
 # --- after the copy: the note, and no grow (lcraw.sh) --------------------------------
 
 def test_the_note_names_each_raw_partition_and_the_rescue(tmp_path):
