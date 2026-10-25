@@ -210,6 +210,43 @@ def journal(run: Path) -> str:
 #: של שני המסלולים בלי רווח תלוי-מסלול בסוף השורה.
 LOOP_STUB = 'progress_loop() { echo "LOOP $1$4" >> "$RUN_DIR/trace"; }; '
 
+#: #2077: סוף משימה עם D_ROLE=classroom (`finish_and_stop` אחרי 'כבה')
+#: קורא ל-`reboot -f` בלי שומר IMAGECTL_TEST. זיוף ב-PATH נכשל ורושם;
+#: פקודה אמיתית אינה נמצאת לפניו. בלי קובץ היומן הזיוף נכשל גם הוא.
+_POWER_STUB = r"""#!/bin/sh
+if [ -z "${IMAGECTL_POWER_LOG:-}" ]; then
+    echo "IMAGECTL_POWER_LOG is unset" >&2
+    exit 126
+fi
+printf 'STUB %s %s\n' "$(basename "$0")" "$*" >> "$IMAGECTL_POWER_LOG" || exit 126
+exit 127
+"""
+
+POWER_COMMANDS = ("reboot", "poweroff", "safe_poweroff")
+
+
+def install_power_stubs(directory: Path) -> None:
+    """שלוש פקודות הכיבוי, כסקריפטים כושלים בראש ה-PATH של `run_path`."""
+    directory.mkdir(parents=True, exist_ok=True)
+    for name in POWER_COMMANDS:
+        (directory / name).write_text(_POWER_STUB, encoding="utf-8", newline="\n")
+
+
+def _power_stub_prefix(tmp_path: Path) -> str:
+    """PATH שהזיוף ראשון בו, והנתיב ש-`type -P` יחזיר — מ-`pwd` של bash."""
+    stub_dir = tmp_path / "power-stubs"
+    install_power_stubs(stub_dir)
+    return (
+        f'_ps=$(cd {shlex.quote(posix(stub_dir))} && pwd) || '
+        '{ echo "POWER-STUB-DIR-UNREADABLE"; exit 96; }; '
+        f'_pl=$(cd {shlex.quote(posix(tmp_path))} && pwd) || '
+        '{ echo "POWER-LOG-DIR-UNREADABLE"; exit 96; }; '
+        'chmod 0755 "$_ps"/reboot "$_ps"/poweroff "$_ps"/safe_poweroff || '
+        '{ echo "POWER-STUB-CHMOD-FAILED"; exit 96; }; '
+        'export IMAGECTL_POWER_STUB_DIR="$_ps" IMAGECTL_POWER_LOG="$_pl/power.calls" '
+        'PATH="$_ps:/usr/bin:$PATH"; '
+    )
+
 STUBS = (
     # ‏#652: הסוכן האמיתי טוען את smartgate.sh (imagectl-agent), ולכן `smart_gate`
     # מוגדר שם. כאן, כמו `run_restore` ו-`progress_loop`, הוא מזויף כדי
@@ -255,6 +292,9 @@ def run_path(tmp_path: Path, server: str, call: str, *, tries: int = 2,
     ‏`.task.*` ולא `.session.*`), ‏`stubs` ו-`env` מוסיפים למסלול הזה
     בלבד. הפלט הולך לקובץ: תהליך רקע ששרד מחזיק צינור פתוח, וההמתנה
     עליו נראית כמו באג בקוד שנבדק ולא בכלי הבדיקה.
+
+    ‏#2077: ‏`reboot`, ‏`poweroff` ו-`safe_poweroff` בראש ה-PATH הם זיוף
+    שנכשל (127) ורושם ל-`power.calls`. סוף משימה של כיתה קורא ל-`reboot -f`.
     """
     run = tmp_path / "run"
     (run / "targets").mkdir(parents=True, exist_ok=True)
@@ -284,7 +324,7 @@ def run_path(tmp_path: Path, server: str, call: str, *, tries: int = 2,
     with out_file.open("w", encoding="utf-8") as sink:
         try:
             subprocess.run(
-                [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
+                [BASH, "-c", _power_stub_prefix(tmp_path) + script],
                 stdout=sink, stderr=subprocess.STDOUT, text=True, cwd=str(REPO),
                 stdin=subprocess.DEVNULL, timeout=RUN_TIMEOUT_S,
             )

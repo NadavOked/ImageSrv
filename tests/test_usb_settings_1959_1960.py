@@ -36,10 +36,11 @@ from test_cloner_gui import BASH, GUI, _pkgconfig, posix
 from test_usb_clone import KIOSK, LIB, needs_jq, run
 
 REPO = Path(__file__).resolve().parent.parent
-DEFAULTS = {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60}
+DEFAULTS = {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60,
+            "cloner_beep": True}   # #2131
 FSI, PDI = "⁨", "⁩"   # view.iso: a Latin run in a Hebrew line, "20 GB" and never "GB 20"
 ITEMS = ["מקום פנוי מינימלי אחרי שחזור", "אימות מלא אחרי הכתיבה", "אזהרת CRC למגירה", "סף חום", "מיפוי חיבורים",
-         "החזר לברירת המחדל"]   # #1962: the mapping before the reset
+         "צליל בסיום סבב שיכפול", "החזר לברירת המחדל"]   # #1962: the mapping, #2131: the beep, before the reset
 
 pytestmark = requires_native(("bash", BASH))
 native_gui = requires_native(
@@ -71,7 +72,7 @@ CUSTOM = ["KEY ENTER", "KEY BACKSPACE", "KEY BACKSPACE", "CHAR 33", "CHAR 30", "
           "KEY DOWN", "KEY ENTER", "KEY RIGHT", "KEY ENTER",                                   # full
           "KEY DOWN", "KEY ENTER", "CHAR 31", "KEY ENTER",                                     # CRC 5001
           "KEY DOWN", "KEY ENTER", "KEY BACKSPACE", "KEY BACKSPACE", "CHAR 37", "CHAR 30", "KEY ENTER"]   # 70 C
-TO_RESET = ["KEY DOWN"] * 5 + ["KEY ENTER"]
+TO_RESET = ["KEY DOWN"] * 6 + ["KEY ENTER"]
 
 
 # --- #1960: the reset, in usbset.sh -------------------------------------------------------------
@@ -321,7 +322,7 @@ def test_the_reset_by_mouse_alone(drivers, tmp_path):
     """Open the item, press the red button -- no key at all."""
     kiosk(tmp_path, CUSTOM)
     _frame, gui_dir = frame_now(tmp_path, [])
-    sent = tokens(gui(drivers["hits"], gui_dir, "click:%d,%d" % items_drawn(drivers["plain"], gui_dir)[5]))
+    sent = tokens(gui(drivers["hits"], gui_dir, "click:%d,%d" % items_drawn(drivers["plain"], gui_dir)[len(ITEMS) - 1]))
     frame, gui_dir = frame_now(tmp_path, sent)
     assert dialog_title(frame) == "להחזיר את ברירות המחדל?", frame
     press = tokens(gui(drivers["hits"], gui_dir, "click:%d,%d" % hit(drivers["hits"], gui_dir, "btn:החזר לברירת המחדל")))

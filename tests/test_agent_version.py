@@ -87,16 +87,31 @@ def test_state_reads_server_version_once_even_if_unavailable(request, monkeypatc
             raise OSError("git unavailable")
         return version
     monkeypatch.setattr(update, "_describe", describe)
+    # #1868: a workstation checkout has .git, so HEAD keys a cache and a read
+    # per poll would go unnoticed here, while a git-archive tree (the
+    # Testrunner) has no HEAD to key on and spawns git every time. Force the
+    # unreadable-HEAD path on every machine so this test sees the real count.
+    def unreadable_head(_repo):
+        raise update.VersionError("not-a-git-tree", "no .git")
+    monkeypatch.setattr(update, "_head", unreadable_head)
     _no_verified_tag(monkeypatch, update)
     try:
         server = request.getfixturevalue("server")
         mac = setup_build_machine(server)
+        reads = []                      # describe calls seen after each poll
         for _ in range(4):
             reply = server["anon"].get(f"/api/v1/agent/state?mac={mac}")
             assert reply.status_code == 200
             assert "server_version" in reply.json()
             assert reply.json()["server_version"] == version
-        assert len(calls) == 1
+            reads.append(len(calls))
+        # Polling must not read again: the station router takes the version
+        # once, when the app is built (station.py `running_version`). Without
+        # a HEAD the app-startup warmup (#1297) is not shared with it, so two
+        # reads in total is startup + router -- the 1 this test used to assert
+        # held only where .git made the two share a cache entry (#1868).
+        assert len(set(reads)) == 1, reads
+        assert reads[-1] <= 2, reads
     finally:
         cached = sys.modules.get("server.agent_version")
         if cached:

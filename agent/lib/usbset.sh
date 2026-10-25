@@ -13,15 +13,16 @@
 
 USBSET="${LC:-$RUN_DIR/lc}/usbset"
 
-#: id|title|sub|kind|min|max -- kind num (a whole number), rb (sample/full), map (#1962,
+#: id|title|sub|kind|min|max -- kind num (a whole number), rb (one of two, _us_two), map (#1962,
 #: usbmap.sh) or reset (#1960)
 USBSET_ITEMS='min_free_gb|מקום פנוי מינימלי אחרי שחזור|יעד שיישאר עם פחות מזה יוצג כ'"'"'לא נכנס'"'"'|num|0|500
 readback_mode|אימות מלא אחרי הכתיבה|כבוי: מדגם · דלוק: כל הבלוקים (xxh64)|rb||
 crc_warn_threshold|אזהרת CRC למגירה|כבל או מגירה חשודים|num|0|1000000
 temp_warn_c|סף חום|דיסק חם מעל זה אחרי הכתיבה — כתום|num|30|100
 drawer_slots|מיפוי חיבורים|כל החיבורים — שם, ופעיל או לא|map||
+cloner_beep|צליל בסיום סבב שיכפול|הצלחה, כשל ומגירה שנשלפה — ברמקול של המחשב|rb||
 reset|החזר לברירת המחדל|כל ההגדרות חוזרות לערכים הקבועים|reset||'
-USBSET_LAST=5   # the last item's index
+USBSET_LAST=6   # the last item's index
 
 _us_text() {
     # $1 = id, $2 = pane|dlg|short|field. The words of the server's settings screen
@@ -43,12 +44,22 @@ _us_text() {
         temp_warn_c:dlg) echo "דיסק שחם מעל זה אחרי הכתיבה מסומן כתום." ;;
         temp_warn_c:short) echo "סף חום" ;;
         temp_warn_c:field) echo "°C" ;;
+        cloner_beep:pane) echo "אותם צלילים כמו במשכפל: הצלחה, כשל (בסוף, באמצע, או שהמקור נכשל) ומגירה שנשלפה. כבוי: שקט — המסך מראה הכול כרגיל." ;;
+        cloner_beep:dlg) echo "צליל מהרמקול של המחשב בסיום השיכפול וכשמגירה נשלפת." ;;
+        cloner_beep:short) echo "צליל" ;;
+    esac
+}
+
+_us_two() {   # $1 = an rb item: its two choices, value|label|sub, the first one first on the screen
+    case "$1" in
+        readback_mode) echo "sample|מדגם|כ־5% מהבלוקים בשימוש, מפוזרים על כל המחיצה"; echo "full|מלא|כל הבלוקים, ‏xxh64 — איטי יותר" ;;
+        cloner_beep) echo "true|דלוק|הצלחה, כשל ומגירה שנשלפה"; echo "false|כבוי|שקט — המסך מראה הכול כרגיל" ;;   # #2131
     esac
 }
 
 _us_default() {   # $1 = id. usbclone.sh's fixed default (Nadav 20/10).
     case "$1" in min_free_gb) echo "$USB_DEF_MIN_FREE_GB" ;; readback_mode) echo "$USB_DEF_READBACK" ;;
-        crc_warn_threshold) echo "$USB_DEF_CRC_WARN" ;; temp_warn_c) echo "$USB_DEF_TEMP_WARN_C" ;; esac
+        crc_warn_threshold) echo "$USB_DEF_CRC_WARN" ;; temp_warn_c) echo "$USB_DEF_TEMP_WARN_C" ;; cloner_beep) echo "$USB_DEF_BEEP" ;; esac
 }
 
 _us_get() { cat "$USBSET/$1" 2>/dev/null; }
@@ -60,13 +71,14 @@ _us_iso() { printf '\342\201\250%s\342\201\251' "$1"; }   # FSI..PDI: "20 GB" in
 
 _us_show() {   # $1 = id, $2 = value. As the screen writes it.
     case "$1" in min_free_gb) echo "$2 GB" ;; temp_warn_c) echo "$2 °C" ;;
-        readback_mode) [ "$2" = full ] && echo "מלא" || echo "מדגם" ;; *) echo "$2" ;; esac
+        readback_mode) [ "$2" = full ] && echo "מלא" || echo "מדגם" ;; cloner_beep) [ "$2" = false ] && echo "כבוי" || echo "דלוק" ;;
+        *) echo "$2" ;; esac
 }
 
 usbset_now() {   # $1 = id. The value in force now (usb_settings_load's).
     usb_data_state_read; usb_settings_load
     case "$1" in min_free_gb) echo "$USB_MIN_FREE_GB" ;; readback_mode) echo "$USB_READBACK" ;;
-        crc_warn_threshold) echo "$USB_CRC_WARN" ;; temp_warn_c) echo "$USB_TEMP_WARN_C" ;; esac
+        crc_warn_threshold) echo "$USB_CRC_WARN" ;; temp_warn_c) echo "$USB_TEMP_WARN_C" ;; cloner_beep) echo "$USB_BEEP" ;; esac
 }
 
 usbset_open() {
@@ -101,14 +113,14 @@ usbset_reset() {
     _ur_sn=$(jq -c --arg m "$(usb_model)" 'if (.slot_names | type) == "object" then .slot_names | del(.[$m]) else {} end' \
         "$_ur_f" 2>/dev/null) || _ur_sn='{}'; [ -n "$_ur_sn" ] || _ur_sn='{}'   # #2001: and its names
     _ur_j=$(jq -cn --argjson mf "$USB_DEF_MIN_FREE_GB" --arg rb "$USB_DEF_READBACK" --argjson crc "$USB_DEF_CRC_WARN" \
-        --argjson temp "$USB_DEF_TEMP_WARN_C" --argjson ds "$_ur_ds" --argjson sn "$_ur_sn" '{min_free_gb: $mf, readback_mode: $rb,
-        crc_warn_threshold: $crc, temp_warn_c: $temp} + (if ($ds | length) > 0 then {drawer_slots: $ds} else {} end)
+        --argjson temp "$USB_DEF_TEMP_WARN_C" --argjson beep "$USB_DEF_BEEP" --argjson ds "$_ur_ds" --argjson sn "$_ur_sn" '{min_free_gb: $mf, readback_mode: $rb,
+        crc_warn_threshold: $crc, temp_warn_c: $temp, cloner_beep: $beep} + (if ($ds | length) > 0 then {drawer_slots: $ds} else {} end)
         + (if ($sn | length) > 0 then {slot_names: $sn} else {} end)') || return 1
     printf '%s\n' "$_ur_j" > "$_ur_f.next" && mv "$_ur_f.next" "$_ur_f" && sync || return 1
     jq -e --argjson want "$_ur_j" '. == $want' "$_ur_f" > /dev/null 2>&1 || return 1
     usb_settings_load
-    [ "$USB_MIN_FREE_GB|$USB_READBACK|$USB_CRC_WARN|$USB_TEMP_WARN_C" \
-        = "$USB_DEF_MIN_FREE_GB|$USB_DEF_READBACK|$USB_DEF_CRC_WARN|$USB_DEF_TEMP_WARN_C" ] || return 1
+    [ "$USB_MIN_FREE_GB|$USB_READBACK|$USB_CRC_WARN|$USB_TEMP_WARN_C|$USB_BEEP" \
+        = "$USB_DEF_MIN_FREE_GB|$USB_DEF_READBACK|$USB_DEF_CRC_WARN|$USB_DEF_TEMP_WARN_C|$USB_DEF_BEEP" ] || return 1
     if usb_map_json > /dev/null || usb_names_json > /dev/null; then return 1; fi   # #231: never a bare '! cmd'
     usb_answer && min_free_take "$RUN_DIR/response.json" && printf '%s\n' "$USB_NOTICE" > "$RUN_DIR/usb.notice"
 }
@@ -145,7 +157,8 @@ EOF
             elif usbset_save "$_uk_id" "$_uk_v"; then _us_put dlg 0
             else _us_put err "לא נשמר: הכתיבה לקובץ ההגדרות נכשלה"; fi ;;
         "KEY LEFT":rb|"KEY RIGHT":rb|"KEY UP":rb|"KEY DOWN":rb|"KEY TAB":rb|"CHAR 20":rb)   # #1963: Space, as the hint says
-            if [ "$(_us_get opt)" = full ]; then _us_put opt sample; else _us_put opt full; fi ;;
+            _uk_b=$(_us_two "$_uk_id" | sed -n 2p); _uk_a=$(_us_two "$_uk_id" | sed -n 1p)
+            if [ "$(_us_get opt)" = "${_uk_b%%|*}" ]; then _us_put opt "${_uk_a%%|*}"; else _us_put opt "${_uk_b%%|*}"; fi ;;
         "KEY BACKSPACE":num) _uk_v=$(_us_get buf); _us_put buf "${_uk_v%?}"; _us_put err "" ;;
         "CHAR "*:num)
             _uk_c=$(printf "\\$(printf '%03o' "0x${1#CHAR }")")
@@ -187,8 +200,8 @@ EOF
             _us_rec dlg plain 640 "$_uf_t" "$(_us_text "$_uf_id" dlg)"
             if [ "$_uf_k" = rb ]; then
                 _uf_o=$(_us_get opt)
-                _us_rec d.opt "מדגם" "כ־5% מהבלוקים בשימוש, מפוזרים על כל המחיצה" "$([ "$_uf_o" = full ] && echo 0 || echo 1)" 0
-                _us_rec d.opt "מלא" "כל הבלוקים, ‏xxh64 — איטי יותר" "$([ "$_uf_o" = full ] && echo 1 || echo 0)" 0
+                _us_two "$_uf_id" | while IFS='|' read -r _uo_v _uo_l _uo_s; do
+                    _us_rec d.opt "$_uo_l" "$_uo_s" "$([ "$_uf_o" = "$_uo_v" ] && echo 1 || echo 0)" 0; done
             else
                 _us_rec d.field "$(_us_text "$_uf_id" field)" "$(_us_get buf)" text 1 1
                 [ -z "$_uf_err" ] || _us_rec d.error "$_uf_err"
@@ -220,7 +233,7 @@ usbset_reset_frame() {
     # #1960: $1 = dialog open, $2 = נשמר|לסשן, $3 = the error. The pane: each value now and
     # its default; the dialog: the server's confirmation (F12) -- the red button, no typed word.
     _us_rec pane "החזר לברירת המחדל" "ההגדרות חוזרות לערכים הקבועים של הדיסק-און-קי, מיפוי החיבורים ושמותיהם של הדגם הזה נמחקים, וקובץ ההגדרות השמור נכתב מחדש."
-    for _rf_id in min_free_gb readback_mode crc_warn_threshold temp_warn_c; do
+    for _rf_id in min_free_gb readback_mode crc_warn_threshold temp_warn_c cloner_beep; do
         _rf_v=$(usbset_now "$_rf_id"); _rf_d=$(_us_default "$_rf_id")
         if [ "$_rf_v" = "$_rf_d" ]; then _rf_sub="ברירת המחדל"; else _rf_sub="ברירת המחדל: $(_us_show "$_rf_id" "$_rf_d")"; fi
         _us_rec prow "$(_us_text "$_rf_id" short)" "" "$(_us_show "$_rf_id" "$_rf_v")" mono "$_rf_sub" "" "" ""
@@ -231,7 +244,7 @@ usbset_reset_frame() {
         if [ "$2" = נשמר ]; then _rf_l="ההגדרות השמורות על הדיסק-און-קי יוחלפו בערכים האלה:"
         else _rf_l="ההגדרות של הסשן הזה יוחלפו בערכים האלה:"; fi
         _us_rec dlg danger 640 "להחזיר את ברירות המחדל?" "$_rf_l"
-        for _rf_id in min_free_gb readback_mode crc_warn_threshold temp_warn_c; do
+        for _rf_id in min_free_gb readback_mode crc_warn_threshold temp_warn_c cloner_beep; do
             _us_rec d.kv "$(_us_text "$_rf_id" short)" "$(_us_iso "$(_us_show "$_rf_id" "$(_us_default "$_rf_id")")")" 0
         done
         _us_rec d.kv "מיפוי חיבורים" "ברירת המחדל — כל חיבור שיש בו דיסק, לפי הסדר" 0   # #1962, #2001

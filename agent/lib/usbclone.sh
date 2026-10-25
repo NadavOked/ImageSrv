@@ -27,6 +27,7 @@ USB_DEF_MIN_FREE_GB=20
 USB_DEF_READBACK=sample
 USB_DEF_CRC_WARN=500
 USB_DEF_TEMP_WARN_C=60
+USB_DEF_BEEP=true   # #2131: the tunes of #2067 (roundbeep.sh) -- the stick's own switch, no server
 
 usb_part_label() {   # $1 = block device name (sdb1). Its filesystem label, or nothing.
     blkid -s LABEL -o value "$SYSROOT/dev/$1" 2>/dev/null
@@ -99,12 +100,12 @@ _usb_int() {   # $1 = value, $2 = min, $3 = max. 0 = a whole number in range, no
 }
 
 usb_settings_load() {
-    # Sets USB_MIN_FREE_GB USB_READBACK USB_CRC_WARN USB_TEMP_WARN_C and
+    # Sets USB_MIN_FREE_GB USB_READBACK USB_CRC_WARN USB_TEMP_WARN_C USB_BEEP and
     # USB_NOTICE (what the operator must be told; "" = nothing). The defaults,
     # then settings.json field by field: a field that is there and not valid
     # is refused by name and the default stays.
     USB_MIN_FREE_GB=$USB_DEF_MIN_FREE_GB; USB_READBACK=$USB_DEF_READBACK
-    USB_CRC_WARN=$USB_DEF_CRC_WARN; USB_TEMP_WARN_C=$USB_DEF_TEMP_WARN_C; USB_NOTICE=""
+    USB_CRC_WARN=$USB_DEF_CRC_WARN; USB_TEMP_WARN_C=$USB_DEF_TEMP_WARN_C; USB_BEEP=$USB_DEF_BEEP; USB_NOTICE=""
     _us_f=$(usb_settings_path)
     [ "${USB_DATA_STATE:-none}" = mounted ] \
         || USB_NOTICE="אין מחיצת נתונים על הדיסק-און-קי — ההגדרות לסשן הזה בלבד, ולא יישמרו"
@@ -120,6 +121,9 @@ usb_settings_load() {
     if [ -n "$_us_v" ]; then _usb_int "$_us_v" 0 1000000 && USB_CRC_WARN=$_us_v || _us_bad="$_us_bad crc_warn_threshold=$_us_v"; fi
     _us_v=$(jq -r '.temp_warn_c // empty' "$_us_f")
     if [ -n "$_us_v" ]; then _usb_int "$_us_v" 30 100 && USB_TEMP_WARN_C=$_us_v || _us_bad="$_us_bad temp_warn_c=$_us_v"; fi
+    # a JSON true/false only; jq's // would read false as missing
+    _us_v=$(jq -r '.cloner_beep | if type == "boolean" then tostring elif . == null then empty else tojson end' "$_us_f")
+    case "$_us_v" in '') ;; true|false) USB_BEEP=$_us_v ;; *) _us_bad="$_us_bad cloner_beep=$_us_v" ;; esac
     _us_mc=0; usb_map_json > /dev/null || _us_mc=$?   # #1962 (usbmap.sh): 2 = this model's list is not valid
     [ "$_us_mc" != 2 ] || _us_bad="$_us_bad drawer_slots[$(usb_model)]"
     _us_mc=0; usb_names_json > /dev/null || _us_mc=$?   # #2001: this model's names, the same way
@@ -131,17 +135,18 @@ usb_settings_load() {
 
 usb_answer() {
     # The answer a server would have given, written where every reader of the
-    # last hello looks ($RUN_DIR/response.json). schema 1, role cloner.
+    # last hello looks ($RUN_DIR/response.json). schema 1, role cloner. #2131: ui.cloner_beep
+    # from the stick's settings, where roundbeep.sh reads the server's switch.
     # #1962: + the drawer_slots in force (usbmap.sh usb_map_live: this model's, else -- #2001 --
     # every connection with a disk, in order), as a server's hello; with none (no disk), the
     # last list in force goes (drawer_slots_refresh keeps a file otherwise).
     _ua_ds=$(usb_map_live) || _ua_ds=null
     jq -n --argjson ds "$_ua_ds" --arg v "${AGENT_VERSION:-unknown}" --argjson mf "$USB_MIN_FREE_GB" --arg rb "$USB_READBACK" \
-        --argjson crc "$USB_CRC_WARN" --argjson temp "$USB_TEMP_WARN_C" --arg st "${USB_DATA_STATE:-none}" \
+        --argjson crc "$USB_CRC_WARN" --argjson temp "$USB_TEMP_WARN_C" --arg st "${USB_DATA_STATE:-none}" --argjson beep "$USB_BEEP" \
         '{schema: 1, known: true, role: "cloner", task: null, session: null, name: "USB",
           server_name: "דיסק-און-קי ImageSrv", server_version: null, tz: null,
           min_free_gb: $mf, readback_mode: $rb, crc_warn_threshold: $crc, smart_learned: [],
-          usb: {version: $v, data: $st, temp_warn_c: $temp}} + (if $ds == null then {} else {drawer_slots: $ds} end)' \
+          ui: {cloner_beep: $beep}, usb: {version: $v, data: $st, temp_warn_c: $temp}} + (if $ds == null then {} else {drawer_slots: $ds} end)' \
         > "$RUN_DIR/response.json" || return 1
     if [ "$_ua_ds" = null ]; then rm -f "$RUN_DIR/drawer_slots"; else drawer_slots_refresh; fi
     usb_drawer_names   # #2001: the names of this model's connections, for every screen

@@ -218,7 +218,7 @@ probe_disks() {
         _nv=null
         case "$_n" in nvme*)
             if _have "$NVME"; then
-                _nf="${TMPDIR:-/tmp}/probe.$$.$_n.nvme"; [ -d "${RUN_DIR:-}" ] && _nf="$RUN_DIR/probe.$_n.nvme"; capped_run "$NVME_MAX_S" "$_nf" "$NVME" smart-log -o json "$DEVROOT/$_n"; _nrc=$?; _jsn=$(cat "$_nf" 2>/dev/null); [ "$CAPPED_TIMED_OUT" != 1 ] && [ "$_nrc" = 0 ] && [ -n "$_jsn" ] \
+                _nf="${TMPDIR:-/tmp}/probe.$$.$_n.nvme"; [ -d "${RUN_DIR:-}" ] && _nf="$RUN_DIR/probe.$_n.nvme"; capped_run "$NVME_MAX_S" "$_nf" "$NVME" smart-log -o json "$DEVROOT/$_n"; _nrc=$?; _jsn=$(cat "$_nf" 2>/dev/null); rm -f "$_nf"; [ "$CAPPED_TIMED_OUT" != 1 ] && [ "$_nrc" = 0 ] && [ -n "$_jsn" ] \
                     && _cw=$(_jint "$_jsn" critical_warning) && _pu=$(_jint "$_jsn" percentage_used) \
                     && _me=$(_jint "$_jsn" media_errors) && _us=$(_jint "$_jsn" unsafe_shutdowns) \
                     && [ -n "$_cw" ] && [ -n "$_pu" ] && [ -n "$_me" ] && [ -n "$_us" ] \
@@ -228,7 +228,7 @@ probe_disks() {
         esac
         _se=null
         if _have "$SMARTCTL"; then
-            _sf="${TMPDIR:-/tmp}/probe.$$.$_n.smart"; [ -d "${RUN_DIR:-}" ] && _sf="$RUN_DIR/probe.$_n.smart"; capped_run "$SMARTCTL_MAX_S" "$_sf" "$SMARTCTL" -l error -j "$DEVROOT/$_n"; _rc=$?; _sj=$(cat "$_sf" 2>/dev/null)   # #1367: in build_hello -- capped
+            _sf="${TMPDIR:-/tmp}/probe.$$.$_n.smart"; [ -d "${RUN_DIR:-}" ] && _sf="$RUN_DIR/probe.$_n.smart"; capped_run "$SMARTCTL_MAX_S" "$_sf" "$SMARTCTL" -l error -j "$DEVROOT/$_n"; _rc=$?; _sj=$(cat "$_sf" 2>/dev/null); rm -f "$_sf"   # #1367: capped; #2125: removed after the read
             if [ "$CAPPED_TIMED_OUT" = 1 ]; then _se=$(_pe "smartctl לא ענה תוך ${SMARTCTL_MAX_S} שניות על $_n"); elif [ $((_rc & 2)) -ne 0 ]; then _se=$(_pe "smartctl לא הצליח לפתוח את $_n")
             else
                 _cnt=$(_jint "$_sj" count); [ -z "$_cnt" ] && _cnt=$(_jint "$_sj" error_count)

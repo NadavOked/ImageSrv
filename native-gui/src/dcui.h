@@ -32,7 +32,7 @@
 #define DCUI_MAX_TILES 4
 #define DCUI_MAX_ROWS 7
 #define DCUI_MAX_PROBS 3
-#define DCUI_MAX_ITEMS 6
+#define DCUI_MAX_ITEMS 7                /* #2131: the USB stick's beep, before its reset */
 #define DCUI_MAX_PROWS 8                /* #1962: a row per drawer, up to 8 */
 #define DCUI_MAX_NOTES 4
 #define DCUI_MAX_KEYS 8

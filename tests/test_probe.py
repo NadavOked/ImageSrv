@@ -333,6 +333,43 @@ def test_nvme_smart_log_is_capped(fake_machine, tmp_path):
     assert disk["nvme_smart"] == {"error": "nvme smart-log לא ענה"}
 
 
+def test_capture_files_in_tmpdir_are_removed_after_the_answer(fake_machine, tmp_path):
+    """#2125: בלי RUN_DIR הפלט של nvme/smartctl נכתב ל-``$TMPDIR/probe.<pid>.*``
+    ונשאר שם אחרי שהתשובה כבר נקראה. הראיה שהבדיקה רצה היא ה-JSON עצמו;
+    תיקייה ריקה בלי התשובה אינה ניקוי."""
+    sysroot = fake_machine["sysroot"]
+    (sysroot / "sys/block/nvme0n1").mkdir(parents=True)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    _stub(stubs, "nvme", """
+cat <<'EOF'
+{"critical_warning": 0, "percentage_used": 5, "media_errors": 1, "unsafe_shutdowns": 2}
+EOF
+""")
+    _stub(stubs, "smartctl", """
+cat <<'EOF'
+{"ata_smart_error_log": {"summary": {"count": 3}}}
+EOF
+exit 0
+""")
+    extra = f"export TMPDIR={posix(scratch)!r}; unset RUN_DIR; "
+    disks = {d["name"]: d for d in probe_of(
+        sysroot, extra=extra, stubs=stubs, devroot=fake_machine["dev"])["disks"]}
+    assert disks["sda"]["smart_errors"] == {"count": 3}
+    assert disks["nvme0n1"]["nvme_smart"]["percentage_used"] == 5
+    left = sorted(p.name for p in scratch.iterdir())
+    assert left == [], left
+    _stub(stubs, "nvme", "sleep 20\n")
+    disk = next(d for d in probe_of(
+        sysroot, extra=extra + "NVME_MAX_S=1; ", stubs=stubs,
+        devroot=fake_machine["dev"])["disks"] if d["name"] == "nvme0n1")
+    assert disk["nvme_smart"] == {"error": "nvme smart-log לא ענה"}
+    left = sorted(p.name for p in scratch.iterdir())
+    assert left == [], left
+
+
 def test_encryption_luks_and_bitlocker(fake_machine, tmp_path):
     stubs = tmp_path / "stubs"; stubs.mkdir()
     _stub(stubs, "blkid", r"""

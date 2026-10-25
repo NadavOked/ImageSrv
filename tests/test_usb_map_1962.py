@@ -28,7 +28,7 @@ pytestmark = needs_jq
 
 MODEL = "HP Compaq 8000 Elite SFF PC"
 TO_MAP = ["KEY DOWN"] * 4 + ["KEY ENTER"]
-TO_RESET = ["KEY DOWN"] * 5 + ["KEY ENTER", "KEY TAB", "KEY ENTER"]
+TO_RESET = ["KEY DOWN"] * 6 + ["KEY ENTER", "KEY TAB", "KEY ENTER"]
 SATA1_ON = ["KEY DOWN", "CHAR 20"]   # #2001: the window -- SATA 1 (empty, off by default) to "פעיל", F2 saves
 
 STUBS = ('list_disks() { echo sda sdb nvme0n1 sdz; }; '
@@ -99,13 +99,13 @@ def test_reset_removes_this_models_mapping_and_keeps_another_models(tmp_path):
     out, usb = stick(tmp_path, TO_MAP + SATA1_ON + ["KEY F2"], settings={"drawer_slots": dict(other)})
     assert saved(usb)["drawer_slots"][MODEL][1] == "sata:2", out.stdout
     out, usb = stick(tmp_path, TO_RESET, then='jq -c ".drawer_slots" "$RUN_DIR/response.json"')
-    assert saved(usb) == {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60,
+    assert saved(usb) == {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60, "cloner_beep": True,
                           "drawer_slots": other}, out.stdout + out.stderr
     assert out.stdout.split("@@")[1].split() == ['["sata:1","sata:3","nvme:0000:03:00.0"]']   # the default again
 
 
 def test_reset_says_what_happens_to_the_mapping(tmp_path):
-    out, _usb = stick(tmp_path, ["KEY DOWN"] * 5 + ["KEY ENTER"])
+    out, _usb = stick(tmp_path, ["KEY DOWN"] * 6 + ["KEY ENTER"])
     assert "d.kv\tמיפוי חיבורים\tברירת המחדל — כל חיבור שיש בו דיסק, לפי הסדר\t0" in out.stdout, out.stdout
 
 
