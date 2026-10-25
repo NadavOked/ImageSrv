@@ -78,16 +78,26 @@ TWO = ("cslot_name=1|מגירה עליונה\n"
        "cdisk=2|sdb|WDC WD5000AAKX|500107862016|fail|\n")
 
 
+def _keep_fresh(path: Path) -> None:
+    """state.c draws "הסוכן לא מעדכן מצב" when st_mtime is more than 10s behind
+    time(NULL). --png measures that once, after fontconfig, so under load one
+    of two renders crossed the line and the pictures differed on the toast's
+    top row (y=740 at 1280x800) as well as in the status bar (#2110). An hour
+    ahead stays fresh for the whole run; utime(now) does not. Same as #2099."""
+    ahead = time.time() + 3600
+    os.utime(path, (ahead, ahead))
+
+
 def _render(tmp_path: Path, name: str, body: str, size: str = "1280x800"):
     binary = tmp_path / "gui-bin"
     if not binary.exists():
         _build_gui(tmp_path)
-    # the state is written after the build: a file older than 10 s is drawn
-    # with the "הסוכן לא מעדכן מצב" toast (state.c stale), and the build now
-    # takes about that long (#1322 added five sources) -- the IP/MAC test's
-    # second render then differed by the toast, not by the address
+    # written after the build (#1322): the build itself used to age the file
+    # past 10s before the first pixel. The stamp still has to lead the clock,
+    # because fontconfig runs before state_poll (#2110).
     state = tmp_path / f"{name}.txt"
     state.write_text(HEAD + body, encoding="utf-8", newline="\n")
+    _keep_fresh(state)
     _png(binary, tmp_path / name, state, size)
     return {t: _png_rgb(tmp_path / f"{name}-standby-{t}.png") for t in ("light", "dark")}
 
@@ -227,7 +237,7 @@ def test_the_status_bar_shows_this_machines_ip_and_mac(tmp_path):
     st = _render(tmp_path, "a", "hello_age=4\nhello_rc=200\n" + TWO)
     state = tmp_path / "a.txt"
     env2 = dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf"))
-    os.utime(state)   # the same state, fresh: a slow first render made it "stale" and drew the toast (not the IP)
+    _keep_fresh(state)   # the first render ages a stamp of "now" past 10s; the toast is not the IP
     run = subprocess.run([str(tmp_path / "gui-bin"), "--png", posix(tmp_path / "b"), "--size", "1280x800",
                           "--mac", "3C:52:82:A1:00:1F", "--ip", "10.99.99.99", "--state", posix(state)],
                          capture_output=True, text=True, timeout=120, env=env2, stdin=subprocess.DEVNULL)

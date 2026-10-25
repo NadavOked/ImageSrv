@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -401,3 +403,86 @@ def test_the_block_is_installed_for_the_whole_run():
 
     assert sender.subprocess is not subprocess
     assert getattr(sender.subprocess, "STDOUT", None) == subprocess.STDOUT
+
+
+# --- #1940: תקרת run_group כשתהליך יוצא מהקבוצה ---------------------------
+
+#: התקרה של הקורא בבדיקות האלה, והשינה של הילד. 8ש' מכסות timeout=2
+#: ועוד ניקוז קצר; שינה של 20ש' היא מה שנמדד בלי התקרה (חזר אחרי 20ש').
+_GROUP_TIMEOUT_S = 2
+_GROUP_SLEEP_S = 20
+_GROUP_BOUND_S = 8
+
+
+def _kill_pidfile(pidfile: Path) -> None:
+    """SIGKILL ל-PID שהילד עצמו כתב. אין קובץ או שהתהליך כבר מת = לא שגיאה."""
+    if not pidfile.is_file():
+        return
+    try:
+        pid = int(pidfile.read_text(encoding="ascii").strip())
+    except ValueError:
+        return
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        return
+
+
+def test_run_group_returns_a_child_that_finished():
+    """ילד שנגמר מוחזר כמו subprocess.run — לא חריגת פקיעה."""
+    out = hygiene.run_group(
+        [sys.executable, "-c", "print('ok')"],
+        capture_output=True, text=True, timeout=10,
+        stdin=subprocess.DEVNULL,
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "ok"
+
+
+def test_a_child_in_the_group_raises_before_its_sleep_ends():
+    """ילד שנשאר בקבוצה: הריגה, ואז TimeoutExpired בתוך התקרה.
+    עובר גם בלי תקרת הניקוז — השומר שלא שברנו את המסלול שכבר עבד."""
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        hygiene.run_group(
+            [sys.executable, "-c", f"import time; time.sleep({_GROUP_SLEEP_S})"],
+            capture_output=True, timeout=_GROUP_TIMEOUT_S,
+            stdin=subprocess.DEVNULL,
+        )
+    elapsed = time.monotonic() - started
+    assert elapsed < _GROUP_BOUND_S, f"TimeoutExpired אחרי {elapsed:.1f}s"
+
+
+@requires_native(posix=True, why="fork ו-setsid; בווינדוס run_group הוא subprocess.run")
+def test_an_escaped_child_raises_before_its_sleep_ends(tmp_path):
+    """#1940: נכד שקרא setsid ומחזיק את הצינור אחרי שהקבוצה נהרגה.
+    בלי תקרת הניקוז TimeoutExpired מגיע כשהנכד נגמר (sleep 20 → כ-20ש'),
+    לא בתוך התקרה של הקורא. הכישלון נשאר חריגה — פלט חלקי אינו הצלחה."""
+    pidfile = tmp_path / "escaped.pid"
+    code = "\n".join([
+        "import os, sys, time",
+        "pid = os.fork()",
+        "if pid == 0:",
+        "    os.setsid()",
+        "    with open(sys.argv[1], 'w', encoding='ascii') as handle:",
+        "        handle.write(str(os.getpid()))",
+        f"    time.sleep({_GROUP_SLEEP_S})",
+        "    os._exit(0)",
+        "os._exit(0)",
+    ])
+    started = time.monotonic()
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            hygiene.run_group(
+                [sys.executable, "-c", code, str(pidfile)],
+                capture_output=True, timeout=_GROUP_TIMEOUT_S,
+                stdin=subprocess.DEVNULL,
+            )
+        elapsed = time.monotonic() - started
+        assert elapsed < _GROUP_BOUND_S, (
+            f"TimeoutExpired אחרי {elapsed:.1f}s — התהליך שברח "
+            f"(sleep {_GROUP_SLEEP_S}) החזיק את הצינור, והתקרה לא נאכפה"
+        )
+        assert pidfile.is_file(), "הנכד לא כתב pid — אין ראיה שברח מהקבוצה"
+    finally:
+        _kill_pidfile(pidfile)

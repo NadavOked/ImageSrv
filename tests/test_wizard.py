@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import threading
 import urllib.error
 from dataclasses import replace
@@ -16,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from server.wizard.__main__ import main
+from server import ifaddr
 from server.wizard import bridge, core
 from server.wizard.core import WizardConfig, WizardPaths, WizardState, list_interfaces, validate_config
 from server.wizard.httpd import WizardHTTPServer
@@ -147,7 +149,8 @@ def test_rerun_authenticates_the_chosen_installer_admin(tmp_path: Path) -> None:
         close()
 
 
-def test_installer_gets_password_on_fd_not_argv(tmp_path: Path) -> None:
+def test_installer_gets_password_on_fd_not_argv(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(ifaddr, "read_ipv4", lambda _name: "10.44.10.37")
     installer = tmp_path / "fake-installer.py"
     verify = tmp_path / "fake-verify.py"
     record = tmp_path / "installer-record.json"
@@ -169,6 +172,76 @@ pathlib.Path(__file__).with_name('installer-record.json').write_text(
     assert "Imag3ctl!haifa" not in got["argv"]
     assert got["argv"][-4:] == ["--admin-user", "admin", "--admin-pass-fd", "3" if os.name == "posix" else "0"]
     assert got["argv"][:4] == ["--servers-if", "eth-test", "--servers-mode", "dhcp"]
+
+
+@pytest.mark.parametrize("mode", ["dhcp", "static"])
+@pytest.mark.parametrize("dev", [False, True])
+def test_no_answers_console_cert_uses_selected_nic_ip(tmp_path: Path, monkeypatch, mode, dev) -> None:
+    """#2106: inspect the real certificate, not just the arguments to TLS setup."""
+    from cryptography import x509
+    from ipaddress import ip_address
+
+    state = WizardState(_paths(tmp_path, tmp_path / "unused", tmp_path / "unused2"), dev=dev,
+                        interfaces_provider=lambda: NICS,
+                        hostname_setter=lambda _hostname: 0)
+    monkeypatch.setattr(state, "_run", lambda *args, **kwargs: 0)
+    lookups = []
+
+    def run_ip(argv, **kwargs):
+        lookups.append(argv)
+        return SimpleNamespace(stdout=json.dumps([
+            {"ifname": "other-nic", "addr_info": [{"family": "inet", "local": "192.0.2.99"}]},
+            {"ifname": "eth-test", "addr_info": [{"family": "inet", "local": "10.44.10.37"}]},
+        ]))
+
+    monkeypatch.setattr(ifaddr.subprocess, "run", run_ip)
+    state._apply(valid(mode=mode, address="10.44.10.37" if mode == "static" else "",
+                       netmask="255.255.255.0" if mode == "static" else ""))
+    got = state.progress()
+    assert got["state"] == "done", got
+    cert_path = state.paths.data_dir / "console-tls" / "console.crt"
+    cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+    sans = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    assert ip_address("10.44.10.37") in sans.get_values_for_type(x509.IPAddress)
+    assert "eth-test" not in sans.get_values_for_type(x509.DNSName)
+    assert "imagectl-haifa" in sans.get_values_for_type(x509.DNSName)
+    assert got["console_url"] == "https://10.44.10.37:8081"
+    assert lookups == ([] if dev else [["ip", "-json", "-4", "addr", "show", "dev", "eth-test"]])
+    assert state.paths.stamp_file.exists()
+    assert core.read_fact(state.paths.status_file)["state"] == "done"
+
+
+@pytest.mark.parametrize("failure", ["no-address", "invalid-address", "invalid-json", "command-failed"])
+def test_no_answers_console_cert_lookup_failure_is_visible(tmp_path: Path, monkeypatch, failure) -> None:
+    """#2106: failed resolution must not issue a bogus SAN or mark setup done."""
+    state = WizardState(_paths(tmp_path, tmp_path / "unused", tmp_path / "unused2"),
+                        interfaces_provider=lambda: NICS,
+                        hostname_setter=lambda _hostname: 0)
+    monkeypatch.setattr(state, "_run", lambda *args, **kwargs: 0)
+
+    def run_ip(argv, **kwargs):
+        if failure == "command-failed":
+            raise subprocess.CalledProcessError(1, argv)
+        if failure == "invalid-json":
+            return SimpleNamespace(stdout="not JSON")
+        addresses = [{"family": "inet", "local": "eth-test"}] if failure == "invalid-address" else []
+        return SimpleNamespace(stdout=json.dumps([{"ifname": "eth-test", "addr_info": addresses}]))
+
+    monkeypatch.setattr(ifaddr.subprocess, "run", run_ip)
+    state._apply(valid())
+    got = state.progress()
+    assert got["state"] == "check-error", got
+    assert got["error"]
+    if failure in {"no-address", "invalid-address"}:
+        assert "eth-test" in got["error"]
+        assert "IPv4" in got["error"]
+    else:
+        assert "ip -json addr" in got["error"]
+    assert core.read_fact(state.paths.status_file)["state"] == "check-error"
+    assert "console_url" not in got
+    assert "fingerprint" not in got
+    assert not state.paths.stamp_file.exists()
+    assert not (state.paths.data_dir / "console-tls").exists()
 
 
 def test_failing_installer_sets_named_state_and_never_writes_stamp(tmp_path: Path) -> None:

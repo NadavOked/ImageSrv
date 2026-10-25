@@ -85,11 +85,37 @@ def secondary(tmp_path, clock):
 
 
 def _stable(body):
-    """המקום הפנוי בדיסק (``/overview``) זז בין שתי קריאות — לא חלק מההשוואה."""
-    if isinstance(body, dict) and isinstance(body.get("storage"), dict):
-        body = {**body, "storage": {k: v for k, v in body["storage"].items()
-                                    if k != "free_bytes"}}
+    """שדות שזזים בין שתי קריאות — לא חלק מההשוואה.
+
+    ``free_bytes`` ב-``/overview`` הוא המקום הפנוי בדיסק.
+    ``now`` הוא שעון השרת ברגע הקריאה (``now_iso()``, #1301) — ``/overview``
+    ו-``/update/status``. שתי הקריאות נופלות לפעמים משני צידי גבול שנייה (#1783).
+    """
+    if isinstance(body, dict):
+        if "now" in body:
+            body = {k: v for k, v in body.items() if k != "now"}
+        storage = body.get("storage")
+        if isinstance(storage, dict):
+            body = {**body, "storage": {k: v for k, v in storage.items()
+                                        if k != "free_bytes"}}
     return body
+
+
+def _status_clock(monkeypatch):
+    """שעון מוזרק ל-``GET /update/status``: קבוע בתוך קריאה, קופץ שנייה בין הקריאות.
+
+    הראיה שההזרקה פגעה בתשובה עצמה היא ש-``now`` שווה לחותמת שנקבעה — שעון
+    אמיתי לא יחזיר אותה (#1783).
+    """
+    from datetime import datetime, timedelta, timezone
+    from server import update as update_mod
+
+    base = datetime(2026, 10, 19, 5, 57, 55, tzinfo=timezone.utc)
+    first = base.isoformat(timespec="seconds")
+    second = (base + timedelta(seconds=1)).isoformat(timespec="seconds")
+    holder = {"now": first}
+    monkeypatch.setattr(update_mod, "now_iso", lambda: holder["now"])
+    return first, second, holder
 
 
 def _get(server, nid, path):
@@ -107,11 +133,20 @@ PARITY = ("/overview", "/machines", "/groups", "/disk-failures", "/shrink-record
 
 @pytest.mark.parametrize("path", PARITY)
 def test_a_relayed_get_is_what_the_secondarys_own_console_answers(server, secondary, paired,
-                                                                 path):
+                                                                 path, monkeypatch):
+    # ‏#1783: בלי הקפיצה הטסט ירוק גם כשההשוואה עדיין כוללת את ``now``.
+    clock = None
+    if path == "/update/status":
+        first, second, clock = _status_clock(monkeypatch)
     own = secondary["admin"].get("/api/console" + path)
     assert own.status_code == 200, own.text
+    if clock is not None:
+        assert own.json().get("now") == first, own.text
+        clock["now"] = second
     relayed = _get(server, paired, path)
     assert relayed.status_code == 200, relayed.text
+    if clock is not None:
+        assert relayed.json().get("now") == second, relayed.text
     assert _stable(relayed.json()) == _stable(peer_safe.defang(own.json()))
     assert isinstance(relayed.json(), interserver_api.console_get_type(path))
     for name in interserver_api.CONSOLE_HEADERS:

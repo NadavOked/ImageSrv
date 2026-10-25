@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlsplit
 
-from server import hostname_rule, login_guard, users
+from server import hostname_rule, ifaddr, login_guard, users
 from server.atomicfile import write_atomic
 from server.console_tls import ensure_console_cert
 from server.interserver_auth import generate_self_signed
@@ -485,7 +485,17 @@ class WizardState:
             if verify_rc:
                 self._fail("verify-failed", "verify-boot-payload.sh נכשל; ההתקנה אינה מסומנת כהושלמה.", config)
                 return
-            tls = ensure_console_cert(self.paths.data_dir, config.interface, hostname=config.hostname)
+            if self.dev:
+                console_host = config.address if config.mode == "static" else ""
+                if not console_host:
+                    nic = next((row for row in self.interfaces() if row["name"] == config.interface), {})
+                    console_host = str(nic.get("current_ip") or "").split("/", 1)[0]
+            else:
+                console_host = ifaddr.read_ipv4(config.interface)
+            if not console_host or not _ipv4(console_host):
+                self._fail("check-error", f"לא נקראה כתובת IPv4 תקינה לכרטיס {config.interface}; לא הונפקה תעודת קונסולה.", config)
+                return
+            tls = ensure_console_cert(self.paths.data_dir, console_host, hostname=config.hostname)
             if not FP_RE.fullmatch(tls.fingerprint_sha256):
                 self._fail("check-error", "טביעת תעודת הקונסולה לא נקראה בצורה תקינה.", config)
                 return
@@ -494,11 +504,7 @@ class WizardState:
                 return
             self.paths.stamp_file.parent.mkdir(parents=True, exist_ok=True)
             self.paths.stamp_file.touch()
-            console_host = config.address if config.mode == "static" else ""
-            if not console_host:
-                nic = next((row for row in self.interfaces() if row["name"] == config.interface), {})
-                console_host = str(nic.get("current_ip") or "").split("/", 1)[0]
-            console_url = f"https://{console_host or config.hostname}:8081"
+            console_url = f"https://{console_host}:8081"
             self._set("done", console_url=console_url, user="admin",
                       fingerprint=tls.fingerprint_sha256)
         except Exception as exc:  # visible terminal state; never turn an exception into success

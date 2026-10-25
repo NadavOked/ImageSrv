@@ -878,7 +878,13 @@ def create_console_router(
         with _write_lock, writing(ctx.conn):
             if not update_one(ctx.conn, "DELETE FROM machines WHERE mac = ?", (canonical,)):
                 raise HTTPException(404, "מכונה לא קיימת")
-        journal(ctx.conn, "machine_delete", canonical, user[0])
+            # #1873: hello must never see the deletion without its timestamp.
+            # journal() owns its own lock/transaction, so insert here atomically;
+            # a failed record must roll back the deletion and fail visibly.
+            ctx.conn.execute(
+                "INSERT INTO journal (ts, user, event, detail) VALUES (?, ?, ?, ?)",
+                (now_iso(), user[0], "machine_delete", canonical),
+            )
         return {"ok": True, "network": _sync_known_macs(user[0])}
 
     @router.get("/machines.csv")

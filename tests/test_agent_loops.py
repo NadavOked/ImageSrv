@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from pathlib import Path
+import sqlite3
 
 import pytest
 
@@ -385,3 +386,111 @@ def test_monitoring_never_breaks_the_hello_it_watches(loop_server):
 
 def test_a_deploy_user_cannot_read_the_health_screen(loop_server):
     assert loop_server["deploy"].get("/api/console/health").status_code == 403
+
+
+# --- #1873: deletion while the previously registered agent is running --------
+
+
+@pytest.mark.parametrize("group", ["grp_BUILD", "grp_CLONERS"])
+@pytest.mark.parametrize("hello_before_delete", [False, True])
+def test_deleted_running_agent_has_bounded_grace(
+        loop_server, monkeypatch, group, hello_before_delete):
+    from server import console_api, db
+
+    mac = "aa:bb:cc:00:18:73"
+    admin = loop_server["admin"]
+    ctx = loop_server["ctx"]
+    moment = [T0]
+    # Also freeze journal() on the old implementation for the negative control.
+    monkeypatch.setattr(db, "now_iso", lambda: moment[0])
+    monkeypatch.setattr(console_api, "now_iso", lambda: moment[0])
+    monkeypatch.setattr(agent_loops, "now_iso", lambda: moment[0])
+    assert admin.post("/api/console/machines", json={
+        "mac": mac, "name": "deleted-pc", "group_id": group,
+    }).status_code == 200
+    boot = loop_server["anon"].get(f"/boot/menu?mac={mac}")
+    assert boot.status_code == 200 and "set default=imagectl" in boot.text
+    if hello_before_delete:
+        assert hello(loop_server, mac)["known"] is True
+    # Exercise normalization too: the journal must contain the canonical MAC.
+    assert admin.delete(f"/api/console/machines/{mac.upper()}").status_code == 200
+    deletion = ctx.conn.execute(
+        "SELECT ts, detail FROM journal WHERE event = 'machine_delete'"
+    ).fetchone()
+    assert dict(deletion) == {"ts": T0, "detail": mac}
+
+    for offset in (0, 2, 300, 599):
+        moment[0] = at(offset)
+        answer = hello(loop_server, mac)
+        assert answer["known"] is False and answer["task"] is None
+        assert answer["session"] is None and "unregistered_screen" not in answer
+        assert loop_rows(loop_server) == {}
+        assert "agent_loop" not in journal_events(loop_server)
+
+    # A failed repeat deletion cannot extend the grace period either.
+    assert admin.delete(f"/api/console/machines/{mac}").status_code == 404
+    moment[0] = at(600)
+    hello(loop_server, mac)
+    assert agent_loops.current(ctx.conn)[0]["hits"] == 1
+    assert loop_rows(loop_server)[f"agent_loop:{mac}"]["state"] == "bad"
+    assert journal_events(loop_server).count("agent_loop") == 1
+
+
+def test_deletion_grace_does_not_hide_a_foreign_machine(loop_server):
+    ids = setup_classroom(loop_server)
+    assert loop_server["admin"].delete(
+        f"/api/console/machines/{ids['mac1']}").status_code == 200
+    stranger = "aa:bb:cc:00:18:74"
+    assert loop_server["admin"].delete(
+        f"/api/console/machines/{stranger}").status_code == 404
+    for _ in range(3):
+        assert hello(loop_server, stranger)["known"] is False
+    loops = agent_loops.current(loop_server["ctx"].conn)
+    assert len(loops) == 1 and loops[0]["mac"] == stranger and loops[0]["hits"] == 3
+    assert journal_events(loop_server).count("agent_loop") == 1
+
+
+def test_deletion_grace_does_not_hide_a_reregistered_machine(loop_server):
+    ids = setup_classroom(loop_server)
+    mac = ids["mac1"]
+    admin = loop_server["admin"]
+    assert admin.delete(f"/api/console/machines/{mac}").status_code == 200
+    assert admin.post("/api/console/machines", json={
+        "mac": mac, "name": "05", "group_id": ids["group"],
+    }).status_code == 200
+    assert hello(loop_server, mac)["known"] is True
+    assert agent_loops.current(loop_server["ctx"].conn)[0]["hits"] == 1
+
+
+def test_failed_deletion_record_rolls_back_the_machine_delete(loop_server):
+    ids = setup_classroom(loop_server)
+    ctx = loop_server["ctx"]
+    ctx.conn.execute(
+        "CREATE TRIGGER reject_machine_delete BEFORE INSERT ON journal"
+        " WHEN NEW.event = 'machine_delete'"
+        " BEGIN SELECT RAISE(ABORT, 'deletion record unavailable'); END"
+    )
+    ctx.conn.commit()
+    with pytest.raises(sqlite3.IntegrityError, match="deletion record unavailable"):
+        loop_server["admin"].delete(f"/api/console/machines/{ids['mac1']}")
+    assert ctx.conn.execute(
+        "SELECT 1 FROM machines WHERE mac = ?", (ids["mac1"],)
+    ).fetchone() is not None
+    assert "machine_delete" not in journal_events(loop_server)
+
+
+def test_unreadable_deletion_history_is_logged_as_unverified(loop_server, caplog):
+    ctx = loop_server["ctx"]
+
+    class BrokenHistory:
+        def execute(self, sql, parameters=()):
+            if "FROM journal" in sql:
+                raise sqlite3.OperationalError("deletion history unavailable")
+            return ctx.conn.execute(sql, parameters)
+
+    answer = {"schema": 1, "known": False, "task": None, "session": None}
+    assert agent_loops.note(
+        BrokenHistory(), ctx.store, "aa:bb:cc:00:18:75", answer, now=T0) is None
+    assert "was not recorded" in caplog.text
+    assert "deletion history unavailable" in caplog.text
+    assert agent_loops.current(ctx.conn, now=T0) == []

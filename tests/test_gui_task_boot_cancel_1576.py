@@ -24,8 +24,12 @@ the boot hands them out.
 
 from __future__ import annotations
 
+import pytest
+
 from conftest import hello_body
 from fastapi.testclient import TestClient
+from server import identity
+from server.app import create_agent_app
 from test_kiosk_app import _login_kiosk, kiosk_env  # noqa: F401
 from test_server_room import cloner_hello
 
@@ -144,3 +148,81 @@ def test_a_console_direct_send_keeps_its_round_through_the_boot(kiosk_env):
     _boot(kiosk_env)
     assert _q(kiosk_env, "SELECT state FROM tasks WHERE id = ?", opened["task_id"])["state"] == "pending"
     assert _q(kiosk_env, "SELECT state FROM room_rounds WHERE id = ?", opened["id"])["state"] == "active"
+
+
+@pytest.mark.parametrize("kind", ["capture", "direct_send"])
+@pytest.mark.parametrize("lease_state", ["mismatch", "missing", "unreadable", "match"])
+def test_boot_cancel_requires_the_macs_lease_1629(kiosk_env, tmp_path, kind, lease_state):
+    """Exercise the HTTP wiring and real verifier: a stranger cannot cancel
+    a GUI task or close its room, but the rebooting owner still can.
+    Negative control: the old resolver cancels even on the three refusals.
+    """
+    _, gui = _env(kiosk_env)
+    opened = _direct(gui, kiosk_env) if kind == "direct_send" else None
+    tid = opened["task_id"] if opened else _capture(gui)
+    assert _q(kiosk_env, "SELECT state FROM tasks WHERE id = ?", tid)["state"] == "pending"
+    if opened:
+        assert _q(kiosk_env, "SELECT state FROM room_rounds WHERE id = ?", opened["id"])["state"] == "active"
+        assert _q(kiosk_env, "SELECT state FROM sessions WHERE id = ?",
+                  opened["wave_session_id"])["state"] == "open"
+
+    owner_ip = "10.44.12.50"
+    source_ip = owner_ip if lease_state == "match" else "10.44.12.99"
+    path = tmp_path / "boot-dnsmasq.leases"
+    if lease_state != "unreadable":
+        path.write_text("" if lease_state == "missing" else
+                        f"0 {BUILD} {owner_ip} build-01 *\n", encoding="utf-8")
+    rt = kiosk_env["rt"]
+    rt.ctx.leases = identity.LeaseFile(path)
+    # Install the lease source before mounting /boot, just as create_runtime does.
+    app = create_agent_app(rt)
+    client = TestClient(app, base_url=rt.server_base, client=(source_ip, 40001))
+    response = client.get(f"/boot/menu?mac={BUILD}",
+                          headers={"X-Forwarded-For": owner_ip})
+    assert response.status_code == 200
+    assert "server lookup failed" not in response.text
+    matched = lease_state == "match"
+    task = _q(kiosk_env, "SELECT state, error FROM tasks WHERE id = ?", tid)
+    assert task["state"] == ("cancelled" if matched else "pending")
+    if matched:
+        assert task["error"] == REASON
+    if opened:
+        assert _q(kiosk_env, "SELECT state FROM room_rounds WHERE id = ?",
+                  opened["id"])["state"] == ("closed" if matched else "active")
+        assert _q(kiosk_env, "SELECT state FROM sessions WHERE id = ?",
+                  opened["wave_session_id"])["state"] == ("closed" if matched else "open")
+
+    refusals = rt.conn.execute(
+        "SELECT event, detail FROM journal WHERE event IN (?, ?)",
+        (identity.REFUSED, identity.UNVERIFIABLE)).fetchall()
+    assert len(refusals) == (0 if matched else 1)
+    if not matched:
+        expected = identity.REFUSED if lease_state == "mismatch" else identity.UNVERIFIABLE
+        assert refusals[0]["event"] == expected
+        assert BUILD in refusals[0]["detail"] and source_ip in refusals[0]["detail"]
+        assert "(boot-cancel)" in refusals[0]["detail"]
+        if lease_state == "mismatch":
+            assert f"lease says {owner_ip}" in refusals[0]["detail"]
+    assert _q(kiosk_env, "SELECT COUNT(*) AS n FROM journal WHERE event = 'task_boot_cancel'")["n"] == int(matched)
+
+
+def test_a_repeated_boot_cancel_refusal_is_journaled_once_1629(kiosk_env, tmp_path):
+    """The refusal goes through the agent routes' journal throttle (#1949):
+    a stranger repeating `GET /boot/menu?mac=<build>` -- or every boot while
+    the leases file is unreadable -- is one journal line, not one per request.
+    The task stays pending through all of them."""
+    _, gui = _env(kiosk_env)
+    tid = _capture(gui)
+    path = tmp_path / "boot-dnsmasq.leases"
+    path.write_text(f"0 {BUILD} 10.44.12.50 build-01 *\n", encoding="utf-8")
+    rt = kiosk_env["rt"]
+    rt.ctx.leases = identity.LeaseFile(path)
+    client = TestClient(create_agent_app(rt), base_url=rt.server_base,
+                        client=("10.44.12.99", 40001))
+    for _ in range(4):
+        assert client.get(f"/boot/menu?mac={BUILD}").status_code == 200
+    assert _q(kiosk_env, "SELECT state FROM tasks WHERE id = ?", tid)["state"] == "pending"
+    rows = rt.conn.execute("SELECT detail FROM journal WHERE event = ?",
+                           (identity.REFUSED,)).fetchall()
+    assert [r["detail"] for r in rows] == [
+        f"{BUILD} from 10.44.12.99, lease says 10.44.12.50 (boot-cancel)"]

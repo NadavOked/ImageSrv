@@ -47,6 +47,20 @@ _EXPLAINED_CODES = frozenset({"task-assigned", "session-joinable", "cloner-wait"
 #: חמישה מחזורים שלא הגיעו. נגזר, לא הומצא.
 SILENCE_SECONDS = 600
 
+# #1873: allow the running agent to leave after registry deletion. Like the
+# unregistered-screen window, ten minutes cover slow boot/download/reboot paths.
+# This is measured from deletion, never refreshed by hello.
+DELETION_GRACE_SECONDS = 600
+
+
+def _deleted_recently(conn: sqlite3.Connection, mac: str, now: str) -> bool:
+    cutoff = (datetime.fromisoformat(now)
+              - timedelta(seconds=DELETION_GRACE_SECONDS)).isoformat(timespec="seconds")
+    return conn.execute(
+        "SELECT 1 FROM journal WHERE event = 'machine_delete' AND detail = ?"
+        " AND ts > ? AND ts <= ? LIMIT 1", (mac, cutoff, now)
+    ).fetchone() is not None
+
 
 def _cutoff(now: str) -> str:
     """החותמת שמתחתיה שתיקה נחשבת לסוף הלולאה.
@@ -120,6 +134,10 @@ def note(conn: sqlite3.Connection, store: SessionStore, mac: str, answer: dict,
     נשאר בדיוק כפי שהוא.
     """
     try:
+        if answer.get("known") is not True and _deleted_recently(conn, mac, now or now_iso()):
+            # #1873: today's unknown answer does not explain an earlier boot.
+            # Only a committed deletion of this MAC grants the bounded grace.
+            return None
         if answer.get("known") is not True and unknown_screen.served_recently(conn, mac, now):
             # ‏#1802: השרת עצמו שלח אותה לסוכן — למסך "המחשב הזה לא רשום"
             # בווילן ההפצה. ההגעה מוסברת, והאתחול הבא ממילא לדיסק.

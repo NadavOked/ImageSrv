@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import socket
+import stat
 from pathlib import Path
 
 import pytest
@@ -513,6 +515,39 @@ def test_write_grub_cfg_uses_the_installers_generator(tmp_path):
     text = (tmp_path / "grub" / "grub.cfg").read_text(encoding="ascii")
     assert text == render_bootstrap(GrubConfig(server_base="http://10.44.9.10:8080"))
     assert "set imagectl_fallback=10.44.9.10:8080" in text
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX umask and modes")
+@pytest.mark.parametrize("existing", [False, True], ids=["new", "existing-0600"])
+def test_1817_write_grub_cfg_is_0644_under_private_umask(tmp_path, existing):
+    from boot.grub_menu import GrubConfig, render_bootstrap
+
+    path = tmp_path / "grub" / "grub.cfg"
+    path.parent.mkdir()
+    if existing:
+        path.write_text("old config", encoding="ascii")
+        path.chmod(0o600)
+    previous_umask = os.umask(0o077)
+    try:
+        error = deploy_net.write_grub_cfg("http://10.44.9.10:8080", tmp_path)
+    finally:
+        os.umask(previous_umask)
+    assert error is None
+    assert stat.S_IMODE(path.stat().st_mode) == 0o644
+    assert path.read_text(encoding="ascii") == render_bootstrap(
+        GrubConfig(server_base="http://10.44.9.10:8080"))
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX umask and modes")
+def test_1817_write_grub_cfg_creates_a_traversable_grub_dir_under_private_umask(tmp_path):
+    previous_umask = os.umask(0o077)
+    try:
+        error = deploy_net.write_grub_cfg("http://10.44.9.10:8080", tmp_path)
+    finally:
+        os.umask(previous_umask)
+    assert error is None
+    assert stat.S_IMODE((tmp_path / "grub").stat().st_mode) == 0o755
+    assert stat.S_IMODE((tmp_path / "grub" / "grub.cfg").stat().st_mode) == 0o644
 
 
 def test_regenerate_firewall_skips_when_the_installer_wrote_none(tmp_path):

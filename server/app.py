@@ -33,7 +33,7 @@ from . import learn_netloss, learn_wol   # #1846, #1847
 from . import server_io   # #1884
 from . import pxe_log   # #1887
 from . import timezone, timesync   # #1447, #1773
-from .api import ServerContext, create_agent_router
+from .api import ServerContext, boot_identity_ok, create_agent_router
 from .console_api import create_console_router
 from .console_data import create_console_data_router   # #1882-#1889
 from .console_hostcfg import create_hostcfg_router
@@ -796,7 +796,9 @@ def _boot_asgi(rt: ServerRuntime):
     המפעיל תמיד: עד #1266 רק מתג ה-SSH בקונסולה הכניס אותו, והמתג יצא
     מהמוצר — אז הדגל אינו מוגש מ-PXE לעולם (`STRIPPED_CMDLINE`)."""
     conn = rt.conn
-    resolve = make_resolver(conn, rt.library, rt.store, rt.server_base)
+    resolve = make_resolver(
+        conn, rt.library, rt.store, rt.server_base,
+        identity_ok=lambda mac, client_ip: boot_identity_ok(rt.ctx, mac, client_ip))
 
     async def boot_asgi(scope, receive, send):
         # ‏#584: שביל הפירורים (#400) נרשם רק אם הבקשה התקבלה על וילן

@@ -209,6 +209,13 @@ def kill_group(pgid: int) -> None:
         pass
 
 
+#: #1940: אחרי SIGKILL לקבוצה, נכד שברח (setsid) עדיין מחזיק את הצינור.
+#: communicate() בלי תקרה ממתין לו, ו-TimeoutExpired של הקורא לא מגיע
+#: (נמדד: timeout=2 עם setsid sleep 20 חזר אחרי 20ש'). זו תקרת ניקוז,
+#: לא המתנה שנייה לעבודה — חצייתה נזרקת, לא נבלעת.
+RUN_GROUP_DRAIN_S = 1
+
+
 def run_group(argv, *, timeout: float | None = None, **kwargs) -> subprocess.CompletedProcess:
     """כמו `subprocess.run`, אבל התהליך ראש session משלו וכל הקבוצה נהרגת
     בסוף. בווינדוס (אין `start_new_session`/`killpg`) זה `subprocess.run`
@@ -221,8 +228,11 @@ def run_group(argv, *, timeout: float | None = None, **kwargs) -> subprocess.Com
         try:
             out, err = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            kill_group(proc.pid)               # לפני ה-communicate השני: צינור שיתום מחזיק
-            proc.communicate()
+            kill_group(proc.pid)
+            # #1940: נכד מחוץ לקבוצה מחזיק את הצינור. בלי תקרה communicate()
+            # ממתין לו וה-TimeoutExpired לא מגיע לקורא. פקיעת הניקוז נזרקת
+            # כמו שהיא; ניקוז שהסתיים עדיין כישלון — לא פלט חלקי כהצלחה.
+            proc.communicate(timeout=RUN_GROUP_DRAIN_S)
             raise
         finally:
             kill_group(proc.pid)

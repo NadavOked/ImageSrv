@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -37,17 +39,34 @@ def test_port_owner_reads_ss_output():
 
 
 @pytest.fixture()
-def health_server(tmp_path: Path, images_root: Path, clock):
+def health_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
     """שרת עם בדיקות מזויפות שאפשר לסובב תרחיש-תרחיש."""
     if TestClient is None:
         pytest.skip("fastapi is required")
     from server import users
     from server.app import create_app
 
-    tftp = tmp_path / "tftp"
+    # #1817: pytest's private ancestors (including /root on the VM) are not
+    # part of this fixture. Model them as traversable without chmod outside it.
+    real_stat = Path.stat
+    ancestors = {tmp_path, *tmp_path.parents}
+
+    def fixture_stat(path, *args, **kwargs):
+        result = real_stat(path, *args, **kwargs)
+        if path in ancestors:
+            values = list(result)
+            values[0] |= stat.S_IXOTH
+            return os.stat_result(values)
+        return result
+
+    monkeypatch.setattr(Path, "stat", fixture_stat)
+    tftp = tmp_path / "boot-data" / "tftp"
     (tftp / "grub").mkdir(parents=True)
+    for directory in (tftp.parent, tftp, tftp / "grub"):
+        directory.chmod(0o755)
     for name in ("bootx64.efi", "grubx64.efi", "grub/grub.cfg"):
         (tftp / name).write_bytes(b"x")
+        (tftp / name).chmod(0o644)
 
     fake = {"ss": SS_DNSMASQ, "active": "active", "http": 200, "journal": "",
             "interfaces": [{"name": "eth0", "state": "up", "mac": "aa", "addresses": []}],
@@ -195,7 +214,64 @@ def test_missing_boot_files_are_named(health_server):
     (health_server["tftp"] / "grubx64.efi").unlink()
     rows = by_id(health_server["admin"].get("/api/console/health").json())
     assert rows["boot_files"]["state"] == "bad"
-    assert "grubx64.efi" in rows["boot_files"]["detail"]
+    assert f"חסרים ב-{health_server['tftp']}: grubx64.efi" in rows["boot_files"]["detail"]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX permission bits")
+@pytest.mark.parametrize("name", ["bootx64.efi", "grubx64.efi", "grub/grub.cfg"])
+def test_1817_private_boot_file_is_red_with_path_and_mode(health_server, name):
+    path = health_server["tftp"] / name
+    path.chmod(0o600)
+    row = by_id(health_server["admin"].get("/api/console/health").json())["boot_files"]
+    assert row["state"] == "bad"
+    assert f"{path} (mode 0600)" in row["detail"]
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX permission bits")
+@pytest.mark.parametrize("level", ["ancestor", "root", "grub"])
+def test_1817_private_directory_is_red_with_path_and_mode(health_server, level):
+    root = health_server["tftp"]
+    path = {"ancestor": root.parent, "root": root, "grub": root / "grub"}[level]
+    path.chmod(0o700)
+    row = by_id(health_server["admin"].get("/api/console/health").json())["boot_files"]
+    assert row["state"] == "bad"
+    assert f"{path} (mode 0700)" in row["detail"]
+    assert stat.S_IMODE(path.stat().st_mode) == 0o700
+
+
+def test_1817_stat_failure_is_red_with_path(health_server, monkeypatch):
+    path = health_server["tftp"] / "grub/grub.cfg"
+    real_stat = Path.stat
+
+    def denied(candidate, *args, **kwargs):
+        if candidate == path:
+            raise PermissionError("permission probe denied")
+        return real_stat(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", denied)
+    response = health_server["admin"].get("/api/console/health")
+    assert response.status_code == 200
+    row = by_id(response.json())["boot_files"]
+    assert row["state"] == "bad"
+    assert str(path) in row["detail"]
+    assert "permission probe denied" in row["detail"]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX symlinks and modes")
+def test_1817_symlink_target_directory_must_be_traversable(health_server):
+    root = health_server["tftp"]
+    private = root.parent / "private"
+    private.mkdir(mode=0o700)
+    target = private / "shim.efi"
+    target.write_bytes(b"x")
+    target.chmod(0o644)
+    path = root / "bootx64.efi"
+    path.unlink()
+    path.symlink_to(target)
+    row = by_id(health_server["admin"].get("/api/console/health").json())["boot_files"]
+    assert row["state"] == "bad"
+    assert f"{private} (mode 0700)" in row["detail"]
 
 
 # --- #333: שרשרת האתחול אינה נגמרת בשורש ה-TFTP -------------------------

@@ -139,6 +139,18 @@ def identity_gate(ctx: ServerContext, mac: str, request: Request,
         ctx, identity.verify(ctx.conn, ctx.leases, mac, client_ip), where)
 
 
+def boot_identity_ok(ctx: ServerContext, mac: str, client_ip: str | None) -> bool:
+    """#1629: the boot menu's `?mac=` is not identity. Before that MAC's GUI
+    tasks are cancelled on boot (#1576), the same check as `identity_gate`,
+    with the same journal line and the same #1949 repeat throttle; the
+    request has no response to refuse, so only the cancellation is skipped.
+    `ctx.leases is None` = no identity hook installed, as in `identity_gate`."""
+    if ctx.leases is None:
+        return True
+    verdict = identity.verify(ctx.conn, ctx.leases, mac, client_ip)
+    return _identity_refusal(ctx, verdict, "boot-cancel") is None
+
+
 def source_gate(ctx: ServerContext, request: Request, where: str) -> JSONResponse | None:
     """‏#997: זהות בלי MAC מוצהר — `GET /images/…/manifest|files`. הסוכן
     מושך אותם ב-`http_get` בלי MAC ובלי כותרת (‏`agent/lib/common.sh`), ולכן

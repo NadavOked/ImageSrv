@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import sqlite3
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from . import (bootguard, capabilities, crcwarn, direct, disk_failures, drawer_slots,
@@ -488,7 +489,8 @@ def build_answer(
 
 
 def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
-                  store: SessionStore, server_base: str | None = None):
+                  store: SessionStore, server_base: str | None = None,
+                  *, identity_ok: Callable[[str, str | None], bool] | None = None):
     """ה-Resolver ש-boot/http.py מצפה לו: (mac, client_ip) → ממשק 3.
 
     בלי הצטרפות ובלי דיסקים — תפריט אתחול רק שואל, לא מחייב.
@@ -510,7 +512,11 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
             # ‏#1576: אתחול שנספר (אותו תנאי כמו net_seen והספירה של #75)
             # מבטל משימת גואי שלא התחילה -- **לפני** בניית התשובה, כדי שהתפריט
             # והסוכן שעולה לא יראו אותה.
-            cancel_gui_tasks_on_boot(conn, store, mac)
+            # #1629: a query MAC is not identity -- the cancellation waits for
+            # the agent routes' lease check (`api.boot_identity_ok`, which
+            # journals a refusal). None = no identity hook, as in identity_gate.
+            if identity_ok is None or identity_ok(mac, client_ip):
+                cancel_gui_tasks_on_boot(conn, store, mac)
         answer = build_answer(
             conn, library, store, mac, client_ip=client_ip, joining=False,
             # ‏#585: בקשת תפריט מחוץ לווילן ההפצה אינה כותבת `net_seen` —

@@ -165,9 +165,14 @@ def write_grub_cfg(url: str, tftp_root: str | Path) -> str | None:
     from boot.grub_menu import GrubConfig, render_bootstrap
     path = Path(tftp_root) / "grub" / "grub.cfg"
     try:
+        created = not path.parent.is_dir()
         path.parent.mkdir(parents=True, exist_ok=True)
+        if created:
+            path.parent.chmod(0o755)   # #1817: not the process umask (dnsmasq traverses it)
         # ‏#1908: אטומי — grub.cfg חתוך הוא אף מחשב שלא מגיע לתפריט.
-        write_atomic(path, render_bootstrap(GrubConfig(server_base=url)), encoding="ascii")
+        # #1817: dnsmasq must also read a formerly private file, regardless of umask.
+        write_atomic(path, render_bootstrap(GrubConfig(server_base=url)),
+                     encoding="ascii", mode=0o644)
     except (OSError, ValueError) as exc:
         return f"לא ניתן לכתוב את {path}: {exc}"
     return None

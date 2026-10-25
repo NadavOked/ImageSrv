@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import socket
+import stat
 import subprocess
 import urllib.request
 from pathlib import Path
@@ -351,6 +352,50 @@ def sender_check(pids: list[int] | None, live_round: bool) -> dict:
                  f"רץ בלי סבב ({shown}) — יתום אחרי סגירה, יש לעצור אותו")
 
 
+def tftp_file_problems(root: Path) -> list[str]:
+    """#1817: dnsmasq needs o+r on files and o+x along the whole path.
+
+    The server may run as root: its own access is not evidence for dnsmasq.
+    Inspect both the requested path and symlink targets; never change modes.
+    """
+    problems, missing = [], []
+    checked_dirs = set()
+    for name in BOOT_FILES:
+        path = (root / name).absolute()
+        directories = list(reversed(path.parents))
+        try:
+            resolved = path.resolve(strict=True)
+            directories += list(reversed(resolved.parents))
+        except FileNotFoundError:
+            missing.append(name)     # the pre-#1817 message, by name
+            continue
+        except (OSError, RuntimeError) as exc:
+            problems.append(f"לא ניתן לבדוק {path}: {exc}")
+        for directory in directories:
+            if directory in checked_dirs:
+                continue
+            checked_dirs.add(directory)
+            try:
+                mode = directory.stat().st_mode
+            except OSError as exc:
+                problems.append(f"לא ניתן לבדוק {directory}: {exc}")
+                continue
+            if not stat.S_ISDIR(mode) or not mode & stat.S_IXOTH:
+                problems.append(
+                    f"{directory} (mode {stat.S_IMODE(mode):04o}): "
+                    "נדרשת תיקייה עם o+x עבור dnsmasq")
+        try:
+            mode = path.stat().st_mode
+        except OSError as exc:
+            problems.append(f"לא ניתן לבדוק {path}: {exc}")
+            continue
+        if not stat.S_ISREG(mode) or not mode & stat.S_IROTH:
+            problems.append(
+                f"{path} (mode {stat.S_IMODE(mode):04o}): "
+                "נדרש קובץ רגיל עם o+r עבור dnsmasq")
+    return ([f"חסרים ב-{root}: {', '.join(missing)}"] if missing else []) + problems
+
+
 def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     results = []
     reboot_detail = auto_reboot.health_detail(ctx)
@@ -435,12 +480,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     # שרשרת האתחול, משני קצותיה: הקבצים על שורש ה-TFTP, ומיד אחריהם
     # הקרנל וה-initramfs כפי שהתחנה מושכת אותם ב-HTTP (#333).
     root = hooks["tftp_root"]()
-    missing = [name for name in BOOT_FILES if not (root / name).is_file()]
-    if unconfigured:
-        # ‏grub.cfg נושא את כתובת הנפילה — המתקין אינו כותב אותו בלי כרטיס
-        # הפצה; הקונסולה כותבת אותו בהדלקת DHCP (deploy_net.complete).
-        missing = [name for name in missing if name != "grub/grub.cfg"]
-    problems = [f"חסרים ב-{root}: {', '.join(missing)}"] if missing else []
+    problems = [] if unconfigured else tftp_file_problems(root)
     if not unconfigured:
         problems += boot_asset_problems(hooks["http_size"], server_base)
     if unconfigured:
