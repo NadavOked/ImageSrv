@@ -7054,14 +7054,14 @@ broadcast/0.0.0.0/שמורה); תשובה אחרת נספרת כ"נדחתה" ו�
   והמסך מציג אותו; ‏`used_bytes` של מחיצת המערכת שלא נמדד = `unchecked`.
 - בזמן העתקה ואחריה: `lc_run=src|total|copied|elapsed|shrunk|report|cur|source_restore|shrink_path`,
   ‏`lc_part=idx|label|fs|bytes|size|wait\|copy\|done\|failed|in`,
-  ‏`lc_tgt=dev|state|bytes|part|ok|grown_idx,grown_bytes,src_bytes,free|error|total|ntfs_boot|ntfs_note|raw,rescued|pulled`.
+  ‏`lc_tgt=dev|state|bytes|part|ok|grown_idx,grown_bytes,src_bytes,free|error|total|ntfs_boot|ntfs_note|raw,rescued|pulled|grow_deferred`.
   ‏#2009 (הכרעת נדב 22/10, אחרי שעותק מוגדל ממקור ב-Fast Startup לא עלה — Automatic Repair: "לעולם לא
   גרועים מ-dd"): ‏`ntfs_note` (שדה 10) = למה יעד `done` **כתום ולא ירוק**; ריק = ירוק. אין שאלה ואין
   חסימה. **המקור לא נכתב לעולם** — רק `ntfs-3g.probe --readwrite` (קריאה בלבד) לפני הטבלה הראשונה, שורה ביומן
   לכל מחיצת NTFS (`$LC/run/src.ntfs`; ולכן גם בקובץ האבחון של ה-USB). **בעותק**, אחרי ההעתקה והקריאה בחזרה
   ולפני ההגדלה (`lc_unhibernate_target`): מחיצת NTFS שהיעד שלה hibernated (rc 14) — `ntfs-3g -o remove_hiberfile`,
   ‏umount, ‏`ntfsfix -d`, וראיה: ה-probe אומר clean ו-`hiberfil.sys` נעלם או אינו מתחיל ב-hibr/wake (`grow.sh`
-  ‏`ntfs_unhibernate`); ואז ההגדלה כרגיל ("Windows במקור לא כובה עד הסוף (Fast Startup). בעותק בוטלה ההשהיה
+  ‏`ntfs_unhibernate`, ‏`ntfsunhib.sh`); ואז ההגדלה כרגיל ("Windows במקור לא כובה עד הסוף (Fast Startup). בעותק בוטלה ההשהיה
   (עלייה מלאה)"). כשל — או מחיצה שלא נבדקה — ⇒ היעד **זהה למקור**: טבלת המקור (`apply_gpt`, כשההגדלה שינתה
   אותה), וכל מחיצה שההגדלה הזיזה או שהביטול כתב בה — `dd` גולמי מהמקור ו-`cmp` מולו; בלי הגדלה ("…וביטול
   ההשהיה בעותק נכשל — הועתק בלי הגדלה, זהה למקור. כדי להגדיל: לכבות את המקור עם Shift+כיבוי ולשכפל שוב").
@@ -7076,6 +7076,11 @@ broadcast/0.0.0.0/שמורה); תשובה אחרת נספרת כ"נדחתה" ו�
   ‏#2045 (שדה 12): ‏`pulled` = ‏`1` כשהדיסק יצא מהמערכת באמצע ההעתקה (`/sys/block/<d>` נעלם —
   ‏`drawer_watch` ב-`verdict.sh`, הקובץ `targets/<d>/pulled`); הכרטיס אומר "הדיסק נשלף באמצע — לא נכתב עד הסוף.
   אפשר לשכפל אליו שוב" ולא "אינו שמיש… בדקו או החליפו". שדה חסר (סוכן ישן) = ‏`0` — הטקסט המחמיר.
+  ‏#2196 (שדה 13): ‏`grow_deferred` = ‏`1` כשטבלת המחיצות הוגדלה ומערכת הקבצים לא (`finish_grow`, הקובץ
+  ‏`targets/<d>/grow_deferred`; לא כשהיא גדלה ורק הניקוי אחריה נכשל, #2011). הכרטיס אז אינו אומר "הוגדלה" — רק
+  שורת ה-`error` האחת. ‏ntfsresize שאומר "NTFS is inconsistent" נאמר בשמו (‏`ntfs_grow_target` ב-`ntfsunhib.sh`,
+  הרצף המלא של הגדלת NTFS לכל מסלול): "טבלת המחיצות הוגדלה, מערכת הקבצים לא: ה-NTFS במקור אינו עקבי (ntfsresize).
+  ב-Windows: chkdsk /f, ואז הרחבת הכונן בניהול הדיסקים" — לא כופים. שדה חסר (סוכן ישן) = ‏`0`.
   ‏#1487: ‏`ntfs_boot` = כמה מחיצות NTFS ביעד קיבלו סקטור אתחול גיבוי שנכתב ונקרא בחזרה
   (‏`partclone -r` אינו כותב אותו; ‏`agent/lib/ntfsboot.sh`). כשל בו מכשיל את היעד בשמו.
   ‏#1440: ‏`bytes` של `lc_part` הוא `-1` כש-`used_bytes` לא נמדד (לא גודל המחיצה), ו-`total`

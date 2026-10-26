@@ -12,10 +12,20 @@
 # device -- every step writes into a file, never a disk):
 #   1  IMGSRV_USB  (FAT32, active)  /EFI/BOOT/BOOTX64.EFI = shim, grubx64.efi,
 #      mmx64.efi; /EFI/debian/grub.cfg (+ /EFI/BOOT, /boot/grub copies);
-#      /imagesrv/vmlinuz + initrd.img; /syslinux (legacy BIOS);
+#      /imagesrv/vmlinuz + initrd.img;
 #      /imagesrv-usb.json (the version the screen shows)
 #   2  IMGSRV_DATA (FAT)            settings.json and reports/ -- written by
 #      the agent on the stick (usbclone.sh); empty at build time
+#
+# Legacy BIOS (#2186): GRUB i386-pc -- boot.img in the MBR's code bytes (0..439,
+# the partition table untouched) and core.img in sectors 1..2047, before
+# partition 1, both patched here the way grub-bios-setup (--no-rs-codes) patches
+# them. core.img finds IMGSRV_USB by its label and reads the UEFI grub.cfg itself
+# (tools/usb/grub-bios.cfg): one kernel line for both. Built with USB_BIOS_LOADER=grub.
+# The default is syslinux WITHOUT --stupid: measured in QEMU/SeaBIOS over usb-storage
+# (#2186, 25/10) 8-10s to the kernel, against 19-29s for GRUB and >400s for --stupid
+# (one sector per BIOS call, #2010). In the field (HP 8100, 25/10) it booted in IDE and
+# AHCI. GRUB stays for a BIOS that hangs after the syslinux banner (HP 8000 + AHCI, #2010).
 #
 # The boot chain is the PXE one (install/setup-boot-server.sh): shim-signed and
 # grub-efi-amd64-signed from Debian, the same packages -- grubx64.efi.signed
@@ -51,11 +61,13 @@ KERNEL_DIR="${IMAGECTL_KERNEL_DIR:-/boot}"
 SHIM="${USB_SHIM:-/usr/lib/shim/shimx64.efi.signed}"
 MOKMGR="${USB_MOKMGR:-/usr/lib/shim/mmx64.efi.signed}"
 GRUB="${USB_GRUB:-/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed}"
+GRUB_PC="${USB_GRUB_PC_DIR:-/usr/lib/grub/i386-pc}"
+BIOS_LOADER="${USB_BIOS_LOADER:-syslinux}"   # #2186: syslinux (fastest, measured), or grub for a BIOS syslinux hangs on
 SYSLINUX_MBR="${USB_SYSLINUX_MBR:-/usr/lib/syslinux/mbr/mbr.bin}"
 # #2010 (the field, 22/10: an HP 8000 in AHCI hung after "SYSLINUX 6.04 EDD", the same stick
-# booted in IDE): --stupid = one sector per BIOS read (syslinux(1): "for BIOSes that cannot
-# read more than one sector at a time"). USB_SYSLINUX_OPTS= (empty) builds without it, to measure.
-SYSLINUX_OPTS="${USB_SYSLINUX_OPTS---stupid}"
+# booted in IDE): --stupid = one sector per BIOS read. It was the default until #2186 (25/10):
+# never shown to cure the hang, and slow. USB_SYSLINUX_OPTS=--stupid still builds it, to measure.
+SYSLINUX_OPTS="${USB_SYSLINUX_OPTS-}"
 LABEL=IMGSRV_USB
 DATA_LABEL=IMGSRV_DATA
 DATA_MB=32
@@ -75,15 +87,22 @@ done
 [[ "$SURVEY" == 0 || -z "$PUBLISH" ]] || die "--survey is never published: the console's download is the regular stick"
 [[ "$SURVEY" == 0 ]] || DATA_MB=128
 
-for tool in mformat mcopy mmd mdir mtype sfdisk dd sha256sum python3 git cpio gzip zstd stat truncate; do
+for tool in mformat mcopy mmd mdir mtype sfdisk dd od sha256sum python3 git cpio gzip zstd stat truncate; do
     command -v "$tool" >/dev/null || die "missing $tool (apt install mtools fdisk coreutils python3 git)"
 done
 for f in "$SHIM" "$GRUB"; do
     [[ -s "$f" ]] || die "missing $f -- apt install shim-signed grub-efi-amd64-signed (the PXE boot chain's packages)"
 done
-if [[ "$BIOS" == 1 ]]; then
+if [[ "$BIOS" == 1 && "$BIOS_LOADER" == grub ]]; then
+    command -v grub-mkimage >/dev/null || die "missing grub-mkimage (apt install grub-common grub-pc-bin), or --no-bios for UEFI only"
+    for f in boot.img diskboot.img moddep.lst; do
+        [[ -s "$GRUB_PC/$f" ]] || die "missing $GRUB_PC/$f (apt install grub-pc-bin), or --no-bios for UEFI only"
+    done
+elif [[ "$BIOS" == 1 && "$BIOS_LOADER" == syslinux ]]; then
     command -v syslinux >/dev/null || die "missing syslinux (apt install syslinux syslinux-common), or --no-bios for UEFI only"
     [[ -s "$SYSLINUX_MBR" ]] || die "missing $SYSLINUX_MBR (apt install syslinux-common), or --no-bios for UEFI only"
+elif [[ "$BIOS" == 1 ]]; then
+    die "USB_BIOS_LOADER is grub or syslinux, not '$BIOS_LOADER'"
 fi
 
 # --- version, kernel ---------------------------------------------------------------
@@ -143,7 +162,7 @@ truncate -s $(( ESP_SECT * 512 )) "$ESP"
 # -H: hidden sectors = the partition's start; syslinux's boot sector reads it
 mformat -i "$ESP" -F -c 1 -v "$LABEL" -N 19140001 -H "$ESP_START" -T "$ESP_SECT" -h 64 -s 32 :: \
     || die "mformat of the boot partition failed"
-mmd -i "$ESP" ::/EFI ::/EFI/BOOT ::/EFI/debian ::/boot ::/boot/grub ::/imagesrv ::/syslinux
+mmd -i "$ESP" ::/EFI ::/EFI/BOOT ::/EFI/debian ::/boot ::/boot/grub ::/imagesrv
 mcopy -i "$ESP" "$SHIM" ::/EFI/BOOT/BOOTX64.EFI
 mcopy -i "$ESP" "$GRUB" ::/EFI/BOOT/grubx64.efi
 if [[ -s "$MOKMGR" ]]; then mcopy -i "$ESP" "$MOKMGR" ::/EFI/BOOT/mmx64.efi
@@ -156,7 +175,8 @@ if [[ "$SURVEY" == 1 ]]; then   # the marker usbsurvey.sh looks for
     printf 'ImageSrv USB survey stick (#1921): each disk SMART is kept on IMGSRV_DATA/survey, no serial.\r\n' > "$STAGE/survey"
     mcopy -i "$ESP" "$STAGE/survey" ::/imagesrv/survey
 fi
-if [[ "$BIOS" == 1 ]]; then
+if [[ "$BIOS" == 1 && "$BIOS_LOADER" == syslinux ]]; then
+    mmd -i "$ESP" ::/syslinux
     mcopy -i "$ESP" "$STAGE/syslinux.cfg" ::/syslinux/syslinux.cfg
     # shellcheck disable=SC2086  # SYSLINUX_OPTS: zero or more flags, word-split on purpose
     syslinux --install $SYSLINUX_OPTS --directory /syslinux "$ESP" || die "syslinux --install failed"
@@ -184,10 +204,41 @@ start=$DATA_START, size=$DATA_SECT, type=c
 EOF
 dd if="$ESP" of="$IMG" bs=512 seek="$ESP_START" conv=notrunc,sparse status=none
 dd if="$DATA" of="$IMG" bs=512 seek="$DATA_START" conv=notrunc,sparse status=none
-[[ "$BIOS" == 0 ]] || dd if="$SYSLINUX_MBR" of="$IMG" bs=440 count=1 conv=notrunc status=none
+if [[ "$BIOS" == 1 && "$BIOS_LOADER" == syslinux ]]; then
+    dd if="$SYSLINUX_MBR" of="$IMG" bs=440 count=1 conv=notrunc status=none
+elif [[ "$BIOS" == 1 ]]; then
+    # #2186: what grub-bios-setup --no-rs-codes writes (grub util/setup.c), but into the file --
+    # that tool opens the host's own disk to guess a root device, and needs root for it
+    CORE="$WORK/core.img"
+    grub-mkimage -O i386-pc -d "$GRUB_PC" -o "$CORE" -p /boot/grub -c "$REPO/tools/usb/grub-bios.cfg" \
+        biosdisk part_msdos fat normal linux search configfile echo || die "grub-mkimage (i386-pc) failed"
+    nsec=$(( ($(stat -c %s "$CORE") + 511) / 512 ))
+    (( nsec >= 2 && nsec < ESP_START )) || die "core.img is $nsec sectors: it must fit in sectors 1..$(( ESP_START - 1 ))"
+    truncate -s $(( nsec * 512 )) "$CORE"
+    # shellcheck disable=SC2059  # $2 is the bytes, as printf escapes
+    put() { printf "$2" | dd of="$3" bs=1 seek="$1" conv=notrunc status=none; }
+    # diskboot's blocklist, the end of core's first sector: the rest is nsec-1 sectors from LBA 2
+    put 508 "$(printf '\\%03o\\%03o' $(( (nsec - 1) & 255 )) $(( (nsec - 1) >> 8 )))" "$CORE"
+    dd if="$CORE" of="$IMG" bs=512 seek=1 conv=notrunc status=none
+    # boot.img's jump (0..2) and code (90..439); 3..89 (a BPB) and 440.. (the disk id and the
+    # partition table sfdisk wrote) stay as they are
+    dd if="$GRUB_PC/boot.img" of="$IMG" bs=1 count=3 conv=notrunc status=none
+    dd if="$GRUB_PC/boot.img" of="$IMG" bs=1 skip=90 seek=90 count=350 conv=notrunc status=none
+    put 92 '\001\0\0\0\0\0\0\0' "$IMG"   # the kernel sector: core.img at LBA 1
+    put 100 '\377' "$IMG"                # boot drive 0xff: the one the BIOS booted from (DL)
+    put 102 '\220\220' "$IMG"            # nop the jump over the drive check (no --allow-floppy)
+fi
 
 # --- read back from the image itself (principle 5: evidence, not exit codes) ------------
+if [[ "$BIOS" == 1 && "$BIOS_LOADER" == grub ]]; then
+    patched="$(od -A n -t x1 -j 92 -N 9 "$IMG" | tr -d ' \n')|$(od -A n -t x1 -j 102 -N 2 "$IMG" | tr -d ' \n')"
+    [[ "$patched" == "0100000000000000ff|9090" ]] || die "the GRUB MBR does not read back: $patched"
+    cmp -s <(dd if="$IMG" bs=1 skip=104 count=336 status=none) <(dd if="$GRUB_PC/boot.img" bs=1 skip=104 count=336 status=none) \
+        || die "boot.img's code is not in the MBR"
+    cmp -s <(dd if="$IMG" bs=512 skip=1 count="$nsec" status=none) "$CORE" || die "core.img is not in sectors 1..$nsec"
+fi
 layout=$(sfdisk -d "$IMG")
+grep -q "^label-id: 0x19141914$" <<<"$layout" || die "the disk id is not as written: $layout"
 grep -q "start= *$ESP_START, size= *$ESP_SECT, type=c, bootable" <<<"$layout" || die "partition 1 not as written: $layout"
 grep -q "start= *$DATA_START, size= *$DATA_SECT, type=c" <<<"$layout" || die "partition 2 not as written: $layout"
 listing=$(mdir -i "$IMG@@$(( ESP_START * 512 ))" -b ::/EFI/BOOT) || die "the boot partition does not read back"

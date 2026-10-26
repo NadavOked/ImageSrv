@@ -71,10 +71,12 @@ jobs:
           # mawk (דביאן) ו-busybox awk קוראים אחרת את רצפי הבריחה של gsub —
           # וזה בדיוק ההבדל שהשאיר את #145 ירוק בזמן שהסוכן נשבר.
           # #1210: בלי update האינדקס השמור ב-runner מחזיר 404 כשהמראה מתקדמת.
+          # #2186: mtools..zstd -- tests/test_usb_bios_grub_2186.py builds a real USB stick (GRUB/syslinux MBR).
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             libhivex-dev libhivex-bin dash busybox nodejs libpango1.0-dev libcairo2-dev libdrm-dev libharfbuzz-dev libfribidi-dev fonts-ibm-plex fontconfig libvncserver-dev \
-            partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl >/dev/null
+            partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl \
+            mtools grub-pc-bin syslinux syslinux-common cpio zstd >/dev/null
           # איזה busybox רץ כאן -- ‏gsub שלו נבדל בין בניות, וה-runner אינו
           # בהכרח מה שנארז ב-initrd. בלי השורה הזאת אין דרך לדעת בדיעבד.
           busybox | head -1

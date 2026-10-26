@@ -1,4 +1,5 @@
 # ImageSrv USB @VERSION@ -- #1914. UEFI: shim -> grubx64.efi, both Debian-signed.
+# Legacy BIOS (#2186): GRUB i386-pc reads this same file (tools/usb/grub-bios.cfg).
 # One entry, no menu, no timeout. The kernel line carries exactly one imagectl.*
 # word, imagectl.mode=usbclone (CLAUDE.md principle 2): no imagectl.server, no task.
 set timeout=0

@@ -189,21 +189,35 @@ static double role3(App *a, cairo_t *cr, double x, double cy, int i) {
     return w;
 }
 
+static int same_rgb(Rgb x, Rgb y) { return x.r == y.r && x.g == y.g && x.b == y.b; }
+static Rgb on_tint(const Theme *t, Rgb c) {
+    return same_rgb(c, t->danger) ? t->danger_fg : same_rgb(c, t->warn) ? t->warning_ink : same_rgb(c, t->led_ok) ? t->success_ink : c;
+}
+
 static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     const Theme *t = a->theme; const LcDisk *d = &a->st.lc.disks[i];
     int role = lc_role_of(a, d->dev), blk = blocked(a, i), lvl = smart_level(d->smart), isrc = role == LCR_SOURCE;
     int inc = !strcmp(d->mark, "incomplete");   /* #1798: orange -- never a source, still a target */
+    int hw = d->hw[0] != 0;   /* the orange hardware line below, including a CRC/cable warning */
+    /* Nadav 26/10: orange is ONLY a disk on its way to F1 (a SMART warning); F1 is red. The
+     * drawer's hardware note (CRC, cable, USB 2.0) and a shrink-to-fit stay words, not the card's
+     * colour -- "never the disk's colour" (localclone.h, #1921). #1798's incomplete mark kept. */
+    int orange = lvl == 1 || inc;
+    int emphasis = isrc || lvl == 2 || orange;   /* #2203: source blue > red > orange (mockup 07) */
     int focus = !a->lcu.confirm && a->lcu.focus == LCF_BAY && a->lcu.bay == i;
-    Rgb edge = isrc ? t->indigo : lvl == 2 ? t->danger : lvl || inc ? t->warn : t->hair;
+    Rgb edge = isrc ? t->indigo : lvl == 2 ? t->danger : orange ? t->warn : t->hair;
+    Rgb fill = isrc ? t->indigo_soft : lvl == 2 ? t->danger_soft : orange ? t->warning_soft : t->surface;
+    Rgb number = isrc ? t->action_fg : lvl == 2 ? t->danger_fg : orange ? t->warning_ink : t->ink;
     double cy = b.y + b.h / 2;
     cairo_save(cr); draw_rrect_path(cr, b, 4); cairo_clip(cr);
-    draw_set(cr, isrc ? t->indigo_soft : t->surface); cairo_paint(cr);
+    draw_set(cr, fill); cairo_paint(cr);
     if (blk) sb_hatch(cr, t, b);
-    cairo_rectangle(cr, b.x + b.w - LS_NUM_W, b.y, 1, b.h); cairo_rectangle(cr, b.x + LS_GRIP, b.y, 1, b.h);
-    draw_set(cr, isrc ? t->indigo : t->hair); cairo_fill(cr);
-    if (isrc || lvl || inc) { double bw = isrc ? 5 : 4; cairo_rectangle(cr, b.x + b.w - bw, b.y, bw, b.h); draw_set(cr, edge); cairo_fill(cr); }
+    if (!emphasis) {
+        cairo_rectangle(cr, b.x + b.w - LS_NUM_W, b.y, 1, b.h); cairo_rectangle(cr, b.x + LS_GRIP, b.y, 1, b.h);
+        draw_set(cr, t->hair); cairo_fill(cr);
+    }
     cairo_restore(cr);
-    draw_border_rrect(cr, b, 4, edge, 1);
+    draw_border_rrect(cr, b, 4, edge, emphasis ? 3 : 1);
     if (focus) draw_border_rrect(cr, (Rect){ b.x - 3.5, b.y - 3.5, b.w + 7, b.h + 7 }, 7, t->indigo, 3);
     hit_add(a, b, HIT_LC_BAY_BASE + i);
     double alpha = blk ? .8 : role == LCR_SKIP ? .55 : 1;
@@ -212,7 +226,7 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     char num[16]; if (drawer > 0) snprintf(num, sizeof num, "%d", drawer); else snprintf(num, sizeof num, "%s", "—");
     Text nb = text_make(cr, FONT_MONO, 40, 600, num, 0, DIR_LTR), nl = text_make(cr, FONT_SANS, 11, 400, "מגירה", 0, DIR_RTL);
     double nr = b.x + b.w - 18, ny = cy - (40 + 6 + nl.h) / 2;
-    text_draw_r(cr, &nb, nr, ny + (40 - nb.h) / 2, t->ink); text_draw_r(cr, &nl, nr, ny + 46, t->muted);
+    text_draw_r(cr, &nb, nr, ny + (40 - nb.h) / 2, number); text_draw_r(cr, &nl, nr, ny + 46, t->muted);
     text_free(&nb); text_free(&nl);
     /* .face, laid out from the left: the role buttons, the size, the SMART chip, then the name block */
     double fl = b.x + LS_GRIP + 1 + 22, fr = b.x + b.w - LS_NUM_W - 1 - 22;
@@ -235,11 +249,11 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     lc_disk_card_name(d, name, sizeof name); lc_has_text(d, has, sizeof has);   /* #2030: the name IS the connection, so the line under it no longer says it again */
     Text tn = text_make(cr, FONT_SANS, 18, 600, name, 0, DIR_RTL);
     const char *tag = isrc ? "מקור" : role == LCR_TARGET ? "יעד" : NULL;
-    if (lvl && !isrc) { hexc(lvl == 2 ? t->danger : t->warn, col); text_escape(smart_reason_he(d), e1, sizeof e1);
+    if (lvl && (!isrc || lvl == 1)) { hexc(lvl == 2 ? t->danger_fg : t->warning_ink, col); text_escape(smart_reason_he(d), e1, sizeof e1);
         snprintf(mk, sizeof mk, "<span foreground='%s'>%s</span>", col, e1); }
     else mk[0] = 0;
-    if (d->hw[0]) {   /* #1921: the drawer's hardware note -- the cable, the drawer, USB 2.0; not the disk's colour */
-        char eh[500]; size_t n = strlen(mk); hexc(t->warn, col); text_escape(d->hw, eh, sizeof eh);
+    if (hw) {   /* #1921: the drawer's hardware note -- the cable, the drawer, USB 2.0 (words only, #2203) */
+        char eh[500]; size_t n = strlen(mk); hexc(t->warning_ink, col); text_escape(d->hw, eh, sizeof eh);
         snprintf(mk + n, sizeof mk - n, "%s<span foreground='%s'>%s</span>", n ? " · " : "", col, eh);
     }
     Text t1 = mk[0] ? text_make_markup(cr, FONT_SANS, 12, 400, mk, (int)ww, DIR_RTL) : (Text){ NULL, 0, 0 };
@@ -248,6 +262,7 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     else if (blk) { verdict_text(a, d, src, l2, sizeof l2, &c3); }
     else if (role == LCR_SKIP) { snprintf(l2, sizeof l2, "לא ישתנה"); verdict_text(a, d, src, l3, sizeof l3, &c3); }
     else { snprintf(l2, sizeof l2, "עליו עכשיו: %s — ", has); verdict_text(a, d, src, l3, sizeof l3, &c3); }
+    if (emphasis) c3 = on_tint(t, c3);   /* #2203: on a tinted card the line colours fall under 4.5:1 -- their ink */
     Text t2;
     if (!isrc && !blk && role == LCR_TARGET) { hexc(t->danger_fg, col); text_escape(l2, e2, sizeof e2);
         snprintf(mk, sizeof mk, "%s<span foreground='%s' weight='bold'>יימחק</span>", e2, col);
@@ -263,7 +278,7 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
         text_draw(cr, &tg, tr.x + 9, tr.y + (22 - tg.h) / 2, isrc ? (Rgb){ 1, 1, 1 } : t->ink); text_free(&tg);
     }
     by += tn.h + 3; if (t1.layout) { text_draw_r(cr, &t1, fr, by, t->muted); by += t1.h + 3; }
-    text_draw_r(cr, &t2, fr, by, blk ? c3 : inc ? t->warn : t->muted); by += t2.h + 3;
+    text_draw_r(cr, &t2, fr, by, blk ? c3 : inc ? t->warning_ink : t->muted); by += t2.h + 3;
     if (l3[0]) { text_draw_r(cr, &t3, fr, by, c3); text_free(&t3); }
     text_free(&tn); text_free(&t1); text_free(&t2);
     /* .grip */

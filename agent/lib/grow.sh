@@ -36,57 +36,7 @@ grow_filesystem() {
     # #2011: GROW_GREW=1 -- it failed *after* the filesystem grew (dirty, still mounted).
     GROW_ERROR=""; GROW_GREW=""
     case "$1" in
-        ntfs)
-            # שיטת קרונזילה + ניקוי dirty בסגנון FOG (resetFlag): ה-clone
-            # עשוי לשאת דגלי hibernation/dirty של הגלופה (fast-startup),
-            # ו-ntfsresize מסרב לווליום מהובר גם עם --force (#648). ‏ntfs-3g
-            # -o remove_hiberfile נכשל ב-"Operation not permitted" במעבדה —
-            # עיגון FUSE ב-initramfs busybox אינו יציב. במקום לעגן, עובדים
-            # על ההתקן הגולמי, בשלושה צעדים שהסדר ביניהם קריטי:
-            #   1. ntfsfix -b -d — מתקן את ה-$LogFile, מנקה את דגל ה-dirty
-            #      (-d) ואת רשימת ה-bad clusters (-b). בלי -d, ‏ntfsfix
-            #      **מסמן** את הווליום dirty בכוונה, וזה chkdsk על כל תחנת
-            #      כיתה באתחול הראשון.
-            #   2. ntfsresize -f -f — מותח את מערכת הקבצים (double force).
-            #   3. ntfsfix -d — האחרון על המחיצה: ‏ntfsresize עלול לסמן
-            #      dirty מחדש, וניקוי הדגל חייב לבוא **אחרי** ה-resize.
-            # ‏ntfsfix עשוי לא לנקות fast-startup עקשן לגמרי — ולכן
-            # finish_grow הופך כישלון הרחבה ל-warning, לא לכשל (best-effort).
-            # ‏#2009 (שטח 22/10, Fast Startup → Automatic Repair; "לעולם לא גרועים מ-dd"): hibernated מוגדל רק אחרי
-            # ntfs_unhibernate (ntfsunhib.sh) עם ראיה, אחרת לא נוגעים בו. בדיקה שלא ענתה אינה "לא hibernated" (עיקרון 5). 15 = dirty. $2 = היעד.
-            _ns=$(ntfs_state "$2")
-            case "$_ns" in
-                clean|dirty) ;;
-                hibernated)
-                    ntfs_unhibernate "$2" || {
-                        GROW_ERROR="Windows במחיצה לא כובה עד הסוף (Fast Startup), וביטול ההשהיה נכשל — מערכת הקבצים לא הוגדלה"
-                        log "WARNING: $2: hibernated and not unhibernated -- not grown (#2009)"; return 1; } ;;
-                *) GROW_ERROR="לא הצלחנו לבדוק אם Windows במחיצה כובה עד הסוף (${_ns#unchecked:}) — מערכת הקבצים לא הוגדלה"
-                   log "WARNING: $2: hibernation not checked (${_ns#unchecked:}) -- not grown (#2009)"; return 1 ;;
-            esac
-            if ntfsfix -b -d "$2" >> "$LOG_FILE" 2>&1; then
-                :
-            else
-                _rc=$?
-                log "WARNING: $2: ntfsfix -b -d failed (rc=$_rc); trying ntfsresize"
-            fi
-            if ntfsresize -f -f --no-progress-bar "$2" >> "$LOG_FILE" 2>&1; then
-                # ניקוי דגל ה-dirty אחרון, כדי שהתחנה לא תעלה ל-chkdsk.
-                if ntfsfix -d "$2" >> "$LOG_FILE" 2>&1; then
-                    :
-                else
-                    _rc=$?
-                    log "WARNING: $2: final ntfsfix -d failed (rc=$_rc); volume may boot into chkdsk"
-                    GROW_ERROR="מערכת הקבצים הורחבה, אך דגל ה-dirty של NTFS נשאר (ntfsfix -d rc=$_rc)"
-                    GROW_GREW=1; return 1
-                fi
-                return 0
-            else
-                _rc=$?
-                GROW_ERROR="ntfsresize נכשל (rc=$_rc)"
-                log "WARNING: $2: ntfsresize failed (rc=$_rc); grow deferred"
-                return 1
-            fi ;;
+        ntfs) ntfs_grow_target "$2" ;;   # #2196: the whole NTFS sequence, hibernated included -- ntfsunhib.sh
         ext4|ext3|ext2)
             e2fsck -f -y "$2" >> "$LOG_FILE" 2>&1
             _ck=$?
@@ -158,7 +108,7 @@ finish_grow() {
     if [ -n "${3:-}" ] && ! boot_hidden_disk "$1" "$3"; then
         fail_written_target "$1" "${BOOT_HIDDEN_ERROR:-מיקום ההתחלה בסקטורי האתחול לא נבדק (ntfsboot.sh לא נטען)}"; return 1
     fi
-    _grow_warning=""
+    _grow_warning=""; rm -f "$RUN_DIR/targets/$1/grow_deferred"
     if ! grow_expanded "$1"; then
         _mark="$RUN_DIR/targets/$1/expanded"
         if [ -f "$_mark" ]; then
@@ -168,7 +118,8 @@ finish_grow() {
         fi
         # #2011: grown and only the clean-up after it failed -- "הורחב", never "נדחתה" (still a warning)
         if [ "${GROW_GREW:-}" = 1 ]; then _grow_warning="הושלם, עם אזהרה: מחיצה ${_idx:-?} (${_fs:-?}); $GROW_ERROR"
-        else _grow_warning="הושלם, אך ההרחבה נדחתה: מחיצה ${_idx:-?} (${_fs:-?}); ${GROW_ERROR:-הרחבת מערכת הקבצים נכשלה}"; fi
+        else _grow_warning="הושלם, אך ההרחבה נדחתה: מחיצה ${_idx:-?} (${_fs:-?}); ${GROW_ERROR:-הרחבת מערכת הקבצים נכשלה}"
+            : > "$RUN_DIR/targets/$1/grow_deferred"; fi   # #2196: the table grew, the filesystem did not (lc_tgt's 13th field)
         log "WARNING: $1: $_grow_warning"
     fi
     # #1979: a Linux clone gets its own machine-id and SSH host keys (bottom)

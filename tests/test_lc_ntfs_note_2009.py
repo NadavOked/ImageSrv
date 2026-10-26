@@ -294,7 +294,8 @@ def test_the_drop_comes_before_the_grow_and_the_done_is_orange(tmp_path):
     assert "state sdb=failed|\n" in out.stdout, out.stdout                                         # no note on a failed one
     tgt = [l for l in out.stdout.splitlines() if l.startswith("lc_tgt=sda|")][0]
     fields = tgt[len("lc_tgt="):].split("|")
-    assert len(fields) == 12 and fields[1] == "done" and fields[9] == UNHIB, fields   # field 11: #2017's raw,rescued; 12: #2045's pulled
+    assert len(fields) == 13 and fields[1] == "done" and fields[9] == UNHIB, fields   # field 11: #2017's raw,rescued; 12: #2045's pulled
+    assert fields[12] == "0", fields   # #2196: grown, so not "the table grew, the filesystem did not"
     never_the_source(tmp_path)
 
 

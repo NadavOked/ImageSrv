@@ -815,7 +815,10 @@ def test_expansion_knows_every_filesystem_family():
     """ntfsresize ל-Windows, resize2fs ל-ext4, btrfs resize, xfs_growfs."""
     source = (AGENT / "lib" / "grow.sh").read_text(encoding="utf-8")
     grow = source[source.index("grow_filesystem() {"):]
-    assert "ntfsresize" in grow
+    # #2196: the NTFS grow is one function every path shares (ntfsunhib.sh)
+    assert 'ntfs) ntfs_grow_target "$2"' in grow
+    unhib = (AGENT / "lib" / "ntfsunhib.sh").read_text(encoding="utf-8")
+    assert "ntfsresize -f -f" in unhib[unhib.index("ntfs_grow_target() {"):]
     assert "resize2fs" in grow
     assert "btrfs filesystem resize max" in grow
     assert "xfs_growfs" in grow

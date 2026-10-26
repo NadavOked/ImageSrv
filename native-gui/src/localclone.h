@@ -39,7 +39,7 @@ typedef struct {
 typedef struct { char dev[16]; int verdict; long long need; char reason[240]; } LcFit;
 /* lc_part=idx|label|fs|bytes|size|state|in -- bytes -1 = used not measured (#1440) */
 typedef struct { int idx; char label[24], fs[16], state[8]; long long bytes, size, in; } LcPart;
-/* lc_tgt=dev|state|bytes|part|ok|grown_idx,grown_bytes,src_bytes,free|error|total|ntfs_boot|ntfs_note|raw,rescued|pulled */
+/* lc_tgt=dev|state|bytes|part|ok|grown_idx,grown_bytes,src_bytes,free|error|total|ntfs_boot|ntfs_note|raw,rescued|pulled|grow_deferred */
 typedef struct {
     char dev[16], state[16]; long long bytes, total; int part, ok, has_table;
     int ntfs_boot;                               /* #1487: NTFS backup boot sectors written and read back */
@@ -47,6 +47,7 @@ typedef struct {
     int grown_idx; long long grown_bytes, src_bytes, free_bytes; char error[400];
     char note[400];                              /* #2009: a "done" that is orange, and why (Fast Startup / dirty); "" = green */
     int pulled;                                  /* #2045: the disk left the system mid-copy -- not a broken disk */
+    int grow_deferred;                           /* #2196: the table grew, the filesystem did not -- no "הוגדלה" over it */
 } LcTgt;
 
 typedef struct {

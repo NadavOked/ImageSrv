@@ -1,10 +1,11 @@
-"""#2010 -- the clone stick's legacy-BIOS boot: syslinux installed with --stupid.
+"""#2010 -> #2186 -- the syslinux stick (USB_BIOS_LOADER=syslinux): --stupid only when asked.
 
 The field, 22/10 (HP 8000 Elite CMT, BIOS 786G7 v01.02): after the BIOS went from IDE to
 AHCI the stick hung right after "SYSLINUX 6.04 EDD ..."; in IDE it booted and cloned.
-syslinux(1): --stupid "only read one sector at a time" -- for BIOSes that fail on reads of
-more than one sector. tools/build_usb_clone.sh installs it so by default; USB_SYSLINUX_OPTS=
-(set, empty) builds without it, to measure the difference. UEFI (shim + GRUB) is not touched.
+syslinux(1): --stupid "only read one sector at a time". It was the default from 22/10 and
+made the boot slow, without being shown to cure the hang; Nadav 25/10: "it has to be fast"
+(#2186). The default is now without it, and USB_SYSLINUX_OPTS=--stupid builds it, to measure.
+The stick's legacy BIOS boot is GRUB now (tests/test_usb_bios_grub_2186.py).
 """
 
 from __future__ import annotations
@@ -28,9 +29,9 @@ def opts(env: str) -> str:
     return out.stdout
 
 
-def test_syslinux_reads_one_sector_at_a_time_by_default():
-    assert opts("unset USB_SYSLINUX_OPTS;") == "[--stupid]"
-    assert opts("USB_SYSLINUX_OPTS=;") == "[]"                         # the measure without it
+def test_syslinux_is_not_stupid_by_default():
+    assert opts("unset USB_SYSLINUX_OPTS;") == "[]"                    # #2186: fast
+    assert opts("USB_SYSLINUX_OPTS=--stupid;") == "[--stupid]"         # the measure with it
 
 
 def test_the_install_takes_the_options():

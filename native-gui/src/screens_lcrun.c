@@ -201,7 +201,7 @@ static double res_card(App *a, cairo_t *cr, double x, double y, double w, const 
     if (!bad) {
         char gb[48]; lc_gb(gb, sizeof gb, (double)g->grown_bytes);
         if (g->rescued > 0) snprintf(h3, sizeof h3, "%s · הועתק במצב הצלה — לא זהה למקור", name);   /* #2017: zeros where the source did not read */
-        else if (g->has_table && g->grown_idx > 0) snprintf(h3, sizeof h3, "%s · זהה למקור · המחיצה האחרונה הוגדלה ל-%s", name, gb);
+        else if (g->has_table && g->grown_idx > 0 && !g->grow_deferred) snprintf(h3, sizeof h3, "%s · זהה למקור · המחיצה האחרונה הוגדלה ל-%s", name, gb);
         else snprintf(h3, sizeof h3, "%s · זהה למקור", name);
         if (why) snprintf(h3, sizeof h3, "%s · הושלם, עם בעיה", name);   /* #2024: not "identical" over its reason */
         if (g->note[0]) { snprintf(li[n], sizeof li[n], "%s", g->note); mk[n++] = 2; }   /* #2009: first -- why it is orange */
@@ -212,7 +212,9 @@ static double res_card(App *a, cairo_t *cr, double x, double y, double w, const 
             else snprintf(li[n], sizeof li[n], "סקטור אתחול גיבוי נכתב ואומת (%d מחיצות NTFS)", g->ntfs_boot);
             mk[n++] = 1;
         }
-        if (g->has_table && g->grown_idx > 0) {
+        if (g->has_table && g->grown_idx > 0 && g->grow_deferred) {
+            /* #2196: the filesystem did not follow -- one line, the error (finish_grow) says it all */
+        } else if (g->has_table && g->grown_idx > 0) {
             char was[48]; lc_gb(was, sizeof was, (double)g->src_bytes);
             snprintf(li[n], sizeof li[n], "מחיצה %d הוגדלה מ-%s ל-%s, עד סוף הדיסק; מה שאחריה הועבר לסוף, בגודלו", g->grown_idx, was, gb); mk[n++] = 0;
         } else if (g->has_table && g->free_bytes > 500000000LL) {

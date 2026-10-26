@@ -117,11 +117,12 @@ lc_gui_run() {
         # #2009: field 10 = why a "done" is orange ("" = green); #2017: field 11 = raw partitions,sectors not read (-1 = none rescued) -- lcraw.sh
         # #2045: field 12 = 1 when the disk left the system mid-copy (drawer_watch, verdict.sh) -- "pulled", not "broken"
         _gr_pl=0; [ ! -f "$_gr_t/pulled" ] || _gr_pl=1
-        printf 'lc_tgt=%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_gr_d" "$(cat "$_gr_t/state" 2>/dev/null)" "$(target_bytes "$_gr_d")" \
+        _gr_gd=0; [ ! -f "$_gr_t/grow_deferred" ] || _gr_gd=1   # #2196: field 13 = the table grew, the filesystem did not (finish_grow)
+        printf 'lc_tgt=%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_gr_d" "$(cat "$_gr_t/state" 2>/dev/null)" "$(target_bytes "$_gr_d")" \
             "$(cat "$_gr_t/lc_part" 2>/dev/null)" "${_gr_ok:-0}" "$(cat "$_gr_t/lc_table" 2>/dev/null | tr '|' ',')" \
             "$(_lc_clean "$(cat "$_gr_t/error" 2>/dev/null)")" "$(cat "$_gr_t/total" 2>/dev/null)" "${_gr_nb:-0}" \
             "$(_lc_clean "$(cat "$_gr_t/ntfs_note" 2>/dev/null)")" \
-            "$(if command -v lc_raw_flags > /dev/null; then lc_raw_flags "$_gr_d" "$_gr_r/manifest.json"; fi)" "$_gr_pl"
+            "$(if command -v lc_raw_flags > /dev/null; then lc_raw_flags "$_gr_d" "$_gr_r/manifest.json"; fi)" "$_gr_pl" "$_gr_gd"
     done
 }
 

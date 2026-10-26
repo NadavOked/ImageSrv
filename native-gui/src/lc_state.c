@@ -102,13 +102,14 @@ int lc_state_line(State *s, const char *key, char *val) {
         p->idx = atoi(f[0]); cpy(p->label, sizeof p->label, f[1]); cpy(p->fs, sizeof p->fs, f[2]);
         p->bytes = ll(f[3]); p->size = ll(f[4]); cpy(p->state, sizeof p->state, f[5]); p->in = ll(f[6]);
     } else if (!strcmp(key, "lc_tgt") && l->ntgts < LC_MAX_DISKS) {
-        lc_split(val, f, 12);   /* #2009: the 10th, the note; #2017: the 11th, raw,rescued; #2045: the 12th, pulled -- an agent that sends fewer = none */
+        lc_split(val, f, 13);   /* #2009: the 10th, the note; #2017: the 11th, raw,rescued; #2045: the 12th, pulled; #2196: the 13th, grow deferred -- an agent that sends fewer = none */
         LcTgt *t = &l->tgts[l->ntgts++];
         cpy(t->dev, sizeof t->dev, f[0]); cpy(t->state, sizeof t->state, f[1]); t->bytes = ll(f[2]);
         t->part = atoi(f[3]); t->ok = atoi(f[4]); cpy(t->error, sizeof t->error, f[6]); t->total = ll(f[7]); t->ntfs_boot = atoi(f[8]); cpy(t->note, sizeof t->note, f[9]);
         t->has_table = sscanf(f[5], "%d,%lld,%lld,%lld", &t->grown_idx, &t->grown_bytes, &t->src_bytes, &t->free_bytes) == 4;
         t->rescued = -1; if (sscanf(f[10], "%d,%lld", &t->raw_parts, &t->rescued) != 2) { t->raw_parts = 0; t->rescued = -1; }   /* #2017; an older agent: none */
         t->pulled = !strcmp(f[11], "1");   /* #2045; an older agent: not pulled -- the stricter text */
+        t->grow_deferred = !strcmp(f[12], "1");   /* #2196; an older agent: the error line still says it */
     }
     return 1;
 }

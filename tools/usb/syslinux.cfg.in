@@ -1,4 +1,4 @@
-# ImageSrv USB @VERSION@ -- #1914. Legacy BIOS (syslinux). Same kernel line as grub.cfg.
+# ImageSrv USB @VERSION@ -- #1914. Legacy BIOS (syslinux), only with USB_BIOS_LOADER=syslinux (#2186). Same kernel line as grub.cfg.
 DEFAULT imagesrv
 PROMPT 0
 TIMEOUT 0
