@@ -512,3 +512,50 @@ def test_when_the_drop_fails_the_copy_is_the_sources_own_like_dd(tmp_path, disks
     assert _files(devs["big"], fx) == src_files
     assert _root("ntfs-3g.probe", "--readwrite", devs["big"] + "p3").returncode == 14   # resumes on the volume it left
     _src_p3_unchanged(devs, before)
+
+
+@pytest.mark.skipif(_tool("dmsetup") is None, reason="dmsetup is not installed: the RAM view (#1466) cannot be built here")
+def test_a_hibernated_source_shrinks_through_a_view_unhibernated_in_ram_2208(tmp_path, disks, fanout_bin):
+    """#2208 (metal 26/10: a Fast Startup source refused for a smaller target). The real
+    ntfs-3g drops the hibernation on the source's RAM VIEW, then the view shrinks: the
+    smaller target is a full boot (probe clean), every target's "done" is orange, and
+    not one byte of the source is written -- it still resumes (rc 14)."""
+    fx, devs = disks
+    _hibernate_src_p3(tmp_path, devs)
+    before = _root("sha256sum", devs["src"] + "p3").stdout.split()[0]
+    src_sha = _root("sha256sum", devs["src"]).stdout.split()[0]
+    src_table, src_files = _table(devs["src"]), _files(devs["src"], fx)
+    res = _engine(tmp_path, fx, fanout_bin, "small same", 1)
+    t = res["target"]
+    assert res["verdict"]["small"] == "shrink", res["raw"][-3000:]                 # measured, not refused
+    assert t["small"]["state"] == "done" and t["same"]["state"] == "done", res["raw"][-3000:]
+    assert "dropping it on the RAM view (#2208)" in res["raw"], res["raw"][-3000:]
+    assert res["note"]["small"] == UNHIB and res["note"]["same"] == UNHIB, res["note"]
+    for d in ("small", "same"):
+        assert _root("ntfs-3g.probe", "--readwrite", devs[d] + "p3").returncode == 0, d   # a full boot, not a resume
+    assert _size(_table(devs["small"])["parts"][3]) < _size(src_table["parts"][3])     # the compacted layout
+    assert _files(devs["small"], fx) == src_files
+    _src_p3_unchanged(devs, before)
+    assert _root("sha256sum", devs["src"]).stdout.split()[0] == src_sha and _table(devs["src"]) == src_table
+    assert res["dmleft"] == "" and res["brd"] == "none", (res["dmleft"], res["brd"])
+
+
+@pytest.mark.skipif(_tool("dmsetup") is None, reason="dmsetup is not installed: the RAM view (#1466) cannot be built here")
+def test_a_drop_that_fails_on_the_view_refuses_the_smaller_target_by_name_2208(tmp_path, disks, fanout_bin):
+    """ntfs-3g refuses remove_hiberfile (a wrapper): the smaller target is refused by
+    name and not written; the target that fits goes on as #2009 has it (the source's own)."""
+    fx, devs = disks
+    _hibernate_src_p3(tmp_path, devs)
+    before = _root("sha256sum", devs["src"] + "p3").stdout.split()[0]
+    wrap = tmp_path / "wrap"; wrap.mkdir()
+    (wrap / "ntfs-3g").write_text('#!/bin/sh\ncase "$*" in *remove_hiberfile*) echo refused >&2; exit 1 ;; esac\n'
+                                  f'exec {_tool("ntfs-3g")} "$@"\n', newline="\n")
+    os.chmod(wrap / "ntfs-3g", 0o755)
+    res = _engine(tmp_path, fx, fanout_bin, "small same", 1,
+                  env=(f"PATH={wrap}:{fanout_bin}:{os.environ.get('PATH', '')}:{SBIN}",))
+    t = res["target"]
+    assert t["small"]["state"] == "failed" and "במצב שינה של Windows" in t["small"]["error"], res["raw"][-3000:]
+    assert "powercfg /h off" in t["small"]["error"] and _no_table(devs["small"]), t["small"]
+    assert t["same"]["state"] == "done" and res["note"]["same"] == SAME, (t["same"], res["note"])
+    _src_p3_unchanged(devs, before)
+    assert res["dmleft"] == "" and res["brd"] == "none", (res["dmleft"], res["brd"])

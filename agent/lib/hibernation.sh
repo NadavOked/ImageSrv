@@ -160,7 +160,8 @@ lc_unhibernate_target() {
     _ut_hib=$(awk -F'|' '$2 == "hibernated" { print $1 }' "$_ut_d/ntfs.before" 2>/dev/null)
     _ut_bad=$(awk -F'|' '$2 ~ /^unchecked/ { print $1 }' "$_ut_d/ntfs.before" 2>/dev/null)
     [ ! -f "$_ut_d/ntfs.before.bad" ] || _ut_bad="plan"; rm -f "$_ut_d/ntfs.before.bad"
-    [ -n "$_ut_hib$_ut_bad" ] || return 0
+    # #2208: none hibernated because the drop was on the source's RAM view (lcsnap.sh) -- orange all the same
+    [ -n "$_ut_hib$_ut_bad" ] || { [ ! -f "$LC/run/src_unhib" ] || cp "$LC/run/src_unhib" "$_ut_d/ntfs.action" || return 2; return 0; }
     _ut_touched=""; _ut_lf=""
     if [ -z "$_ut_bad" ]; then
         for _ut_i in $_ut_hib; do

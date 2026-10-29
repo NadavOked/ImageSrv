@@ -56,16 +56,60 @@ lc_shrink_plan() {
     cp "$RUN_DIR/shrink.plan" "$LC/run/shrink.plan" || { LC_ERROR="לא הצלחנו לשמור את תוכנית הכיווץ"; return 1; }
 }
 
+# #2207 (metal 26/10): the minimum is the CAPTURE's goal (a small image), not
+# the copy's. Shrunk to minimum + margin, a 500GB C: with 75GB used needed
+# 28,352 MB moved (31 GB of RAM, refused on 12 GB) for a 256GB target that
+# takes it with 0 MB moved. The copy shrinks only to what its smallest target
+# holds, less this, and never below the plan (ntfsresize's minimum + margin).
+LC_FIT_MARGIN="${LC_FIT_MARGIN:-1073741824}"
+
+lc_smallest_target() {
+    # $1 = targets (words). The smallest one's bytes, as the kernel says now;
+    # 1 = no target, or one whose size does not read (principle 5: not a guess).
+    _fy_m=""
+    for _fy_t in $1; do
+        _fy_s=$(cat "$SYSROOT/sys/block/$_fy_t/size" 2>/dev/null); case "$_fy_s" in ''|*[!0-9]*) return 1 ;; esac
+        { [ -n "$_fy_m" ] && [ "$_fy_m" -le $((_fy_s * 512)) ]; } || _fy_m=$((_fy_s * 512))
+    done
+    [ -n "$_fy_m" ] && echo "$_fy_m"
+}
+
+lc_fit_plan() {
+    # $1 = plan (idx|type|uguid|start|size|cur|new), $2 = parts file, $3 =
+    # target bytes. stdout: the plan with every shrink given back by one
+    # fraction, so the compacted layout ends LC_GPT_TAIL + LC_FIT_MARGIN
+    # before $3 -- each partition keeps its own minimum + margin, and what
+    # it gives up stays whole MiB (the tail moves aligned, _shrink_compact).
+    # 1 = the layout was not computed, or a line would not shrink any more.
+    awk -F'|' '{ printf "%s|%s|%s|%.0f\n", $1, $4, $5, $7 / 512 }' "$1" > "$LC/run/fit.mark" || return 1
+    _fz_e=$(_shrink_compact "$LC/run/fit.mark" "$2" | awk -F'|' '{ e = ($4 + $5) * 512; if (e > m) m = e } END { printf "%.0f\n", m }')
+    case "$_fz_e" in ''|0|*[!0-9]*) return 1 ;; esac
+    awk -F'|' -v room=$(($3 - LC_GPT_TAIL - LC_FIT_MARGIN - _fz_e)) '
+        { l[NR] = $1 "|" $2 "|" $3 "|" $4 "|" $5; c[NR] = $6; n[NR] = $7; d[NR] = $6 - $7; tot += d[NR] }
+        END { f = (room > 0 && tot > 0) ? room / tot : 0
+              for (i = 1; i <= NR; i++) { g = int(d[i] * f / 1048576) * 1048576
+                  if (g >= d[i]) exit 1
+                  printf "%s|%.0f|%.0f\n", l[i], c[i], n[i] + g } }' "$1"
+}
+
 lc_shrink_source() {
-    # $1 = source disk. 0 = the copy goes on with the compacted layout, read
-    # from the views; 1 + LC_ERROR (Hebrew, with the numbers) = refused or
-    # failed -- the source was not written, and the caller writes no smaller
-    # target. Writes $LC/run/shrink_path (snapshot|refused) and the stage
-    # times (P1): info_s (until the first write to a view), resize_s.
+    # $1 = source disk, $2 = the targets it is shrunk for (words). 0 = the
+    # copy goes on with the compacted layout, read from the views; 1 +
+    # LC_ERROR (Hebrew, with the numbers) = refused or failed -- the source
+    # was not written, and the caller writes no smaller target. Writes
+    # $LC/run/shrink_path (snapshot|refused) and the stage times (P1):
+    # info_s (until the first write to a view), resize_s.
     LC_ERROR=""; _ss_r="$LC/run"; rm -f "$_ss_r/resize_at"; _ss_t0=$(date +%s)
     lc_shrink_plan "$1" || return 1
     [ -s "$_ss_r/shrink.plan" ] || { log "local clone: nothing to shrink on the source"; return 0; }
-    lc_snap_shrink "$1"; _ss_rc=$?
+    # #2207: to what the smallest target holds. Its size unread, or the fit not
+    # computed -- the plan as measured (minimum + margin): never a guess.
+    if _ss_tb=$(lc_smallest_target "$2") && lc_fit_plan "$_ss_r/shrink.plan" "$_ss_r/parts.txt" "$_ss_tb" > "$_ss_r/shrink.fit" \
+        && [ "$(awk 'END { print NR }' "$_ss_r/shrink.fit")" = "$(awk 'END { print NR }' "$_ss_r/shrink.plan")" ] \
+        && mv "$_ss_r/shrink.fit" "$_ss_r/shrink.plan"; then
+        log "local clone: shrunk to what the smallest target ($_ss_tb bytes) holds, not to the minimum (#2207): $(cut -d'|' -f1,7 "$_ss_r/shrink.plan" | tr '\n' ' ')"
+    else log "local clone: no target size, or its fit not computed -- the source shrinks to its measured minimum (#2207)"; fi
+    lc_snap_shrink "$1" unhib; _ss_rc=$?   # #2208: a view left in Fast Startup is dropped, then shrunk
     case "$_ss_rc" in
         0) echo snapshot > "$_ss_r/shrink_path"; log "local clone: the source was shrunk through a read-only view -- the source disk is not written" ;;
         3) echo refused > "$_ss_r/shrink_path"; _ss_rc=1

@@ -28,6 +28,7 @@ printf '1|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7||2048|488281250\n' > "$LC/inv/sdb
 list_drawers() { echo sda; echo sdb; }
 partition_node() { echo "/dev/$1$2"; }
 _fs_of() { echo ntfs; }
+probe_fake() { case " $HIB " in *" ${2#/dev/} "*) return 15 ;; esac; return 0; }; NTFSPROBE=probe_fake   # #2208: 14 is measured now; the words stay for 15
 capture_ntfs_hibernation_reason() { case " $HIB " in *" ${1#/dev/} "*) echo "חלונות במחיצה ${1#/dev/} נכבה ב-Fast Startup — x"; return 1 ;; esac; return 0; }
 disk_port() { echo 2; }; disk_drawer() { echo "3|SATA 2"; }   # #2084: the source is "דיסק 3", never "sda"
 ntfsresize() {

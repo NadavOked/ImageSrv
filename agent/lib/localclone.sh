@@ -201,7 +201,7 @@ EOF
     rm -f "$RUN_DIR/parts.orig.txt" "$RUN_DIR/targets/$_lr_src/shrunk"
     if [ -n "$_lr_small" ]; then
         echo shrinking > "$LC/phase"
-        lc_shrink_source "$_lr_src" \
+        lc_shrink_source "$_lr_src" "$_lr_small" \
             || for _lr_t in $_lr_small; do fail_written_target "$_lr_t" "המקור לא כווץ, ולכן היעד לא נכתב: $LC_ERROR"; done
         echo copying > "$LC/phase"
     fi

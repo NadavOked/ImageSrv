@@ -86,6 +86,9 @@ ntfsresize() {
     esac
 }
 ntfsfix() { ord "ntfsfix $*"; return "${NTFSFIX_RC:-0}"; }
+# #2208: ntfs-3g.probe --readwrite <node> -- the rc in $RUN_DIR/probe.<node's name>, 0 (clean) when none
+ntfsprobe_fake() { ord "ntfs-3g.probe $*"; [ ! -f "$RUN_DIR/probe.${2##*/}" ] || return "$(cat "$RUN_DIR/probe.${2##*/}")"; }
+NTFSPROBE=ntfsprobe_fake
 sgdisk() { ord "sgdisk $*"; return 1; }
 blockdev() {   # --getsize64 of a mapper node: its table's length, as the kernel would say it
     ord "blockdev $*"

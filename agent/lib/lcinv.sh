@@ -190,11 +190,11 @@ _lc_measure_fit() {
         [ "$_lm_ts" -lt "$_lm_need" ] && _lm_small=1
     done
     [ "$_lm_small" = 1 ] || { echo "none||" > "$_lm_out"; return 0; }
-    # #651: ntfsresize refuses a hibernated volume; say that, not its message.
+    # #651: refused by name -- a dirty NTFS, or one not checked. #2208: a hibernated one is measured, and dropped on the RAM view (lcsnap.sh).
     while IFS='|' read -r _lm_i _lm_g _lm_rest; do
         case "$(_partition_role "$_lm_g")" in windows|linux) ;; *) continue ;; esac
         _lm_pn=$(partition_node "$1" "$_lm_i")
-        [ "$(_fs_of "$_lm_pn")" = ntfs ] || continue
+        { [ "$(_fs_of "$_lm_pn")" = ntfs ] && [ "$(ntfs_state "$_lm_pn")" != hibernated ]; } || continue
         _lm_why=$(capture_ntfs_hibernation_reason "$_lm_pn" "$RUN_DIR/lc-probe") || {
             case "$_lm_why" in   # #2084 (mockup 09, until #2069): the words of the mockup, a disk by its number
                 *"Fast Startup"*) echo "failed||המקור$(_lc_src_he "$1") במצב שינה של Windows — אי אפשר לכווץ אותו לדיסק הזה, שקטן ממנו. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי" ;;
