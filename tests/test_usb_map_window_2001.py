@@ -34,7 +34,7 @@ pytestmark = needs_jq
 
 MODEL = "HP Compaq 8000 Elite SFF PC"
 TO_MAP = ["KEY DOWN"] * 4 + ["KEY ENTER"]
-TO_RESET = ["KEY DOWN"] * 6 + ["KEY ENTER", "KEY TAB", "KEY ENTER"]
+TO_RESET = ["KEY DOWN"] * 7 + ["KEY ENTER", "KEY TAB", "KEY ENTER"]
 NV3, NV4 = "nvme:0000:03:00.0", "nvme:0000:04:00.0"
 DEFAULT = ["sata:1", "sata:3", NV3, NV4]
 
@@ -323,7 +323,7 @@ def test_reset_removes_this_models_names_too_and_keeps_another_models(tmp_path):
     other = {"drawer_slots": {"HP 8100": ["sata:2"]}, "slot_names": {"HP 8100": {"sata:2": "x"}}}
     stick(tmp_path, TO_MAP + chars("Top") + ["KEY F2"], settings=dict(other))
     out, usb = stick(tmp_path, TO_RESET, then='ls "$RUN_DIR/drawer_names" 2>/dev/null || echo none')
-    assert saved(usb) == {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60, "cloner_beep": True,
+    assert saved(usb) == {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60, "cloner_beep": True, "poweroff_s": 20,
                           **other}, out.stdout + out.stderr
     assert out.stdout.split("@@")[1].split() == ["none"]
 

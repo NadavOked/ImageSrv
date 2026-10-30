@@ -218,6 +218,22 @@ def test_a_full_capture_lands_in_the_library(server, images_root):
     assert tasks[0]["state"] == "done"
 
 
+@pytest.mark.parametrize("action", ["unhibernated", "unhibernated_logfile"])
+def test_a_manifest_that_records_a_dropped_fast_startup_is_accepted_and_kept(server, images_root, action):
+    """#2213: the agent adds `src_unhib` (docs/interfaces.md) when it read a
+    RAM view whose hibernation it dropped. The server takes the manifest and
+    the field reaches the library manifest -- the image does not lie."""
+    mac = setup_build_machine(server)
+    created = make_task(server, mac).json()
+    manifest = manifest_for()
+    manifest["src_unhib"] = action
+    response = do_capture(server, created["id"], manifest=manifest)
+    assert response.status_code == 202, response.text
+    assert wait_verified(server, created["id"]) == "done"
+    raw = json.loads((images_root / created["image_id"] / "manifest.json").read_text(encoding="utf-8"))
+    assert raw["src_unhib"] == action
+
+
 def test_intake_stores_the_real_requirement_not_the_source_disk_size(server, images_root):
     """‏#82: הסוכן שולח `min_target_bytes` = גודל דיסק המקור, ומה שמונח
     בספרייה הוא הדרישה האמיתית — סוף הפריסה.

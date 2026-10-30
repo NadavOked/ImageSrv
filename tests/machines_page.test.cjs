@@ -202,7 +202,7 @@ test('the machine drawer: header line, actions (monitor, WoL for the room, "requ
   assert.match(html,/<div class="grp-acts"><button class="btn sm" onclick="wakeMachine\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">WoL</,'#984: per-machine WoL in the cloner drawer, next to its state'); assert.doesNotMatch(html,/wakeRoom/);
   assert.match(html,/renameMachine\(/); assert.match(html,/rebootMachine\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">אתחול מרחוק</,'#977 §4'); assert.match(html,/editMachineMac\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">עריכה</,'#977 §5 — next to the MAC');
   assert.doesNotMatch(html,/בקרוב/,'#977: nothing in the drawer is "soon" any more');
-  assert.match(html,/<span class="k">קושחה<\/span><span class="v"><span class="muted">לא דווח<\/span>/,'#977 §7: old agent / no field = not reported, not "off"');
+  assert.match(html,/<div class="grp">קושחה וחיבורים/,'#2080 (mockup 06): "קושחה וחיבורים" above "מערכת וחומרה", in place of the old firmware row'); assert.doesNotMatch(html,/<span class="k">קושחה<\/span>/);
   assert.match(html,/<span class="k">סוכן<\/span><span class="v"><span class="muted">לא דווח<\/span>/);
   assert.match(html,/note err"[^]*<b>דיסק 3 אדום<\/b> — <span class="mono">S5Y2NX0R12345<\/span> נכשל בכתיבה .*סיבה: כבל\/חריץ SATA 2 \(ATA timeout\)/);
   assert.match(html,/clearDiskFailure\(7\)">נקה אחרי החלפה</); assert.match(html,/<summary>3 שורות קרנל<\/summary><pre class="ata-log">ata3.00: exception Emask/);
@@ -237,15 +237,18 @@ test('the machine drawer: header line, actions (monitor, WoL for the room, "requ
   assert.doesNotMatch(html,/rebootMachine\(|wakeMachine\(/);
 });
 
-test('#977 §7: firmware, Secure Boot and the agent version from /machines in "what now" — measured, unknown and not reported are three texts', () => {
+test('#977 §7 + #2080: boot mode / Secure Boot come from the firmware image; the agent version from /machines — reported, not reported and unknown are different texts', () => {
   const {run,node}=setup();
-  const cell=(k)=>{ const h=node('#drawerBody').innerHTML; const m=h.match(new RegExp(`<span class="k">${k}<\\/span><span class="v">(.*?)<\\/span>(?=<span class="k">|<\\/div>)`)); return m&&m[1]; };
-  const set=(f)=>run(`Object.assign(MACHINES.find(m=>m.mac==='c8:d9:d2:0b:fe:32'),${JSON.stringify(f)}); openMachineDetail('c8:d9:d2:0b:fe:32')`);
-  set({firmware:'uefi',secure_boot:1,agent_version:'v0.66.0'});
-  assert.match(cell('קושחה'),/UEFI · Secure Boot דלוק/); assert.match(cell('סוכן'),/<span class="mono">v0.66.0<\/span>/);
-  set({firmware:'uefi',secure_boot:0}); assert.match(cell('קושחה'),/UEFI · Secure Boot כבוי/);
-  set({firmware:'uefi',secure_boot:null}); assert.match(cell('קושחה'),/UEFI · <span class="muted">Secure Boot לא דווח<\/span>/,'null is not off');
-  set({firmware:'bios',secure_boot:null}); assert.match(cell('קושחה'),/^BIOS$/,'BIOS has no Secure Boot to report');
+  const mac='c8:d9:d2:0b:fe:32';
+  const cell=(k)=>{ const h=node('#drawerBody').innerHTML; const m=h.match(new RegExp(`<span class="k">${k}<\/span><span class="v">(.*?)<\/span>(?=<span class="k">|<\/div>)`)); return m&&m[1]; };
+  const fw=(cur)=>run(`FIRMWARE['${mac}']=${JSON.stringify({current:cur,changes:[],slots:[],peers:[]})}; openMachineDetail('${mac}')`);
+  const set=(f)=>run(`Object.assign(MACHINES.find(m=>m.mac==='${mac}'),${JSON.stringify(f)}); openMachineDetail('${mac}')`);
+  fw({boot:'uefi',secure_boot:true,sata_mode:'ahci',model:'HP',bios_version:'v1'});
+  assert.match(cell('אתחול'),/UEFI · Secure Boot דלוק/); assert.match(cell('בקר הדיסקים'),/AHCI/);
+  fw({boot:'uefi',secure_boot:false}); assert.match(cell('אתחול'),/UEFI · Secure Boot כבוי/);
+  fw({boot:'uefi',secure_boot:null}); assert.match(cell('אתחול'),/^UEFI$/,'null Secure Boot is not shown as off');
+  fw({boot:null,secure_boot:null,sata_mode:null}); assert.match(cell('אתחול'),/לא דווח/); assert.match(cell('בקר הדיסקים'),/לא דווח/,'not reported is not a mode');
+  set({agent_version:'v0.66.0'}); assert.match(cell('סוכן'),/<span class="mono">v0.66.0<\/span>/);
   set({agent_version:'unknown'}); assert.match(cell('סוכן'),/לא ידוע — סוכן ישן/,'the server stores "unknown" for a missing/invalid version');
 });
 

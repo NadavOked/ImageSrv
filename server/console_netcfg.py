@@ -699,10 +699,15 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         שוב; גם ההחזרה נקראת בחזרה. מחזיר None רק כשהחדש **אומת**."""
         before = [{"name": n, "text": hooks["netcfg_read_conf"](n, netcfg_host.INTERFACES_DIR)}
                   for n in touched]
+        try:
+            module_before = hooks["netcfg_read_bond_module"]()
+        except (OSError, UnicodeError) as exc:
+            return f"לא ניתן לקרוא את {netcfg_host.BOND_MODULE_CONF}: {exc}"
         down = hooks["netcfg_down"](old.name)
         text = netcfg.render(new, hostname=hooks["hostname"]())
         errors = [hooks["netcfg_write_conf"](n, text if n == new.name else None,
                                              netcfg_host.INTERFACES_DIR) for n in touched]
+        errors.append(hooks["netcfg_write_bond_module"]("bonding\n" if new.slaves else None))
         error = " · ".join(e for e in errors if e) or hooks["netcfg_apply"](new.name)
         gaps = [] if error else gaps_of(new, hooks["netcfg_state"]())
         if not error and not gaps:
@@ -711,9 +716,12 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         if down:
             why += f" (לפני כן: {down})"
         hooks["netcfg_down"](new.name)
+        module_error = hooks["netcfg_write_bond_module"](module_before)
         restored = netcfg_rollback.restore(netcfg_rollback.Pending(
             interface=old.name, deadline=0, armed_at="", boot="", files=before,
             resolv=None), hooks)
+        if module_error:
+            restored.append(module_error)
         back = restored or gaps_of(old, hooks["netcfg_state"]())
         return (f"{new.name} לא אומת: {why}. " + (
             f"ההגדרה הקודמת על {old.name} הוחזרה ואומתה" if not back else
