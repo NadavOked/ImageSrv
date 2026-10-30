@@ -78,8 +78,15 @@ lc_end_count() {
     elif [ "$_et_ok" -gt 0 ]; then _lk=partial; else _lk=failed; fi
     # the result screen's own buttons (end.req: power off, again, back) stay the person's
     END_ABORT_FILE="$LC/end.req"
+    _lk_nt=""   # #2198: an unread setting is said on the screen (usb.notice); the notice before it comes back after
+    if [ "${IMAGECTL_MODE:-}" = usbclone ]; then   # #2198: F4 saves in the kiosk process; read back here
+        usb_data_state_read; usb_settings_load || { USB_POWEROFF_S=0; log "usbclone: settings could not be read -- no automatic power-off"
+            _lk_nt="x$(cat "$RUN_DIR/usb.notice" 2>/dev/null)"
+            echo "הגדרות הדיסק-און-קי לא נקראו — המחשב לא ייכבה לבד. כשמסיימים: כבה עכשיו" > "$RUN_DIR/usb.notice"; }
+    fi
     # shellcheck disable=SC2046 # #2024: every target's result decides (none = a problem, held)
     end_countdown "$_lk" "local clone ended ($_et_ok of $_et_n)" "$_et_ok" "$_et_n" $(cat "$LC/run/targets" 2>/dev/null); _lk=$?
+    if [ "$_lk_nt" = x ]; then rm -f "$RUN_DIR/usb.notice"; elif [ -n "$_lk_nt" ]; then printf '%s\n' "${_lk_nt#x}" > "$RUN_DIR/usb.notice"; fi
     END_ABORT_FILE=""; return "$_lk"
 }
 

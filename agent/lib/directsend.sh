@@ -205,7 +205,7 @@ direct_send_run() {
         || { _direct_failed "$2" "לא הצלחנו לקרוא את תוכנית המחיצות מהמניפסט החי"; return 1; }
     _dr_total=$(json_get "$_dr_manifest" ".total_compressed_bytes")
     case "$_dr_total" in ''|*[!0-9]*) _dr_total=0 ;; esac
-    target_init "$2" "$_dr_total"
+    target_init "$2" "$_dr_total"; capture_unhib_note "$2" || { _direct_failed "$2" "לא הצלחנו לרשום שההשהיה בוטלה בעותק — המקור לא נכתב"; return 1; }   # target_init clears pass 1's warning
     echo "sending" > "$RUN_DIR/state"
     # swap is described in the manifest and recreated by the receiver; it
     # is never streamed (spec 14) -- exactly streamed_partitions() on the server.
@@ -258,6 +258,7 @@ direct_send_task() {
     _dt_ppid=$!
     direct_send_run "$1" "$_dt_disk" "$(json_get "$RESP" ".task.disk_serial")"; _dt_rc=$?
     shrink_restore_source "$_dt_disk" || :   # #1171: the tail's RAM view, after both reads; not released = a warning in error
+    [ "$_dt_rc" != 0 ] || capture_unhib_note "$_dt_disk" || { _direct_failed "$_dt_disk" "לא הצלחנו לרשום שההשהיה בוטלה בעותק — המקור לא נכתב"; _dt_rc=1; }
     if [ "$_dt_rc" -eq 0 ]; then
         echo "done" > "$RUN_DIR/state"
         report_final "$_dt_ppid" "" "$MAC" "$SERVER" "$1" \

@@ -106,7 +106,7 @@ def test_the_capture_flow_marks_the_table_at_every_step():
         for line in re.findall(r"^.*\bcd_(?:init|part|state|used) .*$", source, re.M):
             assert "2>/dev/null || :" in line, f"קריאה שיכולה להפיל קליטה: {line.strip()}"
     order = capture.index('capture_stage shrink; cd_init'), capture.index("capture_space_preflight"), \
-        capture.index("shrink_before_capture"), capture.index('capture_stage stream; cd_init')
+        capture.index("capture_prepare_views"), capture.index('capture_stage stream; cd_init')
     assert list(order) == sorted(order), "הטבלה נבנית לפני ה-preflight ומחדש אחרי הכיווץ"
     agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
     assert agent.index('"$LIB_DIR/capturedetail.sh"') < agent.index('"$LIB_DIR/capture.sh"')
