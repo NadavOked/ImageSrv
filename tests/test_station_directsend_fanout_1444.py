@@ -169,9 +169,9 @@ def direct(tmp_path, *, fanout: str | None = None, env: dict | None = None,
         stubs["jq"] = JQ_STUB
     if shutil.which("blkid") is None:   # #1905: a missing blkid is "unreadable"; the real one says rc 2 on these files
         stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
-    libs =" ".join(f". {posix(AGENT)}/lib/{n}.sh;" for n in (
+    libs =" ".join(f"[ ! -f {posix(AGENT)}/lib/{n}.sh ] || . {posix(AGENT)}/lib/{n}.sh;" if n == "captureview" else f". {posix(AGENT)}/lib/{n}.sh;" for n in (
         "common", "sysinfo", "waits", "jsonq", "progress", "restore", "manifest",
-        "bootca", "hibernation", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink",
+        "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink",
         "directsend", "directrecv", "ui"))   # #1466: lcsnap.sh -- capture_disk reads through lc_src_node; #1901/#1808: the source gates
     started = time.monotonic()
     out = run_sh(

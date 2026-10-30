@@ -74,6 +74,17 @@
 
 ### כללים
 
+- **`src_unhib`** (#2213, optional, image-level) — `"unhibernated"` or
+  `"unhibernated_logfile"`: capture dropped Windows Fast Startup on a RAM
+  copy-on-write view and verified it clean before reading that view. The
+  latter records that clearing `$LogFile` was needed. The source was never
+  written. Applies to agent capture and direct-send manifests;
+  absence means no drop was recorded, not a claim about older images.
+  The capture/direct-send task also carries the existing local-clone Hebrew
+  warning in its target `error` field even on success (orange completion).
+  Capture reports this warning before uploading the manifest, since accepting
+  the manifest can close the task before its next periodic report.
+
 - **`compression`** — הרמה ש-`zstd` באמת קיבלה בקליטה, נגזרת מ-`CAPTURE_LEVEL` של הסוכן ולא נכתבת בנפרד. **תיאור, לא הבטחה:** אימג'ים שנקלטו לפני #72 אומרים `zstd-9` ונקראים כרגיל — הפירוק אינו תלוי ברמה. ברירת המחדל היא `3` מאז #72, אחרי מדידה: רמה 9 עלתה פי 3.1 בזמן והחזירה 1.1% בגודל (‏~80MB על אימג' 7.3GB, כארבע שניות בשידור שאורך 5:54). מספר התהליכונים (`CAPTURE_THREADS`, ברירת מחדל `0` = כל הליבות מאז 16/10; עד אז `2`) **אינו** בשדה — הוא אינו משנה את הפורמט ולא את הפירוק — ולכן הוא נרשם ביומן הסוכן ליד ה-`stderr` של `zstd` עצמו.
 - **`family`** — `256` או `500` בלבד. נגזר אוטומטית מגודל כונן המקור (מתחת ל-300GiB — `256`). **תווית תצוגה בלבד, לא מסנן** (‏#1863, הכרעת נדב 20/10): אף מסלול אינו מכריע לפיה אם אימג' מתאים לדיסק. ההכרעה היא הגודל האמיתי בלבד — `min_target_bytes` (הנגזר, ראו למטה) ועוד `min_free_gb` (‏#1354) מול הדיסק שנבחר — בקונסולה, במסך המשכפל, במחשב הבנייה וב-`allowed_images`. עד #1863 היא הייתה תקרה נוספת ב-`allowed_for_disks`, ומאז הכיווץ (#1171) היא הסתירה אימג' "500" שנכנס לדיסק 256 ממסך המשכפל בזמן שהקונסולה אישרה אותו.
 - **`min_target_bytes`** — כונן יעד קטן מזה נחסם. **הערך הוא סוף הפריסה, לא גודל דיסק המקור** (‏#82): המחיצה האחרונה שהמניפסט מצהיר עליה (`start_sector × sector_size + size_bytes`, המקסימום על פני כל המחיצות), ועוד **256KiB** לעותק הגיבוי של ה-GPT (33 סקטורים: 16,896 בייט בכונן 512, ‏135,168 ב-4Kn) — ולכל היותר `source_disk_bytes`, שהרי דיסק המקור החזיק את הפריסה הזו בפועל.
@@ -3137,13 +3148,18 @@ proxy ישנה מה-DB (‏`console_dhcp.proxy_configs`), ו-`GET /net/proxy-sup
   את התוצאות). הגשר כותב `$RUN_DIR/end.now` רק בזמן ספירה, ו-`$RUN_DIR/end.hold`
   רק ל-`partial`/`failed`; בלי כניסה. רשומה פגומה — אין דיאלוג. הכיבוי —
   ‏`finish_and_stop` (‏`arm_wol`); כיבוי שסורב נשאר על המסך כ-`toast=`.
+  **‏#2198:** ב-USB עם `poweroff_s=0`, הצלחה נשלחת כ-`0|localclone|N|N|0`
+  (‏N חיובי): דיאלוג ההצלחה נשאר בלי ספירה ועם "כבה עכשיו". זה החריג היחיד
+  שמתיר epoch ‏0 בלי `held=1`; אינו מסמן בעיה בדיסק. ערך חיובי קובע את הזמן
+  רק לשיכפול מקומי ב-USB; הסוכן קורא מחדש את הגדרות ה-USB לפני הספירה.
+  קריאה שנכשלה = ‏0 (אין ספירה), ונאמרת על המסך ב-`usb.notice` (‏toast) עד סוף ההמתנה.
   **‏#2024 (הכרעת נדב 22/10) — יעד עם בעיה: בלי ספירה ובלי תקרה.** ‏`END_HOLD_S`
   בוטל. ‏`end_countdown` מקבל אחרי `<done>|<targets>` את רשימת היעדים, ובודק כל
   אחד (‏`end_problem`): נקי = ‏`state` ‏`done`, בלי `error`, ‏`readback` ‏`verified`
   או `sampled`, ‏`write_check_state` שאינו `slow`, ו-`drivers.json` (אם יש) בלי
   ‏`state=failed`, בלי `boot.state=failed` ובלי `linux.state` ‏hostonly/unsupported/failed.
   כל השאר — וכן רשימה ריקה, קובץ שאינו נקרא ו-kind ‏`partial`/`failed` — **מחזיק**:
-  ‏`held=1` ו-**`epoch=0`** (אין זמן; ‏`epoch=0` בלי `held=1` — פגומה), והכיבוי רק
+  ‏`held=1` ו-**`epoch=0`** (אין זמן), והכיבוי רק
   ב-`end.now` ("כבה"), בכפתור של מסך התוצאה המקומי (‏`END_ABORT_FILE`, ‏rc 2), או
   בכיבוי מהקונסולה (‏`attended_power_check` — מתשובת דיווח ה-held, או מפעימה שרצה).
   להחזקה אין **hello**, כמו לספירה: ‏hello היה הופך אותה ל"נראית" לגל חדש, ואז
@@ -6458,6 +6474,10 @@ Pango markup, וכל ערך דינמי בתוכם עובר `esc`; ערך לטי�
 (`agent/lib/usbset.sh`, ‏`usbmap.sh`), ונשמרות ב-`settings.json` במחיצה
 ‏IMGSRV_DATA: ‏`min_free_gb`, ‏`readback_mode`, ‏`crc_warn_threshold`, ‏`temp_warn_c`,
 ‏`cloner_beep` (‏#2131: ‏JSON ‏`true`/`false` בלבד, חסר = דלוק, כל ערך אחר נדחה בקול),
+‏`poweroff_s` (‏#2198: מספר שלם ב-JSON, ‏0–3600, ברירת מחדל 20; חסר = 20,
+ערך פגום נדחה ונרשם ביומן = 20). חל רק אחרי שיכפול מקומי מוצלח ב-USB;
+0 = המתנה למפעיל בלי כיבוי אוטומטי, וגם אז "כבה עכשיו" פעיל. כשל או דיסק כתום
+מחזיקים בלי ספירה בכל ערך. איפוס ההגדרות מחזיר 20.
 ו-`drawer_slots` — **מילון לפי דגם המחשב** (DMI ‏`product_name`) של רשימות
 ‏#1485 (‏1–8 מפתחות `sata:<ataN>`/`nvme:<PCI>` בלי כפילות), לעולם לא לפי סידורי
 של דיסק. ‏**#2001** (המוקאפ שנדב אישר, ‏slot-map-2001): העורך הוא חלון אחד

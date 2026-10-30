@@ -1,4 +1,4 @@
-"""#651: reject hibernated NTFS before capture opens an upload."""
+"""#651/#2213: NTFS evidence and capture through a verified unhibernated view."""
 
 from test_agent import AGENT, posix, sh
 from test_capture_refusals import (
@@ -103,24 +103,16 @@ def test_detection_commands_are_read_only():
     assert "ntfsfix" not in source
 
 
-def test_hibernated_capture_stops_before_upload_but_clean_capture_proceeds(tmp_path):
-    """Mutation caught: always-clean guard opens curl and creates a manifest for dirty input."""
+def test_hibernated_capture_uses_a_view_but_clean_capture_proceeds_without_one(tmp_path):
+    """#2213 changes the old refusal to a verified view; clean stays unchanged."""
+    from test_capture_fast_startup_2213 import fast_run, succeeded
+
+    succeeded(fast_run(tmp_path / "hibernated"))
     # ‏`_fs_of` מוחלף ל-ntfs, ולכן הזרם הוא partclone.ntfs האמיתי — על צומת
     # מחיצה שאינו קיים בקופסה הוא נופל ב-`clone: open ... error` (stage=pcl
     # rc=1) גם כשהשומר אישר. הסטאב הוא אותו PIPE_INPUT של בדיקות אמצע-הצינור.
     common = {"sgdisk": ONE_PARTITION, "curl": CURL_SINK, "partclone.ntfs": PIPE_INPUT}
     override = '_fs_of() { echo ntfs; }; '
-    hibernated = (
-        override
-        + 'capture_ntfs_hibernation_reason() { '
-        + 'capture_hibernated_message "$1"; return 1; }; '
-    )
-    box, run, out = capture_run(tmp_path / "dirty", stubs=common, shell_pre=hibernated)
-    reason = refusal_reason(box, run, out)
-    assert "Fast Startup" in reason and "powercfg /h off" in reason
-    assert (run / "capture.reason").read_text(encoding="utf-8").strip() == "source_ntfs"
-    assert not (run / "new-manifest.json").exists()
-
     box, run, out = capture_run(
         tmp_path / "clean",
         stubs=common,
@@ -129,6 +121,7 @@ def test_hibernated_capture_stops_before_upload_but_clean_capture_proceeds(tmp_p
     assert out.strip().endswith("rc=0"), out
     assert (run / "new-manifest.json").exists()
     assert not (run / "capture.reason").exists()
+    assert not (run / "src_unhib").exists()
 
 
 def test_the_gui_draws_a_task_error_as_a_right_to_left_paragraph():
