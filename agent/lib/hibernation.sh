@@ -12,7 +12,7 @@ capture_hibernated_message() {
 
 capture_ntfs_hibernation_reason() {
     # $1=partition node, $2=private mount point. Empty output means clean.
-    # Non-empty output always means capture must stop; rc 1=hibernated, rc 2=not checked.
+    # rc 1=hibernated/dirty: #2213 may prepare a verified RAM view; rc 2=not checked, refuse.
     _hn_node="$1"; _hn_mnt="$2"
     command -v ntfs-3g.probe >/dev/null 2>&1 || {
         echo "לא הצלחנו לבדוק מצב שינה ב-$_hn_node: הכלי ntfs-3g.probe חסר"

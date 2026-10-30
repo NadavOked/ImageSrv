@@ -191,6 +191,7 @@ def sourced_libs() -> str:
              "ui.sh", "hold.sh", "clonergui.sh",   # #708: resolve_target_drawers (#701) lives here
              "smart.sh", "crcdelta.sh"]   # #872: crc_delta_after sits on the write line of do_restore
     names += ["attended.sh", "shrinkplan.sh"]   # attended beats; the capture's shrink plan
+    names += ["captureview.sh", "hibernation.sh"]   # #2213: direct-send completion preserves the warning
     names += ["idle.sh"]   # #1560: end_countdown / end_failed_round -- the end of a cloner round
     names += ["verdict.sh"]   # #1935: _machine_state -- do_restore_drawers writes the final word itself
     return "".join(f". {posix(AGENT)}/lib/{n}; "

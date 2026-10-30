@@ -1585,6 +1585,14 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
 .page.settings dl.mkv dt.sec .name{font-weight:600}
 .page.settings dl.mkv .sub{display:block;color:var(--clr-muted);font-size:var(--t-sm)}
 .page.settings dl.mkv dd.sec .sub{display:inline}
+/* ‏#2056/#2059 (מוקאפ 05): שורת הגדרה עם הסבר קטן מתחת לתווית, והערך עם "הוחל ב-N מתוך M" מתחתיו */
+.page.settings dl.mkv dt.hint{flex-direction:column;align-items:flex-start;justify-content:center;gap:2px}
+.page.settings dl.mkv dt.hint .sub{font-size:var(--t-sm);color:var(--clr-muted);line-height:1.4;max-width:60ch}
+.page.settings dl.mkv .sv small.applied{display:block;font-size:var(--t-sm);margin-top:1px}
+.page.settings dl.mkv .sv small.applied.ok{color:var(--clr-success-fg)}
+.page.settings dl.mkv .sv small.applied.warn{color:var(--clr-warning-fg)}
+.page.settings dl.mkv .lock{display:inline-flex;align-items:center;gap:6px;color:var(--clr-muted);font-size:var(--t-sm)}
+.page.settings dl.mkv .lock .ui-icon{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6}
 .page.settings .card-b .empty{padding:26px 16px}
 /* חלון "תעודת TLS" (פרטים…): אותן שורות dl.mkv, בתוך החלון */
 .sheet dl.mkv{display:grid;grid-template-columns:max-content 1fr;gap:0 18px;margin:0 0 12px;font-size:var(--t-base)}
@@ -1939,3 +1947,38 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 .win .n-f-bar .btn.ghost{border-color:transparent;color:var(--clr-action-fg);margin-inline-start:auto}
 .win .n-f-bar .btn.ghost[hidden]{display:none}
 @media (max-width:720px){.smap-t td.name{width:auto}.smap-add{grid-template-columns:1fr 1fr}.smap-add .acts{grid-column:1 / -1}}
+
+/* ‏#1857 (מוקאפ 04): דף הדיסקים -- כרטיסי סטים, סרגל סינון, מדבקות */
+.page .setcards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:900px){.page .setcards{grid-template-columns:1fr}}
+.page .setcard{background:var(--clr-surface,var(--surface));border:1px solid var(--hair);border-radius:var(--r,9px);padding:14px 16px;cursor:pointer;box-shadow:var(--shadow-card)}
+.page .setcard:hover{border-color:var(--clr-action)}
+.page .setcard.sel{border-color:var(--clr-action);box-shadow:0 0 0 2px var(--clr-action)}
+.page .setcard h5{margin:0;font-size:var(--t-md);display:flex;gap:8px;align-items:center}
+.page .setcard .pre{font:600 12px var(--mono,monospace);color:var(--clr-muted)}
+.page .setcard small{color:var(--clr-muted);font-size:var(--t-sm)}
+.page .setcard .health{display:flex;gap:6px;margin:10px 0 6px;flex-wrap:wrap}
+.page .setcard .grid{display:flex;flex-wrap:wrap;gap:3px;margin-top:8px}
+.page .setcard .grid i{width:14px;height:14px;border-radius:3px;background:var(--clr-success-soft);border:1px solid var(--clr-success)}
+.page .setcard .grid i.w{background:var(--clr-warning-soft);border-color:var(--clr-warning)}
+.page .setcard .grid i.b{background:var(--clr-danger-soft);border-color:var(--clr-danger)}
+.page .setcard .grid i.n,.page .setcard .grid i.e{background:var(--hover,transparent);border-color:var(--hair)}
+.page .setcard .grid i.e{border-style:dashed}
+.page .setcard.add{border-style:dashed;display:grid;place-items:center;text-align:center;color:var(--clr-action-fg);box-shadow:none}
+.page .dk-bar{flex-wrap:wrap;overflow:visible}
+.page .dk-bar .dk-q{flex:1;min-width:220px;height:32px}
+.page .dk-bar .dk-sel{height:32px}
+.page .dk-bar .dk-sel.on{border-color:var(--clr-action);background:var(--clr-action-soft,transparent)}
+.page .dk-chk{display:inline-flex;align-items:center;gap:6px;height:32px}
+.page .dk-pick{padding:8px 12px;border-bottom:1px solid var(--clr-row-border)}
+.page .dk-more{padding:8px 12px}
+.page tr.dk-red td{background:var(--clr-danger-soft)}
+.page .lbl{font:700 13px var(--mono,monospace);background:var(--hover,transparent);border:1px solid var(--hair);border-radius:5px;padding:1px 7px;white-space:nowrap;direction:ltr;display:inline-block}
+.page .lbl.ins{background:var(--clr-action-soft,transparent);border-color:var(--clr-action);color:var(--clr-action-fg)}
+
+/* ‏#2080 (מוקאפ 06): קושחה וחיבורים במגירת המכונה */
+.fw-chg{color:var(--clr-warning-fg);font-weight:600}
+.page.drw .fw-alert{margin:0 0 10px}
+.page.drw .fw-alert ul{margin:4px 0 0;padding-inline-start:18px;font-weight:400}
+.page.drw tr.fw-row-chg td{background:var(--clr-warning-soft)}
+.page.drw .fw-acts{display:flex;gap:8px;margin-top:12px}

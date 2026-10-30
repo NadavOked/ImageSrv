@@ -673,7 +673,7 @@ static void settings_body(G *g, const DcuiFrame *f, Rect page) {
     for (int i = 0; i < f->nitems; i++) {                       /* .it */
         const DcuiItem *it = &f->items[i];
         Text ti = rtl(g, 15, 600, it->title, 0), su = rtl(g, 12.5, 400, it->sub, 0);
-        double h = 12 + fmax(38, ti.h + su.h) + 12 + 2;
+        double h = f->nitems == 8 ? 56 : 12 + fmax(38, ti.h + su.h) + 12 + 2; /* #2198: eight USB items fit; server unchanged */
         Rect r = { right - lw, ly, lw, h };
         draw_fill_rrect(g->cr, r, 8, it->selected ? t->indigo : t->hair);
         double bw = it->selected ? 2 : 1;

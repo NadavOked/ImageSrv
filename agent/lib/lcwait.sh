@@ -78,8 +78,15 @@ lc_end_count() {
     elif [ "$_et_ok" -gt 0 ]; then _lk=partial; else _lk=failed; fi
     # the result screen's own buttons (end.req: power off, again, back) stay the person's
     END_ABORT_FILE="$LC/end.req"
+    _lk_nt=""   # #2198: an unread setting is said on the screen (usb.notice); the notice before it comes back after
+    if [ "${IMAGECTL_MODE:-}" = usbclone ]; then   # #2198: F4 saves in the kiosk process; read back here
+        usb_data_state_read; usb_settings_load || { USB_POWEROFF_S=0; log "usbclone: settings could not be read -- no automatic power-off"
+            _lk_nt="x$(cat "$RUN_DIR/usb.notice" 2>/dev/null)"
+            echo "הגדרות הדיסק-און-קי לא נקראו — המחשב לא ייכבה לבד. כשמסיימים: כבה עכשיו" > "$RUN_DIR/usb.notice"; }
+    fi
     # shellcheck disable=SC2046 # #2024: every target's result decides (none = a problem, held)
     end_countdown "$_lk" "local clone ended ($_et_ok of $_et_n)" "$_et_ok" "$_et_n" $(cat "$LC/run/targets" 2>/dev/null); _lk=$?
+    if [ "$_lk_nt" = x ]; then rm -f "$RUN_DIR/usb.notice"; elif [ -n "$_lk_nt" ]; then printf '%s\n' "${_lk_nt#x}" > "$RUN_DIR/usb.notice"; fi
     END_ABORT_FILE=""; return "$_lk"
 }
 
@@ -112,7 +119,16 @@ lc_power_during_copy() {
 
 lc_power_commit() {
     for _pd_t in $(cat "$LC/run/targets" 2>/dev/null); do
-        fail_written_target "$_pd_t" "המחשב כובה מהקונסולה באמצע שיכפול מקומי — הדיסק שבור ואינו שמיש"
+        # #2090: verifying can outlive a finished target. Keep every terminal
+        # result; an unread state is not proof of completion (principle 5).
+        if ! _pd_s=$(cat "$RUN_DIR/targets/$_pd_t/state" 2>/dev/null) || [ -z "$_pd_s" ]; then
+            log "WARNING: $_pd_t: target state could not be read -- treating it as unfinished"
+            _pd_s=""
+        fi
+        case "$_pd_s" in done|failed|cancelled) continue ;; esac
+        # The operator cut the copy, not the drive: keep the guarded wipe,
+        # but no ATA evidence against it (fail_written_target's stream flag).
+        fail_written_target "$_pd_t" "המחשב כובה מהקונסולה באמצע שיכפול מקומי — הדיסק שבור ואינו שמיש" stream
     done
     _lr_src=$(cat "$LC/run/src" 2>/dev/null); _lr_r="$LC/run"
     date +%s > "$_lr_r/ended"; echo 1 > "$_lr_r/stopped"; lc_report

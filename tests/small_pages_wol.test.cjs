@@ -108,9 +108,10 @@ test('settings (סידור 17/10, המוקאפ settings-redesign): four groups, 
   assert.match(html,/<div class="obj-actions"><\/div>/,'every change saves at once — no save/cancel in the header');
   assert.doesNotMatch(html,/set-save|set-cancel|saveSettings|cancelSettings/);
   const groups=[...html.matchAll(/<section class="set-grp"><div class="c12 card"><div class="card-h"><span>([^<]+)</g)].map((m)=>m[1]);
-  assert.deepEqual(groups,['כללי','שיכפול והפצה','אבטחה','עדכונים ותחזוקה'],'"מראה" moved to my account; TLS is a row; no "שם המארח" card');
+  assert.deepEqual(groups.map((g)=>g.trim()),['כללי','שיכפול והפצה','כיבוי אוטומטי בגואי','אבטחה','עדכונים ותחזוקה'],'"מראה" moved to my account; TLS is a row; no "שם המארח" card');
   const groupOf=(c)=>{const i=html.indexOf('<span>'+c+'<'); return html.slice(i,html.indexOf('</section>',i));};
-  for(const c of groups) assert.match(groupOf(c),/<\/div><\/div><p class="set-foot">[^<]{20,}<\/p>$/,c+': the explanation is visible under the group');
+  // ‏#2059 (מוקאפ 05): כרטיס "כיבוי אוטומטי בגואי" בלי הערת תחתית — כך במוקאפ; לכל השאר ההערה גלויה
+  for(const c of groups.filter((g)=>g.trim()!=='כיבוי אוטומטי בגואי')) assert.match(groupOf(c),/<\/div><\/div><p class="set-foot">[^<]{20,}<\/p>$/,c+': the explanation is visible under the group');
   // שם השרת — פעם אחת בעמוד, ופותח את החלון האחד (POST /hostname)
   assert.equal((html.match(/שינוי שם/g)||[]).length,1,'the server is renamed in one place only');
   assert.match(groupOf('כללי'),/<dt title="[^"]*">שם השרת<\/dt><dd title="[^"]*"><span class="sv mono" dir="ltr">שרת המכללה<\/span> <button class="btn sm flat" type="button" onclick="hostnameSheet\(\)">שינוי שם…<\/button><\/dd>/);
