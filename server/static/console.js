@@ -1832,7 +1832,7 @@ const BRANCH_TREE = [
   // נדב 18/10: כמו הראשי בכניסה הראשונה — מלאי, תשתית וניהול מקופלים (index.html)
   { id: "inv", label: "מלאי", icon: "list", open: false, kids: [
     ["images", "אימג'ים", "t-images"], ["machines", "מחשבים", "t-machines"],
-    ["transfers", "העברות", "deploy"]] },
+    ["disks", "דיסקים", "t-disks"], ["transfers", "העברות", "deploy"]] },   // ‏#1857: דיסקים וסטים -- אותו עץ כמו בראשי
   { id: "infra", label: "תשתית", icon: "t-infra", open: false, kids: [
     ["health", "בריאות ושירותים", "t-health"], ["storage", "אחסון", "storage"],
     ["network", "רשת", "t-network"], ["monitor", "מוניטור", "t-monitor"],
@@ -4354,7 +4354,7 @@ function machineRowHtml(m) {
     `<span class="mono">${esc(m.mac)}</span>`,
     net && net.ip ? `<span class="mono">${esc(net.ip)}</span>` : `<span class="muted">—</span>`,
     net && net.last_seen ? esc(ago(net.last_seen)) : `<span class="muted">${NET ? "מעולם לא" : "לא נקרא"}</span>`,
-    disksCell(m), UI.status(st.cls, st.text), UI.rowMenu(name, items)] };
+    disksCell(m), UI.status(st.cls, st.text) + (m.fw_changes > 0 ? ` ${UI.pill("warn", "קושחה השתנתה")}` : ""), UI.rowMenu(name, items)] };
 }
 /* שורת הקבוצה — roll-up: שם (כיתה → אובייקט), מונה, מחוברים/סבב רק כשיש נתון, פעולות. */
 function groupRowHtml(g, kids) {
@@ -4479,8 +4479,10 @@ function machines(tab = 0) {
     sub.push(`${NET.filter((d) => d.registered && isToday(d.last_seen) && (!MACHINES_ROLE || macs.has(d.mac))).length} נראו ברשת היום`);
   }
   const red = (DISK_FAILURES || []).length, unreg = NET ? NET.filter((d) => !d.registered).length : 0;
+  const fwChanged = all.filter((m) => m.fw_changes > 0).length;
   const pill = (red ? UI.pill("warn", `${red} ${red === 1 ? "דיסק נכשל בשיכפול הקודם" : "דיסקים נכשלו בשיכפול הקודם"}`) : "")   // #1580: orange
-    + (unreg ? UI.pill("warn", `${unreg} ${unreg === 1 ? "לא רשום" : "לא רשומים"}`) : "");
+    + (unreg ? UI.pill("warn", `${unreg} ${unreg === 1 ? "לא רשום" : "לא רשומים"}`) : "")
+    + (fwChanged ? UI.pill("warn", `קושחה השתנתה ב-${fwChanged}`) : "");   // ‏#2080 (מוקאפ 06)
   const addRole = MACHINES_ROLE === "build" || MACHINES_ROLE === "cloner" ? `role:'${MACHINES_ROLE}'` : "";
   const actions = (isAdmin()
     ? `<button class="btn primary" onclick="openAddMachine({${addRole}})">+ מחשב</button>${!MACHINES_ROLE && classroomsOn() ? `<button class="btn" onclick="addGroupSheet()">+ כיתה</button>` : ""}${MACHINES_ROLE ? "" : `<button class="btn" onclick="openAddMachine({${addRole}${addRole ? "," : ""}tab:1})">ייבוא בהדבקה</button><a class="btn" href="/api/console/machines.csv" download>ייצוא CSV</a>`}`
@@ -5440,12 +5442,6 @@ function machineHealthHtml(m) {
   return UI.kv(rows);
 }
 /* #977 §7: firmware/secure_boot as the agent measured them (#500). null = not reported, never "off". */
-function firmwareHtml(m) {
-  if (m.firmware == null) return `<span class="muted">לא דווח</span>`;
-  if (m.firmware !== "uefi") return esc(String(m.firmware).toUpperCase());
-  const sb = m.secure_boot == null ? `<span class="muted">Secure Boot לא דווח</span>` : m.secure_boot ? "Secure Boot דלוק" : "Secure Boot כבוי";
-  return `UEFI · ${sb}`;
-}
 /* ‏#1300 (הכרעת נדב 12/10): מגירת מחשב כמו console-full.html W.machDrawer — תגיות בראש, שלוש
    לשוניות (סקירה · דיסקים · היסטוריה), כפתור ראשי ושורת כפתורים אחת — אבל עם כל הפרטים שהיו:
    הסקירה מקובצת ל"מצב עכשיו", "זיהוי ורשת", "מערכת וחומרה" ו"בריאות המכונה" במקום רשימה אחת
@@ -5500,7 +5496,6 @@ function machineDrawerHtml(m) {
     drivers = pk.length ? `${pk.length} ${pk.length === 1 ? "חבילה" : "חבילות"} — ${esc(pk.map((p) => p.name).join(", "))}` : `<span class="muted">אין חבילה מתאימה</span>`;
   }
   const sys = [
-    ["קושחה", firmwareHtml(m)],
     ["סוכן", m.agent_version == null ? `<span class="muted">לא דווח</span>` : m.agent_version === "unknown" ? `<span class="muted">לא ידוע — סוכן ישן</span>` : `<span class="mono">${esc(m.agent_version)}</span>`],
   ];
   const hw = UI.kv(inv == null ? sys.concat([["חומרה", `<span class="muted">המכונה מעולם לא דיווחה על חומרה (סוכן ישן).</span>`]]) : sys.concat([
@@ -5511,6 +5506,7 @@ function machineDrawerHtml(m) {
     ["דרייברים מתאימים", drivers],
   ]));
   const grp = (title, body) => `<div class="mgrp"><div class="grp">${title}</div>${body}</div>`;
+  const fw = FIRMWARE[m.mac];   // ‏#2080
   const h = MCH.history[m.mac];
   const history = Array.isArray(h) && h.length
     ? UI.timeline(h.slice(0, 20).map((r) => ({ t: isToday(r.ts) ? fmtClock(r.ts) : fmtDate(r.ts), cls: journalCls(r), text: esc(r.label || r.event || "") + (r.text ? " — " + esc(r.text) : ""), who: r.user || "" })))
@@ -5527,12 +5523,82 @@ function machineDrawerHtml(m) {
   return `<div class="page drw"><div class="obj-sub">${sub}${chips}</div>${actions}${red}${machineCaptureWarningHtml(m.mac)}${machineRestoreWarningHtml(m.mac)}`
     + `<div><div class="sec">מצב עכשיו</div>${now}${power}${block ? `<div class="cap mon-why">מוניטור: ${esc(block)}</div>` : ""}</div>`
     + grp("זיהוי ורשת", ident)
+    + (station || (fw && fw.current) ? grp(firmwareTitle(fw), firmwareSectionHtml(m, fw)) : "")   // ‏#2080: מעל "חומרה", במקום שורת "קושחה"
     + grp(`מערכת וחומרה${m.inventory_seen_at ? ` <small>(${esc(ago(m.inventory_seen_at))})</small>` : ""}`, hw)
     + grp(`בריאות המכונה${m.probe_seen_at ? ` <small>(נדגם ${esc(ago(m.probe_seen_at))})</small>` : ""}`, machineVerdictsHtml(m) + machineHealthHtml(m))
     + grp("נתונים שנאספו", machineDataHtml(m))   // #1882-#1889
     + `<div><div class="sec" data-cnt="${station ? drawerSlots(m).length : disks ?? ""}">דיסקים</div>${station ? diskMapHtml(m, admin) : diskBoxesHtml(m)}</div>`
     + (Array.isArray(m.disks) && m.disks.length ? `<div><div class="sec">SMART</div>${m.disks.map((d, i) => `<div class="mgrp"><div class="grp">${esc(slotLabel(m, d.port != null ? Number(d.port) : i + 1, d))}</div>${smartAttrsHtml(m.mac, d)}</div>`).join("")}</div>` : "")   // #1859
     + `<div><div class="sec" data-cnt="${Array.isArray(h) && h.length ? Math.min(h.length, 20) : ""}">היסטוריה</div>${history}</div>${foot}</div>`;
+}
+/* ‏#2080 (מוקאפ 06, נדב 24/10): תמונת הקושחה של המכונה -- "קושחה וחיבורים". מה השתנה מאז ההדלקה הקודמת מוצג
+   כתום "היה → עכשיו"; שינוי הוא אזהרה, לא חסימה. שדה שלא דווח = "לא דווח", לא שינוי (עיקרון 5). */
+const FIRMWARE = {};
+function loadFirmware(mac, rerender) {
+  if (!isAdmin() || FIRMWARE[mac]) return;
+  FIRMWARE[mac] = { loading: true };
+  api("/machines/" + encodeId(mac) + "/firmware").then((v) => { FIRMWARE[mac] = v; }, (e) => { FIRMWARE[mac] = { error: e.message }; }).then(rerender);
+}
+function firmwareTitle(fw) {
+  if (!fw || !fw.current) return "קושחה וחיבורים";
+  const when = [fw.current.at ? `עכשיו: ${fmtWhenShort(fw.current.at)}` : "", fw.ref_at ? `${fw.ref_kind === "baseline" ? "נשמר" : "קודם"}: ${fmtWhenShort(fw.ref_at)}` : ""].filter(Boolean).join(" · ");
+  return `קושחה וחיבורים${when ? ` <small>${esc(when)}</small>` : ""}`;
+}
+function fwValueHe(field, v) {
+  if (field === "sata_mode") return { ahci: "AHCI", ide: "IDE", raid: "RAID" }[v] || String(v);
+  if (field === "boot") return { uefi: "UEFI", bios: "BIOS" }[v] || String(v);
+  if (field === "secure_boot") return v ? "דלוק" : "כבוי";
+  return String(v);
+}
+function firmwareSectionHtml(m, fw) {
+  if (!fw || fw.loading) return `<div class="muted">טוען…</div>`;
+  if (fw.error) return UI.note("warn", `תמונת הקושחה לא נקראה: ${esc(fw.error)}`);
+  const cur = fw.current;
+  if (!cur) return `<div class="muted">המכונה עוד לא דיווחה על הקושחה (סוכן ישן, או שעוד לא התחברה).</div>`;
+  const changes = fw.changes || [];
+  const chg = (field) => changes.find((c) => c.kind === "field" && c.field === field);
+  const val = (field, text) => {
+    const c = chg(field);
+    return c ? `<span class="fw-chg">${esc(fwValueHe(field, c.now))} <span class="muted">(היה ${esc(fwValueHe(field, c.was))})</span></span>` : text;
+  };
+  const notRep = `<span class="muted">לא דווח</span>`;
+  const boot = cur.boot == null ? notRep : `${val("boot", esc(fwValueHe("boot", cur.boot)))}${cur.secure_boot == null ? "" : ` · Secure Boot ${val("secure_boot", cur.secure_boot ? "דלוק" : "כבוי")}`}`;
+  const kv = UI.kv([
+    ["דגם", cur.model ? esc(cur.model) : notRep],
+    ["BIOS", cur.bios_version ? val("bios_version", esc(cur.bios_version)) : notRep],
+    ["אתחול", boot],
+    ["בקר הדיסקים", cur.sata_mode == null ? notRep : val("sata_mode", esc(fwValueHe("sata_mode", cur.sata_mode)))],
+  ]);
+  const alert = changes.length ? `<div class="alert warn fw-alert"><b>הקושחה השתנתה מאז ${fw.ref_kind === "baseline" ? "התמונה שנשמרה" : "ההדלקה הקודמת"}</b><ul>${changes.map((c) => `<li>${esc(c.text)}</li>`).join("")}</ul></div>` : "";
+  const rows = (fw.slots || []).map((r) => {
+    const d = r.disk, was = r.was;
+    const disk = d ? `${esc(d.model || "דיסק")}${d.size_bytes ? ` · <bdi dir="ltr">${esc(fmtBytes(d.size_bytes))}</bdi>` : ""}<span class="sub mono" dir="ltr">${esc(d.serial || "—")}${r.note ? ` · ${esc(r.note)}` : ""}</span>`
+      : `<b>ריק</b><span class="sub">${was ? `היה: ${esc(was.model || "דיסק")} · ${esc(was.serial || "")}` : ""}</span>`;
+    return { attrs: r.changed ? 'class="fw-row-chg"' : "", cells: [esc(r.connection), disk, d && d.link_gbps ? `<bdi dir="ltr">${esc(d.link_gbps)} Gb/s</bdi>` : "—"] };
+  });
+  const table = rows.length ? UI.datagrid({ columns: ["חיבור", "דיסק", "קישור"], rows }) : `<div class="muted">אין רשימת חיבורים מה-hello האחרון.</div>`;
+  const macEnc = encodeId(m.mac);
+  const acts = isAdmin() ? `<div class="fw-acts">${changes.length ? `<button class="btn primary" onclick="firmwareAccept('${macEnc}')">זו ההגדרה הנכונה — שמור</button>` : ""}${cur.model ? `<button class="btn" onclick="firmwareCompare('${macEnc}')">השווה לדגם${fw.peers && fw.peers.length ? ` (${fw.peers.length + 1} מכונות)` : ""}</button>` : ""}</div>` : "";
+  const gap = fw.gap_below_populated && changes.length ? `<p class="cap">חיבור SATA ריק בזמן שחיבור גבוה ממנו מאוכלס: ה-BIOS של HP עלול לעצור על זה ב-F1 (שגיאה 1796). ראו Issue 1858.</p>` : "";
+  return alert + kv + table + acts + gap;
+}
+function firmwareAccept(macEnc) {
+  const mac = decodeURIComponent(macEnc);
+  confirmSheet("לשמור את התמונה הנוכחית כהגדרה הנכונה?", "מכאן משווים אליה: שינוי נוסף בקושחה יוצג כאזהרה חדשה.", "שמור", async () => {
+    await post("/machines/" + macEnc + "/firmware/accept");
+    delete FIRMWARE[mac];
+    toast("נשמר — נרשם ביומן");
+    await loadMachines();
+  }, null, false);
+}
+function firmwareCompare(macEnc) {
+  const mac = decodeURIComponent(macEnc), fw = FIRMWARE[mac];
+  if (!fw || !fw.current) return;
+  const m = (MACHINES || []).find((x) => x.mac === mac);
+  const row = (name, c, differs) => `<tr><td>${esc(name)}</td>${["boot", "sata_mode", "bios_version"].map((f) => `<td${differs.includes(f) ? ' class="fw-chg"' : ""}>${c[f] == null ? '<span class="muted">לא דווח</span>' : esc(fwValueHe(f, c[f]))}</td>`).join("")}</tr>`;
+  const table = `<table class="dg"><thead><tr><th>מכונה</th><th>אתחול</th><th>בקר</th><th>BIOS</th></tr></thead><tbody>${row(m ? machineName(m) : mac, fw.current, [])}${(fw.peers || []).map((p) => row(p.name, p, p.differs)).join("")}</tbody></table>`;
+  sheet({ title: `השוואה לדגם ${fw.current.model}`, sub: fw.peers && fw.peers.length ? "מה שונה בין המכונה הזו לשאר מכונות הדגם מסומן בכתום." : "אין עוד מכונה מהדגם הזה שדיווחה על קושחה.",
+    fields: [], note: table, submitLabel: "סגור", onSubmit: async () => {} });
 }
 /* ‏#1882–#1889: מה שהשרת אסף על המכונה (‏GET /machines/{mac}/data). מפתח חסר/null = "לא נקרא", לא "אין". */
 const MACHINE_DATA = {};
@@ -5613,6 +5679,7 @@ function openMachineDetail(mac, tab = "") {
   if (["build", "cloner"].includes(machineRole(m)) || Array.isArray(m.disks)) loadSmartAttrs(m.mac, () => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });   // #1859
   delete MACHINE_DATA[m.mac];   // #1882-#1889: נטען מחדש בכל פתיחה — הנתונים מתעדכנים בכל סבב
   loadMachineData(m.mac, () => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });
+  loadFirmware(m.mac, () => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });   // ‏#2080
   if (MCH.history[m.mac]) return;
   api("/journal?machine=" + encodeURIComponent(machineName(m) || m.mac) + "&limit=20")
     .then((rows) => { MCH.history[m.mac] = rows; })
@@ -7655,6 +7722,8 @@ let SETTINGS = null, settingsError = "";
 const SETTING_GROUPS = [
   { card: "general", title: "כללי", foot: "השם מופיע בעץ, בכותרת, במסכי התחנות וברשת (hostname). שינוי השם מפעיל את השרת מחדש." },
   { card: "deploy", title: "שיכפול והפצה", foot: "סבב מתחיל לבד כשעבר הזמן הזה בלי מצטרף חדש. קצב אוטומטי כבוי = תמיד התקרה הקבועה; השינוי חל מהגל הבא. יעד שיישאר עם פחות מקום יוצג כ\"לא נכנס\"." },
+  // ‏#2059 (מוקאפ 05, נדב 24/10): הכיבוי האוטומטי של הגואי הקטן -- הגדרה אחת לכל סוגי המכונות.
+  { card: "guipower", title: "כיבוי אוטומטי בגואי", small: "משכפל · מחשב בנייה · שחזור", foot: "" },
   { card: "security", title: "אבטחה", foot: "מי שעומד ליד מחשב ומשחזר אליו אימג' מהשרת, כשאין סבב פתוח, מתבקש להיכנס עם משתמש וסיסמה של הקונסולה; בסבב פתוח לא מתבקשת כניסה. השרת מקבל פנייה ממחשב רק אם כתובת ה-IP שלו היא זו שהשרת נתן ל-MAC שלו — כך מחשב אחד לא יכול להתחזות לאחר. כיבוי של כל אחד מהמתגים נרשם ביומן." },
   { card: "update", title: "עדכונים ותחזוקה", foot: "החיבור היוצא לריפו הציבורי נפתח רק בזמן בדיקה או עדכון. ההפעלה מחדש נדחית כשיש עבודה פעילה. קובץ הגיבוי מכיל סודות — לשמור אותו כמו סיסמה." },
 ];
@@ -7667,6 +7736,12 @@ const SETTING_ROWS = [
   { key: "ntp_source", card: "general", label: "מקור השעה", type: "ntpsource" },
   { key: "ntp_status", card: "general", label: "מצב השעון", type: "ntpstatus" },
   { key: "session_wait_seconds", card: "deploy", label: "המתנה מהמצטרף האחרון", type: "number", min: 30, more: "סבב מתחיל לבד כשעברו כך וכך שניות בלי מצטרף חדש" },
+  // ‏#2056 (מוקאפ 05): כמה זמן הסבב מחכה למשכפל שהפסיק לדווח. מותר רק להגדיל (3–30 דקות); הערך עובר לסוכן ב-hello.
+  { key: "lost_wait_seconds", card: "deploy", type: "agenttime", label: "המתנה למחשב שהתנתק באמצע שיכפול",
+    sub: "אם הוא לא חוזר בזמן הזה, הוא מסומן \"אבד\" והדיסקים שלו לא שלמים. השאר ממשיכים.",
+    unit: "min", min: 180, max: 1800, def: 180, noun: "משכפלים", fieldLabel: "דקות",
+    sheetSub: "כמה זמן הסבב מחכה למשכפל שהפסיק לדווח (כבל שזז, סוויץ׳ שמתאתחל), לפני שהוא מסומן \"אבד\".",
+    sheetNote: "הערך עובר לכל משכפל בהתחברות הבאה שלו ובתחילת כל סבב. משכפל שלא אישר את הערך עובד עם 3 דקות, ומוצג כאן כ\"לא הוחל\"." },
   // ‏#1303 (נדב 12/10): הקצב הנלמד של המולטיקאסט (‏drive_rates); ‏"false" בלבד מכבה — חסר = אוטומטי.
   { key: "learned_rate_enabled", card: "deploy", label: "קצב שידור אוטומטי לפי הכוננים בחדר", more: "כבוי = תמיד התקרה הקבועה (IMAGECTL_MAX_BITRATE). השינוי חל מהגל הבא", type: "switch", defaultOn: true },
   // ‏#1354 (נדב 13/10): יעד שיישארו בו פחות מזה במחיצת המערכת — "לא נכנס". הסוכן מקבל ב-hello.
@@ -7685,6 +7760,17 @@ const SETTING_ROWS = [
   { key: "class_deploy_enabled", card: "deploy", label: "הפצה לכיתה ממסך התחנה", more: "כבוי במהדורת השיכפול — הכרטיס יורד מהתפריט והשרת מסרב לסבב כיתה", type: "switch" },
   { key: "cloner_beep", card: "deploy", label: "צליל בסיום סבב שיכפול", type: "switch", defaultOn: true,
     more: "דלוק (ברירת המחדל): שלושה צפצופים קצרים בהצלחה, צפצוף ארוך בכשל, דרך הרמקול הפנימי של המחשב" },
+  // ‏#2059 (מוקאפ 05): כיבוי כשאין פעילות (אזהרה 30ש' לפני), וספירה לכיבוי בסוף משימה. בלי "לא לכבות לבד" -- ממתין להכרעת נדב.
+  { key: "gui_idle_poweroff_seconds", card: "guipower", type: "agenttime", label: "כיבוי כשאין פעילות",
+    sub: "אזהרה על המסך 30 שניות לפני. כל מקש או תזוזת עכבר מאפסים.",
+    unit: "min", min: 60, max: 3600, def: 300, prefix: "אחרי", noun: "מכונות", fieldLabel: "דקות",
+    sheetSub: "מחשב שעומד במסך בלי משימה ובלי שנוגעים בו נכבה אחרי הזמן הזה." },
+  { key: "gui_end_poweroff_seconds", card: "guipower", type: "agenttime", label: "ספירה לכיבוי בסוף משימה",
+    sub: "אפשר לעצור את הספירה מהמסך. אז המחשב מחכה 5 דקות.",
+    unit: "sec", min: 10, max: 300, def: 20, noun: "מכונות", fieldLabel: "שניות",
+    sheetSub: "אחרי שמשימה מסתיימת בהצלחה, המסך סופר לאחור ומכבה. דיסק בעייתי עוצר את הספירה תמיד." },
+  { key: "problem_disk_rule", card: "guipower", type: "lockedrule", label: "מחשב עם דיסק בעייתי",
+    sub: "נשאר דלוק עד שמישהו לוחץ \"כבה\" (#2024)" },
   // נדב 18/10: מתג + "אחרי N דקות" (1–1440). ‏console_idle_seconds נשאר בשניות בשרת, 0 = כבוי.
   { key: "console_idle_seconds", card: "security", label: "ניתוק אוטומטי בחוסר פעילות", type: "idleswitch",
     more: "קונסולה פתוחה בלי מגע (עכבר/מקלדת) — מתנתקת אחרי הזמן שנקבע; תקף מיד לסשן הזה. כבוי — אין ניתוק בחוסר פעילות" },
@@ -7725,7 +7811,7 @@ function settingSecondsText(v) {
 }
 function ghostBtn(label, fn) { return `<button class="btn sm flat" type="button" onclick="${fn}">${esc(label)}</button>`; }
 /* ‏dl.kv של המוקאפ: [dt, dd(html)] */
-function settingsKv(rows) { return `<dl class="mkv">${rows.map(([dt, dd, attrs]) => `<dt${attrs || ""}>${esc(dt)}</dt><dd${attrs || ""}>${dd}</dd>`).join("")}</dl>`; }
+function settingsKv(rows) { return `<dl class="mkv">${rows.map(([dt, dd, attrs, sub]) => `<dt${sub ? ` class="hint"` : ""}${attrs || ""}>${esc(dt)}${sub ? `<small class="sub">${esc(sub)}</small>` : ""}</dt><dd${attrs || ""}>${dd}</dd>`).join("")}</dl>`; }
 /* ‏#1676: "לא נקרא" נשאר גלוי (עיקרון 5), אבל שגיאת מערכת גולמית (נתיב, Errno) — מאחורי "פרטים טכניים",
    כמו UI.noteTech; משפט עברי מהשרת נשאר בשורה. */
 function settingUnreadHtml(err) {
@@ -7802,6 +7888,8 @@ function settingDd(r) {
   if (r.type === "idleswitch")
     return `<label class="msw solo" id="srow-idle"><input type="checkbox" role="switch" aria-label="${esc(r.label)}"${idleSecondsNow() > 0 ? " checked" : ""} onchange="idleSwitch(this)"><span class="track"></span></label>`;
   if (r.type === "idleminutes") return `<span class="sv">${esc(idleMinutesText(idleSecondsNow()))}</span> ${ghostBtn("שינוי…", "idleMinutesSheet()")}`;
+  if (r.type === "agenttime") return agentTimeRowHtml(r);   // #2056/#2059
+  if (r.type === "lockedrule") return `<span class="lock">${uiIcon("lock")}כלל קבוע, לא הגדרה</span>`;
   if (r.type === "tls") return tlsRowHtml();
   if (r.type === "timezone") return timezoneRow(r)[1];   // #1447
   if (r.type === "ntpsource") return ntpSourceHtml();
@@ -7834,10 +7922,10 @@ function settingRowVisible(r) {
 }
 function settingsGroupHtml(g) {
   const rows = SETTING_ROWS.filter((r) => r.card === g.card && settingRowVisible(r))
-    .map((r) => [r.label, settingDd(r), r.more ? ` title="${esc(r.more)}"` : ""]);
+    .map((r) => [r.label, settingDd(r), r.more ? ` title="${esc(r.more)}"` : "", r.sub]);
   const extra = g.card === "update" ? updateActionsHtml() : "";
   const acts = g.card === "update" && updateUpToDate() ? UI.pill("ok", "✓ מעודכן") : "";
-  return `<section class="set-grp">${UI.card({ title: g.title, acts, body: settingsKv(rows) + extra })}<p class="set-foot">${esc(g.foot)}</p></section>`;
+  return `<section class="set-grp">${UI.card({ title: g.title, small: g.small || "", acts, body: settingsKv(rows) + extra })}${g.foot ? `<p class="set-foot">${esc(g.foot)}</p>` : ""}</section>`;
 }
 /* מתג נשמר מיד. כיבוי של מתג confirmOff — קודם חלון אישור (כפתור אדום); עד האישור המתג חוזר למצבו. */
 function settingsSwitch(key, input) {
@@ -7855,6 +7943,37 @@ function settingsSwitch(key, input) {
   }
   input.disabled = true;
   save().catch((e) => { input.checked = !want; input.disabled = false; toast(e.message); });
+}
+/* ‏#2056/#2059 (מוקאפ 05): זמן המתנה/כיבוי. הערך נשמר בשניות; ‏unit "min" = הממשק בדקות שלמות.
+   מתחתיו "הוחל ב-N מתוך M" -- רק מה שהסוכן החזיר ב-hello (‏agent_timing_applied). שרת שלא שלח את השדה
+   = בלי שורה (לא "הוחל"); אין מכונות מחוברות = "אין מכונות מחוברות". */
+function agentTimeAppliedHtml(r) {
+  const a = SETTINGS && SETTINGS.agent_timing_applied && SETTINGS.agent_timing_applied[r.key];
+  if (!a || !Number.isInteger(a.applied) || !Number.isInteger(a.connected)) return "";
+  if (a.connected === 0) return `<small class="applied muted">אין מכונות מחוברות</small>`;
+  const ok = a.applied === a.connected;
+  const noun = r.noun === "משכפלים" ? "משכפלים מחוברים" : "מכונות מחוברות";
+  return `<small class="applied ${ok ? "ok" : "warn"}">הוחל ב-${a.applied} מתוך ${a.connected} ${noun}${ok ? "" : " · השאר עובדים עם הערך הקודם"}</small>`;
+}
+function agentTimeRowHtml(r) {
+  const v = settingCurrent(r.key), text = v === "" ? `<span class="muted">לא נקבע</span>` : `<bdi>${esc(r.prefix ? `${r.prefix} ${settingSecondsText(v)}` : settingSecondsText(v))}</bdi>`;
+  return `<span class="sv">${text}${agentTimeAppliedHtml(r)}</span> ${ghostBtn("שינוי…", `agentTimeSheet('${r.key}')`)}`;
+}
+function agentTimeSheet(key) {
+  const r = settingRow(key);
+  if (!r || !isAdmin()) return;
+  const div = r.unit === "min" ? 60 : 1, lo = r.min / div, hi = r.max / div, dflt = r.def / div;
+  const cur = Number(settingCurrent(key));
+  sheet({ title: r.label, sub: r.sheetSub,
+    note: r.sheetNote ? UI.note("info", esc(r.sheetNote)) : "",
+    fields: [{ id: "v", label: r.fieldLabel, value: String(Number.isFinite(cur) && cur > 0 ? Math.ceil(cur / div) : dflt), dir: "ltr", help: `בין ${lo} ל-${hi}. ברירת המחדל: ${dflt}.` }],
+    onSubmit: async (v) => {
+      const value = String(v.v == null ? "" : v.v).trim(), n = Number(value);
+      if (value === "" || !Number.isInteger(n) || n < lo || n > hi) throw new Error(`${r.label}: מספר שלם, ${lo}–${hi} ${r.fieldLabel}`);
+      await post("/settings", { [key]: String(n * div) });
+      toast("נשמר — נרשם ביומן");
+      await loadSettingsData();
+    } });
 }
 /* ערך (שם / שניות) — חלון קטן שנשמר מיד, לא שדה פתוח בדף. */
 function settingsValueSheet(key) {
@@ -8318,6 +8437,7 @@ const pages = {
   monitor: { crumb: "מוניטור", title: "מוניטור", tabs: [], render: monitorPage, load: loadMonitor, own: true },   // ‏#954 גל 6: הרשימה כטבלה
   drivers: { crumb: "דרייברים", title: "דרייברים", tabs: ["דגמים", "חבילות", "כיסוי לפי מכונה"], render: (i) => driversPage(i), load: () => loadDrivers(), own: true },   // ‏#954 גל 6; lazily: drivers.js loads after this file
   tools: { crumb: "ארגז כלים", title: "ארגז כלים", tabs: [], render: toolsPage, load: loadTools, own: true },   // ‏#649 שלב 1: קבוצה = כרטיס, ☐ בנייה/שיכפול | ☐ תלמיד
+  disks: { crumb: "דיסקים", title: "דיסקים", tabs: [], render: () => disksPage(), load: () => loadDisks(), own: true },   // ‏#1857: דיסקים וסטים (disks.js, נטען אחרי הקובץ הזה)
   storage: { crumb: "אחסון", title: "אחסון", tabs: [], render: () => storagePage(), load: () => loadStorage(), own: true },   // ‏#1066 שלב ב': מיקומי הספרייה (storage.js, נטען אחרי הקובץ הזה)
   ports: { crumb: "פורטים", title: "פורטים", tabs: ["חיבורים פיזיים", "רשת הפצה", "פורטים"], render: ports, load: loadPorts, own: true },   // ‏#954 גל 5: מתג בכל שורה
 };
@@ -10189,12 +10309,14 @@ const UI_ICON_PATHS = {
   "moon": "<path d=\"M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z\"/>",
   "storage": "<ellipse cx=\"12\" cy=\"5\" rx=\"8\" ry=\"3\"/><path d=\"M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3\"/>",
   "plus": "<path d=\"M12 5v14M5 12h14\"/>",
+  "lock": "<rect x=\"5\" y=\"11\" width=\"14\" height=\"9\" rx=\"1.5\"/><path d=\"M8 11V8a4 4 0 0 1 8 0v3\"/>",
   /* apple-pending-4 · 3: אייקוני העץ — כל אחד ייחודי (בלי כפילויות), קו 1.6, ‏currentColor */
   "t-home": '<rect x="3" y="3" width="8" height="10" rx="1.5"/><rect x="13" y="3" width="8" height="6" rx="1.5"/><rect x="13" y="11" width="8" height="10" rx="1.5"/><rect x="3" y="15" width="8" height="6" rx="1.5"/>',
   "t-deploy": '<circle cx="12" cy="12" r="2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/>',
   "t-images": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',   /* נדב 17/09: אימג'ים = תיקייה */
   "t-subfolder": '<g stroke-width="1.2"><path d="M5.5 8.5a1.5 1.5 0 0 1 1.5-1.5h2.8l1.4 1.5h5.8a1.5 1.5 0 0 1 1.5 1.5v6.5a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5Z"/></g>',   /* תיקיות משנה בעץ: וריאנט קטן ודק, שלא ייראה כמו צומת האימג'ים */
   "t-machines": '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 7h6M9 11h6M12 17h.01"/>',
+  "t-disks": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 14h.01M11 14h6"/>',   /* ‏#1857: דיסקים -- ייחודי (כמו הצומת ב-index.html) */
   "t-health": '<path d="M12 20.5S3.5 15.4 3.5 9.3A4.8 4.8 0 0 1 12 6.6a4.8 4.8 0 0 1 8.5 2.7c0 6.1-8.5 11.2-8.5 11.2Z"/><path d="M7 12h3l1.5-2.5 2 5 1.5-2.5h2"/>',
   "t-network": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3 3.2 15 0 18M12 3c-3.2 3-3.2 15 0 18"/>',
   "t-monitor": '<rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="m10 8.5 5 2.5-5 2.5Z"/><path d="M8 21h8M12 17v4"/>',

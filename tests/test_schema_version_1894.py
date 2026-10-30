@@ -31,7 +31,9 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # 5: model_slot_maps (#2001, 22/10; 4 in its PR -- #1901 took 4 first in lab/int-1022)
                 5: "f79a1deed0176e55c865a0fb33b907acdd5a1b008dc904ac230067faaaa62790",
                 # 6: net_devices.held_at + held_json (#2031, PR #2036, 22/10; it did not bump)
-                6: "745aae931b0522af00e91d463f7a8ccb84894c6eb4f133ca80160d92923ae02c"}
+                6: "745aae931b0522af00e91d463f7a8ccb84894c6eb4f133ca80160d92923ae02c",
+                # 7: applied_timing (#2056/#2059), disk sets + inventory (#1857), firmware images (#2080) -- mockups 05/04/06, 24/10
+                7: "47896c6739283e20dfc43b9458dc2d6f039de4717af91caa89b20004e3387a1c"}
 
 
 def _fingerprint(conn) -> str:
@@ -70,7 +72,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 7
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'model_slot_maps'").fetchone()
     assert "disk_serial" in [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
 
@@ -87,7 +89,7 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 7
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "held_at" in columns and "held_json" in columns
 

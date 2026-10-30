@@ -19,6 +19,9 @@ CASES = [
     ("cloner_beep", "yes", "true", "צליל בסיום סבב שיכפול"),
     ("readback_full", "yes", "true", "אימות מלא אחרי הכתיבה"),
     ("igmp_querier", "yes", "true", "IGMP querier"),
+    ("lost_wait_seconds", "179", "180", "המתנה למחשב שהתנתק באמצע שיכפול"),   # #2056
+    ("gui_idle_poweroff_seconds", "59", "60", "כיבוי כשאין פעילות"),   # #2059
+    ("gui_end_poweroff_seconds", "9", "10", "ספירה לכיבוי בסוף משימה"),   # #2059
     ("intersite_rate_cap_mbps", "100001", "100000", "הגבלת קצב בין אתרים"),
     ("auto_reboot", "monthly", "daily", "הפעלה מחדש אוטומטית"),
     ("auto_reboot_time", "24:00", "23:59", "שעת הפעלה מחדש"),

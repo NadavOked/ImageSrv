@@ -297,7 +297,7 @@ def test_the_defaults_are_nadavs():
     text = (LIB / "usbclone.sh").read_text(encoding="utf-8")
     got = dict(re.findall(r"^USB_DEF_(\w+)=(\S+)", text, re.M))
     assert got == {"MIN_FREE_GB": "20", "READBACK": "sample", "CRC_WARN": "500", "TEMP_WARN_C": "60",
-                   "BEEP": "true"}   # #2131: on, as the server's cloner_beep
+                   "BEEP": "true", "POWEROFF_S": "20"}   # #2131: on, as the server's cloner_beep
 
 
 # --- the settings: the server's settings screen, the stick's data (Nadav 20/10) ------------------
