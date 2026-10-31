@@ -157,6 +157,29 @@ safecopy (GPL-2.0+), dosfstools (GPL-3.0+).
     endorse derived products.
   The full texts are in the packages' `copyright` files and must travel with
   the firmware (ISO and initramfs).
+* Wired network-card firmware (#1820), on the ISO pool and installed on the
+  server, **not** in the initramfs. Each whole Debian 13 package is shipped;
+  the license ids below are those Debian's `copyright` file assigns to the
+  files each package ships (read from the 20250410-2 packages on 2026-10-31;
+  the texts themselves not yet reviewed, same open item as `rtl_nic`):
+  * `firmware-bnx2`, `firmware-bnx2x` (Broadcom/QLogic NetXtreme II):
+    `binary-redist-firmware`.
+  * `firmware-qlogic` (QLogic FastLinQ, Brocade): `binary-redist-QLogic-1`
+    to `-3`, `binary-redist-QLogic-BR-series`, `BSD-2-clause-OpenIB.org`.
+  * `firmware-netxen` (QLogic 3xxx): `binary-redist-QLogic-4`.
+  * `firmware-myricom` (Myri-10G): `BSD-2-clause-Myricom`.
+  * `firmware-netronome` (Agilio): `binary-redist-Netronome`.
+  * `firmware-cavium` (LiquidIO): `binary-redist-Cavium`.
+  * `firmware-intel-misc`: `ice` DDP `binary-redist-Intel`, `e100`
+    `BSD-3-clause-Intel`. The package also carries other Intel firmware under
+    `binary-redist-Intel-1`, `-Intel-Ice-enhanced` and
+    `-Intel-narrower-patent`.
+  * `firmware-misc-nonfree`: `tg3` and `tehuti` `binary-redist-firmware`,
+    Chelsio `cxgb4` `binary-redist-Chelsio`, `cxgb3` `BSD-2-clause` and
+    `binary-redist-NetLogic`, `typhoon` `BSD-3-clause-3Com`. This package
+    also carries firmware for many non-network devices under dozens of
+    other ids; the per-file list is in its `copyright` file.
+  * `firmware-linux-free` (Debian main; `pcnet_cs`): GPL-2, GPL-2+, GPL-3.
 
 ## 3. Source code for GPL / LGPL components
 

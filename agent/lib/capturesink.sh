@@ -95,6 +95,12 @@ upload_manifest() {
     # matches) and re-reads every file in the background; the image enters the
     # library only when that passes. This machine is released here.
     capture_stage verify
+    # #2213: the manifest may close the task immediately. Deliver its warning
+    # while the task is still open, before that PUT can win the reporter race.
+    if [ -s "$RUN_DIR/src_unhib" ]; then
+        report_final "${_ppid:-}" "" "$MAC" "$SERVER" "$1" || {
+            printf '%s\n' network_server > "$RUN_DIR/capture.reason"; return 1; }
+    fi
     curl -sfS -X PUT -H "Content-Type: application/json" \
         -H "X-Imagectl-Task-Token: ${TASK_TOKEN:-}" \
         --data-binary "@$2" \

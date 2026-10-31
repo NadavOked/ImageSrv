@@ -28,6 +28,7 @@ USB_DEF_READBACK=sample
 USB_DEF_CRC_WARN=500
 USB_DEF_TEMP_WARN_C=60
 USB_DEF_BEEP=true   # #2131: the tunes of #2067 (roundbeep.sh) -- the stick's own switch, no server
+USB_DEF_POWEROFF_S=20   # #2198: successful local clone only; 0 waits for the operator
 
 usb_part_label() {   # $1 = block device name (sdb1). Its filesystem label, or nothing.
     blkid -s LABEL -o value "$SYSROOT/dev/$1" 2>/dev/null
@@ -100,12 +101,13 @@ _usb_int() {   # $1 = value, $2 = min, $3 = max. 0 = a whole number in range, no
 }
 
 usb_settings_load() {
-    # Sets USB_MIN_FREE_GB USB_READBACK USB_CRC_WARN USB_TEMP_WARN_C USB_BEEP and
+    # Sets USB_MIN_FREE_GB USB_READBACK USB_CRC_WARN USB_TEMP_WARN_C USB_BEEP USB_POWEROFF_S and
     # USB_NOTICE (what the operator must be told; "" = nothing). The defaults,
     # then settings.json field by field: a field that is there and not valid
     # is refused by name and the default stays.
     USB_MIN_FREE_GB=$USB_DEF_MIN_FREE_GB; USB_READBACK=$USB_DEF_READBACK
     USB_CRC_WARN=$USB_DEF_CRC_WARN; USB_TEMP_WARN_C=$USB_DEF_TEMP_WARN_C; USB_BEEP=$USB_DEF_BEEP; USB_NOTICE=""
+    USB_POWEROFF_S=$USB_DEF_POWEROFF_S
     _us_f=$(usb_settings_path)
     [ "${USB_DATA_STATE:-none}" = mounted ] \
         || USB_NOTICE="אין מחיצת נתונים על הדיסק-און-קי — ההגדרות לסשן הזה בלבד, ולא יישמרו"
@@ -124,6 +126,10 @@ usb_settings_load() {
     # a JSON true/false only; jq's // would read false as missing
     _us_v=$(jq -r '.cloner_beep | if type == "boolean" then tostring elif . == null then empty else tojson end' "$_us_f")
     case "$_us_v" in '') ;; true|false) USB_BEEP=$_us_v ;; *) _us_bad="$_us_bad cloner_beep=$_us_v" ;; esac
+    # tojson keeps strings/null/booleans distinct from a JSON integer, including 0.
+    _us_v=$(jq -r 'if has("poweroff_s") then .poweroff_s | tojson else empty end' "$_us_f") \
+        || { USB_POWEROFF_S=0; log "usbclone: poweroff_s could not be read -- no automatic power-off" >&2; return 1; }
+    if [ -n "$_us_v" ]; then _usb_int "$_us_v" 0 3600 && USB_POWEROFF_S=$_us_v || _us_bad="$_us_bad poweroff_s=$_us_v"; fi
     _us_mc=0; usb_map_json > /dev/null || _us_mc=$?   # #1962 (usbmap.sh): 2 = this model's list is not valid
     [ "$_us_mc" != 2 ] || _us_bad="$_us_bad drawer_slots[$(usb_model)]"
     _us_mc=0; usb_names_json > /dev/null || _us_mc=$?   # #2001: this model's names, the same way

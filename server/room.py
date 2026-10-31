@@ -32,6 +32,7 @@ from . import model_slots   # #2001
 from .db import _write_lock, journal, now_iso, update_one, writing
 from . import clockstep, learn_eta, learn_models, learn_ports, pxe_log, readbackhash, storage_history
 from . import held   # #2031
+from . import agent_timing   # #2056
 from .images import required_bytes, restore_refusal
 from .imagefit import validate_expand_choice
 from .sessions import SessionError, SessionStore, SessionSuperseded
@@ -938,6 +939,7 @@ def _mark_lost(conn: sqlite3.Connection, store: SessionStore, wave: sqlite3.Row,
     now = _utcnow()
     ahead = now + timedelta(seconds=clockstep.JUMP_SECONDS)
     floor = _iso_or_none(wave["started_at"])
+    lost_limit = agent_timing.lost_seconds(conn)   # ‏#2056: הגדרה בקונסולה, ברירת מחדל LOST_SECONDS
     lost, future = [], []
     for m in members:
         if m["state"] in reports.FINAL:
@@ -947,7 +949,7 @@ def _mark_lost(conn: sqlite3.Connection, store: SessionStore, wave: sqlite3.Row,
             continue
         if max(refs) > ahead:
             future.append(m)
-        elif (now - max(refs)).total_seconds() > LOST_SECONDS:
+        elif (now - max(refs)).total_seconds() > lost_limit:
             lost.append(m)
     if future:
         _rebase_future(conn, wave, future, now)

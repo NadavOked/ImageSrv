@@ -302,6 +302,7 @@ void screen_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
 void screen_done(App *a, cairo_t *cr, double W, double H, double head_h) {
     const Theme *t=a->theme; const State *s=&a->st;
     int failed = s->task == TASK_FAILED;
+    int warning = !failed && s->task_error[0]; /* #2213: dropped Fast Startup on the RAM copy */
     double cw=card_width(W), inner=cw-2*N_PAD;
     double tw=inner-N_DONE_ICON-N_DONE_GAP;
     Text label=label_make(cr,a->done_title,tw);
@@ -319,15 +320,15 @@ void screen_done(App *a, cairo_t *cr, double W, double H, double head_h) {
     double x=panel.x+N_PAD,y=panel.y+N_PAD;
     /* align-items:center: the icon is centred against the text block */
     draw_native_icon(cr,t,(Rect){panel.x+cw-N_PAD-N_DONE_ICON,y+(dmax(block,N_DONE_ICON)-N_DONE_ICON)/2,N_DONE_ICON,N_DONE_ICON},
-                     failed ? ICON_WARNING : ICON_SUCCESS);
-    text_draw(cr,&label,x,y,failed ? t->danger : t->muted);   y += label.h+N_LABEL_GAP;
+                     failed || warning ? ICON_WARNING : ICON_SUCCESS);
+    text_draw(cr,&label,x,y,failed ? t->danger : warning ? t->warn : t->muted);   y += label.h+N_LABEL_GAP;
     text_draw(cr,&title,x,y,t->ink);                          y += title.h+N_TITLE_GAP;
     text_draw(cr,&sub,x,y,t->muted);                          y += sub.h+N_LOGO_GAP;
     draw_metric(cr,t,(Rect){x+tw-mw,y,mw,mh},"נקראו",bytes);
     draw_metric(cr,t,(Rect){x,y,mw,mh},"כונן המקור",s->task_disk[0] ? s->task_disk : "—");
     y += mh+N_ACTION_TOP;
     double bw=btn_width(&button);
-    draw_btn(a,cr,(Rect){x+tw-bw,y,bw,N_BUTTON_H},&button,failed ? BTN_PRIMARY : BTN_SUCCESS,HIT_AGAIN);
+    draw_btn(a,cr,(Rect){x+tw-bw,y,bw,N_BUTTON_H},&button,failed || warning ? BTN_PRIMARY : BTN_SUCCESS,HIT_AGAIN);
     text_free(&label);text_free(&title);text_free(&sub);text_free(&button);
 }
 

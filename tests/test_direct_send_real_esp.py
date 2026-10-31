@@ -44,7 +44,7 @@ pytestmark = requires_native(
 )
 
 LIBS = ("common", "sysinfo", "waits", "jsonq", "progress", "restore", "manifest", "bootca",
-        "hibernation", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui")   # #1798: capture_disk reads the mark; #1901/#1808: the source gates
+        "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui")   # #1798: capture_disk reads the mark; #1901/#1808: the source gates
 
 #: udp-sender: says it started (as the real one does once receivers joined)
 #: and swallows the stream. What it read is what fanout hashed.
@@ -109,7 +109,7 @@ def _drive(fx: Path, stubs: Path, mode: str, env: tuple[str, ...] = ()) -> dict:
     (t / "stubs").symlink_to(stubs, target_is_directory=True)
     (t / "answer.json").write_text(json.dumps(_answer(receivers=1)), encoding="utf-8")
     script = t / "drive.sh"
-    sources = "\n".join(f'. "$LIB_DIR/{n}.sh"' for n in LIBS)
+    sources = "\n".join(f'[ ! -f "$LIB_DIR/{n}.sh" ] || . "$LIB_DIR/{n}.sh"' if n == "captureview" else f'. "$LIB_DIR/{n}.sh"' for n in LIBS)
     script.write_text(DRIVER % {"lib": LIB, "sources": sources, "task": TASK}, newline="\n")
     done = _root(*env, "sh", str(script), str(fx), mode, str(t), timeout=600)
     words = dict(line.split(None, 1) for line in done.stdout.splitlines() if " " in line)

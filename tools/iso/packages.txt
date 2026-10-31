@@ -144,3 +144,21 @@ sqlite3
 # ה-netinst נושא אותן ב-non-free-firmware, ו-build-iso.sh מאנדקס את הרכיב.
 firmware-realtek
 firmware-intel-graphics
+# קושחת כרטיסי רשת קוויים בשרת (#1820). הכרעת נדב 31/10: "צריך לכלול הכול
+# לא יודע מה יחובר". כאן כל חבילה של דביאן 13 שמביאה קובץ ש-`modinfo -F
+# firmware` מבקש עבור מודול תחת drivers/net/ethernet (נמדד מול
+# 6.12.113+deb13-amd64, 31/10). שרת בלעדיהן עולה בלי רשת ("Can't load
+# firmware file bnx2-mips-..."). לא firmware-linux-nonfree השלם (#1820), ולא
+# firmware-marvell-prestera (61MB, ASIC של מתג; אף מודול קווי לא מבקש ממנה).
+# אותה רשימה ב-WIRED_NIC_FIRMWARE ב-tests/test_iso_build.py, והרישיונות
+# ב-THIRD_PARTY_NOTICES.md סעיף F (#1707).
+firmware-bnx2            # bnx2: Broadcom NetXtreme II 1Gb (HP ProLiant, Dell R)
+firmware-bnx2x           # bnx2x: Broadcom NetXtreme II 10Gb
+firmware-misc-nonfree    # tg3 (tigon/), cxgb3/cxgb4 (Chelsio), tehuti, typhoon
+firmware-intel-misc      # ice (Intel E800 DDP), e100
+firmware-qlogic          # qed (QLogic FastLinQ), bna (Brocade)
+firmware-netxen          # netxen_nic, qlcnic
+firmware-myricom         # myri10ge
+firmware-netronome       # nfp (Agilio): ~140MB installed, 1.7MB .deb
+firmware-cavium          # liquidio
+firmware-linux-free      # pcnet_cs (main, 96KB)

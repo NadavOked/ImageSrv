@@ -39,6 +39,7 @@ STATE_DIR = "/var/lib/imagectl/netcfg"
 ROLLBACK_TIMER = "imagectl-netrollback.timer"
 #: ‏#1264: מצב כל bond כפי שהקרנל מדווח עליו — הראיה, לא ההגדרה.
 BONDING_DIR = "/proc/net/bonding"
+BOND_MODULE_CONF = "/etc/modules-load.d/imagectl-bond.conf"
 #: ‏#1264: הסקריפט של ifenslave שיוצר bond מתוך `bond-slaves` ב-ifupdown.
 #: בלעדיו `ifup bond0` נופל, ורשת ההפצה נשארת בלי כתובת.
 IFENSLAVE_HOOK = "/etc/network/if-pre-up.d/ifenslave"
@@ -81,6 +82,29 @@ def write_conf(name: str, text: str | None,
 def write_resolv(text: str, path: str | Path = RESOLV_CONF) -> str | None:
     try:
         write_atomic(path, text)   # ‏#1908
+    except OSError as exc:
+        return f"לא ניתן לכתוב את {path}: {exc.strerror or exc}"
+    return None
+
+
+def read_bond_module(path: str | Path = BOND_MODULE_CONF) -> str | None:
+    """Snapshot our boot configuration; unreadable must not mean absent."""
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+
+
+def write_bond_module(text: str | None,
+                      path: str | Path = BOND_MODULE_CONF) -> str | None:
+    """Persist bonding atomically, or remove our file when returning to one NIC."""
+    path = Path(path)
+    try:
+        if text is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            write_atomic(path, text)
     except OSError as exc:
         return f"לא ניתן לכתוב את {path}: {exc.strerror or exc}"
     return None
@@ -260,11 +284,20 @@ def apply_interface(name: str) -> str | None:
     ‏**None כאן פירושו "הפקודות רצו", ולא "הכתובת השתנתה".** את זה
     קובעת רק `read_state()`.
     """
-    link_code, link_text = _run(["ip", "link", "set", "dev", name, "up"])
-    if link_code is None:
-        return f"{name}: לא ניתן להפעיל את הכרטיס (ip link: {link_text})"
-    if link_code != 0:
-        return f"{name}: הפעלת הכרטיס נכשלה (ip link rc={link_code}: {link_text[:200]})"
+    if name == netcfg.BOND_NAME:
+        # #1804: ifenslave creates the bond during ifup. It need not exist
+        # yet (nor survive ifdown), so do not require ip link up beforehand.
+        code, text = _run(["modprobe", "bonding"])
+        if code is None:
+            return f"{name}: לא ניתן להפעיל את הכרטיס (modprobe bonding: {text})"
+        if code != 0:
+            return f"{name}: הפעלת הכרטיס נכשלה (modprobe bonding rc={code}: {text[:200]})"
+    else:
+        link_code, link_text = _run(["ip", "link", "set", "dev", name, "up"])
+        if link_code is None:
+            return f"{name}: לא ניתן להפעיל את הכרטיס (ip link: {link_text})"
+        if link_code != 0:
+            return f"{name}: הפעלת הכרטיס נכשלה (ip link rc={link_code}: {link_text[:200]})"
     down_code, down_text = _run(["ifdown", "--force", name])
     up_code, up_text = _run(["ifup", name])
     if up_code is None:
@@ -548,5 +581,7 @@ def default_hooks() -> dict:
         "netcfg_down": down_interface,
         "netcfg_bond_state": read_bond,
         "netcfg_bond_supported": bond_supported,
+        "netcfg_read_bond_module": read_bond_module,
+        "netcfg_write_bond_module": write_bond_module,
         "netcfg_main_defines": main_defines,
     }

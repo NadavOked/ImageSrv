@@ -32,7 +32,7 @@ capture_pcl_flags() {
     # $1 = partclone tool, $2 = fs. ONE place for both reads of a direct send
     # (directsend.sh): its receivers hash pass 2 against pass 1, and #1472 gave
     # pass 1 alone -a0 -z -- every direct send failed on partition 1 (#1574).
-    # -I: the preflight already refused dirty/hibernated NTFS; still read-only.
+    # -I: preflight verified NTFS; hibernation is dropped only on RAM views.
     # ‏#1472: ‏-a0 -z 524288 כמו lccopy.sh (נמדד שם); ‏fanout -S מגבב את כל הזרם.
     _cf=""; [ "$2" = ntfs ] && _cf="-I"
     [ "$1" = partclone.dd ] || _cf="$_cf -a0 -z 524288"
@@ -42,7 +42,7 @@ capture_pcl_flags() {
 capture_disk() {
     # $1 = task id, $2 = disk name, $3 = the serial it was ordered for (#1901; a direct send too, #1955). Emits the manifest path on success.
     _task="$1"; _disk="$2"
-    rm -f "$RUN_DIR/capture.reason"
+    rm -f "$RUN_DIR/capture.reason" "$RUN_DIR/capture.unhib" "$RUN_DIR/src_unhib"
     _node_base="$DEVROOT/$_disk"
     capture_stage ntfs_check   # #980 §4: the source checks (GPT, partitions, NTFS hibernation)
 
@@ -106,7 +106,7 @@ capture_disk() {
         _why=$(_bitlocker_reason "$_idx" "$_fs" "$_node"); [ -z "$_why" ] || { _capture_failed "$_disk" "$_why" source_bitlocker; return 1; }   # #1806: every partition, before a byte
         case "$_fs" in ntfs|ntfs-3g)
             _why=$(capture_ntfs_hibernation_reason "$_node" "$RUN_DIR/ntfs-check.$_idx"); _hn_status=$?
-            [ -z "$_why" ] || { _hn_code=source_disk; [ "$_hn_status" != 1 ] || _hn_code=source_ntfs; _capture_failed "$_disk" "$_why" "$_hn_code"; return 1; } ;;
+            capture_ntfs_gate "$_disk" "$_idx" "$_node" "$_hn_status" "$_why" || { _capture_failed "$_disk" "$CAPTURE_NTFS_ERROR" "$CAPTURE_NTFS_CODE"; return 1; } ;;
             unreadable) _capture_failed "$_disk" "מחיצה $_idx: לא הצלחנו לקרוא את מערכת הקבצים שלה (blkid) — לא נקלט"; return 1 ;;   # #1905: never raw, never past the hibernation gate
             *) _why=$(capture_fs_reason "$_idx" "$_fs") || _why="בדיקת מערכת הקבצים לא רצה (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; } ;; esac   # #1900: before the space check, not at the end
     done < "$_parts"; _why=$(capture_layout_reason "$_disk" "$_parts") || _why="source_disk|בדיקת הדיסק הדינמי ומחיצת האתחול לא רצה (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "${_why#*|}" "${_why%%|*}"; return 1; }   # #1824 LDM, #1822 no ESP
@@ -115,7 +115,7 @@ capture_disk() {
     capture_stage shrink; cd_init "$_disk" "$_parts" "$_sector_size" 2>/dev/null || :   # #1505: the console's partition table
     capture_space_preflight "$_task" "$_disk" "$_parts" "$_sector_size" \
         || { _capture_failed "$_disk" "$CAPTURE_SPACE_ERROR" "${CAPTURE_SPACE_CODE:-network_server}"; return 1; }
-    shrink_before_capture "$_disk" "$_parts" "$_sector_size" \
+    capture_prepare_views "$_disk" "$_parts" "$_sector_size" \
         || { _capture_failed "$_disk" "${SHRINK_ERROR:-הכיווץ נכשל בלי סיבה (shrink.sh לא נטען?)}"; return 1; }
 
     # ‏min_target_bytes הוא מה שהאימג' באמת צריך — סוף המחיצה האחרונה שבטבלה
@@ -277,7 +277,7 @@ capture_disk() {
     # ‏#1466: הבייטים עברו; העותק בזיכרון משוחרר (המקור לא נכתב). כשל = אזהרה בלבד.
     capture_stage restore_size
     [ "${CAPTURE_SINK:-upload}" = discard ] || shrink_restore_source "$_disk"   # #1171: a direct send reads the view again; direct_send_task releases it
-
+    capture_unhib_note "$_disk" || { _capture_failed "$_disk" "לא הצלחנו לרשום שההשהיה בוטלה בעותק — המקור לא נכתב"; return 1; }
     _json_parts=${_json_parts%,}
     _json_parts=$(_mark_expandable "$_json_parts")
     _os=$(_image_os "$_json_parts")
@@ -293,7 +293,7 @@ capture_disk() {
     # הנתיב קבוע והקורא מכיר אותו. בלי echo של הנתיב ל-stdout: log()
     # מדבר גם הוא ל-stdout, ולכידת $(capture_disk) החזירה פעם בליל
     # שורות לוג במקום נתיב — וה-curl של המניפסט נכשל בשקט (מעבדה, #12).
-    printf '{"schema":1,"family":%s,"os":"%s",%s,"source_disk_bytes":%s,"min_target_bytes":%s,"target_floor_bytes":%s,"scheme":"gpt","sector_size":%s,"disk_guid":"%s","partitions":[%s],"total_compressed_bytes":%s,"compression":"zstd-%s"}\n' \
-        "$_family" "$_os" "$_bootca" "$_disk_bytes" "$_min_target" "$_floor_json" "$_sector_size" "$_disk_guid" "$_json_parts" "$_total" "$CAPTURE_LEVEL" \
+    printf '{"schema":1,"family":%s,"os":"%s",%s,"source_disk_bytes":%s,"min_target_bytes":%s,"target_floor_bytes":%s,"scheme":"gpt","sector_size":%s,"disk_guid":"%s","partitions":[%s],"total_compressed_bytes":%s,"compression":"zstd-%s"%s}\n' \
+        "$_family" "$_os" "$_bootca" "$_disk_bytes" "$_min_target" "$_floor_json" "$_sector_size" "$_disk_guid" "$_json_parts" "$_total" "$CAPTURE_LEVEL" "$(capture_unhib_json)" \
         > "$RUN_DIR/new-manifest.json"
 }

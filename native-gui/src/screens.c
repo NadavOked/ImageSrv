@@ -202,7 +202,7 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
     case SCREEN_FAILURE:return failure_status_word(a,dot);   /* #1569 */
     case SCREEN_PICK:return "בחירת דיסק";
     case SCREEN_PROGRESS:return s->task==TASK_PENDING?"ממתין לסוכן":"משימה פעילה";
-    case SCREEN_DONE:if(s->task==TASK_FAILED){*dot=a->theme->danger;return "נכשל";}return "הושלם";
+    case SCREEN_DONE:if(s->task==TASK_FAILED){*dot=a->theme->danger;return "נכשל";}if(s->task_error[0])*dot=a->theme->warn;return "הושלם";
     case SCREEN_CLASS:return s->has_session?(s->sess_open?"ממתין להצטרפות":"משדר"):"בחירת כיתה";
     case SCREEN_ROOM:
         if(s->has_round){snprintf(buf,n,"גל %d %s",s->wave_number,s->wave_open?"ממתין":   /* #1331 mockup v2: an ended wave says so */
@@ -579,6 +579,7 @@ void app_route(App *a){
         if(s->task==TASK_DONE&&s->task_direct){snprintf(a->done_title,sizeof a->done_title,"ההפצה הישירה הושלמה");snprintf(a->done_sub,sizeof a->done_sub,"הדיסק %s שודר למגירות שנבחרו. שום דבר לא נשמר בשרת.",s->task_disk);}
         else if(s->task==TASK_DONE){snprintf(a->done_title,sizeof a->done_title,"הקליטה הושלמה");snprintf(a->done_sub,sizeof a->done_sub,"\"%s\" נכנס לספרייה.",s->task_name);}
         else{snprintf(a->done_title,sizeof a->done_title,"המשימה נכשלה");snprintf(a->done_sub,sizeof a->done_sub,RLM "%s",s->task_error[0]?s->task_error:"ראו את היומן בקונסולה.");}   /* #1502: the server sends "sda: ..." */
+        if(s->task==TASK_DONE&&s->task_error[0])snprintf(a->done_sub,sizeof a->done_sub,RLM "%s",s->task_error); /* #2213: success with a warning */
     }
     if(a->showing_done){a->screen=SCREEN_DONE;return;}
     if(a->mode==MODE_CLASSES&&(a->signed_in||s->has_session)){a->screen=SCREEN_CLASS;return;}

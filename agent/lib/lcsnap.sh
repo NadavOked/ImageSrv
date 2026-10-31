@@ -35,8 +35,8 @@
 # then it shrinks. Its budget is LC_SNAP_UNHIB_MB more. The targets' "done" is
 # orange ($_sr/src_unhib, lc_unhibernate_target); a drop that fails refuses
 # the smaller target by name, and a view whose state does not read is refused.
-# The local clone only (lc_snap_shrink <src> unhib): the capture refuses a
-# hibernated source before it ever makes a view (#651).
+# Capture uses mode `capture` (#2213): full-size entries need only the drop,
+# shrinking entries share the same views; the local clone's `unhib` is unchanged.
 
 LC_SNAP_RESERVE_MB="${LC_SNAP_RESERVE_MB:-1024}"   # the copy's own buffers (fanout, partclone)
 LC_SNAP_META_MB="${LC_SNAP_META_MB:-256}"
@@ -131,17 +131,22 @@ _snap_views() {
         { [ "$_sw_got" = "$_sw_want" ] && [ -e "$DEVROOT/mapper/$_sw_name" ]; } || {
             log "the view of partition $_sw_idx did not read back: '$_sw_got', not '$_sw_want'"
             LC_SNAP_WHY="העותק של מחיצה $_sw_idx לא נקרא בחזרה כפי שנוצר — הפרטים ביומן"; return 3; }
-        _sw_h=0; _sw_hs=clean; [ "$_sn_u" != unhib ] || _sw_hs=$(ntfs_state "$DEVROOT/mapper/$_sw_name")   # #2208: the view, never the source
+        _sw_h=0; _sw_hs=clean; case "$_sn_u" in unhib|capture) _sw_hs=$(ntfs_state "$DEVROOT/mapper/$_sw_name") ;; esac   # the view, never the source
+        if [ "$_sn_u" = capture ] && [ "$_sw_hs" = dirty ]; then LC_SNAP_WHY=$(capture_hibernated_message "$_sw_node"); return 3; fi
         case "$_sw_hs" in clean|dirty) ;; hibernated) _sw_h=1 ;;
             *) LC_SNAP_WHY="מחיצה $_sw_idx: לא הצלחנו לבדוק אם Windows בה כובה עד הסוף (${_sw_hs#unchecked:})"; return 3 ;; esac
+        if [ "$_sn_u" = capture ] && [ "$_sw_new" = "$_sw_cur" ]; then _sw_mb=0; else
         ntfsresize -n -s "$_sw_new" --no-progress-bar "$DEVROOT/mapper/$_sw_name" < /dev/null > "$_sr/snap/$_sw_idx.n" 2>&1; _sw_rc=$?
         cat "$_sr/snap/$_sw_idx.n" >> "$LOG_FILE"
         _sw_mb=$(_lc_relocs "$_sr/snap/$_sw_idx.n")
         { [ "$_sw_rc" = 0 ] && [ -n "$_sw_mb" ]; } \
             || { LC_SNAP_WHY="מחיצה $_sw_idx: ‏ntfsresize -n לא אמר כמה צריך להזיז (rc=$_sw_rc)"; return 3; }
+        fi
         _sw_need=$((_sw_mb + _sw_mb / 10 + LC_SNAP_META_MB + _sw_h * LC_SNAP_UNHIB_MB))
         [ $((_sw_need * 1024)) -le "$3" ] \
-            || { LC_SNAP_WHY="מחיצה $_sw_idx: להזזת $_sw_mb MB נדרשים $_sw_need MB זיכרון, ויש $(($3 / 1024)) MB"; return 3; }
+            || { if [ "$_sn_u" = capture ] && [ "$_sw_mb" = 0 ]; then   # #2213: the owner's wording (mockup 13, 30/10)
+                LC_SNAP_WHY="מחיצה $_sw_idx: לביטול מצב השינה בעותק נדרשים $_sw_need MB זיכרון, ויש $(($3 / 1024)) MB — לא נקלט. המקור לא נכתב"
+                else LC_SNAP_WHY="מחיצה $_sw_idx: להזזת $_sw_mb MB נדרשים $_sw_need MB זיכרון, ויש $(($3 / 1024)) MB"; fi; return 3; }
         _sw_tot=$((_sw_tot + _sw_mb)); _sw_i=$((_sw_i + 1))
         echo "$_sw_idx|$DEVROOT/mapper/$_sw_name|$_sw_st|$_sw_sz|$((_sw_new / 512))|$_sw_name|$_sw_h" >> "$_sr/snap/views"
     done 3< "$2"
@@ -158,7 +163,11 @@ _snap_unhib() {
         LC_SNAP_WHY="העותק של מחיצה $1 אינו תקין אחרי ביטול ההשהיה (המאגר בזיכרון התמלא?) — הפרטים ביומן"; _snap_back 3; return; }
     log "view of partition $1: the drop rc=$_su_rc, its RAM store holds $_sv_use sectors (#2208)"
     if [ "$_su_rc" -ne 0 ]; then
+        if [ "$_sn_u" = capture ]; then   # #2213: the owner's wording (mockup 13, 30/10)
+        LC_ERROR="המקור במצב שינה של Windows (Fast Startup), וביטול ההשהיה בעותק של מחיצה $1 נכשל — לא נקלט. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי — המקור לא נכתב"
+        else
         LC_ERROR="המקור במצב שינה של Windows (Fast Startup), וביטול ההשהיה בעותק של מחיצה $1 נכשל — אי אפשר לכווץ אותו לדיסק הזה, שקטן ממנו. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי — המקור לא נכתב"
+        fi
         _snap_back 1; return; fi
     _su_a=unhibernated; [ "$NTFS_UNHIB_LOGFILE" = 0 ] || _su_a=unhibernated_logfile
     echo "$_su_a" > "$_sr/src_unhib" || { LC_ERROR="לא הצלחנו לרשום שההשהיה בוטלה בעותק — המקור לא נכתב"; _snap_back 1; return; }
@@ -181,7 +190,7 @@ _snap_cut() {
 }
 
 lc_snap_shrink() {
-    # $1 = source, $2 = unhib (#2208). Reads $_sr/shrink.plan and parts.txt. 0 = the views are
+    # $1 source, $2 unhib (#2208) or capture (#2213, permits full-size entries). 0 = views ready,
     # shrunk, parts.txt is the compacted layout (parts.orig.txt the source's),
     # and $_sr/snap/<idx>.node names what partclone reads; 1 + LC_ERROR =
     # failed, the source was not written; 3 + LC_SNAP_WHY = no view could be
@@ -206,7 +215,12 @@ lc_snap_shrink() {
     log "local clone: read-only path -- $_sn_k view(s) of the source, $(cat "$_sr/relocations_mb") MB to move, $((_sn_kib / 1024)) MB of RAM each"
     date +%s > "$_sr/resize_at"; : > "$_sn_d/mark"; : > "$_sn_d/cuts"
     while IFS='|' read -r _sn_idx _sn_node _sn_st _sn_sz _sn_new _sn_name _sn_hib <&3; do
+        _sn_prev=""; [ "$_sn_u" != capture ] || _sn_prev=$(cat "$_sr/src_unhib" 2>/dev/null)
         [ "$_sn_hib" != 1 ] || _snap_unhib "$_sn_idx" "$_sn_node" "$_sn_name" || return
+        [ "$_sn_prev" != unhibernated_logfile ] || echo "$_sn_prev" > "$_sr/src_unhib" || { LC_ERROR="לא הצלחנו לרשום שההשהיה בוטלה בעותק — המקור לא נכתב"; _snap_back 1; return; }
+        if [ "$_sn_u" = capture ] && [ "$_sn_new" = "$_sn_sz" ]; then
+            echo "$_sn_idx|$_sn_node" >> "$_sn_d/cuts"; continue
+        fi   # #2213: full-size view, no resize and no linear cut
         log "shrinking the VIEW of partition $_sn_idx on $1: $((_sn_sz * 512)) -> $((_sn_new * 512)) bytes (the source is not written)"
         # ‏-s בלי -f ועם "y" מפורש, כמו shrink.sh. ‏$? של הצינור הוא של ntfsresize.
         printf 'y\n' | ntfsresize -s "$((_sn_new * 512))" --no-progress-bar "$_sn_node" >> "$LOG_FILE" 2>&1; _sn_rc=$?

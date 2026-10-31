@@ -59,13 +59,24 @@ _rb_lock() {
     # that is gone -- kill -9 leaves the directory -- is broken at once, and
     # after BEEP_LOCK_WAIT_S the lock is broken anyway. Two tunes over each
     # other beat a speaker silenced until the next boot (principle 5).
-    _rb_lockdir="$RUN_DIR/beep.lock"; _rb_w=0; _rb_me=; _rb_cut=
+    _rb_lockdir="$RUN_DIR/beep.lock"; _rb_w=0; _rb_missing=0; _rb_me=; _rb_cut=
     _rb_cap=${BEEP_LOCK_WAIT_S:-30}; case "$_rb_cap" in ''|*[!0-9]*) _rb_cap=30 ;; esac
     until mkdir "$_rb_lockdir" 2>/dev/null; do
-        [ -d "$_rb_lockdir" ] || { _rb_unheard "$1" 'cannot lock the speaker'; return 1; }
+        if [ ! -d "$_rb_lockdir" ]; then
+            # The owner may have unlocked after mkdir failed; retry briefly.
+            _rb_missing=$((_rb_missing + 1))
+            [ "$_rb_missing" -lt 3 ] || { _rb_unheard "$1" 'cannot lock the speaker'; return 1; }
+            sleep .05; continue
+        fi
+        _rb_missing=0
         _rb_o=; [ ! -r "$_rb_lockdir/pid" ] || read -r _rb_o < "$_rb_lockdir/pid"
         if [ -n "$_rb_o" ] && ! _rb_alive "$_rb_o"; then
-            log "beep $1: the speaker's lock outlived its owner ($_rb_o) -- broken"; rm -rf "$_rb_lockdir"; continue
+            # Another waiter may have broken it and a new owner taken it.
+            _rb_check=; { read -r _rb_check < "$_rb_lockdir/pid"; } 2>/dev/null || :
+            if [ "$_rb_check" = "$_rb_o" ]; then
+                rm -rf "$_rb_lockdir"
+                log "beep $1: the speaker's lock outlived its owner ($_rb_o) -- broken"; continue
+            fi
         fi
         _rb_w=$((_rb_w + 1))
         if [ "$_rb_w" -gt $((_rb_cap * 20)) ]; then
