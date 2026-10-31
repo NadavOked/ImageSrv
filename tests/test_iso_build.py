@@ -53,6 +53,15 @@ BASH_SCRIPTS = ("make-pool.sh", "build-iso.sh", "firstboot.sh", "firstboot-answe
 ISO_ONLY = {"nftables", "sqlite3", "ca-certificates", "chrony"}
 #: תיקיית קושחה ש-build_initramfs.sh דורש (#1125) → החבילה שמביאה אותה בדביאן 13.
 FIRMWARE_PACKAGE = {"rtl_nic": "firmware-realtek", "i915": "firmware-intel-graphics"}
+#: ‏#1820 (הכרעת נדב 31/10: "צריך לכלול הכול"): חבילת קושחה של דביאן 13 → מודול
+#: קווי מ-drivers/net/ethernet שמבקש ממנה קובץ (`modinfo -F firmware`, ‏6.12.113, ‏31/10).
+#: שרת עם כרטיס כזה עלה מה-ISO בלי רשת, כי ה-ISO נשא רק את rtl_nic.
+WIRED_NIC_FIRMWARE = {
+    "firmware-bnx2": "bnx2", "firmware-bnx2x": "bnx2x", "firmware-misc-nonfree": "tg3",
+    "firmware-intel-misc": "ice", "firmware-qlogic": "qed", "firmware-netxen": "netxen_nic",
+    "firmware-myricom": "myri10ge", "firmware-netronome": "nfp", "firmware-cavium": "liquidio",
+    "firmware-linux-free": "pcnet_cs", "firmware-realtek": "r8169",
+}
 
 
 def _strip_comments(text: str) -> str:
@@ -140,7 +149,7 @@ def test_packages_txt_is_the_union_of_every_apt_list() -> None:
 def test_every_package_in_packages_txt_has_a_source() -> None:
     """הכיוון ההפוך: שורה ב-packages.txt שאין לה מקור היא רשימה שנסחפה."""
     known = set().union(*initramfs_lists().values(), installer_pkgs(), vmupdate_pkgs(), ISO_ONLY,
-                        FIRMWARE_PACKAGE.values())
+                        FIRMWARE_PACKAGE.values(), WIRED_NIC_FIRMWARE)
     orphans = sorted(packages_txt() - known)
     assert not orphans, f"ב-packages.txt בלי מקור ובלי הצהרה ב-ISO_ONLY: {orphans}"
 
@@ -168,6 +177,18 @@ def test_firmware_the_initramfs_gate_demands_is_on_the_iso() -> None:
     assert not unknown, f"תיקיית קושחה בלי חבילה ידועה ב-FIRMWARE_PACKAGE: {unknown}"
     missing = sorted({FIRMWARE_PACKAGE[d] for d in dirs} - packages_txt())
     assert not missing, f"build_initramfs.sh ידרוש קושחה שה-ISO לא מתקין: {missing}"
+
+
+def test_wired_nic_firmware_is_on_the_iso_and_in_the_notices_1820() -> None:
+    """‏#1820: שרת עם Broadcom NetXtreme II (bnx2) עלה מה-ISO בלי רשת, כי ה-ISO נשא
+    רק firmware-realtek. כל חבילת קושחה לכרטיס קווי חייבת להיות ב-packages.txt
+    (ההתקנה offline מתקינה את כולה), ורשומה ב-THIRD_PARTY_NOTICES.md (#1707)."""
+    missing = sorted(WIRED_NIC_FIRMWARE.keys() - packages_txt())
+    assert not missing, f"קושחת רשת קווית חסרה ב-packages.txt (#1820): {missing}"
+    notices = (REPO / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+    unlisted = sorted(p for p in WIRED_NIC_FIRMWARE if f"`{p}`" not in notices)
+    assert not unlisted, f"חבילת קושחה ב-ISO בלי שורה ב-THIRD_PARTY_NOTICES.md (#1707): {unlisted}"
+    assert "firmware-linux-nonfree" not in packages_txt(), "#1820: לא את המטא-חבילה השלמה"
 
 
 def test_no_ssh_server_on_the_product_server() -> None:

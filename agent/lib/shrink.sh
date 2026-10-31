@@ -31,7 +31,7 @@
 # שם, ‏ntfsfix רק `-d`: ‏`-b` היה מוחק את רשימת הקלאסטרים הפגומים של דיסק
 # הבנייה ($BadClus).
 #
-# מה שאסור: כיווץ NTFS מהובר/מלוכלך (השער של #651 רץ לפני הקורא הזה).
+# #2213: dirty NTFS is refused; hibernation is dropped on the view before shrink.
 # שידור ישיר (‏CAPTURE_SINK=discard, ‏#715) מכווץ רק את הזנב, על עותק **אחד**
 # שנבנה פעם אחת ונקרא פעמיים (‏_shrink_direct, ‏#1171) -- הקריאה השנייה שם
 # משווה sha256 לראשונה, ועותק שנבנה פעמיים אינו מובטח להיות אותם בייטים.
@@ -127,6 +127,7 @@ _shrink_direct() {
     # ב-direct_send_task אחרי השנייה. אין זנב או אין עותק: גם כן גודל מלא, וביומן למה.
     # ‏0 = יוצאים לדרך (‏$2 מצומצם או כפי שהיה); ‏1 = SHRINK_ERROR.
     if ! shrink_plan "$1" "$2" "$3"; then
+        [ ! -s "$RUN_DIR/capture.unhib" ] || return 1   # #2213: a required view cannot bypass a failed measure
         log "direct send: no tail -- $SHRINK_ERROR; the layout is sent at its full size"; SHRINK_ERROR=""; return 0
     fi
     [ -s "$RUN_DIR/shrink.plan" ] || return 0
@@ -143,6 +144,7 @@ _shrink_view() {
     # $1 disk $2 parts file; התוכנית ב-$RUN_DIR/shrink.plan. ‏0 = כווץ על העותק,
     # ‏$2 מתאר את הפריסה המצומצמת ו-partclone קורא את העותק (lc_src_node);
     # ‏3 = אין עותק (‏LC_SNAP_WHY), ולא נשאר ממנו דבר; ‏1 = SHRINK_ERROR.
+    [ ! -s "$RUN_DIR/capture.unhib" ] || { capture_snap "$1" "$2"; return; }   # #2213: one plan, one set of views
     _sb_plan="$RUN_DIR/shrink.plan"
     LC_SNAP_RUN="$RUN_DIR/capsnap"; rm -rf "$LC_SNAP_RUN"
     { mkdir -p "$LC_SNAP_RUN" && cp "$_sb_plan" "$LC_SNAP_RUN/shrink.plan" && cp "$2" "$LC_SNAP_RUN/parts.txt"; } \

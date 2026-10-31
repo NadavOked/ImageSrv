@@ -533,15 +533,11 @@ def test_direct_send_takes_only_the_tail_and_never_writes_the_source(tmp_path):
     assert part(manifest(run), 3)["size_bytes"] == WIN_SECTORS * 512 - tail
 
 
-def test_a_hibernated_disk_is_refused_before_the_shrink_is_even_measured(tmp_path):
-    """‏#651 קודם: ntfsresize מסרב למהובר ממילא, אבל השער שלנו רץ לפניו,
-    ואף קריאה — גם לא --info — לא מגיעה לדיסק."""
-    hibernated = ('_fs_of() { echo ntfs; }; '
-                  'capture_ntfs_hibernation_reason() { capture_hibernated_message "$1"; return 1; }; ')
-    box, run, out = capture_run(tmp_path, stubs=stubs(), shell_pre=hibernated + SAY_YES)
-    reason = refusal_reason(box, run, out)
-    assert "Fast Startup" in reason
-    assert order(run) == []
+def test_a_hibernated_disk_drops_on_the_view_before_the_shrink(tmp_path):
+    """#2213 replaces the early refusal; the source remains read-only."""
+    from test_capture_fast_startup_2213 import shrink_hibernated
+
+    shrink_hibernated(tmp_path)
 
 
 # --- ‏#929: כל מחיצות ה-NTFS מכווצות, כל אחת במקומה ---------------------------
@@ -857,7 +853,7 @@ def test_on_the_target_c_is_stretched_and_d_moves_to_the_tail(tmp_path):
 def test_the_shrink_runs_after_the_hibernation_gate_and_before_the_layout_math():
     lines = capture_body()
     gate = first_index(lines, "capture_ntfs_hibernation_reason")
-    shrink = first_index(lines, "shrink_before_capture")
+    shrink = first_index(lines, "capture_prepare_views")
     layout = first_index(lines, "_min_target=$(awk")
     assert gate < shrink < layout, (gate, shrink, layout)
     assert shrink < first_index(lines, "partclone_for_fs")

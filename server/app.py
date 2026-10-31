@@ -32,6 +32,7 @@ from . import auth, auto_reboot, boottrace, deploy_net, dhcp, drive_rates, pulls
 from . import learn_netloss, learn_wol   # #1846, #1847
 from . import server_io   # #1884
 from . import pxe_log   # #1887
+from . import agent_timing   # #2056
 from . import timezone, timesync   # #1447, #1773
 from .api import ServerContext, boot_identity_ok, create_agent_router
 from .console_api import create_console_router
@@ -589,6 +590,8 @@ def create_runtime(
         live_receivers=lambda session_id: store.live_count(session_id),
         # ‏#1950: חבר `lost` שעדיין מקבל את הזרם נספר במחיצה הבאה.
         lost_receivers=lambda session_id: store.lost_ips(session_id),
+        # ‏#2056: תקרת הנטישה של השולח גדלה עם ההמתנה למחשב שהתנתק (הגדרה בקונסולה).
+        lost_wait=lambda: agent_timing.lost_seconds(conn),
         # ברזל 17/10: שאלת SMART פתוחה בגל עוצרת את שעון ה-180 של השולח.
         # מכונה שחרגה מהתקרה (‏ASK_HOLD_MAX_SECONDS) משתחררת מהגל לבדה.
         pending_asks=lambda session_id: smart_ask.waiting_in_wave(conn, session_id),

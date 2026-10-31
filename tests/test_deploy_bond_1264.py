@@ -191,8 +191,10 @@ def lab(tmp_path: Path, images_root: Path, clock):
     from server.app import create_app
 
     m = Machine()
+    module_conf = tmp_path / "modules-load.d" / "imagectl-bond.conf"
     fake = {"applied": [], "deploy_calls": [], "local": "10.1.2.3",
-            "probe": dhcp.ProbeResult(True, ()), "supported": True, "main_defines": False}
+            "probe": dhcp.ProbeResult(True, ()), "supported": True, "main_defines": False,
+            "apply": m.apply, "bond_state": m.bond_state}
     dhcp_hooks = {
         "interfaces": m.interfaces,
         "probe": lambda name: fake["probe"],
@@ -208,11 +210,13 @@ def lab(tmp_path: Path, images_root: Path, clock):
         "netcfg_write_conf": lambda name, text, root=None: (
             m.confs.pop(name, None) if text is None else m.confs.__setitem__(name, text)) and None,
         "netcfg_write_resolv": lambda text, path=None: None,
-        "netcfg_apply": m.apply,
+        "netcfg_apply": lambda name: fake["apply"](name),
         "netcfg_down": m.down,
         "netcfg_state": m.state,
-        "netcfg_bond_state": m.bond_state,
+        "netcfg_bond_state": lambda name: fake["bond_state"](name),
         "netcfg_bond_supported": lambda: fake["supported"],
+        "netcfg_read_bond_module": lambda: netcfg_host.read_bond_module(module_conf),
+        "netcfg_write_bond_module": lambda text: netcfg_host.write_bond_module(text, module_conf),
         "netcfg_main_defines": lambda name: fake["main_defines"],
         "netcfg_sourced": lambda *a: True,
         "netcfg_timer_active": lambda *a: (True, "active"),
@@ -242,7 +246,8 @@ def lab(tmp_path: Path, images_root: Path, clock):
     assert r.status_code == 200 and r.json()["deploy"]["ok"], r.text
     assert deploy_net.stored(app.state.ctx.conn) == ("eth1", "http://10.44.9.1:8080")
     fake["applied"].clear(); fake["deploy_calls"].clear(); m.calls.clear()
-    return SimpleNamespace(client=client, conn=app.state.ctx.conn, m=m, fake=fake, deploy=ctx)
+    return SimpleNamespace(client=client, conn=app.state.ctx.conn, m=m, fake=fake,
+                           deploy=ctx, module_conf=module_conf)
 
 
 def _settings(conn, prefix):
@@ -455,3 +460,162 @@ def test_a_failed_completion_is_named_dnsmasq_still_follows_and_a_retry_on_the_n
     assert lab.m.calls == [], "the machine is already bonded — nothing is touched again"
     assert deploy_net.stored(lab.conn) == ("bond0", "http://10.44.9.1:8080")
     assert ("fw", "bond0") in lab.fake["deploy_calls"]
+
+
+# #1804: exercise the real host apply function, faking only command execution
+# and the kernel's proc directory. The older Machine.apply skipped both.
+@pytest.fixture()
+def host_lab(lab, monkeypatch, tmp_path):
+    proc = tmp_path / "proc" / "net" / "bonding"
+    proc.mkdir(parents=True)
+    lab.commands = []
+    lab.module_result = (0, "")
+    lab.module_loaded = False
+    lab.proc_text = BONDING_TEXT
+    lab.fake["apply"] = netcfg_host.apply_interface
+    lab.fake["bond_state"] = lambda name: netcfg_host.read_bond(name, proc)
+
+    def run(cmd, timeout=40):
+        lab.commands.append(tuple(cmd))
+        if cmd == ["modprobe", "bonding"]:
+            lab.module_loaded = lab.module_result[0] == 0
+            return lab.module_result
+        if cmd[:2] == ["ip", "link"]:
+            return (0, "") if cmd[4] in lab.m.nics else (1, 'Cannot find device "bond0"')
+        if cmd[0] == "ifdown":
+            lab.m.down(cmd[-1])
+            if cmd[-1] == "bond0":
+                (proc / "bond0").unlink(missing_ok=True)
+            return 0, ""
+        if cmd[0] == "ifup":
+            if cmd[-1] == "bond0" and not lab.module_loaded:
+                return 1, "bonding module is not loaded"
+            error = lab.m.apply(cmd[-1])
+            if cmd[-1] == "bond0" and not error and lab.proc_text is not None:
+                (proc / "bond0").write_text(lab.proc_text, encoding="utf-8")
+            return (1, error) if error else (0, "")
+        pytest.fail(f"unexpected host command: {cmd}")
+
+    monkeypatch.setattr(netcfg_host, "_run", run)
+    return lab
+
+
+def test_1804_loads_module_before_ifup_and_persists_atomically(host_lab, monkeypatch):
+    lab = host_lab
+    writes = []
+    atomic = netcfg_host.write_atomic
+
+    def write(path, text):
+        writes.append((path, text))
+        atomic(path, text)
+
+    monkeypatch.setattr(netcfg_host, "write_atomic", write)
+    result = _second(lab, "eth1", "eth2").json()
+    assert result["ok"], result
+    assert lab.commands.index(("modprobe", "bonding")) < lab.commands.index(("ifup", "bond0"))
+    assert ("ip", "link", "set", "dev", "bond0", "up") not in lab.commands
+    assert lab.module_conf.read_text(encoding="utf-8") == "bonding\n"
+    assert (lab.module_conf, "bonding\n") in writes
+    assert result["bond"]["checked"] is True
+    assert {m["name"] for m in result["bond"]["members"]} == {"eth1", "eth2"}
+
+
+def _assert_1804_rolled_back(lab, before, result):
+    assert result["ok"] is False, result
+    assert "הוחזרה ואומתה" in result["apply_error"]
+    assert lab.m.confs == before
+    assert lab.m.nics["eth1"] == ["10.44.9.1/24"]
+    assert "bond0" not in lab.m.nics
+    assert not lab.module_conf.exists()
+    assert "bond0" not in _settings(lab.conn, netcfg.SETTING_PREFIX)
+    assert "bond0" not in _settings(lab.conn, dhcp.SETTING_PREFIX)
+    assert deploy_net.stored(lab.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert lab.fake["deploy_calls"] == [] and lab.fake["applied"] == []
+
+
+@pytest.mark.parametrize("code,detail", [(1, "module rejected"), (None, "modprobe unavailable")])
+def test_1804_modprobe_failure_names_the_command_and_rolls_back(host_lab, code, detail):
+    lab = host_lab
+    lab.module_result = (code, detail)
+    before = dict(lab.m.confs)
+    result = _second(lab, "eth1", "eth2").json()
+    assert "modprobe bonding" in result["apply_error"]
+    assert detail in result["apply_error"]
+    if code is not None:
+        assert f"rc={code}" in result["apply_error"]
+    assert ("ifup", "bond0") not in lab.commands
+    _assert_1804_rolled_back(lab, before, result)
+
+
+@pytest.mark.parametrize("proc_text,needle", [
+    (None, "bond0"),
+    (BONDING_TEXT.split("Slave Interface: eth2")[0], "eth2 אינו חבר"),
+])
+def test_1804_ifup_success_without_proc_evidence_rolls_back(host_lab, proc_text, needle):
+    lab = host_lab
+    lab.proc_text = proc_text
+    before = dict(lab.m.confs)
+    result = _second(lab, "eth1", "eth2").json()
+    assert ("ifup", "bond0") in lab.commands, "the readback must follow a successful ifup"
+    assert needle in result["apply_error"]
+    if proc_text is None:
+        assert "bonding" in result["apply_error"] and "לא נקרא" in result["apply_error"]
+    _assert_1804_rolled_back(lab, before, result)
+
+
+def test_1804_removing_second_card_removes_module_file(lab):
+    assert _second(lab, "eth1", "eth2").json()["ok"]
+    # Seed explicitly so old code reaches removal and fails on the stale file.
+    lab.module_conf.parent.mkdir(parents=True, exist_ok=True)
+    lab.module_conf.write_text("bonding\n", encoding="utf-8")
+    result = _second(lab, "bond0", "").json()
+    assert result["ok"], result
+    assert not lab.module_conf.exists()
+    assert lab.m.nics["eth1"] == ["10.44.9.1/24"]
+
+
+def test_1804_failed_module_write_rolls_back(lab, monkeypatch):
+    before = dict(lab.m.confs)
+
+    def fail_write(path, text):
+        raise OSError("module file write failed")
+
+    monkeypatch.setattr(netcfg_host, "write_atomic", fail_write)
+    result = _second(lab, "eth1", "eth2").json()
+    assert result["ok"] is False, result
+    assert "imagectl-bond.conf" in result["apply_error"]
+    assert "module file write failed" in result["apply_error"]
+    assert ("apply", "bond0") not in lab.m.calls
+    _assert_1804_rolled_back(lab, before, result)
+
+
+def test_1804_unreadable_module_file_stops_before_network_changes(lab):
+    lab.module_conf.mkdir(parents=True)  # Reading a directory must not mean absent.
+    result = _second(lab, "eth1", "eth2").json()
+    assert result["ok"] is False, result
+    assert "imagectl-bond.conf" in result["apply_error"]
+    assert lab.m.calls == []
+    assert lab.m.nics["eth1"] == ["10.44.9.1/24"]
+
+
+def test_1804_failed_removal_restores_module_file_and_bond(lab, monkeypatch):
+    assert _second(lab, "eth1", "eth2").json()["ok"]
+    lab.module_conf.parent.mkdir(parents=True, exist_ok=True)
+    original = "# existing boot configuration\nbonding\n"
+    lab.module_conf.write_text(original, encoding="utf-8")
+    before = dict(lab.m.confs)
+    unlink = Path.unlink
+
+    def fail_removal(path, *args, **kwargs):
+        if path == lab.module_conf:
+            raise OSError("module file removal failed")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_removal)
+    result = _second(lab, "bond0", "").json()
+    assert result["ok"] is False, result
+    assert "module file removal failed" in result["apply_error"]
+    assert "הוחזרה ואומתה" in result["apply_error"]
+    assert lab.module_conf.read_text(encoding="utf-8") == original
+    assert lab.m.confs == before and lab.m.nics["bond0"] == ["10.44.9.1/24"]
+    assert deploy_net.stored(lab.conn) == ("bond0", "http://10.44.9.1:8080")

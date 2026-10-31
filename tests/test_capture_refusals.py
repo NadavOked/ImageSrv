@@ -232,7 +232,7 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         # `imagectl-agent`: ‏`capture_disk` קורא לשניהם בשורת המניפסט,
         # ופונקציה שאינה טעונה היא מניפסט פגום — לא שגיאה.
         f". {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/manifest.sh; "
-        f". {posix(AGENT)}/lib/bootca.sh; . {posix(AGENT)}/lib/hibernation.sh; "
+        f". {posix(AGENT)}/lib/bootca.sh; . {posix(AGENT)}/lib/hibernation.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; "
         # ‏#87: shrink.sh לפני capture.sh כמו בסוכן; הוא עצמו קורא ל-attended
         # (‏#906) ול-ui.sh, ולכן גם הם כאן — פונקציה שאינה טעונה היא כשל שקט.
         f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/attended.sh; "
@@ -242,6 +242,7 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         f". {posix(AGENT)}/lib/shrinkmem.sh; . {posix(AGENT)}/lib/shrinkoffer.sh; "
         f". {posix(AGENT)}/lib/capturedetail.sh; "   # #1505: the console's partition table, loaded before capture.sh like the agent does
         f". {posix(AGENT)}/lib/diskfit.sh; . {posix(AGENT)}/lib/capturegate.sh; "   # #1901/#1900 the source gates; #1808 the RAID check (diskfit.sh)
+        f"if [ -f {posix(AGENT)}/lib/captureview.sh ]; then . {posix(AGENT)}/lib/captureview.sh; fi; "   # #2213: negative control can remove the new library
         f". {posix(AGENT)}/lib/capture.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/capturesink.sh; "   # #1217
         f". {posix(AGENT)}/lib/readback.sh; . {posix(AGENT)}/lib/readbacklc.sh; "   # #1805: rb_capture_json (a direct send's digest; nothing here)
         f'node_is_block() {{ grep -qxF "$1" {posix(nodes)!r} 2>/dev/null; }}; '

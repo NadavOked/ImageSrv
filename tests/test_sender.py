@@ -100,7 +100,6 @@ class Recorder:
         self.spawned = threading.Event()
 
     def __call__(self, cmd):
-        self.commands.append(cmd)
         if self.log_text is not None:
             # לוג פר-מחיצה, בדיוק כמו run_process האמיתי: נגזר מ---file,
             # כך שהמנוע יקרא את הקובץ שהמחיצה הזו כתבה (ולא ידרוס קודמתה).
@@ -111,7 +110,10 @@ class Recorder:
             cmd, self.code, self.block, self.delay,
             self.ignore_term, self.ignore_kill,
         )
+        # ‏processes לפני commands: טסט שמחכה ל-len(commands) ומיד ניגש ל-processes[n]
+        # נפל ב-IndexError תחת עומס (שער סבב 14 ו-15, 30/10) -- התהליך עוד לא נרשם.
         self.processes.append(process)
+        self.commands.append(cmd)
         self.spawned.set()
         return process
 
