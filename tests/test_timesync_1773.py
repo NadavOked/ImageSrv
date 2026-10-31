@@ -6,7 +6,8 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login
-from server import health, timesync, users
+from server.system import health, timesync
+from server.console import users
 
 
 class ClockMachine:
@@ -45,7 +46,7 @@ def test_apply_writes_exact_dropin_restarts_and_reads_back():
 
 
 def test_default_write_has_exact_file_content(tmp_path, monkeypatch):
-    path = tmp_path / "imagectl.conf"
+    path = tmp_path / "imagesrv.conf"
     monkeypatch.setattr(timesync, "CLIENT_CONF", path)
     monkeypatch.setattr(timesync, "CONF_DIR", tmp_path)
     timesync._write_client("a.example 1.2.3.4")
@@ -54,8 +55,8 @@ def test_default_write_has_exact_file_content(tmp_path, monkeypatch):
 
 def test_automatic_writes_debian_pools_and_server_off_writes_port_zero(tmp_path, monkeypatch):
     monkeypatch.setattr(timesync, "CONF_DIR", tmp_path)
-    monkeypatch.setattr(timesync, "CLIENT_CONF", tmp_path / "imagectl.conf")
-    monkeypatch.setattr(timesync, "SERVER_CONF", tmp_path / "imagectl-server.conf")
+    monkeypatch.setattr(timesync, "CLIENT_CONF", tmp_path / "imagesrv.conf")
+    monkeypatch.setattr(timesync, "SERVER_CONF", tmp_path / "imagesrv-server.conf")
     timesync._write_client("")
     assert timesync.CLIENT_CONF.read_text(encoding="utf-8").count("debian.pool.ntp.org") == 4
     timesync._write_server([])
@@ -64,7 +65,7 @@ def test_automatic_writes_debian_pools_and_server_off_writes_port_zero(tmp_path,
 
 def test_server_on_writes_allow_subnets_and_listener_bind(tmp_path, monkeypatch):
     monkeypatch.setattr(timesync, "CONF_DIR", tmp_path)
-    monkeypatch.setattr(timesync, "SERVER_CONF", tmp_path / "imagectl-server.conf")
+    monkeypatch.setattr(timesync, "SERVER_CONF", tmp_path / "imagesrv-server.conf")
     timesync._write_server(["10.44.0.0/24", "2001:db8::/64"])
     text = timesync.SERVER_CONF.read_text(encoding="utf-8")
     assert "port 123" in text and "bindaddress 0.0.0.0" in text
@@ -91,7 +92,7 @@ def test_debian_main_conf_is_made_additive_safe_and_confdir_is_idempotent(tmp_pa
 
 
 def test_server_unit_allows_the_exact_chrony_dropin_directory():
-    unit = (__import__("pathlib").Path(__file__).parents[1] / "install/imagectl-server.service").read_text(encoding="utf-8")
+    unit = (__import__("pathlib").Path(__file__).parents[1] / "deploy/imagesrv-server.service").read_text(encoding="utf-8")
     rw = next(line for line in unit.splitlines() if line.startswith("ReadWritePaths="))
     assert "/etc/chrony/conf.d" in rw.split("=", 1)[1].split()
 
@@ -173,7 +174,7 @@ def test_a_server_without_chrony_still_comes_up_and_says_why(tmp_path):
     def no_chrony(_nic):
         raise FileNotFoundError(2, "No such file or directory", "/etc/chrony/chrony.conf")
 
-    ctx = SimpleNamespace(conn=connect(tmp_path / "imagectl.db"))
+    ctx = SimpleNamespace(conn=connect(tmp_path / "imagesrv.db"))
     service = _nic_services(ctx, None, None, None, False,
                             {"interfaces": lambda: [], "timesync": no_chrony}, apply_timesync=True)
     assert service is not None

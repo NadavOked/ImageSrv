@@ -43,7 +43,7 @@ IDLE = ("D_SCHEMA=1 D_KNOWN=true D_ROLE=cloner D_TASK=null "
 def run_poll(setup: str, script: str) -> str:
     """מריץ קטע מול `poll.sh` האמיתי, עם `sleep` שמדפיס במקום לישון."""
     return sh(
-        f'. {posix(AGENT)}/lib/poll.sh; '
+        f'. {posix(AGENT)}/lib/core/poll.sh; '
         'sleep() { printf "%s " "$1"; }; '
         f'{setup}; {script}'
     ).strip()
@@ -69,7 +69,7 @@ def test_the_ceiling_stays_under_the_awake_threshold():
     """הדופק של מחשבי השיכפול הוא ה-`last_seen` שלהם, ומסך החדר קורא
     אותו כ"דולק/כבוי". תקרה שתעבור את `AWAKE_SECONDS` תגרום להם
     להבהב — ולכן הקבוע בשרת הוא זה שקושר, לא מספר שנבחר בסוכן."""
-    from server.room import AWAKE_SECONDS                   # noqa: PLC0415
+    from server.rounds.room import AWAKE_SECONDS                   # noqa: PLC0415
 
     ceiling = int(run_poll(IDLE, 'echo "$POLL_MAX"'))
     assert ceiling * 2 <= AWAKE_SECONDS
@@ -158,7 +158,7 @@ def test_a_task_that_arrived_resets_the_ladder():
 def test_the_cosmetic_counters_are_not_part_of_the_signature():
     """‏joined ו-starts_in_seconds משתנים בכל שנייה בסבב פתוח. אילו
     היו בחתימה, ההתרחבות הייתה מתאפסת תמיד ו-#136 היה חוזר בשקט."""
-    source = (AGENT / "lib" / "poll.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "core" / "poll.sh").read_text(encoding="utf-8")
     body = source[source.index("poll_signature()"):source.index("poll_widen()")]
     code = "\n".join(ln for ln in body.splitlines()
                      if not ln.lstrip().startswith("#"))
@@ -169,7 +169,7 @@ def test_the_cosmetic_counters_are_not_part_of_the_signature():
 def test_nothing_in_the_ladder_reads_a_clock():
     """הטריגר הוא התשובה, ולכן אין ב-`poll.sh` שעון בכלל — לא `date`
     ולא `SECONDS`. זו הבדיקה שמונעת חזרה שקטה ל-backoff מבוסס-זמן."""
-    source = (AGENT / "lib" / "poll.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "core" / "poll.sh").read_text(encoding="utf-8")
     code = "\n".join(ln for ln in source.splitlines() if not ln.lstrip().startswith("#"))
     for clock in ("date ", "$SECONDS", "uptime"):
         assert clock not in code, f"‏poll.sh קורא שעון: {clock}"
@@ -198,12 +198,12 @@ def test_off_vlan_is_read_from_the_answer_with_positive_evidence(value, expected
 
 
 def wait_open_branch() -> str:
-    """הענף האמיתי מתוך `imagectl-agent` — לא העתק שלו.
+    """הענף האמיתי מתוך `imagesrv-agent` — לא העתק שלו.
 
     בדיקה שמריצה עותק של הקוד בודקת את העותק. כאן נחתך הענף מהקובץ
     שנארז ב-initramfs, וכל שינוי בו עובר דרך הבדיקה הזאת.
     """
-    lines = (AGENT / "imagectl-agent").read_text(encoding="utf-8").splitlines()
+    lines = (AGENT / "imagesrv-agent").read_text(encoding="utf-8").splitlines()
     start = next(i for i, ln in enumerate(lines) if ln.strip() == "wait_open)")
     end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == ";;")
     return "\n".join(lines[start + 1:end])
@@ -213,7 +213,7 @@ def run_wait_open(require_login: str) -> str:
     """מריץ את הענף עם דמויות במקום כל מה שנוגע בעולם."""
     branch = wait_open_branch()
     return sh(
-        f'. {posix(AGENT)}/lib/poll.sh; '
+        f'. {posix(AGENT)}/lib/core/poll.sh; '
         'die_local() { echo "DIE:$1"; exit 0; }; '
         'ui_waiting_draw() { echo DRAW; }; '
         'json_get() { echo null; }; '
@@ -243,7 +243,7 @@ def test_the_waiting_station_never_slows_down_across_iterations():
     """
     branch = wait_open_branch()
     out = sh(
-        f'. {posix(AGENT)}/lib/poll.sh; '
+        f'. {posix(AGENT)}/lib/core/poll.sh; '
         'die_local() { echo "DIE:$1"; exit 9; }; '
         'ui_waiting_draw() { :; }; json_get() { echo null; }; '
         'sleep() { printf "%s " "$1"; }; '
@@ -271,7 +271,7 @@ def test_no_idle_branch_sleeps_a_flat_two_seconds():
     ארבעה `poll_sleep`: wait_open, wait_poll, build_console, ומסלול
     ה-recovery כשהגואי הנייטיב פעיל — אז לולאת ה-hello ממשיכה לרוץ.
     בלי גואי ה-recovery מסתיים בדיסק המקומי (11/10, אין אשף טקסט)."""
-    source = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    source = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     flat = [ln.strip() for ln in source.splitlines() if ln.strip() == "sleep 2"]
     assert len(flat) == 1, f"נשארו {len(flat)} השהיות קבועות של שתי שניות"
 
@@ -280,5 +280,5 @@ def test_no_idle_branch_sleeps_a_flat_two_seconds():
 
 
 def test_the_agent_loads_the_poll_library():
-    source = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    source = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/poll.sh"' in source

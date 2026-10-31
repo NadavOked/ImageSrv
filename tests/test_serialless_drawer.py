@@ -26,7 +26,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import room
+from server.rounds import room
 from conftest import room_slots
 from test_server_room import (  # noqa: F401 — ה-fixture עצמו
     CLONER1, cloner_hello, report, room as room_view, room_server,

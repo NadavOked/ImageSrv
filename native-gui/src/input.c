@@ -17,7 +17,7 @@
 #define test_bit(bit, arr) (((arr)[(bit) / BITS_PER_LONG] >> ((bit) % BITS_PER_LONG)) & 1)
 
 /* DEV_ABSPTR (#949): an absolute pointer that is not a touchscreen --
- * ABS_X/ABS_Y + BTN_LEFT, no BTN_TOUCH -- i.e. imagectl-monitor's uinput
+ * ABS_X/ABS_Y + BTN_LEFT, no BTN_TOUCH -- i.e. imagesrv-monitor's uinput
  * device, a tablet, a VM pointer. Position maps 1:1 like touch, but the
  * cursor stays drawn: the person at the screen must see where the remote
  * operator is (owner, again 16/10 in #1475: one shared cursor). */

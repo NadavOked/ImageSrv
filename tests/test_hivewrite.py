@@ -168,7 +168,7 @@ def test_x_writes_an_expand_string_and_plain_writes_a_plain_one(hivewrite, hive)
     """בלי -x הערך הוא REG_SZ (כמו תמיד); עם -x הוא REG_EXPAND_SZ, ו-`-g`
     קורא את שניהם. זה מה שמאפשר ל-postdeploy.sh להוסיף ל-DevicePath
     בלי לשבור את `%SystemRoot%\inf` שכבר בו."""
-    value = r"%SystemRoot%\inf;%SystemRoot%\..\ImageCtl\Drivers"
+    value = r"%SystemRoot%\inf;%SystemRoot%\..\ImageSrv\Drivers"
     assert run(hivewrite, "-x", hive, PARAMS, "DevicePath", value).returncode == 0
     assert run(hivewrite, hive, PARAMS, "PlainPath", value).returncode == 0
     listing = lsval(hive, PARAMS)

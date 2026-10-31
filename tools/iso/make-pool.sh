@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ImageCtl — ה-repo המקומי של ה-ISO (#1139): כל חבילה מ-packages.txt
+# ImageSrv — ה-repo המקומי של ה-ISO (#1139): כל חבילה מ-packages.txt
 # **וכל התלויות שלה**, כקבצי .deb, ואינדקסי apt מעליהם.
 #
 #   sudo tools/iso/make-pool.sh --out /root/ic-iso-tmp/repo
@@ -11,12 +11,12 @@
 # (וכל שרת שיותקן ממנו) קפוא על הגרסאות של יום ההוצאה, והסקריפט נכשל בשמו.
 #
 # ‏--security (‏#1411, ‏#1803): **כל** אותה סגירה, בגרסת המועמד — של trixie-security
-# כשיש — ארוזה ל-tar אחד (‏imagectl-security-pool-<תאריך>.tar) עם
+# כשיש — ארוזה ל-tar אחד (‏imagesrv-security-pool-<תאריך>.tar) עם
 # ‏security-pool.json לידו — הגיבוב, הגודל והתאריך. כל הסגירה ולא רק עדכוני האבטחה:
 # כפתור העדכון מתקין ממנו גם חבילה שנוספה ל-packages.txt אחרי שהשרת הותקן (#1803).
 # את ה-json מעתיקים ל-
-# ‏install/security-pool.json (קומיט, תג), ו-publish-to-public.sh מצמיד את ה-tar
-# ל-Release של התג. כפתור העדכון מתקין ממנו בלבד (install/security-upgrade.sh).
+# ‏deploy/security-pool.json (קומיט, תג), ו-publish-to-public.sh מצמיד את ה-tar
+# ל-Release של התג. כפתור העדכון מתקין ממנו בלבד (deploy/security-upgrade.sh).
 #
 # רץ על דביאן 13 עם אינטרנט (שרת המעבדה). **התקנה מה-ISO רצה בלי
 # אינטרנט**, ולכן כל חבילה שחסרה כאן נכשלת רק מול שרת אמיתי — הסקריפט
@@ -35,7 +35,7 @@
 # לקבל דרכו את עדכוני האבטחה שלהם (‏--security). חבילה ב-pool אינה מותקנת.
 #
 # הפלט (‏--out DIR):
-#   DIR/pool/{main,contrib,...}/imagectl/*.deb   לפי ה-Section של החבילה
+#   DIR/pool/{main,contrib,...}/imagesrv/*.deb   לפי ה-Section של החבילה
 #   DIR/pool-date                                היום (UTC) שבו נלקחו הגרסאות —
 #                                                ‏build-iso.sh כותב אותו למניפסט
 #   DIR/dists/trixie/<רכיב>/binary-amd64/{Packages.gz,Release}
@@ -213,8 +213,8 @@ sort_into_pool() {
             */*) comp="${section%%/*}" ;;
             *)   comp="main" ;;
         esac
-        install -d "$OUT/pool/$comp/imagectl"
-        mv -f "$deb" "$OUT/pool/$comp/imagectl/"
+        install -d "$OUT/pool/$comp/imagesrv"
+        mv -f "$deb" "$OUT/pool/$comp/imagesrv/"
         n=$((n + 1))
     done
     rm -rf "$DL" "$EMPTY_STATUS"
@@ -241,7 +241,7 @@ if [[ -n "$SECURITY" ]]; then
     missing=()       # ראיה חיובית: כל שם ב-packages.txt בסגירה, אחרת השרת לא יוכל להתקין אותו
     for p in "${PKGS[@]}"; do [[ -n "${IN_CLOSURE[$p]:-}" ]] || missing+=("$p"); done
     (( ${#missing[@]} == 0 )) || die "חבילות מ-packages.txt אינן בסגירה של apt-get -s: ${missing[*]}"
-    # ‏#1773: בשרת שמתעדכן chrony מחליפה את systemd-timesyncd (install/timesync-swap.sh), ודרך
+    # ‏#1773: בשרת שמתעדכן chrony מחליפה את systemd-timesyncd (deploy/timesync-swap.sh), ודרך
     # החזרה היא systemd-timesyncd מאותו מאגר — בגרסה של systemd שבסגירה, כי היא תלויה בו
     # בגרסה מדויקת. מחוץ לסימולציה: שתיהן מתנגשות, ו-apt-get -s לא היה בוחר את שתיהן.
     if [[ -n "${IN_CLOSURE[chrony]:-}" ]]; then
@@ -259,7 +259,7 @@ if [[ -n "$SECURITY" ]]; then
     sort_into_pool
     write_index "$OUT"
     printf '%s\n' "$POOL_DATE" > "$OUT/pool-date"
-    ASSET="imagectl-security-pool-$POOL_DATE.tar"
+    ASSET="imagesrv-security-pool-$POOL_DATE.tar"
     tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="$POOL_DATE 00:00Z" \
         -cf "$OUT/$ASSET" -C "$OUT" pool dists pool-date || die "אריזת $ASSET נכשלה"
     sha=$(sha256sum "$OUT/$ASSET" | cut -d' ' -f1) && size=$(stat -c %s "$OUT/$ASSET") \
@@ -267,10 +267,10 @@ if [[ -n "$SECURITY" ]]; then
     printf '{\n "asset": "%s",\n "date": "%s",\n "packages": %d,\n "security": %d,\n "sha256": "%s",\n "size": %d,\n "suite": "trixie+trixie-security"\n}\n' \
         "$ASSET" "$POOL_DATE" "${#ALL[@]}" "${#SEC[@]}" "$sha" "$size" > "$OUT/security-pool.json"
     # ראיה חיובית: ה-json נקרא באותו קורא שהשרת והפרסום מריצים.
-    lock_out=$(python3 -I "$SCRIPT_DIR/../../install/security-pool-lock.py" "$OUT/security-pool.json" 2>&1) \
-        || die "security-pool.json שנכתב אינו עובר את install/security-pool-lock.py: $lock_out"
+    lock_out=$(python3 -I "$SCRIPT_DIR/../../deploy/security-pool-lock.py" "$OUT/security-pool.json" 2>&1) \
+        || die "security-pool.json שנכתב אינו עובר את deploy/security-pool-lock.py: $lock_out"
     printf 'make-pool: %s (%s בתים, sha256 %s)\n' "$OUT/$ASSET" "$size" "$sha"
-    printf 'make-pool: הבא — להעתיק את %s ל-install/security-pool.json (קומיט + תג), ולפרסם עם IMAGECTL_SECURITY_POOL=%s\n' \
+    printf 'make-pool: הבא — להעתיק את %s ל-deploy/security-pool.json (קומיט + תג), ולפרסם עם IMAGESRV_SECURITY_POOL=%s\n' \
         "$OUT/security-pool.json" "$OUT/$ASSET"
     exit 0
 fi

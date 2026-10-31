@@ -3,7 +3,7 @@
 
 TARGET="${TARGET:-/target}"
 CDROM="${CDROM:-/cdrom}"
-BOOTSTRAP_LOG="${BOOTSTRAP_LOG:-/run/imagectl/debootstrap.log}"
+BOOTSTRAP_LOG="${BOOTSTRAP_LOG:-/run/imagesrv/debootstrap.log}"
 
 last_bootstrap_line() {
     [ -s "$BOOTSTRAP_LOG" ] || return 0
@@ -47,7 +47,7 @@ run_debootstrap() {
 }
 
 read_package_list() {
-    _rp_file="$CDROM/imagectl-src/tools/iso/packages.txt"
+    _rp_file="$CDROM/imagesrv-src/tools/iso/packages.txt"
     [ -r "$_rp_file" ] || fail packages-list-missing "cannot read $_rp_file"
     PACKAGE_WORDS=
     while IFS= read -r _rp_line || [ -n "$_rp_line" ]; do
@@ -78,18 +78,18 @@ bind_target_filesystems() {
 
 # The local repository is the ISO's pool and dists/ **together** (#1371).
 # dists/ indexes the merged pool -- netinst's own debs (dbus-user-session
-# and the rest) next to pool/*/imagectl -- so copying only
-# pool/*/imagectl published ~500 packages whose files were not there
+# and the rest) next to pool/*/imagesrv -- so copying only
+# pool/*/imagesrv published ~500 packages whose files were not there
 # ("File not found" on the first install that needed one, 13/10). Success is
 # positive evidence: every Filename in every binary index is a file here.
 copy_local_repo() {
-    _cr_repo="$TARGET/var/lib/imagectl/apt-repo"
+    _cr_repo="$TARGET/var/lib/imagesrv/apt-repo"
     must_run repo-dirs "could not create the local apt repository" mkdir -p "$_cr_repo"
     _cr_seen=0
-    for _cr_comp in "$CDROM"/pool/*/imagectl; do
+    for _cr_comp in "$CDROM"/pool/*/imagesrv; do
         [ -d "$_cr_comp" ] && _cr_seen=$((_cr_seen + 1))
     done
-    if [ "$DRY_RUN" -eq 0 ]; then [ "$_cr_seen" -gt 0 ] || fail apt-repo-missing "the ISO contains no imagectl package pool"; fi
+    if [ "$DRY_RUN" -eq 0 ]; then [ "$_cr_seen" -gt 0 ] || fail apt-repo-missing "the ISO contains no imagesrv package pool"; fi
     must_run repo-copy "could not copy the package pool" cp -a "$CDROM/pool" "$_cr_repo/"
     must_run repo-index "could not copy apt indexes" cp -a "$CDROM/dists" "$_cr_repo/"
     if [ "$DRY_RUN" -eq 1 ]; then
@@ -128,18 +128,18 @@ copy_local_repo() {
 }
 
 write_installer_facts() {
-    write_target 0644 /etc/imagectl/installer-nic "state=configured
+    write_target 0644 /etc/imagesrv/installer-nic "state=configured
 interface=$ANSWER_SERVERS_IF
 mac=$ANSWER_SERVERS_MAC
 reason=$ANSWER_SERVERS_MODE
 d_i_choose_interface=$ANSWER_SERVERS_IF
-source=/etc/imagectl/answers
+source=/etc/imagesrv/answers
 "
-    write_target 0644 /etc/imagectl/installer-role "role=$ANSWER_ROLE
+    write_target 0644 /etc/imagesrv/installer-role "role=$ANSWER_ROLE
 primary=$ANSWER_PRIMARY_URL
 primary_fingerprint=$ANSWER_PRIMARY_FINGERPRINT
 "
-    must_run iso-manifest "could not copy imagectl-iso.json" cp "$CDROM/imagectl-iso.json" "$TARGET/etc/imagectl/iso-release.json"
+    must_run iso-manifest "could not copy imagesrv-iso.json" cp "$CDROM/imagesrv-iso.json" "$TARGET/etc/imagesrv/iso-release.json"
 }
 
 install_target_packages() {
@@ -154,24 +154,24 @@ install_target_packages() {
     # shellcheck disable=SC2086
     must_run apt-install "offline package installation failed" chroot "$TARGET" apt-get install -y --no-install-recommends \
         $PACKAGE_WORDS linux-image-amd64 grub-efi-amd64-signed shim-signed grub-pc-bin
-    must_run source-copy "could not copy imagectl-src" cp -a "$CDROM/imagectl-src" "$TARGET/opt/imagectl-src"
+    must_run source-copy "could not copy imagesrv-src" cp -a "$CDROM/imagesrv-src" "$TARGET/opt/imagesrv-src"
     # .git is what the update button works on (#1185). An ISO from the public
     # clone always carries it; a lab ISO (build-iso --source) says so in its
     # manifest (source_git=false) and is allowed through, named on screen.
-    if [ "$DRY_RUN" -eq 0 ] && [ ! -e "$TARGET/opt/imagectl-src/.git" ]; then
-        _src_git=$(jq -r 'if .source_git == false then "no" else "yes" end' "$CDROM/imagectl-iso.json" 2>/dev/null || echo yes)
-        [ "$_src_git" = no ] || fail source-git-missing "imagectl-src was copied without .git"
-        progress packages 62 "Installing packages" "lab ISO (--source): imagectl-src has no .git, the update button will not work on this server"
+    if [ "$DRY_RUN" -eq 0 ] && [ ! -e "$TARGET/opt/imagesrv-src/.git" ]; then
+        _src_git=$(jq -r 'if .source_git == false then "no" else "yes" end' "$CDROM/imagesrv-iso.json" 2>/dev/null || echo yes)
+        [ "$_src_git" = no ] || fail source-git-missing "imagesrv-src was copied without .git"
+        progress packages 62 "Installing packages" "lab ISO (--source): imagesrv-src has no .git, the update button will not work on this server"
     fi
-    must_run firstboot-copy "could not install firstboot" cp "$CDROM/imagectl/firstboot.sh" "$TARGET/usr/local/sbin/imagectl-firstboot"
-    must_run firstboot-mode "could not mark firstboot executable" chmod 0755 "$TARGET/usr/local/sbin/imagectl-firstboot"
-    must_run firstboot-service "could not install firstboot service" cp "$CDROM/imagectl/imagectl-firstboot.service" "$TARGET/etc/systemd/system/imagectl-firstboot.service"
+    must_run firstboot-copy "could not install firstboot" cp "$CDROM/imagesrv/firstboot.sh" "$TARGET/usr/local/sbin/imagesrv-firstboot"
+    must_run firstboot-mode "could not mark firstboot executable" chmod 0755 "$TARGET/usr/local/sbin/imagesrv-firstboot"
+    must_run firstboot-service "could not install firstboot service" cp "$CDROM/imagesrv/imagesrv-firstboot.service" "$TARGET/etc/systemd/system/imagesrv-firstboot.service"
     must_run firstboot-tty1 "could not reserve tty1 for firstboot progress" chroot "$TARGET" systemctl mask getty@tty1.service
-    must_run firstboot-enable "could not enable firstboot service" chroot "$TARGET" systemctl enable imagectl-firstboot.service
+    must_run firstboot-enable "could not enable firstboot service" chroot "$TARGET" systemctl enable imagesrv-firstboot.service
     copy_local_repo
     write_target 0644 /etc/apt/sources.list ""
-    write_target 0644 /etc/apt/sources.list.d/imagectl-iso.list \
-        "deb [trusted=yes] file:/var/lib/imagectl/apt-repo trixie main contrib
+    write_target 0644 /etc/apt/sources.list.d/imagesrv-iso.list \
+        "deb [trusted=yes] file:/var/lib/imagesrv/apt-repo trixie main contrib
 "
     write_installer_facts
 }

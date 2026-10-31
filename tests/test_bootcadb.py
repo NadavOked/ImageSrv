@@ -12,9 +12,10 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-BOOTCADB = REPO / "agent" / "lib" / "bootcadb.sh"
+BOOTCADB = REPO / "agent" / "lib" / "postdeploy" / "bootcadb.sh"
 DB_GUID = "d719b2cb-3d3a-4596-a3bc-dad00e67656f"
 X509_GUID = bytes.fromhex("a159c0a5e494a74a87b5ab155c2bf072")
 
@@ -136,8 +137,8 @@ def test_progress_report_carries_explicit_preflight_result(tmp_path: Path):
                         ("boot_ca_reason", "db unreadable")):
         (target / name).write_text(value, encoding="utf-8")
     script = (f"export RUN_DIR={posix(run)!r}; "
-              f". {posix(REPO / 'agent/lib/common.sh')!r}; "
-              f". {posix(REPO / 'agent/lib/progress.sh')!r}; "
+              f". {posix(REPO / 'agent/lib/core/common.sh')!r}; "
+              f". {posix(REPO / 'agent/lib/core/progress.sh')!r}; "
               "build_progress session-1 aa:bb:cc:dd:ee:ff")
     proc = subprocess.run([BASH, "-c", script], cwd=REPO, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True, encoding="utf-8")
@@ -149,7 +150,7 @@ def test_progress_report_carries_explicit_preflight_result(tmp_path: Path):
 def run_restore_gate(tmp_path: Path, *, sb: int | None, db: bytes | None):
     """The real run_restore with the real bootcadb.sh: does the gate sit before apply_gpt?"""
     env, run_dir, manifest = fixture_env(tmp_path, sb=sb, db=db)
-    lib = REPO / "agent" / "lib"
+    lib = flat_lib()
     script = (f". {posix(lib / 'common.sh')!r}; . {posix(lib / 'progress.sh')!r}; "
               f". {posix(lib / 'bootcadb.sh')!r}; . {posix(lib / 'restore.sh')!r}; "
               "disk_fits() { return 0; }; "

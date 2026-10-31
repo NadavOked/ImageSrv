@@ -38,7 +38,7 @@ def test_the_agent_port_logo_route_is_gone(server):
 
 def test_no_branding_module_and_no_router_wiring():
     assert not (REPO / "server" / "branding.py").exists()
-    for name in ("app.py", "api.py"):
+    for name in ("app.py", "agent/api.py"):
         text = (REPO / "server" / name).read_text(encoding="utf-8")
         assert "branding" not in text, name
 
@@ -123,8 +123,8 @@ def test_the_wizard_pages_carry_the_favicon(tmp_path):
 
 def test_the_visible_name_outside_the_console_is_imagesrv():
     """שאריות שלב א' (#1302): הכותרת של מסכי הסוכן, שם שולחן המוניטור ב-VNC,
-    והודעות האתחול הראשון על tty1. שמות פנימיים (imagectl-*, UINPUT_NAME) נשארים."""
-    ui = (REPO / "agent" / "lib" / "ui.sh").read_text(encoding="utf-8")
+    והודעות האתחול הראשון על tty1. שמות פנימיים (imagesrv-*, UINPUT_NAME) נשארים."""
+    ui = (REPO / "agent" / "lib" / "gui" / "ui.sh").read_text(encoding="utf-8")
     assert 'echo "  ImageSrv"' in ui and '"  ImageCtl"' not in ui
     mon = (REPO / "agent" / "monitor.c").read_text(encoding="utf-8")
     assert 'screen->desktopName = "ImageSrv monitor";' in mon

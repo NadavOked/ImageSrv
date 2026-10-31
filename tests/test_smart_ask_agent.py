@@ -26,7 +26,7 @@ from test_cloner_gui import BASH, PORTS, posix, sh, smart_choice_env  # noqa: F4
 pytestmark = requires_native(("bash", BASH))
 
 REPO = Path(__file__).resolve().parent.parent
-ATTENDED = posix(REPO / "agent" / "lib" / "attended.sh")
+ATTENDED = posix(REPO / "agent" / "lib" / "core" / "attended.sh")
 
 JQ_STUB = r'''
 import json, sys

@@ -17,8 +17,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import images
-from server.images import inside, valid_image_id
+from server.library import images
+from server.library.images import inside, valid_image_id
 
 from test_capture import make_task, setup_build_machine
 
@@ -46,7 +46,7 @@ def test_the_id_the_server_hands_out_is_an_id_the_server_accepts(server):
     "../evil",                    # יציאה מהשורש
     "../../srv/tftp",
     "img_7f3a91/../../evil",      # מתחיל כמו מזהה ומסתיים כנתיב
-    "/etc/imagectl",
+    "/etc/imagesrv",
     "images/img_7f3a91",
     "img_7f3a91 ",                # רווח בקצה — נדחה, לא נחתך
     " img_7f3a91",

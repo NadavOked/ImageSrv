@@ -28,7 +28,7 @@ import pytest
 
 from conftest import hello_body
 from fastapi.testclient import TestClient
-from server import identity
+from server.agent import identity
 from server.app import create_agent_app
 from test_kiosk_app import _login_kiosk, kiosk_env  # noqa: F401
 from test_server_room import cloner_hello

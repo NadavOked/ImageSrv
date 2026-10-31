@@ -12,7 +12,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from server import boottrace, db, learn_wol, wol
+from server.agent import boottrace
+from server import db
+from server.net import wol
+from server.learn import learn_wol
 
 from test_server_room import CLONER1, room_server  # noqa: F401
 from conftest import hello_body
@@ -23,7 +26,7 @@ T0 = 1_760_000_000.0
 
 @pytest.fixture()
 def conn(tmp_path):
-    c = db.connect(tmp_path / "imagectl.db")
+    c = db.connect(tmp_path / "imagesrv.db")
     c.execute("INSERT INTO machines (mac, suffix, group_id, added_at) VALUES (?, '02',"
               " 'grp_CLONERS', 'x')", (MAC,))
     c.commit()

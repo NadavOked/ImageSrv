@@ -1,7 +1,7 @@
 """#1914/#1921 -- the survey stick (Nadav 20/10, night): build_usb_clone.sh --survey.
 
 * the stick is told by a marker on its boot partition (/imagesrv/survey), not by a
-  kernel word: the kernel line stays imagectl.mode=usbclone alone (principle 2);
+  kernel word: the kernel line stays imagesrv.mode=usbclone alone (principle 2);
 * on it, every boot keeps survey/<stamp>-<drawer>-<hash>.txt for each disk that is
   not the stick: smartctl -x (and -d sat when -x gave nothing), -H and its exit
   code, nvme smart-log, the link, the controller, the machine, the screen's verdict;
@@ -73,7 +73,7 @@ def survey(tmp_path: Path, root: Path, on: str = "1", extra: str = "") -> tuple[
     (tmp_path / "run" / "usb.survey").write_text(on + "\n", newline="\n")
     out = run(tmp_path, SMARTCTL + extra + f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; '
               'usb_survey; echo "rc=$?"; echo "notice=$USB_SURVEY_NOTICE"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone", SMARTCTL_MAX_S="10")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone", SMARTCTL_MAX_S="10")
     return out, data
 
 
@@ -120,7 +120,7 @@ def test_no_marker_read_is_the_regular_stick(tmp_path):
     (tmp_path / "run" / "usb.survey").unlink(missing_ok=True)
     data = tmp_path / "usbdata"; data.mkdir()
     out = run(tmp_path, SMARTCTL + f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_survey; echo "rc=$?"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=0" in out.stdout and not (data / "survey").exists(), out.stdout + out.stderr
 
 
@@ -159,7 +159,7 @@ def test_without_a_data_partition_the_survey_says_so(tmp_path):
     root = machine(tmp_path)
     (tmp_path / "run" / "usb.survey").write_text("1\n")
     out = run(tmp_path, SMARTCTL + 'USB_DATA_STATE=failed; usb_survey; echo "rc=$?"; echo "notice=$USB_SURVEY_NOTICE"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=1" in out.stdout and "notice=אין מחיצת נתונים זמינה" in out.stdout, out.stdout + out.stderr
 
 
@@ -167,7 +167,7 @@ def test_the_screen_is_told_it_is_the_survey_stick(tmp_path):
     (tmp_path / "run").mkdir()
     (tmp_path / "run" / "usb.survey").write_text("1\n")
     out = run(tmp_path, 'LC="$RUN_DIR/lc"; GUI_DIR="$RUN_DIR/gui"; mkdir -p "$LC" "$GUI_DIR"; echo local > "$LC/screen"; '
-              'lc_gui_state; cat "$GUI_DIR/state"', IMAGECTL_MODE="usbclone")
+              'lc_gui_state; cat "$GUI_DIR/state"', IMAGESRV_MODE="usbclone")
     assert "lc_survey=1" in out.stdout.splitlines(), out.stdout + out.stderr
     gui = (REPO / "native-gui" / "src")
     assert '"lc_survey"' in (gui / "lc_state.c").read_text(encoding="utf-8")
@@ -186,7 +186,7 @@ def test_usbclone_main_surveys_on_the_survey_stick_and_reaches_the_screen(tmp_pa
               ': > "$_m/imagesrv/survey" ;; esac; return 0; }; umount() { rm -rf "$1/imagesrv"; }; '
             'gui_cloner_parent() { sleep 30 & _gui_pid=$!; }; '
             'lc_session() { echo "SESSION survey=$(cat "$RUN_DIR/usb.survey")"; LC_END=back; }; usbclone_main')
-    out = run(tmp_path, stub, SYSROOT=posix(root), IMAGECTL_MODE="usbclone", IMAGECTL_TEST_ONCE="1",
+    out = run(tmp_path, stub, SYSROOT=posix(root), IMAGESRV_MODE="usbclone", IMAGESRV_TEST_ONCE="1",
               USB_FIND_S="0", USB_DATA_DIR=posix(data), SMARTCTL_MAX_S="10")
     assert "SESSION survey=1" in out.stdout, out.stdout + out.stderr   # the clone screen comes up as always
     assert len(files(data)) == 2, (files(data), out.stdout + out.stderr)

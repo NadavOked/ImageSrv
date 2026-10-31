@@ -366,13 +366,13 @@ const PORTS_1267=[
   p1267('dhcp','DHCP','67','udp','deploy','ok','dnsmasq מאזין',{listening:true,bind:['0.0.0.0:67'],toggle:'confirm',enabled:true,interfaces:[{name:'ens19',enabled:true,proxy:false}]}),
   p1267('http_boot','HTTP','8080','tcp','deploy','ok','עונה על תפריט האתחול',{listening:true,bind:['0.0.0.0:8080'],toggle:'confirm',enabled:true}),
   p1267('http_console','HTTPS','8081','tcp','mgmt','ok','המתג דלוק ומאזין',{listening:true,bind:['10.44.10.1:8081','127.0.0.1:8081'],toggle:'confirm',enabled:true,
-    firewall:'open',firewall_detail:'כלל פתיחה בטבלת imagectl: iifname "ens18" tcp dport 8081 accept'}),
+    firewall:'open',firewall_detail:'כלל פתיחה בטבלת imagesrv: iifname "ens18" tcp dport 8081 accept'}),
   p1267('pxe_proxy','PXE','4011','udp','deploy','off','כבוי על ידי המפעיל — לא מאזין'),
   p1267('multicast','Multicast','9000–9001','udp','deploy','ok','אין udp-sender חי — ואין סבב'),
   p1267('monitor','Monitor (RFB)','5900','tcp','deploy','off','המתג monitor:stations כבוי'),
   p1267('interserver','HTTPS (mTLS)','8443','tcp','interserver','off','לא מאזין',{listening:false,
-    firewall:'blocked',firewall_detail:'אין כלל פתיחה בטבלת imagectl, ו-policy drop חוסם חיבור מבחוץ',off_means:'שרתים משניים לא יוכלו להירשם'}),
-  p1267('firewall','חומת אש','—','nft',null,'ok','פעילה, 9 כללים לטבלת imagectl'),
+    firewall:'blocked',firewall_detail:'אין כלל פתיחה בטבלת imagesrv, ו-policy drop חוסם חיבור מבחוץ',off_means:'שרתים משניים לא יוכלו להירשם'}),
+  p1267('firewall','חומת אש','—','nft',null,'ok','פעילה, 9 כללים לטבלת imagesrv'),
 ];
 const card=(html,title)=>{const i=html.indexOf('<span>'+title); assert.ok(i>=0,'missing card: '+title); const s=html.lastIndexOf('<div class="',i); const n=html.indexOf('<div class="c12 card"',i+1); return html.slice(s,n<0?undefined:n);};
 const menuOf=(r)=>JSON.parse(r.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));

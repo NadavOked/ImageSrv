@@ -36,8 +36,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import registry, users
-from server.console_api import create_console_router
+from server.agent import registry
+from server.console import users
+from server.console.console_api import create_console_router
 from server.db import _open, connect, get_setting, set_setting
 
 from test_hello_write_lock import _hold_briefly, _poison, _starve

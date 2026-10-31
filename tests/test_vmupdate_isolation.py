@@ -1,11 +1,11 @@
 """‏#1334 — שני ממצאי האבטחה: האורח אינו מגיע למארח ולרשתות הפנימיות, והדיסק
 שהאורח שינה אינו נקרא כ-root ואינו נעגן בקרנל של השרת.
 
-1. **רשת** (`server/vmnet.py`, ‏#1468): הטבלה שנטענת לפני כל הדלקה — משתמש
+1. **רשת** (`server/vm/vmnet.py`, ‏#1468): הטבלה שנטענת לפני כל הדלקה — משתמש
    ה-VM אינו שולח דבר, ומה שבא מה-MAC/הכתובת של האורח אינו מגיע למארח; ושורת
    הפקודה של QEMU (ב-`test_vmupdate.py`) — ‏`-run-with` למשתמש ה-VM, ‏macvtap
    בלבד, בלי hostfwd/guestfwd/smb. ה-macvtap וה-lease — `test_vmnet_1468.py`.
-2. **הדיסק** (`server/vmdisk.py`): ערך שנקרא מהדיסק ואינו בפורמט הצפוי —
+2. **הדיסק** (`server/vm/vmdisk.py`): ערך שנקרא מהדיסק ואינו בפורמט הצפוי —
    נדחה לפני שהוא נוגע בפקודה; מחיצה שמערכת הקבצים שלה אינה זו שבמניפסט
    המקור — נדחית לפני כל loop, ‏partclone או כיווץ.
 """
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from server import vmdisk, vmnet
+from server.vm import vmdisk, vmnet
 
 # --- 1. רשת (‏#1468: macvtap — הטבלה חוסמת את משתמש ה-VM ואת האורח במארח) -----
 
@@ -37,7 +37,7 @@ def test_the_ruleset_blocks_the_vm_user_and_the_guest_from_the_host():
     out = lines.index("chain out {")
     assert lines[out + 1].startswith("type filter hook output") and "policy accept" in lines[out + 1]
     # במארח: כל מסגרת מה-MAC של האורח — בטבלת `inet`, כלומר IPv4 **ו-IPv6** (סקירה 16/10)
-    assert lines[0] == "add table inet imagectl_vm"
+    assert lines[0] == "add table inet imagesrv_vm"
     inn = lines.index("chain in {")
     assert lines[inn + 1].startswith("type filter hook input") and "policy accept" in lines[inn + 1]
     assert lines[inn + 2:inn + 4] == [f"ether saddr {MAC} drop", "}"]
@@ -75,7 +75,7 @@ def test_apply_loads_and_reads_the_table_back():
 
 
 def test_a_table_that_did_not_come_back_is_a_refusal_not_a_pass():
-    run, _calls = _runner("table inet imagectl_vm {\n}\n")
+    run, _calls = _runner("table inet imagesrv_vm {\n}\n")
     assert "לא ידוע מה נטען" in vmnet.apply(999, MAC, run=run)
     # כלל ה-MAC שלא חזר — גם הוא סירוב, לא "בערך נטען"
     partial = vmnet.ruleset(999, MAC).replace(f"ether saddr {MAC} drop", "")
@@ -242,7 +242,7 @@ def test_the_unprivileged_wrapper_drops_everything():
 
 
 from native import requires_native  # noqa: E402
-from server import agent_shell  # noqa: E402
+from server.vm import agent_shell  # noqa: E402
 
 posix_only = requires_native(posix=True, why="symlinks ו-chown של POSIX")
 

@@ -31,7 +31,7 @@ def _capture(ctx, name: str, folder: str, files: dict, source_bytes: int):
           str((ctx.builder.answer or {}).get("task")))
 
     uploader = Client()          # ההעלאה במקביל ללולאת ה-hello של התהליכון
-    uploader.headers["X-Imagectl-Task-Token"] = token
+    uploader.headers["X-Imagesrv-Task-Token"] = token
     for filename, payload in files.items():
         status, _ = uploader.request(
             "PUT", f"/api/v1/capture/{task['id']}/files/{filename}",

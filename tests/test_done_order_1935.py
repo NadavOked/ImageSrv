@@ -17,7 +17,7 @@ helpers themselves are run for real in test_drawer_progress.py
 (``run_restore_drawers``), test_hostname_failure_visible.py
 (``name_this_machine``) and test_postdeploy.py (``stage_drivers``).
 
-**Negative control** (imagectl-agent, drawers.sh, hostname.sh, postdeploy.sh,
+**Negative control** (imagesrv-agent, drawers.sh, hostname.sh, postdeploy.sh,
 restore.sh, single_restore.sh of 9001fc91; Testrunner 22/10): both fail -- the
 final report is ``naming`` / ``verifying``, never ``done``: with the spies the
 old callers never wrote it, the old helpers did, early. The helpers' own tests
@@ -26,7 +26,7 @@ fail there too (27 failed, 66 passed in the six files).
 
 from __future__ import annotations
 
-from server.reports import TERMINAL, VALID_STATES
+from server.agent.reports import TERMINAL, VALID_STATES
 
 from test_final_report import (  # noqa: F401 -- `reports` is a fixture
     IMAGE, SESSION, native_tools, reports, run_path, url_of,

@@ -77,7 +77,7 @@ def test_direct_send_without_failures_keeps_all_three_receivers(room_server):
 def _source_done(room_server, opened):
     """הדיווח הסופי של המקור — מה ש-`report_final` של directsend.sh שולח."""
     from test_direct_server import _token
-    from server.tasks import TOKEN_HEADER
+    from server.core.tasks import TOKEN_HEADER
     return room_server["anon"].post("/api/v1/agent/progress", json={
         "task_id": opened["task_id"], "mac": BUILD, "state": "done",
         "targets": [{"dev": "sda", "bytes_written": 4096, "bytes_total": 4096,

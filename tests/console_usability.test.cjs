@@ -184,12 +184,12 @@ test('#1300 rail: on a wide screen ☰ toggles full tree ↔ icon rail, and the 
   run('navButton()');
   assert.equal(app.getAttribute('data-nav'), 'rail', 'wide: the click makes it a rail');
   assert.equal(top.getAttribute('aria-expanded'), 'false'); assert.equal(top.getAttribute('aria-label'), 'הצגת העץ המלא');
-  assert.equal(run('__st["imagectl.nav"]'), 'rail', 'remembered');
+  assert.equal(run('__st["imagesrv.nav"]'), 'rail', 'remembered');
   run('navButton()');
   assert.equal(app.getAttribute('data-nav'), 'full', 'a second click brings the tree back');
   assert.equal(top.getAttribute('aria-expanded'), 'true'); assert.equal(top.getAttribute('aria-label'), 'כיווץ לפס אייקונים');
-  assert.equal(run('__st["imagectl.nav"]'), 'full');
-  run('__st["imagectl.nav"]="rail"; NAV_PREF="full"; restoreNav()');
+  assert.equal(run('__st["imagesrv.nav"]'), 'full');
+  run('__st["imagesrv.nav"]="rail"; NAV_PREF="full"; restoreNav()');
   assert.equal(app.getAttribute('data-nav'), 'rail', 'a stored rail is restored after a reload');
   run('localStorage={getItem(){throw new Error("blocked")},setItem(){throw new Error("blocked")}}; NAV_PREF="rail"; restoreNav()');
   assert.equal(app.getAttribute('data-nav'), 'full', 'unreadable storage = the full tree, no crash');
@@ -198,14 +198,14 @@ test('#1300 rail: on a wide screen ☰ toggles full tree ↔ icon rail, and the 
 });
 test('#1300 rail: up to 900px the rail is the default whatever is stored; ☰ opens the full tree as a drawer and does not change the stored choice; Escape never touches the wide choice', () => {
   const {run, tree, document} = setup();
-  run('globalThis.__st={"imagectl.nav":"full"}; localStorage={getItem:(k)=>__st[k]??null,setItem:(k,v)=>{__st[k]=String(v);}}');
+  run('globalThis.__st={"imagesrv.nav":"full"}; localStorage={getItem:(k)=>__st[k]??null,setItem:(k,v)=>{__st[k]=String(v);}}');
   const side = tree.querySelector('#sidebar'), app = document.getElementById('app'), back = document.getElementById('sidebarBackdrop');
   run('window.matchMedia=()=>({matches:true}); restoreNav()');
   assert.equal(app.getAttribute('data-nav'), 'rail'); assert.ok(app.classList.contains('narrow'));
   run('navButton()');
   assert.ok(side.classList.contains('open') && back.classList.contains('open'), 'narrow: ☰ opens the drawer and the scrim');
   assert.equal(app.getAttribute('data-nav'), 'rail', 'the rail stays under the drawer');
-  assert.equal(run('__st["imagectl.nav"]'), 'full', 'the drawer is not a stored choice');
+  assert.equal(run('__st["imagesrv.nav"]'), 'full', 'the drawer is not a stored choice');
   run('closeSidebarFromScrim()'); assert.ok(!side.classList.contains('open'), 'the scrim closes it');
   run('window.matchMedia=()=>({matches:false}); applyNavMode(false)');
   assert.equal(app.getAttribute('data-nav'), 'full', 'back to wide: the stored choice again'); assert.ok(!app.classList.contains('narrow'));

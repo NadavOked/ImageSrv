@@ -24,7 +24,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from server import console_tls
+from server.console import console_tls
 
 try:
     from fastapi.testclient import TestClient
@@ -34,7 +34,7 @@ except ImportError:                                   # pragma: no cover
 NOW = datetime.datetime.now(datetime.timezone.utc)
 
 
-def make_pair(cn="imagectl.college.ac.il", *, dns=("imagectl.college.ac.il",),
+def make_pair(cn="imagesrv.college.ac.il", *, dns=("imagesrv.college.ac.il",),
               not_before=None, not_after=None, issuer_cn=None):
     """תעודה + מפתח (PEM). ‏``issuer_cn`` שונה מ-CN = "חתומה" (לא עצמית)."""
     key = ec.generate_private_key(ec.SECP256R1())
@@ -61,8 +61,8 @@ def test_a_matching_valid_pair_is_accepted_with_its_expiry():
     cert, key, _ = make_pair()
     info = console_tls.validate_upload(cert, key)
     assert info["not_after"].startswith(str((NOW + datetime.timedelta(days=365)).year))
-    assert "imagectl.college.ac.il" in info["sans"]
-    assert info["subject"] == "imagectl.college.ac.il"
+    assert "imagesrv.college.ac.il" in info["sans"]
+    assert info["subject"] == "imagesrv.college.ac.il"
     assert len(info["fingerprint_sha256"].split(":")) == 32
 
 
@@ -126,7 +126,7 @@ def test_the_generated_cert_is_still_self_signed(tmp_path: Path):
 class Machine:
     """המכונה המדומה: שם מארח, ותיעוד של כל מה שהשרת ביקש ממנה."""
 
-    def __init__(self, hostname="imagectl-old"):
+    def __init__(self, hostname="imagesrv-old"):
         self.name = hostname
         self.set_calls: list[str] = []
         self.restarts = 0
@@ -157,13 +157,13 @@ class Machine:
 def host(tmp_path: Path, images_root: Path, clock):
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
     from test_sender import Recorder
 
     machine = Machine()
     data = tmp_path / "data"
-    tls = console_tls.ensure_console_cert(data, "10.0.0.1", "imagectl-old")
+    tls = console_tls.ensure_console_cert(data, "10.0.0.1", "imagesrv-old")
     app = create_app(data, images_root, "http://10.44.12.10:8080", now_fn=clock,
                      sender_runner=Recorder(block=True), console_tls=tls,
                      host_hooks=machine.hooks())
@@ -309,7 +309,7 @@ def test_a_restart_that_was_not_scheduled_is_a_failure_not_a_success(host):
 
 
 def test_upload_is_refused_when_the_console_runs_without_tls(tmp_path: Path, images_root: Path, clock):
-    from server import users
+    from server.console import users
     from server.app import create_app
     from conftest import complete_console_login
     from test_sender import Recorder
@@ -336,12 +336,12 @@ def test_deploy_user_gets_403(host, method, path):
 
 
 def test_hostname_status_reads_the_machine(host):
-    assert host["admin"].get("/api/console/hostname").json()["hostname"] == "imagectl-old"
+    assert host["admin"].get("/api/console/hostname").json()["hostname"] == "imagesrv-old"
 
 
 @pytest.mark.parametrize("given,applied", [
-    ("imagectl", "imagectl"), ("imagectl-tlv", "imagectl-tlv"),
-    ("IMAGECTL-TA", "imagectl-ta"), ("1srv", "1srv"), ("a" * 15, "a" * 15),
+    ("imagesrv", "imagesrv"), ("imagesrv-tlv", "imagesrv-tlv"),
+    ("IMAGESRV-TA", "imagesrv-ta"), ("1srv", "1srv"), ("a" * 15, "a" * 15),
 ])
 def test_a_valid_hostname_is_applied_read_back_and_restarts(host, given, applied):
     r = host["admin"].post("/api/console/hostname", json={"hostname": given})
@@ -349,7 +349,7 @@ def test_a_valid_hostname_is_applied_read_back_and_restarts(host, given, applied
     assert r.json()["hostname"] == applied
     assert host["machine"].set_calls == [applied]
     assert host["machine"].restarts == 1
-    assert events(host["ctx"], "hostname_changed") == [f"imagectl-old → {applied}"]
+    assert events(host["ctx"], "hostname_changed") == [f"imagesrv-old → {applied}"]
 
 
 #: ‏#1997 (נדב, 22/10): שם השרת הוא שם מחשב — עד 15, בלי נקודות. עד כאן RFC 1123
@@ -367,14 +367,14 @@ def test_an_invalid_hostname_is_refused_before_touching_the_machine(host, bad):
 
 
 def test_the_same_hostname_is_not_a_change(host):
-    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagectl-old"})
+    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagesrv-old"})
     assert r.status_code == 400
     assert host["machine"].set_calls == []
 
 
 def test_hostnamectl_failure_is_reported_and_nothing_restarts(host):
     host["machine"].set_error = "hostnamectl: Access denied"
-    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagectl-new"})
+    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagesrv-new"})
     assert r.status_code == 500
     assert "Access denied" in r.json()["detail"]
     assert host["machine"].restarts == 0
@@ -385,15 +385,15 @@ def test_a_name_that_does_not_read_back_is_not_a_success(host):
     """‏hostnamectl החזיר 0 אך המכונה עדיין קוראת לעצמה בשם הישן — "לא
     הצלחנו לאמת" אינו "השתנה" (עיקרון 5)."""
     host["machine"].readback_lies = True
-    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagectl-new"})
+    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagesrv-new"})
     assert r.status_code == 500
-    assert "imagectl-old" in r.json()["detail"]
+    assert "imagesrv-old" in r.json()["detail"]
     assert host["machine"].restarts == 0
     assert not events(host["ctx"], "hostname_changed")
 
 
 def test_hostname_change_waits_while_a_round_is_running(host):
     open_round(host["ctx"])
-    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagectl-new"})
+    r = host["admin"].post("/api/console/hostname", json={"hostname": "imagesrv-new"})
     assert r.status_code == 409
     assert host["machine"].set_calls == []

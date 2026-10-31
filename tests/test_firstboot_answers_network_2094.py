@@ -6,7 +6,7 @@ The journal of the installed VM says what happened -- not the NIC rename
     07:51:34 dhcpcd[14282]: dhcpcd-10.1.0 starting           (ifup, from firstboot)
     07:51:35 dhcpcd[14285]: received SIGTERM, stopping
     07:51:35 dhcpcd[14285]: ens33: removing interface
-    07:51:35 systemd[1]: imagectl-firstboot.service: Deactivated successfully.
+    07:51:35 systemd[1]: imagesrv-firstboot.service: Deactivated successfully.
 
 ``dhcpcd -b`` (netcfg.render) stays in the cgroup of whoever ran ``ifup``;
 firstboot is a oneshot unit, and when it ends systemd stops its cgroup. So
@@ -60,13 +60,13 @@ def _firstboot(tmp_path: Path, *, lease_after: int | None, ip_fails: bool = Fals
                    "exit 0\n")
     _shim(bindir / "ip", ip_body)
     src, app = tmp_path / "src", tmp_path / "app"
-    (src / "install").mkdir(parents=True)
-    (app / "install").mkdir(parents=True)
+    (src / "deploy").mkdir(parents=True)
+    (app / "deploy").mkdir(parents=True)
     # #2148: and whether first boot asked it to leave the fingerprint to the DCUI
-    _shim(src / "install" / "setup-boot-server.sh",
-          rec.replace('"${0##*/}" "$*"', '"setup-boot-server" "fp_on_dcui=${IMAGECTL_CONSOLE_FP_ON_DCUI:-} $*"')
+    _shim(src / "deploy" / "setup-boot-server.sh",
+          rec.replace('"${0##*/}" "$*"', '"setup-boot-server" "fp_on_dcui=${IMAGESRV_CONSOLE_FP_ON_DCUI:-} $*"')
           + "exit 0\n")
-    _shim(app / "install" / "verify-boot-payload.sh", rec.replace("${0##*/}", "verify-boot-payload") + "exit 0\n")
+    _shim(app / "deploy" / "verify-boot-payload.sh", rec.replace("${0##*/}", "verify-boot-payload") + "exit 0\n")
     answers, secret = tmp_path / "answers", tmp_path / "answers.secret"
     # servers_if=lo: firstboot resolves the NIC from the real /sys/class/net
     answers.write_text("role=standalone\nservers_mode=dhcp\nservers_if=lo\nservers_mac=\n"
@@ -104,7 +104,7 @@ def test_the_server_issues_its_certificate_again_once_the_address_is_there(tmp_p
     the restart here gives the first boot its final certificate."""
     got, seen = _firstboot(tmp_path, lease_after=2)
     assert got.returncode == 0, got.stdout + got.stderr
-    restart = seen.index("systemctl restart imagectl-server.service")
+    restart = seen.index("systemctl restart imagesrv-server.service")
     assert seen.index("systemctl restart networking.service") < restart
     assert restart < next(i for i, c in enumerate(seen) if c.startswith("verify-boot-payload"))
 
@@ -113,7 +113,7 @@ def test_no_lease_in_time_is_said_and_the_certificate_is_left_alone(tmp_path):
     got, seen = _firstboot(tmp_path, lease_after=None)
     assert got.returncode == 0, got.stdout + got.stderr
     assert "LOG nic lo: up, no IPv4 address after 5s" in got.stdout
-    assert "systemctl restart imagectl-server.service" not in seen
+    assert "systemctl restart imagesrv-server.service" not in seen
     assert (tmp_path / "stamp").exists()
 
 
@@ -123,7 +123,7 @@ def test_an_address_read_that_fails_is_not_no_address(tmp_path):
     assert got.returncode == 0, got.stdout + got.stderr
     assert "[nic-check-failed]" in got.stdout
     assert "no IPv4 address after" not in got.stdout
-    assert "systemctl restart imagectl-server.service" not in seen
+    assert "systemctl restart imagesrv-server.service" not in seen
 
 
 # --- the DCUI's "Restart Management Network" on a DHCP NIC ---------------------
@@ -132,12 +132,12 @@ def _dcui_restart_dhcp(tmp_path, empty_reads: int | None):
     """``dhcpcd -b`` returns at once; the ESXi lease came ~7 s later (08:03:10
     -> 08:03:17). The read-back was taken at once and said "not verified" on a
     restart that worked. ``empty_reads``: reads before the lease (None = never)."""
-    from server import netcfg, netcfg_host
+    from server.net import netcfg, netcfg_host
     from server.db import connect, set_setting
     from server.dcui import actions
 
     nic = "ens33"
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     set_setting(conn, netcfg.SETTING_PREFIX + nic, netcfg.NetConfig(nic, mode="dhcp").to_json())
     clock = {"now": 0.0}
     reads = {"n": 0}
@@ -161,7 +161,7 @@ def test_a_dhcp_restart_waits_for_the_lease_before_it_judges(tmp_path):
 
 
 def test_a_dhcp_restart_with_no_lease_still_fails_after_the_wait(tmp_path):
-    from server import netcfg_host
+    from server.net import netcfg_host
     result, _reads, waited = _dcui_restart_dhcp(tmp_path, empty_reads=None)
     assert not result.ok
     assert waited == netcfg_host.DHCP_LEASE_WAIT_S

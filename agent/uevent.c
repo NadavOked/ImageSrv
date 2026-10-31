@@ -1,4 +1,4 @@
-/* uevent.c -- notify ImageCtl about whole-disk kernel uevents (#1971).
+/* uevent.c -- notify ImageSrv about whole-disk kernel uevents (#1971).
  *
  * The kernel's own uevents (NETLINK_KOBJECT_UEVENT, group 1 -- there is no udev
  * in the initramfs). A record is NUL-separated KEY=VALUE strings; a whole-disk
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         char b[4096]; size_t n = fread(b, 1, sizeof b - 1, stdin); b[n] = 0;
         return disk_event(b, n) ? notify(argv[2]) != 0 : 2;
     }
-    if (argc != 2) { fprintf(stderr, "usage: imagectl-uevent FILE\n"); return 2; }
+    if (argc != 2) { fprintf(stderr, "usage: imagesrv-uevent FILE\n"); return 2; }
     int fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
     if (fd < 0) { perror("uevent socket"); return 1; }
     struct sockaddr_nl a = { .nl_family = AF_NETLINK, .nl_pid = (unsigned)getpid(), .nl_groups = 1 };

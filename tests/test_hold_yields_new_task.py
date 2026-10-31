@@ -22,6 +22,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH), "jq")
 
@@ -31,7 +32,7 @@ def _hold(tmp_path: Path, answers: dict[str, dict], yield_task: str | None) -> t
     run.mkdir(); ans.mkdir()
     for name, body in answers.items():
         (ans / f"{name}.json").write_text(json.dumps(body), encoding="utf-8")
-    libs = " ".join(f". {posix(AGENT)}/lib/{n}.sh;" for n in ("common", "jsonq", "hold", "attended"))
+    libs = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in ("common", "jsonq", "hold", "attended"))
     setyield = f"HOLD_YIELD_TASK={yield_task}; " if yield_task else ""
     out = sh(
         f"export RUN_DIR={posix(run)!r} ANS={posix(ans)!r} HOLD_BEAT_S=0; {libs} "

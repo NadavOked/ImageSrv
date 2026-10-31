@@ -16,7 +16,7 @@ from pathlib import Path
 
 import server.app
 import server.main
-from server.sender import DEFAULT_PORTBASE
+from server.rounds.sender import DEFAULT_PORTBASE
 from tools.e2e import harness
 
 PRODUCTION_PORTS = {DEFAULT_PORTBASE, DEFAULT_PORTBASE + 1}

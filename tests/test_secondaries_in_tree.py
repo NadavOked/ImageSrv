@@ -44,7 +44,7 @@ def test_console_js_builds_secondaries_from_the_api_and_names_from_me():
     assert "populateSidebarSecondaries" in js
     assert 'api("/storage-nodes")' in js
     assert "ME.server_name" in js
-    assert "imagectl-server-names" not in js, "שם השרת נשמר בשרת, לא ב-localStorage"
+    assert "imagesrv-server-names" not in js, "שם השרת נשמר בשרת, לא ב-localStorage"
     # נדב 17/10: הלחיצה הכפולה בעץ פותחת את אותו חלון כמו "שינוי שם…" בהגדרות — ‏POST /hostname.
     assert "hostnameSheet(true)" in js
     assert 'post("/hostname", { hostname: v.hostname })' in js
@@ -52,7 +52,7 @@ def test_console_js_builds_secondaries_from_the_api_and_names_from_me():
 
 
 def test_me_reports_a_server_name_for_every_user(server):
-    from server import users
+    from server.console import users
 
     admin, app = server["admin"], server["app"]
     me = admin.get("/api/console/me").json()

@@ -62,7 +62,7 @@ KNOWN_HMAC = bytes.fromhex("a5ce9cbf7c63cbedf3403e594d04b0ef")
 
 SECRET_BYTES = bytes.fromhex(SECRET)
 WRONG_SECRET = bytes(16)
-POWER_REBOOT = b"imagectl-power:reboot"
+POWER_REBOOT = b"imagesrv-power:reboot"
 
 
 def _pkgconfig(*pkgs: str) -> bool:
@@ -76,7 +76,7 @@ NATIVE = requires_native(
     ("cc", shutil.which("cc") or shutil.which("gcc")),
     ("libvncserver", _pkgconfig("libvncserver")),
     posix=True,
-    why="imagectl-monitor נבנה על המעבדה בלבד",
+    why="imagesrv-monitor נבנה על המעבדה בלבד",
 )
 
 
@@ -86,7 +86,7 @@ def _hmac16(secret: bytes, challenge: bytes) -> bytes:
 
 def _build(tmp_path: Path) -> Path:
     """אותה שורת הידור כמו ב-`tools/build_initramfs.sh`."""
-    binary = tmp_path / "imagectl-monitor"
+    binary = tmp_path / "imagesrv-monitor"
     cc = shutil.which("cc") or shutil.which("gcc")
     build = subprocess.run(
         [cc, "-O2", "-Wall", "-Wextra", "-o", str(binary),
@@ -600,7 +600,7 @@ def test_wrong_peer_is_closed_before_the_handshake(tmp_path):
 
 def _rekey(secret: bytes, challenge: bytes) -> bytes:
     """‏#1837: ‏`rekey_secret` — כתוב כאן בנפרד מ-monitor.c ומהשרת."""
-    return hmaclib.new(secret, b"imagectl-monitor-rekey" + challenge,
+    return hmaclib.new(secret, b"imagesrv-monitor-rekey" + challenge,
                        hashlib.sha256).digest()[:16]
 
 
@@ -962,7 +962,7 @@ def test_memfb_header_whose_row_wraps_u32_is_refused(tmp_path):
 # הבקרה ההתנהגותית לדרייבר היא מוטציה ממוקדת (ראו גוף ה-PR).
 
 _DRIVER = r"""
-#define main imagectl_monitor_main
+#define main imagesrv_monitor_main
 #include "monitor.c"
 #undef main
 

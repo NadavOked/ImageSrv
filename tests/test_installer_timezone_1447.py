@@ -138,9 +138,9 @@ def test_the_engines_timezone_refusal_lands_on_the_timezone_field(tmp_path):
 def test_firstboot_hands_the_zone_to_setup_and_setup_writes_the_setting():
     firstboot = (REPO / "tools" / "iso" / "firstboot-answers.sh").read_text(encoding="utf-8")
     assert 'argv+=(--timezone "$(answers_get timezone)")' in firstboot
-    setup = (REPO / "install" / "setup-boot-server.sh").read_text(encoding="utf-8")
+    setup = (REPO / "deploy" / "setup-boot-server.sh").read_text(encoding="utf-8")
     assert '--timezone)    TIMEZONE="${2:?}"; shift 2 ;;' in setup
-    assert "set_setting(connect(\"$DATA_DIR/imagectl.db\"), timezone.SETTING, zone)" in setup
+    assert "set_setting(connect(\"$DATA_DIR/imagesrv.db\"), timezone.SETTING, zone)" in setup
     assert "if zone not in timezone.zones():" in setup
 
 

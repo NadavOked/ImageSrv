@@ -6,16 +6,16 @@
 # Run on the Debian 13 VM after `make`. No root needed.
 set -eu
 cd "$(dirname "$0")/.."
-[ -x ./imagectl-station-gui ] || { echo "build first: make" >&2; exit 1; }
+[ -x ./imagesrv-station-gui ] || { echo "build first: make" >&2; exit 1; }
 
 root=$(mktemp -d "${TMPDIR:-/tmp}/native-gui-size.XXXXXX")
 trap 'rm -rf "$root" "$root.cpio" "$root.cpio.zst"' EXIT
-mkdir -p "$root/usr/bin" "$root/etc/imagectl"
-cp ./imagectl-station-gui "$root/usr/bin/"
-cp fonts.conf "$root/etc/imagectl/fonts.conf"
+mkdir -p "$root/usr/bin" "$root/etc/imagesrv"
+cp ./imagesrv-station-gui "$root/usr/bin/"
+cp fonts.conf "$root/etc/imagesrv/fonts.conf"
 
 # Same awk as copy_libs() in tools/build_initramfs.sh.
-ldd ./imagectl-station-gui | awk '/=>/ { print $3 } /^\s*\// { print $1 }' | while read -r lib; do
+ldd ./imagesrv-station-gui | awk '/=>/ { print $3 } /^\s*\// { print $1 }' | while read -r lib; do
     [ -f "$lib" ] || continue
     mkdir -p "$root$(dirname "$lib")"
     cp -Ln "$lib" "$root$lib"

@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, pxe_log
+from server import db
+from server.net import pxe_log
 
 MAC = "78:ac:c0:9b:18:87"
 OTHER = "aa:bb:cc:00:18:87"
@@ -32,7 +33,7 @@ def _lines() -> list[str]:
         f"{_ts(49)} imagesrv dnsmasq-dhcp[812]: 2219812 DHCPOFFER(eth1) 10.44.12.31 {MAC}",
         f"{_ts(49)} imagesrv dnsmasq-dhcp[812]: DHCPREQUEST(eth1) 10.44.12.31 {MAC}",
         f"{_ts(48)} imagesrv dnsmasq-dhcp[812]: DHCPACK(eth1) 10.44.12.31 {MAC} cloner-2",
-        f"{_ts(47)} imagesrv dnsmasq-tftp[812]: sent /srv/imagectl/tftp/bootx64.efi to 10.44.12.31",
+        f"{_ts(47)} imagesrv dnsmasq-tftp[812]: sent /srv/imagesrv/tftp/bootx64.efi to 10.44.12.31",
         f"{_ts(46)} imagesrv dnsmasq-tftp[812]: error 0 Early terminate received from 10.44.12.99",
         f"{_ts(45)} imagesrv dnsmasq-dhcp[812]: DHCPDISCOVER(eth1) {OTHER}",
         "-- cursor: s=abc;i=42",
@@ -41,7 +42,7 @@ def _lines() -> list[str]:
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def test_the_journal_lines_become_events():
@@ -98,7 +99,7 @@ def test_rows_are_capped_on_every_insert(conn, monkeypatch):
 
 
 def test_only_the_journal_is_read_never_the_dhcp_settings():
-    src = (Path(__file__).resolve().parent.parent / "server" / "pxe_log.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parent.parent / "server" / "net" / "pxe_log.py").read_text(encoding="utf-8")
     assert '["journalctl", "-u", "dnsmasq"' in src
     for forbidden in ("dnsmasq.d", "write_text", "systemctl", ".conf"):
         assert forbidden not in src, forbidden
@@ -107,7 +108,7 @@ def test_only_the_journal_is_read_never_the_dhcp_settings():
 def test_the_room_clock_reads_it_and_the_console_shows_it(server):
     app = (Path(__file__).resolve().parent.parent / "server" / "app.py").read_text(encoding="utf-8")
     assert "pxe_log.sweep" in app
-    from server import registry
+    from server.agent import registry
     ctx = server["ctx"]
     registry.add_machine(ctx.conn, MAC, "cloner-2", "grp_CLONERS", "test")
     pxe_log.sweep(ctx.conn, lambda c: (_lines(), "x"))
@@ -116,7 +117,7 @@ def test_the_room_clock_reads_it_and_the_console_shows_it(server):
 
 
 def test_a_machine_missing_from_the_wave_says_what_dhcp_saw(conn):
-    from server import room
+    from server.rounds import room
     pxe_log.sweep(conn, lambda c: (_lines(), "x"))
     got = room._with_pxe(conn, [{"mac": OTHER, "reason": "off"}, {"mac": MAC, "reason": "drawers"}])
     assert got[0]["pxe"] == {"state": "no_tftp", "he": pxe_log.STATES_HE["no_tftp"]}

@@ -43,7 +43,7 @@ def test_a_gui_failure_reaches_the_journal_with_the_machine(server):
     assert hello(server, body).status_code == 200
     rows = journal_rows(server, "gui_failed")
     assert len(rows) == 1, rows
-    from server.journal_he import EVENTS_HE, severity
+    from server.console.journal_he import EVENTS_HE, severity
     assert EVENTS_HE["gui_failed"] == "הגואי לא עלה"
     assert severity("gui_failed") == "warn"
 
@@ -84,13 +84,13 @@ def test_an_unregistered_machine_is_not_journaled(server):
 
 
 def console_cookie(server) -> str:
-    token = server["deploy"].cookies.get("imagectl_session")
+    token = server["deploy"].cookies.get("imagesrv_session")
     assert token, "the deploy client holds no console session"
     return token
 
 
 def gui_pull(server, mac: str, cookie: str | None, base: str = OFF_VLAN):
-    headers = {"Cookie": f"imagectl_session={cookie}"} if cookie else {}
+    headers = {"Cookie": f"imagesrv_session={cookie}"} if cookie else {}
     return server["anon"].post(base + "/api/v1/agent/pulls",
                                json={"mac": mac, "image_id": "img_7f3a91",
                                      "username": "", "password": ""},
@@ -125,7 +125,7 @@ def test_a_forged_session_is_not_a_session(server):
 
 
 def test_a_password_change_session_does_not_authorize_work(server):
-    from server import auth
+    from server.console import auth
     lab2 = second_class(server)
     token = auth.issue(server["ctx"].conn, "labtech", "deploy", purpose=auth.PURPOSE_PWCHANGE)
     response = gui_pull(server, lab2["mac1"], token)

@@ -53,7 +53,7 @@ def judge(body: str, tmp_path: Path, crc: int = 500) -> list[list[str]]:
     """smart_judge on an output: its findings, verdict|word|kind|key|name|value split."""
     f = tmp_path / "out.txt"
     f.write_text(body, encoding="utf-8", newline="\n")
-    out = sh(f'export SMART_KB={posix(DATA)}; . {posix(AGENT)}/lib/smartjudge.sh; smart_judge {posix(f)!r} {crc}')
+    out = sh(f'export SMART_KB={posix(DATA)}; . {posix(AGENT)}/lib/smart/smartjudge.sh; smart_judge {posix(f)!r} {crc}')
     assert out.returncode == 0, out.stderr
     return [line.split("|") for line in out.stdout.splitlines() if line]
 
@@ -78,19 +78,19 @@ def probe(tmp_path: Path, body: str, dev: str = "sda", rc: int = 0, crc: int | N
 
 
 def test_the_agent_and_the_server_read_the_same_two_files():
-    from server import smart_names
+    from server.disks import smart_names
     assert smart_names.SMART_TABLE == DATA / "smart-knowledge.tsv"
     assert smart_names.HW_TABLE == DATA / "hw-issues.tsv"
-    sh_src = (AGENT / "lib" / "smartjudge.sh").read_text(encoding="utf-8")
-    assert 'SMART_KB="${SMART_KB:-${LIB_DIR:-/usr/lib/imagectl}/data}"' in sh_src
+    sh_src = (AGENT / "lib" / "smart" / "smartjudge.sh").read_text(encoding="utf-8")
+    assert 'SMART_KB="${SMART_KB:-${LIB_DIR:-/usr/lib/imagesrv}/data}"' in sh_src
     assert '"$SMART_KB/smart-knowledge.tsv"' in sh_src and '"$SMART_KB/hw-issues.tsv"' in sh_src
     build = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
-    assert '"$AGENT_DIR/lib/data/$_kb" "$ROOT/usr/lib/imagectl/data/$_kb"' in build
+    assert '"$AGENT_DIR/lib/data/$_kb" "$ROOT/usr/lib/imagesrv/data/$_kb"' in build
     assert "for _kb in smart-knowledge.tsv hw-issues.tsv" in build
 
 
 def test_both_files_are_well_formed_and_no_name_is_in_both():
-    from server import smart_names
+    from server.disks import smart_names
     smart = {(r["kind"], r["id"], r["name"]) for r in smart_names._load(smart_names.SMART_TABLE)}
     hw = {(r["kind"], r["id"], r["name"]) for r in smart_names._load(smart_names.HW_TABLE)}
     assert not smart & hw
@@ -103,8 +103,8 @@ def test_both_files_are_well_formed_and_no_name_is_in_both():
 def test_every_orange_and_red_word_has_its_sentence_everywhere():
     """A word of the table the agent can store is in SMART_WARN_REASONS (or red), so smart.sh,
     the GUI and the console say it (test_reasons_he_1861 checks the three translators)."""
-    from server import smart_names
-    sh_src = (AGENT / "lib" / "smart.sh").read_text(encoding="utf-8")
+    from server.disks import smart_names
+    sh_src = (AGENT / "lib" / "smart" / "smart.sh").read_text(encoding="utf-8")
     warn = re.search(r'^SMART_WARN_REASONS="([^"]*)"', sh_src, re.M).group(1).split()
     rows = smart_names._load(smart_names.SMART_TABLE)
     assert {r["word"] for r in rows if r["verdict"] == "orange"} <= set(warn)
@@ -128,7 +128,8 @@ def test_the_cloner2_disks_are_green_and_crc_is_a_drawer_note(tmp_path, name, cr
 def test_the_server_says_crc_as_a_drawer_note_not_the_disks_colour(tmp_path):
     """Coordinator 20/10: the server works the same way with both tables -- the console's disk view
     carries the hardware note, and the CRC row is the hardware table's, not a disk verdict."""
-    from server import db, smart_history
+    from server import db
+    from server.disks import smart_history
     conn = db.connect(tmp_path / "t.db")
     db.set_setting(conn, "crc_warn_threshold", "500")
     attrs = {"ata": [[5, 100, 100, 10, 0, "Reallocated_Sector_Ct"], [199, 99, 99, 0, 1752, "CRC_Error_Count"],
@@ -162,7 +163,7 @@ def test_an_ocz_intrepid_is_not_orange_for_the_bytes_it_read(tmp_path):
 
 def test_crucial_202_is_life_remaining_on_the_server(tmp_path):
     """#1923: 202 on a Crucial is Percent_Lifetime_Remain -- not "data address mark errors"."""
-    from server import smart_names
+    from server.disks import smart_names
     he, note, known = smart_names.name(202, "Percent_Lifetime_Remain")
     assert known and "חיים" in he, (he, note)
     assert smart_names.name(202, "Data_Address_Mark_Errs")[0] != he
@@ -172,7 +173,7 @@ def test_crucial_202_is_life_remaining_on_the_server(tmp_path):
 
 
 def test_an_unknown_name_is_unknown_never_fine(tmp_path):
-    from server import smart_names
+    from server.disks import smart_names
     body = fixture("cloner2-sdc.txt").replace("Power_On_Hours  ", "Totally_New_Attr")
     found = judge(body, tmp_path)
     assert ["unknown", "-", "ata", "9", "Totally_New_Attr", "9487"] in found, found
@@ -183,7 +184,7 @@ def test_an_unknown_name_is_unknown_never_fine(tmp_path):
 
 def test_the_agent_and_the_server_judge_every_attribute_alike(tmp_path):
     """The same verdict for every attribute of every fixture, from the two readers."""
-    from server import smart_names
+    from server.disks import smart_names
     for f in sorted(FIX.glob("*.txt")):
         found = {(int(x[3]), x[4]): x[0] for x in judge(f.read_text(encoding="utf-8"), tmp_path) if x[2] == "ata"}
         media = "ssd" if "Solid State" in f.read_text(encoding="utf-8") else None
@@ -312,7 +313,7 @@ def test_the_brief_attribute_format_of_x_is_read_too(tmp_path):
 
 
 def test_smart_probe_asks_for_x(tmp_path):
-    src = (AGENT / "lib" / "smart.sh").read_text(encoding="utf-8")
+    src = (AGENT / "lib" / "smart" / "smart.sh").read_text(encoding="utf-8")
     assert '"$SMARTCTL" -x -f old -n never "$_sp_dev"' in src
     assert '"$SMARTCTL" -d sat -x -f old -n never "$_sp_dev"' in src
 
@@ -339,7 +340,7 @@ def test_an_orange_disk_on_the_gate_is_written_without_a_question(tmp_path):
 def hw_words(dmesg: str, n: int = 3, t0: str = "5.0") -> list[str]:
     """hw_link_words; t0 = the dmesg time the drawer was identified at (#1937)."""
     # %b: the repr's \n are lines (with %s the whole dmesg was one line, and the rules met on it)
-    out = sh(f'. {posix(AGENT)}/lib/hwissues.sh; printf "%b" {dmesg!r} | hw_link_words {n} {t0!r}')
+    out = sh(f'. {posix(AGENT)}/lib/smart/hwissues.sh; printf "%b" {dmesg!r} | hw_link_words {n} {t0!r}')
     assert out.returncode == 0, out.stderr
     return out.stdout.split()
 
@@ -378,7 +379,7 @@ def _hw_after(tmp_path: Path, later: str, gone: bool = False) -> tuple[list[str]
     assert "  3  Device-to-host register FISes sent due to a COMRESET" in body
     assert " 10  Transition from drive PhyRdy to drive PhyNRdy" in body
     dm = tmp_path / "dmesg.txt"; dm.write_text(PIIX_BOOT, newline="\n")
-    stub = (f'. {posix(AGENT)}/lib/hwissues.sh; _hw_ata() {{ echo 3; }}; '
+    stub = (f'. {posix(AGENT)}/lib/smart/hwissues.sh; _hw_ata() {{ echo 3; }}; '
             f'dmesg_stub() {{ cat {posix(dm)!r}; }}; DMESG=dmesg_stub; ')
     verdict, _, run = probe(tmp_path, body, extra=stub)
     assert verdict == "ok", verdict   # the field's screen: green
@@ -406,14 +407,14 @@ def test_a_disk_that_left_sys_block_after_it_was_identified_is_drawer_gone(tmp_p
 
 
 def test_the_hw_words_are_read_again_after_the_write():
-    src = (AGENT / "lib" / "crcdelta.sh").read_text(encoding="utf-8")
+    src = (AGENT / "lib" / "smart" / "crcdelta.sh").read_text(encoding="utf-8")
     assert 'command -v hw_refresh >/dev/null 2>&1 && hw_refresh "$_cd_d"' in src
 
 
 def test_the_hw_sentences_come_from_the_table():
-    from server import smart_names
+    from server.disks import smart_names
     for w in ("link_slow", "link_reset", "drawer_gone", "usb2", "ide", "crc", "icrc_logged"):
-        out = sh(f'export SMART_KB={posix(DATA)}; . {posix(AGENT)}/lib/smartjudge.sh; smart_kb_he {w} | od -An -c | tr -d " \\n" | head -c 40')
+        out = sh(f'export SMART_KB={posix(DATA)}; . {posix(AGENT)}/lib/smart/smartjudge.sh; smart_kb_he {w} | od -An -c | tr -d " \\n" | head -c 40')
         assert out.returncode == 0 and out.stdout.strip(), w   # bytes printed (od: no locale in the way)
         he = smart_names.hw_sentence(w)
         assert he and "|" not in he, w
@@ -450,6 +451,6 @@ def test_link_slow_is_below_both_the_port_and_the_disk(tmp_path, caps, disk_ver,
     run = tmp_path / "run"; (run / "smart").mkdir(parents=True)
     (run / "smart" / "sda.out").write_text(f"SATA Version is:  {disk_ver} (current: 3.0 Gb/s)\n", newline="\n")
     out = sh(f'export SYSROOT={posix(sysroot)!r} RUN_DIR={posix(run)!r} DMESG=true; '
-             f'. {posix(AGENT)}/lib/disklink.sh; . {posix(AGENT)}/lib/hwissues.sh; hw_refresh sda; cat "$RUN_DIR/smart/sda.hw"')
+             f'. {posix(AGENT)}/lib/hw/disklink.sh; . {posix(AGENT)}/lib/smart/hwissues.sh; hw_refresh sda; cat "$RUN_DIR/smart/sda.hw"')
     assert out.returncode == 0, out.stderr
     assert ("link_slow" in out.stdout.split()) == slow, out.stdout

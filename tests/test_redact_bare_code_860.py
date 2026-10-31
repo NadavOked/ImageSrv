@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from server import interserver_auth
+from server.interserver import interserver_auth
 
 
 def test_a_bare_three_group_code_is_redacted():

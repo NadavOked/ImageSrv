@@ -10,7 +10,7 @@ skipped red #1760). A swapped disk (another serial), a disk without a serial, or
 hello without an inventory -- the slot stays and the drawer is written (principle 5).
 The console card shows the drawer written in an earlier wave as "נכתב", not "—".
 
-Negative control: server/room.py, server/hello.py and server/static/console.js back
+Negative control: server/rounds/room.py, server/agent/hello.py and server/static/console.js back
 to the base, all of them (#439) -- see the PR.
 """
 
@@ -27,7 +27,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from native import requires_native
-from server import room
+from server.rounds import room
 from test_server_room import (  # noqa: F401 -- `room_server` is a fixture
     CLONER1, cloner_hello, heartbeat, report, room as room_view, room_body, room_server,
 )

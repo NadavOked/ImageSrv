@@ -1,7 +1,7 @@
 """‏#447 — תקרת קצב שנלמדת מהכוננים שבחדר, ולעולם לא מעל התקרה של היום.
 
 הכרעת נדב 11/10: לבנות עכשיו, אבל בתקופה הראשונה **רק להוריד**. התקרה של
-היום (‏`IMAGECTL_MAX_BITRATE`, ‏200m במעבדה) היא הגג; כונן שידוע שהוא איטי
+היום (‏`IMAGESRV_MAX_BITRATE`, ‏200m במעבדה) היא הגג; כונן שידוע שהוא איטי
 מוריד את הגל אליו, כונן שאינו מוכר אינו מוריד דבר (לא מנחשים).
 
 שלוש מלכודות שהטסטים כאן נועדו לתפוס:
@@ -22,7 +22,9 @@ import json
 
 import pytest
 
-from server import db, drive_rates, reports
+from server import db
+from server.rounds import drive_rates
+from server.agent import reports
 
 MB = 1_000_000
 CEILING = "200m"                      # 200Mbit/s = 25MB/s
@@ -31,7 +33,7 @@ CAP_200M = 25 * MB                    # בייטים לשנייה
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _sample(conn, serial, rate_bps, cap_bps=CAP_200M, model="EVO 870",
@@ -196,7 +198,7 @@ def test_a_garbled_switch_is_off_not_on(conn, value):
 
 
 def test_without_a_configured_cap_a_slow_drive_still_lowers_to_the_floor(conn):
-    """קצב אוטומטי (הכרעת נדב 11/10): בלי `IMAGECTL_MAX_BITRATE` הגג 900m
+    """קצב אוטומטי (הכרעת נדב 11/10): בלי `IMAGESRV_MAX_BITRATE` הגג 900m
     והפתיחה 600m — והכונן האיטי מוריד, עד הרצפה: רבע מהפתיחה (150m).
     עד ההכרעה: בלי תקרה לא היה `--max-bitrate` כלל, ולא נלמד דבר."""
     _slow(conn, "S1", 10 * MB)                   # 10 × 8 × 0.9 = 72m
@@ -321,7 +323,7 @@ def test_a_wave_without_a_known_cap_teaches_nothing(conn):
     _with_disks(conn)
     assert drive_rates.record_wave(conn, "ses_w1", [_member([_done()])]) == 0
     # תקרה לא-מספרית עוברת כמות שהיא — ואין ממנה קצב לסווג לפיו. (בלי
-    # `IMAGECTL_MAX_BITRATE` יש מאז הקצב האוטומטי קצב ידוע: הפתיחה.)
+    # `IMAGESRV_MAX_BITRATE` יש מאז הקצב האוטומטי קצב ידוע: הפתיחה.)
     _decided(conn, session="ses_w2", ceiling="fast")
     assert drive_rates.record_wave(conn, "ses_w2", [_member([_done()])]) == 0
 

@@ -1,7 +1,7 @@
 """‏#1803 — עדכון גרסה מתקין חבילות שנוספו ל-packages.txt של התג החדש.
 
 מעבדה 19/10: שרת שהותקן מ-ISO v0.59.2 ועודכן בכפתור עד rc7 — ‏ifenslave (‏#1264,
-‏packages.txt:39) לא הותקן, כי ``install/security-upgrade.sh`` שידרג רק חבילות
+‏packages.txt:39) לא הותקן, כי ``deploy/security-upgrade.sh`` שידרג רק חבילות
 **מותקנות**. מה שנבדק כאן:
 
 * חבילה מ-``tools/iso/packages.txt`` של התג שחסרה בשרת — מותקנת מהמאגר החתום של
@@ -142,8 +142,8 @@ def test_the_update_rolls_back_and_names_the_package_missing_from_the_pool(tmp_p
 out=""; url=""
 while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2 ;; -*) case "$1" in --max-time|--connect-timeout|--speed-limit|--speed-time|--proto|--proto-redir|-m) shift ;; esac; shift ;; *) url=$1; shift ;; esac; done
 case "$url" in file://*) cp "${url#file://}" "$out" ;; *) exit 0 ;; esac''')
-    monkeypatch.setenv("IMAGECTL_SECURITY_POOL_URL", "file://" + posix(world.release))
-    monkeypatch.setenv("IMAGECTL_PYTHON", sys.executable)
+    monkeypatch.setenv("IMAGESRV_SECURITY_POOL_URL", "file://" + posix(world.release))
+    monkeypatch.setenv("IMAGESRV_PYTHON", sys.executable)
     done = _run_upgrade(tmp_path, bindir, repo, data)
     status = _status(data)
     log = calls(tmp_path)
@@ -176,7 +176,7 @@ Inst libc6 (2.41-12 Debian:13.1/stable [amd64])
     raw = (out / lock["asset"]).read_bytes()
     assert lock["sha256"] == hashlib.sha256(raw).hexdigest()
     with tarfile.open(out / lock["asset"]) as tar:
-        assert "pool/main/imagectl/ifenslave_2.14_amd64.deb" in tar.getnames()
+        assert "pool/main/imagesrv/ifenslave_2.14_amd64.deb" in tar.getnames()
 
 
 @POSIX

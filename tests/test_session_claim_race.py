@@ -20,9 +20,9 @@ from pathlib import Path
 import pytest
 
 from server import db as db_module
-from server import pulls, sessions
+from server.rounds import pulls, sessions
 from server.db import connect, now_iso
-from server.sessions import MULTICAST, UNICAST, SessionError, SessionStore
+from server.rounds.sessions import MULTICAST, UNICAST, SessionError, SessionStore
 
 GROUP = "grp_LAB1"
 MAC = "b4:2e:99:07:1a:c4"

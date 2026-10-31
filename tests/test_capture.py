@@ -11,7 +11,7 @@ import hashlib
 import json
 import time
 
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 
 import pytest
 
@@ -242,7 +242,7 @@ def test_intake_stores_the_real_requirement_not_the_source_disk_size(server, ima
     שיישב בתיקייה ערך שאף קורא לא מתכוון לכבד. סוכן ישן שממשיך לשלוח
     את גודל המקור נקלט כרגיל — אין כאן שינוי שובר, ולכן `schema` נשאר 1.
     """
-    from server.images import required_bytes
+    from server.library.images import required_bytes
 
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()

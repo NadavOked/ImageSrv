@@ -121,7 +121,7 @@ def test_confirmed_the_tail_is_taken_on_a_view_and_fits_the_smaller_drive(tmp_pa
     assert win["size_bytes"] == WIN_BYTES - TAIL and win["shrunk_from_bytes"] == WIN_BYTES
     assert win["start_sector"] == WIN_START
     assert rec["start_sector"] == REC_START - TAIL // 512 and rec["source_start_sector"] == REC_START
-    from server.images import required_bytes
+    from server.library.images import required_bytes
     assert required_bytes(m) == m["min_target_bytes"] <= TARGET_BYTES, (m["min_target_bytes"], TARGET_BYTES)
 
 
@@ -196,7 +196,7 @@ def test_no_view_sends_the_full_layout_and_says_so(tmp_path):
 def test_the_question_is_the_direct_sends_and_in_hebrew(tmp_path):
     plan = tmp_path / "plan"
     plan.write_text(f"3|g|u|1|2|{WIN_BYTES}|{WIN_BYTES - TAIL}\n", newline="\n")
-    q = sh(f"export CAPTURE_SINK=discard; . {posix(AGENT)}/lib/shrinkplan.sh; "
+    q = sh(f"export CAPTURE_SINK=discard; . {posix(AGENT)}/lib/shrink/shrinkplan.sh; "
            f"shrink_question {posix(plan)!r}")
     assert q.startswith("ההפצה הישירה תכווץ בעותק בזיכרון") and "כווץ ושלח" in q and "הקליטה" not in q, q
     assert not re.search(r"[A-Za-z]", q.replace(" GB", "")), q   # GB: the unit every screen shows

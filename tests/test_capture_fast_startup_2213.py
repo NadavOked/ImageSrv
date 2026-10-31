@@ -261,7 +261,7 @@ def test_success_warning_is_sent_before_manifest_can_close_task(tmp_path):
     run.mkdir()
     (run / "src_unhib").write_text("unhibernated\n", newline="\n")
     script = (f'RUN_DIR={posix(run)!r}; LOG_FILE="$RUN_DIR/log"; MAC=x; SERVER=http://s; '
-              f'. {posix(AGENT)}/lib/capturesink.sh; '
+              f'. {posix(AGENT)}/lib/capture/capturesink.sh; '
               'report_final() { echo report >> "$RUN_DIR/order"; return "$REPORT_RC"; }; '
               'curl() { echo manifest >> "$RUN_DIR/order"; }; ')
     assert sh(script + 'REPORT_RC=0; upload_manifest t m; echo "rc=$?"').strip() == "rc=0"

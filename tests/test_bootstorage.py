@@ -1,5 +1,5 @@
 """‏#1331 — דרייבר האחסון ה-in-box של הדיסק שנכתב הופך ל-boot-start
-(`agent/lib/bootstorage.sh`, ‏interfaces.md §17 צעד 5א).
+(`agent/lib/postdeploy/bootstorage.sh`, ‏interfaces.md §17 צעד 5א).
 
 אותה קופסה של `test_postdeploy.py` (‏sh אמיתי, כלים מזויפים), עם hive
 ‏`SYSTEM` מזויף: עץ קבצים, ערך לקובץ. מה שנבדק הוא **מה נשאר ב-SYSTEM**
@@ -154,9 +154,9 @@ def test_an_earlier_exit_leaves_system_alone_and_reports_no_boot(tmp_path, case)
 
 
 def test_the_agent_loads_bootstorage_before_postdeploy():
-    main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert main.index('"$LIB_DIR/bootstorage.sh"') < main.index('"$LIB_DIR/postdeploy.sh"')
-    post = (AGENT / "lib" / "postdeploy.sh").read_text(encoding="utf-8")
+    post = (AGENT / "lib" / "postdeploy" / "postdeploy.sh").read_text(encoding="utf-8")
     assert post.index("_device_path_add \"$_hive\" ||") < post.index('boot_storage_enable "$1"')
 
 
@@ -164,7 +164,7 @@ def test_the_agent_loads_bootstorage_before_postdeploy():
 
 pytest.importorskip("fastapi")
 
-from server import reports   # noqa: E402
+from server.agent import reports   # noqa: E402
 from test_room_drivers import M70Q, _wave   # noqa: E402,F401
 from test_server_room import CLONER1, cloner_hello, room, room_server   # noqa: E402,F401
 

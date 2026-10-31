@@ -25,7 +25,7 @@ def _reason(tmp_path, *, hiberfil=False, probe_rc=0):
                 "umount": "#!/bin/sh\nexit 0\n",
             },
         )
-        + f". {posix(AGENT)}/lib/hibernation.sh; "
+        + f". {posix(AGENT)}/lib/capture/hibernation.sh; "
         + f"capture_ntfs_hibernation_reason /dev/fake {posix(tmp_path / 'mnt')}"
     )
     output = sh(script + '; rc=$?; printf "\\n__rc=%s\\n" "$rc"; exit 0')
@@ -38,7 +38,7 @@ def _bitlocker(tmp_path, dd_body: str) -> str:
     script = (
         make_stubs(tmp_path / "stubs", {"dd": f"#!/bin/sh\n{dd_body}\n"})
         + f'RUN_DIR={posix(run)!r}; LOG_FILE={posix(run / "agent.log")!r}; '
-        + f'. {posix(AGENT)}/lib/hibernation.sh; '
+        + f'. {posix(AGENT)}/lib/capture/hibernation.sh; '
         + '_bitlocker_reason 1 ntfs /dev/fake'
     )
     return sh(script).strip()
@@ -96,7 +96,7 @@ def test_bitlocker_header_has_detected_clean_and_unable_states(tmp_path):
 
 
 def test_detection_commands_are_read_only():
-    source = (AGENT / "lib" / "hibernation.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "capture" / "hibernation.sh").read_text(encoding="utf-8")
     assert "ntfs-3g.probe --readwrite" in source
     assert 'ntfs-3g -o rw' not in source          # 17/09: no mount at all any more
     assert "remove_hiberfile" not in source
@@ -126,7 +126,7 @@ def test_hibernated_capture_uses_a_view_but_clean_capture_proceeds_without_one(t
 
 def test_the_gui_draws_a_task_error_as_a_right_to_left_paragraph():
     """#1502: the server hands the task error over as "sda: <reason>"
-    (server/reports.py), and Pango takes a paragraph's direction from its first
+    (server/agent/reports.py), and Pango takes a paragraph's direction from its first
     strong letter (text.c: auto-dir) -- the "s" of "sda" laid the whole Hebrew
     line out left-to-right. Every place that draws it opens with an RLM (U+200F),
     as the room and standby screens already do. Read from the source: the GUI

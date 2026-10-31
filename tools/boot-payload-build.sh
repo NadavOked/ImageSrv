@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# ImageCtl — מטען האתחול של התחנות: ה-initrd (אחד או יותר) ו-vmlinuz
-# ב-/srv/imagectl/boot. **מימוש אחד** לשני המקומות שבונים אותו (#1230):
+# ImageSrv — מטען האתחול של התחנות: ה-initrd (אחד או יותר) ו-vmlinuz
+# ב-/srv/imagesrv/boot. **מימוש אחד** לשני המקומות שבונים אותו (#1230):
 # ‏tools/iso/firstboot.sh בהתקנה, ו-tools/server-upgrade.sh בכל עדכון.
 #
 # מה נגזר כאן **בכל ריצה** ולכן לעולם אינו נרשם בקובץ הדגלים:
@@ -12,7 +12,7 @@
 #     ‏source_date_epoch ממניפסט ה-ISO (עץ בלי .git, בניית --source).
 #     בלי אף אחד מהם — כישלון בשם, לא `date` שקט.
 #
-# קובץ הדגלים (/etc/imagectl/initrd.flags) — שורה לכל הרצת
+# קובץ הדגלים (/etc/imagesrv/initrd.flags) — שורה לכל הרצת
 # ‏build_initramfs.sh: רק מה שקבוע (תפקיד ו---output). ‏# ושורה ריקה
 # מדולגות. זה הפורמט ש-firstboot כותב (--write-flags) ושהעדכון קורא.
 #
@@ -25,8 +25,8 @@
 #   boot-payload-build.sh --http-root DIR (--flags-file FILE | --iso-default)
 #                         [--manifest FILE] [--write-flags FILE] [--build-log FILE]
 #
-# משתני סביבה (לבדיקות): IMAGECTL_MODULES_DIR (/lib/modules),
-# ‏IMAGECTL_KERNEL_DIR (/boot), IMAGECTL_BUILD_TMPDIR (/var/tmp).
+# משתני סביבה (לבדיקות): IMAGESRV_MODULES_DIR (/lib/modules),
+# ‏IMAGESRV_KERNEL_DIR (/boot), IMAGESRV_BUILD_TMPDIR (/var/tmp).
 
 set -euo pipefail
 
@@ -34,12 +34,12 @@ say() { printf 'boot-payload-build: %s\n' "$*" >&2; }
 die() { say "$*"; exit 1; }
 
 APP_DIR=$(cd "$(dirname "$0")/.." && pwd)
-MODULES_DIR="${IMAGECTL_MODULES_DIR:-/lib/modules}"
-KERNEL_DIR="${IMAGECTL_KERNEL_DIR:-/boot}"
+MODULES_DIR="${IMAGESRV_MODULES_DIR:-/lib/modules}"
+KERNEL_DIR="${IMAGESRV_KERNEL_DIR:-/boot}"
 HTTP_ROOT=""
 FLAGS_FILE=""
 ISO_DEFAULT=0
-MANIFEST=/etc/imagectl/iso-release.json
+MANIFEST=/etc/imagesrv/iso-release.json
 WRITE_FLAGS=""
 BUILD_LOG=""
 
@@ -113,15 +113,15 @@ say "kernel $KVER, SOURCE_DATE_EPOCH=$EPOCH, ${#lines[@]} build(s)"
 # מביניהן. עץ ה-staging (מאות MB לבנייה) הולך ל-/var/tmp שעל הדיסק ולא ל-/tmp,
 # שבדביאן 13 הוא tmpfs: שתי בניות במקביל היו שתיים כאלה ב-RAM.
 # סדרתי בכל זאת: שורת --with-gui (שתיים כאלה היו מריצות `make -B` לאותו
-# native-gui/imagectl-station-gui) ושורה בלי --skip-apt (נעילת dpkg). כולן בתור אחד.
+# native-gui/imagesrv-station-gui) ושורה בלי --skip-apt (נעילת dpkg). כולן בתור אחד.
 # הפסק לפי ראיה חיובית בלבד: קובץ rc שאומר 0 ו-.new לא ריק; כל השאר — כשל בשם.
 if [[ -n "$BUILD_LOG" ]]; then exec 3>>"$BUILD_LOG"; else exec 3>&1; fi
 install -d "$HTTP_ROOT"
-BUILD_TMP="${IMAGECTL_BUILD_TMPDIR:-/var/tmp}"
+BUILD_TMP="${IMAGESRV_BUILD_TMPDIR:-/var/tmp}"
 [[ -d "$BUILD_TMP" && -w "$BUILD_TMP" ]] \
     || die "build temp dir $BUILD_TMP is not a writable directory; the previous payload is untouched"
 export TMPDIR="$BUILD_TMP"
-LOGDIR=$(mktemp -d "$TMPDIR/imagectl-payload.XXXXXX")
+LOGDIR=$(mktemp -d "$TMPDIR/imagesrv-payload.XXXXXX")
 trap 'rm -rf "$LOGDIR"' EXIT
 t0=$SECONDS
 
@@ -197,7 +197,7 @@ mv -f "$HTTP_ROOT/vmlinuz.new" "$HTTP_ROOT/vmlinuz"
 if [[ -n "$WRITE_FLAGS" ]]; then
     install -d "$(dirname "$WRITE_FLAGS")"
     {
-        printf '# ImageCtl initrd builds (#1230): one build_initramfs.sh run per line.\n'
+        printf '# ImageSrv initrd builds (#1230): one build_initramfs.sh run per line.\n'
         printf '# --kernel-version and --source-date-epoch are derived at every build.\n'
         printf '%s\n' "${lines[@]}"
     } > "$WRITE_FLAGS.new"

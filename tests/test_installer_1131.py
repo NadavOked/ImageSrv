@@ -1,6 +1,6 @@
 """‏#1131 / ‏#1121 — פונקציות המתקין וסקריפט השדרוג, מורצות **בפועל** ב-bash.
 
-הפונקציות נשלפות מ-`install/setup-boot-server.sh` (לא עותק — סטייה בין
+הפונקציות נשלפות מ-`deploy/setup-boot-server.sh` (לא עותק — סטייה בין
 הסקריפט לבדיקה היא בדיוק החור, כמו test_installer_admin) ורצות עם כלים
 מדומים על PATH (‏`ip`, ‏`nft`, ‏`systemctl`…) שרושמים מה נקרא. הבדיקה היא
 קוד יציאה, קבצים שנכתבו, ומה **לא** נקרא.
@@ -24,9 +24,9 @@ import pytest
 from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 UPGRADE = REPO / "tools" / "server-upgrade.sh"
-LIVE = REPO / "install" / "console-live.sh"
+LIVE = REPO / "deploy" / "console-live.sh"
 
 
 def find_bash() -> str | None:
@@ -128,13 +128,13 @@ WRITE_FILE = HELPERS + "DRY_RUN=0\nLAST_BACKUP=''\n" + installer_function("write
 def test_write_file_backs_up_our_own_file_too_and_writes_atomically(tmp_path, bindir):
     target = tmp_path / "etc" / "thing.conf"
     target.parent.mkdir()
-    target.write_text("# ImageCtl old\n", encoding="utf-8")
+    target.write_text("# ImageSrv old\n", encoding="utf-8")
     proc = run_bash(WRITE_FILE + f'write_file "{posix(target)}" 0600 <<\'EOF\'\nnew content\nEOF\n'
                     'echo "backup=$LAST_BACKUP"', tmp_path, bindir)
     assert proc.returncode == 0, proc.stderr
     assert target.read_text(encoding="utf-8") == "new content\n"
-    backups = list(target.parent.glob("thing.conf.pre-imagectl.*"))
-    assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "# ImageCtl old\n"
+    backups = list(target.parent.glob("thing.conf.pre-imagesrv.*"))
+    assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == "# ImageSrv old\n"
     assert f"backup={posix(backups[0])}" in proc.stdout.replace("\\", "/")
     assert not list(target.parent.glob("thing.conf.??????")), "tmp של mktemp נשאר"
     if os.name != "nt":
@@ -147,7 +147,7 @@ def test_write_file_first_write_has_no_backup_and_default_mode(tmp_path, bindir)
                     'echo "backup=[$LAST_BACKUP]"', tmp_path, bindir)
     assert proc.returncode == 0, proc.stderr
     assert target.read_text(encoding="utf-8") == "x\n" and "backup=[]" in proc.stdout
-    assert not list(target.parent.glob("new.conf.pre-imagectl.*"))
+    assert not list(target.parent.glob("new.conf.pre-imagesrv.*"))
     if os.name != "nt":
         assert stat.S_IMODE(target.stat().st_mode) == 0o644
 
@@ -198,7 +198,7 @@ REFUSE = HELPERS + installer_function("refuse_if_installed")
 def test_second_run_stops_in_name_unless_forced(tmp_path, bindir):
     data = tmp_path / "data"
     data.mkdir()
-    (data / "imagectl.db").write_bytes(b"")
+    (data / "imagesrv.db").write_bytes(b"")
     base = f'DATA_DIR="{posix(data)}"\nUNIT_FILE="{posix(tmp_path / "no-unit")}"\nDRY_RUN=0\n'
     proc = run_bash(base + "FORCE=0\n" + REFUSE + "refuse_if_installed; echo continued",
                     tmp_path, bindir)
@@ -215,11 +215,11 @@ def test_second_run_stops_in_name_unless_forced(tmp_path, bindir):
 
 def test_installer_reads_the_console_deploy_nic_from_the_db(tmp_path, bindir):
     """‏#1121 ס' 7: ‏deploy:interface+deploy:url ב-DB → הכרטיס; חצי-רשומה → ריק."""
-    from server import deploy_net
+    from server.net import deploy_net
     from server.db import connect
     data = tmp_path / "data"
     data.mkdir()
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     script = f'DATA_DIR="{posix(data)}"\n' + installer_function("console_deploy_if_from_db") \
         + 'printf "[%s]" "$(console_deploy_if_from_db)"'
     proc = run_bash(script, tmp_path, bindir)
@@ -243,7 +243,7 @@ def test_installer_keeps_dnsmasq_and_the_deploy_rules_when_the_console_configure
 
 def test_firewall_is_the_last_step_after_the_server_answers():
     text = INSTALLER.read_text(encoding="utf-8")
-    server_up = text.index("run systemctl enable --now imagectl-server")
+    server_up = text.index("run systemctl enable --now imagesrv-server")
     live = text.index('console-live.sh" "https://127.0.0.1:8081"')
     firewall = text.index("\ninstall_firewall\n")
     ready = text.index("\nREADY=1\n")
@@ -255,8 +255,8 @@ def test_firewall_is_the_last_step_after_the_server_answers():
 FIREWALL_PRELUDE = (
     "set -euo pipefail\n" + HELPERS + "DRY_RUN=0\nNO_FIREWALL=0\nLAST_BACKUP=''\n"
     "IFACE=eth1\nCONSOLE_DEPLOY_IF=''\nSERVERS_IF=eth0\nSTORAGE_ROLE=standalone\nPRIMARY_URL=''\n"
-    f"APP_DIR='{posix(REPO)}'\nSCRIPT_DIR='{posix(REPO / 'install')}'\n"
-    "DATA_DIR='/nonexistent-imagectl-data'\n"           # #1829: no DB, no proxy interfaces
+    f"APP_DIR='{posix(REPO)}'\nSCRIPT_DIR='{posix(REPO / 'deploy')}'\n"
+    "DATA_DIR='/nonexistent-imagesrv-data'\n"           # #1829: no DB, no proxy interfaces
     + installer_function("write_file")
 )
 
@@ -286,12 +286,12 @@ def test_install_firewall_loads_after_a_syntax_check_and_enables_the_unit(tmp_pa
     proc = run_bash(_firewall_script(tmp_path), tmp_path, bindir)
     assert proc.returncode == 0 and "FIREWALL_DONE" in proc.stdout, proc.stderr
     text = conf.read_text(encoding="utf-8")
-    assert "table inet imagectl" in text and 'iifname "eth1"' in text
+    assert "table inet imagesrv" in text and 'iifname "eth1"' in text
     seen = calls(tmp_path)
     assert seen.index(next(c for c in seen if c.startswith("nft -c -f"))) \
         < seen.index("nft list ruleset") < seen.index("systemctl enable --now nftables")
     assert not [c for c in seen if c.startswith("systemctl disable")]
-    assert list(tmp_path.glob("nftables.conf.pre-imagectl.*"))          # גיבוי גם כאן
+    assert list(tmp_path.glob("nftables.conf.pre-imagesrv.*"))          # גיבוי גם כאן
 
 
 def test_failed_install_firewall_leaves_tmpdir_empty(tmp_path, bindir):
@@ -439,16 +439,16 @@ def test_health_live_unread_at_startup_is_reread_until_it_succeeds_then_locked(
 
 def _fake_repo(tmp_path: Path, *, live_ok: bool, payload_ok: bool = True) -> Path:
     repo = tmp_path / "repo"
-    (repo / "install").mkdir(parents=True)
+    (repo / "deploy").mkdir(parents=True)
     (repo / "tools").mkdir()
-    (repo / "install" / "imagectl-server.service").write_text("[Unit]\n", encoding="utf-8")
-    shutil.copy(REPO / "install" / "imagectl-upgrade-recover.service", repo / "install")
+    (repo / "deploy" / "imagesrv-server.service").write_text("[Unit]\n", encoding="utf-8")
+    shutil.copy(REPO / "deploy" / "imagesrv-upgrade-recover.service", repo / "deploy")
     shutil.copy(UPGRADE, repo / "tools" / "server-upgrade.sh")
-    (repo / "install" / "console-live.sh").write_text(
+    (repo / "deploy" / "console-live.sh").write_text(
         '#!/usr/bin/env bash\nprintf "console-live %s\\n" "$*" >> "$FAKE_LOG"\n'
         + ("exit 0" if live_ok else 'echo "no answer" >&2; exit 1') + "\n",
         encoding="utf-8", newline="\n")
-    (repo / "install" / "verify-boot-payload.sh").write_text(
+    (repo / "deploy" / "verify-boot-payload.sh").write_text(
         '#!/usr/bin/env bash\nprintf "verify-boot-payload %s\\n" "$*" >> "$FAKE_LOG"\n'
         + ("exit 0" if payload_ok else "exit 1") + "\n", encoding="utf-8", newline="\n")
     # ‏#1230: הבנייה עצמה נבדקת ב-test_boot_payload_1230; כאן רק שהיא נקראה.
@@ -464,15 +464,15 @@ def _fake_repo(tmp_path: Path, *, live_ok: bool, payload_ok: bool = True) -> Pat
 def _upgrade_env(tmp_path: Path, repo: Path, data: Path) -> dict:
     flags = tmp_path / "initrd.flags"
     if not flags.exists():
-        flags.write_text("--skip-apt --output /srv/imagectl/boot/initrd.img\n",
+        flags.write_text("--skip-apt --output /srv/imagesrv/boot/initrd.img\n",
                          encoding="utf-8", newline="\n")
-    return {"IMAGECTL_DATA_DIR": posix(data), "IMAGECTL_UNIT_DIR": posix(tmp_path / "units"),
-            "IMAGECTL_JOURNALD_DIR": posix(tmp_path / "journald.conf.d"),
-            "IMAGECTL_UPGRADE_LOG": posix(tmp_path / "upgrade.log"),
-            "IMAGECTL_INITRD_FLAGS": posix(flags),
-            "IMAGECTL_ISO_MANIFEST": posix(tmp_path / "no-iso-release.json"),
-            "IMAGECTL_HTTP_ROOT": posix(tmp_path / "boot"),
-            "IMAGECTL_LIVE_WAIT": "1", "PYTHONPATH": posix(REPO)}
+    return {"IMAGESRV_DATA_DIR": posix(data), "IMAGESRV_UNIT_DIR": posix(tmp_path / "units"),
+            "IMAGESRV_JOURNALD_DIR": posix(tmp_path / "journald.conf.d"),
+            "IMAGESRV_UPGRADE_LOG": posix(tmp_path / "upgrade.log"),
+            "IMAGESRV_INITRD_FLAGS": posix(flags),
+            "IMAGESRV_ISO_MANIFEST": posix(tmp_path / "no-iso-release.json"),
+            "IMAGESRV_HTTP_ROOT": posix(tmp_path / "boot"),
+            "IMAGESRV_LIVE_WAIT": "1", "PYTHONPATH": posix(REPO)}
 
 
 def _upgrade_fakes(bindir: Path, *, restart_fails: bool = False, enable_fails: bool = False) -> None:
@@ -482,20 +482,20 @@ def _upgrade_fakes(bindir: Path, *, restart_fails: bool = False, enable_fails: b
     enable = 'echo "Failed to enable unit" >&2; exit 1' if enable_fails else "exit 0"
     fake_tool(bindir, "systemctl",
               f'case "$1" in restart) {restart} ;; enable) {enable} ;; '
-              'show) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;; esac')
+              'show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac')
 
 
 def _status(data: Path) -> dict | None:
     from server import update
     from server.db import connect
-    return update.get_status(connect(data / "imagectl.db"))
+    return update.get_status(connect(data / "imagesrv.db"))
 
 
 def _seed_db(data: Path, *, previous: str | None = "v0.48.0", open_round: bool = False):
     from server import update
     from server.db import connect, set_setting
     data.mkdir()
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     if previous:
         set_setting(conn, update.PREVIOUS_KEY, previous)
     if open_round:
@@ -524,13 +524,13 @@ def test_upgrade_verifies_the_new_version_answers_before_declaring_done(tmp_path
     assert proc.returncode == 0, proc.stderr + log
     assert "done and verified" in log
     seen = calls(tmp_path)
-    assert seen.count("systemctl restart imagectl-server") == 1
-    assert "systemctl is-active --quiet imagectl-server" in seen
+    assert seen.count("systemctl restart imagesrv-server") == 1
+    assert "systemctl is-active --quiet imagesrv-server" in seen
     assert any(c.startswith("console-live ") and " v0.49.0 " in c for c in seen)
     assert any(c.startswith("verify-boot-payload ") and "http://10.10.10.8:8080" in c for c in seen)
     assert not [c for c in seen if c.startswith("git checkout")]
     assert (_status(data) or {}).get("state") != "failed"
-    assert (tmp_path / "units" / "imagectl-server.service").exists()
+    assert (tmp_path / "units" / "imagesrv-server.service").exists()
 
 
 def test_upgrade_to_a_broken_tag_rolls_back_to_the_previous_tag_and_records_failed(tmp_path, bindir):
@@ -543,8 +543,8 @@ def test_upgrade_to_a_broken_tag_rolls_back_to_the_previous_tag_and_records_fail
     assert proc.returncode != 0
     seen = calls(tmp_path)
     assert "git checkout --detach v0.48.0" in seen
-    assert seen.count("systemctl restart imagectl-server") == 2          # החדש, ואז החזרה
-    assert seen.index("git checkout --detach v0.48.0") > seen.index("systemctl is-active --quiet imagectl-server")
+    assert seen.count("systemctl restart imagesrv-server") == 2          # החדש, ואז החזרה
+    assert seen.index("git checkout --detach v0.48.0") > seen.index("systemctl is-active --quiet imagesrv-server")
     status = _status(data)
     assert status and status["state"] == "failed" and status["tag"] == "v0.49.0"
     assert "health/live" in status["error"] and "הוחזר ל-v0.48.0" in status["error"]
@@ -588,7 +588,7 @@ def test_upgrade_without_a_saved_previous_tag_rolls_back_to_the_commit_it_starte
     assert proc.returncode != 0
     seen = calls(tmp_path)
     assert "git checkout --detach commit-of-v0.49.0" in seen, seen
-    assert seen.count("systemctl restart imagectl-server") == 2          # החדש, ואז החזרה
+    assert seen.count("systemctl restart imagesrv-server") == 2          # החדש, ואז החזרה
     status = _status(data)
     assert status and status["state"] == "failed"
     assert "הוחזר ל-commit-of-v0.49.0" in status["error"] and "אין תג קודם" not in status["error"]
@@ -619,16 +619,16 @@ def test_a_stale_saved_previous_tag_is_not_the_rollback_target(tmp_path, bindir)
 
 # --- ‏#1957: טיימרים — מותקנים ומופעלים בכל עדכון, ולא רק בהתקנה נקייה ---------------
 
-TIMER = "imagectl-backup.timer"
+TIMER = "imagesrv-backup.timer"
 
 
 def _with_timer(repo: Path) -> None:
-    (repo / "install" / TIMER).write_text("[Timer]\nOnCalendar=hourly\n", encoding="utf-8")
-    (repo / "install" / "imagectl-backup.service").write_text("[Unit]\n", encoding="utf-8")
+    (repo / "deploy" / TIMER).write_text("[Timer]\nOnCalendar=hourly\n", encoding="utf-8")
+    (repo / "deploy" / "imagesrv-backup.service").write_text("[Unit]\n", encoding="utf-8")
 
 
 def test_upgrade_installs_and_enables_every_timer_of_the_new_version(tmp_path, bindir):
-    """שרת שמתעדכן לגרסה עם `imagectl-backup.timer` (#1895) מקבל אותו — מותקן
+    """שרת שמתעדכן לגרסה עם `imagesrv-backup.timer` (#1895) מקבל אותו — מותקן
     ומופעל, אחרי daemon-reload. בלי זה הגיבוי השעתי קיים רק בהתקנה נקייה."""
     data = tmp_path / "data"
     _seed_db(data)
@@ -638,7 +638,7 @@ def test_upgrade_installs_and_enables_every_timer_of_the_new_version(tmp_path, b
     proc = _run_upgrade(tmp_path, bindir, repo, data)
     assert proc.returncode == 0, proc.stderr + (tmp_path / "upgrade.log").read_text(encoding="utf-8")
     assert (tmp_path / "units" / TIMER).exists()
-    assert (tmp_path / "units" / "imagectl-backup.service").exists()
+    assert (tmp_path / "units" / "imagesrv-backup.service").exists()
     seen = calls(tmp_path)
     enable = f"systemctl enable --now {TIMER}"
     assert enable in seen, seen
@@ -671,7 +671,7 @@ def test_rollback_disables_a_timer_the_previous_version_does_not_have(tmp_path, 
     git = bindir / "git"   # העץ של v0.48.0 — בלי הטיימר
     git.write_text(git.read_text(encoding="utf-8").replace(
         "checkout) exit 0 ;;",
-        f'checkout) if [ "$3" = v0.48.0 ]; then rm -f install/{TIMER}; fi; exit 0 ;;'),
+        f'checkout) if [ "$3" = v0.48.0 ]; then rm -f deploy/{TIMER}; fi; exit 0 ;;'),
         encoding="utf-8", newline="\n")
     proc = _run_upgrade(tmp_path, bindir, repo, data)
     assert proc.returncode != 0

@@ -34,6 +34,7 @@ from test_capture_refusals import GPT_DISK, ONE_PARTITION
 from test_directsend import CURL_RECORD, JQ_STUB, MAC, PARTCLONE, TASK, UDP_SENDER, _answer
 from test_stream_honesty import FANOUT_WITHOUT_HASH, GOOD_SHA, PAYLOAD
 from test_timeouts import STUBS, log_of, make_stubs, run_sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -64,7 +65,7 @@ DIRECT_BYTES = b"A" * 4096          # PARTCLONE's 4096 bytes; zstd is `exec cat`
 # --- the classroom station: restore_partition ---------------------------------
 
 
-def station(tmp_path, sha: str, stubs: dict, env: str = "") -> tuple[Path, str, float]:
+def station(tmp_path, sha: str, stubs: dict, env: str = "", setup: str = "") -> tuple[Path, str, float]:
     box = tmp_path / "box"
     run = box / "run"
     payload = box / "part.bin"
@@ -77,10 +78,11 @@ def station(tmp_path, sha: str, stubs: dict, env: str = "") -> tuple[Path, str, 
         + f"export TMPDIR={posix(tmp_path)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_HELPER_S=3 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20 "
         + env + "; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/ntfsboot.sh; . {posix(AGENT)}/lib/drawers.sh; "   # #1487: restore_partition calls ntfs_boot_target; #1906: and restore_pipe
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/ntfsboot.sh; . {posix(AGENT)}/lib/restore/drawers.sh; "   # #1487: restore_partition calls ntfs_boot_target; #1906: and restore_pipe
         f"target_init sda {len(PAYLOAD)}; "
+        + setup +
         f"stream_source() {{ cat {posix(payload)!r}; }}; "
         "node_is_block() { true; }; "
         f"restore_partition unicast http://s img sda 2 dd p2.zst {sha} '' "
@@ -128,13 +130,36 @@ def test_a_station_fanout_that_dies_before_open_fails_fast_by_its_code(tmp_path)
     """fanout exits 2 before opening the feed: zstd is blocked opening the
     fifo. The feed is unblocked as soon as fanout's rc is not 0, so the
     partition fails at once with fanout's code -- not after WAIT_DRAWER_S
-    with a kill. Negative control: without the unblock_fifo line the writer
-    waits the full 60s ceiling."""
-    run, out, elapsed = station(tmp_path, GOOD_SHA, {"fanout": FANOUT_DIES_AT_ONCE},
-                                env="WAIT_DRAWER_S=60")
+    with a kill. Check ordering at the wait boundary, rather than whether a
+    loaded runner finishes all setup in 40 seconds. The reader and unblock
+    stand-ins rendezvous on the real FIFO; fanout still never opens it.
+    wait_pid/wait_progress's clocks have their own tests in test_timeouts.
+    Negative control: remove restore.sh's unblock_fifo call: wait_pid records
+    wait-before-unblock, kills the blocked reader, and rc=2 is not reported."""
+    setup = r'''
+restore_pipe() {
+    read -r released < "$1/feed"
+    echo 0 > "$1/zstd.rc"; echo 0 > "$1/$4"
+}
+unblock_fifo() {
+    printf '%s\n' "$1" > "$RUN_DIR/unblocked"
+    printf 'released\n' > "$1"
+}
+wait_pid() {
+    if [ ! -s "$RUN_DIR/unblocked" ]; then
+        echo wait-before-unblock > "$RUN_DIR/bad-wait"
+        kill "$1"; wait "$1"; return 1
+    fi
+    wait "$1"
+}
+wait_progress() { wait "$1"; }
+'''
+    run, out, _ = station(tmp_path, GOOD_SHA, {"fanout": FANOUT_DIES_AT_ONCE},
+                          env="WAIT_DRAWER_S=60", setup=setup)
+    assert not (run / "bad-wait").exists(), "waited for the reader before releasing it"
+    assert (run / "unblocked").read_text().strip() == posix(run / "targets/sda/feed")
     assert out.strip().endswith("rc=1"), out
     assert "write failed (rc=2)" in log_of(run), log_of(run)
-    assert elapsed < 40, elapsed
 
 
 # --- the build machine's direct send: direct_send_one -------------------------
@@ -155,7 +180,7 @@ def direct(tmp_path, *, fanout: str | None = None, env: dict | None = None,
     (box / "answer.json").write_text(json.dumps(_answer()), encoding="utf-8")
     envs = {"RUN_DIR": posix(run), "DEVROOT": posix(dev), "SYSROOT": posix(box),
             "SERVER": "http://s", "IFACE": "eth0", "MAC": MAC, "TASK_TOKEN": "t" * 48,
-            "RESP": posix(box / "resp.json"), "IMAGECTL_TEST": "1",
+            "RESP": posix(box / "resp.json"), "IMAGESRV_TEST": "1",
             "PCL_COUNT": posix(box / "pcl.count"), "PCL_BYTE": "A", "PCL_SECOND": "",
             "UDP_ARGV": posix(box / "udp.argv"), "CURL_ARGV": posix(box / "curl.argv"),
             "UDP_SILENT": "", "DIRECT_POLL_S": "0", "EVICT_LOG": posix(box / "evict.log"),
@@ -169,7 +194,7 @@ def direct(tmp_path, *, fanout: str | None = None, env: dict | None = None,
         stubs["jq"] = JQ_STUB
     if shutil.which("blkid") is None:   # #1905: a missing blkid is "unreadable"; the real one says rc 2 on these files
         stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
-    libs =" ".join(f"[ ! -f {posix(AGENT)}/lib/{n}.sh ] || . {posix(AGENT)}/lib/{n}.sh;" if n == "captureview" else f". {posix(AGENT)}/lib/{n}.sh;" for n in (
+    libs =" ".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh;" if n == "captureview" else f". {posix(flat_lib())}/{n}.sh;" for n in (
         "common", "sysinfo", "waits", "jsonq", "progress", "restore", "manifest",
         "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink",
         "directsend", "directrecv", "ui"))   # #1466: lcsnap.sh -- capture_disk reads through lc_src_node; #1901/#1808: the source gates

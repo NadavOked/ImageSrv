@@ -11,7 +11,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from server import db, housekeeping, learn_models, room_precheck
+from server import db
+from server.rounds import room_precheck
+from server.system import housekeeping
+from server.learn import learn_models
 
 from test_server_room import (CLONER1, cloner_hello, heartbeat, room,  # noqa: F401
                               room_body, room_server)
@@ -23,7 +26,7 @@ _seq = iter(range(10 ** 6))
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _m(conn, serial, mbps, model=EVO, at=None):

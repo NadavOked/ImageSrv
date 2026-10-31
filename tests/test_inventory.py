@@ -47,7 +47,7 @@ def _lenovo(sysroot: Path) -> None:
 def inventory_of(sysroot: Path) -> dict:
     out = sh(
         f'export SYSROOT={posix(sysroot)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/inventory.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/inventory.sh; '
         f'printf "{{\\"x\\":0%s}}" "$(inventory_json)"'
     )
     return json.loads(out)["inventory"]
@@ -100,14 +100,14 @@ def _agent_hello(fake_machine, libs: str) -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'{libs} build_hello'
     ))
 
 
 def test_hello_schema_2_carries_the_inventory(fake_machine):
     _lenovo(fake_machine["sysroot"])
-    hello = _agent_hello(fake_machine, f'. {posix(AGENT)}/lib/inventory.sh;')
+    hello = _agent_hello(fake_machine, f'. {posix(AGENT)}/lib/hw/inventory.sh;')
     assert hello["schema"] == 2
     assert hello["inventory"]["dmi"]["sys_vendor"] == "LENOVO"
     assert "8086:15bc:020000" in hello["inventory"]["pci"]
@@ -121,7 +121,7 @@ def test_hello_without_the_inventory_lib_has_no_inventory_field(fake_machine):
 
 
 def test_the_agent_loads_the_inventory_lib():
-    text = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    text = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '"$LIB_DIR/inventory.sh"' in text
 
 
@@ -129,7 +129,7 @@ def test_the_agent_loads_the_inventory_lib():
 
 pytest.importorskip("fastapi")
 
-from server import inventory  # noqa: E402
+from server.agent import inventory  # noqa: E402
 
 GOOD = {
     "dmi": {"sys_vendor": "LENOVO", "product_name": "10SQS0AK00",

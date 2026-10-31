@@ -1,10 +1,10 @@
 """‏#1372 — עדכון v0.71→v0.73.2 לא הכין את המארח ל-VM ולא הזהיר: "אומת" בירוק
-בלי qemu/ovmf/guestfs ובלי imagectl-vm. הסיבה: `server-upgrade.sh` של התג **הישן**
+בלי qemu/ovmf/guestfs ובלי imagesrv-vm. הסיבה: `server-upgrade.sh` של התג **הישן**
 רץ, ובו אין צעד 3ב.
 
 מה שנבדק כאן — **הגרסה שרצה** מוודאת את מה שהיא צריכה, בלי קשר למי שהעלה אותה:
 * ‏`VmUpdate.host_problem` — אותן בדיקות שההפעלה מסרבת לפיהן, כמשפט אחד.
-* ‏`VmHost.ensure` — בעלייה, מארח שאינו מוכן → install/vmupdate-host.sh של
+* ‏`VmHost.ensure` — בעלייה, מארח שאינו מוכן → deploy/vmupdate-host.sh של
   הגרסה שרצה, ביחידה מנותקת; ומה שקרה לה נאמר.
 * ‏`GET /update/status` — ‏`done` שאומת, ומארח שאינו מוכן → `warning` (הקונסולה
   מציגה "אומת — אבל …"), גם כשהסקריפט הישן כתב `done` בלי אזהרה.
@@ -22,9 +22,10 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from server import update as update_mod, vmupdate
+from server import update as update_mod
+from server.vm import vmupdate
 from server.db import set_setting
-from server.vmhost import UNIT, VmHost
+from server.vm.vmhost import UNIT, VmHost
 from test_vmupdate import FakeMachine, lab   # noqa: F401 — fixture
 
 REPO = Path(__file__).resolve().parent.parent
@@ -39,20 +40,20 @@ def test_a_ready_host_has_no_problem(lab):
 
 def test_every_missing_piece_is_named_in_one_sentence(lab):
     """מה ש-v0.73.2 ראה אחרי העדכון: אין QEMU, אין OVMF של Secure Boot, אין guestfs,
-    ואין imagectl-vm — הכול בשורה אחת, לשני מצבי ה-SB."""
+    ואין imagesrv-vm — הכול בשורה אחת, לשני מצבי ה-SB."""
     engine = lab["make"](FakeMachine(missing={"qemu-system-x86_64", "OVMF_VARS_4M.ms.fd",
                                               "python3-guestfs"}, user=False))
     why = engine.host_problem()
     assert why.startswith("חסרים בשרת כלים להפעלת VM: ")
     for piece in ("qemu-system-x86_64", "OVMF_VARS_4M.ms.fd", "python3-guestfs",
-                  "משתמש המערכת imagectl-vm אינו קיים"):
+                  "משתמש המערכת imagesrv-vm אינו קיים"):
         assert piece in why
     assert why.count("qemu-system-x86_64") == 1   # שני מצבי SB — שם אחד
 
 
 def test_only_the_user_missing_is_still_a_problem(lab):
     why = lab["make"](FakeMachine(user=False)).host_problem()
-    assert why == "משתמש המערכת imagectl-vm אינו קיים"
+    assert why == "משתמש המערכת imagesrv-vm אינו קיים"
 
 
 # --- ההכנה בעלייה ---------------------------------------------------------------------
@@ -60,9 +61,9 @@ def test_only_the_user_missing_is_still_a_problem(lab):
 
 def _repo(tmp_path: Path, with_script=True) -> Path:
     repo = tmp_path / "repo"
-    (repo / "install").mkdir(parents=True)
+    (repo / "deploy").mkdir(parents=True)
     if with_script:
-        (repo / "install" / "vmupdate-host.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (repo / "deploy" / "vmupdate-host.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     return repo
 
 
@@ -74,7 +75,7 @@ def test_a_host_that_is_not_ready_gets_this_versions_preparation_in_the_backgrou
     assert len(runs) == 1
     argv = runs[0]
     assert argv[:4] == ["systemd-run", f"--unit={UNIT}", "--collect", "bash"]
-    assert Path(argv[4]) == tmp_path / "repo" / "install" / "vmupdate-host.sh"
+    assert Path(argv[4]) == tmp_path / "repo" / "deploy" / "vmupdate-host.sh"
     assert "הופעלה ברקע" in host.warning() and f"journalctl -u {UNIT}" in host.warning()
 
 
@@ -90,13 +91,13 @@ def test_a_ready_host_runs_nothing(tmp_path):
 @pytest.mark.parametrize(("kwargs", "said"), [
     ({"run": lambda argv: (False, "Failed to connect to bus")}, "הפעלת ההכנה ברקע נכשלה: Failed to connect to bus"),
     ({"can_launch": lambda: "השרת אינו רץ כ-root"}, "ההכנה לא הופעלה בעליית השרת (השרת אינו רץ כ-root)"),
-    ({"with_script": False}, "ההכנה לא הופעלה בעליית השרת (install/vmupdate-host.sh אינו בגרסה הזו)"),
+    ({"with_script": False}, "ההכנה לא הופעלה בעליית השרת (deploy/vmupdate-host.sh אינו בגרסה הזו)"),
 ])
 def test_a_preparation_that_did_not_start_is_said_not_swallowed(tmp_path, kwargs, said):
     repo = _repo(tmp_path, with_script=kwargs.pop("with_script", True))
     host = VmHost(lambda: "x", repo, **{"run": lambda argv: (True, ""), "can_launch": lambda: None, **kwargs})
     host.ensure()
-    said = said.replace("install/vmupdate-host.sh", str(Path("install") / "vmupdate-host.sh"))
+    said = said.replace("deploy/vmupdate-host.sh", str(Path("deploy") / "vmupdate-host.sh"))
     assert said in host.warning()
     assert host.health()[0] == "warn"
 
@@ -113,7 +114,7 @@ def test_a_readiness_check_that_breaks_is_not_ready():
 
 @pytest.fixture()
 def server(tmp_path, images_root, clock, monkeypatch):
-    from server import users
+    from server.console import users
     from server.app import create_app
     host = {"problem": "חסרים בשרת כלים להפעלת VM: qemu-system-x86_64"}
     monkeypatch.setattr(vmupdate.VmUpdate, "host_problem", lambda self: host["problem"])

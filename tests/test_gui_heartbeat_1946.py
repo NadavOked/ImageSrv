@@ -119,7 +119,7 @@ def test_the_compiled_gui_beats_on_a_still_screen_and_not_when_stopped(tmp_path)
     state = tmp_path / "state.txt"
     state.write_text("cloner=Office 2024\ndrawer=1|sda|writing|45|100|\n", newline="\n")
     beat = tmp_path / "beat"
-    env = dict(os.environ, IMAGECTL_GUI_BEAT=str(beat))
+    env = dict(os.environ, IMAGESRV_GUI_BEAT=str(beat))
     fonts = keeper.REPO / "native-gui" / "fonts.conf"
     if fonts.exists():
         env["FONTCONFIG_FILE"] = str(fonts)

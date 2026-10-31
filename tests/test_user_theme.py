@@ -56,7 +56,7 @@ def test_theme_is_per_user(server):
 
 # ---- #1499: one saved theme for the console and the build machine (Nadav 16/10) ----
 # The build machine's native GUI signs in through the agent port (the kiosk
-# allowlist, server/kiosk.py). Its login answer carries the user's theme, and
+# allowlist, server/agent/kiosk.py). Its login answer carries the user's theme, and
 # a switch made there is saved with the same PUT /me/theme -- also by deploy,
 # who has no console at all.
 

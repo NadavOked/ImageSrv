@@ -1,7 +1,0 @@
-{
-  "server_base_url": "http://192.0.2.10:8080",
-  "kiosk_url": "http://192.0.2.10:8080/",
-  "allow_imaging": false,
-  "target_device": null,
-  "network_timeout": 30
-}

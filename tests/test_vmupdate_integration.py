@@ -15,11 +15,11 @@ Shell של OVMF מריץ (כותב קובץ ומכבה), ומחיצת NTFS רי�
 `docs/vm-update.md` סעיף 7.
 
 **הרצה:** root (‏losetup, ‏mount), ‏Linux, והכלים של השרת. ‏opt-in במפורש —
-‏`IMAGECTL_VM_IT=1` — כי ריצת המעבדה הרגילה אינה root, ודילוג שקט על "אין
+‏`IMAGESRV_VM_IT=1` — כי ריצת המעבדה הרגילה אינה root, ודילוג שקט על "אין
 root" היה ירוק בלי ראיה (#52). ‏TCG (אין /dev/kvm ב-Testrunner — הוא VM):
 ‏`allow_tcg=True` הוא דגל הבדיקה, ולא נגיש מה-API.
 
-    sudo -n env IMAGECTL_VM_IT=1 TMPDIR=$HOME/x-tmp python3 -m pytest \\
+    sudo -n env IMAGESRV_VM_IT=1 TMPDIR=$HOME/x-tmp python3 -m pytest \\
         tests/test_vmupdate_integration.py -q -rs
 
 המכונה היחידה שנוגעים בה: קבצים דלילים ב-TMPDIR שמחוברים ל-loop. כל צומת
@@ -39,9 +39,9 @@ from pathlib import Path
 
 import pytest
 
-from server import agent_shell, vmdisk, vmupdate
+from server.vm import agent_shell, vmdisk, vmupdate
 from server.db import connect, set_setting
-from server.images import ImageLibrary, required_bytes
+from server.library.images import ImageLibrary, required_bytes
 
 TOOLS = ("losetup", "sgdisk", "partclone.fat", "partclone.ntfs", "mkfs.vfat", "mkntfs",
          "ntfsresize", "ntfsfix", "zstd", "jq", "blkid", "mount", "nft", "setpriv",
@@ -53,12 +53,12 @@ if not Path("/usr/share/OVMF/OVMF_CODE_4M.fd").exists():
 if not vmupdate.Machine().guestfs():
     MISSING.append("python3-guestfs")
 if os.name != "nt" and vmupdate.Machine().vm_user() is None:
-    MISSING.append("the imagectl-vm system user")
+    MISSING.append("the imagesrv-vm system user")
 
 pytestmark = [pytest.mark.vm_it, pytest.mark.skipif(
-    os.environ.get("IMAGECTL_VM_IT") != "1" or os.name == "nt"
+    os.environ.get("IMAGESRV_VM_IT") != "1" or os.name == "nt"
     or getattr(os, "geteuid", lambda: 1)() != 0 or bool(MISSING),
-    reason="opt-in (IMAGECTL_VM_IT=1), Linux, root, and the server's tools"
+    reason="opt-in (IMAGESRV_VM_IT=1), Linux, root, and the server's tools"
            + (f" — missing: {', '.join(MISSING)}" if MISSING else ""))]
 
 MIB = 1 << 20
@@ -183,8 +183,8 @@ def table_of(disk: Path) -> dict[int, dict[str, str]]:
 
 @pytest.fixture()
 def library_root():
-    """הספרייה במקום שמשתמש ה-VM יכול לעבור בו — כמו /srv/imagectl/images
-    בייצור. ‏TMPDIR של המעבדה יושב תחת /home/test ‏(0700), ושם imagectl-vm
+    """הספרייה במקום שמשתמש ה-VM יכול לעבור בו — כמו /srv/imagesrv/images
+    בייצור. ‏TMPDIR של המעבדה יושב תחת /home/test ‏(0700), ושם imagesrv-vm
     אינו מגיע לקובצי ה-ESP שהורדו (נמדד 13/10)."""
     import tempfile
     root = Path(tempfile.mkdtemp(prefix="f1334-lib-", dir="/var/tmp"))
@@ -201,7 +201,7 @@ def test_open_boot_payload_save_and_reopen(tmp_path, library_root):
     source = capture_source(tmp_path, library_root)
     library = ImageLibrary(library_root)
     assert library.get("img_1334aa") is not None, "the test image itself must be valid"
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     vmupdate.write_settings(conn, {"memory_mib": 1024, "cpus": 1})
     # ‏#1468: ה-VM על macvtap בכרטיס היציאה של המכונה. ה-UEFI Shell אינו עושה DHCP,
     # ולכן תקרת ה-lease גבוהה מזמן המטען — כאן נבדק החיבור, לא ה-lease.
@@ -229,17 +229,17 @@ def test_open_boot_payload_save_and_reopen(tmp_path, library_root):
     # 2ב. הבידוד: QEMU רץ כמשתמש ה-VM, והטבלה של vmnet חוסמת אותו מהמארח.
     vm_user = vmupdate.Machine().vm_user()
     uid, gid = vm_user.uid, vm_user.gid
-    # ‏`process=imagectl-vmupdate` משנה את שם התהליך — מחפשים בשורת הפקודה.
+    # ‏`process=imagesrv-vmupdate` משנה את שם התהליך — מחפשים בשורת הפקודה.
     owners = [line.split()[0] for line in sh("ps", "-e", "-o", "uid=,args=").splitlines()
-              if "imagectl-vmupdate,process=" in line]
+              if "imagesrv-vmupdate,process=" in line]
     assert owners and set(owners) == {str(uid)}, owners
     qemu_line = next(line for line in sh("ps", "-e", "-o", "args=").splitlines()
-                     if "imagectl-vmupdate,process=" in line)
+                     if "imagesrv-vmupdate,process=" in line)
     assert "tap,id=net0,fd=" in qemu_line and "user,id=" not in qemu_line
     mac = engine.ensure_mac()
-    link = sh("ip", "-d", "-o", "link", "show", "dev", "imagectl-vm0")
-    assert f"imagectl-vm0@{nic}" in link and "macvtap mode bridge" in link and mac in link
-    table = sh("nft", "list", "table", "inet", "imagectl_vm")
+    link = sh("ip", "-d", "-o", "link", "show", "dev", "imagesrv-vm0")
+    assert f"imagesrv-vm0@{nic}" in link and "macvtap mode bridge" in link and mac in link
+    table = sh("nft", "list", "table", "inet", "imagesrv_vm")
     assert f"skuid {uid} drop" in table and f"ether saddr {mac} drop" in table
     host_ip = sh("ip", "-o", "-4", "route", "get", "1.1.1.1").split(" src ")[1].split()[0]
     for target in ("127.0.0.1", host_ip, "10.255.255.1"):
@@ -254,10 +254,10 @@ def test_open_boot_payload_save_and_reopen(tmp_path, library_root):
     stopped = wait_state(engine, "stopped", 900)
     assert stopped["forced"] is False and stopped["runtime_seconds"] >= 0
     # ה-macvtap והטבלה ירדו עם QEMU (#1468)
-    gone = subprocess.run(["ip", "-o", "link", "show", "dev", "imagectl-vm0"], env=ENV,
+    gone = subprocess.run(["ip", "-o", "link", "show", "dev", "imagesrv-vm0"], env=ENV,
                           capture_output=True, stdin=subprocess.DEVNULL)
     assert gone.returncode != 0, gone.stdout
-    table_gone = subprocess.run(["nft", "list", "table", "inet", "imagectl_vm"], env=ENV,
+    table_gone = subprocess.run(["nft", "list", "table", "inet", "imagesrv_vm"], env=ENV,
                                 capture_output=True, stdin=subprocess.DEVNULL)
     assert table_gone.returncode != 0, table_gone.stdout
 

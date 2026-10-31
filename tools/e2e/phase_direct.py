@@ -82,7 +82,7 @@ def run(ctx) -> None:
 
     # המקור מוסר את המניפסט בלבד — עם האסימון שהגיע ב-hello.
     source = Client()
-    source.headers["X-Imagectl-Task-Token"] = task["token"]
+    source.headers["X-Imagesrv-Task-Token"] = task["token"]
     manifest = make_manifest(GB256, FILES_A)
     status, result = source.json(
         "PUT", f"/api/v1/direct/{opened['task_id']}/manifest", manifest)

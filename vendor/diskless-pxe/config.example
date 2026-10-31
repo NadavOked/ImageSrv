@@ -1,5 +1,0 @@
-IMAGECTL_SERVER=http://192.168.1.10:8080
-KIOSK_URL=http://192.168.1.10:8080/
-KERNEL_URL=http://192.168.1.10:8080/diskless/vmlinuz-lts
-INITRAMFS_URL=http://192.168.1.10:8080/diskless/initramfs
-BOOT_TIMEOUT=5

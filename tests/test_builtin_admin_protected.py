@@ -18,7 +18,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import users  # noqa: E402
+from server.console import users  # noqa: E402
 
 BUILTIN = "admin"
 

@@ -1,4 +1,4 @@
-"""‏#1649 — אתחול השרת באמצע כיווץ של שמירת VM משאיר את העותק `imagectl-vmsave`
+"""‏#1649 — אתחול השרת באמצע כיווץ של שמירת VM משאיר את העותק `imagesrv-vmsave`
 ושני loop (על `disk.raw` ועל `run/shrink.cow`); לפני התיקון ה-`detach_all` של
 השמירה הבאה (או של הביטול) נכשל על "התקן loop נשאר מחובר", כי העותק עוד מחזיק
 אותם — ואיש לא ניקה.
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from server import vmdisk
+from server.vm import vmdisk
 from test_vmdisk_readonly_1491 import SIZE, ViewHost, done
 from test_vmupdate_isolation import DISK, FakeGuest
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from test_agent import AGENT, BASH, posix, sh
 from test_timeouts import make_stubs
 from native import requires_native
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -35,7 +36,7 @@ def _run_sender(tmp_path: Path, *args: str) -> list[str]:
     sh(
         make_stubs(box / "stubs", {"udp-sender": RECORD_ARGV})
         + f"export RUN_DIR={posix(run)!r} IFACE=eth0 UDP_ARGV={posix(argv)!r}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/directsend.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/directsend.sh; "
         f"printf 'bytes' | direct_udp_send {quoted}"
     )
     return argv.read_text(encoding="utf-8").splitlines()
@@ -59,7 +60,7 @@ def _flags(argv: list[str]) -> dict[str, str | None]:
 def test_the_agent_sends_with_the_servers_own_flags(tmp_path):
     """אותם דגלים בדיוק כמו `SenderEngine.command_for` — חוץ מ-`--file`
     (הזרם מגיע ב-stdin) ו-`--interface` (הכרטיס של מחשב הבנייה)."""
-    from server.sender import SenderEngine
+    from server.rounds.sender import SenderEngine
 
     engine = SenderEngine(library=None, portbase=31200, max_wait=120,
                           start_timeout=180, retries_until_drop=200,
@@ -186,7 +187,7 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
     (box / "answer.json").write_text(json.dumps(answer or _answer()), encoding="utf-8")
     envs = {"RUN_DIR": posix(run), "DEVROOT": posix(dev), "SYSROOT": posix(box),
             "SERVER": "http://s", "IFACE": "eth0", "MAC": MAC, "TASK_TOKEN": "t" * 48,
-            "RESP": posix(box / "resp.json"), "IMAGECTL_TEST": "1",
+            "RESP": posix(box / "resp.json"), "IMAGESRV_TEST": "1",
             "PCL_COUNT": posix(box / "pcl.count"), "PCL_BYTE": "A", "PCL_SECOND": "",
             "UDP_ARGV": posix(box / "udp.argv"), "CURL_ARGV": posix(box / "curl.argv"),
             "UDP_SILENT": "1" if udp_silent else "", "DIRECT_POLL_S": "0",
@@ -199,7 +200,7 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
         stubs["jq"] = JQ_STUB
     if shutil.which("blkid") is None:   # #1905: a missing blkid is "unreadable"; the real one says rc 2 on these files
         stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
-    libs =" ".join(f"[ ! -f {posix(AGENT)}/lib/{n}.sh ] || . {posix(AGENT)}/lib/{n}.sh;" if n == "captureview" else f". {posix(AGENT)}/lib/{n}.sh;" for n in (
+    libs =" ".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh;" if n == "captureview" else f". {posix(flat_lib())}/{n}.sh;" for n in (
         "common", "sysinfo", "waits", "jsonq", "progress", "restore", "manifest",
         "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui"))   # ‏#87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
     out = run_sh(

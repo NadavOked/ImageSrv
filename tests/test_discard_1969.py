@@ -51,7 +51,7 @@ def _one(tmp_path: Path, disk: str, body: str = "exit 0", **env: str) -> tuple[s
     out = run_sh(
         f"export PATH={posix(bindir)!r}:$PATH SYSROOT={posix(root)!r} DEVROOT={posix(tmp_path / 'dev')!r} "
         f"RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(log)!r} {exports}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/discard.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/restore/discard.sh; "
         f'discard_before_restore {disk}; echo "rc=$?"')
     return (out.strip().splitlines()[-1],
             calls.read_text(encoding="utf-8").splitlines() if calls.exists() else [],
@@ -105,7 +105,7 @@ def _round(tmp_path: Path, blk_body: str, **env: str):
     run, prelude = _room(tmp_path, f'echo "gpt $1" >> {calls!r}; return 0;',
                          drawers=("sda", "sdb", "sdc", "sdd"), **env)
     prelude = (prelude + f"export PATH={posix(bindir)!r}:$PATH SYSROOT={posix(root)!r}; "
-               f". {posix(AGENT)}/lib/discard.sh; "
+               f". {posix(AGENT)}/lib/restore/discard.sh; "
                # a gate failed sdc before the tables (the write check, as #1366 does)
                'write_check() { [ "$1" != sdc ] || { target_set sdc failed "gate"; return 1; }; }; ')
     out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc sdd; echo "rc=$?"')

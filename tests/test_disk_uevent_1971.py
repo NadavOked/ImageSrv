@@ -28,7 +28,7 @@ pytestmark = requires_native(("gcc", GCC))
 
 @pytest.fixture(scope="module")
 def listener(tmp_path_factory) -> Path:
-    out = tmp_path_factory.mktemp("uevent") / "imagectl-uevent"
+    out = tmp_path_factory.mktemp("uevent") / "imagesrv-uevent"
     build = subprocess.run([GCC, "-O2", "-Wall", "-Wextra", "-Werror", "-o", str(out), str(AGENT / "uevent.c")],
                            capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert build.returncode == 0, build.stderr
@@ -90,7 +90,7 @@ def test_the_state_loop_wakes_on_the_file_not_on_its_second(tmp_path):
     gui.mkdir()
     passes = tmp_path / "passes"
     run_sh(f"""export RUN_DIR={posix(tmp_path)!r} GUI_DIR={posix(gui)!r}
-. {posix(AGENT)}/lib/clonergui.sh
+. {posix(AGENT)}/lib/gui/clonergui.sh
 lc_gui_active() {{ return 1; }}
 n=0; cloner_gui_state() {{ n=$((n+1)); echo "pass $n $(date +%s%N)" >> {posix(passes)!r}; [ $n -lt 3 ] || exit 0; }}
 ( sleep 0.3; : > "$GUI_DIR/disk-event" ) &

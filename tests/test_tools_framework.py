@@ -1,4 +1,4 @@
-"""‏#649 תחום 1 — המסגרת של ארגז הכלים (agent/lib/tools.sh), בהזרקת מעטפת.
+"""‏#649 תחום 1 — המסגרת של ארגז הכלים (agent/lib/tools/tools.sh), בהזרקת מעטפת.
 
 החוזה (התגובה האחרונה ב-#649): כל `tools_<domain>.sh` מגדיר
 `tools_<domain>_list` (שורה לכלי `id|domain|title|risk|args`) ו-
@@ -133,7 +133,7 @@ def setup(tmp_path: Path, modules: dict[str, str] | None = None,
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
     fake = tmp_path / "bin"; fake.mkdir()
-    shutil.copy(AGENT / "lib" / "toolbins.sh", lib / "toolbins.sh")
+    shutil.copy(AGENT / "lib" / "tools" / "toolbins.sh", lib / "toolbins.sh")
     sel = write_selection(tmp_path, ALL_FAKE_IDS if selection is None else selection)
     (run / "response.json").write_text(json.dumps({"role": "build", "tools": tools}),
                                        encoding="utf-8", newline="\n")
@@ -151,9 +151,9 @@ def setup(tmp_path: Path, modules: dict[str, str] | None = None,
     path = ":".join([msys(fake), *([msys(jq_dir)] if jq_dir else []), "/usr/bin", "/bin"])
     prelude = (
         f"export PATH={path!r} LIB_DIR={posix(lib)!r} RUN_DIR={posix(run)!r} "
-        f"GUI_DIR={posix(gui)!r} TOOLS_SELECTION={posix(sel)!r} IMAGECTL_TEST=1; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/buildmenuitems.sh; . {posix(AGENT)}/lib/tools.sh; "
+        f"GUI_DIR={posix(gui)!r} TOOLS_SELECTION={posix(sel)!r} IMAGESRV_TEST=1; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/gui/buildmenuitems.sh; . {posix(AGENT)}/lib/tools/tools.sh; "
     )
     return lib, run, gui, prelude
 

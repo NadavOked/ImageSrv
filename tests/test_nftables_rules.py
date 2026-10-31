@@ -17,8 +17,8 @@ import pytest
 from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
-GEN = REPO / "install" / "nftables-rules.sh"
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+GEN = REPO / "deploy" / "nftables-rules.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 FIXTURES = REPO / "tests" / "fixtures" / "nftables"
 UPGRADE = REPO / "tools" / "server-upgrade.sh"
 
@@ -129,13 +129,13 @@ def test_deploy_opens_dhcp_tftp_and_not_ssh() -> None:
     assert 'iifname "eth-deploy" udp dport 69 accept' in got
     assert 'tcp dport 22' not in got
     assert 'iifname "eth-deploy" tcp dport 22' not in got
-    assert 'log prefix "imagectl-drop "' in got
+    assert 'log prefix "imagesrv-drop "' in got
     assert "limit rate 5/minute" in got
 
 
 @needs_bash
 def test_proxy_1829_opens_udp_4011_only_on_the_deploy_interface() -> None:
-    from server import ports
+    from server.net import ports
 
     got = generate(*PRIMARY_ARGS, "--proxy-if", "eth-deploy")
     rules = [line.strip() for line in got.splitlines() if "dport 4011" in line]
@@ -253,7 +253,7 @@ def test_installer_installs_nftables_and_has_no_firewall_flag() -> None:
 
 def test_installer_binds_tftp_to_the_deploy_interface() -> None:
     """R20-F1: TFTP בלי interface= מאזין על כל הכרטיסים. המתקין כותב
-    את ההגבלה בקובץ הבסיס (imagectl.conf) כשיש כרטיס הפצה — ובלעדיו
+    את ההגבלה בקובץ הבסיס (imagesrv.conf) כשיש כרטיס הפצה — ובלעדיו
     (#1088) אינו מפעיל dnsmasq כלל, עד שהקונסולה תכתוב את השורה."""
     text = INSTALLER.read_text(encoding="utf-8")
     assert "interface=$IFACE" in text

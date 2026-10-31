@@ -17,7 +17,7 @@ from native import requires_native
 from test_cloner_gui import BASH, posix
 
 REPO = Path(__file__).resolve().parent.parent
-INITMODS = REPO / "agent" / "lib" / "initmods.sh"
+INITMODS = REPO / "agent" / "lib" / "core" / "initmods.sh"
 
 pytestmark = requires_native(("bash", BASH))
 

@@ -36,9 +36,9 @@ def setup(tmp_path: Path, extra: str = "") -> tuple[str, Path]:
     run = tmp_path / "run"; run.mkdir(parents=True)
     gui = run / "gui"; gui.mkdir()
     (run / "rows").write_text(ROWS, newline="\n")
-    pre = (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} IMAGECTL_TEST=1; '
-           f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-           f'. {posix(AGENT)}/lib/askgui.sh; {extra}')
+    pre = (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} IMAGESRV_TEST=1; '
+           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+           f'. {posix(AGENT)}/lib/gui/askgui.sh; {extra}')
     return pre, gui
 
 
@@ -180,7 +180,7 @@ SHRUNK_ASK = "3|table|499000000000|146000000000\n4|fs|1000000000|700000000\n"
 
 
 def restore_ask(tmp_path: Path, body: str, stdin: str = "1\n") -> subprocess.CompletedProcess:
-    pre, gui = setup(tmp_path, f'. {posix(AGENT)}/lib/shrinkoffer.sh; ')
+    pre, gui = setup(tmp_path, f'. {posix(AGENT)}/lib/shrink/shrinkoffer.sh; ')
     (tmp_path / "run" / "targets" / "sda").mkdir(parents=True)
     (tmp_path / "run" / "shrunk.ask").write_text(SHRUNK_ASK, newline="\n")
     run = subprocess.run([BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + pre + body],

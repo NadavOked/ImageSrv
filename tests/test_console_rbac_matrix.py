@@ -20,8 +20,8 @@ from fastapi.testclient import TestClient
 from starlette.routing import Mount
 
 from server.app import create_agent_app, create_console_app
-from server import capabilities
-from server.kiosk import KIOSK_CLASS_ONLY_ROUTES, KIOSK_CONSOLE_ROUTES
+from server.core import capabilities
+from server.agent.kiosk import KIOSK_CLASS_ONLY_ROUTES, KIOSK_CONSOLE_ROUTES
 
 #: נתיבים ציבוריים במכוון — בלי כניסה בכלל, ולכן גם deploy רואה אותם:
 #: הכניסה עצמה (שמשיבה ל-deploy 403 ממילא). לוגו מסך הכניסה (#1168) הוסר ב-#1302.

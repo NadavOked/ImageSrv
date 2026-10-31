@@ -136,7 +136,7 @@ def test_a_hello_right_on_the_edge_of_the_window_is_written(db):
 def test_the_window_stays_well_inside_the_awake_threshold():
     """השומר על המספר עצמו. הסף חייב להישאר קטן מ-`AWAKE_SECONDS`,
     אחרת מכונה חיה מצטיירת ככבויה — ‏#64 ו-#109 שוב, דרך התיקון."""
-    from server.room import AWAKE_SECONDS                   # noqa: PLC0415
+    from server.rounds.room import AWAKE_SECONDS                   # noqa: PLC0415
 
     assert NET_SEEN_MIN_INTERVAL_SECONDS * 2 <= AWAKE_SECONDS
 
@@ -218,7 +218,7 @@ def test_the_free_text_description_survives_the_throttle(db):
 def test_the_loop_counter_climbs_while_the_writes_stop(db):
     """שני המונים על חיבור אחד, זה מול זה: ‏`agent_loops` עולה בכל
     הגעה, ו-`net_devices` לא נכתבת אף פעם."""
-    from server import agent_loops                          # noqa: PLC0415
+    from server.agent import agent_loops                          # noqa: PLC0415
 
     net_seen(db, MAC, IP)
     beats = 12

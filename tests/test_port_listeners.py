@@ -5,7 +5,7 @@
 ‏uvicorn אמיתי על 127.0.0.1 עם פורט שהמערכת בוחרת; אף פורט ייצור אינו
 נתפס כאן.
 
-הבקרה השלילית (בגוף ה-PR): בלי `server/ports.py` הטסטים כאן לא רצים
+הבקרה השלילית (בגוף ה-PR): בלי `server/net/ports.py` הטסטים כאן לא רצים
 כלל (ImportError), ולכן הבקרה נמדדת על `test_port_toggles.py` — שם
 הכישלון התנהגותי. כאן הראיה היא הסוקט עצמו.
 """
@@ -22,7 +22,7 @@ import pytest
 pytest.importorskip("fastapi")
 uvicorn = pytest.importorskip("uvicorn")
 
-from server import ports  # noqa: E402
+from server.net import ports  # noqa: E402
 
 
 async def _app(scope, receive, send):

@@ -1,9 +1,9 @@
 /* The last-resort screen (owner, 17/10: "no black screen without a GUI").
  * Rendered once at build time into a raw XRGB8888 block; on the machine,
- * agent/lib/splash.sh centres it on the framebuffer when the GUI is not
+ * agent/lib/gui/splash.sh centres it on the framebuffer when the GUI is not
  * coming back -- no process of ours is needed to show it. */
-#ifndef IMAGECTL_SPLASH_H
-#define IMAGECTL_SPLASH_H
+#ifndef IMAGESRV_SPLASH_H
+#define IMAGESRV_SPLASH_H
 
 /* Writes <w>x<h> pixels, 4 bytes each (cairo RGB24 = XRGB8888 little-endian,
  * the only fbdev format backend.c accepts), row after row with no padding.

@@ -21,6 +21,7 @@ from native import requires_native
 from test_cloner_gui import BASH, PORTS, PRELUDE, env, posix, sh, target
 from test_capture_gates import ISW_SIGNATURE, _with_isw_anchor
 from test_timeouts import make_stubs
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
@@ -52,8 +53,8 @@ def box(tmp_path: Path, images: dict[str, bytes], stubs: dict[str, str] | None =
     all_stubs = {"blkid": "#!/bin/sh\nexit 2\n", **(stubs or {})}
     pre = (make_stubs(tmp_path / "stubs", all_stubs)
            + f"export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} DEVROOT={posix(dev)!r} "
-           f"SYSROOT={posix(tmp_path)!r} LOG_FILE={posix(run / 'log')!r} IMAGECTL_TEST=1 D_ROLE=cloner; "
-           + "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in LIBS)
+           f"SYSROOT={posix(tmp_path)!r} LOG_FILE={posix(run / 'log')!r} IMAGESRV_TEST=1 D_ROLE=cloner; "
+           + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
            + "attended() { shift; \"$@\"; }; attended_power_check() { :; }; "
            + 'disk_port() { case "$1" in sda) echo 1;; sdb) echo 2;; esac; }; ')
     return pre, run
@@ -167,7 +168,7 @@ def test_a_wipe_that_did_not_take_fails_the_drawer(tmp_path):
 def _dispatch(tmp_path, request: str, token: str, screen: str) -> bool:
     gui = tmp_path / "gui"; gui.mkdir(parents=True)
     (gui / "ask-request").write_text(request, newline="\n")
-    sh(f"export GUI_DIR={posix(gui)!r}; . {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/askgui.sh; "
+    sh(f"export GUI_DIR={posix(gui)!r}; . {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/gui/askgui.sh; "
        f"GUI_SCREEN={screen}; token='{token}'; gui_ask_dispatch")
     return (gui / "ask-decision").exists()
 

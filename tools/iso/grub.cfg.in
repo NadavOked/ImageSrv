@@ -1,5 +1,5 @@
 # ‏#1190: ערך אחד, בלי תפריט — ה-ISO עולה ישר למתקין החי; התפקיד, הדיסק
-# וכל השאר נשאלים בגואי על המסך. שורת הקרנל: רק imagectl.mode=installer.
+# וכל השאר נשאלים בגואי על המסך. שורת הקרנל: רק imagesrv.mode=installer.
 set default=0
 set timeout=0
 set color_normal=white/black

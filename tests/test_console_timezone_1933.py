@@ -19,7 +19,8 @@ from dataclasses import replace
 
 import pytest
 
-from server import db, timezone
+from server import db
+from server.system import timezone
 
 # ‏fixtures של שני השרתים האמיתיים (‏#1179) — ייבוא, לא העתקה.
 from test_secondary_console_relay import secondary                  # noqa: F401

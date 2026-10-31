@@ -8,7 +8,7 @@
 
 * השרת — ‏`session.portbase` בתשובת ה-hello הוא הפורט ש-`SenderEngine` שלו
   באמת משדר בו (בחבילה הזאת: פורט אקראי של `hygiene`, לא 9000; פורט-הפצה-מכוון: תיעוד).
-* ‏`session_stream` (‏`agent/lib/streamid.sh`) — מציב את ה-portbase של הסבב,
+* ‏`session_stream` (‏`agent/lib/core/streamid.sh`) — מציב את ה-portbase של הסבב,
   ומסרב לפני הכתיבה כשהמניפסט אינו של האימג' של הסבב או כשהפורט אינו פורט.
 * ‏`do_restore` / ‏`do_restore_drawers` — הפורט מגיע ל-udp-receiver, וסירוב
   עוצר לפני `run_restore` (‏`die_local`, "לא נכתב דבר").
@@ -44,7 +44,7 @@ def test_the_hello_names_the_port_this_servers_sender_really_uses(server):
     אקראי (‏`hygiene.assign_test_portbase`) — לכן שוויון אליו הוא ראיה
     שהערך נקרא מהמנוע, ולא 9000 (פורט-הפצה-מכוון) שבמקרה שווה גם לו."""
     from conftest import hello_body, setup_classroom
-    from server import sender
+    from server.rounds import sender
 
     ids = setup_classroom(server)
     opened = server["admin"].post("/api/console/sessions", json={
@@ -61,7 +61,7 @@ def test_the_direct_source_and_the_receivers_are_told_the_same_port():
     """מחשב בנייה שמשדר (‏`task.direct.multicast.portbase`) והמקלטים
     (‏`session.portbase`) מקבלים את הערך מאותו מקור — גם בלי מנוע."""
     pytest.importorskip("fastapi")
-    from server import direct, sender
+    from server.rounds import direct, sender
 
     assert direct.default_multicast()["portbase"] == sender.DEFAULT_PORTBASE
 
@@ -80,9 +80,9 @@ def _agent_sh(tmp_path, call: str, *, manifest_id=IMAGE, portbase=None, pre="") 
     script = (
         'export PATH="/usr/bin:$PATH"; ' + pre
         + f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path / 'agent.log')!r}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/streamid.sh; " + JQ_FN
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/core/streamid.sh; " + JQ_FN
         + f'session_stream {IMAGE} {posix(tmp_path / "manifest.json")!r} '
         f'{posix(tmp_path / "resp.json")!r}; ' + call
     )

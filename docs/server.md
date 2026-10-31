@@ -26,7 +26,7 @@ python -m server.main --server-url http://10.44.12.10:8080
 
 `--server-url` היא הכתובת שהלקוחות רואים (לא localhost) — אותה כתובת
 שהמתקין כתב ל-GRUB. http בלבד, מאותה סיבה: ה-GRUB החתום נבנה בלי TLS.
-ברירות מחדל: נתונים ב-`/var/lib/imagectl`, אימג'ים ב-`/srv/imagectl/images`,
+ברירות מחדל: נתונים ב-`/var/lib/imagesrv`, אימג'ים ב-`/srv/imagesrv/images`,
 פורט 8080. בהרצה ראשונה נוצר משתמש `admin` עם סיסמה חד-פעמית שמודפסת
 לטרמינל בלבד — לכן ההרצה הראשונה נעשית מול מסך, לא כשירות.
 
@@ -47,22 +47,22 @@ loopback). להרצת פיתוח על `127.0.0.1` בלבד מותר `--console-t
 
 ### כשירות קבוע
 
-> הריפו **פרטי** מאז 09/2026 (‏`ImageCtl-archive`) — ‏`git clone` אנונימי
-> ייכשל, וצריך אישורים. השם הישן `NadavOked/ImageCtl` (היום `NadavOked/ImageSrv`) הוא היום הריפו
+> הריפו **פרטי** מאז 09/2026 (‏`ImageSrv-dev`) — ‏`git clone` אנונימי
+> ייכשל, וצריך אישורים. השם `NadavOked/ImageSrv` (בלי `-dev`) הוא הריפו
 > הציבורי (פרסום נקי, קומיט יחיד) — לא ריפו העבודה ולא מה שמתקינים ממנו.
 
 ```bash
-sudo git clone https://github.com/NadavOked/ImageCtl-archive /opt/imagectl
+sudo git clone https://github.com/NadavOked/ImageSrv-dev /opt/imagesrv
 sudo apt-get install -y python3-fastapi python3-uvicorn python3-websockets python3-cryptography python3-openssl
-cd /opt/imagectl && sudo python3 -m server.main --server-url http://10.44.12.10:8080
+cd /opt/imagesrv && sudo python3 -m server.main --server-url http://10.44.12.10:8080
 # ^ הרצה ראשונה מול מסך: רושמים את סיסמת ה-admin, ואז Ctrl+C
-sudo cp install/imagectl-server.service /etc/systemd/system/
-sudo systemctl edit imagectl-server     # Environment=IMAGECTL_URL=http://10.44.12.10:8080
-sudo systemctl enable --now imagectl-server
+sudo cp deploy/imagesrv-server.service /etc/systemd/system/
+sudo systemctl edit imagesrv-server     # Environment=IMAGESRV_URL=http://10.44.12.10:8080
+sudo systemctl enable --now imagesrv-server
 ```
 
-עדכון גרסה = `git pull` + `systemctl restart imagectl-server`. הנתונים
-יושבים ב-`/var/lib/imagectl` ולכן שורדים עדכון; גיבוי = התיקייה
+עדכון גרסה = `git pull` + `systemctl restart imagesrv-server`. הנתונים
+יושבים ב-`/var/lib/imagesrv` ולכן שורדים עדכון; גיבוי = התיקייה
 הזו + תיקיית האימג'ים.
 
 ## איפה מה חי
@@ -169,12 +169,12 @@ MAC, כתובות, תיאור חופשי (למשל מספר הוילן; נשמר
 DNS, זמן חכירה, כתובת השרת בוילן) ו-proxy (עונה על PXE בלבד; לרשת
 המכללה, שבה יש DHCP קיים ואסור להתנגש בו). ההגדרות נשמרות ב-`settings`
 תחת `dhcp:<כרטיס>`, ואחרי כל שינוי נכתבים **שני** קבצי dnsmasq ומופעלים
-**שני** שירותים (`server/dhcp.py` מרנדר, `server/dhcp_host.py` נוגע
-במכונה, `server/console_dhcp.py` מארח):
+**שני** שירותים (`server/net/dhcp.py` מרנדר, `server/net/dhcp_host.py` נוגע
+במכונה, `server/console/console_dhcp.py` מארח):
 
-- ‏DHCP מלא → `/etc/dnsmasq.d/imagectl-dhcp.conf` → `systemctl restart dnsmasq`.
-- ‏proxy → `/etc/imagectl/dnsmasq-proxy.conf` → `restart`/`stop` של
-  `imagectl-proxy`, אינסטנס dnsmasq נפרד ‏(#36; פירוט ב-`server-install.md`).
+- ‏DHCP מלא → `/etc/dnsmasq.d/imagesrv-dhcp.conf` → `systemctl restart dnsmasq`.
+- ‏proxy → `/etc/imagesrv/dnsmasq-proxy.conf` → `restart`/`stop` של
+  `imagesrv-proxy`, אינסטנס dnsmasq נפרד ‏(#36; פירוט ב-`server-install.md`).
 
 הבידוד הזה הוא תיקון של באג upstream: ‏dnsmasq 2.91 קופא על בקשת PXE
 לפורט 4011 במצב proxy, ובאינסטנס משותף הקפיאה מורידה איתה את ה-DHCP של
@@ -222,7 +222,7 @@ proxy דורש אישור נוסף משלו כל עוד גרסת ה-dnsmasq המ
 (‏#53, עיקרון 5). ‏`ProbeResult` הוא אמיתי (truthy) תמיד, כדי שטעות
 כזו תיפול לצד החוסם.
 ה-restart של השירותים ופורט 68 דורשים root — יחידת ה-systemd מוסיפה
-`/etc/dnsmasq.d` ו-`-/etc/imagectl` ל-`ReadWritePaths`. כשל בהחלה לא
+`/etc/dnsmasq.d` ו-`-/etc/imagesrv` ל-`ReadWritePaths`. כשל בהחלה לא
 מסתתר: ההגדרה נשמרת, הקונסולה מציגה את השגיאה (של שני האינסטנסים,
 אם נכשלו שניהם), והיומן רושם `dhcp_apply_failed`.
 
@@ -329,16 +329,16 @@ recovery בתחנה ידרוש כניסה ברגע שתהיה; לכבות רק �
 עד #1266 היו כאן שתי "דלתות SSH" עם מתג בקונסולה (‏#83): ‏dropbear בתחנות
 ו-`sshd` של השרת לכל כרטיס. הכרעת נדב (10/10): כל מה שקשור לפורט 22 מחוץ
 לקוד המוצר. השרת אינו נוגע ב-`sshd`, אינו פותח 22 בחומת האש, אינו מגיש
-`imagectl.debug` לתחנות (גם לא מ-`--extra-cmdline`) ואינו שומר מפתחות
+`imagesrv.debug` לתחנות (גם לא מ-`--extra-cmdline`) ואינו שומר מפתחות
 host. בעלייה הוא מוחק את הגדרות המתגים הישנות (‏`ssh:stations`,
 ‏`ssh:iface:*`) ואת `machine_ssh_hostkey` — ‏docs/interfaces.md סעיף 8.
 
 **מה לא נוקה על מכונה קיימת:** drop-in ישן ב-`/etc/ssh/sshd_config.d/
-imagectl-ssh.conf` (אם המתקין הישן כתב אותו) ו-`<data_dir>/ssh/known_hosts`
+imagesrv-ssh.conf` (אם המתקין הישן כתב אותו) ו-`<data_dir>/ssh/known_hosts`
 נשארים כמות שהם — המוצר כבר אינו קורא או כותב אותם.
 
 גישת טכנאי לתחנות במעבדה היא overlay של המעבדה, מחוץ לריפו
-(‏`IMAGECTL_EXTRA_OVERLAY`, ‏docs/agent.md).
+(‏`IMAGESRV_EXTRA_OVERLAY`, ‏docs/agent.md).
 
 ## הרשת של השרת עצמו, ומה מונע נעילה עצמית (‏#55–#57)
 
@@ -348,13 +348,13 @@ imagectl-ssh.conf` (אם המתקין הישן כתב אותו) ו-`<data_dir>/s
 10.10.10.9` בשרת, והדרך היחידה הייתה `ip route add` שנעלם באתחול.
 
 היום, לכל כרטיס, בקונסולה: כתובת ומסכה (סטטי או לקוח DHCP), שער, ‏DNS,
-ונתיבים סטטיים עם הוספה ומחיקה. הכל נכתב ל-`/etc/network/interfaces.d/imagectl-<כרטיס>`
+ונתיבים סטטיים עם הוספה ומחיקה. הכל נכתב ל-`/etc/network/interfaces.d/imagesrv-<כרטיס>`
 — ‏ifupdown, כפי שהמכונה בנויה — ולכן שורד אתחול. ‏DNS נכתב ישירות
 ל-`/etc/resolv.conf`: ‏`dns-nameservers` עובד רק דרך resolvconf, שאינו
 מותקן כאן, ושורה שנראית כמו הגדרה ואינה עושה כלום היא בדיוק "כתבנו את
 הקובץ" שמתחזה ל"ההגדרה נכנסה".
 
-**ברירת המחדל היא `manual`** — ImageCtl לא כותב לכרטיס קובץ בכלל. שרת
+**ברירת המחדל היא `manual`** — ImageSrv לא כותב לכרטיס קובץ בכלל. שרת
 קיים ממשיך לעבוד כפי שהוא עד שמישהו בוחר לנהל כרטיס מהקונסולה.
 
 ### שלושה מצבים, ורק אחד מהם הצלחה
@@ -384,8 +384,8 @@ imagectl-ssh.conf` (אם המתקין הישן כתב אותו) ו-`<data_dir>/s
 | | |
 |---|---|
 | הסמן | `<data-dir>/netcfg/pending.json` — ‏**הטקסט** הקודם של הקובץ, תפוגה של 60 שניות, ומזהה האתחול |
-| הזרוע | `imagectl-netrollback.service` — ‏`python3 -m server.netcfg_rollback`, בלי FastAPI ובלי DB |
-| השעון | `imagectl-netrollback.timer` — ‏`OnBootSec=0` וכל עשר שניות |
+| הזרוע | `imagesrv-netrollback.service` — ‏`python3 -m server.net.netcfg_rollback`, בלי FastAPI ובלי DB |
+| השעון | `imagesrv-netrollback.timer` — ‏`OnBootSec=0` וכל עשר שניות |
 | האישור | כפתור בקונסולה שמוחק את הסמן |
 
 הסמן נכתב **לפני** שנוגעים בקובץ כלשהו. מכונה שמתה בין הכתיבה להחלה
@@ -403,7 +403,7 @@ imagectl-ssh.conf` (אם המתקין הישן כתב אותו) ו-`<data_dir>/s
 עומדת לקרות.
 
 **הגנה שלא הוכחה אינה הגנה.** לפני כל שינוי שיכול לנתק, השרת בודק
-ש-`imagectl-netrollback.timer` הוא `active`; אם לא — השינוי נחסם, ולא
+ש-`imagesrv-netrollback.timer` הוא `active`; אם לא — השינוי נחסם, ולא
 "מבוצע בזהירות".
 
 מה נחשב "יכול לנתק": הכרטיס שדרכו הגיעה הבקשה, וכל שינוי של שער, ‏DNS
@@ -431,13 +431,13 @@ imagectl-ssh.conf` (אם המתקין הישן כתב אותו) ו-`<data_dir>/s
 
 ## מנוע השידור
 
-כשסבב עובר ל"משדר", `server/sender.py` מריץ `udp-sender` אחד לכל קובץ
+כשסבב עובר ל"משדר", `server/rounds/sender.py` מריץ `udp-sender` אחד לכל קובץ
 מחיצה, בסדר המניפסט, עם `--min-receivers` לפי מספר המצטרפים. סגירת סבב
 עוצרת את השידור הרץ. הרצת התהליכים מוזרקת, ולכן כל המנוע נבדק בלי
 udpcast מותקן; מצב השידור מוצג בקונסולה ומדווח ביומן.
 
 **הקצב של כל גל נקבע בשרת לבד** (‏#447 + הכרעת נדב 11/10: "אני לא נוגע
-בזה, והשרת לבד מחליט"; ‏`server/drive_rates.py`). הגל הראשון יוצא ב-600m
+בזה, והשרת לבד מחליט"; ‏`server/rounds/drive_rates.py`). הגל הראשון יוצא ב-600m
 (נמדד נקי, אפס שידורים חוזרים — מ.19, ‏06/09). בסוף כל גל השרת שומר שני
 דברים: מה ש-udp-sender שלו ספר (בייטים ובלוקים ששודרו שוב), ומה שכל כונן
 (דגם + סידורי) באמת כתב. לפני הגל הבא הוא מוצא את הגל האחרון שכל הכוננים
@@ -450,7 +450,7 @@ udpcast מותקן; מצב השידור מוצג בקונסולה ומדווח �
 - **שידורים חוזרים מעל 0.1% מהבלוקים** → ‏‎-25%.
 - **כונן שידוע שהוא איטי** (הגביל בשני גלים שונים) → הקצב שלו × 0.9.
 
-הגג הוא `IMAGECTL_MAX_BITRATE` כשהוגדר (שרת מה-ISO אינו מגדיר — ואז 900m),
+הגג הוא `IMAGESRV_MAX_BITRATE` כשהוגדר (שרת מה-ISO אינו מגדיר — ואז 900m),
 והרצפה רבע מקצב הפתיחה (150m). **לפי כרטיס ההפצה** (הכרעת נדב 15/10: "הכי
 מהר שאפשר, והשרת מגביל לפי כרטיס הרשת שלו"): כשמהירות הקישור נקראה
 מ-`/sys/class/net/<if>/speed`, הגג הוא 90% ממנה והפתיחה 60% — על 1GbE
@@ -461,7 +461,7 @@ udpcast מותקן; מצב השידור מוצג בקונסולה ומדווח �
 והפתיחה לעולם אינם מעל 90%/60% מכרטיס מחשב השיכפול האיטי בגל — ידני
 (מגירת המכונה: אוטומטי / 1 / 2.5 / 10Gb/s), מדווח (בדיקת המכונה), או
 **הנחה של 1Gb/s** כשאינו ידוע, והמסך אומר שזו הנחה ("תקרה לפי <מכונה>: 1Gb/s
-(הנחה — המהירות לא ידועה)"). ‏`server/nic_speed.py`. סבב חדש עם אותו חדר מתחיל מהקצב שעבד בפעם
+(הנחה — המהירות לא ידועה)"). ‏`server/rounds/nic_speed.py`. סבב חדש עם אותו חדר מתחיל מהקצב שעבד בפעם
 הקודמת; כונן חדש בחדר — מ-600m. **הפצה ממחשב בנייה (#715)** מקבלת אותה
 פתיחה, אותו גג ואותה ירידה לכונן איטי — אבל לא עולה: המונה של udp-sender
 נמצא שם ולא בשרת, ובלי ראיה אין עלייה. מה שהלמידה **אינה** עושה: היא אינה
@@ -510,7 +510,7 @@ udpcast מותקן; מצב השידור מוצג בקונסולה ומדווח �
 
 ## גיבוי ושחזור (‏#1128)
 
-`server/backup.py` הוא מה שעומד מאחורי "הורד גיבוי הגדרות" בקונסולה
+`server/system/backup.py` הוא מה שעומד מאחורי "הורד גיבוי הגדרות" בקונסולה
 (‏`GET /api/console/update/backup`, מנהל בלבד): עותק עקבי של ה-DB דרך
 ה-backup API (לא `cp` — ‏WAL), ‏`integrity_check` על העותק, ושאר
 `data_dir` בלי אימג'ים. הנוהל המלא — cron, ‏RPO, סדר השחזור לשרת חדש

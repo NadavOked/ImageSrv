@@ -9,7 +9,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from boot.grub_menu import GrubConfig
-from server import hello
+from server.agent import hello
 from test_login_mfa import _fresh
 
 
@@ -50,7 +50,7 @@ def test_a_server_base_with_a_grub_metacharacter_is_rejected(base):
 
 
 def test_a_plain_server_base_still_passes():
-    assert GrubConfig(server_base="http://imagectl-tlv.college.ac.il:8080").server_base
+    assert GrubConfig(server_base="http://imagesrv-tlv.college.ac.il:8080").server_base
 
 
 def test_an_oversized_hello_field_is_refused_with_413(server):

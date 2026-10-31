@@ -192,7 +192,7 @@ def test_check_update_no_tags_at_all_is_a_named_case():
 def update_server(tmp_path: Path, images_root: Path, clock):
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     state = {"current": "v0.24.0", "remote": "x\trefs/tags/v0.24.0\n",
@@ -235,7 +235,7 @@ def test_me_reports_the_server_version_from_the_same_source_as_update(update_ser
     """‏#915: שורת הסטטוס בקונסולה מציגה את תג ה-git של העץ — מאותו hook
     ‏`describe` כמו `/update` — ולא `v0.9` קשיח ב-HTML. לכל משתמש מחובר,
     (הפצה — #1073 — לא נכנסת לקונסולה בכלל)."""
-    from server import users
+    from server.console import users
     admin, app, state = update_server["admin"], update_server["app"], update_server["state"]
     assert admin.get("/api/console/me").json()["version"] == "v0.24.0"
     assert admin.get("/api/console/me").json()["version_verified"] is False
@@ -441,7 +441,7 @@ def test_revert_keeps_its_guards_404_when_off_409_when_a_round_is_open(update_se
 
 
 def test_deploy_user_cannot_reach_update_endpoints(update_server, images_root, clock, tmp_path):
-    from server import users
+    from server.console import users
     from server.app import create_app
     app = update_server["app"]
     users.create(app.state.ctx.conn, "labtech", "deploy-pass-1", "deploy", by="test", check_policy=False)
@@ -469,7 +469,7 @@ def test_a_missing_git_binary_is_named_not_errno_2(monkeypatch):
 
 #: מה ש-systemd-run מדפיס כשהיחידה הקודמת עוד חיה (systemd 257, דביאן 13; וגם
 #: הנוסח הישן "already exists").
-UNIT_EXISTS = ("Failed to start transient service unit: Unit imagectl-upgrade.service "
+UNIT_EXISTS = ("Failed to start transient service unit: Unit imagesrv-upgrade.service "
                "was already loaded or has a fragment file.")
 
 

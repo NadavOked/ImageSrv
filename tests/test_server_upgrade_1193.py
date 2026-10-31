@@ -71,10 +71,10 @@ def _success_tools(bindir: Path) -> None:
     fake_tool(bindir, "systemctl", r'''
 case "$1" in
   show) case "$*" in
-    *imagectl-dcui*) printf "LoadState=%s\nActiveState=%s\n" "${FAKE_DCUI_LOAD-loaded}" "${FAKE_DCUI_ACTIVE-active}" ;;
-    *) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;;
+    *imagesrv-dcui*) printf "LoadState=%s\nActiveState=%s\n" "${FAKE_DCUI_LOAD-loaded}" "${FAKE_DCUI_ACTIVE-active}" ;;
+    *) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;;
   esac ;;
-  is-active) case "$*" in *imagectl-dcui*) [ -z "${FAKE_DCUI_DEAD:-}" ] || exit 3 ;; esac ;;
+  is-active) case "$*" in *imagesrv-dcui*) [ -z "${FAKE_DCUI_DEAD:-}" ] || exit 3 ;; esac ;;
 esac
 exit 0''')
     fake_tool(bindir, "curl", "exit 0")
@@ -94,8 +94,8 @@ def test_fetch_and_checkout_precede_units_restart_and_verification(tmp_path, bin
         " fetch --no-tags origin refs/tags/v0.53.0:refs/tags/v0.53.0"))
     checkout = next(i for i, row in enumerate(log) if row.startswith("git -C ") and " checkout --detach v0.53.0" in row)
     units = log.index("systemctl daemon-reload")
-    restart = log.index("systemctl restart imagectl-server")
-    active = log.index("systemctl is-active --quiet imagectl-server")
+    restart = log.index("systemctl restart imagesrv-server")
+    active = log.index("systemctl is-active --quiet imagesrv-server")
     assert fetch < checkout < units < restart < active
 
 
@@ -122,7 +122,7 @@ def test_fetch_failure_records_git_error_and_touches_no_units_or_service(tmp_pat
     assert "Read-only file system" in status["error"]
     assert not any(" checkout " in row for row in log)
     assert not any(row.startswith("systemctl ") for row in log)
-    assert not (tmp_path / "units" / "imagectl-server.service").exists()
+    assert not (tmp_path / "units" / "imagesrv-server.service").exists()
 
 
 @requires_native(("git", shutil.which("git")), why="tag conflicts require real git")
@@ -203,7 +203,7 @@ def test_checkout_failure_records_git_error_and_does_not_restart(tmp_path, bindi
 # --- ‏#1185: אחרי שה-checkout הצליח, כל כשל מחזיר את העץ לתג הקודם -----------------
 #
 # העץ הוא מה שהשרת יריץ באתחול הבא. כשל שעוצר את הסקריפט אחרי ה-checkout ולפני
-# החזרה משאיר את /opt/imagectl על התג החדש בזמן שהשירות הרץ (והיחידות וה-initrd)
+# החזרה משאיר את /opt/imagesrv על התג החדש בזמן שהשירות הרץ (והיחידות וה-initrd)
 # הם של הישן — והסטטוס נשאר `running` לתמיד, כלומר "לא ידוע" שנראה כמו "בתהליך".
 
 

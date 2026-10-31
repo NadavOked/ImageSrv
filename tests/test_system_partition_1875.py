@@ -8,8 +8,8 @@ platter -- p1, 2.0GB free -- so the image was refused on every disk, a 500GB
 one included ("יישארו רק 2.0 GB פנויים ב-C:"), while ``_expand_candidate``
 stretched the LAST one (p2). Two answers to one question.
 
-The rule now (one jq def in ``agent/lib/diskfit.sh``, one function in
-``server/minfree.py``):
+The rule now (one jq def in ``agent/lib/restore/diskfit.sh``, one function in
+``server/library/minfree.py``):
 
 1. **Evidence.** Capture already mounts every Basic Data NTFS partition
    read-only to look for ``Windows\\System32`` (#1369); in the same mount it
@@ -36,8 +36,9 @@ import shutil
 from pathlib import Path
 
 from native import requires_native
-from server.images import ImageLibrary, required_bytes
+from server.library.images import ImageLibrary, required_bytes
 from test_agent import AGENT, BASH, _stub, posix, sh
+from agentlib import flat_lib
 
 needs_shell = requires_native(("bash", BASH), ("jq", shutil.which("jq")))
 
@@ -97,7 +98,7 @@ def fits(tmp_path: Path, image: dict, disk: int, gb: str = "20") -> tuple[str, s
     out = sh(_stub(stubs / "blockdev", f"echo {disk}")
              + f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
              f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                        ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
              + "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
              + f'disk_fits sda {posix(path)!r}; echo "rc=$?"')
@@ -111,7 +112,7 @@ def system_index(tmp_path: Path, image: dict) -> str:
     run = tmp_path / "run"
     run.mkdir(exist_ok=True)
     return sh(f"export RUN_DIR={posix(run)!r} LOG_FILE={posix(run)!r}/log; "
-              f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/diskfit.sh; "
+              f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/diskfit.sh; "
               f"system_partition {posix(path)!r}").strip()
 
 
@@ -145,7 +146,7 @@ def test_vm_without_an_expandable_mark_is_judged_the_same(tmp_path):
 
 
 def test_the_server_lets_vm_onto_a_500gb_and_a_256gb_disk():
-    from server import minfree   # lazy: the negative control swaps the module
+    from server.library import minfree   # lazy: the negative control swaps the module
     assert minfree.refusal(VM, DISK_500, 20) is None
     assert minfree.refusal(VM, DISK_256, 20) is None
     assert minfree.unchecked(VM, 20) is None
@@ -156,7 +157,7 @@ def test_the_server_lets_vm_onto_a_500gb_and_a_256gb_disk():
 def test_the_smallest_disk_the_console_shows_for_vm_is_the_agents_boundary(tmp_path):
     """Short by ~1.1 GiB at its own layout, and C: is the partition that grows:
     the console's "fits a disk from X" exists and the agent agrees on it."""
-    from server import minfree
+    from server.library import minfree
     smallest = minfree.min_disk_bytes(VM, 20)
     assert smallest == NEED + 20 * GIB - C_FREE
     assert fits(tmp_path / "a", VM, smallest)[0] == "rc=0"
@@ -168,7 +169,7 @@ def test_the_smallest_disk_the_console_shows_for_vm_is_the_agents_boundary(tmp_p
 
 @needs_shell
 def test_the_agent_and_the_server_name_the_same_system_partition(tmp_path):
-    from server import minfree
+    from server.library import minfree
     assert minfree.system_partition(VM)["index"] == 2
     assert system_index(tmp_path, VM) == "2"
 
@@ -178,7 +179,7 @@ def test_the_system_mark_from_capture_beats_size(tmp_path):
     """Evidence over the heuristic: a third windows partition -- neither the
     first on the platter nor the largest -- carries the mark, and it is the one
     judged (0.2 GB free; it does not grow, expand stretches p2)."""
-    from server import minfree
+    from server.library import minfree
     image = vm({3: {"role": "windows", "system": True}})
     rc, err = fits(tmp_path, image, DISK_500)
     assert (rc, err) == ("rc=1", "לא נכנס — יישארו רק 0.2 GB פנויים ב-C:, המינימום 20GB")
@@ -192,7 +193,7 @@ AMBIGUOUS = "לא נבדק אם יישארו 20GB פנויים ב-C: — לא י
 
 @needs_shell
 def test_two_windows_partitions_of_the_same_size_are_unchecked_not_short(tmp_path):
-    from server import minfree
+    from server.library import minfree
     image = vm({1: {"size_bytes": 223392075264, "used_bytes": 1 << 20}})
     rc, err = fits(tmp_path, image, 10**13)
     assert (rc, err) == ("rc=1", AMBIGUOUS)
@@ -204,7 +205,7 @@ def test_two_windows_partitions_of_the_same_size_are_unchecked_not_short(tmp_pat
 
 @needs_shell
 def test_a_windows_partition_without_a_size_among_several_is_unchecked(tmp_path):
-    from server import minfree
+    from server.library import minfree
     image = vm({1: {"size_bytes": None}})
     assert minfree.refusal(image, DISK_500, 20) == AMBIGUOUS
     assert fits(tmp_path, image, DISK_500) == ("rc=1", AMBIGUOUS)
@@ -253,7 +254,7 @@ def test_vm_is_named_on_c_and_the_oem_partition_is_never_mounted(tmp_path):
              + _stub(stubs / "umount", UMOUNT)
              + f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
              f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box / 'dev')!r} LOG_FILE={posix(run / 'log')!r}; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                        ("common", "jsonq", "restore", "diskfit", "hostname", "unattend"))
              + f"write_hostname sda {posix(manifest)!r} LAB1-05 || true")
     result = json.loads(out.strip().splitlines()[-1])

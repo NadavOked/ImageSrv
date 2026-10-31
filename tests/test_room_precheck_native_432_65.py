@@ -25,6 +25,7 @@ from test_agent import AGENT
 from test_class_deploy_switch import PRELUDE, STATION
 from test_cloner_gui import (BASH, GUI, _build_gui, _count_color, _pkgconfig,
                              _png_rgb, _routing_error, _token, posix, sh)
+from agentlib import flat_lib
 
 C1, C2 = "3c:52:82:a1:00:21", "3c:52:82:a1:00:22"
 WARN = "CLONE-01 · דיסק 2: קישור 1.5 מתוך 6.0 Gb/s — לבדוק כבל או מגירה"
@@ -63,7 +64,7 @@ def gui_state_lines(tmp_path: Path) -> list[str]:
     (run / "room.json").write_text(json.dumps(ROOM), newline="\n")
     (gui / "mode").write_text("direct\n", newline="\n")
     out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
+             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
              + PRELUDE
              + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '
              + f'gui_get() {{ cp {posix(run / "room.json")!r} "$2"; }}; '
@@ -94,7 +95,7 @@ def _bridge(tmp_path: Path, record: str) -> tuple[int, str | None, str | None]:
     (run / "gui").mkdir(parents=True)
     rec = tmp_path / "record"
     rec.write_bytes(record.encode("utf-8"))
-    lib = posix(AGENT / "lib")
+    lib = posix(flat_lib())
     script = f"""
         RUN_DIR={posix(run)}; GUI_DIR={posix(run)}/gui
         . {lib}/common.sh
@@ -281,7 +282,7 @@ def test_local_copy_power_dialogs_render_the_red_owner_warning(tmp_path):
             assert _count(warning, "--clr-danger-fill", theme) > 400, (theme, warning)
 
 
-STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagectl-ta\n"
+STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagesrv-ta\n"
            "cdisk=1|sda|Samsung SSD 870 EVO|500107862016|passed||6.0|6.0\n"
            "cdisk=2|sdb|Samsung SSD 870 EVO|500107862016|passed||{link}|6.0\n"
            "message=x|y\n")

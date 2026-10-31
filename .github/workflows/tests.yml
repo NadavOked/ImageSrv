@@ -1,4 +1,4 @@
-# ImageCtl — הבדיקות רצות על כל push ו-pull request (אפיון, נספח ג' פער 7).
+# ImageSrv — הבדיקות רצות על כל push ו-pull request (אפיון, נספח ג' פער 7).
 #
 # ubuntu-latest מביא gcc, ולכן גם tests/test_fanout.py — הכותב המקבילי
 # עם הבידוד, הסיכון שנספח ב' מדרג כגבוה — רץ כאן באמת, מול צינורות.
@@ -47,7 +47,7 @@ jobs:
     # ששינתה שם או תמונת runner שהתעדכנה היו משאירות את הבנייה ירוקה
     # עם אפס כיסוי לשלושת הרכיבים המסוכנים ביותר (#52).
     env:
-      IMAGECTL_REQUIRE_NATIVE: "1"
+      IMAGESRV_REQUIRE_NATIVE: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -60,12 +60,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r server/requirements.txt pytest httpx
+          # ‏#2164: ‏pytest-xdist — הריצה המקבילית. מוצמד לגרסה של שער המעבדה
+          # ‏(דביאן 13, ‏#2121), שעליה נמדד ש-`--dist load` מדווח worker שקרס
+          # ככישלון בשמו, ו-`loadgroup` נתקע.
+          pip install -r server/requirements.txt pytest httpx pytest-xdist==3.6.1
           # ‏#1356: partclone/gdisk/ntfs-3g/dosfstools/pv — מנוע השיכפול המקומי (#1322)
           # רץ על loop devices כ-root; בלעדיהם REQUIRE_NATIVE מכשיל (v0.73.0 היה אדום).
           # ‏tests/test_hivewrite.py מקמפל את העוזר מול libhivex ומאמת
           # עם hivexget — בלי החבילות האלה הוא היה מדולג בשקט. עכשיו
-          # ‏IMAGECTL_REQUIRE_NATIVE הופך התקנה שנכשלה לכישלון בדיקות.
+          # ‏IMAGESRV_REQUIRE_NATIVE הופך התקנה שנכשלה לכישלון בדיקות.
           # ‏busybox עובר לכאן משלב הפרסינג שבסוף: ‏tests/test_json_escape.py
           # מריץ את `json_escape` תחת ה-awk של busybox דווקא, כי gawk (כאן),
           # mawk (דביאן) ו-busybox awk קוראים אחרת את רצפי הבריחה של gsub —
@@ -85,10 +88,48 @@ jobs:
       # קוד היציאה של `tee` — כלומר 0 תמיד. זה בדיוק הדפוס שעיקרון 5
       # אוסר, והוא כבר הפיל את הפרויקט פעם (‏#52: חבילות שדילגו בשלמותן
       # וה-CI נשאר ירוק).
+      #
+      # ‏#2164: במקביל (‏`-n auto --dist load`, עובד לכל vCPU) — סדרתית זה היה
+      # ‏1:50–2:10 לכל גרסה (ריצה 40819406095, ‏29/10), וכל פרסום חיכה לזה.
+      # ובמקביל קוד היציאה של pytest כבר אינו הראיה: הוא 0 גם כשטסט לא רץ
+      # (worker שבלע node, תוסף שמסנן). לכן הפסק הוא של שער המעבדה (#2121),
+      # ‏`tools/git/lab_gate.py`: ‏collect של העץ הזה עם אותם ארגומנטים — מה
+      # **שצריך** לרוץ; ‏junit של הריצה — מה **שרץ**; וירוק רק כשכל id שנאסף
+      # נמצא ב-junit, אין FAILED/ERROR/SKIPPED מחוץ ל-`.github/ci-gate-allowed.json`,
+      # ובדיקות הסשן של conftest (יתומים, שולח אמיתי) נרשמו — וריקות.
+      # הפלט מחוץ לעץ (`RUNNER_TEMP`): טסט שבודק את העץ לא יראה אותו.
       - name: Run the test suite (fanout included)
         run: |
           set -o pipefail
-          python -m pytest tests -q -p no:cacheprovider -m "not uinput and not vm_it" 2>&1 | tee pytest.log
+          args=(-p no:cacheprovider -m "not uinput and not vm_it")
+          gate="$RUNNER_TEMP/gate"
+          mkdir -p "$gate"
+          if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" \
+              < /dev/null > "$gate/collect.log" 2>&1; then
+            tail -n 30 "$gate/collect.log"
+            echo "gate: CANNOT VERIFY -- collect-only failed; nothing to compare the run with"
+            exit 2
+          fi
+          tail -n 1 "$gate/collect.log"
+          # ‏#2118: שני שלבים. מקבילי — `-m "not serial"`; ואחריו, באותו job,
+          # סדרתי (בלי `-n`) לטסטים הרגישים לעומס. ‏`-m` נוסף דורס את הקודם,
+          # ולכן הביטוי המלא נבנה כאן. הפסק אחד, על האיחוד: ‏collect הוא כל
+          # העץ, ושני ה-junit נספרים יחד — טסט שלא רץ באף שלב הוא אדום.
+          base='not uinput and not vm_it'
+          set +e
+          IMAGESRV_SESSION_PROBLEMS="$gate/problems-parallel.json" \
+            python -m pytest tests -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
+            --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
+          rc1=${PIPESTATUS[0]}
+          IMAGESRV_SESSION_PROBLEMS="$gate/problems-serial.json" \
+            python -m pytest tests -q -p no:cacheprovider -m "$base and serial" \
+            --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
+          rc2=${PIPESTATUS[0]}
+          set -e
+          python tools/git/lab_gate.py verdict --collected "$gate/collected.txt" \
+            --junit "$gate/run-parallel.xml" --junit "$gate/run-serial.xml" \
+            --problems "$gate/problems-parallel.json" --problems "$gate/problems-serial.json" \
+            --allowed .github/ci-gate-allowed.json --pytest-rc "$rc1" --pytest-rc "$rc2"
       # ‏#949: חמשת טסטי evdev כותבים ל-/dev/uinput וקוראים /dev/input/event*
       # — במעבדה root, כאן sudo עם אותו אינטרפרטר (אותם site-packages).
       # ‏`-m uinput` בלי טסטים = יציאה 5 של pytest = כישלון, לא "עבר".
@@ -122,6 +163,9 @@ jobs:
           if-no-files-found: ignore
       - name: Agent scripts parse under a real POSIX shell
         run: |
-          for f in agent/imagectl-agent agent/init agent/lib/*.sh; do
+          find agent/lib -type f -name '*.sh' -print0 > "$RUNNER_TEMP/agent-lib-files"
+          mapfile -d '' -t libs < "$RUNNER_TEMP/agent-lib-files"
+          [ "${#libs[@]}" -ge 121 ] || { echo "agent/lib scan found fewer than 121 scripts" >&2; exit 1; }
+          for f in agent/imagesrv-agent agent/init "${libs[@]}"; do
             dash -n "$f" && busybox ash -n "$f"
           done

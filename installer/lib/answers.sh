@@ -94,7 +94,7 @@ validate_answers() {
             [ "${#ANSWER_PRIMARY_FINGERPRINT}" -eq 64 ] || fail primary-unverified "the primary was not verified (no green connection check)"
             ;;
         *) fail invalid-role "role must be standalone or secondary" ;; esac
-    # #1997: the server's name is a computer name -- server/hostname_rule.py, the same rule
+    # #1997: the server's name is a computer name -- server/core/hostname_rule.py, the same rule
     # (letters, digits, hyphen, up to 15, no hyphen at either end); a test compares the two.
     case "$ANSWER_HOSTNAME" in ''|*[!A-Za-z0-9-]*|-*|*-) fail invalid-hostname "hostname must be letters, digits and hyphens, not at either end" ;; esac
     [ "${#ANSWER_HOSTNAME}" -le 15 ] || fail invalid-hostname "hostname is longer than 15 characters"

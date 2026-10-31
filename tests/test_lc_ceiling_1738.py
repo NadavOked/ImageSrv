@@ -157,7 +157,7 @@ def test_no_tune_file_is_exactly_the_product(tmp_path):
     out = run(tmp_path, 'mkdir -p "$LC/run"; lc_tune_begin sdc sda; '
               'echo "z=$LC_SRC_Z pipe=${FANOUT_PIPE_BYTES-unset} direct=$LC_EXP_DIRECT"; cat "$LC/run/tune.applied"')
     assert out.returncode == 0, out.stderr
-    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagectl:")]
+    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagesrv:")]
     # the one default (metal 18/10, #1749) -- and a test run with no SYSROOT never
     # writes the host's kernel, so here it says it was not applied
     assert lines == ["z=524288 pipe=unset direct=0",
@@ -171,7 +171,7 @@ def test_known_numbers_are_applied_and_everything_else_refused_aloud(tmp_path):
               'lc_tune_begin sdc sda; echo "z=$LC_SRC_Z ra=${LC_SRC_RA_KB:-none}"; sh -c \'echo "child=$FANOUT_PIPE_BYTES"\'; '
               'lc_tune_end sda; sh -c \'echo "after=${FANOUT_PIPE_BYTES-unset}"\'; cat "$LC/run/tune.applied"; cat "$RUN_DIR/log"')
     assert out.returncode == 0, out.stderr
-    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagectl:")]   # log() also prints
+    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagesrv:")]   # log() also prints
     assert lines[:3] == ["z=4194304 ra=none", "child=16777216", "after=unset"], lines
     assert any(l.startswith("LC_SRC_Z=4194304 FANOUT_PIPE_BYTES=16777216 ") for l in lines), lines
     assert "unknown key 'BOGUS' -- refused" in out.stdout and "LC_SRC_RA_KB='abc' is not a number -- refused" in out.stdout
@@ -254,7 +254,7 @@ if [ "$src" = - ]; then cat > "$out"; elif [ -n "$out" ]; then cat "$src" > "$ou
 
 def _copy(tmp_path: Path, tune: str, fs: str) -> tuple[str, Path]:
     box = tmp_path / "box"; stubs = box / "stubs"; dev = box / "dev"; dev.mkdir(parents=True)
-    (dev / "sdc1").write_bytes(b"imagectl" * 8192)
+    (dev / "sdc1").write_bytes(b"imagesrv" * 8192)
     bodies = {**STREAM_STUBS, "partclone.ntfs": NTFS_STUB, "partclone.dd": NTFS_STUB}
     t = f"mkdir -p {posix(stubs)!r}\n"
     for name, body in bodies.items():

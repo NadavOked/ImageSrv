@@ -38,7 +38,7 @@ BOOT = DRAWERS + 'D_ROLE=cloner; ' + GUI_UP
 def run(tmp_path: Path, script: str, timeout: int = 60, **env):
     import subprocess
     run_dir = tmp_path / "run"; run_dir.mkdir(exist_ok=True)
-    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff SERVER=http://10.0.0.1:8080; '
+    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff SERVER=http://10.0.0.1:8080; '
     pre += "".join(f'export {k}={v!r}; ' for k, v in env.items())
     pre += "".join(f'. {posix(LIB)}/{name}.sh; ' for name in LIBS)
     # #1579: lc_pull_session starts the hello beat (attended_start: a background
@@ -143,10 +143,10 @@ def test_a_removable_disk_is_never_a_drawer(tmp_path):
 
 def said(out) -> list[str]:
     """stdout without the agent's console log lines: log() writes
-    "imagectl: ..." to stdout as well as to the log file (common.sh) -- the
+    "imagesrv: ..." to stdout as well as to the log file (common.sh) -- the
     console of the machine is where a technician reads it. The functions'
     answer is their exit code, echoed by the test."""
-    return [l for l in out.stdout.splitlines() if not l.startswith("imagectl: ")]
+    return [l for l in out.stdout.splitlines() if not l.startswith("imagesrv: ")]
 
 
 #: a curl that records its arguments and the body, and answers $CODE with $BODY
@@ -190,7 +190,7 @@ def test_the_screen_token_is_kept_only_on_positive_evidence(tmp_path, code, body
     lines = said(out)
     assert lines[0] == ("GOT" if kept else "NONE"), (out.stdout, out.stderr)
     if not kept:   # a refusal is said on the console (log), never silent
-        assert "imagectl: pull: the server gave no screen token" in out.stdout, out.stdout
+        assert "imagesrv: pull: the server gave no screen token" in out.stdout, out.stdout
     assert (kept in lines) if kept else "old" not in lines           # a stale token never survives
     assert "http://10.0.0.1:8080/api/v1/agent/cloner-round/nonce" in lines and "--retry" not in lines
 
@@ -261,7 +261,7 @@ def test_the_kiosk_and_the_agent_both_load_lcpull():
     bridge = (LIB / "guibridge.sh").read_text(encoding="utf-8")
     libs = bridge[bridge.index("gui_libs() {"):bridge.index("gui_main() {")]
     assert '"$LIB_DIR/lcpull.sh"' in libs and '"$LIB_DIR/drawers.sh"' in libs   # list_drawers in the kiosk
-    assert '"$LIB_DIR/lcpull.sh"' in (REPO / "agent" / "imagectl-agent").read_text(encoding="utf-8")
+    assert '"$LIB_DIR/lcpull.sh"' in (REPO / "agent" / "imagesrv-agent").read_text(encoding="utf-8")
 
 
 @requires_native(("/proc", Path("/proc/self").is_dir()), posix=True, why="the check reads /proc")

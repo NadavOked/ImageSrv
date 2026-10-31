@@ -6,7 +6,7 @@ Two halves:
 
 1. The measurement exists on disk: each partition file is ``partclone -c |
    zstd``, and partclone's v2 image header (110 bytes, ``src/partclone.h``)
-   carries ``usedblocks`` and ``block_size``. ``server.usedbackfill`` reads
+   carries ``usedblocks`` and ``block_size``. ``server.library.usedbackfill`` reads
    it and records ``used_bytes`` + ``used_bytes_source`` in manifest.json --
    derived, never invented: a header that is not provably valid leaves null.
 2. An image whose min-free check cannot be evaluated is not deployable: the
@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 from conftest import Clock, MANIFEST_256, write_image
 
-from server.images import ImageLibrary
+from server.library.images import ImageLibrary
 
 try:
     from fastapi.testclient import TestClient
@@ -81,7 +81,7 @@ def test_partclones_crc_is_zlibs_without_the_final_inversion():
 # --- parse_header -------------------------------------------------------------
 
 def test_a_valid_header_gives_used_blocks_and_block_size():
-    from server.usedbackfill import parse_header
+    from server.library.usedbackfill import parse_header
     got = parse_header(header(used=12345, total=99999, block=4096) + b"\xff" * 64)
     assert got == {"fs": "NTFS", "device_size": 99999 * 4096, "total_blocks": 99999,
                    "used_blocks": 12345, "block_size": 4096}
@@ -102,7 +102,7 @@ def _flip(raw: bytes, at: int) -> bytes:
     header(used=10, total=9),
 ], ids=["none", "empty", "short", "magic", "v1", "endian", "body-crc", "crc", "block0", "used>total"])
 def test_anything_short_of_a_provably_valid_v2_header_is_none(raw):
-    from server.usedbackfill import parse_header
+    from server.library.usedbackfill import parse_header
     assert parse_header(raw) is None
 
 
@@ -117,19 +117,19 @@ HANG = ("import sys,time\n"
 
 
 def test_read_head_collects_110_bytes_across_short_reads(tmp_path):
-    from server.usedbackfill import read_head
+    from server.library.usedbackfill import read_head
     f = tmp_path / "stream"
     f.write_bytes(header() + b"\x00" * 5000)
     assert read_head(f, cmd=(sys.executable, "-c", DRIP)) == header()
 
 
 def test_read_head_without_the_decompressor_is_none(tmp_path):
-    from server.usedbackfill import read_head
+    from server.library.usedbackfill import read_head
     assert read_head(tmp_path / "x", cmd=(str(tmp_path / "no-such-zstd"),)) is None
 
 
 def test_read_head_is_bounded_by_its_timeout(tmp_path):
-    from server.usedbackfill import read_head
+    from server.library.usedbackfill import read_head
     start = time.monotonic()
     got = read_head(tmp_path / "x", cmd=(sys.executable, "-c", HANG), timeout=1)
     assert time.monotonic() - start < 15
@@ -138,7 +138,7 @@ def test_read_head_is_bounded_by_its_timeout(tmp_path):
 
 @pytest.mark.skipif(shutil.which("zstd") is None, reason="zstd binary not installed")
 def test_a_real_zstd_stream_round_trips(tmp_path):
-    from server.usedbackfill import parse_header, read_head
+    from server.library.usedbackfill import parse_header, read_head
     plain = header(used=777, total=1000, block=4096) + bytes(range(256)) * 4096
     packed = subprocess.run(["zstd", "-q", "-c"], input=plain, capture_output=True,
                             check=True).stdout
@@ -165,7 +165,7 @@ def reader(by_name: dict[str, bytes | None]):
 
 
 def test_backfill_writes_the_derived_value_and_its_source_to_the_manifest(tmp_path):
-    from server.usedbackfill import SOURCE, backfill
+    from server.library.usedbackfill import SOURCE, backfill
     write_image(tmp_path, old_image())
     lib = ImageLibrary(tmp_path)
     used_blocks = 20_000_000
@@ -181,7 +181,7 @@ def test_backfill_writes_the_derived_value_and_its_source_to_the_manifest(tmp_pa
 
 
 def test_a_measured_image_is_not_read_at_all(tmp_path):
-    from server.usedbackfill import backfill
+    from server.library.usedbackfill import backfill
     write_image(tmp_path, MANIFEST_256)
     calls = []
     assert backfill(ImageLibrary(tmp_path), read=lambda p: calls.append(p)) == []
@@ -195,7 +195,7 @@ def test_a_measured_image_is_not_read_at_all(tmp_path):
      f"p3: header says {(WIN_SIZE // 4096 + 1) * 4096} bytes used, more than the partition ({WIN_SIZE})"),
 ], ids=["garbage", "no-zstd", "bigger-than-partition"])
 def test_what_cannot_be_derived_stays_null_and_is_reported(tmp_path, raw, problem):
-    from server.usedbackfill import backfill
+    from server.library.usedbackfill import backfill
     write_image(tmp_path, old_image())
     before = (tmp_path / "img_5790e4" / "manifest.json").read_bytes()
     reported = []
@@ -208,7 +208,7 @@ def test_what_cannot_be_derived_stays_null_and_is_reported(tmp_path, raw, proble
 
 
 def test_a_missing_partition_file_is_reported_not_guessed(tmp_path):
-    from server.usedbackfill import backfill
+    from server.library.usedbackfill import backfill
     write_image(tmp_path, old_image())
     (tmp_path / "img_5790e4" / "p3.win.pcl.zst").unlink()
     results = backfill(ImageLibrary(tmp_path), read=lambda p: header())
@@ -217,7 +217,7 @@ def test_a_missing_partition_file_is_reported_not_guessed(tmp_path):
 
 
 def test_one_bad_image_does_not_stop_the_next(tmp_path):
-    from server.usedbackfill import backfill
+    from server.library.usedbackfill import backfill
     write_image(tmp_path, old_image("img_aaaaaa"))
     write_image(tmp_path, old_image("img_bbbbbb"))
     good = header(used=1000)
@@ -256,7 +256,7 @@ def test_record_takes_only_a_known_source(tmp_path):
 
 
 def test_the_dry_run_prints_the_header_and_writes_nothing(tmp_path, capsys, monkeypatch):
-    from server import usedbackfill
+    from server.library import usedbackfill
     write_image(tmp_path, old_image())
     folder = tmp_path / "img_5790e4"
     (folder / "p3.win.pcl.zst").write_bytes(header(used=5, total=9))
@@ -276,7 +276,7 @@ def test_the_dry_run_prints_the_header_and_writes_nothing(tmp_path, capsys, monk
 # --- the server: min_free_unchecked, the room refusal, the startup pass -------
 
 def test_unchecked_is_the_agents_string_and_only_for_an_unmeasured_system_partition():
-    from server import minfree
+    from server.library import minfree
     assert minfree.unchecked(old_image(), 20) == UNCHECKED
     assert minfree.unchecked(old_image(), 0) is None                    # rule off
     assert minfree.unchecked(MANIFEST_256, 20) is None                  # measured
@@ -289,7 +289,7 @@ def room_server(tmp_path: Path):
         pytest.skip("fastapi is required")
     from test_room_image_fit import CLONER1, DISK_500, hello_with_disks, open_round
     from test_sender import Recorder
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     images = tmp_path / "images"
@@ -327,7 +327,7 @@ def test_the_room_refuses_it_even_when_no_drawer_size_is_known(room_server):
     """No floor known is "the agent decides" for SIZE (#953) -- but this
     refusal does not depend on the drawer: every drawer refuses it."""
     from test_room_image_fit import CLONER1, hello_with_disks
-    from server import room
+    from server.rounds import room
     hello_with_disks(room_server["anon"], CLONER1, [0, 0])    # size not measured
     assert room.disk_floor(room_server["ctx"].conn) is None
     r = room_server["open"]()
@@ -335,7 +335,7 @@ def test_the_room_refuses_it_even_when_no_drawer_size_is_known(room_server):
 
 
 def test_after_the_backfill_the_same_image_opens(room_server):
-    from server.usedbackfill import backfill
+    from server.library.usedbackfill import backfill
     lib = room_server["ctx"].library
     backfill(lib, read=reader({"p3.win.pcl.zst": header(used=20_000_000)}))
     room_server["hello"]()
@@ -348,7 +348,7 @@ def test_after_the_backfill_the_same_image_opens(room_server):
 def test_the_startup_pass_journals_what_it_wrote_and_what_it_could_not(tmp_path, monkeypatch):
     import functools
 
-    import server.usedbackfill as ub
+    import server.library.usedbackfill as ub
     from server.app import _backfill_used_bytes
     from server.db import connect
     write_image(tmp_path / "images", old_image("img_aaaaaa"))
@@ -397,7 +397,7 @@ def test_a_raw_capture_is_not_read_and_is_not_a_problem(tmp_path):
     """Only the NTFS partition -- which has no header although partclone wrote
     it -- is reported. The MSR is never even opened (#1641), and the ESP, whose
     header is valid, is still measured."""
-    from server.usedbackfill import derive
+    from server.library.usedbackfill import derive
     write_image(tmp_path, windows_with_msr())
     manifest = ImageLibrary(tmp_path).scan()["img_8da804"]
     read_names = []
@@ -414,7 +414,7 @@ def test_a_raw_capture_is_not_read_and_is_not_a_problem(tmp_path):
 
 
 def test_the_startup_pass_is_silent_for_a_windows_image_whose_only_gap_is_the_msr(tmp_path):
-    from server.usedbackfill import backfill
+    from server.library.usedbackfill import backfill
     esp, msr, win = windows_with_msr()["partitions"]
     write_image(tmp_path, {**windows_with_msr(), "partitions": [{**esp, "used_bytes": 1}, msr,
                                                                 {**win, "used_bytes": 1}]})
@@ -422,11 +422,11 @@ def test_the_startup_pass_is_silent_for_a_windows_image_whose_only_gap_is_the_ms
 
 
 def test_every_filesystem_the_agent_streams_with_dd_is_skipped_by_its_own_mapping(tmp_path):
-    """The rule is the agent's ``partclone_for_fs`` (``server.vmdisk`` keeps a
+    """The rule is the agent's ``partclone_for_fs`` (``server.vm.vmdisk`` keeps a
     parity-tested copy), not a file name -- the file is called ``.pcl.zst`` in
     both cases. (``xfs`` is not a manifest filesystem today, so it cannot be
     tried here; the mapping would send it to dd too.)"""
-    from server.usedbackfill import derive
+    from server.library.usedbackfill import derive
     msr = windows_with_msr()["partitions"][1]
     for n, fs in enumerate(("", "unknown")):
         image = {**windows_with_msr(f"img_00000{n}"),
@@ -437,7 +437,7 @@ def test_every_filesystem_the_agent_streams_with_dd_is_skipped_by_its_own_mappin
 
 
 def test_a_partclone_filesystem_without_a_header_still_fails_loudly(tmp_path):
-    from server.usedbackfill import derive
+    from server.library.usedbackfill import derive
     esp, _msr, win = windows_with_msr()["partitions"]
     write_image(tmp_path, {**windows_with_msr(), "partitions": [esp, win]})
     manifest = ImageLibrary(tmp_path).scan()["img_8da804"]
@@ -446,7 +446,7 @@ def test_a_partclone_filesystem_without_a_header_still_fails_loudly(tmp_path):
 
 
 def test_the_dry_run_does_not_call_a_raw_capture_a_failure(tmp_path, capsys, monkeypatch):
-    from server import usedbackfill
+    from server.library import usedbackfill
     esp, msr, win = windows_with_msr()["partitions"]
     write_image(tmp_path, {**windows_with_msr(), "partitions": [esp, msr, win]})
     folder = tmp_path / "img_8da804"

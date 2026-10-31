@@ -78,10 +78,10 @@ def _sh(box: Path, call: str, libs: str = "") -> str:
     return sh(f'chmod 0755 {posix(box)}/stubs/readlink; export PATH="$(cd {posix(box)!r}/stubs && pwd):$PATH" '
               f'LINKS={posix(box / "links")!r} SYSROOT={posix(box)!r} DEVROOT={posix(box / "dev")!r} '
               f'RUN_DIR={posix(box)!r} LOG_FILE={posix(box)}/log; log() {{ :; }}; '
-              f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; {libs}{call}')
+              f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; {libs}{call}')
 
 
-PICK = f'. {posix(AGENT)}/lib/single_restore.sh; '
+PICK = f'. {posix(AGENT)}/lib/restore/single_restore.sh; '
 
 
 def _pick(box: Path) -> str:
@@ -129,7 +129,7 @@ def test_the_one_internal_disk_is_still_picked(tmp_path):
 def test_a_usb_enclosure_or_an_sd_card_is_never_a_drawer(tmp_path):
     box = _machine(tmp_path, {"mmcblk0": ("0", "mmc"), "sda": ("0", "sata"), "sdb": ("0", "usb"),
                               "sdc": ("0", "sata")})
-    out = _sh(box, "list_drawers", f'. {posix(AGENT)}/lib/drawers.sh; ').split()
+    out = _sh(box, "list_drawers", f'. {posix(AGENT)}/lib/restore/drawers.sh; ').split()
     assert out == ["sda", "sdc"], out
 
 
@@ -153,7 +153,7 @@ def test_the_hello_says_removable_for_anything_not_internal(tmp_path, kind, remo
 
 def _jq_source(tmp_path: Path, disks: list[dict]) -> str:
     """The guibridge.sh filter itself, read from the file, on a fresh inventory."""
-    src = (AGENT / "lib" / "guibridge.sh").read_text(encoding="utf-8")
+    src = (AGENT / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
     line = next(l for l in src.splitlines() if "_gd=$(jq -er" in l)
     flt = line[line.index("'") + 1:line.rindex("'")]
     inv = tmp_path / "inv.json"
@@ -198,6 +198,6 @@ def test_the_real_readlink_on_real_symlinks(tmp_path):
         target = box / PATHS[kind].lstrip("/")
         target.mkdir(parents=True)
         os.symlink(target, blk / "device", target_is_directory=True)
-    out = sh(f'export SYSROOT={posix(box)!r}; log() {{ :; }}; . {posix(AGENT)}/lib/common.sh; '
-             f'. {posix(AGENT)}/lib/sysinfo.sh; {PICK}pick_internal_disk; echo "rc=$?"')
+    out = sh(f'export SYSROOT={posix(box)!r}; log() {{ :; }}; . {posix(AGENT)}/lib/core/common.sh; '
+             f'. {posix(AGENT)}/lib/hw/sysinfo.sh; {PICK}pick_internal_disk; echo "rc=$?"')
     assert out.strip().splitlines() == ["nvme0n1", "rc=0"]

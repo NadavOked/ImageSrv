@@ -25,7 +25,7 @@ import json
 
 import pytest
 
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 from test_capture import make_task, setup_build_machine, task_token
 from test_json_escape import BUSYBOX, bb, source_line
 from native import requires_native

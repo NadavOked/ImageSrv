@@ -45,7 +45,7 @@ def test_a_stale_press_from_before_the_window_powers_nothing_off(tmp_path):
 
 
 def test_the_bridge_takes_the_press_only_while_the_window_is_up():
-    bridge = (AGENT / "lib" / "guibridge.sh").read_text(encoding="utf-8")
+    bridge = (AGENT / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
     assert 'idle-poweroff) [ -s "$RUN_DIR/idle.warn" ] && : > "$RUN_DIR/idle.now"' in bridge
 
 

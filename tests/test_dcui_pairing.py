@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, interserver_auth, storage_nodes
+from server import db
+from server.interserver import interserver_auth, storage_nodes
 from server.dcui import app as dcui_app
 from server.dcui import gui, pairing, view
 from server.dcui.data import demo_snapshot
@@ -33,7 +34,7 @@ CODE_RE = re.compile(r"^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKMNPQRSTU
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _secondary(conn, identity=True):
@@ -256,7 +257,7 @@ def test_only_the_server_screen_calls_the_physical_functions():
     names = re.compile(r"\b(open_physical_pairing|close_physical_pairing|unbind_parent_physical)\b")
     callers = sorted(str(p.relative_to(REPO)).replace("\\", "/")
                      for p in (REPO / "server").rglob("*.py") if names.search(p.read_text(encoding="utf-8")))
-    assert callers == ["server/dcui/pairing.py", "server/storage_nodes.py"], callers
+    assert callers == ["server/dcui/pairing.py", "server/interserver/storage_nodes.py"], callers
 
 
 # ---- the server screen: keys, stages and frames -----------------------------------
@@ -412,7 +413,7 @@ def test_esc_on_the_disconnect_question_changes_nothing(tmp_path, conn):
 
 
 def test_f2_sets_the_address_the_primary_sees_behind_the_password(tmp_path, conn):
-    from server import users
+    from server.console import users
     users.create(conn, "admin", "before", "admin", by="test", is_builtin=True, check_policy=False)
     _secondary(conn)
     runtime = _runtime(tmp_path, conn)

@@ -7,7 +7,8 @@ import json
 import pytest
 
 from conftest import hello_body
-from server import drawer_slots, room
+from server.disks import drawer_slots
+from server.rounds import room
 from test_server_room import CLONER1, CLONER2, room_server  # noqa: F401
 
 MACHINES = "/api/console/machines"

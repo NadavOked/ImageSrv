@@ -1,7 +1,0 @@
-#!/bin/sh
-set -eu
-. /usr/local/bin/imagectl-env
-while :; do
-  /usr/local/bin/imagectl-kiosk || true
-  sleep "${KIOSK_RESTART_DELAY:-2}"
-done

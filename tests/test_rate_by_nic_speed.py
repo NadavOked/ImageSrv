@@ -19,7 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, drive_rates, nic_speed
+from server import db
+from server.rounds import drive_rates, nic_speed
 from test_server_room import room_server  # noqa: F401 — fixture של nic_room
 
 FAST_MAC = "aa:bb:cc:00:00:21"
@@ -29,7 +30,7 @@ FAST_MAC = "aa:bb:cc:00:00:21"
 def conn(tmp_path):
     """מחשב השיכפול של `_drive` מוגדר 10G — כך הטסטים של כרטיס השרת אינם
     נחסמים בהנחת 1Gb/s על המקבלים (‏15/10 ב'); לטסטים של המקבלים — ‏`slow`."""
-    c = db.connect(tmp_path / "imagectl.db")
+    c = db.connect(tmp_path / "imagesrv.db")
     nic_speed.set_manual(c, FAST_MAC, 10000)
     return c
 
@@ -214,7 +215,7 @@ def test_a_throwing_reader_is_the_start_rate_not_a_dead_wave(conn):
 
 
 def test_the_sender_without_a_reader_says_not_wired():
-    from server.sender import SenderEngine                  # noqa: PLC0415
+    from server.rounds.sender import SenderEngine                  # noqa: PLC0415
     engine = SenderEngine(library=None, interface="eth1", simulate=True)
     assert engine.link() == {"interface": "eth1", "speed_mbps": None, "why": "not_wired"}
     engine.link_speed = lambda iface: _link(2500) | {"interface": iface}
@@ -311,7 +312,7 @@ def _on(mac, serial):
 
 def _report(conn, mac, nics):
     """דגימת probe כפי שהסוכן שולח ב-hello (‏`probe.nic`)."""
-    from server import probe                                # noqa: PLC0415
+    from server.agent import probe                                # noqa: PLC0415
     probe.record(conn, mac, probe.well_formed({"nic": nics}))
 
 

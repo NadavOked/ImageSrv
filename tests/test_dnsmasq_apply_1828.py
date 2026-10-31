@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from server import dhcp_host
+from server.net import dhcp_host
 
 OLD = "interface=eth1\ndhcp-range=10.0.0.10,10.0.0.200\n"
 NEW = "interface=eth1\ndhcp-range=10.0.0.10,banana\n"
@@ -40,7 +40,7 @@ def machine(monkeypatch):
 
 
 def _conf(tmp_path, text=OLD):
-    conf = tmp_path / "dnsmasq.d" / "imagectl-dhcp.conf"
+    conf = tmp_path / "dnsmasq.d" / "imagesrv-dhcp.conf"
     conf.parent.mkdir()
     if text is not None:
         conf.write_text(text, encoding="utf-8")
@@ -110,7 +110,7 @@ def test_a_failed_known_macs_reload_brings_back_the_old_list(tmp_path, machine):
 # --- אותה משפחה: מפתח 0600 וקובץ הבחירה ---------------------------------------
 
 def test_the_private_key_writer_is_atomic(tmp_path, monkeypatch):
-    from server import storage_nodes
+    from server.interserver import storage_nodes
     from test_atomic_writes_1908 import disk_fills_mid_write
 
     key = tmp_path / "node.key"
@@ -125,7 +125,7 @@ def test_the_private_key_writer_is_atomic(tmp_path, monkeypatch):
 
 
 def test_the_toolbox_selection_file_is_atomic(tmp_path, monkeypatch):
-    from server import console_tools
+    from server.console import console_tools
     from test_atomic_writes_1908 import disk_fills_mid_write
 
     path = console_tools.write_selection_file(tmp_path, {"tools": ["a"]})

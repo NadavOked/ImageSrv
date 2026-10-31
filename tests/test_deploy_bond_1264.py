@@ -25,7 +25,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import deploy_net, dhcp, netcfg, netcfg_host
+from server.net import deploy_net, dhcp, netcfg, netcfg_host
 
 try:
     from fastapi.testclient import TestClient
@@ -187,11 +187,11 @@ def lab(tmp_path: Path, images_root: Path, clock):
     ‏eth0 = ניהול, ‏eth2/eth3 = כרטיסים פנויים."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     m = Machine()
-    module_conf = tmp_path / "modules-load.d" / "imagectl-bond.conf"
+    module_conf = tmp_path / "modules-load.d" / "imagesrv-bond.conf"
     fake = {"applied": [], "deploy_calls": [], "local": "10.1.2.3",
             "probe": dhcp.ProbeResult(True, ()), "supported": True, "main_defines": False,
             "apply": m.apply, "bond_state": m.bond_state}
@@ -583,7 +583,7 @@ def test_1804_failed_module_write_rolls_back(lab, monkeypatch):
     monkeypatch.setattr(netcfg_host, "write_atomic", fail_write)
     result = _second(lab, "eth1", "eth2").json()
     assert result["ok"] is False, result
-    assert "imagectl-bond.conf" in result["apply_error"]
+    assert "imagesrv-bond.conf" in result["apply_error"]
     assert "module file write failed" in result["apply_error"]
     assert ("apply", "bond0") not in lab.m.calls
     _assert_1804_rolled_back(lab, before, result)
@@ -593,7 +593,7 @@ def test_1804_unreadable_module_file_stops_before_network_changes(lab):
     lab.module_conf.mkdir(parents=True)  # Reading a directory must not mean absent.
     result = _second(lab, "eth1", "eth2").json()
     assert result["ok"] is False, result
-    assert "imagectl-bond.conf" in result["apply_error"]
+    assert "imagesrv-bond.conf" in result["apply_error"]
     assert lab.m.calls == []
     assert lab.m.nics["eth1"] == ["10.44.9.1/24"]
 

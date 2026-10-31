@@ -206,7 +206,7 @@ def test_not_measured_is_not_zero(driver, tmp_path):
 def test_the_restore_card_says_a_standing_stream_too(rate, said):
     """cloner_gui_pace's 0 reaches sr_pace_text too (#1561's card): before this it read
     "מודד את הקצב…" -- a measured stall said as "not measured yet" (principle 5b)."""
-    out = subprocess.run([BASH, "-c", f'. {posix(GUI.parent / "agent")}/lib/srgui.sh; _cg_rate={rate}; _cg_eta=-1; sr_pace_text'],
+    out = subprocess.run([BASH, "-c", f'. {posix(GUI.parent / "agent")}/lib/gui/srgui.sh; _cg_rate={rate}; _cg_eta=-1; sr_pace_text'],
                          capture_output=True, text=True, encoding="utf-8", stdin=subprocess.DEVNULL, timeout=60)
     assert out.returncode == 0, out.stderr
     assert out.stdout == said, out.stdout

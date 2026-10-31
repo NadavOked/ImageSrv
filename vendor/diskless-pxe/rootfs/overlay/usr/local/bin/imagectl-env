@@ -1,8 +1,0 @@
-#!/bin/sh
-set -eu
-CONF=${IMAGECTL_CONF:-/etc/imagectl/client.conf}
-[ -r "$CONF" ] || { echo "missing $CONF" >&2; exit 2; }
-# Only known shell-style keys are accepted.
-while IFS='=' read -r k v; do
-  case "$k" in SERVER_BASE_URL|KIOSK_URL|ALLOW_IMAGING|TARGET_DEVICE|LOG_LEVEL|NETWORK_TIMEOUT|KIOSK_RESTART_DELAY) export "$k=$v";; esac
-done < "$CONF"

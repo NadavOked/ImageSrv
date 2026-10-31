@@ -28,7 +28,8 @@ except ImportError:                                   # pragma: no cover
 def tools_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import capabilities, users
+    from server.core import capabilities
+    from server.console import users
     monkeypatch.setattr(capabilities, "TOOLS", True)    # v1.1: הדגל דלוק
     from server.app import create_app
 
@@ -43,7 +44,7 @@ def tools_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
 
 
 def test_catalog_is_the_json_file_with_an_empty_selection_at_first(tools_server):
-    from server.console_tools import load_catalog
+    from server.console.console_tools import load_catalog
     r = tools_server["admin"].get("/api/console/tools/catalog")
     assert r.status_code == 200
     body = r.json()

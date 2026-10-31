@@ -60,8 +60,8 @@ def box(tmp_path: Path, plans: list[str], *, subvols: str = "", others: str = "h
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "agent.log")!r} SUBVOLS={subvols!r} OTHER_SUBVOLS={others!r} '
         f'DEFAULT_ETC={("1" if default_etc else "")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {lines}; }}; '
         f'partition_node() {{ echo /dev/fake; }}; '
     )
@@ -179,7 +179,7 @@ def test_a_partial_dual_boot_name_reaches_the_report_as_a_warning(tmp_path):
     script, run = box(tmp_path, [WIN_PLAN, LINUX_PLAN], mount="exit 1")
     (run / "response.json").write_text("{}", encoding="utf-8")
     out = sh(script
-             + f'. {posix(AGENT)}/lib/progress.sh; RESP={posix(run / "response.json")!r}; '
+             + f'. {posix(AGENT)}/lib/core/progress.sh; RESP={posix(run / "response.json")!r}; '
              'json_get() { case "$2" in *prefix) echo lab1;; *suffix) echo 05;; '
              '  .error) sed -n \'s/.*"error":"\\([^"]*\\)".*/\\1/p\' "$1";; *) echo null;; esac; }; '
              'target_init sda 4096; target_set sda done; name_this_machine sda sess1')

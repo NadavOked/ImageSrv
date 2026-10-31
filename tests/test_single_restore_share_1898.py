@@ -3,7 +3,7 @@
 dual-boot שנקלט עם כיווץ (‏C: לפני שורש הלינוקס): עד כאן רק המשכפל שאל
 (‏`drawer_share_gate`), ובשחזור היחיד ‏`disk_fits` סירב בשם "יישארו רק X GB
 ב-C:" — כי בלי `share.ok` ‏C: אינה גדלה. עכשיו `sr_share_gate`
-(‏`agent/lib/single_restore.sh`) מציג את אותה חלוקה (‏`share_plan`, ‏kind
+(‏`agent/lib/restore/single_restore.sh`) מציג את אותה חלוקה (‏`share_plan`, ‏kind
 ‏`share`) על הגואי של ההתקדמות, לפני `pull_open` ולפני בייט ראשון:
 
 * ‏`split` — ‏`targets/<disk>/share.ok`, והשחזור ממשיך (‏`expand_last` ו-`disk_fits`
@@ -33,6 +33,7 @@ from test_agent import AGENT, BASH, posix
 from test_head_share_1898 import DISK, GIB, dual_boot
 from test_single_restore_progress_gui import GUI, RLM, _pkgconfig, body, cards
 from test_unicast_pull import AWAIT, MAC, RUN_TIMEOUT_S
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -85,8 +86,8 @@ def restore(tmp_path: Path, manifest: dict, answer: str, *, gui: bool = True, wa
         f"export RUN_DIR={shlex.quote(posix(run))} SYSROOT={shlex.quote(posix(tmp_path))} MAC={MAC!r} "
         f"SERVER=http://127.0.0.1:1 SR_GUI_BIN={shlex.quote(posix(gui_bin) if gui else '/nonexistent')} "
         f"ANSWER={answer!r} WAIT_SMART_GUI_S={wait_s} SR_GUI_TICK_S=0.2 D_ROLE=build "
-        "AFTER_TASK_FILE=/nonexistent/after-task IMAGECTL_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1; "
-        + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in LIBS)
+        "AFTER_TASK_FILE=/nonexistent/after-task IMAGESRV_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1; "
+        + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in LIBS)
         + "attended_power_check() { :; }; disk_port() { echo 1; }; pick_internal_disk() { echo sda; }; "
         "stage_drivers() { :; }; smart_red() { return 1; }; target_ident_keep() { :; }; "
         "writemark_release_done() { :; }; "   # #1877: the mark is not what this checks

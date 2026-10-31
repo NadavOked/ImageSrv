@@ -14,7 +14,7 @@ Nadav's decision (20/10):
 
 The GUI turns KEY_POWER into $RUN_DIR/gui/power.press (native-gui main.c) and
 the question's answer into power.answer; the agent decides. These tests start
-the agent's helpers the way imagectl-agent's main loop does -- its own lib
+the agent's helpers the way imagesrv-agent's main loop does -- its own lib
 list and its own start lines, read from the file -- so "nobody listens" is
 what they see when the listener is not there: the press stays unanswered.
 The GUI half (input.c reading a power-button device) is the lab test at the
@@ -35,11 +35,11 @@ import evdev_lab
 import hygiene
 from native import requires_native
 from test_cloner_gui import BASH, posix
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-AGENT = REPO / "agent" / "imagectl-agent"
-LIB = REPO / "agent" / "lib"
-
+AGENT = REPO / "agent" / "imagesrv-agent"
+LIB = flat_lib()
 BASH_ONLY = requires_native(("bash", BASH))
 
 OFF = "power button: powering off with wake-on-LAN armed"   # safe_poweroff's own line, real
@@ -67,7 +67,7 @@ def run(tmp_path: Path, setup: str, during: str, *, role: str = "cloner", wait: 
     the journal, then '---STATE', then gui_hello_state (what every screen
     reads)."""
     run_dir = tmp_path / "run"; run_dir.mkdir(parents=True, exist_ok=True)
-    pre = (f'export RUN_DIR={posix(run_dir)!r} LIB_DIR={posix(LIB)!r} IMAGECTL_TEST=1 '
+    pre = (f'export RUN_DIR={posix(run_dir)!r} LIB_DIR={posix(LIB)!r} IMAGESRV_TEST=1 '
            f'MAC=aa:bb:cc:dd:ee:ff POWER_TICK_S=0.1 D_ROLE={role}; ')
     pre += "".join(f'export {k}={v!r}; ' for k, v in env.items())
     pre += "".join(f'. "$LIB_DIR/{n}.sh"; ' for n in lib_names())

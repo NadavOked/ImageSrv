@@ -22,9 +22,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import sender as sender_module
-from server.images import ImageLibrary
-from server.sender import SenderEngine
+from server.rounds import sender as sender_module
+from server.library.images import ImageLibrary
+from server.rounds.sender import SenderEngine
 
 from conftest import MANIFEST_256, write_image
 from test_sender import Recorder, wait_for

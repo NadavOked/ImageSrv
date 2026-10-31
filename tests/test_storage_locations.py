@@ -13,8 +13,8 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import MANIFEST_256, setup_classroom, write_image
-from server import storage_locations as sl
-from server.storage_locations import FAILED, OK, UNCHECKED, HookResult
+from server.storage import storage_locations as sl
+from server.storage.storage_locations import FAILED, OK, UNCHECKED, HookResult
 
 IQN = "iqn.2005-10.org.freenas.ctl:images"
 PORTAL = "10.44.3.75:3260"
@@ -172,8 +172,8 @@ class FakeHooks:
 
 @pytest.fixture()
 def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
-    from server import sender as sender_module
-    from server import users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from server.app import create_app
     from test_sender import Recorder
 
@@ -337,7 +337,7 @@ def test_test_warns_when_storage_shares_the_deploy_nic_subnet(env):
 
 
 def test_smb_secret_is_not_returned_on_get(env):
-    params = {"server": "fs01", "share": "images", "username": "imagectl",
+    params = {"server": "fs01", "share": "images", "username": "imagesrv",
               "secret": "s3cret", "domain": "COLLEGE"}
     created = env["admin"].post("/api/console/storage-locations", json={
         "name": "fileserver-images", "type": "smb", "params": params, "tested": True,
@@ -348,7 +348,7 @@ def test_smb_secret_is_not_returned_on_get(env):
     listed = env["admin"].get("/api/console/storage-locations").json()
     row = next(r for r in listed["locations"] if r["name"] == "fileserver-images")
     assert row["params"].get("secret") is None
-    assert row["params"]["username"] == "imagectl"
+    assert row["params"]["username"] == "imagesrv"
 
 
 # --- iSCSI: גילוי → login → דיסק → פירמוט/עיגון -----------------------------
@@ -616,11 +616,11 @@ def test_health_has_a_row_per_location(env):
 
 
 def test_installer_has_storage_packages_and_unique_initiator():
-    text = Path("install/setup-boot-server.sh").read_text(encoding="utf-8")
+    text = Path("deploy/setup-boot-server.sh").read_text(encoding="utf-8")
     for pkg in ("open-iscsi", "nfs-common", "cifs-utils"):
         assert pkg in text, pkg
     assert "initiatorname.iscsi" in text
-    assert "iqn.2026-09.imagectl." in text
+    assert "iqn.2026-09.imagesrv." in text
     assert "machine-id" in text
 
 
@@ -636,7 +636,7 @@ def test_shared_nic_warning_needs_positive_evidence():
 # --- #1123 (1): סיסמת SMB לא ב-argv ולא ב-fstab ------------------------------
 
 def _smb_params():
-    return {"server": "fs01", "share": "images", "username": "imagectl",
+    return {"server": "fs01", "share": "images", "username": "imagesrv",
             "secret": "s3cret", "domain": "COLLEGE"}
 
 
@@ -656,14 +656,14 @@ def test_smb_secret_goes_to_credentials_file_not_argv_or_fstab(env):
     for _, _, _, opts in cifs_mounts:
         assert "password=" not in opts and "s3cret" not in opts, opts
         assert "credentials=" in opts, opts
-    assert sl.creds_path(loc_id) == f"/etc/imagectl/creds/{loc_id}"
+    assert sl.creds_path(loc_id) == f"/etc/imagesrv/creds/{loc_id}"
     assert f"credentials={sl.creds_path(loc_id)}" in cifs_mounts[-1][3]
     fstab_text = str(fake.fstab[-1])
     assert "s3cret" not in fstab_text and "password=" not in fstab_text
     assert f"credentials={sl.creds_path(loc_id)}" in fstab_text
     path, creds = fake.creds_writes[-1]
     assert path == sl.creds_path(loc_id)
-    assert creds == {"username": "imagectl", "password": "s3cret", "domain": "COLLEGE"}
+    assert creds == {"username": "imagesrv", "password": "s3cret", "domain": "COLLEGE"}
     test_path = fake.creds_writes[0][0]
     assert test_path != path and test_path in fake.creds_removes
     assert env["admin"].post(
@@ -677,11 +677,11 @@ def test_smb_secret_goes_to_credentials_file_not_argv_or_fstab(env):
 def test_creds_write_is_0600_in_mount_cifs_format(tmp_path: Path):
     """ה-hook האמיתי: `username=`/`password=`/`domain=`, ‏0600, בלי קובץ זמני."""
     target = tmp_path / "creds" / "loc_ab12cd34"
-    result = sl.creds_write(str(target), {"username": "imagectl", "password": "s3cret",
+    result = sl.creds_write(str(target), {"username": "imagesrv", "password": "s3cret",
                                           "domain": "COLLEGE"})
     assert result.status == OK, result.reason
     assert target.read_text(encoding="utf-8") == (
-        "username=imagectl\npassword=s3cret\ndomain=COLLEGE\n")
+        "username=imagesrv\npassword=s3cret\ndomain=COLLEGE\n")
     assert not list(target.parent.glob("*.tmp"))
     if os.name == "posix":
         assert (target.stat().st_mode & 0o777) == 0o600
@@ -703,7 +703,7 @@ def test_smb_scan_uses_auth_file_not_argv(monkeypatch, tmp_path: Path):
 
     monkeypatch.setattr(sl, "_run", fake_run)
     monkeypatch.setattr(sl, "CREDS_DIR", tmp_path / "creds")
-    result = sl.smb_scan("fs01", {"username": "imagectl", "secret": "s3cret"})
+    result = sl.smb_scan("fs01", {"username": "imagesrv", "secret": "s3cret"})
     assert result.status == OK, result.reason
     assert result.payload["items"] == [{"share": "images", "type": "Disk"}]
     cmd = seen[0]
@@ -722,7 +722,7 @@ def test_fstab_write_is_atomic(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(sl, "FSTAB_PATH", fstab)
     monkeypatch.setattr(sl, "daemon_reload", lambda: HookResult(OK), raising=False)   # ‏#2122: לא PID 1 של המריץ
     entry = {"source": "10.44.10.20:/mnt/pool/images",
-             "target": "/var/lib/imagectl/storage/nas", "fstype": "nfs",
+             "target": "/var/lib/imagesrv/storage/nas", "fstype": "nfs",
              "opts": "vers=4.1,soft"}
     assert sl.fstab_write([entry]).status == OK
     text = fstab.read_text(encoding="utf-8")
@@ -808,7 +808,7 @@ def test_scan_validates_server_and_portal(env):
     ("nfs", {"server": "nas01.college.local", "export": "/mnt/pool/images",
              "version": "4.1"}),
     ("nfs", {"server": "fe80::1", "export": "/export"}),
-    ("smb", {"server": "10.44.10.21", "share": "images$", "username": "svc.imagectl",
+    ("smb", {"server": "10.44.10.21", "share": "images$", "username": "svc.imagesrv",
              "secret": "p=ss w0rd!", "domain": "COLLEGE"}),
     ("iscsi", {"portal": "10.44.3.75", "iqn": IQN}),
     ("iscsi", {"portal": "[fd00::75]:3260", "iqn": IQN}),
@@ -921,7 +921,7 @@ def test_the_server_unit_lets_iscsiadm_write_its_lock_and_node_records():
     נתיב שאינו מכוסה = "גלה יעדים" שנכשל ב-Read-only file system בכל שרת מותקן,
     וכל טסט עם hooks מזויפים עובר. ‏/run/lock/iscsi עצמו לא קיים בעליית
     היחידה, ולכן מה שנפתח הוא /run/lock שבו iscsiadm יוצר אותו."""
-    unit = (Path(__file__).resolve().parents[1] / "install" / "imagectl-server.service").read_text(
+    unit = (Path(__file__).resolve().parents[1] / "deploy" / "imagesrv-server.service").read_text(
         encoding="utf-8")
     assert "ProtectSystem=strict" in unit
     rw = [p.lstrip("-") for p in next(

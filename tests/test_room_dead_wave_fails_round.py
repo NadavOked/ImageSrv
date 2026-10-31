@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from server import room as room_mod
+from server.rounds import room as room_mod
 
 from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
     CLONER1, cloner_hello, heartbeat, report, room, room_body, room_server,

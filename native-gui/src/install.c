@@ -109,7 +109,7 @@ static void parse_disk(InstallState *s,char *value){
         if(!strcmp(part,"model"))snprintf(d->model,sizeof d->model,"%s",eq);else if(!strcmp(part,"size"))d->size_bytes=strtoull(eq,NULL,10);
         else if(!strcmp(part,"bus"))snprintf(d->bus,sizeof d->bus,"%s",eq);else if(!strcmp(part,"removable"))d->removable=truth(eq);
         else if(!strcmp(part,"has"))snprintf(d->has,sizeof d->has,"%s",eq);else if(!strcmp(part,"iso"))d->iso=truth(eq);}
-    if(strstr(d->has,"imagectl")||strstr(d->has,"ImageCtl"))s->existing_disk=s->ndisks;
+    if(strstr(d->has,"imagesrv")||strstr(d->has,"ImageSrv"))s->existing_disk=s->ndisks;
     s->ndisks++;
 }
 
@@ -160,7 +160,7 @@ static void cancel_reboot(InstallState *s){s->reboot_at=0;s->reboot_left=0;}
 
 void install_demo(App *a,int view){InstallState *s=&a->install;memset(s,0,sizeof *s);s->active=s->demo=1;s->view=view;s->disk=0;s->disk_ack=1;s->existing_disk=1;s->ndisks=3;
     s->disks[0]=(InstallDisk){"/dev/sda","VMware Virtual disk","scsi","gpt:2 partitions (ext4, vfat)",64424509440ULL,0,0};
-    s->disks[1]=(InstallDisk){"/dev/nvme0n1","Samsung SSD 980","nvme","imagectl installation",1073741824000ULL,0,0};
+    s->disks[1]=(InstallDisk){"/dev/nvme0n1","Samsung SSD 980","nvme","imagesrv installation",1073741824000ULL,0,0};
     s->disks[2]=(InstallDisk){"/dev/sr0","USB install media","usb","iso9660 filesystem",4294967296ULL,1,1};s->virt=INSTALL_VIRT_METAL;s->raid=RAID_1;   /* #1989: the RAID row on screen */
     s->nnics=3;s->nic=0;s->secondary=1;
     s->nics[0]=(InstallNic){"ens18","Intel I219-LM","52:54:00:aa:10:01","מחובר","10.44.10.37/24","DHCP · שער 10.44.10.254","10.44.10.37","255.255.255.0","10.44.10.254","10.44.10.2"};
@@ -168,7 +168,7 @@ void install_demo(App *a,int view){InstallState *s=&a->install;memset(s,0,sizeof
     snprintf(s->primary_url,sizeof s->primary_url,"192.168.68.250");snprintf(s->hostname,sizeof s->hostname,"imagesrv-haifa");snprintf(s->timezone,sizeof s->timezone,"Asia/Jerusalem");snprintf(s->admin_user,sizeof s->admin_user,"admin");
     snprintf(s->password,sizeof s->password,"Imag3ctl!haifa");snprintf(s->confirm,sizeof s->confirm,"Imag3ctl!haifa");snprintf(s->root_password,sizeof s->root_password,"R00t!haifa");snprintf(s->root_confirm,sizeof s->root_confirm,"R00t!haifa");seed_from_nic(s);s->primary_ok=s->primary_checked=1;
     snprintf(s->primary_name,sizeof s->primary_name,"imagesrv-ta");snprintf(s->primary_version,sizeof s->primary_version,"v0.52.1");snprintf(s->primary_fingerprint,sizeof s->primary_fingerprint,"3fa3221ea017f9ce3493fe0fe0c180aaa5ea6293a2a399b0f14977280a074915");snprintf(s->phase,sizeof s->phase,"packages");s->progress_pct=52;
-    snprintf(s->title,sizeof s->title,"Installing ImageSrv packages");snprintf(s->log,sizeof s->log,"Setting up imagectl-server");if(view==INSTALL_FAILED)snprintf(s->error,sizeof s->error,"packages-failed: apt returned exit 100");
+    snprintf(s->title,sizeof s->title,"Installing ImageSrv packages");snprintf(s->log,sizeof s->log,"Setting up imagesrv-server");if(view==INSTALL_FAILED)snprintf(s->error,sizeof s->error,"packages-failed: apt returned exit 100");
     snprintf(s->console_url,sizeof s->console_url,"https://10.44.10.37:8081");snprintf(s->user,sizeof s->user,"admin");snprintf(s->output,sizeof s->output,"[10:43:02] bootstrap complete\n[10:43:08] unpacking packages\n[10:43:11] apt returned exit 100\n");a->focus=HIT_INSTALL_ADMIN_USER;if(view==INSTALL_DONE)arm_reboot(s,monotonic_s());}
 
 static int finish_install(App *a,InstallBridge *b){a->install.error[0]=0;if(call(a,b,"finish","{}")){a->install.view=INSTALL_FAILED;return -1;}a->install.view=INSTALL_DONE;arm_reboot(&a->install,monotonic_s());return 0;}

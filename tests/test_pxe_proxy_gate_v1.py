@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import capabilities
+from server.core import capabilities
 
 from test_server_dhcp import GOOD, dhcp_server  # noqa: F401 — fixture
 
@@ -56,7 +56,7 @@ def test_proxy_works_when_classrooms_are_on(dhcp_server, monkeypatch):  # noqa: 
 def _stale_proxy_row(ctx) -> None:
     """רשומת proxy=true שנשמרה לפני הגידור של 11/10 (שרת המעבדה, למשל):
     נכתבת ישר ל-DB, כי ה-API כבר מסרב לכתוב אותה."""
-    from server import dhcp
+    from server.net import dhcp
     from server.db import set_setting
     stale = dhcp.InterfaceConfig(name="eth1", enabled=False, proxy=True,
                                  server_ip="10.44.1.10")
@@ -65,7 +65,7 @@ def _stale_proxy_row(ctx) -> None:
 
 def test_a_stale_proxy_row_is_not_applied_while_classrooms_are_off(dhcp_server):  # noqa: F811
     """‏#1303: ‏`apply_dnsmasq` רינדר והפעיל את ה-proxy לפי ה-DB בלי לבדוק את
-    היכולת — שינוי בכרטיס **אחר** היה מדליק את `imagectl-proxy` על v1."""
+    היכולת — שינוי בכרטיס **אחר** היה מדליק את `imagesrv-proxy` על v1."""
     admin, fake = dhcp_server["admin"], dhcp_server["fake"]
     assert capabilities.classrooms() is False, "v1 — הבדיקה מניחה כיתות כבויות"
     _stale_proxy_row(dhcp_server["ctx"])

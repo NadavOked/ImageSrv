@@ -1,5 +1,5 @@
 """‏#1331 T8 — האם ה-initramfs של לינוקס שנכתב ימצא את הדיסק שלו
-(`agent/lib/linuxdrivers.sh`, ‏interfaces.md §17 צעד 1ל).
+(`agent/lib/postdeploy/linuxdrivers.sh`, ‏interfaces.md §17 צעד 1ל).
 
 אותה קופסה של `test_postdeploy.py` (‏sh אמיתי, כלים מזויפים) עם תוכנית
 לינוקס ועץ-שורש מזויף ב-`$RUN_DIR/linux` (‏`mount` מזויף). ה-initrd נבנה
@@ -30,7 +30,7 @@ from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_postdeploy import LINUX_PLAN, Box
 
-from server import reports
+from server.agent import reports
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -232,7 +232,7 @@ def test_the_listing_runs_on_busybox_applets(tmp_path):
     rd.write_bytes(initrd([AHCI, NVME], early=MICROCODE + newc(["x"], pad=4)))
     out = subprocess.run(
         [str(tools / "sh"), "-c",
-         f'PATH={tools}; LOG_FILE=/dev/null; . {posix(AGENT)}/lib/linuxdrivers.sh; '
+         f'PATH={tools}; LOG_FILE=/dev/null; . {posix(AGENT)}/lib/postdeploy/linuxdrivers.sh; '
          f'_initrd_list {rd} || echo "FAILED $_ld_why"'],
         capture_output=True, text=True, stdin=subprocess.DEVNULL)
     names = out.stdout.splitlines()
@@ -271,13 +271,13 @@ def test_only_an_unverified_initramfs_is_journaled(monkeypatch, state, logged):
 
 
 def test_the_agent_loads_linuxdrivers_before_postdeploy():
-    main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert main.index('"$LIB_DIR/hostname_linux.sh"') < main.index('"$LIB_DIR/linuxdrivers.sh"')
     assert main.index('"$LIB_DIR/linuxdrivers.sh"') < main.index('"$LIB_DIR/postdeploy.sh"')
 
 
 def test_the_journal_event_has_a_hebrew_label_and_is_a_warning():
-    from server import journal_he   # noqa: PLC0415
+    from server.console import journal_he   # noqa: PLC0415
     assert "linux_initramfs_warning" in journal_he.EVENTS_HE
     assert journal_he.severity("linux_initramfs_warning") == "warn"
 

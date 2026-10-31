@@ -57,7 +57,7 @@ CURL = '#!/bin/sh\nprintf "%s\\n" "$@" >> "$F/curl.argv"\n[ -z "${CURL_HOOK:-}" 
 DRIVER = r'''
 set -u
 F=$1; MODE=$2; T=$3
-export F RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGECTL_TEST=1 MAC=aa:bb:cc:00:00:10 SERVER=http://s
+export F RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGESRV_TEST=1 MAC=aa:bb:cc:00:00:10 SERVER=http://s
 export IFACE=lo TASK_TOKEN=tttttttttttttttttttttttttttttttttttttttttttttttt RESP=$F/resp.json DIRECT_POLL_S=0
 export PATH="$T/stubs:$PATH"
 rm -rf "$RUN_DIR"; mkdir -p "$RUN_DIR"

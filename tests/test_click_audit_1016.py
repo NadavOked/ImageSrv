@@ -36,7 +36,7 @@ def test_bad_tar_upload_is_hebrew_not_python_repr(server):
 
 
 def test_bad_tar_upload_logs_raw_text(server, caplog):
-    caplog.set_level("WARNING", logger="imagectl.archive")
+    caplog.set_level("WARNING", logger="imagesrv.archive")
     server["admin"].post("/api/console/images/upload", content=b"not a tar" * 200)
     assert any("archive unreadable" in r.getMessage() for r in caplog.records)
 
@@ -64,19 +64,19 @@ def test_enroll_preview_unreachable_secondary_is_hebrew(server):
 
 
 def test_systemctl_oserror_is_hebrew_and_logged(monkeypatch, caplog):
-    from server import dhcp_host
+    from server.net import dhcp_host
 
     def boom(*a, **k):
         raise FileNotFoundError("[WinError 2] The system cannot find the file specified")
     monkeypatch.setattr(dhcp_host.subprocess, "run", boom)
-    caplog.set_level("WARNING", logger="server.dhcp_host")
+    caplog.set_level("WARNING", logger="server.net.dhcp_host")
     error = dhcp_host._systemctl("restart", "dnsmasq")
     assert error and _hebrew(error) and "dnsmasq" in error and not RAW.search(error), error
     assert any("WinError 2" in r.getMessage() for r in caplog.records)   # הגולמי בלוג
 
 
 def test_systemctl_nonzero_stderr_stays_in_log(monkeypatch):
-    from server import dhcp_host
+    from server.net import dhcp_host
 
     class Done:
         returncode, stdout, stderr = 1, "", "Failed to restart dnsmasq.service: Unit not found."
@@ -86,7 +86,7 @@ def test_systemctl_nonzero_stderr_stays_in_log(monkeypatch):
 
 
 def test_write_failure_is_hebrew(tmp_path):
-    from server import dhcp_host
+    from server.net import dhcp_host
     blocker = tmp_path / "file"
     blocker.write_text("x")
     error = dhcp_host._write("x", blocker / "sub" / "conf")   # אב שהוא קובץ -> OSError
@@ -95,7 +95,7 @@ def test_write_failure_is_hebrew(tmp_path):
 
 
 def test_deploy_net_run_oserror_is_hebrew(monkeypatch):
-    from server import deploy_net
+    from server.net import deploy_net
 
     def boom(*a, **k):
         raise FileNotFoundError("[WinError 2] The system cannot find the file specified")

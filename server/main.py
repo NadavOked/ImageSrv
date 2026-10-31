@@ -18,7 +18,11 @@ import threading
 import urllib.parse
 from pathlib import Path
 
-from . import deploy_net, drive_rates, identity
+from server.paths import REPO_ROOT
+
+from server.net import deploy_net
+from server.rounds import drive_rates
+from server.agent import identity
 
 
 def _configure_stdio() -> None:
@@ -114,7 +118,7 @@ def agent_uvicorn_config(app, host: str, port: int):
     """
     import uvicorn
 
-    from .grub_close import ResetBootOnPeerClose
+    from server.net.grub_close import ResetBootOnPeerClose
     return uvicorn.Config(app, host=host, port=port, log_level="info",
                           http=ResetBootOnPeerClose)
 
@@ -127,22 +131,22 @@ def build_parser() -> argparse.ArgumentParser:
     # ‏#1088: אינו חובה עוד. ריק = הכתובת נקראת ממה שנרשם מהקונסולה
     # (`deploy:url`, בהדלקת DHCP על כרטיס), ואם גם זה חסר — "רשת ההפצה לא
     # הוגדרה": הסוכן על loopback בלבד, והקונסולה אומרת מה לעשות.
-    # היחידה מעבירה ``${IMAGECTL_URL}`` גם כשהוא ריק (ארגומנט ריק אחד).
+    # היחידה מעבירה ``${IMAGESRV_URL}`` גם כשהוא ריק (ארגומנט ריק אחד).
     parser.add_argument("--server-url", default="",
                         help="הכתובת שהלקוחות רואים, http בלבד (כמו במתקין). "
                              "ריק = מה שהוגדר מהקונסולה (#1088)")
     parser.add_argument("--tftp-root", default="/srv/tftp",
                         help="שורש ה-TFTP שהמתקין פרס אליו — לשם נכתב grub.cfg "
                              "כשרשת ההפצה מוגדרת מהקונסולה (#1088)")
-    parser.add_argument("--data-dir", default="/var/lib/imagectl")
-    parser.add_argument("--images", default="/srv/imagectl/images")
+    parser.add_argument("--data-dir", default="/var/lib/imagesrv")
+    parser.add_argument("--images", default="/srv/imagesrv/images")
     # ‏#748: עץ הקוד עצמו — משם ``git describe``/``fetch``/``checkout``
     # של כפתור העדכון. ברירת המחדל היא תיקיית הקוד (ImageStore ->
     # server/main.py -> parents[1]), שזהה ל-``WorkingDirectory`` ביחידת
-    # systemd (‏/opt/imagectl) בלי לצטט אותה כאן כברירת מחדל שנייה.
+    # systemd (‏/opt/imagesrv) בלי לצטט אותה כאן כברירת מחדל שנייה.
     parser.add_argument("--repo-dir", default=None,
                         help="עץ הגיט של השרת; ברירת מחדל: תיקיית הקוד")
-    parser.add_argument("--boot-dir", default="/srv/imagectl/boot",
+    parser.add_argument("--boot-dir", default="/srv/imagesrv/boot",
                         help="הקרנל וה-initramfs שהמתקין הניח; מוגש תחת ‎/boot")
     parser.add_argument("--dhcp-leases", default=identity.DEFAULT_LEASES,
                         help="קובץ החכירות של dnsmasq — שומר הזהות (#855) "
@@ -150,9 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--interface", default=None,
                         help="ממשק השידור; ברירת מחדל: הכרטיס של --server-url")
     parser.add_argument("--extra-cmdline",
-                        default=os.environ.get("IMAGECTL_EXTRA_CMDLINE", ""),
+                        default=os.environ.get("IMAGESRV_EXTRA_CMDLINE", ""),
                         help="תוספות לשורת הקרנל של הסוכן (למשל קונסולה "
-                             "טורית ו-debug במעבדה); גם IMAGECTL_EXTRA_CMDLINE")
+                             "טורית ו-debug במעבדה); גם IMAGESRV_EXTRA_CMDLINE")
     # ‏#1074 (R20-F1): ברירת המחדל היא כתובת כרטיס ההפצה, לא 0.0.0.0.
     # ‏None כאן = "לא ביקשו"; ‏main ממלא מ-`--interface` (או מ-server-url
     # כשאין `ip`). ‏0.0.0.0 רק בבקשה מפורשת, ועם אזהרה ביומן.
@@ -244,7 +248,7 @@ def _deploy_state(args) -> deploy_net.DeployState:
     from .db import connect
     data_dir = Path(args.data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
-    conn = connect(data_dir / "imagectl.db")
+    conn = connect(data_dir / "imagesrv.db")
     try:
         return deploy_net.resolve(conn, None, None)
     finally:
@@ -258,7 +262,7 @@ def _resolve_bind_host(parser, flag: str, value: str | None) -> tuple[str | None
     lease עדיין) ושמו. ‏`ip` שנכשל, או כרטיס שאינו קיים — ‏`parser.error`:
     כתובת שלא הצלחנו לקרוא אינה "אין כתובת" (עיקרון 5).
     """
-    from . import ifaddr
+    from server.net import ifaddr
     if not value or not ifaddr.is_interface_name(value):
         return value, None
     try:
@@ -287,7 +291,7 @@ def _raise(error: str | None) -> None:
 
 def ifaddr_current(name: str) -> str | None:
     """הכתובת הנוכחית של כרטיס לדוגם — None כשאין או כשלא נקרא (הדוגם ינסה)."""
-    from . import ifaddr
+    from server.net import ifaddr
     try:
         return ifaddr.read_ipv4(name)
     except ifaddr.AddressLookupError:
@@ -297,8 +301,8 @@ def ifaddr_current(name: str) -> str | None:
 def _nic_baseline(nic, args, runtime, console_iface, console_addr, inter_iface, inter_addr) -> None:
     """‏#705: על איזה כרטיס כל מאזין נקשר **היום** — אותם תנאים בדיוק כמו
     הקשירה למטה (‏#1310 ראשי על כרטיס הקונסולה, ‏#1313 משני בלי הדגל)."""
-    from . import storage_nodes
-    from .interserver_auth import is_loopback
+    from server.interserver import storage_nodes
+    from server.interserver.interserver_auth import is_loopback
     if console_iface is None and console_addr and not is_loopback(console_addr):
         nic.base.console = _owner_nic(console_addr)
     if storage_nodes.role(runtime.conn) == "secondary":
@@ -313,7 +317,7 @@ def _nic_baseline(nic, args, runtime, console_iface, console_addr, inter_iface, 
 
 def _owner_nic(address: str | None) -> str | None:
     """הכרטיס שנושא את הכתובת — או None (כולל כשלא ניתן לקרוא)."""
-    from . import dhcp, nic_services
+    from server.net import dhcp, nic_services
     if not address:
         return None
     try:
@@ -333,7 +337,7 @@ def _primary_alive(runtime, args, hostname: str):
     מאוחר יותר, ולכן הטביעה שהמתקין של המשני מציג היא המפתח שהמשני יצמיד."""
     import uvicorn
 
-    from . import primary_alive, storage_nodes
+    from server.interserver import primary_alive, storage_nodes
     from .app import create_alive_app
     if storage_nodes.role(runtime.conn) == "secondary":
         return None
@@ -352,7 +356,8 @@ def _primary_alive(runtime, args, hostname: str):
 def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
     """‏#1972: ה-querier על כרטיס ההפצה — ותמיד שורה במסך הבריאות. כאן בלבד
     (כמו `vm_host`): בבדיקות אין סוקט raw ואין תהליכון."""
-    from . import health, ifaddr, igmp_querier, ports
+    from server.system import health
+    from server.net import ifaddr, igmp_querier, ports
     hooks = getattr(runtime, "health_hooks", None)
     if hooks is None:          # בדיקות של main מחליפות את create_runtime
         return
@@ -371,7 +376,7 @@ def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
 def _start_ups_monitor(runtime) -> None:
     """‏#1973: מנטר ה-UPS — יומן בנפילת חשמל, כיבוי מסודר בסוללה נמוכה. כאן
     בלבד: בבדיקות אסור שתהליכון יקרא ל-`systemctl poweroff`."""
-    from . import ups
+    from server.system import ups
     hooks = getattr(runtime, "health_hooks", None)
     if hooks is None:          # בדיקות של main מחליפות את create_runtime
         return
@@ -388,7 +393,7 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    from . import ifaddr
+    from server.net import ifaddr
     deploy = _deploy_state(args)
 
     if deploy.source == "cli":
@@ -403,7 +408,7 @@ def main() -> None:
         # חובת הכניסה מחוץ לווילן (#42) לא נורתה לעולם. "לא הצלחנו לסווג"
         # אינו "בפנים" (עיקרון 5). פתרון DNS פעם אחת בעלייה היה נשבר בשקט
         # כשהרשומה משתנה — ולכן השרת מסרב לעלות ואומר למה. המתקין ממילא גוזר
-        # את הכתובת מהכרטיס (install/setup-boot-server.sh).
+        # את הכתובת מהכרטיס (deploy/setup-boot-server.sh).
         host = urllib.parse.urlsplit(args.server_url).hostname
         try:
             ipaddress.ip_address(host)
@@ -417,7 +422,7 @@ def main() -> None:
     # שרת ראשי נכשל בקול (עיקרון 5), ולא מתגלגל ל-standalone בשקט.
     # ‏#732: רק כשהדגל ניתן. בלעדיו התפקיד השמור נשאר, ואין מה לאמת.
     if args.storage_role is not None:
-        from .storage_nodes import StorageConfigError, normalize_config
+        from server.interserver.storage_nodes import StorageConfigError, normalize_config
         try:
             normalize_config(args.storage_role, args.primary_url)
         except StorageConfigError as exc:
@@ -426,8 +431,7 @@ def main() -> None:
     # ‏#740: הכתובת הבין-שרתית מאומתת כאן, לפני הרמת השרת — https+פורט מפורש,
     # בלי אישורים/query/fragment (עיקרון 5: downgrade נדחה, לא "מתוקן" בשקט).
     if args.interserver_url is not None:
-        from .interserver_auth import (InterserverURLError,
-                                       parse_interserver_url)
+        from server.interserver.interserver_auth import InterserverURLError, parse_interserver_url
         try:
             parse_interserver_url(args.interserver_url)
         except InterserverURLError as exc:
@@ -447,8 +451,7 @@ def main() -> None:
     # אפשר לכתוב אליה עוצרים בקול, לא קונסולה שעלתה בלי TLS (עיקרון 5).
     # ‏#1088: עם שם כרטיס ה-SAN הוא הכתובת **הנוכחית** + שם המארח; בחילוף
     # כתובת התעודה אינה מתחדשת (הדפדפן כבר אישר אותה) — היא תקפה לפי השם.
-    from .console_tls import (ConsoleTLSError, check_tls_flag,
-                              ensure_console_cert)
+    from server.console.console_tls import ConsoleTLSError, check_tls_flag, ensure_console_cert
     console_tls = None
     try:
         check_tls_flag(args.console_tls, args.console_host)
@@ -520,7 +523,7 @@ def main() -> None:
 
     import uvicorn
 
-    from . import dhcp_host, ports
+    from server.net import dhcp_host, ports
     from .app import create_agent_app, create_console_app, create_runtime
     from .db import journal
 
@@ -539,7 +542,7 @@ def main() -> None:
               "(הפעלה מחדש של השרת), או ש-‏--primary-url יהיה כתובת IP")
     deploy_ctx = deploy_net.DeployContext(
         state=deploy, agent_port=args.port, tftp_root=Path(args.tftp_root),
-        repo_dir=Path(args.repo_dir) if args.repo_dir else Path(__file__).resolve().parents[1],
+        repo_dir=Path(args.repo_dir) if args.repo_dir else REPO_ROOT,
         servers_interface=console_iface, primary_ip=primary_ip,
         primary_ip_error=primary_ip_error)
 
@@ -563,7 +566,7 @@ def main() -> None:
     # מחדל בתוך create_runtime, כי הוספה/מחיקה של מכונה מהקונסולה קוראת
     # לאותם hooks בכל בדיקה בחבילה (registry.all_macs → dhcp.render_known_macs
     # → apply_known_macs). ברירת מחדל אמיתית שם הייתה כותבת ל-
-    # ‏/etc/imagectl/known-macs ומריצה systemctl reload dnsmasq בכל הרצת
+    # ‏/etc/imagesrv/known-macs ומריצה systemctl reload dnsmasq בכל הרצת
     # ‏pytest.
     runtime = create_runtime(args.data_dir, args.images, server_url,
                              boot_dir=args.boot_dir, interface=interface,
@@ -598,7 +601,7 @@ def main() -> None:
                              # ‏#1447: אזור הזמן של המערכת = ההגדרה (timedatectl).
                              apply_timezone=True, apply_timesync=True)
     # ‏#1372: עדכון מהכפתור רץ בסקריפט של התג **הישן**, ולכן ההכנה של הגרסה
-    # הזו אינה תלויה בו: מארח שאינו מוכן — install/vmupdate-host.sh שלנו, ברקע.
+    # הזו אינה תלויה בו: מארח שאינו מוכן — deploy/vmupdate-host.sh שלנו, ברקע.
     # ‏getattr: בדיקות של main מחליפות את create_runtime ברשומה משלהן.
     vm_host = getattr(runtime, "vm_host", None)
     if vm_host is not None:
@@ -630,7 +633,7 @@ def main() -> None:
     # על **כל** מאזין קונסולה — ורק עליהם; הסוכן נשאר http.
     console_ssl = console_tls.uvicorn_kwargs() if console_tls else {}
     console_scheme = "https" if console_tls else "http"
-    from .interserver_auth import is_loopback
+    from server.interserver.interserver_auth import is_loopback
 
     def console_servers(addr: str | None) -> tuple[list, list[str]]:
         """היצרנים והכתובות של מאזין הקונסולה לכתובת נתונה — פונקציה, כי
@@ -749,7 +752,7 @@ def main() -> None:
     # ‏--interserver-host (או, ב-#1313, ‏--console-host של משני). הוא threaded
     # (pyOpenSSL terminator) לצד ה-uvicorn —
     # ‏#996: גם הוא במנהל המאזינים, כמתג `interserver` (start/stop של ה-thread).
-    from . import storage_nodes
+    from server.interserver import storage_nodes
     inter_host = args.interserver_host
     if (not inter_host and args.storage_role == "secondary"
             and args.console_host and not is_loopback(args.console_host)):
@@ -762,13 +765,13 @@ def main() -> None:
         print(f"interserver: no --interserver-host — using --console-host {inter_host} (#1313)")
     interserver_rebind = None
     if inter_host and storage_nodes.role(runtime.conn) == "secondary":
-        from . import interserver_api
+        from server.interserver import interserver_api
         if inter_iface:
             host_sans = [h for h in (inter_addr, machine_hostname) if h]
         else:
             host_sans = [inter_host]
         if args.interserver_url:
-            from .interserver_auth import parse_interserver_url
+            from server.interserver.interserver_auth import parse_interserver_url
             host_sans.append(parse_interserver_url(args.interserver_url)[0])
         ident = storage_nodes.ensure_identity(runtime.conn, args.data_dir,
                                               host_sans=host_sans)

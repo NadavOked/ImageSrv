@@ -1,7 +1,7 @@
 """‏#738 (tracer 2 של #703) + #1247: ה-allowlist של מחשב הבנייה על פורט הסוכן.
 
 #1247 הסיר את הקיוסק כאפליקציה נפרדת (:8082) ואת מסך התחנה בדפדפן
-(`/console/station`). ה-allowlist עצמו (`server/kiosk.py`) נשאר, כי הסוכן
+(`/console/station`). ה-allowlist עצמו (`server/agent/kiosk.py`) נשאר, כי הסוכן
 (buildmenu.sh/roomflow.sh/הגואי הנייטיב) צורך אותו דרך פורט הסוכן.
 
 מה שנבדק כאן הוא **התנהגות**, לא מבנה:
@@ -31,18 +31,18 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from server import users
+from server.console import users
 from server import app as server_app
 from server.app import create_agent_app, create_console_app, create_runtime
-from server.console_storage import create_storage_router
-from server.console_api import create_console_router
+from server.console.console_storage import create_storage_router
+from server.console.console_api import create_console_router
 
 from conftest import setup_classroom
 from test_server_room import cloner_hello  # noqa: E402
 
 
 #: מלאי נתיבי `/api/console` על אפליקציית הסוכן — (method, path). כל שינוי
-#: מכוון כאן מחייב שינוי מקביל ב-`server/kiosk.py`; כל שינוי לא-מכוון
+#: מכוון כאן מחייב שינוי מקביל ב-`server/agent/kiosk.py`; כל שינוי לא-מכוון
 #: (ראוטר ניהול שנדבק) נופל כאן.
 EXPECTED_KIOSK_ROUTES = frozenset({
     # תת-קבוצת /api/console המסוננת (allowlist הקיוסק)
@@ -328,7 +328,7 @@ def test_multi_method_route_does_not_leak_an_unlisted_method():
     לקיוסק. היום כל ה-routes חד-מתודיים, ולכן הטסט בונה route כזה במפורש."""
     from fastapi import APIRouter
 
-    from server.kiosk import _allowlisted
+    from server.agent.kiosk import _allowlisted
 
     source = APIRouter()
 

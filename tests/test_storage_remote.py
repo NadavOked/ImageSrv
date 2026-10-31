@@ -22,7 +22,10 @@ import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
-from server import db, interserver_api, interserver_auth, monitor, registry, storage_nodes
+from server import db
+from server.console import monitor
+from server.agent import registry
+from server.interserver import interserver_api, interserver_auth, storage_nodes
 from server.db import net_seen
 from test_storage_transfer import paired, secondary          # noqa: F401 — fixtures
 
@@ -431,7 +434,7 @@ def test_remote_power_verifies_the_secondarys_name_and_writes_through_the_tunnel
         server, secondary, paired, machine):
     """‏`POST /storage-nodes/{nid}/monitor/{mac}/power`: השם מושווה לרשימת
     המכונות של **המשני** ("Remote"), לא ל-`?name=`; בלי מוניטור פתוח → 409;
-    עם מוניטור פתוח והשם הנכון הפריים `imagectl-power:reboot` מגיע למכונה
+    עם מוניטור פתוח והשם הנכון הפריים `imagesrv-power:reboot` מגיע למכונה
     דרך המנהרה, והראשי רושם `monitor_power`. ‏ClientCutText ישירות ב-WS
     נדחה גם בנתיב הזה (אותו גשר)."""
     admin = server["admin"]

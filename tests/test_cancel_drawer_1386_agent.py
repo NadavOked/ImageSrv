@@ -26,6 +26,7 @@ from test_agent import AGENT, BASH, posix
 from test_cloner_gui import bridge_setup, sh
 from test_drawer_pull_isolation_1598 import GOOD_SHA, PAYLOAD, fanout_dir  # noqa: F401 — fixture
 from test_timeouts import log_of, make_stubs, run_sh
+from agentlib import flat_lib
 
 JQ = shutil.which("jq")
 requires_jq = pytest.mark.skipif(JQ is None, reason="jq אינו מותקן — הביטוי לא היה רץ בכלל")
@@ -78,7 +79,7 @@ def room(tmp_path: Path, fanout_dir: Path, ask: int, pre: str = "",  # noqa: F81
            f"RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} TMPDIR={posix(tmp_path)!r} "
            "FANOUT_BUFFER=2097152 WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=5 "
            "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=12; ")
-    libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in LIBS)
+    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
     started = time.monotonic()
     out = run_sh(
         make_stubs(box / "stubs", STUBS)
@@ -152,7 +153,7 @@ def _agent(tmp_path: Path, script: str) -> subprocess.CompletedProcess:
     for d, st in (("sda", "writing"), ("sdb", "writing"), ("sdc", "done")):
         (run / "targets" / d).mkdir(parents=True, exist_ok=True)
         (run / "targets" / d / "state").write_text(st + "\n")
-    libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in LIBS)
+    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
     return subprocess.run([BASH, "-c", f"export RUN_DIR={posix(run)!r}; {libs}{script}"],
                           capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
 
@@ -188,7 +189,7 @@ def test_the_cloner_screen_asks_without_a_sign_in_and_only_on_the_cloner(tmp_pat
     run = tmp_path / "run"
     (run / "targets" / "sdb").mkdir(parents=True)
     (run / "targets" / "sdb" / "state").write_text("writing\n")
-    setup += f". {posix(AGENT)}/lib/cancel.sh; "
+    setup += f". {posix(AGENT)}/lib/restore/cancel.sh; "
     out = sh(setup + 'token="drawer-cancel|sdb"; gui_dispatch; echo "rc=$?"; gui_dispatch; echo "rc=$?"')
     assert out.stdout.split() == ["rc=0", "rc=0"], out.stderr   # asked again = 0, never the handoff's 2
     assert target(run, "sdb", "cancel") == "ממסך מחשב השיכפול"
@@ -196,14 +197,14 @@ def test_the_cloner_screen_asks_without_a_sign_in_and_only_on_the_cloner(tmp_pat
     (run / "targets" / "sdb" / "cancel").unlink()
     (tmp_path / "b").mkdir()
     setup2, _ = bridge_setup(tmp_path / "b", "build")
-    out = sh(setup2 + f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/cancel.sh; '
+    out = sh(setup2 + f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/restore/cancel.sh; '
              'token="drawer-cancel|sdb"; gui_dispatch; echo "rc=$?"')
     assert "rc=1" in out.stdout and not (run / "targets" / "sdb" / "cancel").exists()
 
 
 def test_the_libs_load_cancel_sh_where_its_writers_run():
-    agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
-    bridge = (AGENT / "lib" / "guibridge.sh").read_text(encoding="utf-8")
+    agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
+    bridge = (AGENT / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/cancel.sh"' in agent, "the progress loop's reader"
     libs = bridge[bridge.index("gui_libs() {"):]
     assert '. "$LIB_DIR/cancel.sh"' in libs[:libs.index("\n}\n")], "the cloner screen's writer"

@@ -36,7 +36,7 @@ def boot(tmp_path: Path, script: str):
     root.mkdir(exist_ok=True)
     pre = (KIOSK + f'USB_DATA_DIR={posix(usb)!r}; echo mounted > "$RUN_DIR/usb.data"; '
            'LOG_FILE="$RUN_DIR/agent.log"; usb_data_state_read; usb_settings_load; ')
-    out = run(tmp_path, pre + script, IMAGECTL_MODE="usbclone", SYSROOT=posix(root))
+    out = run(tmp_path, pre + script, IMAGESRV_MODE="usbclone", SYSROOT=posix(root))
     assert out.returncode == 0, out.stdout + out.stderr
     return out
 
@@ -68,7 +68,7 @@ sleep() {
     [ "$tick" -lt 4000 ] || exit 91
 }
 '''
-    out = boot(tmp_path, f'press={press}; abort={int(abort)}; IMAGECTL_MODE={mode}; '
+    out = boot(tmp_path, f'press={press}; abort={int(abort)}; IMAGESRV_MODE={mode}; '
                + script + then + 'lc_end_count; echo "RC=$? VALUE=${USB_POWEROFF_S:-unset}"; ')
     return out.stdout, (tmp_path / "run/seen").read_text().strip().split("|")
 

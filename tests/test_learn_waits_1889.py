@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, learn_waits
+from server import db
+from server.learn import learn_waits
 
 T0 = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=2)
 
@@ -22,7 +23,7 @@ def iso(minutes: float) -> str:
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _wave(conn, sid, created, started):

@@ -21,7 +21,7 @@ pytest.importorskip("fastapi")
 
 from conftest import hello_body
 from native import requires_native
-from server import drive_rates, room as room_mod
+from server.rounds import drive_rates, room as room_mod
 from test_class_deploy_switch import PRELUDE, STATION
 from test_cloner_gui import BASH, posix, sh
 from test_cloner_round_server import ask, cloner, now  # noqa: F401  (autouse: the route's clock)
@@ -50,7 +50,7 @@ def _gui_state_lines(tmp_path, room_view: dict) -> list[str]:
     (run / "room.json").write_text(json.dumps(room_view), newline="\n")
     (gui / "mode").write_text("room\n", newline="\n")
     out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
+             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
              + PRELUDE
              + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '
              + f'gui_get() {{ case "$1" in room) cp {posix(run / "room.json")!r} "$2" ;; '
@@ -108,7 +108,7 @@ def test_failed_pull_then_new_pull_closes_old(server):
 @pytest.mark.parametrize("delay", [0.0, 5.0])
 def test_smart_ask_after_send_start_pauses_timeout_then_resumes(
         server_with_sender, free_ports, monkeypatch, delay):
-    from server import sender as sender_module
+    from server.rounds import sender as sender_module
     from test_sender import NOBODY_JOINED_LOG, TRANSFER_LOG, wait_for
     from test_server_streams import setup_classroom
 

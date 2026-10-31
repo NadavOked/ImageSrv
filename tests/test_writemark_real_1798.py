@@ -5,7 +5,7 @@ Real sgdisk, under busybox ash like the agent, on a sparse file the size of a
 120GiB disk (the layout of test_sgdisk_one_call_real_1714.py: ESP, MSR,
 Windows, Recovery in the tail). What a stub cannot prove:
 
-* ``apply_gpt``'s one call names every partition ``imagectl-incomplete`` --
+* ``apply_gpt``'s one call names every partition ``imagesrv-incomplete`` --
   read back with ``sgdisk -i`` (``Partition name: '...'``), not from our args;
 * a NEW process reads the same file and says ``incomplete`` (the reboot);
 * ``expand_last`` rebuilds the candidate and the tail and they carry it again;
@@ -33,7 +33,7 @@ pytestmark = requires_native(
     ("busybox", BUSYBOX), ("sgdisk", SGDISK), posix=True,
     why="the mark is a GPT partition name -- only real sgdisk says what it wrote")
 
-MARK = "imagectl-incomplete"
+MARK = "imagesrv-incomplete"
 
 
 def _name(img: Path, idx: int) -> str:

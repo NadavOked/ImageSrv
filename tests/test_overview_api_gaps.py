@@ -13,7 +13,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import deploy_net, health, journal_he
+from server.net import deploy_net
+from server.system import health
+from server.console import journal_he
 from server.db import journal
 
 try:
@@ -103,7 +105,7 @@ def gap_server(tmp_path: Path, images_root: Path, clock):
     בונה גם שרת שרשת ההפצה שלו טרם הוגדרה."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     reading = {"uptime": 532802}

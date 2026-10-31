@@ -4,7 +4,7 @@ filesystem did not (``lc_tgt``'s 13th field, ``lcgui.sh``; the agent side is
 
 Field, 25/10: the card said "partition 1 grew from 225 to 469 GB" and, below
 it, "the grow was deferred". The real parser (``lc_state.c``) and the real
-result screen are built into a driver; IMAGECTL_GUI_TEXTLOG records every
+result screen are built into a driver; IMAGESRV_GUI_TEXTLOG records every
 string the screen lays out. With the mark: the one line the agent wrote, and
 no "הוגדלה" over it. Without the mark (or from an older agent with 12 fields):
 the partition grew, said as before -- so a screen that never says it fails too.
@@ -72,7 +72,7 @@ def card_words(driver: Path, tmp_path: Path, tail: str) -> list[str]:
              f"lc_tgt=sda|done|148600000000|4|4|3,468952547328,224897344000,0|{ERR}|148600000000|2||0,-1|0{tail}\n")
     p = tmp_path / "state.txt"; p.write_text(state, encoding="utf-8", newline="\n")
     log = tmp_path / "text.log"
-    env = dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf"), IMAGECTL_GUI_TEXTLOG=posix(log))
+    env = dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf"), IMAGESRV_GUI_TEXTLOG=posix(log))
     r = subprocess.run([str(driver), posix(p)], capture_output=True, text=True, encoding="utf-8", timeout=120, env=env,
                        stdin=subprocess.DEVNULL)
     assert r.returncode == 0, r.stderr

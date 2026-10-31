@@ -29,7 +29,7 @@ def _admin_client(app):
     הוא מרוץ בצד הבדיקה, וכאן בודקים את השרת."""
     from fastapi.testclient import TestClient
 
-    from server import auth
+    from server.console import auth
     client = TestClient(app)
     # לא דרך login: שני תהליכונים באותו חלון TOTP היו נחסמים על קוד כפול (#1085).
     client.cookies.set(auth.COOKIE_NAME, auth.issue(app.state.ctx.conn, "noc", "admin"))

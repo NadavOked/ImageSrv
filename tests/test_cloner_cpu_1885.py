@@ -11,14 +11,17 @@ from pathlib import Path
 
 import pytest
 
-from server import cloner_cpu, db, drive_rates, reports
+from server.agent import cloner_cpu, reports
+from server import db
+from server.rounds import drive_rates
+from agentlib import flat_lib
 
 MAC = "78:ac:c0:9b:18:85"
 
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def test_the_field_is_kept_only_as_measured_numbers():
@@ -100,9 +103,7 @@ def test_record_wave_carries_each_machines_cpu(conn):
 from native import requires_native                       # noqa: E402
 from test_agent import AGENT, BASH, posix, sh            # noqa: E402
 
-LIB = AGENT / "lib"
-
-
+LIB = flat_lib()
 def _sys(tmp_path: Path, stat: str, throttle: list[int] | None, temps: list[int], uptime: str) -> Path:
     root = tmp_path / "sys"
     (root / "proc").mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,4 @@
-"""#1361 -- an upgrade restarts the server screen (imagectl-dcui) too.
+"""#1361 -- an upgrade restarts the server screen (imagesrv-dcui) too.
 
 The screen on tty1 is its own python process: after "update from the button"
 it went on running the code it loaded at boot (Nadav, 13/10: the old English
@@ -22,7 +22,7 @@ from test_server_upgrade_1193 import _success_tools
 pytestmark = requires_native(("bash", BASH), why="server-upgrade.sh is bash")
 
 TAG = "v0.53.0"
-UNIT = "imagectl-dcui.service"
+UNIT = "imagesrv-dcui.service"
 
 
 @pytest.fixture()
@@ -46,8 +46,8 @@ def _upgrade(tmp_path: Path, bindir: Path, **fake: str):
 
 def test_a_running_server_screen_is_restarted_after_the_upgrade_is_verified(tmp_path, bindir):
     status, log, _ = _upgrade(tmp_path, bindir)
-    server = log.index("systemctl restart imagectl-server")
-    verified = log.index("systemctl is-active --quiet imagectl-server")
+    server = log.index("systemctl restart imagesrv-server")
+    verified = log.index("systemctl is-active --quiet imagesrv-server")
     screen = log.index(f"systemctl restart {UNIT}")
     assert server < verified < screen          # never before the new server is proven
     assert f"systemctl is-active --quiet {UNIT}" in log[screen:]

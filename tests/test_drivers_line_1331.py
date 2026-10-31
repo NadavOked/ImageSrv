@@ -71,7 +71,7 @@ def test_room_drawer_carries_the_boot_storage_outcome(tmp_path):
 # --- מחשב השיכפול: drawer= שדות 13-17 ---------------------------------------------
 
 
-PRELUDE = CLONER_PRELUDE + f'. {posix(AGENT)}/lib/drvgui.sh; '
+PRELUDE = CLONER_PRELUDE + f'. {posix(AGENT)}/lib/gui/drvgui.sh; '
 
 
 def _cloner_lines(tmp_path: Path, drivers: dict[str, str]) -> tuple[int, list[str], str]:
@@ -113,10 +113,10 @@ def test_a_drivers_file_jq_cannot_read_is_not_published_as_a_snapshot(tmp_path):
 
 
 def test_the_kiosk_and_the_load_gate_source_drvgui():
-    bridge = (AGENT / "lib" / "guibridge.sh").read_text(encoding="utf-8")
+    bridge = (AGENT / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
     gui_libs = bridge[bridge.index("gui_libs() {"):bridge.index("gui_main() {")]
     assert '. "$LIB_DIR/drvgui.sh"' in gui_libs, "the kiosk runs cloner_gui_state"
-    assert '. "$LIB_DIR/drvgui.sh"' in (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    assert '. "$LIB_DIR/drvgui.sh"' in (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
 
 
 # --- הגואי: השורה, הצבעים, הגובה ----------------------------------------------------

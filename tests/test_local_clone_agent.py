@@ -21,10 +21,10 @@ import pytest
 import hygiene
 from native import requires_native
 from test_cloner_gui import BASH, posix
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-LIB = REPO / "agent" / "lib"
-
+LIB = flat_lib()
 pytestmark = requires_native(("bash", BASH))
 
 LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
@@ -34,7 +34,7 @@ LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit",
 
 def run(tmp_path: Path, script: str, timeout: int = 60, **env) -> subprocess.CompletedProcess:
     run_dir = tmp_path / "run"; run_dir.mkdir(exist_ok=True)
-    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff; '
+    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff; '
     pre += "".join(f'export {k}={v!r}; ' for k, v in env.items())
     pre += "".join(f'. {posix(LIB)}/{name}.sh; ' for name in LIBS)
     # #1736: the scripts leave background helpers behind -- a 20 s fallback that ends a
@@ -236,7 +236,7 @@ if [ "$src" = - ]; then cat > "$out"; else cat "$src"; fi
 def _stream(tmp_path: Path, **env) -> tuple[str, Path]:
     box = tmp_path / "box"; stubs = box / "stubs"; dev = box / "dev"
     dev.mkdir(parents=True)
-    (dev / "sdc1").write_bytes(b"imagectl" * 4096)
+    (dev / "sdc1").write_bytes(b"imagesrv" * 4096)
     make = [f"mkdir -p {posix(stubs)!r}"]
     for name, body in STREAM_STUBS.items():   # from bash: a Windows-made file is not executable in Git Bash
         make += [f"cat > {posix(stubs)}/{name} <<'STUB'\n{body}STUB", f"chmod 0755 {posix(stubs)}/{name}"]
@@ -281,7 +281,7 @@ def test_no_source_hash_is_no_evidence_for_any_target(tmp_path):
 def test_the_state_file_carries_the_verdicts_against_the_measured_source(tmp_path):
     # #1354's rule needs the source's partitions, which this plumbing check has none of: 0 = off.
     out = run(tmp_path, 'export GUI_DIR=$RUN_DIR/gui; mkdir -p "$GUI_DIR" "$LC/inv" "$LC/measure"; echo 0 > "$RUN_DIR/min_free_gb"; '
-              'echo \'{"name":"CLONER-02","server_name":"imagectl-ta","server_version":"v1.2.3"}\' > "$RUN_DIR/response.json"; '
+              'echo \'{"name":"CLONER-02","server_name":"imagesrv-ta","server_version":"v1.2.3"}\' > "$RUN_DIR/response.json"; '
               'export AGENT_VERSION=v1.2.2; '
               'echo local > "$LC/screen"; echo done > "$LC/inv.state"; echo idle > "$LC/phase"; '
               'echo "1|sda|A|s1|250000000000|ok|ok||0|0|-1|0|אין עליו טבלת מחיצות" > "$LC/inv/sda.line"; '
@@ -293,7 +293,7 @@ def test_the_state_file_carries_the_verdicts_against_the_measured_source(tmp_pat
     lines = out.stdout.splitlines()
     disks = [l for l in lines if l.startswith("lc_disk=")]
     assert [l.split("|")[0] for l in disks] == ["lc_disk=1", "lc_disk=2", "lc_disk=3"], disks   # by port
-    assert {"machine_name=CLONER-02", "server_name=imagectl-ta", "server_version=v1.2.3",
+    assert {"machine_name=CLONER-02", "server_name=imagesrv-ta", "server_version=v1.2.3",
             "agent_version=v1.2.2"} <= set(lines)
     assert "lc_src=sdc|done||" in lines          # #1443: the copy's size not measured yet = empty, not 0
     assert "lc_fit=sda|shrink|200000000000|" in lines and "lc_fit=sdb|fits|480000000000|" in lines
@@ -304,7 +304,7 @@ def test_the_state_file_carries_the_verdicts_against_the_measured_source(tmp_pat
 def test_the_choice_wraps_the_idle_cloner_and_nothing_else():
     """Only wait_poll (an idle cloner) offers the choice; a round that is open
     or running goes on exactly as before (the server path is unchanged)."""
-    agent = (REPO / "agent" / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (REPO / "agent" / "imagesrv-agent").read_text(encoding="utf-8")
     assert agent.count("local_clone_arm") == 1 and agent.count("local_clone_offer") == 1
     block = agent[agent.index("        wait_poll)"):agent.index("        build_console)")]
     assert block.index("local_clone_arm") < block.index("gui_cloner_parent") < block.index("local_clone_offer") \
@@ -315,7 +315,7 @@ def test_the_kernel_command_line_is_not_read():
     """Principle 2: nothing of the local clone travels on the command line."""
     for name in ("lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "lcwait", "lcgui"):
         text = (LIB / f"{name}.sh").read_text(encoding="utf-8")
-        assert "/proc/cmdline" not in text and "imagectl.mode" not in text and "parse_cmdline" not in text, name
+        assert "/proc/cmdline" not in text and "imagesrv.mode" not in text and "parse_cmdline" not in text, name
 
 
 def test_nothing_is_written_before_lc_run():

@@ -1,0 +1,12 @@
+[Unit]
+Description=Recover an interrupted ImageSrv server upgrade
+DefaultDependencies=no
+After=local-fs.target
+Before=imagesrv-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/imagesrv/tools/server-upgrade-recover.sh
+
+[Install]
+WantedBy=multi-user.target

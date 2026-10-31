@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from server import db, storage_transfer
+from server import db
+from server.interserver import storage_transfer
 
 ADMIN = ("noc", "admin")
 

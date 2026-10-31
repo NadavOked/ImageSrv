@@ -36,11 +36,12 @@ from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_end_hold_2024 import CLEAN, end
 from test_end_of_task_1560 import bash, q, trace_of
+from agentlib import flat_lib
 
 pytest.importorskip("fastapi")
 
-from server import monitor  # noqa: E402
-from server import room as room_mod  # noqa: E402
+from server.console import monitor  # noqa: E402
+from server.rounds import room as room_mod  # noqa: E402
 from test_room_rewake_1721 import CAP, STEP, _packets_to, _round, _wave1_partial  # noqa: E402
 from test_server_room import (  # noqa: E402,F401 — room_server is a fixture
     CLONER1, CLONER2, cloner_hello, room, room_server,
@@ -120,7 +121,7 @@ def test_a_held_report_goes_stale_and_a_joining_hello_clears_it(room_server, mon
     assert machine(deploy)["held"] is None
 
     held_report(anon)
-    from server import held as held_mod
+    from server.agent import held as held_mod
     old = (datetime.now(timezone.utc) - timedelta(seconds=held_mod.FRESH_SECONDS + 5)).isoformat(timespec="seconds")
     ctx.conn.execute("UPDATE net_devices SET held_at = ? WHERE mac = ?", (old, CLONER1))
     ctx.conn.commit()
@@ -235,7 +236,7 @@ def fake():
 
 
 def _libs() -> str:
-    return "".join(f". {posix(AGENT)}/lib/{n}; " for n in
+    return "".join(f". {posix(flat_lib())}/{n}; " for n in
                    ("common.sh", "jsonq.sh", "attended.sh", "idle.sh", "hold.sh"))
 
 

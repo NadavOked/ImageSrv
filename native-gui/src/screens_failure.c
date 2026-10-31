@@ -7,7 +7,7 @@
  * "מה אפשר לעשות": a sentence and the buttons that do it (#2068, mockup 09,
  * Nadav 24/10 -- no technical-details box; the log is in the console's drawer).
  * Enter is the first button (main.c). Every text comes from the state file
- * (agent/lib/failscreen.sh); nothing here is a sample. Numbers are the
+ * (agent/lib/gui/failscreen.sh); nothing here is a sample. Numbers are the
  * mockup's CSS (.wrap 940, .badge 60, .ttl h1 30/600, .ctx 11/15, .cols
  * 1.12fr 1fr gap 14, .why 17/500, .steps 15, .det summary 44, .code 12). */
 #include <math.h>

@@ -1251,7 +1251,7 @@ def test_a_lone_drawer_that_pauses_past_the_block_clock_is_not_evicted(fanout, t
 def test_every_test_that_compiles_fanout_skips_by_name_without_gcc():
     """‏#1283: חמישה טסטים ביקשו את ה-fixture `fanout` בלי `@needs_fanout`,
     ובווינדוס (אין gcc) הם נפלו ב-ERROR של setup — לא דילוג מוצהר
-    שנספר בשמו (וכישלון תחת ‏IMAGECTL_REQUIRE_NATIVE=1, #52), אלא רעש
+    שנספר בשמו (וכישלון תחת ‏IMAGESRV_REQUIRE_NATIVE=1, #52), אלא רעש
     שמסתיר כישלון אמיתי. השומר הזה רץ בכל מקום, גם בלי gcc."""
     import inspect
 

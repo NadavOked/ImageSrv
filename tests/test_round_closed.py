@@ -45,8 +45,8 @@ def test_the_reporter_tells_the_main_path_that_the_session_closed(tmp_path):
     run.mkdir()
     out = run_sh(
         f"export RUN_DIR={posix(run)!r}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; "
         "build_progress() { echo '{}'; }; "
         "http_post_json() { echo '{\"ok\":false,\"code\":\"not_open\"}'; return 22; }; "
         'progress_loop ses_d6e79f65 78:ac:c0:9b:11:c2 http://s; echo "rc=$?"')
@@ -62,8 +62,8 @@ def test_a_reply_that_is_not_not_open_leaves_no_mark(tmp_path):
     run.mkdir()
     run_sh(
         f"export RUN_DIR={posix(run)!r} PROGRESS_INTERVAL_S=0.2; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; "
         "build_progress() { echo '{}'; }; "
         "http_post_json() { return 7; }; "
         "progress_loop ses_1 m http://s & p=$!; sleep 2; kill $p; wait $p 2>/dev/null; :")
@@ -111,7 +111,7 @@ def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path
     run = box / "run"
     payload = box / "part.bin"
     box.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 1024)
+    payload.write_bytes(b"imagesrv" * 1024)
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     (run / "targets" / "sda").mkdir(parents=True)
 
@@ -120,10 +120,10 @@ def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=2 "
         "WAIT_STREAM_START_S=40 WAIT_STREAM_STALL_S=40; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; "
-        f". {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; "
+        f". {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         "target_init sda 8192; "
         "stream_source() { sleep 120; }; "
         '( sleep 2; echo ses_d6e79f65 > "$RUN_DIR/session-closed" ) & '
@@ -142,7 +142,7 @@ def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path
 def test_the_machine_hold_names_the_closed_round():
     """המסך/הקונסולה (HOLD_PROMPT) אומרים למה המכונה עצרה — לא "no drawer
     completed" על סבב שהשרת סגר."""
-    agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     body = agent[agent.index("do_restore_drawers() {"):agent.index("do_restore() {")]
     assert 'round_closed && _why="the server closed this round -- writing stopped"' in body
     assert '"$RUN_DIR/session-closed"' in body.split("progress_loop", 1)[0], \

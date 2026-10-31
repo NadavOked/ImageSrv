@@ -29,6 +29,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native-gui" / "src"
@@ -46,7 +47,7 @@ def _bridge(tmp_path: Path, record: str) -> tuple[int, str | None]:
     rec = tmp_path / "record"
     rec.write_bytes(record.encode("utf-8"))
     out = tmp_path / "out.txt"
-    lib = posix(AGENT / "lib")
+    lib = posix(flat_lib())
     script = f"""
         RUN_DIR={posix(run)}; GUI_DIR={posix(run)}/gui
         . {lib}/common.sh

@@ -316,7 +316,7 @@ def run_native_pack(tmp_path: Path, fault: str = ""):
     lib.write_text("library", encoding="utf-8")
     loader = tmp_path / "ld-linux.so.2"
     loader.write_text("loader", encoding="utf-8")
-    # #690: the GUI block now also compiles imagectl-monitor from AGENT_DIR.
+    # #690: the GUI block now also compiles imagesrv-monitor from AGENT_DIR.
     agent = checkout / "agent"
     agent.mkdir()
     (agent / "monitor.c").write_text("int main(void){return 0;}", encoding="utf-8")
@@ -335,8 +335,8 @@ def run_native_pack(tmp_path: Path, fault: str = ""):
     make_body = ("return 9" if fault == "make" else "return 0" if fault == "binary" else
                  "printf '%s\\n' '#!/bin/sh' "
                  f"'[ \"$1\" = --splash-raw ] && head -c {splash_bytes} /dev/zero > \"$2\"' 'exit 0' "
-                 '> "$GUI_DIR/imagectl-station-gui"; '
-                 'chmod +x "$GUI_DIR/imagectl-station-gui"')
+                 '> "$GUI_DIR/imagesrv-station-gui"; '
+                 'chmod +x "$GUI_DIR/imagesrv-station-gui"')
     script = f"""set -euo pipefail
 WITH_GUI=1
 SKIP_APT=1
@@ -360,23 +360,23 @@ gcc() {{ while [ "$1" != "-o" ]; do shift; done; \
 def test_native_pack_includes_binary_closure_fonts_and_placeholder(tmp_path):
     done, root, fonts, lib, loader = run_native_pack(tmp_path)
     assert done.returncode == 0, done.stderr
-    assert (root / "usr/bin/imagectl-station-gui").is_file()
+    assert (root / "usr/bin/imagesrv-station-gui").is_file()
     # #690: the remote monitor rides in the same GUI image.
-    assert (root / "usr/bin/imagectl-monitor").is_file()
+    assert (root / "usr/bin/imagesrv-monitor").is_file()
     for source in (lib, loader):
         assert (root / bash_path(source).lstrip("/")).read_bytes() == source.read_bytes()
     packed_fonts = root / bash_path(fonts).lstrip("/")
     assert len(list(packed_fonts.glob("*.ttf"))) == 6
     assert not (packed_fonts / "unneeded.ttf").exists()
-    wrapper = (root / "usr/bin/imagectl-kiosk").read_text()
+    wrapper = (root / "usr/bin/imagesrv-kiosk").read_text()
     # The kiosk is now the native-GUI bridge (feat/native-gui): it sources
     # guibridge.sh and enters gui_main, which owns --auth-cmd/--state/stdout.
     assert '. "$LIB_DIR/guibridge.sh"' in wrapper
     assert 'gui_main "$@"' in wrapper
-    assert "exec /usr/bin/imagectl-station-gui\n" not in wrapper
+    assert "exec /usr/bin/imagesrv-station-gui\n" not in wrapper
     assert "--demo" not in wrapper
     # 17/10: the last-resort screen, rendered by the binary at build time.
-    assert (root / "usr/share/imagectl/splash-640x240.raw").stat().st_size == 640 * 240 * 4
+    assert (root / "usr/share/imagesrv/splash-640x240.raw").stat().st_size == 640 * 240 * 4
 
 
 @pytest.mark.parametrize("fault, message", [
@@ -389,4 +389,4 @@ def test_native_pack_stops_on_build_or_missing_runtime_files(tmp_path, fault, me
     done, root, *_ = run_native_pack(tmp_path, fault)
     assert done.returncode != 0
     assert message in done.stderr
-    assert not (root / "usr/bin/imagectl-kiosk").exists()
+    assert not (root / "usr/bin/imagesrv-kiosk").exists()

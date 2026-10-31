@@ -1,5 +1,5 @@
-/* ImageCtl — לקוח RFB מרוחק (#690), vanilla JS, בלי ספרייה חיצונית.
-   מדבר RFB 3.8 מול imagectl-monitor (LibVNCServer, בלי סיסמה) דרך
+/* ImageSrv — לקוח RFB מרוחק (#690), vanilla JS, בלי ספרייה חיצונית.
+   מדבר RFB 3.8 מול imagesrv-monitor (LibVNCServer, בלי סיסמה) דרך
    ה-WebSocket האדמיני /api/console/monitor/<mac>, ומצייר ל-canvas.
 
    הקונסולה כולה vanilla JS בלי CDN (ראו CLAUDE.md), ולכן זהו לקוח
@@ -630,7 +630,7 @@ canvas.addEventListener("keyup", (e) => { e.preventDefault(); keyEvent(keysymFor
    origin בלבד מעצם הגדרתו, מגיע גם לחלון שנפתח עם noopener, ונושא רק "פעילות"
    — לא תוכן ולא קלט. רק קלט נספר, לא מסגרות: מסך שמשתנה לבד (פס התקדמות) אינו
    אדם ליד המקלדת. לכל היותר הודעה אחת ב-5 ש'. */
-const ACTIVITY_CHANNEL = "imagectl-activity";
+const ACTIVITY_CHANNEL = "imagesrv-activity";
 const ACTIVITY_EVERY_MS = 5000;
 const activityChannel = typeof BroadcastChannel === "function"
   ? new BroadcastChannel(ACTIVITY_CHANNEL) : null;

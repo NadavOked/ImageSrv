@@ -16,7 +16,7 @@ import pytest
 from conftest import hello_body, room_slots
 from test_server_room import CLONER1, CLONER2, cloner_hello, report, room, room_server  # noqa: F401
 
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 
 BUILD = "aa:bb:cc:00:00:10"
 
@@ -326,7 +326,7 @@ def _running_direct(room_server):
 
 
 def test_without_a_configured_cap_the_build_machine_sends_at_600m(room_server):
-    """עד היום: בלי `IMAGECTL_MAX_BITRATE` מחשב הבנייה שידר בלי `--max-bitrate`
+    """עד היום: בלי `IMAGESRV_MAX_BITRATE` מחשב הבנייה שידר בלי `--max-bitrate`
     כלל. מעכשיו — קצב הפתיחה, כבר בגל הפתוח (לפני שנבחר לו קצב)."""
     assert room_server["ctx"].sender.max_bitrate is None
     _setup(room_server)

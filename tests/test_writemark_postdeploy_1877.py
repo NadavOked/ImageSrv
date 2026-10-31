@@ -1,6 +1,6 @@
 """#1877 -- the incomplete-write mark stays on through the post-deploy writes.
 
-#1798 (PR #1876) named every partition ``imagectl-incomplete`` with the table
+#1798 (PR #1876) named every partition ``imagesrv-incomplete`` with the table
 and took the names off in ``finish_grow``. But the machine's name
 (``name_this_machine`` -> hostname.sh) and the drivers (``stage_drivers`` /
 ``stage_drawer_drivers`` -> postdeploy.sh) write to the same disk AFTER
@@ -15,7 +15,7 @@ open (principle 4).
 
 Here: the sgdisk stub of test_writemark_1798.py (a GPT kept in files, so the
 disk outlives the shell -- a fresh process is the reboot), and the paths
-themselves cut out of imagectl-agent with their neighbours stubbed. No jq: the
+themselves cut out of imagesrv-agent with their neighbours stubbed. No jq: the
 path tests stub ``json_get``, so they run on Windows too.
 """
 
@@ -39,7 +39,7 @@ def _fresh_state(tmp_path: Path, box: Path) -> str:
     fresh.mkdir(exist_ok=True)
     out = sh(f'export PATH="$(cd {posix(box)!r}/stubs && pwd):$PATH" RUN_DIR={posix(fresh)!r} '
              f'DEVROOT={posix(box)}/dev LOG_FILE={posix(fresh)}/log; log() {{ :; }}; '
-             f'. {posix(AGENT)}/lib/writemark.sh; writemark_state sda')
+             f'. {posix(AGENT)}/lib/restore/writemark.sh; writemark_state sda')
     return out.strip().splitlines()[-1]
 
 
@@ -137,7 +137,7 @@ def _run_path(tmp_path: Path, call: str, *, release_fails: bool = False) -> list
     funcs.write_text(cut_function("do_restore") + "\n" + cut_function("do_restore_drawers") + "\n",
                      encoding="utf-8", newline="\n")
     script = (f'export RUN_DIR={posix(run)!r} RESP=x SERVER=http://127.0.0.1:9 MAC=m D_ROLE=classroom '
-              f'IMAGECTL_TEST=1; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/verdict.sh; '
+              f'IMAGESRV_TEST=1; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/verdict.sh; '
               + PATH_STUBS + f'. {posix(funcs)}; {call}; echo "RETURNED rc=$?"')
     out = tmp_path / "out.txt"
     with out.open("w", encoding="utf-8") as sink:
@@ -190,7 +190,7 @@ def _sr(tmp_path: Path, *, release_fails: bool = False) -> tuple[list[str], str]
     if release_fails:
         (run / "release.fail").write_text("y\n")
     script = (f'export RUN_DIR={posix(run)!r} SERVER=http://127.0.0.1:9 MAC=m; '
-              f'. {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/single_restore.sh; '
+              f'. {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/single_restore.sh; '
               + PATH_STUBS + SR_STUBS + 'single_restore_run img_1; echo "rc=$?" >> "$RUN_DIR/trace"')
     subprocess.run([BASH, "-c", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                    stdin=subprocess.DEVNULL, timeout=120)

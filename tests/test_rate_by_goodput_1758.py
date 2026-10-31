@@ -23,7 +23,8 @@ import time
 
 import pytest
 
-from server import db, drive_rates, nic_speed
+from server import db
+from server.rounds import drive_rates, nic_speed
 
 SENT = 19_500_000_000                 # ‏19.5GB — גודל האימג' מה-Issue
 BLOCKS = -(-SENT // drive_rates.UDPCAST_BLOCK)
@@ -34,7 +35,7 @@ _seq = iter(range(10 ** 6))
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _drives(session: str, drawers: int = 2, mac: str = CLONER2) -> list[dict]:
@@ -428,7 +429,7 @@ def test_record_wave_stores_what_each_machine_delivered(conn):
 
 from test_sender_stream_stats import current_log, engine_env, line, write_log  # noqa: E402,F401
 from test_sender import wait_for  # noqa: E402
-from server import sender as sender_module  # noqa: E402
+from server.rounds import sender as sender_module  # noqa: E402
 
 
 def test_the_wall_time_runs_from_the_first_byte_to_send_done(engine_env, monkeypatch):

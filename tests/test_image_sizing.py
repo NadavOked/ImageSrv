@@ -22,10 +22,11 @@ import shutil
 
 import pytest
 
-from server.images import ImageLibrary, disk_family, layout_end_bytes, required_bytes
+from server.library.images import ImageLibrary, disk_family, layout_end_bytes, required_bytes
 
 from conftest import ESP_GUID, WINDOWS_GUID, write_image
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import lib_path
 
 #: הכונן שעליו נשבר #82 — NVMe פיזי "256GB" במחשב הלנובו של המעבדה.
 NVME_256 = 256060514304
@@ -272,7 +273,7 @@ CASES = [
 def capture_awk() -> str:
     """הקטע שמחשב `_min_target` בתוך capture.sh, כלשונו. נחתך מהקובץ
     ולא משוכפל כאן: בדיקה שמריצה עותק אינה מעידה על הקוד."""
-    source = (AGENT / "lib" / "capture.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     start = source.index("    _min_target=$(awk")
     return source[start:source.index("\"$_parts\")", start) + len("\"$_parts\")")]
 
@@ -284,7 +285,7 @@ def test_the_agent_and_the_server_agree_on_the_requirement(tmp_path, case):
     מציע ובדיקת 2.7 חוסמת — או, גרוע יותר, ההפך."""
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps(case), encoding="utf-8")
-    out = sh(f'. {posix(AGENT)}/lib/diskfit.sh; required_bytes {posix(path)!r}')   # #1217
+    out = sh(f'. {posix(AGENT)}/lib/restore/diskfit.sh; required_bytes {posix(path)!r}')   # #1217
     assert int(out.strip()) == required_bytes(case)
 
 
@@ -306,7 +307,7 @@ def test_capture_sizes_the_layout_and_not_the_source_disk(tmp_path, case):
 def test_capture_no_longer_writes_the_source_disk_size_as_the_requirement():
     """בקרה שלילית ברמת המקור: השורה שהעבירה `$_disk_bytes` פעמיים —
     פעם ל-source_disk_bytes ופעם ל-min_target_bytes — היא #82 עצמו."""
-    source = (AGENT / "lib" / "capture.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     line = next(ln for ln in source.splitlines() if '"$_family" "$_os"' in ln)
     assert '"$_disk_bytes" "$_min_target"' in line
     assert '"$_disk_bytes" "$_disk_bytes"' not in line
@@ -330,8 +331,8 @@ def fits_box(tmp_path, blockdev_body: str, image=TINY11):
         f"chmod 0755 {posix(stubs)}/blockdev; "
         f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/diskfit.sh; '   # #1217
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+        f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/diskfit.sh; '   # #1217
         "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
     )
     return run, path, prelude
@@ -383,7 +384,7 @@ def test_both_restore_paths_check_before_they_write_the_table():
     for name, entry, check, then in (("restore.sh", "run_restore() {", "disk_fits", "apply_gpt"),
                                       ("drawers.sh", "run_restore_drawers() {", "write_check_round", "apply_gpt"),
                                       ("writecheck.sh", "write_check_round() {", "disk_fits", 'write_check "')):
-        source = (AGENT / "lib" / name).read_text(encoding="utf-8")
+        source = (lib_path(name)).read_text(encoding="utf-8")
         body = source[source.index(entry):]
         calls = [ln.strip() for ln in body.splitlines()
                  if not ln.lstrip().startswith("#")]

@@ -2,13 +2,13 @@
 
 שתי החוליות של הסוכן, בלי מהדר ובלי שרת:
 
-* ‏`gui_state` (‏`agent/lib/guistate.sh`) כותב לקובץ המצב את רשימת הדגמים
+* ‏`gui_state` (‏`agent/lib/gui/guistate.sh`) כותב לקובץ המצב את רשימת הדגמים
   מ-`GET /api/console/room/driver-models` — ‏`driver_models=<n>` ושורת
   ‏`driver_model=<vendor>|<model>` לכל דגם — ו**`driver_models=-1`** כשהרשימה
   לא נקראה. ‏"לא נקרא" ו"אין דגמים" הם שני מצבים (עיקרון 5): המתג מושבת
   בשניהם, אבל עם סיבה אחרת. ולכל מגירה בסבב — תוצאת הנחת הדרייברים
   (‏`drawer_list[].drivers`) בשדות 9–10 של `room_drawer=`.
-* ‏`gui_records`/`gui_dispatch` (‏`agent/lib/guibridge.sh`) מתרגמים את רשומת
+* ‏`gui_records`/`gui_dispatch` (‏`agent/lib/gui/guibridge.sh`) מתרגמים את רשומת
   ‏`room-open` / `direct-open` עם `drivers=` לגוף ה-POST: ‏`driver_models`,
   ובסבב מהספרייה גם `target_slots` — השרת קושר דגם רק לדיסק שנבחר כיעד.
   בלי `drivers=` (המתג כבוי) הגוף **זהה** למה שהיה לפני #1269.
@@ -83,7 +83,7 @@ def _state(tmp_path: Path, room: dict, models: list | None) -> list[str]:
     )
     script = (
         f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
+        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
         + PRELUDE
         + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '
         + getter
@@ -160,10 +160,10 @@ def _bridge(tmp_path: Path, record: str) -> dict | None:
     (run / "record").write_bytes(record.encode("utf-8"))
     script = (
         f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} LOG_FILE={posix(run / "log")!r} '
-        f'SERVER=http://127.0.0.1:9 MAC=c8:d9:d2:0b:fe:32 IMAGECTL_TEST=1; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-        f'. {posix(AGENT)}/lib/roomflow.sh; '
-        f'. {posix(AGENT)}/lib/guibridge.sh; '
+        f'SERVER=http://127.0.0.1:9 MAC=c8:d9:d2:0b:fe:32 IMAGESRV_TEST=1; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+        f'. {posix(AGENT)}/lib/gui/roomflow.sh; '
+        f'. {posix(AGENT)}/lib/gui/guibridge.sh; '
         'gui_role() { GUI_ROLE=admin; }; '
         'http_get() { printf \'{"disks":[{"dev":"sda","removable":false}]}\'; }; '
         f'console_post() {{ cp "$2" {posix(posted)!r}; printf 200; }}; '

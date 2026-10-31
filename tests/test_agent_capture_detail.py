@@ -14,10 +14,11 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
-LIB = AGENT / "lib"
+LIB = flat_lib()
 ESP, WIN, SWAP = ("C12A7328-F81F-11D2-BA4B-00A0C93EC93B", "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
                   "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F")
 #: idx|guid|uguid|start|size_sectors -- the shape capture.sh writes
@@ -108,7 +109,7 @@ def test_the_capture_flow_marks_the_table_at_every_step():
     order = capture.index('capture_stage shrink; cd_init'), capture.index("capture_space_preflight"), \
         capture.index("capture_prepare_views"), capture.index('capture_stage stream; cd_init')
     assert list(order) == sorted(order), "הטבלה נבנית לפני ה-preflight ומחדש אחרי הכיווץ"
-    agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert agent.index('"$LIB_DIR/capturedetail.sh"') < agent.index('"$LIB_DIR/capture.sh"')
 
 

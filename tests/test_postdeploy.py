@@ -1,4 +1,4 @@
-"""‏#720 — staging של דרייברים ב-NTFS המשוחזר (`agent/lib/postdeploy.sh`).
+"""‏#720 — staging של דרייברים ב-NTFS המשוחזר (`agent/lib/postdeploy/postdeploy.sh`).
 
 הפונקציה רצה על ה-sh האמיתי עם זיופים של הכלים שהיא קוראת: ‏curl (השרת),
 ‏ntfs-3g/umount (המאונט), ‏hivewrite (הרג'יסטרי, עם "hive" שהוא קובץ טקסט
@@ -29,7 +29,7 @@ pytestmark = requires_native(("bash", BASH))
 WIN_PLAN = "1|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|windows|ntfs|4096|1|p1|y|false|u"
 LINUX_PLAN = "2|0FC63DAF-8483-4772-8E79-3D69D8477DE4|linux|ext4|4096|1|p2|y|false|u"
 STOCK = r"%SystemRoot%\inf"
-ENTRY = r"%SystemRoot%\..\ImageCtl\Drivers"
+ENTRY = r"%SystemRoot%\..\ImageSrv\Drivers"
 
 FILES = {"intel-nic": {"e1d68x64.inf": b"[Version]\n", "x64/e1d68x64.sys": b"\x4d\x5a sys"},
          "ahci-fix": {"storahci.inf": b"[Version] ahci\n"}}
@@ -151,10 +151,10 @@ class Box:
             # מכונת הבדיקות (מעבדת ה-VM היא UEFI) — ו-efibootmgr היה כותב ל-NVRAM שלה.
             f'SYSROOT={posix(self.run)!r}/sys LIB_DIR={posix(AGENT)!r}/lib '
             f'SERVER=http://10.44.12.10:8080 MAC=b4:2e:99:07:1a:c4 {env}; '
-            f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-            f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
-            f'. {posix(AGENT)}/lib/hostname_linux.sh; . {posix(AGENT)}/lib/linuxdrivers.sh; '
-            f'. {posix(AGENT)}/lib/bootstorage.sh; . {posix(AGENT)}/lib/postdeploy.sh; '
+            f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+            f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
+            f'. {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; . {posix(AGENT)}/lib/postdeploy/linuxdrivers.sh; '
+            f'. {posix(AGENT)}/lib/postdeploy/bootstorage.sh; . {posix(AGENT)}/lib/postdeploy/postdeploy.sh; '
             f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; return {plan_rc}; }}; '
             f'partition_node() {{ echo /dev/fake; }}; '
             f'json_get() {{ case "$2" in ".ok") echo {str(self.answer.get("ok", False)).lower()};; '
@@ -187,7 +187,7 @@ class Box:
         return path.read_text().strip() if path.exists() else None
 
     def staged_files(self) -> dict[str, bytes]:
-        root = self.win / "ImageCtl/Drivers"
+        root = self.win / "ImageSrv/Drivers"
         return {p.relative_to(root).as_posix(): p.read_bytes()
                 for p in root.rglob("*") if p.is_file()} if root.exists() else {}
 
@@ -339,8 +339,8 @@ def test_the_progress_report_carries_drivers_only_once_it_exists(tmp_path):
     for name, value in {"state": "done", "base": "0", "total": "10"}.items():
         (run / "targets/sda" / name).write_text(value + "\n")
     (run / "state").write_text("done\n")
-    script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/common.sh; '
-              f'. {posix(AGENT)}/lib/progress.sh; build_progress ses_1 b4:2e:99:07:1a:c4')
+    script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; '
+              f'. {posix(AGENT)}/lib/core/progress.sh; build_progress ses_1 b4:2e:99:07:1a:c4')
     before = json.loads(subprocess.run([BASH, "-c", script], capture_output=True, text=True,
                                        stdin=subprocess.DEVNULL, cwd=str(AGENT.parent)).stdout)
     assert "drivers" not in before
@@ -352,13 +352,13 @@ def test_the_progress_report_carries_drivers_only_once_it_exists(tmp_path):
 
 
 def test_the_agent_stages_after_the_name_and_before_the_closing_report():
-    main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '"$LIB_DIR/postdeploy.sh"' in main
     i_name = main.index('name_this_machine "$_disk" "$_ses"')
     i_stage = main.index('stage_drivers "$_disk" "$RUN_DIR/manifest.json"')
     i_report = main.index('report_final "$_ppid" "$_ses"', i_name)
     assert i_name < i_stage < i_report
-    single = (AGENT / "lib" / "single_restore.sh").read_text(encoding="utf-8")
+    single = (AGENT / "lib" / "restore" / "single_restore.sh").read_text(encoding="utf-8")
     assert single.index('stage_drivers "$_sr_disk"') < single.index("pull_close ")
 
 
@@ -369,7 +369,7 @@ JQ = shutil.which("jq")
 def test_the_real_jq_filters_give_the_rows_the_stage_reads(tmp_path):
     answer = tmp_path / "answer.json"
     answer.write_text(json.dumps(answer_for(FILES)), encoding="utf-8")
-    script = (f'. {posix(AGENT)}/lib/jsonq.sh; '
+    script = (f'. {posix(AGENT)}/lib/core/jsonq.sh; '
               f'json_get {posix(answer)!r} \'.packages[] as $p | $p.files[] | "\\($p.name)|\\(.path)|\\(.sha256)|\\(.url)"\'; '
               f'echo ---; json_get {posix(answer)!r} ".packages[].name"; echo ---; '
               f'json_get {posix(answer)!r} ".inventory"')
@@ -385,7 +385,7 @@ def test_the_real_jq_filters_give_the_rows_the_stage_reads(tmp_path):
 
 pytest.importorskip("fastapi")
 
-from server import reports   # noqa: E402
+from server.agent import reports   # noqa: E402
 
 
 @pytest.mark.parametrize("bad", [None, "staged", {"state": "installed", "packages": []},

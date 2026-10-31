@@ -17,9 +17,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import archive, images
-from server.archive import ArchiveError, import_tar, tar_stream
-from server.images import ImageLibrary
+from server.library import archive, images
+from server.library.archive import ArchiveError, import_tar, tar_stream
+from server.library.images import ImageLibrary
 
 from conftest import MANIFEST_256, write_image
 

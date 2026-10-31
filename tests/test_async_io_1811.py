@@ -10,7 +10,7 @@ held, a second request on the same loop must be answered; the gate is released
 only after it. Before the fix the loop itself sat in the gate, the second
 request waited for the release, and the recorded order was the other way round.
 
-**Negative control** (server/api.py and server/console_library.py of 9001fc91):
+**Negative control** (server/agent/api.py and server/console/console_library.py of 9001fc91):
 both tests fail on the order -- ``['released', 'second']``.
 """
 
@@ -24,7 +24,8 @@ import pytest
 pytest.importorskip("fastapi")
 httpx = pytest.importorskip("httpx")
 
-from server import api, console_library  # noqa: E402
+from server.agent import api  # noqa: E402
+from server.console import console_library  # noqa: E402
 
 from conftest import hello_body  # noqa: E402
 from test_capture import setup_build_machine  # noqa: E402

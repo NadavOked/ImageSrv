@@ -9,7 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import netcfg_host, netcfg_rollback, users
+from server.net import netcfg_host, netcfg_rollback
+from server.console import users
 from server.db import connect, get_setting
 from server.dcui import actions
 from server.dcui import app as dcui_app
@@ -25,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _db(tmp_path):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     users.create(conn, "admin", "before", "admin", by="test",
                  is_builtin=True, check_policy=False)
     return conn
@@ -208,7 +209,7 @@ def test_network_apply_uses_injected_host_path_and_arms_then_confirms(tmp_path):
         "netcfg_apply": lambda name: calls.append(("apply", name)),
         "netcfg_state": lambda: netcfg_host.LiveState(
             True, addresses={"ens18": ["192.0.2.10/24"]}),
-        "hostname": lambda: "imagectl-test",
+        "hostname": lambda: "imagesrv-test",
     }
     form = {"interface": "ens18", "mode": "dhcp", "address": "",
             "netmask": "255.255.255.0", "gateway": "", "dns": ""}
@@ -257,7 +258,7 @@ def test_restart_services_only_restarts_enabled_dnsmasq(tmp_path):
 
     result = actions.restart_services(conn, fake)
     assert result.ok
-    assert ["systemctl", "restart", "imagectl-server"] in calls
+    assert ["systemctl", "restart", "imagesrv-server"] in calls
     assert ["systemctl", "restart", "dnsmasq"] not in calls
 
 
@@ -265,7 +266,7 @@ def test_f2_menu_has_no_wizard_rerun(tmp_path, monkeypatch):
     """הכרעת נדב 11/10 (#1190): אשף ה-web הוא רק לשרת **בלי מסך**. לשרת
     שיש לו מסך אין "Re-run Initial Setup Wizard" ב-F2 — לא בתפריט, לא
     בתיאור, ושום פריט (גם עם "y") לא מגיע ל-systemctl של יחידת האשף.
-    היחידה עצמה (`imagectl-wizard-rerun.service`) נשארת לשרת בלי מסך."""
+    היחידה עצמה (`imagesrv-wizard-rerun.service`) נשארת לשרת בלי מסך."""
     conn = _db(tmp_path)
     calls = []
     # כל פקודה של מסך השרת עוברת ב-`data.run_argv` → `subprocess.run`.
@@ -305,7 +306,7 @@ def test_preinstall_snapshot_uses_status_without_creating_a_database(tmp_path):
     status.write_text("state=wizard-running\ntimestamp=2026-09-20T10:00:00Z\n",
                       encoding="utf-8")
     manifest = tmp_path / "iso-release.json"
-    manifest.write_text('{"imagectl_tag":"v0.52.0"}', encoding="utf-8")
+    manifest.write_text('{"imagesrv_tag":"v0.52.0"}', encoding="utf-8")
     sys_net = tmp_path / "net"
     for name, mac, carrier, state in (
         ("ens33", "00:50:56:01:02:01", "1", "up"),
@@ -331,7 +332,7 @@ def test_preinstall_snapshot_uses_status_without_creating_a_database(tmp_path):
         data_dir, runner=fake, sys_net=sys_net, status_file=status,
         repo_dir=tmp_path / "source", manifest_file=manifest)
     assert snapshot.pre_install
-    assert not (data_dir / "imagectl.db").exists()
+    assert not (data_dir / "imagesrv.db").exists()
     screen = "\n".join(render_preinstall(snapshot))
     assert "ImageSrv v0.52.0 [UNVERIFIED] - installation" in screen
     assert "ens33   00:50:56:01:02:01   10.10.10.8/24" in screen
@@ -512,21 +513,21 @@ def test_reset_screens_are_80x25_ascii_and_main_offers_f9():
 
 
 def test_dcui_unit_owns_tty1_without_requiring_the_web_server():
-    unit = (ROOT / "install" / "imagectl-dcui.service").read_text(encoding="utf-8")
+    unit = (ROOT / "deploy" / "imagesrv-dcui.service").read_text(encoding="utf-8")
     for required in (
-        "Conflicts=getty@tty1.service", "After=imagectl-server.service",
+        "Conflicts=getty@tty1.service", "After=imagesrv-server.service",
         "TTYPath=/dev/tty1", "TTYReset=yes", "Restart=always", "User=root",
-        "ProtectSystem=strict", "ReadWritePaths=/var/lib/imagectl",
+        "ProtectSystem=strict", "ReadWritePaths=/var/lib/imagesrv",
     ):
         assert required in unit
-    assert "Requires=imagectl-server.service" not in unit
+    assert "Requires=imagesrv-server.service" not in unit
 
 
 def test_wizard_units_separate_first_boot_from_explicit_rerun():
-    unit = (ROOT / "install" / "imagectl-wizard.service").read_text(encoding="utf-8")
-    rerun = (ROOT / "install" / "imagectl-wizard-rerun.service").read_text(encoding="utf-8")
-    assert "ConditionPathExists=!/var/lib/imagectl/.firstboot-done" in unit
-    assert "--rerun" not in unit and "$IMAGECTL_WIZARD_MODE" not in unit
+    unit = (ROOT / "deploy" / "imagesrv-wizard.service").read_text(encoding="utf-8")
+    rerun = (ROOT / "deploy" / "imagesrv-wizard-rerun.service").read_text(encoding="utf-8")
+    assert "ConditionPathExists=!/var/lib/imagesrv/.firstboot-done" in unit
+    assert "--rerun" not in unit and "$IMAGESRV_WIZARD_MODE" not in unit
     assert "ConditionPathExists" not in rerun
     assert "python3 -m server.wizard --rerun" in rerun
 

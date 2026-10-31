@@ -11,7 +11,7 @@
  * many times slower; that is why the mirror exists, and it is not measured
  * here.
  */
-#define main imagectl_monitor_main
+#define main imagesrv_monitor_main
 #include "../agent/monitor.c"
 #undef main
 

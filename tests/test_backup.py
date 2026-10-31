@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import backup as backup_mod
+from server.system import backup as backup_mod
 
 try:
     from fastapi.testclient import TestClient
@@ -59,14 +59,14 @@ def test_archive_has_db_manifest_sums_and_no_images(tmp_path: Path):
     # ‏#1302: לוגו מוסד שהועלה לפני שהיכולת הוסרה — שארית, לא הגדרה.
     (data / "branding").mkdir()
     (data / "branding" / "logo.png").write_bytes(b"PNG")
-    (data / "imagectl.db-wal").write_bytes(b"wal")
-    conn = sqlite3.connect(data / "imagectl.db")
+    (data / "imagesrv.db-wal").write_bytes(b"wal")
+    conn = sqlite3.connect(data / "imagesrv.db")
     conn.execute("CREATE TABLE settings (k TEXT, v TEXT)")
     conn.commit()
     payload, name = backup_mod.build_archive(conn, data, "v0.53.3")
     assert name.startswith("imagesrv-settings-") and name.endswith(".tar.gz")
     members = _members(payload)
-    assert set(members) == {"data/imagectl.db", "data/netcfg/servers.conf",
+    assert set(members) == {"data/imagesrv.db", "data/netcfg/servers.conf",
                             "data/console.pem", "MANIFEST.txt", "SHA256SUMS"}
     assert b"version=v0.53.3" in members["MANIFEST.txt"]
     assert backup_mod.BACKUP_WARNING.encode() in members["MANIFEST.txt"]
@@ -88,7 +88,7 @@ def test_integrity_failure_is_an_error_not_a_smaller_backup(monkeypatch):
 def server(tmp_path: Path, images_root: Path, clock):
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
     hooks = {"describe": lambda repo_dir: "v0.53.3",
              "ls_remote_tags": lambda url: (True, "", ""),
@@ -112,7 +112,7 @@ def test_download_restores_to_a_database_with_the_users(server):
     assert r.headers["cache-control"] == "no-store"
     members = _members(r.content)
     restored = sqlite3.connect(":memory:")
-    restored.deserialize(members["data/imagectl.db"])
+    restored.deserialize(members["data/imagesrv.db"])
     names = {row[0] for row in restored.execute("SELECT username FROM users")}
     assert {"noc", "dep"} <= names
     secret = restored.execute("SELECT value FROM settings WHERE key='console_secret'").fetchone()

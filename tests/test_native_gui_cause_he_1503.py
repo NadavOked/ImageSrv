@@ -2,7 +2,7 @@
 
 Metal, 16/10: the cloner's SMART question ("ממתין להחלטה על דיסק 3") printed
 ``unclassified``. For a ``failed_last`` disk the reason the GUI is given is the
-server's cause (``server/ata_cause.py`` CAUSES: cable | disk | unclassified), and
+server's cause (``server/disks/ata_cause.py`` CAUSES: cable | disk | unclassified), and
 ``smart_reason_text`` knew only the agent's SMART codes and passed anything else
 through as-is. The console already says them in Hebrew (``FAILURE_CAUSE_HE``);
 the screen must use the same words.
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server.ata_cause import CAUSES
+from server.disks.ata_cause import CAUSES
 
 REPO = Path(__file__).resolve().parent.parent
 ROUNDS = REPO / "native-gui" / "src" / "screens_rounds.c"

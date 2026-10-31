@@ -16,7 +16,7 @@ def run(tmp_path, script):
     prefix = f'''
         RUN_DIR={tmp_path.as_posix()!r}
         WATCHDOG_UPTIME="$RUN_DIR/uptime"
-        . {AGENT.as_posix()!r}/lib/watchdog.sh
+        . {AGENT.as_posix()!r}/lib/core/watchdog.sh
         reboot() {{ echo "REBOOT $*"; exit 0; }}
     '''
     return subprocess.run([BASH, "--posix", "-c", prefix + script],
@@ -97,7 +97,7 @@ def test_healthy_idle_can_wait_for_hours(tmp_path):
 @pytest.mark.parametrize("moving", [True, False])
 def test_transfer_wait_renews_lease_but_stalled_wait_finishes(tmp_path, moving):
     out = run(tmp_path, f'''
-        . {AGENT.as_posix()!r}/lib/waits.sh
+        . {AGENT.as_posix()!r}/lib/core/waits.sh
         WATCHDOG_ACTIVE=1; WAIT_POLL_S=100; t=0; _wd_last=0
         echo '0.0 0' > "$WATCHDOG_UPTIME"
         : > "$RUN_DIR/counter"
@@ -126,7 +126,7 @@ def test_transfer_wait_renews_lease_but_stalled_wait_finishes(tmp_path, moving):
 def test_attended_hello_loop_renews_the_watchdog_lease(tmp_path):
     """#1130 negative control: attended used to send hello without a watchdog beat."""
     out = run(tmp_path, f'''
-        . {AGENT.as_posix()!r}/lib/attended.sh
+        . {AGENT.as_posix()!r}/lib/core/attended.sh
         attended_hello() {{ echo hello >> "$RUN_DIR/hellos"; }}
         watchdog_beat() {{ echo beat >> "$RUN_DIR/beats"; }}
         sleep() {{

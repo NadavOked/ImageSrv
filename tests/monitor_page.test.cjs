@@ -249,7 +249,7 @@ test('turning on, confirmed in the sheet, sends PUT with the confirm word from c
   await form.onsubmit({preventDefault() {}});
   const puts = calls.filter(c => c.method === 'PUT');
   assert.equal(puts.length, 1);
-  assert.deepEqual(puts[0].body, {enabled: true, confirm: 'imagectl.monitor'});
+  assert.deepEqual(puts[0].body, {enabled: true, confirm: 'imagesrv.monitor'});
   // אחרי ה-PUT נטען המצב מחדש מהשרת
   assert.ok(calls.some(c => c.method === 'GET' && c.url === '/api/console/monitor/settings' && calls.indexOf(c) > calls.indexOf(puts[0])));
 });

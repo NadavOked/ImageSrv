@@ -239,7 +239,7 @@ FLAPPING_BEAT = BEAT_COUNTER + (
 
 
 def hold_probe(tmp_path: Path, beat: str, *, beats: int = 5) -> dict:
-    """מריץ עצירה אמיתית — בלי `IMAGECTL_TEST=1`, שקוצר אותה לפני הלולאה.
+    """מריץ עצירה אמיתית — בלי `IMAGESRV_TEST=1`, שקוצר אותה לפני הלולאה.
 
     ‏`HOLD_BEAT_S=0` כדי שהלולאה לא תמתין: מה שנמדד הוא מספר הפעימות
     שקרו, לא כמה זמן הן לקחו.
@@ -249,7 +249,7 @@ def hold_probe(tmp_path: Path, beat: str, *, beats: int = 5) -> dict:
     out_file = tmp_path / "hold.txt"
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC!r} "
-        f"IMAGECTL_TEST=0 HOLD_BEAT_S=0 BEATS={beats}; "
+        f"IMAGESRV_TEST=0 HOLD_BEAT_S=0 BEATS={beats}; "
         + sourced_libs()
         + beat
         + 'ui_error_hold "restore did not complete" beat'
@@ -347,7 +347,7 @@ def test_the_machine_says_when_the_server_comes_back(tmp_path):
 def test_a_failed_heartbeat_never_becomes_an_action():
     """מה שאסור: המכונה בעצירה על שגיאה ואינה מבצעת יותר כלום (#64).
     כישלון דופק הוא סיבה **לומר**, לא לאתחל, לנסות שוב או לכבות."""
-    hold = (AGENT / "lib" / "hold.sh").read_text(encoding="utf-8")
+    hold = (AGENT / "lib" / "core" / "hold.sh").read_text(encoding="utf-8")
     start = hold.index("hold_watch() {")
     watch = code_only(hold[start:hold.index("\n}\n", start)])   # #2068: hold_action (a person's button) is its own function
     for verb in ("reboot", "poweroff", "die_local", "run_restore"):
@@ -360,7 +360,7 @@ def test_a_failed_heartbeat_never_becomes_an_action():
 @native_tools
 def test_the_hold_no_longer_swallows_the_beat():
     """הבליעה המשולשת עצמה — ‏stdout, ‏stderr ו-`|| true` בשורה אחת."""
-    ui = (AGENT / "lib" / "ui.sh").read_text(encoding="utf-8")
+    ui = (AGENT / "lib" / "gui" / "ui.sh").read_text(encoding="utf-8")
     hold = ui[ui.index("ui_error_hold() {"):]
     hold = code_only(hold[:hold.index("\n}\n")])
     assert '> /dev/null 2>&1 || true' not in hold
@@ -435,7 +435,7 @@ def test_every_error_hold_in_the_agent_carries_a_heartbeat():
 
 @native_tools
 def test_the_capture_report_carries_the_task_token(tmp_path, reports):
-    """השרת דורש מ-#855 את `X-Imagectl-Task-Token` גם על `/progress` של
+    """השרת דורש מ-#855 את `X-Imagesrv-Task-Token` גם על `/progress` של
     משימה — אותה כותרת שההעלאה כבר שולחת (`capture.sh`). בלי זה השרת
     עונה 403, ‏`report_final` רואה כישלון, ומחשב הבנייה נעצר על
     "השרת לא אישר" אחרי קליטה שהצליחה. הבקרה השלילית: על `progress.sh`
@@ -443,5 +443,5 @@ def test_the_capture_report_carries_the_task_token(tmp_path, reports):
     run_capture(tmp_path, url_of(reports))
 
     assert reports.received and reports.received[-1]["task_id"] == TASK
-    sent = reports.headers[-1].get("x-imagectl-task-token")
+    sent = reports.headers[-1].get("x-imagesrv-task-token")
     assert sent == TOKEN, f"הדיווח נשלח בלי אסימון המשימה: {reports.headers[-1]}"

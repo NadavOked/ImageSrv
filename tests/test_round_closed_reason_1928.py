@@ -24,9 +24,9 @@ from test_sender import MANIFEST_256, Recorder, free_ports, wait_for, write_imag
 from test_timeouts import make_stubs, run_sh
 from test_server_room import CLONER1, cloner_hello, room_body, room_server  # noqa: F401 (fixture)
 
-from server import reports
-from server.images import ImageLibrary
-from server.sender import SenderEngine
+from server.agent import reports
+from server.library.images import ImageLibrary
+from server.rounds.sender import SenderEngine
 
 pytest.importorskip("fastapi")
 
@@ -88,7 +88,7 @@ def test_the_reporter_keeps_the_reason_before_the_mark(tmp_path):
     out = run_sh(
         make_stubs(tmp_path / "stubs", stubs)
         + f"export RUN_DIR={posix(run)!r}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/progress.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/core/progress.sh; "
         "build_progress() { echo '{}'; }; "
         f"http_post_json() {{ cat {posix(tmp_path / 'reply.json')!r}; return 22; }}; "
         'progress_loop ses_1 78:ac:c0:9b:11:c2 http://s; echo "rc=$?"')
@@ -113,7 +113,7 @@ def test_the_drawer_says_why_the_server_closed_the_round(tmp_path, why, want):
 
 
 def test_a_new_round_forgets_the_last_reason():
-    agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     body = agent[agent.index("do_restore_drawers() {"):agent.index("do_restore() {")]
     assert '"$RUN_DIR/session-closed.why"' in body.split("progress_loop", 1)[0]
 

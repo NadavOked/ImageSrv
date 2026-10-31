@@ -30,13 +30,13 @@ import pytest
 pytest.importorskip("fastapi")
 httpx = pytest.importorskip("httpx")
 
-from server import capture  # noqa: E402
+from server.library import capture  # noqa: E402
 
 try:
-    from server.reconcile import RESTARTED_VERIFY  # noqa: E402
+    from server.rounds.reconcile import RESTARTED_VERIFY  # noqa: E402
 except ImportError:   # בקרה שלילית: בלי התיקון הטסטים רצים ונופלים על ההתנהגות, לא על ImportError
     RESTARTED_VERIFY = "השרת עלה מחדש — קבצי הקליטה לא נמצאו לאימות; האימג' לא נכנס לספרייה"
-from server.tasks import TOKEN_HEADER, staging_dir  # noqa: E402
+from server.core.tasks import TOKEN_HEADER, staging_dir  # noqa: E402
 
 from conftest import hello_body  # noqa: E402
 from test_capture import (PART_A, PART_B, make_task, manifest_for, setup_build_machine,  # noqa: E402

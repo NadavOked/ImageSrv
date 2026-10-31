@@ -112,7 +112,7 @@ test('password: one component — show/hide button, live policy that mirrors the
   assert.equal((html.match(/<ul class="pw-pol"/g) || []).length, 1, 'the policy list is on the new password only');
   assert.equal(JSON.stringify(run('passwordPolicyState("abc12!xy")')), '[true,true,true,true]');
   assert.equal(JSON.stringify(run('passwordPolicyState("abc12")')), '[false,true,true,false]');
-  // "_" אינו תו מיוחד אצל השרת (server/users.py) — הרשימה לא תהיה ירוקה כשהשרת יסרב
+  // "_" אינו תו מיוחד אצל השרת (server/console/users.py) — הרשימה לא תהיה ירוקה כשהשרת יסרב
   assert.equal(run('passwordPolicyState("abcdefg1_")[3]'), false);
   assert.equal(run('passwordPolicyState("abcdefg1#")[3]'), true);
 });

@@ -27,9 +27,14 @@ pytest.importorskip("fastapi")
 
 from conftest import MANIFEST_256, write_image
 
-from server import (archive, console_library, disk_reserve, drive_rates, housekeeping,
-                    inventory, probe, room_precheck, storage_transfer, work_areas)
-from server.archive import tar_stream
+from server.library import archive, work_areas
+from server.console import console_library
+from server.rounds import drive_rates, room_precheck
+from server.agent import inventory, probe
+from server.system import housekeeping
+from server.storage import disk_reserve
+from server.interserver import storage_transfer
+from server.library.archive import tar_stream
 from server.db import connect
 
 #: #1737: this module reasons about the system reserve -- it stays 10GiB here
@@ -47,7 +52,7 @@ def ago(days: float) -> str:
 
 @pytest.fixture()
 def conn(tmp_path: Path):
-    return connect(tmp_path / "imagectl.db")
+    return connect(tmp_path / "imagesrv.db")
 
 
 def events(conn) -> dict[str, str]:
@@ -62,7 +67,7 @@ def test_the_reserve_is_ten_gib_and_covers_what_its_docstring_counts():
     """ההנמקה ב-disk_reserve.py נשענת על מספרים מקובץ ההתקנה של journald —
     אם מישהו ישנה אותם, הטסט נופל ולא ההנמקה בשקט."""
     assert R == 10 * 1024 ** 3
-    conf = (REPO / "install" / "journald-imagectl.conf").read_text(encoding="utf-8")
+    conf = (REPO / "deploy" / "journald-imagesrv.conf").read_text(encoding="utf-8")
     values = dict(re.findall(r"^(\w+)=(\S+)$", conf, flags=re.M))
     assert values == {"SystemMaxUse": "1G", "SystemKeepFree": "4G", "MaxRetentionSec": "90day"}
     gib = 1024 ** 3
@@ -463,7 +468,7 @@ def test_the_room_clock_runs_housekeeping_in_the_background(tmp_path, monkeypatc
 
 
 def test_new_servers_get_the_journal_ceiling_at_install():
-    setup = (REPO / "install" / "setup-boot-server.sh").read_text(encoding="utf-8")
-    assert ('run install -D -m 0644 "$APP_DIR/install/journald-imagectl.conf"'
-            " /etc/systemd/journald.conf.d/90-imagectl.conf") in setup
+    setup = (REPO / "deploy" / "setup-boot-server.sh").read_text(encoding="utf-8")
+    assert ('run install -D -m 0644 "$APP_DIR/deploy/journald-imagesrv.conf"'
+            " /etc/systemd/journald.conf.d/90-imagesrv.conf") in setup
     assert "systemctl restart systemd-journald || warn" in setup

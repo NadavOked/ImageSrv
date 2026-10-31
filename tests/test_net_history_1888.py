@@ -11,14 +11,16 @@ from pathlib import Path
 
 import pytest
 
-from server import db, net_history, probe
+from server import db
+from server.agent import probe
+from server.learn import net_history
 
 MAC = "78:ac:c0:9b:18:88"
 
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def test_an_ip_row_is_written_only_when_it_changes_and_a_change_is_journaled(conn):
@@ -78,7 +80,7 @@ def test_a_failure_never_breaks_the_probe(conn, monkeypatch):
 
 
 def test_the_console_shows_it(server):
-    from server import registry
+    from server.agent import registry
     ctx = server["ctx"]
     registry.add_machine(ctx.conn, MAC, "cloner-3", "grp_CLONERS", "test")
     db.net_seen(ctx.conn, MAC, "10.1.1.1")

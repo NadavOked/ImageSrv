@@ -28,7 +28,7 @@ def resolve(tmp_path, session: dict) -> str:
     resp.write_text(json.dumps({"schema": 1, "known": True, "session": session}), encoding="utf-8")
     script = (
         f'export RUN_DIR={posix(tmp_path)!r} RESP={posix(resp)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/clonergui.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/gui/clonergui.sh; '
         'die_local() { echo "DIE: $*"; exit 0; }; '
         'list_drawers() { echo sdb; echo sdc; }; '
         'disk_port() { case "$1" in sdb) echo 1 ;; sdc) echo 2 ;; esac; }; '

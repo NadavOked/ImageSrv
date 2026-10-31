@@ -5,7 +5,7 @@
 ו-`test_station.py`, תפריט הטקסט ב-`test_build_menu.py`; כאן שני
 החוליות שביניהם:
 
-* ‏`gui_state` (‏`agent/lib/guistate.sh`) כותב `menu_class=0|1` לקובץ
+* ‏`gui_state` (‏`agent/lib/gui/guistate.sh`) כותב `menu_class=0|1` לקובץ
   המצב — **תמיד**, גם כשכבוי, כדי שהיעדר רשומה לא יקרא כ"דלוק".
   ‏#1073: ב-v1 הערך הוא 0 **גם כשהשרת אמר true** — כיתות = v2, והשער
   `classrooms` (hello/state, #1081) כבוי; המסלול של v2 נבדק עם הדגל
@@ -40,10 +40,10 @@ STATION = {"known": True, "role": "build", "disks": [], "task": None,
            "allowed_images": []}
 
 PRELUDE = (
-    f'. {posix(AGENT)}/lib/common.sh; '
-    f'. {posix(AGENT)}/lib/jsonq.sh; '
-    f'. {posix(AGENT)}/lib/buildmenuitems.sh; . {posix(AGENT)}/lib/buildmenu.sh; '
-    f'. {posix(AGENT)}/lib/guistate.sh; . {posix(AGENT)}/lib/askgui.sh; '
+    f'. {posix(AGENT)}/lib/core/common.sh; '
+    f'. {posix(AGENT)}/lib/core/jsonq.sh; '
+    f'. {posix(AGENT)}/lib/gui/buildmenuitems.sh; . {posix(AGENT)}/lib/gui/buildmenu.sh; '
+    f'. {posix(AGENT)}/lib/gui/guistate.sh; . {posix(AGENT)}/lib/gui/askgui.sh; '
     'disk_slot_records() { :; }; '   # #1495: disk numbering is test_drawer_map_gui_1495's
 )
 
@@ -61,7 +61,7 @@ def state_records(tmp_path: Path, hello: dict | None, *, env: str = "",
     (gui / "mode").write_text("menu\n", newline="\n")
     script = (
         f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1 {env}; '
+        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1 {env}; '
         + PRELUDE
         + shell_pre
         + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '

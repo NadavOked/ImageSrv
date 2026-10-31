@@ -54,7 +54,7 @@ def _really_full(path: Path) -> sqlite3.Connection:
 
 
 def test_sqlite_reports_a_full_database_by_error_code(tmp_path):
-    conn = _really_full(tmp_path / "imagectl.db")
+    conn = _really_full(tmp_path / "imagesrv.db")
     with pytest.raises(sqlite3.OperationalError) as caught:
         conn.execute("INSERT INTO journal (ts, user, event, detail) VALUES ('t', '', 'x', ?)",
                      ("y" * 65536,))
@@ -62,7 +62,7 @@ def test_sqlite_reports_a_full_database_by_error_code(tmp_path):
 
 
 def test_journal_on_a_full_database_does_not_raise_and_is_recorded(tmp_path):
-    conn = _really_full(tmp_path / "imagectl.db")
+    conn = _really_full(tmp_path / "imagesrv.db")
     journal(conn, "unknown_mac", "y" * 65536)          # לא זורק
     assert not conn.in_transaction                       # ‏rollback — אין נעילה יתומה
     assert db_module.last_disk_full()["what"] == "journal unknown_mac"
@@ -80,8 +80,8 @@ def test_a_journal_error_that_is_not_disk_full_still_raises(tmp_path):
 @pytest.fixture()
 def app_full(tmp_path: Path, images_root: Path, clock, monkeypatch):
     """אפליקציה מלאה; ‏`state["full"] = True` הופך כל כתיבה ל-SQLITE_FULL."""
-    from server import sender as sender_module
-    from server import users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from server.app import create_app
 
     monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
@@ -134,7 +134,7 @@ def test_a_full_disk_is_red_in_health_until_a_write_succeeds(app_full):
 
 
 def test_a_hello_whose_answer_needs_a_write_is_a_declared_503(app_full, monkeypatch):
-    from server import api
+    from server.agent import api
 
     def needs_write(*a, **k):
         raise _full_error()

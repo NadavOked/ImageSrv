@@ -4,7 +4,7 @@
 יכול לדעת אם הוא נכתב. מסך הטקסט והקיוסק כבר אומרים "לא ניתן לזהות";
 כאן שתי החוליות של הגואי הנייטיב:
 
-* ‏`gui_state` (‏`agent/lib/guistate.sh`) כותב בשדה ה-fresh של
+* ‏`gui_state` (‏`agent/lib/gui/guistate.sh`) כותב בשדה ה-fresh של
   ‏`room_drawer=` את הערך ‏`-1` עבור `null` — ולא `0`, שהוא "נכתב".
 * ‏`state.c` מפרסר את `-1` ו-`screens_room.c` כותב "לא ניתן לזהות את
   הכונן בחריץ N" בצבע האזהרה, במסך ההכנה ובמסך הסבב החי — נמדד
@@ -52,7 +52,7 @@ def room_drawer_fresh(tmp_path: Path) -> dict[str, str]:
     (gui / "mode").write_text("direct\n", newline="\n")
     script = (
         f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
+        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
         + PRELUDE
         + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '
         + f'gui_get() {{ cp {posix(run / "room.json")!r} "$2"; }}; '

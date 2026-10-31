@@ -1,0 +1,17 @@
+# ImageSrv — explicit post-install rerun of the first-boot wizard (#1163).
+[Unit]
+Description=ImageSrv first-boot web wizard (explicit rerun)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/imagesrv-src
+ExecStart=/usr/bin/python3 -m server.wizard --rerun --host 0.0.0.0 --port 8081 \
+    --data-dir /var/lib/imagesrv \
+    --status-file /etc/imagesrv/firstboot.status \
+    --installer-nic /etc/imagesrv/installer-nic \
+    --installer-role /etc/imagesrv/installer-role
+Restart=no
+StandardOutput=journal+console
+StandardError=journal+console

@@ -14,8 +14,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 #: הקבצים שרצים על השרת בהתקנה ובעדכון. תיקיות נסרקות ברקורסיה.
-SCANNED = ["install", "installer", "tools/server-upgrade.sh", "tools/iso/firstboot.sh",
-           "tools/iso/firstboot-answers.sh", "server/vmhost.py"]
+SCANNED = ["deploy", "installer", "tools/server-upgrade.sh", "tools/iso/firstboot.sh",
+           "tools/iso/firstboot-answers.sh", "server/vm/vmhost.py"]
 SUFFIXES = {".sh", ".py", ".list", ".service", ".conf", ""}
 
 #: מקור רשת: שם מארח של מראת/אבטחה של דביאן-אובונטו, או שורת `deb`/`deb-src` ב-http(s).
@@ -46,9 +46,9 @@ def code_lines(path: Path):
 def test_the_scan_covers_the_files_that_matter():
     """שומר על הסורק: ברשימה ריקה, 'אין ממצאים' אינו ראיה (עיקרון 5)."""
     names = {p.relative_to(REPO).as_posix() for p in scanned_files()}
-    for must in ("install/vmupdate-host.sh", "install/setup-boot-server.sh",
+    for must in ("deploy/vmupdate-host.sh", "deploy/setup-boot-server.sh",
                  "installer/lib/bootstrap.sh", "tools/server-upgrade.sh",
-                 "install/security-upgrade.sh"):
+                 "deploy/security-upgrade.sh"):
         assert must in names, f"{must} חסר בסריקה"
 
 
@@ -66,7 +66,7 @@ def test_the_detector_catches_each_shape_of_live_source():
                 "deb [trusted=yes] http://10.0.0.5/repo trixie main",
                 "add-apt-repository ppa:x/y", "apt-key add k.asc"):
         assert NETWORK_APT.search(bad), bad
-    for ok in ("deb [trusted=yes] file:/var/lib/imagectl/apt-repo trixie main contrib",
+    for ok in ("deb [trusted=yes] file:/var/lib/imagesrv/apt-repo trixie main contrib",
                "deb [trusted=yes] file:/cdrom trixie main contrib non-free-firmware",
-               "rm -f /etc/apt/sources.list.d/imagectl-debian.list"):
+               "rm -f /etc/apt/sources.list.d/imagesrv-debian.list"):
         assert not NETWORK_APT.search(ok), ok

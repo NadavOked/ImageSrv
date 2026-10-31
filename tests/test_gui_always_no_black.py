@@ -26,10 +26,11 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, REPO, posix
+from agentlib import flat_lib
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="needs bash")
 
-LIB = AGENT / "lib"
+LIB = flat_lib()
 GUI = REPO / "native-gui"
 
 
@@ -38,7 +39,7 @@ def _sh(tmp_path: Path, body: str, shell: list[str] | None = None,
     run = tmp_path / "run"
     run.mkdir(parents=True, exist_ok=True)
     script = (
-        f"RUN_DIR={shlex.quote(posix(run))}; export RUN_DIR; IMAGECTL_TEST=1; "
+        f"RUN_DIR={shlex.quote(posix(run))}; export RUN_DIR; IMAGESRV_TEST=1; "
         f"SYSROOT={shlex.quote(posix(tmp_path / 'sysroot'))}; "
         f". {posix(LIB)}/common.sh; . {posix(LIB)}/waits.sh; . {posix(LIB)}/ui.sh; "
         f". {posix(LIB)}/localboot.sh; . {posix(LIB)}/guiparent.sh; . {posix(LIB)}/splash.sh; "
@@ -137,7 +138,7 @@ def test_the_static_screen_is_the_block_centred_on_its_background(tmp_path, shel
     assert (vt / "vtcon0" / "bind").read_text().strip() == "1"
     assert (tmp_path / "run" / "splash.on").exists()
     assert not (tmp_path / "run" / "splash.frame").exists()
-    assert "imagectl:" not in p.stdout                 # its own log line stays off the screen
+    assert "imagesrv:" not in p.stdout                 # its own log line stays off the screen
 
 
 @pytest.mark.parametrize("case", ["no-raw", "16bpp", "wrong-size-raw", "no-fb"])
@@ -229,7 +230,7 @@ def test_the_build_screen_with_the_static_screen_up_writes_no_text(tmp_path):
     assert p.returncode == 86, (p.stdout, p.stderr)
     assert "TEST-REBOOT: native GUI unavailable (build screen)" in p.stdout
     assert "The graphical interface did not start." not in p.stdout
-    assert "imagectl: FATAL" not in p.stdout          # the reboot line stays off our screen
+    assert "imagesrv: FATAL" not in p.stdout          # the reboot line stays off our screen
     assert "FATAL: native GUI unavailable" in _log(tmp_path)
 
 
@@ -249,8 +250,8 @@ def test_log_writes_the_tty_only_when_no_screen_of_ours_owns_it(tmp_path, owner,
     tail = 'kill "$_l"' if owner == "live-gui" else ":"
     p = _sh(tmp_path, setup + 'log "פג הזמן: המגירה sda לא הסתיים"; '
             '( log "from a subshell" ); ' + tail)
-    assert ("imagectl: פג הזמן" in p.stdout) is on_screen, p.stdout
-    assert ("imagectl: from a subshell" in p.stdout) is on_screen, p.stdout
+    assert ("imagesrv: פג הזמן" in p.stdout) is on_screen, p.stdout
+    assert ("imagesrv: from a subshell" in p.stdout) is on_screen, p.stdout
     log = _log(tmp_path)
     assert "פג הזמן: המגירה sda לא הסתיים" in log and "from a subshell" in log
 
@@ -328,7 +329,7 @@ def test_the_build_renders_the_static_screen_into_the_gui_image():
     gui = builder[builder.index('if [ "$WITH_GUI" -eq 1 ]; then'):]
     gui = gui[:gui.index("# --- kernel modules and firmware")]
     assert '"$GUI_BIN" --splash-raw "$SPLASH_RAW" --size "${SPLASH_W}x$SPLASH_H"' in gui
-    assert 'SPLASH_RAW="$ROOT/usr/share/imagectl/splash-${SPLASH_W}x$SPLASH_H.raw"' in gui
+    assert 'SPLASH_RAW="$ROOT/usr/share/imagesrv/splash-${SPLASH_W}x$SPLASH_H.raw"' in gui
     splash = (LIB / "splash.sh").read_text(encoding="utf-8")
-    assert 'SPLASH_DIR="${SPLASH_DIR:-/usr/share/imagectl}"' in splash
+    assert 'SPLASH_DIR="${SPLASH_DIR:-/usr/share/imagesrv}"' in splash
     assert '"$SPLASH_DIR"/splash-*x*.raw' in splash

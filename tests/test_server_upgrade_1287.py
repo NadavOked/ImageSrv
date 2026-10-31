@@ -60,7 +60,7 @@ def _setup(tmp_path: Path, bindir: Path, *, live_ok: bool) -> tuple[Path, Path, 
         encoding="utf-8", newline="\n")
     fake_tool(bindir, "git", _git_shim())
     fake_tool(bindir, "systemctl",
-              'case "$1" in show) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;; esac; exit 0')
+              'case "$1" in show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac; exit 0')
     fake_tool(bindir, "curl", "exit 0")
     return data, repo, boot
 

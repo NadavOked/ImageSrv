@@ -21,7 +21,7 @@ pytest.importorskip("fastapi")
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from server import auth, monitor
+from server.console import auth, monitor
 from server import db as db_module
 from test_monitor import (MAC, SERVER_INIT, browser_handshake,
                           prepare_secret_machine)

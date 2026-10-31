@@ -20,7 +20,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login
-from server import auth
+from server.console import auth
 from server.app import create_agent_app, create_console_app
 
 

@@ -136,7 +136,7 @@ def _disk_contents(tmp_path: Path, *raw: str) -> list[str]:
     command = (
         'set -e; cd "$1"; flags="-O2 -Wall -Wextra -std=c11 -D_GNU_SOURCE $(pkg-config --cflags pangocairo cairo libdrm)"; '
         'srcs=$(make -s -f Makefile print-gui-src | tr " " "\\n" | grep -v -x -e src/main.c -e src/screens_install_setup.c); '
-        'cc $flags -Dmain=imagectl_gui_main -c src/main.c -o "$3/gui-main.o"; '
+        'cc $flags -Dmain=imagesrv_gui_main -c src/main.c -o "$3/gui-main.o"; '
         'cc $flags -o "$2" "$4" "$3/gui-main.o" $srcs $(pkg-config --libs pangocairo cairo libdrm) -lm'
     )
     proc = subprocess.run(["bash", "-c", command, "_", str(GUI), str(binary), str(tmp_path), str(driver)],

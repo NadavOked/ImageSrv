@@ -2,7 +2,7 @@
 
 **מה צריך להגדיר מחוץ למוצר: חומת האש, הרשת, המתגים וההיפרווייזר**
 
-שם המוצר בקוד ובריפו: `ImageCtl` · גרסת המסמך: 18/10/2026 (פרק 4 עודכן ב-22/10/2026: שלוש שכבות Cisco) · פרקים 1–12 נכתבו מול `integration/v0743-speed` (17/10); פרק 13 נכתב מול `integration/v0760-rc6` (`fdbbca8c`, גרסה `v0.76.0`) · Issues `#1474`, `#1563`
+שם המוצר בקוד ובריפו: `ImageSrv` · גרסת המסמך: 18/10/2026 (פרק 4 עודכן ב-22/10/2026: שלוש שכבות Cisco) · פרקים 1–12 נכתבו מול `integration/v0743-speed` (17/10); פרק 13 נכתב מול `integration/v0760-rc6` (`fdbbca8c`, גרסה `v0.76.0`) · Issues `#1474`, `#1563`
 
 > **למי המדריך:** איש IT שמקים את השרת במכללה ומגדיר את מה שמסביבו. לא צריך
 > לקרוא קוד. כל פורט וכל כלל כאן נלקחו מהקוד עצמו — המיפוי לקובץ ולשורה
@@ -23,7 +23,7 @@
 
 **מה נדרש ממך — שישה דברים:**
 
-1. **וילן הפצה סגור** — רשת שכבה 2 נפרדת, בלי ניתוב החוצה, ש-ImageCtl הוא
+1. **וילן הפצה סגור** — רשת שכבה 2 נפרדת, בלי ניתוב החוצה, ש-ImageSrv הוא
    שרת ה-DHCP היחיד בה (פרק 2, פרק 4).
 2. **כללי חומת אש** — בעיקר: מי רשאי להגיע לקונסולה, ומה עובר בין אתרים (פרק 3).
 3. **הגדרות מתג בוילן ההפצה** — ‏IGMP snooping עם querier, ‏DHCP snooping,
@@ -151,7 +151,7 @@
 
 | מה | פורט | כיוון | הערה |
 |---|---|---|---|
-| DHCP של ImageCtl | `67/udp`, `68/udp` | ברודקאסט בוילן | כבוי עד שמדליקים מהקונסולה. לא מנותב, אין relay |
+| DHCP של ImageSrv | `67/udp`, `68/udp` | ברודקאסט בוילן | כבוי עד שמדליקים מהקונסולה. לא מנותב, אין relay |
 | TFTP (טעינת shim/GRUB) | `69/udp` | תחנה ← שרת | בחומת אש מצבית צריך TFTP helper (`nf_conntrack_tftp`) — התשובה יוצאת מפורט אחר |
 | HTTP לתחנות | `8080/tcp` | תחנה ← שרת | תפריט אתחול, קרנל, ‏API הסוכן, משיכת אימג'. **HTTP לא מוצפן** — כולל סיסמת משתמש ההפצה. לכן הוילן חייב להיות סגור פיזית |
 | מולטיקאסט (udpcast) | `9000-9001/udp` | שרת או מחשב הבנייה ← מחשבי השיכפול | שני פורטים לכל שידור. ‏TTL=1 — אינו חוצה נתב |
@@ -273,13 +273,13 @@ end
 
 | דבר | פרט | מקור |
 |---|---|---|
-| DHCP ו-TFTP | dnsmasq על כרטיס וילן ההפצה, ‏UDP ‏67/68 ו-69, ופורט proxy-DHCP ‏4011 | `server/ports.py`, `CLAUDE.md` |
-| מולטיקאסט | `udp-sender` עם `--portbase 9000`, כלומר פורטים UDP ‏9000 ו-9001. מוצמד לכרטיס ההפצה עם `--interface` | `server/sender.py` (שורות 35, 556-560), `server/main.py` |
-| כתובת קבוצה | **השרת לא מעביר `--mcast-data-address`**, ולכן udpcast גוזר אותה מכתובת ה-IP של השרת (ראו סעיף 4.4) | `server/sender.py`, `command_for` |
-| WoL | UDP ‏9, ‏broadcast `255.255.255.255`, נשלח מהכרטיס של וילן ההפצה בלבד (`SO_BINDTODEVICE`) | `server/wol.py` |
+| DHCP ו-TFTP | dnsmasq על כרטיס וילן ההפצה, ‏UDP ‏67/68 ו-69, ופורט proxy-DHCP ‏4011 | `server/net/ports.py`, `CLAUDE.md` |
+| מולטיקאסט | `udp-sender` עם `--portbase 9000`, כלומר פורטים UDP ‏9000 ו-9001. מוצמד לכרטיס ההפצה עם `--interface` | `server/rounds/sender.py` (שורות 35, 556-560), `server/main.py` |
+| כתובת קבוצה | **השרת לא מעביר `--mcast-data-address`**, ולכן udpcast גוזר אותה מכתובת ה-IP של השרת (ראו סעיף 4.4) | `server/rounds/sender.py`, `command_for` |
+| WoL | UDP ‏9, ‏broadcast `255.255.255.255`, נשלח מהכרטיס של וילן ההפצה בלבד (`SO_BINDTODEVICE`) | `server/net/wol.py` |
 | HTTP | GRUB, kernel ו-initrd | `CLAUDE.md` |
 
-**דרישות שכבר רשומות באפיון** (`docs/imagectl-spec.md` סעיף 6): ‏IGMP snooping
+**דרישות שכבר רשומות באפיון** (`docs/imagesrv-spec.md` סעיף 6): ‏IGMP snooping
 על כל סוויץ' בנתיב, ‏querier אחד לוילן, ו-IGMP בגרסה עקבית. המדריך הזה
 מפרט איך עושים את זה על Cisco.
 
@@ -359,7 +359,7 @@ effect when the interface is in a non-trunking mode". זו אזהרה רגילה
   משתתפת מקבלת ~110MB/s (כמעט כל רוחב הפס של Gigabit) לשווא.
 - **עם snooping ובלי querier:** הסוויץ' לומד חברות מדוחות IGMP של
   המשכפלים, אבל החברות **פוקעת** אחרי כ-2-4 דקות אם אף אחד לא שולח
-  General Query. ‏`docs/imagectl-spec.md` סעיף 6 מתאר את זה בדיוק: "הזרם
+  General Query. ‏`docs/imagesrv-spec.md` סעיף 6 מתאר את זה בדיוק: "הזרם
   נופל באמצע" אחרי 125-260 שניות. **שני המצבים נראים כמו באג בקוד**
   (`docs/lab-test-plan.md` שורה 763).
 
@@ -559,7 +559,7 @@ end
   חיתוך (תוצאות חיפוש: Cisco Community, Meraki
   <https://documentation.meraki.com/Switching/MS_-_Switches/Operate_and_Maintain/How-Tos/Storm_Control_for_MS>).
 - **הסקה:** שהמולטיקאסט של ImageSrv יחצה סף כזה (110MB/s מול ~125MB/s קו;
-  מספר מ-`docs/imagectl-spec.md`, מעבדה 17/09 ‏106MB/s).
+  מספר מ-`docs/imagesrv-spec.md`, מעבדה 17/09 ‏106MB/s).
 
 
 ### 4.7 EEE (Energy Efficient Ethernet)
@@ -727,7 +727,7 @@ show mac address-table interface GigabitEthernet1/0/5
 show port-security interface GigabitEthernet1/0/5
 ```
 
-- **נבדק במקור:** יעד ה-broadcast והפורט (קוד `server/wol.py`); ההבהרה
+- **נבדק במקור:** יעד ה-broadcast והפורט (קוד `server/net/wol.py`); ההבהרה
   שהתיעוד של Cisco על directed-broadcast רלוונטי רק ל-WoL בין רשתות
   (91672: <https://www.cisco.com/c/en/us/support/docs/switches/catalyst-3750-series-switches/91672-catl3-wol-vlans.html>).
 - **הסקה:** כל שאר הסעיף. החיפוש לא העלה תיעוד שקושר STP או link-down
@@ -1017,17 +1017,17 @@ end
   מאחוריו. ‏unicast היה עובר פעם לכל מכונה. ‏ה-IGMP snooping מבטיח
   שהזרם יורד רק ל-uplink-ים שמאחוריהם יש חברים (סעיף 4.12).
 - **שרת אחד, זרם אחד:** בפרויקט יש מולטיקאסט יחיד בכל המערכת
-  (`server/sessions.py`, שורה 54), כך ש-uplink נושא זרם אחד.
-- **הגודל:** הזרם נמדד במעבדה ב-**~106MB/s ≈ 850Mbps** (`docs/imagectl-spec.md`
+  (`server/rounds/sessions.py`, שורה 54), כך ש-uplink נושא זרם אחד.
+- **הגודל:** הזרם נמדד במעבדה ב-**~106MB/s ≈ 850Mbps** (`docs/imagesrv-spec.md`
   סעיף 6, 17/09). ‏**uplink של 1Gb נתפס כמעט לגמרי** על ידי הזרם, ללא מרווח
   לתעבורה אחרת (PXE, ‏HTTP של קבצי אתחול, ניהול). זה עובד אבל על הקצה.
 - **המלצה (הסקה):** ‏uplinks של **10Gb** בין ליבה לקומות, ו-1Gb לפחות
   בין קומה לכיתה (קטע שנושא זרם אחד פלוס אתחול של הכיתה). ‏10GbE בשרת מוזכר
-  בפרויקט כיעד בחדר השיכפולים (`docs/imagectl-spec.md` סעיף 6 ושורה 351).
+  בפרויקט כיעד בחדר השיכפולים (`docs/imagesrv-spec.md` סעיף 6 ושורה 351).
 - **EtherChannel בין סוויצ'ים (אם יש):** המולטיקאסט לקבוצה אחת הוא יעד
   אחד, ולכן hash של port-channel שולח אותו על קישור **אחד**. שני קישורי 1Gb
   לא נותנים 2Gb לזרם (אותו עיקרון כמו בסעיף 4.9; **הסקה**).
-- **הגנה על הקו:** `--max-bitrate` ב-udp-sender קיים בקוד (`server/sender.py`,
+- **הגנה על הקו:** `--max-bitrate` ב-udp-sender קיים בקוד (`server/rounds/sender.py`,
   ‏`command_for`) ויכול להגביל את הזרם אם uplink משותף נחנק. זו הגדרה של
   השרת, לא של הסוויץ'.
 - **אתחול כיתה שלמה:** ‏30 מכונות שמורידות kernel ו-initrd ב-HTTP (unicast)
@@ -1197,8 +1197,8 @@ show vlan id 44
 - Red Hat, 802.3ad ושליחה בקישור אחד: <https://access.redhat.com/solutions/372813>
 - Meraki, storm control (השוואה ל-Catalyst): <https://documentation.meraki.com/Switching/MS_-_Switches/Operate_and_Maintain/How-Tos/Storm_Control_for_MS>
 - ליבה/trunks/VTP: שרשורי Cisco Community על VTP revision (<https://community.cisco.com/t5/switching/vtp-question/m-p/1270818>, <https://community.cisco.com/t5/other-network-architecture-subjects/vtp-client-and-revision-numbers/td-p/4139867>); למידת mrouter מ-General Query (<https://community.cisco.com/t5/switching/igmp-snooping-querier-switch-w-o-receivers-receiving-multicast/td-p/3067622>, <https://www.cisco.com/c/fr_ca/support/docs/switches/catalyst-9300-switch/222250-troubleshoot-igmp-snooping-on-cisco-swit.html>).
-- בפרויקט: `docs/imagectl-spec.md` סעיף 6, ‏`docs/lab-test-plan.md` שורות 79 ו-763,
-  ‏`server/sender.py`, ‏`server/wol.py`, ‏`C:\ImageCtl-Lab\evening-1015\research-new-failures-1022.md`
+- בפרויקט: `docs/imagesrv-spec.md` סעיף 6, ‏`docs/lab-test-plan.md` שורות 79 ו-763,
+  ‏`server/rounds/sender.py`, ‏`server/net/wol.py`, ‏`C:\ImageCtl-Lab\evening-1015\research-new-failures-1022.md`
   (N01, N02, N05, N06, N07, N09, N28), ‏`research-multicast.md`, ‏`research-boot.md`.
 
 **מגבלת המחקר:** תוצאות החיפוש הן תקצירים. לא פתחתי כל מסמך Cisco במלואו.
@@ -1209,12 +1209,12 @@ show vlan id 44
 
 | איפה | מה להגדיר | למה |
 |---|---|---|
-| **וילן ההפצה** | **בלי** `ip helper-address` / DHCP relay, ובלי שרת DHCP אחר | ImageCtl הוא ה-DHCP כאן. relay של המכללה לוילן הזה = שני שרתי DHCP |
-| **וילני הכיתות** | **בלי** helper שמפנה לשרת ImageCtl (גרסה 1) | מכונה ברשת הרגילה לא צריכה לראות את השרת בכלל — היא עולה מהדיסק שלה |
+| **וילן ההפצה** | **בלי** `ip helper-address` / DHCP relay, ובלי שרת DHCP אחר | ImageSrv הוא ה-DHCP כאן. relay של המכללה לוילן הזה = שני שרתי DHCP |
+| **וילני הכיתות** | **בלי** helper שמפנה לשרת ImageSrv (גרסה 1) | מכונה ברשת הרגילה לא צריכה לראות את השרת בכלל — היא עולה מהדיסק שלה |
 | **רשת הניהול** | DHCP reservation או כתובת סטטית לכרטיס הניהול | כתובת הקונסולה צריכה להיות קבועה |
 | **רשת ה-VM לעדכון Windows** | DHCP reservation ל-MAC של ה-VM ‏[[לפי עיצוב v1]] | כדי שכללי F7/F8/D6 יחולו על כתובת קבועה |
 
-**ה-DHCP של ImageCtl כבוי בהתקנה.** מדליקים אותו מהקונסולה, על כרטיס ההפצה,
+**ה-DHCP של ImageSrv כבוי בהתקנה.** מדליקים אותו מהקונסולה, על כרטיס ההפצה,
 מאחורי הקלדת שם הכרטיס, בדיקה של "מי כבר עונה" באותה רשת, ואישור נוסף אם
 הכרטיס סומן כמחובר לרשת המכללה.
 
@@ -1311,7 +1311,7 @@ show vlan id 44
   - המאגר יושב ב-GitHub Release, וההורדה עוברת הפניה ל-
     `release-assets.githubusercontent.com:443` — יש לפתוח גם אותו לזמן העדכון
     (‏[[לא נמדד מחומת אש של מכללה]]).
-  - הכנת ה-VM לעדכון Windows (`install/vmupdate-host.sh`) משתמשת **רק** במאגר
+  - הכנת ה-VM לעדכון Windows (`deploy/vmupdate-host.sh`) משתמשת **רק** במאגר
     המקומי; המקור שהוסיפה `#1371` הוסר (`#1459`), ושרת שקיבל אותו מנקה אותו
     בעדכון הבא.
 - **אין SSH** — אין צורך בשום פורט ניהול מרחוק מלבד הקונסולה.

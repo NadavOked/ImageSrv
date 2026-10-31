@@ -13,7 +13,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import health, update as update_mod
+from server.system import health
+from server import update as update_mod
 from server.db import get_setting, set_setting
 from test_server_health import health_server              # noqa: F401 — fixture
 from test_update import _enable, update_server            # noqa: F401 — fixture

@@ -1,8 +1,0 @@
-#!/bin/sh
-set -eu
-. /usr/local/bin/imagectl-env
-: "${KIOSK_URL:?KIOSK_URL required}"
-# Prefer Cog under Cage; fail clearly if the build lacks either component.
-command -v cage >/dev/null 2>&1 || { echo 'cage missing' >&2; exit 10; }
-command -v cog >/dev/null 2>&1 || { echo 'cog missing' >&2; exit 11; }
-exec cage -- cog "$KIOSK_URL"

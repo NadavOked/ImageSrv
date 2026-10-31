@@ -3,7 +3,7 @@
 הראשונה תהיה מול מספר שהודפס בהתקנה.
 
 כמו ``test_installer_admin.py``: בלוק ה-Python **מוטמע** ב-
-`install/setup-boot-server.sh` ומורץ מכאן, לא מועתק — סטייה בין השניים
+`deploy/setup-boot-server.sh` ומורץ מכאן, לא מועתק — סטייה בין השניים
 היא בדיוק החור.
 """
 
@@ -16,10 +16,10 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from server import console_tls
+from server.console import console_tls
 
 REPO = Path(__file__).resolve().parent.parent
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 
 
 def installer_tls_python() -> str:
@@ -34,7 +34,7 @@ def run_installer_tls(data_dir: Path, console_host: str, monkeypatch, capsys) ->
     code = code.replace("$APP_DIR", REPO.resolve().as_posix())
     code = code.replace("$DATA_DIR", data_dir.resolve().as_posix())
     monkeypatch.setenv("CONSOLE_HOST", console_host)
-    exec(compile(code, "install/setup-boot-server.sh", "exec"), {})
+    exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
     return capsys.readouterr().out
 
 

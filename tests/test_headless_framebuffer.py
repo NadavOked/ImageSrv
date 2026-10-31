@@ -3,7 +3,7 @@
 מחשב שיכפול 2 (.59): כל המחברים מנותקים, ‏i915 לא יוצר ‏`/dev/fb0`,
 הגואי נופל ב-"cannot open a display" והמוניטור — שנועד בדיוק למכונה
 בלי מסך — נופל ב-"open framebuffer" בלולאת restart. הפתרון (הכרעת נדב
-15/09): הגואי מצייר לקובץ ממופה, ‏`imagectl-monitor --fb <קובץ>` מגיש
+15/09): הגואי מצייר לקובץ ממופה, ‏`imagesrv-monitor --fb <קובץ>` מגיש
 אותו.
 
 מה נבדק כאן, ואיפה:
@@ -16,7 +16,7 @@
   שקיים (‏`/dev/null` הוא התקן תווים בכל מקום) או חסר: עם מסך המסלול
   זהה להיום (בלי `--fb`, ‏`--backend fbdev`); בלי מסך — ‏`mem` והקובץ.
 * **הצד המקומפל** (‏`requires_native`, מעבדה בלבד): הגואי ב-`--backend
-  mem` כותב כותרת תקינה ופיקסלים שאינם אפס; ‏`imagectl-monitor --fb`
+  mem` כותב כותרת תקינה ופיקסלים שאינם אפס; ‏`imagesrv-monitor --fb`
   על הקובץ מאזין ב-RFB ומגיש את הבאנר, ונופל בגלוי על קובץ פגום.
 
 בקרה שלילית לכל אחד — ראה גוף ה-PR.
@@ -47,8 +47,8 @@ GUI = REPO / "native-gui"
 MONITOR_C = AGENT / "monitor.c"
 HMAC_C = AGENT / "hmac_sha256.c"
 BACKEND_C = GUI / "src" / "backend.c"
-MONITOR_SH = AGENT / "lib" / "monitor.sh"
-GUIBRIDGE_SH = AGENT / "lib" / "guibridge.sh"
+MONITOR_SH = AGENT / "lib" / "core" / "monitor.sh"
+GUIBRIDGE_SH = AGENT / "lib" / "gui" / "guibridge.sh"
 INTERFACES = REPO / "docs" / "interfaces.md"
 
 #: החוזה (‏interfaces.md סעיף 15). מקור יחיד לצורה בטסט — שני צידי ה-C
@@ -59,7 +59,7 @@ FORMAT_XRGB8888 = 1
 WIDTH, HEIGHT = 1280, 800
 STRIDE = WIDTH * 4
 FILE_NAME = "fb.mem"
-DEFAULT_PATH = "/run/imagectl/" + FILE_NAME
+DEFAULT_PATH = "/run/imagesrv/" + FILE_NAME
 
 
 def find_bash() -> str | None:
@@ -111,7 +111,7 @@ def test_monitor_and_gui_agree_on_the_header():
 
 def test_the_memory_framebuffer_is_one_file_everywhere():
     """הגואי כותב ל-`$RUN_DIR/fb.mem`, המוניטור מקבל את **אותו** נתיב,
-    וברירת המחדל ב-C היא `/run/imagectl/fb.mem` (‏`RUN_DIR` של common.sh).
+    וברירת המחדל ב-C היא `/run/imagesrv/fb.mem` (‏`RUN_DIR` של common.sh).
     שם אחר באחד מהם = מוניטור שמחכה לקובץ שלא ייווצר לעולם."""
     for path in (MONITOR_SH, GUIBRIDGE_SH):
         assert f'"$RUN_DIR/{FILE_NAME}"' in path.read_text(encoding="utf-8"), path.name
@@ -164,13 +164,13 @@ def _monitor_start(tmp_path, fb_dev, role="cloner", mem_file=False, env=""):
         (run_dir / FILE_NAME).write_bytes(b"x" * 64)
     script = (
         'OUT=' + repr(posix(out)) + '; LOGF=' + repr(posix(logf)) + '; '
-        'export IMAGECTL_MONITOR=1 IMAGECTL_SERVER=http://10.0.0.1:8080; '
+        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=http://10.0.0.1:8080; '
         'export IP=10.0.0.9; export MONITOR_BIN=/bin/sh; '
         'export RUN_DIR=' + repr(posix(run_dir)) + '; '
         'export FB_DEV=' + repr(fb_dev) + '; '
         f'export D_ROLE={role}; ' + 'export MONITOR_FB_WAIT_S=0; ' + env +
         'log() { echo "$*" >> "$LOGF"; }; '
-        '. ' + posix(AGENT) + '/lib/monitor.sh; '
+        '. ' + posix(AGENT) + '/lib/core/monitor.sh; '
         '_monitor_spawn() { echo "$@" > "$OUT"; _monitor_pid=4242; }; '
         'monitor_start; monitor_start')
     subprocess.run([BASH, "-c", script], capture_output=True,
@@ -235,13 +235,13 @@ def test_a_round_that_blocks_the_loop_still_gets_its_monitor(tmp_path):
     mem = run_dir / FILE_NAME
     script = (
         'OUT=' + repr(posix(out)) + '; LOGF=' + repr(posix(logf)) + '; '
-        'export IMAGECTL_MONITOR=1 IMAGECTL_SERVER=http://10.0.0.1:8080; '
+        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=http://10.0.0.1:8080; '
         'export IP=10.0.0.9; export MONITOR_BIN=/bin/sh; '
         'export RUN_DIR=' + repr(posix(run_dir)) + '; '
         'export FB_DEV=' + repr(posix(tmp_path / "no-such-fb0")) + '; '
         'export D_ROLE=cloner MONITOR_FB_WAIT_S=15; '
         'log() { echo "$*" >> "$LOGF"; }; '
-        '. ' + posix(AGENT) + '/lib/monitor.sh; '
+        '. ' + posix(AGENT) + '/lib/core/monitor.sh; '
         # like the real one: the pid file is what the main loop sees
         '_monitor_spawn() { echo "$@" >> "$OUT"; _monitor_pid=$$; '
         'echo $$ > "$RUN_DIR/monitor.pid"; }; '
@@ -285,10 +285,10 @@ def test_a_cloner_with_a_screen_gets_keyboard_and_mouse(tmp_path):
 
 def _gui_backend_args(tmp_path, fb_dev, backend_env=None, monitor=False):
     env = f'export GUI_BACKEND={backend_env}; ' if backend_env else 'unset GUI_BACKEND; '
-    env += 'export IMAGECTL_MONITOR=1; ' if monitor else 'unset IMAGECTL_MONITOR; '
+    env += 'export IMAGESRV_MONITOR=1; ' if monitor else 'unset IMAGESRV_MONITOR; '
     script = (
-        env + 'export RUN_DIR=/run/imagectl; export FB_DEV=' + repr(fb_dev) + '; '
-        '. ' + posix(AGENT) + '/lib/guibridge.sh; gui_backend_args')
+        env + 'export RUN_DIR=/run/imagesrv; export FB_DEV=' + repr(fb_dev) + '; '
+        '. ' + posix(AGENT) + '/lib/gui/guibridge.sh; gui_backend_args')
     proc = subprocess.run([BASH, "-c", script], capture_output=True, text=True,
                           cwd=str(REPO), stdin=subprocess.DEVNULL)
     assert proc.returncode == 0, proc.stderr
@@ -305,7 +305,7 @@ def test_gui_keeps_fbdev_when_a_screen_is_attached(tmp_path):
 @requires_native(("bash", BASH))
 def test_gui_draws_to_memory_without_a_screen(tmp_path):
     assert _gui_backend_args(tmp_path, posix(tmp_path / "no-such-fb0")) == \
-        f"--backend mem --fb-file /run/imagectl/{FILE_NAME}"
+        f"--backend mem --fb-file /run/imagesrv/{FILE_NAME}"
 
 
 @requires_native(("bash", BASH))
@@ -313,7 +313,7 @@ def test_gui_backend_override_still_wins(tmp_path):
     """‏GUI_BACKEND=drm|auto|mem מפורש גובר על בדיקת ההתקן, כמו היום."""
     assert _gui_backend_args(tmp_path, "/dev/null", "drm") == "--backend drm"
     assert _gui_backend_args(tmp_path, "/dev/null", "mem") == \
-        f"--backend mem --fb-file /run/imagectl/{FILE_NAME}"
+        f"--backend mem --fb-file /run/imagesrv/{FILE_NAME}"
 
 
 # --- (ג) הצד המקומפל — מעבדה בלבד --------------------------------------------
@@ -389,7 +389,7 @@ def _free_port() -> int:
 
 
 def _build_monitor(tmp_path: Path) -> Path:
-    binary = tmp_path / "imagectl-monitor"
+    binary = tmp_path / "imagesrv-monitor"
     build = subprocess.run(
         ["gcc", "-O2", "-Wall", "-Wextra", "-o", str(binary),
          str(MONITOR_C), str(HMAC_C), "-lvncserver"],
@@ -413,7 +413,7 @@ def _write_memfb(path: Path, magic: bytes = MAGIC, seq: int = 0) -> None:
 @requires_native(
     ("gcc", shutil.which("gcc")),
     ("libvncserver", _pkgconfig("libvncserver")),
-    posix=True, why="imagectl-monitor נבנה על המעבדה בלבד",
+    posix=True, why="imagesrv-monitor נבנה על המעבדה בלבד",
 )
 def test_monitor_serves_a_memory_framebuffer_file_over_rfb(tmp_path):
     """‏`--fb <קובץ רגיל>`: בלי ioctl — הגיאומטריה מהכותרת, ‏RFB מאזין ומגיש
@@ -452,7 +452,7 @@ def test_monitor_serves_a_memory_framebuffer_file_over_rfb(tmp_path):
 @requires_native(
     ("gcc", shutil.which("gcc")),
     ("libvncserver", _pkgconfig("libvncserver")),
-    posix=True, why="imagectl-monitor נבנה על המעבדה בלבד",
+    posix=True, why="imagesrv-monitor נבנה על המעבדה בלבד",
 )
 def test_monitor_refuses_a_file_that_is_not_a_framebuffer(tmp_path):
     """קובץ רגיל בלי הקסם — נופל בגלוי, לא מגיש זבל (עיקרון 5)."""
@@ -476,11 +476,11 @@ def test_gui_mirrors_its_frames_when_the_monitor_is_on(tmp_path):
     (‏`--fb-mirror`); המוניטור כבוי — שורת הפקודה כמו היום, בלי עלות.
     בקרה שלילית: על הקוד שלפני #1475 אין `--fb-mirror` בכלל."""
     assert _gui_backend_args(tmp_path, "/dev/null", monitor=True) == (
-        f"--backend fbdev --fb-mirror /run/imagectl/{FILE_NAME}")
+        f"--backend fbdev --fb-mirror /run/imagesrv/{FILE_NAME}")
     assert _gui_backend_args(tmp_path, "/dev/null", "drm", monitor=True) == (
-        f"--backend drm --fb-mirror /run/imagectl/{FILE_NAME}")
+        f"--backend drm --fb-mirror /run/imagesrv/{FILE_NAME}")
     assert _gui_backend_args(tmp_path, posix(tmp_path / "no-such-fb0"), monitor=True) == (
-        f"--backend mem --fb-file /run/imagectl/{FILE_NAME}")
+        f"--backend mem --fb-file /run/imagesrv/{FILE_NAME}")
 
 
 def test_gui_source_mirrors_under_the_seqlock_and_keeps_one_shared_cursor():

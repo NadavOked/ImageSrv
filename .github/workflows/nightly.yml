@@ -34,7 +34,7 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     env:
-      IMAGECTL_REQUIRE_NATIVE: "1"
+      IMAGESRV_REQUIRE_NATIVE: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

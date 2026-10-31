@@ -1,7 +1,7 @@
 """‏#1773 + ‏#1814 — שרת **שמתעדכן** עובר מ-systemd-timesyncd ל-chrony, ושעון שקפץ חוזר.
 
 הכרעת נדב (19/10, PR #1834, אפשרות ב'): ההחלפה היא שלב מפורש של זוג קבוע
-(``install/timesync-swap.sh``), ו-``install/security-upgrade.sh`` נשאר עם ``--no-remove``
+(``deploy/timesync-swap.sh``), ו-``deploy/security-upgrade.sh`` נשאר עם ``--no-remove``
 לכל השאר. עד כה chrony נכנסה לקריאת apt הכללית, ``--no-remove`` סירב להסיר את
 systemd-timesyncd, וכל עדכון של שרת קיים חזר לתג הקודם.
 
@@ -12,7 +12,7 @@ systemd-timesyncd, וכל עדכון של שרת קיים חזר לתג הקוד
 * ``timesync-swap.sh``: בדיקות מקדימות שלא נוגעות בדבר (דרך חזרה במאגר, הסרה אחת בלבד),
   שרת הזמן של timesyncd עובר להגדרה, chrony שלא מסתנכרן מחזיר ל-timesyncd **בגלוי**, וגם
   כשל החזרה נאמר בשמו.
-* ‏#1814: ``makestep 1.0 -1`` בהגדרה ש-server/timesync.py כותב (התקנה ועדכון), ושורת
+* ‏#1814: ``makestep 1.0 -1`` בהגדרה ש-server/system/timesync.py כותב (התקנה ועדכון), ושורת
   "שעון" בבריאות: מקור, מסונכרן או לא, וסטייה — עם כיוון וסף.
 
 הכלים החיצוניים (apt, ‏dpkg-query, ‏systemctl, ‏chronyc, ‏timedatectl, ‏systemd-analyze)
@@ -26,12 +26,12 @@ from pathlib import Path
 
 import pytest
 
-from server import health, timesync
+from server.system import health, timesync
 from test_installer_1131 import calls, fake_tool, posix, run_bash
 from test_security_pool_1411 import OLD, POOL, POSIX, World, _make_pool, _packages_index, _pool_tools
 
 ROOT = Path(__file__).resolve().parent.parent
-SWAP = ROOT / "install" / "timesync-swap.sh"
+SWAP = ROOT / "deploy" / "timesync-swap.sh"
 SYSTEMD = "257.9-1~deb13u1"
 CHRONY = "4.6.1-3"
 
@@ -47,7 +47,7 @@ def bindir(tmp_path: Path) -> Path:
 
 def test_the_client_conf_steps_on_every_update_and_debians_rule_is_retired(tmp_path, monkeypatch):
     monkeypatch.setattr(timesync, "CONF_DIR", tmp_path)
-    monkeypatch.setattr(timesync, "CLIENT_CONF", tmp_path / "imagectl.conf")
+    monkeypatch.setattr(timesync, "CLIENT_CONF", tmp_path / "imagesrv.conf")
     main = tmp_path / "chrony.conf"
     main.write_text("pool 2.debian.pool.ntp.org iburst\nmakestep 1 3\nrtcsync\n", encoding="utf-8")
     monkeypatch.setattr(timesync, "MAIN_CONF", main)
@@ -83,7 +83,7 @@ def test_the_clock_line_names_source_sync_and_offset(status, state, words):
         assert word in row["detail"], row
 
 
-# ---- install/security-upgrade.sh: chrony goes to its own step -------------------------------
+# ---- deploy/security-upgrade.sh: chrony goes to its own step -------------------------------
 
 TIMESYNCD = {"systemd-timesyncd": SYSTEMD}
 POOL_CLOCK = {**POOL, "chrony": CHRONY, "systemd-timesyncd": SYSTEMD}
@@ -92,7 +92,7 @@ POOL_CLOCK = {**POOL, "chrony": CHRONY, "systemd-timesyncd": SYSTEMD}
 def _swap_stub(world: World) -> Path:
     """The swap step as security-upgrade sees it: arguments logged, the pair swapped."""
     installed = posix(world.tmp / "installed")
-    stub = world.repo / "install" / "timesync-swap.sh"
+    stub = world.repo / "deploy" / "timesync-swap.sh"
     stub.write_text(f'''#!/usr/bin/env bash
 printf '%s\\n' "$@" > "$FAKE_LOG.swap"
 if [ "${{FAKE_SWAP_RC:-0}}" != 0 ]; then
@@ -145,7 +145,7 @@ def test_chrony_without_timesyncd_is_an_ordinary_new_package(tmp_path, bindir):
     assert install.endswith(" chrony") and not swap_args.exists()
 
 
-# ---- install/timesync-swap.sh -----------------------------------------------------------------
+# ---- deploy/timesync-swap.sh -----------------------------------------------------------------
 
 class Box:
     """A server with systemd-timesyncd, a pool dir, chrony's /etc and the DB."""
@@ -168,7 +168,7 @@ class Box:
                                               encoding="utf-8", newline="\n")
         self.data = tmp / "data"
         self.data.mkdir()
-        conn = connect(self.data / "imagectl.db")
+        conn = connect(self.data / "imagesrv.db")
         if db_value:
             set_setting(conn, timesync.SETTING, db_value)
         (tmp / "timesyncd.conf").write_text(f"[Time]\n#NTP=\n{ntp}\n", encoding="utf-8", newline="\n")
@@ -208,8 +208,8 @@ esac''')
         fake_tool(self.bindir, "systemd-analyze", f'cat "{posix(self.tmp / "timesyncd.conf")}"')
 
     def run(self, **env: str):
-        full = {"IMAGECTL_DATA_DIR": posix(self.data), "IMAGECTL_PYTHON": sys.executable,
-                "IMAGECTL_CHRONY_ETC": posix(self.etc), "IMAGECTL_CLOCK_WAIT": "1", **env}
+        full = {"IMAGESRV_DATA_DIR": posix(self.data), "IMAGESRV_PYTHON": sys.executable,
+                "IMAGESRV_CHRONY_ETC": posix(self.etc), "IMAGESRV_CLOCK_WAIT": "1", **env}
         return run_bash(f'bash "{posix(SWAP)}" "{posix(ROOT)}" "{posix(self.pool)}" -o Dir::Cache=/x',
                         self.tmp, self.bindir, env=full)
 
@@ -219,7 +219,7 @@ esac''')
 
     def setting(self) -> str | None:
         from server.db import connect, get_setting
-        return get_setting(connect(self.data / "imagectl.db"), timesync.SETTING)
+        return get_setting(connect(self.data / "imagesrv.db"), timesync.SETTING)
 
     def apt(self) -> list[str]:
         return [c for c in calls(self.tmp) if c.startswith("apt-get ")]
@@ -233,7 +233,7 @@ def test_the_swap_installs_chrony_and_carries_the_organisations_ntp_server(tmp_p
     assert "chrony" in box.installed() and "systemd-timesyncd" not in box.installed()
     real = [c for c in box.apt() if " -s " not in c]
     assert len(real) == 1 and real[0].endswith(" install chrony") and "--no-install-recommends" in real[0]
-    client = (box.etc / "conf.d" / "imagectl.conf").read_text(encoding="utf-8")
+    client = (box.etc / "conf.d" / "imagesrv.conf").read_text(encoding="utf-8")
     assert "makestep 1.0 -1" in client and "server 10.0.0.5 iburst" in client, client
     assert "server ntp.college.example iburst" in client
     assert box.setting() == "10.0.0.5 ntp.college.example"
@@ -245,7 +245,7 @@ def test_the_db_setting_wins_over_timesyncd_and_is_left_alone(tmp_path, bindir):
     box = Box(tmp_path, bindir, ntp="NTP=10.9.9.9", db_value="10.0.0.5")
     done = box.run()
     assert done.returncode == 0, done.stdout + done.stderr
-    client = (box.etc / "conf.d" / "imagectl.conf").read_text(encoding="utf-8")
+    client = (box.etc / "conf.d" / "imagesrv.conf").read_text(encoding="utf-8")
     assert "server 10.0.0.5 iburst" in client and "10.9.9.9" not in client
     assert box.setting() == "10.0.0.5"
 

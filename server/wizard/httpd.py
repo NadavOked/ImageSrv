@@ -10,14 +10,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from server.console_tls import ensure_console_cert
+from server.console.console_tls import ensure_console_cert
+from server.paths import STATIC_DIR
 
 from .core import WizardConfig, WizardState, check_primary, validate_config
 
 STATIC = Path(__file__).with_name("static")
-DESIGN_TOKENS = Path(__file__).parents[1] / "static" / "design-tokens.css"
+DESIGN_TOKENS = STATIC_DIR / "design-tokens.css"
 #: ‏#1302: ה-favicon של ImageSrv — אותם קבצים שהקונסולה מגישה.
-FAVICONS = {f"/{name}": Path(__file__).parents[1] / "static" / name for name in ("favicon.svg", "favicon.ico")}
+FAVICONS = {f"/{name}": STATIC_DIR / name for name in ("favicon.svg", "favicon.ico")}
 
 
 class WizardHTTPServer(ThreadingHTTPServer):
@@ -47,7 +48,7 @@ class WizardHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args) -> None:
         # No request bodies are logged. In particular, passwords never reach the journal.
-        print(f"imagectl-wizard: {self.address_string()} {fmt % args}")
+        print(f"imagesrv-wizard: {self.address_string()} {fmt % args}")
 
     def _json(self, status: int, body: dict) -> None:
         raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -166,7 +167,7 @@ def serve(state: WizardState, host: str, port: int, nic_fact: Path, role_fact: P
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(tls.cert_path, tls.key_path)
     httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-    print(f"imagectl-wizard: https://{host}:{port} fingerprint={tls.fingerprint_sha256}")
+    print(f"imagesrv-wizard: https://{host}:{port} fingerprint={tls.fingerprint_sha256}")
     try:
         httpd.serve_forever()
     finally:

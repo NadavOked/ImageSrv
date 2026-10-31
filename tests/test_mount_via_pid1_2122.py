@@ -1,6 +1,6 @@
 """‏#2122 / ‏#2123 — עיגון במרחב של PID 1, ומצב שאינו "מחובר" מהזיכרון.
 
-‏#2122: ‏imagectl-server רץ עם `ProtectSystem=strict` — במרחב עיגון משלו. ‏`mount`
+‏#2122: ‏imagesrv-server רץ עם `ProtectSystem=strict` — במרחב עיגון משלו. ‏`mount`
 שרץ משם נשאר שם, ונעלם ב-restart של השירות; ‏`storage/<שם>` חוזר להיות תיקייה
 על דיסק המערכת (נמדד על rc2/ESXi, ‏24/10). כאן: mount/umount רצים דרך `nsenter`
 למרחב של PID 1, וההצלחה נקבעת לפי שני קובצי mountinfo, לא לפי קוד היציאה.
@@ -18,11 +18,11 @@ from pathlib import Path
 
 import pytest
 
-from server import storage_locations as sl
-from server.storage_locations import FAILED, OK, UNCHECKED, HookResult
+from server.storage import storage_locations as sl
+from server.storage.storage_locations import FAILED, OK, UNCHECKED, HookResult
 
 REPO = Path(__file__).resolve().parents[1]
-TARGET = "/var/lib/imagectl/storage/extra20"
+TARGET = "/var/lib/imagesrv/storage/extra20"
 LINE = "{n} 1 8:17 / {point} rw,relatime shared:{n} - ext4 /dev/sdb1 rw\n"
 
 
@@ -198,7 +198,7 @@ def test_fstab_write_reloads_systemd_after_the_file_is_written(tmp_path, monkeyp
 
 def _unit(name: str) -> dict[str, str]:
     values: dict[str, str] = {}
-    for raw in (REPO / "install" / name).read_text(encoding="utf-8").splitlines():
+    for raw in (REPO / "deploy" / name).read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line and not line.startswith("#") and "=" in line and not line.startswith("["):
             key, value = line.split("=", 1)
@@ -206,7 +206,7 @@ def _unit(name: str) -> dict[str, str]:
     return values
 
 
-@pytest.mark.parametrize("unit", ["imagectl-server.service", "imagectl-dcui.service"])
+@pytest.mark.parametrize("unit", ["imagesrv-server.service", "imagesrv-dcui.service"])
 def test_units_that_mount_storage_can_enter_pid1_namespace(unit):
     """‏`nsenter --mount=/proc/1/ns/mnt` דורש root עם CAP_SYS_ADMIN+CAP_SYS_CHROOT,
     setns שאינו חסום, ו-/proc/1 גלוי; ‏`systemctl daemon-reload` דורש AF_UNIX; והעיגון
@@ -223,7 +223,7 @@ def test_units_that_mount_storage_can_enter_pid1_namespace(unit):
     families = values.get("RestrictAddressFamilies")
     assert families is None or "AF_UNIX" in families.split()
     rw = values["ReadWritePaths"].split()
-    assert "/etc" in rw and "/var/lib/imagectl" in rw
+    assert "/etc" in rw and "/var/lib/imagesrv" in rw
 
 
 # --- #2123: מצב אחרי עליית השרת ----------------------------------------------
@@ -231,8 +231,8 @@ def test_units_that_mount_storage_can_enter_pid1_namespace(unit):
 def _env(tmp_path, images_root, clock, monkeypatch, fake, **kwargs):
     from fastapi.testclient import TestClient
 
-    from server import sender as sender_module
-    from server import users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from server.app import create_app
     from test_sender import Recorder
 

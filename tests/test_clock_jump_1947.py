@@ -9,7 +9,7 @@ moved "now" and left the stamps behind (forward: elapsed 3 h > LOST_SECONDS;
 backward: elapsed < 0, which #1771 had made "lost at once").
 
 The clock here is faked where the production code reads it -- the module
-`datetime` of `server.room` (both `_mark_lost` and `_utcnow` go through it)
+`datetime` of `server.rounds.room` (both `_mark_lost` and `_utcnow` go through it)
 -- and a step moves only the wall clock, never `time.monotonic()`. That is
 exactly what a step is, and it is what the server's detector looks for.
 """
@@ -21,14 +21,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from server import room as room_mod
+from server.rounds import room as room_mod
 
 from test_server_room import (           # noqa: F401 — ‏room_server is a fixture
     CLONER1, CLONER2, cloner_hello, report, room, room_body, room_server,
 )
 
 try:                                      # negative control: no module -> the
-    from server import clockstep          # behaviour is checked, not an import
+    from server.system import clockstep          # behaviour is checked, not an import
 except ImportError:                       # pragma: no cover
     clockstep = None
 
@@ -188,7 +188,7 @@ def test_a_clock_step_does_not_fail_a_running_pull(server, monkeypatch, step):
     """A unicast pull closes as failed after SILENT_SECONDS without a report
     (`pulls._failure`, measured from `updated_at`). A forward step made a pull
     that was reporting look silent for 3 h -- `pull_failed` at once."""
-    from server import pulls                                   # noqa: PLC0415
+    from server.rounds import pulls                                   # noqa: PLC0415
     from test_server_streams import (                          # noqa: PLC0415
         journal_of, pull, report as pull_report, second_class, session_row,
     )

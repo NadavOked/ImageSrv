@@ -12,7 +12,7 @@
 מציגה בלי שדה חדש. ‏`write_hostname` האמיתי רץ, עם hivewrite מזויף
 שהאימות שלו נכשל (הקריאה החוזרת מחזירה שם אחר).
 
-בקרה שלילית — `git checkout origin/main -- agent/lib/hostname.sh` ואז
+בקרה שלילית — `git checkout origin/main -- agent/lib/postdeploy/hostname.sh` ואז
 הקובץ הזה: הטסט הראשון חייב ליפול (‏`error` חסר), האחרים לעבור.
 """
 
@@ -34,12 +34,12 @@ HIVEWRITE_LIES = HIVEWRITE_OK.replace("echo LAB1-05", "echo OTHER")
 
 def restore_done_station(tmp_path: Path, **override: str) -> tuple[str, Path]:
     """תחנה אחרי שחזור מוצלח: היעד `sda` כבר `done` (finish_grow), ואז
-    ‏name_this_machine — כמו ב-`imagectl-agent`. ‏json_get נדרס (אין jq)
+    ‏name_this_machine — כמו ב-`imagesrv-agent`. ‏json_get נדרס (אין jq)
     רק לתשובת השרת; ‏`.error` נקרא מהקובץ בפועל."""
     script, run = windows_box(tmp_path, **override)
     (run / "response.json").write_text("{}", encoding="utf-8")
     script += (
-        f'. {posix(AGENT)}/lib/progress.sh; '
+        f'. {posix(AGENT)}/lib/core/progress.sh; '
         f'RESP={posix(run / "response.json")!r}; MAC=b4:2e:99:07:1a:c4; '
         'json_get() { case "$2" in *prefix) echo lab1;; *suffix) echo 05;; '
         '  .error) sed -n \'s/.*"error":"\\([^"]*\\)".*/\\1/p\' "$1";; *) echo null;; esac; }; '

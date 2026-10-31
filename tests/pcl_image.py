@@ -1,8 +1,8 @@
 """A partclone v2 image, built byte for byte (#1805) -- for the tests of the
-read-back digest on both sides: the server's (server/readbackhash.py) and the
+read-back digest on both sides: the server's (server/agent/readbackhash.py) and the
 agent's (`fanout --readback`).
 
-The layout is partclone's own (src/partclone.h, src/main.c; server/usedbackfill.py
+The layout is partclone's own (src/partclone.h, src/main.c; server/library/usedbackfill.py
 documents the header): image_desc_v2 (110 bytes, little-endian, CRC-32 seeded
 0xFFFFFFFF with no final XOR over the first 106), the bit map -- one bit a block,
 LSB first, (total + 7) // 8 bytes -- and its CRC-32, then the used blocks in

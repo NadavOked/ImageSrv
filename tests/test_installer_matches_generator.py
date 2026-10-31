@@ -16,7 +16,7 @@ import pytest
 
 from boot.grub_menu import GrubConfig, render_bootstrap
 
-INSTALLER = Path(__file__).resolve().parent.parent / "install" / "setup-boot-server.sh"
+INSTALLER = Path(__file__).resolve().parent.parent / "deploy" / "setup-boot-server.sh"
 PLACEHOLDER = "@@GRUB_HOST@@"
 PORT_PLACEHOLDER = "@@GRUB_PORT@@"
 HOST = "10.44.12.10:8080"
@@ -43,7 +43,7 @@ def test_the_installer_carries_the_same_bootstrap_as_the_generator():
     ) + "\n"
 
     assert from_bash == from_python, (
-        "העותק המוטמע ב-install/setup-boot-server.sh סטה מ-render_bootstrap().\n"
+        "העותק המוטמע ב-deploy/setup-boot-server.sh סטה מ-render_bootstrap().\n"
         "הרץ:  python tools/render_bootstrap.py http://" + HOST + "\n"
         "והחלף את גוף ה-heredoc GRUBCFG, כשהכתובת מוחלפת בחזרה ב-"
         + PLACEHOLDER
@@ -83,7 +83,7 @@ def test_both_uefi_client_arch_values_are_matched(arch):
     מול מחשב בודד שלא עולה בזמן שכל השאר עובדים.
 
     השורות עברו מהמתקין למחולל של הקונסולה — DHCP מוגדר משם."""
-    dhcp = INSTALLER.parent.parent / "server" / "dhcp.py"
+    dhcp = INSTALLER.parent.parent / "server" / "net" / "dhcp.py"
     assert arch in dhcp.read_text(encoding="utf-8")
 
 
@@ -117,8 +117,8 @@ def test_the_installer_no_longer_writes_enable_tftp():
 
 def test_the_storage_args_environment_is_quoted():
     """‏STORAGE_ARGS מכיל רווחים (--storage-role X --primary-url Y). ‏Environment=
-    בלי גרשיים = systemd מפצל למילים וקולט רק ``IMAGECTL_STORAGE_ARGS=--storage-role``
+    בלי גרשיים = systemd מפצל למילים וקולט רק ``IMAGESRV_STORAGE_ARGS=--storage-role``
     → כל התקנת secondary קורסת "expected one argument". חייב גרשיים סביב הערך."""
     text = INSTALLER.read_text(encoding="utf-8")
-    assert 'Environment="IMAGECTL_STORAGE_ARGS=$STORAGE_ARGS"' in text
-    assert "Environment=IMAGECTL_STORAGE_ARGS=$STORAGE_ARGS" not in text
+    assert 'Environment="IMAGESRV_STORAGE_ARGS=$STORAGE_ARGS"' in text
+    assert "Environment=IMAGESRV_STORAGE_ARGS=$STORAGE_ARGS" not in text

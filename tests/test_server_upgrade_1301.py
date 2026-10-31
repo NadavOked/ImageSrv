@@ -42,14 +42,14 @@ def _seed_running(data: Path, **doc) -> None:
     """What ``update._apply_in_background`` writes just before it launches the script."""
     from server import update
     from server.db import connect
-    update._set_status(connect(data / "imagectl.db"),
+    update._set_status(connect(data / "imagesrv.db"),
                        {"state": "running", "tag": TAG, "started_at": STARTED,
                         "by": "nadav", "from": "v0.48.0", **doc})
 
 
 def _journal(data: Path) -> list[tuple[str, str, str]]:
     from server.db import connect
-    rows = connect(data / "imagectl.db").execute(
+    rows = connect(data / "imagesrv.db").execute(
         "SELECT event, detail, user FROM journal WHERE event LIKE 'update_apply_%' ORDER BY id").fetchall()
     return [(r["event"], r["detail"], r["user"]) for r in rows]
 
@@ -226,5 +226,5 @@ def test_the_status_document_is_json_the_console_reads_as_is(tmp_path, bindir):
     _run(tmp_path, bindir, repo, data, TAG)
     from server import update
     from server.db import connect, get_setting
-    raw = get_setting(connect(data / "imagectl.db"), update.STATUS_KEY)
+    raw = get_setting(connect(data / "imagesrv.db"), update.STATUS_KEY)
     assert json.loads(raw) == _status(data)

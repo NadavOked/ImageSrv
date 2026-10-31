@@ -2,7 +2,7 @@
 
 Python stays the privileged backend and the only state machine: this module
 turns the same :class:`app.Runtime` the text console draws into the Hebrew
-records that ``imagectl-station-gui --screen dcui`` paints (protocol:
+records that ``imagesrv-station-gui --screen dcui`` paints (protocol:
 docs/interfaces.md section 31, "the graphical screen").  It reads nothing from
 the host except :func:`collect_extras` -- every other fact is the
 :class:`data.Snapshot` the text console already shows.
@@ -35,7 +35,7 @@ MAX_PROBLEMS_SHOWN = 3
 PARENT_CONTACT_FRESH_SECONDS = 10 * 60
 
 SERVICE_LABELS = {
-    "imagectl-server": "שרת ImageSrv והקונסולה",
+    "imagesrv-server": "שרת ImageSrv והקונסולה",
     "dnsmasq": "DHCP ו־TFTP לרשת ההפצה",
     "nftables": "חומת האש של השרת",
 }
@@ -102,7 +102,7 @@ def collect_extras(conn, uptime_path: Path = Path("/proc/uptime")) -> Extras:
         uptime = None
     if conn is None:
         return Extras(uptime_seconds=uptime)
-    from server import storage_nodes
+    from server.interserver import storage_nodes
     try:
         rows = conn.execute(
             "SELECT label FROM storage_nodes WHERE disabled_at IS NULL ORDER BY label"
@@ -424,18 +424,18 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
     guessed: a cause the snapshot does not carry is not named."""
     found: list[Problem] = []
     services = snapshot.services
-    server = services.get("imagectl-server")
+    server = services.get("imagesrv-server")
     if server is None or server.active != "active":
         state = server.active if server else "unknown"
         if state in ("", "unknown"):
             found.append(Problem(
-                "warn", "לא הצלחנו לבדוק את שרת ImageSrv (imagectl-server)",
+                "warn", "לא הצלחנו לבדוק את שרת ImageSrv (imagesrv-server)",
                 "לא ידוע אם הקונסולה ומחשבי השיכפול מקבלים שירות.",
                 "<b>מה לעשות:</b> רענון (F5); אם זה חוזר — הגדרות ← הפעלה מחדש של השירותים.",
                 ("F2", "הגדרות")))
         else:
             found.append(Problem(
-                "bad", "שרת ImageSrv (imagectl-server) לא פועל",
+                "bad", "שרת ImageSrv (imagesrv-server) לא פועל",
                 f"{iso('systemd: ' + state)}. הקונסולה לא נפתחת, ומחשבים לא מקבלים משימות.",
                 _SVC_TODO, ("F2", "הגדרות"),
                 "הקונסולה <b>לא תיפתח</b> עד שהבעיה הראשונה תתוקן."))
@@ -707,7 +707,7 @@ def _hero(frame: Frame, snapshot: Snapshot, extras: Extras, found: list[Problem]
 
 def _tiles(frame: Frame, snapshot: Snapshot, extras: Extras, today: datetime) -> None:
     rows = [service_row(name, snapshot.services.get(name), snapshot, extras)
-            for name in ("imagectl-server", "dnsmasq", "nftables")]
+            for name in ("imagesrv-server", "dnsmasq", "nftables")]
     frame.add("tile", "שירותים", *services_pill(rows))
     for row in rows:
         frame.add(*row.record())
@@ -1115,10 +1115,10 @@ def _settings_body(frame: Frame, runtime, today: datetime) -> None:
                            "הגדרת רשת הניהול, עם רשת הביטחון.")
     elif selected == 2:
         frame.add("pane", "הפעלה מחדש של השירותים",
-                  f"מפעיל מחדש את {mono_m('imagectl-server')}, ואת {mono_m('dnsmasq')} רק כשהוא מופעל — ואז קורא "
+                  f"מפעיל מחדש את {mono_m('imagesrv-server')}, ואת {mono_m('dnsmasq')} רק כשהוא מופעל — ואז קורא "
                   "בחזרה את המצב של כל שירות.")
         extras = getattr(runtime, "extras", None) or Extras()
-        for name in ("imagectl-server", "dnsmasq"):
+        for name in ("imagesrv-server", "dnsmasq"):
             frame.add(*service_row(name, snapshot.services.get(name), snapshot,
                                    extras).record("prow"))
         frame.add("pnote", "מחשבים שבאמצע שיכפול עלולים להיכשל בזמן ההפעלה מחדש.")

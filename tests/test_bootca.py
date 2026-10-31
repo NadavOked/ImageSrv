@@ -1,6 +1,6 @@
 """‏#85 — גזירת החותם של מטעני האתחול של האימג' בזמן הקליטה.
 
-מה שנבדק כאן הוא `agent/lib/bootca.sh`: הוא פותח את ה-ESP, מוצא את מטעני
+מה שנבדק כאן הוא `agent/lib/postdeploy/bootca.sh`: הוא פותח את ה-ESP, מוצא את מטעני
 האתחול, קורא מהם את טבלת התעודות של Authenticode, ומדפיס את שני שדות
 המניפסט — ‏`boot_ca` ו-`boot_ca_error`.
 
@@ -25,10 +25,11 @@ from pathlib import Path
 
 import pytest
 
+from agentlib import lib_path
 from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
-BOOTCA = REPO / "agent" / "lib" / "bootca.sh"
+BOOTCA = REPO / "agent" / "lib" / "postdeploy" / "bootca.sh"
 
 
 def find_bash() -> str | None:
@@ -214,10 +215,10 @@ BROKEN_OPENSSL = "#!/bin/sh\necho 'unable to load PKCS7 object' >&2\nexit 1\n"
 #: הכפיל, מחושב פעם אחת. `openssl=None` בהרצה = הכלי אינו ב-PATH כלל.
 FAKE_OPENSSL = fake_openssl()
 
-#: אותו סדר טעינה של `imagectl-agent` — ‏`bootca.sh` נשען על
+#: אותו סדר טעינה של `imagesrv-agent` — ‏`bootca.sh` נשען על
 #: ‏`node_is_block` שב-restore.sh, וטעינה חלקית היתה בודקת קוד אחר.
 SOURCE_CHAIN = "".join(
-    f". {posix(REPO / 'agent' / 'lib' / name)!r}; "
+    f". {posix(lib_path(name))!r}; "
     for name in ("common.sh", "waits.sh", "sysinfo.sh", "restore.sh", "bootca.sh")
 )
 
@@ -521,7 +522,7 @@ def test_a_silent_boot_ca_still_leaves_a_valid_manifest(tmp_path):
 
 def test_capture_writes_both_fields_into_the_manifest():
     """שני השדות יוצאים מ-`capture_disk` עצמו, ולא רק מהפונקציה."""
-    text = (REPO / "agent" / "lib" / "capture.sh").read_text(encoding="utf-8")
+    text = (REPO / "agent" / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     assert "_bootca=$(boot_ca_json " in text
     assert '"os":"%s",%s,' in text, "השדות אינם בשורת ה-printf של המניפסט"
 

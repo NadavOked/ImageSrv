@@ -16,8 +16,9 @@ import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
-from server import db, interserver_auth, storage_heartbeat, storage_nodes
-from server import room as room_mod
+from server import db
+from server.interserver import interserver_auth, storage_heartbeat, storage_nodes
+from server.rounds import room as room_mod
 from server.dcui import view
 from test_storage_transfer import paired, secondary          # noqa: F401 — fixtures
 

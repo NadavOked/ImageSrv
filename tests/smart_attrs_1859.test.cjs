@@ -1,7 +1,7 @@
 // #1859 (Nadav 20/10): the console shows every SMART attribute of a disk in Hebrew, marks the critical ones and
 // what rose since the previous round ("להחליף את הדיסק" on a critical one), says "אין עדיין השוואה" with no
 // previous round -- never "stable" -- and says why a disk is orange. The view is GET /machines/{mac}/smart
-// (server/smart_history.py describe); console.js runs in a vm, as in reasons_he_1861.test.cjs.
+// (server/disks/smart_history.py describe); console.js runs in a vm, as in reasons_he_1861.test.cjs.
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');

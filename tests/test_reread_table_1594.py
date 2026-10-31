@@ -26,7 +26,7 @@ def _reread(tmp_path: Path, refuse: int, tries: int | None = None) -> tuple[int,
     answers; returns (exit code, how many times blockdev was asked, the log)."""
     log = tmp_path / "log"; calls = tmp_path / "calls"
     env = f"REREAD_TRIES={tries}; export REREAD_TRIES; " if tries else ""
-    out = sh(f'{env}. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; LOG_FILE={posix(log)!r}; '
+    out = sh(f'{env}. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; LOG_FILE={posix(log)!r}; '
              f'blockdev() {{ echo x >> {posix(calls)!r}; '
              f'[ "$(wc -l < {posix(calls)!r})" -gt {refuse} ] && return 0; '
              'echo "blockdev: ioctl error on BLKRRPART: Device or resource busy" >&2; return 1; }; '

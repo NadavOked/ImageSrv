@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 from test_capture import task_token
 
 CANONICAL = "b4:2e:99:07:1a:c4"

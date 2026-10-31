@@ -21,7 +21,7 @@ pytest.importorskip("fastapi")
 
 from starlette.websockets import WebSocketDisconnect
 
-from server import auth, users
+from server.console import auth, users
 from test_monitor import (MAC, SERVER_INIT, FakeMachine, browser_handshake,
                           monitor_client, prepare_secret_machine)
 

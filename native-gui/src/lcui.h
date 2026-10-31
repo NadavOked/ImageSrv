@@ -1,7 +1,7 @@
 /* #1322: the local clone's functions -- lc_state.c (the records, the roles,
  * the keys and clicks) and the three drawing files. ui.h has the data. */
-#ifndef IMAGECTL_LCUI_H
-#define IMAGECTL_LCUI_H
+#ifndef IMAGESRV_LCUI_H
+#define IMAGESRV_LCUI_H
 #include <cairo.h>
 #include "input.h"
 #include "ui.h"

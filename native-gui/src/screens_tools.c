@@ -6,7 +6,7 @@
  *   output  -- "רץ…" with a spinner, then the tool's text and its verdict
  *              (rc 2 = "לא הצלחנו לבדוק", orange, never green -- principle 5)
  * Everything is drawn with the mockup's existing tokens: no new colour.
- * The bridge side is agent/lib/tools.sh (tools_gui_list / tools_gui_run). */
+ * The bridge side is agent/lib/tools/tools.sh (tools_gui_list / tools_gui_run). */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

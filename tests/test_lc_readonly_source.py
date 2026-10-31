@@ -124,7 +124,7 @@ SHOW = ('echo "rc=$_rc"; echo "path=$(cat "$LC/run/shrink_path" 2>/dev/null)"; e
 def shrink(tmp_path: Path, pre: str = "", after: str = "", **env) -> tuple[dict[str, str], list[str], Path]:
     out = run(tmp_path, setup() + pre + 'lc_shrink_source sdc; _rc=$?; ' + SHOW + after, **env)
     assert out.returncode == 0, out.stderr
-    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagectl:"))
+    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagesrv:"))
     log = tmp_path / "run" / "order.log"
     return got, (log.read_text(encoding="utf-8").splitlines() if log.exists() else []), tmp_path / "run"
 
@@ -330,7 +330,7 @@ def test_a_smaller_target_is_measured_with_no_server(tmp_path):
               'lc_measure sdc; echo "rc=$?"; echo "m=$(cat "$LC/measure/sdc")"; '
               'echo "v=$(lc_verdict 256060514304 512110190592 "$(cut -d"|" -f1 "$LC/measure/sdc")" "$(cut -d"|" -f2 "$LC/measure/sdc")" "")"')
     assert out.returncode == 0, out.stderr
-    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagectl:"))
+    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagesrv:"))
     state, need, why = got["m"].split("|")
     assert (got["rc"], state, why) == ("0", "done", ""), out.stdout
     assert need.isdigit() and int(need) < 256060514304, out.stdout        # the compacted layout fits the target

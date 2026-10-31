@@ -119,9 +119,9 @@ def open_pull(tmp_path: Path, server: str, *, user: str = "labtech",
     args = " ".join(shlex.quote(a) for a in (server, MAC, IMAGE, user, password))
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))} HTTP_RETRIES=0 "
-        f"HTTP_TIMEOUT=4 IMAGECTL_TEST=1; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/pull.sh; "
+        f"HTTP_TIMEOUT=4 IMAGESRV_TEST=1; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/pull.sh; "
         f"if pull_open {args}; "
         f'then echo "OPENED=[$PULL_SESSION]"; '
         f'else echo "NOT-OPENED=[$PULL_SESSION]"; fi'
@@ -278,7 +278,7 @@ def run_flow(script: str, keys: tuple[str, ...], out_file: Path) -> None:
                 + out_file.read_text(encoding="utf-8")
             ) from None
 
-#: המתנה על ראיה חיובית עם תקרה — הדפוס של `agent/lib/waits.sh`: חוזרת
+#: המתנה על ראיה חיובית עם תקרה — הדפוס של `agent/lib/core/waits.sh`: חוזרת
 #: ברגע שהשורה נמצאת, ואומרת בקול כשהיא לא הגיעה. ‏500 × 0.02 = תקרה של
 #: 10 שניות, שאין להגיע אליה לעולם; הגעה אליה היא כשל ולא איטיות.
 AWAIT = (
@@ -374,16 +374,16 @@ def station(tmp_path, *, pull_code: str = "200",
         f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC!r} "
         f'SERVER="http://127.0.0.1:1" '
         f'RESP={shlex.quote(posix(run / "resp.json"))} '
-        f"IMAGECTL_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1 PROGRESS_INTERVAL_S=0.2 "
+        f"IMAGESRV_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1 PROGRESS_INTERVAL_S=0.2 "
         f"RECOVERY_USER=labtech RECOVERY_PASS=pass RESTORE_RESULT={restore!r} "
         f"AWAIT_FILE={shlex.quote(await_file)} "
         f"AWAIT_TEXT={shlex.quote(await_text)}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/pull.sh; "
-        f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/guibridge.sh; "   # #1545: gui_backend_args
-        f". {posix(AGENT)}/lib/single_restore.sh; "   # #706: the GUI restore's write
-        f". {posix(AGENT)}/lib/srgui.sh; . {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; "   # #1561: its progress on the GUI
-        f". {posix(AGENT)}/lib/slotnames.sh; disk_port() {{ echo 1; }}; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/pull.sh; "
+        f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "   # #1545: gui_backend_args
+        f". {posix(AGENT)}/lib/restore/single_restore.sh; "   # #706: the GUI restore's write
+        f". {posix(AGENT)}/lib/gui/srgui.sh; . {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; "   # #1561: its progress on the GUI
+        f". {posix(AGENT)}/lib/hw/slotnames.sh; disk_port() {{ echo 1; }}; "
         'pick_internal_disk() { echo sda; }; '
         'sr_share_gate() { return 0; }; '   # #1898: the split question -- its own tests (test_single_restore_share_1898.py)
         'http_get() { cat "$RUN_DIR/manifest.src.json"; }; '
@@ -541,9 +541,9 @@ def test_the_closing_report_that_did_not_arrive_is_not_silence(tmp_path):
     run = tmp_path / "run"
     run.mkdir(parents=True, exist_ok=True)
     script = (
-        f"export RUN_DIR={shlex.quote(posix(run))} IMAGECTL_TEST=1; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/pull.sh; "
+        f"export RUN_DIR={shlex.quote(posix(run))} IMAGESRV_TEST=1; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/pull.sh; "
         'http_post_json() { return 7; }; '
         'sleep 30 > /dev/null 2>&1 & '
         'pull_close "$!" ses_pull01 aa:bb "http://x"'

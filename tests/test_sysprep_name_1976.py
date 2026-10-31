@@ -3,7 +3,7 @@
 אימג' כללי (`sysprep /generalize`) מריץ באתחול הראשון את שלב ה-specialize,
 והוא קובע את שם המחשב מקובץ התשובות: ‏`ComputerName` = `*`, או בלי
 `ComputerName` בכלל, הוא שם אקראי — מעל מה ש-`hostname.sh` כתב ל-SYSTEM.
-התיקון (`agent/lib/unattend.sh`): כשמצב האימג' (`Setup\\State\\ImageState`
+התיקון (`agent/lib/postdeploy/unattend.sh`): כשמצב האימג' (`Setup\\State\\ImageState`
 בכוורת SOFTWARE) הוא GENERALIZE_RESEAL, השם נכתב גם לקובץ התשובות שה-
 Setup יקרא. אימג' שלא עבר sysprep — הקובץ לא נגעים בו, וגם לא נוצר.
 

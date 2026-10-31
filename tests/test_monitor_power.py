@@ -29,7 +29,7 @@ MONITOR_C = REPO / "agent" / "monitor.c"
 
 #: האסימון שהדפדפן שולח ו-monitor.c מזהה. מקור יחיד לצורה — שני הצדדים
 #: חייבים להסכים עליו בדיוק, ולכן הטסט נועל אותו.
-POWER_PREFIX = "imagectl-power:"
+POWER_PREFIX = "imagesrv-power:"
 REBOOT_TOKEN = POWER_PREFIX + "reboot"
 POWEROFF_TOKEN = POWER_PREFIX + "poweroff"
 
@@ -78,7 +78,7 @@ def test_server_builds_the_reboot_and_poweroff_tokens():
     """‏#1129: השרת בונה את האסימון מהתחילית + הפעולה; זה מה ש-monitor.c
     יזהה. נועלים את התחילית המדויקת ואת שתי הפעולות — שני הצדדים חייבים
     להסכים על שתיהן, אחרת monitor.c לא ימפה את מה שהשרת שולח."""
-    from server import monitor
+    from server.console import monitor
     assert monitor.POWER_PREFIX == POWER_PREFIX
     assert set(monitor.POWER_ACTIONS) == {"reboot", "poweroff"}
     assert monitor.power_frame("reboot").endswith(REBOOT_TOKEN.encode())
@@ -150,7 +150,7 @@ def test_monitor_c_uses_the_shared_safe_poweroff_only_for_poweroff():
         "} else if (len == (int)strlen(POWER_POWEROFF)", maxsplit=1)
     poweroff_branch = poweroff_branch.split("\n    }\n", maxsplit=1)[0]
 
-    assert "/usr/lib/imagectl/common.sh" in poweroff_branch
+    assert "/usr/lib/imagesrv/common.sh" in poweroff_branch
     assert "safe_poweroff" in poweroff_branch
     assert "poweroff -f" not in poweroff_branch
     assert "safe_poweroff" not in reboot_branch

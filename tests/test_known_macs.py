@@ -6,7 +6,7 @@ tag:known. הבדיקות כאן מוכיחות את הצד השני — שהו�
 לקרוא אותו מחדש, וש-**אף בדיקה אחרת בחבילה אינה נוגעת במכונה** כשהיא
 לא ביקשה זאת במפורש: ה-hook הוא `None` כברירת מחדל, בדיוק כדי שהוספת
 מכונה בעשרות בדיקות קיימות (‏setup_classroom) לא תכתוב ל-
-/etc/imagectl/known-macs ולא תריץ systemctl בכל ריצת pytest.
+/etc/imagesrv/known-macs ולא תריץ systemctl בכל ריצת pytest.
 """
 
 from __future__ import annotations
@@ -23,7 +23,8 @@ pytestmark = pytest.mark.usefixtures("classrooms_on")
 
 from fastapi.testclient import TestClient
 
-from server import dhcp, users
+from server.net import dhcp
+from server.console import users
 from server.app import create_app
 
 

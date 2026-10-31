@@ -3,8 +3,8 @@
  * agent as plain key=value lines (README "The --state file"). Re-read
  * whenever its mtime or size changes -- the agent's `printf > tmp && mv`
  * makes that atomic -- at the 2 s cadence of setInterval(poll, 2000). */
-#ifndef IMAGECTL_STATE_H
-#define IMAGECTL_STATE_H
+#ifndef IMAGESRV_STATE_H
+#define IMAGESRV_STATE_H
 
 #include <stdio.h>
 #include <sys/types.h>

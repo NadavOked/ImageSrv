@@ -2,8 +2,8 @@
  * held one byte per typed character (ASCII); a Hebrew letter from the
  * SI-1452 layout is two. Header-only, so tests/test_native_gui_hebrew.py
  * builds it on its own. */
-#ifndef IMAGECTL_UTF8_H
-#define IMAGECTL_UTF8_H
+#ifndef IMAGESRV_UTF8_H
+#define IMAGESRV_UTF8_H
 
 #include <stddef.h>
 #include <string.h>

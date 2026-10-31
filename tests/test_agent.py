@@ -19,6 +19,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from agentlib import lib_files
+
 import pytest
 
 from native import requires_native
@@ -112,7 +114,7 @@ def decide(schema="1", known="true", role="classroom",
         f'D_SCHEMA={schema!r} D_KNOWN={known!r} D_ROLE={role!r} '
         f'D_TASK={task!r} D_SESSION_STATE={session!r} D_MODE={mode!r}; '
         f'export D_SCHEMA D_KNOWN D_ROLE D_TASK D_SESSION_STATE D_MODE; '
-        f'. {posix(AGENT)}/lib/decide.sh; decide'
+        f'. {posix(AGENT)}/lib/core/decide.sh; decide'
     )
     return out.strip()
 
@@ -207,7 +209,7 @@ def test_hello_matches_the_interface(fake_machine):
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'build_hello'
     )
     hello = json.loads(out)
@@ -247,8 +249,8 @@ def _hello_with_monitor_lib(fake_machine) -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
-        f'. {posix(AGENT)}/lib/monitor.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/monitor.sh; '
         f'build_hello'
     ))
 
@@ -268,7 +270,7 @@ def test_hello_carries_a_boot_monitor_secret_that_is_stable_per_boot(fake_machin
 
 
 def test_hello_picks_up_a_secret_rotated_after_a_connection(fake_machine):
-    """סימולציה של מה ש-imagectl-monitor כותב אחרי חיבור שהסתיים: קובץ
+    """סימולציה של מה ש-imagesrv-monitor כותב אחרי חיבור שהסתיים: קובץ
     סוד חדש. ה-hello הבא נושא אותו, לא את הישן."""
     first = _hello_with_monitor_lib(fake_machine)
     rotated = "ffeeddccbbaa99887766554433221100"
@@ -286,7 +288,7 @@ def test_hello_omits_the_secret_when_the_monitor_lib_is_absent(fake_machine):
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'build_hello'
     )
     body = json.loads(out)
@@ -303,7 +305,7 @@ def test_hello_omits_the_secret_when_the_monitor_lib_is_absent(fake_machine):
 def secure_boot_of(sysroot: Path) -> str:
     return sh(
         f'export SYSROOT={posix(sysroot)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'detect_secure_boot'
     ).strip()
 
@@ -343,7 +345,7 @@ def test_unknown_reaches_hello_as_a_bare_null_not_a_string(fake_machine):
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'build_hello'
     )
     assert json.loads(out)["secure_boot"] is None
@@ -356,7 +358,7 @@ def test_missing_uuid_reaches_hello_as_a_bare_null_not_an_empty_string(fake_mach
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'build_hello'
     )
     hello = json.loads(out)
@@ -366,7 +368,7 @@ def test_missing_uuid_reaches_hello_as_a_bare_null_not_an_empty_string(fake_mach
 def port_from(path: str, sysroot: Path | None = None) -> str:
     prefix = f"export SYSROOT={posix(sysroot)!r}; " if sysroot else ""
     return sh(
-        prefix + f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        prefix + f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f"port_from_path {path!r}"
     ).strip()
 
@@ -428,7 +430,7 @@ def test_hello_reports_the_slot_of_a_sata_drawer(fake_machine):
         f'export SYSROOT={posix(sysroot)!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'build_hello'
     )
     (disk,) = json.loads(out)["disks"]
@@ -440,7 +442,7 @@ def test_mac_stays_canonical(fake_machine):
     """התבנית הקנונית — lowercase עם נקודתיים — נשמרת כמו שהיא מ-sysfs."""
     out = sh(
         f'export SYSROOT={posix(fake_machine["sysroot"])!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'list_macs'
     )
     for mac in out.split():
@@ -468,7 +470,7 @@ def test_progress_matches_the_interface(tmp_path):
 
     out = sh(
         f'export RUN_DIR={posix(run)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
         f'build_progress ses_a91f b4:2e:99:07:1a:c4'
     )
     report = json.loads(out)
@@ -496,16 +498,16 @@ def test_cmdline_reads_only_server_and_mode(tmp_path):
     שני, לא מתועד — בדיוק מה שהמחולל נבדק עליו מהצד השני."""
     cmdline = tmp_path / "cmdline"
     cmdline.write_text(
-        "quiet imagectl.server=10.0.0.1:8080 imagectl.mode=recovery "
-        "imagectl.image_id=img_7f3a91 imagectl.session=ses_a91f\n"
+        "quiet imagesrv.server=10.0.0.1:8080 imagesrv.mode=recovery "
+        "imagesrv.image_id=img_7f3a91 imagesrv.session=ses_a91f\n"
     )
     run = tmp_path / "run"
     run.mkdir()
     out = sh(
         f'export CMDLINE_FILE={posix(cmdline)!r} RUN_DIR={posix(run)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; parse_cmdline >/dev/null 2>&1; '
-        f'printf "%s|%s\\n" "$IMAGECTL_SERVER" "$IMAGECTL_MODE"; '
-        f'set | grep "^IMAGECTL_" || true'
+        f'. {posix(AGENT)}/lib/core/common.sh; parse_cmdline >/dev/null 2>&1; '
+        f'printf "%s|%s\\n" "$IMAGESRV_SERVER" "$IMAGESRV_MODE"; '
+        f'set | grep "^IMAGESRV_" || true'
     )
     first, vars_dump = out.split("\n", 1)
     assert first == "10.0.0.1:8080|recovery"
@@ -515,20 +517,20 @@ def test_cmdline_reads_only_server_and_mode(tmp_path):
 
 
 def test_debug_flag_is_an_unknown_parameter(tmp_path):
-    """‏#1303: מעטפת הניפוי `imagectl.debug=1` נמחקה מהמוצר. מי שמוסיף
-    אותה בעריכת GRUB ליד המחשב מקבל את מה שמקבל כל פרמטר imagectl לא
+    """‏#1303: מעטפת הניפוי `imagesrv.debug=1` נמחקה מהמוצר. מי שמוסיף
+    אותה בעריכת GRUB ליד המחשב מקבל את מה שמקבל כל פרמטר imagesrv לא
     מוכר — אזהרה ביומן, ושום משתנה סביבה שקוד כלשהו יכול להישען עליו."""
     cmdline = tmp_path / "cmdline"
-    cmdline.write_text("quiet imagectl.server=10.0.0.1:8080 imagectl.debug=1\n")
+    cmdline.write_text("quiet imagesrv.server=10.0.0.1:8080 imagesrv.debug=1\n")
     run = tmp_path / "run"
     run.mkdir()
     out = sh(
         f'export CMDLINE_FILE={posix(cmdline)!r} RUN_DIR={posix(run)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; parse_cmdline; '
-        f'set | grep "^IMAGECTL_" || true'
+        f'. {posix(AGENT)}/lib/core/common.sh; parse_cmdline; '
+        f'set | grep "^IMAGESRV_" || true'
     )
-    assert "ignoring unknown kernel parameter: imagectl.debug=1" in out
-    assert "IMAGECTL_DEBUG" not in out
+    assert "ignoring unknown kernel parameter: imagesrv.debug=1" in out
+    assert "IMAGESRV_DEBUG" not in out
 
 
 # מעטפת שקוראת פקודות ממסוף: `sh < /dev/tty2`, ‏`ash </dev/ttyS0`, או getty.
@@ -540,9 +542,9 @@ def test_agent_offers_no_shell_on_any_terminal():
     """‏#1303: הסוכן רץ כ-root על מכונה שעומדת בכיתה. אף קובץ של הסוכן
     שנארז ל-initramfs אינו פותח מעטפת על מסוף — לא מאחורי דגל בשורת
     הקרנל ולא בלעדיו (עיקרון 2: שורת הקרנל נושאת רק את השרת ואת מצב
-    השחזור). ‏`init` ו-`imagectl-agent` נכללים ברשימה."""
+    השחזור). ‏`init` ו-`imagesrv-agent` נכללים ברשימה."""
     agent_files = [p for p in SH_FILES if p.is_relative_to(AGENT)]
-    assert {p.name for p in agent_files} >= {"init", "imagectl-agent", "common.sh"}
+    assert {p.name for p in agent_files} >= {"init", "imagesrv-agent", "common.sh"}
     offenders = [
         f"{p.relative_to(REPO).as_posix()}: {m.group(0)}"
         for p in agent_files
@@ -553,7 +555,7 @@ def test_agent_offers_no_shell_on_any_terminal():
 
 # --- hooks של overlay מעבדה/אתר (#1266) ----------------------------------------
 # ‏SSH יצא מהמוצר. הגישה לטכנאי במעבדה היא overlay מחוץ לריפו; המוצר נותן
-# רק מנגנון כללי: ‏IMAGECTL_EXTRA_OVERLAY בבנאי, ו-hooks שרצים אחרי DHCP.
+# רק מנגנון כללי: ‏IMAGESRV_EXTRA_OVERLAY בבנאי, ו-hooks שרצים אחרי DHCP.
 
 
 def run_site_hooks_in(tmp_path, hooks: dict[str, str] | None):
@@ -569,7 +571,7 @@ def run_site_hooks_in(tmp_path, hooks: dict[str, str] | None):
     out = sh(
         f'export RUN_DIR={posix(run)!r} SITE_HOOKS_DIR={posix(hooks_dir)!r} '
         f'IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sitehooks.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/sitehooks.sh; '
         f'run_site_hooks; echo "rc=$?"'
     )
     log = run / "agent.log"
@@ -599,7 +601,7 @@ def test_no_overlay_means_no_hook_and_no_noise(tmp_path):
 
 def test_the_agent_runs_site_hooks_once_after_the_network_is_known():
     """אחרי ש-net.conf נטען (‏$IP ידוע) ולפני ה-hello הראשון."""
-    text = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    text = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     calls = [ln for ln in text.splitlines()
              if ln.strip().startswith("run_site_hooks")]
     assert len(calls) == 1
@@ -608,7 +610,7 @@ def test_the_agent_runs_site_hooks_once_after_the_network_is_known():
 
 
 def test_the_live_installer_runs_the_same_hooks():
-    text = (AGENT / "lib" / "installer_boot.sh").read_text(encoding="utf-8")
+    text = (AGENT / "lib" / "core" / "installer_boot.sh").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/sitehooks.sh"' in text and "run_site_hooks" in text
 
 
@@ -616,7 +618,7 @@ def test_the_live_installer_runs_the_same_hooks():
 
 #: מה שאסור שיופיע בקוד שנכנס לאימג' ובכלי הבנייה שלו. "ssh" בתחילת
 #: מילה בלבד, כדי ש-`_ssha` (משתנה ב-expand.sh) לא ייתפס.
-NO_SSH = re.compile(r"(?<![A-Za-z_])ssh|dropbear|authorized_keys|imagectl_deploy",
+NO_SSH = re.compile(r"(?<![A-Za-z_])ssh|dropbear|authorized_keys|imagesrv_deploy",
                     re.IGNORECASE)
 
 
@@ -647,33 +649,33 @@ CLONE_HOSTKEYS = re.compile(r"/ssh/ssh_host_\*|ssh-keygen|ssh-hostkeys|sshd?\.se
 
 
 def _without_clone_hostkeys(name: str, line: str) -> str:
-    return CLONE_HOSTKEYS.sub("", line) if name.replace("\\", "/") == "agent/lib/grow.sh" else line
+    return CLONE_HOSTKEYS.sub("", line) if name.replace("\\", "/") == "agent/lib/restore/grow.sh" else line
 
 
 def test_the_clone_hostkeys_allowance_still_catches_packing_ssh():
     """ההיתר של #1979 אינו פותח את grow.sh ל-dropbear או למפתח טכנאי."""
     for line in ('dropbear -R -p 22', 'cp authorized_keys "$ROOT"', 'ssh -i key root@x',
                  'rm -f "$1"/ssh/ssh_host_* && dropbear'):
-        assert NO_SSH.search(_without_clone_hostkeys("agent/lib/grow.sh", line)), line
+        assert NO_SSH.search(_without_clone_hostkeys("agent/lib/restore/grow.sh", line)), line
 
 
 def test_the_builder_copies_the_overlay_and_packs_its_binaries(tmp_path):
-    """הקטע של IMAGECTL_EXTRA_OVERLAY, מורץ לבדו: העץ מועתק מעל השורש,
+    """הקטע של IMAGESRV_EXTRA_OVERLAY, מורץ לבדו: העץ מועתק מעל השורש,
     ‏`.binaries` נארז דרך copy_bin (הערות ושורות ריקות מדולגות) ואינו
     נכנס לאימג' בעצמו."""
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
     start = builder.index("# --- site/lab overlay (#1266)")
     block = builder[start:builder.index("# --- pack ---", start)]
     overlay, root = tmp_path / "overlay", tmp_path / "root"
-    (overlay / "etc" / "imagectl" / "hooks.d").mkdir(parents=True)
-    (overlay / "etc" / "imagectl" / "hooks.d" / "10-lab.sh").write_text("true\n", encoding="utf-8")
+    (overlay / "etc" / "imagesrv" / "hooks.d").mkdir(parents=True)
+    (overlay / "etc" / "imagesrv" / "hooks.d" / "10-lab.sh").write_text("true\n", encoding="utf-8")
     (overlay / ".binaries").write_text("# lab\nfoo\n\nbar\n", encoding="utf-8")
     root.mkdir()
     (tmp_path / "block.sh").write_text(block, encoding="utf-8", newline="\n")
     sh(f'set -euo pipefail; ROOT={posix(root)!r}; EXTRA_OVERLAY={posix(overlay)!r}; '
        f'copy_bin() {{ echo "$1" >> {posix(tmp_path / "bins")!r}; }}; '
        f'. {posix(tmp_path / "block.sh")!r}')
-    assert (root / "etc" / "imagectl" / "hooks.d" / "10-lab.sh").is_file()
+    assert (root / "etc" / "imagesrv" / "hooks.d" / "10-lab.sh").is_file()
     assert not (root / ".binaries").exists()
     assert (tmp_path / "bins").read_text(encoding="utf-8").split() == ["foo", "bar"]
 
@@ -682,7 +684,7 @@ def test_an_overlay_path_that_is_not_a_directory_stops_the_build_early():
     """הוגדר ואינו תיקייה = שגיאה לפני apt — לא אימג' בלי ה-overlay
     שנראה בדיוק כמו אימג' איתו."""
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
-    check = builder.index("IMAGECTL_EXTRA_OVERLAY is not a directory")
+    check = builder.index("IMAGESRV_EXTRA_OVERLAY is not a directory")
     assert check < builder.index("apt-get install")
 
 
@@ -724,8 +726,8 @@ def test_the_gui_sign_in_leaves_no_password_on_tmpfs(tmp_path):
         f'HTTP_TIMEOUT=1 HTTP_RETRIES=0 '
         f'RECOVERY_USER="labtech" RECOVERY_PASS="s3cret-in-the-classroom"; '
         f'chmod 0755 {posix(stub_dir)}/curl; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-        f'. {posix(AGENT)}/lib/buildmenu.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+        f'. {posix(AGENT)}/lib/gui/buildmenu.sh; '
         'console_signin; echo "rc=$?"'
     )
     assert out.strip().endswith("rc=1"), out
@@ -749,7 +751,7 @@ def test_the_gui_sign_in_leaves_no_password_on_tmpfs(tmp_path):
 )
 def test_hostname_composition(prefix, suffix, expected):
     """סעיף 10: קידומת-סיומת, ו-INS תמיד באותיות גדולות."""
-    out = sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
+    out = sh(f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
              f'compose_hostname {prefix!r} {suffix!r}')
     assert out.strip() == expected
 
@@ -764,8 +766,8 @@ def test_a_bad_hostname_is_refused_before_touching_the_disk(tmp_path, name):
     run.mkdir()
     out = sh(
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
         f'write_hostname sda /nonexistent.json {name!r} || true'
     )
     result = json.loads(out.strip().splitlines()[-1])
@@ -775,7 +777,7 @@ def test_a_bad_hostname_is_refused_before_touching_the_disk(tmp_path, name):
 
 def test_the_hostname_result_matches_the_interface():
     """מבנה הפלט של סעיף 5 — נבנה ידנית, ולכן נבדק כ-JSON אמיתי."""
-    out = sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
+    out = sh(f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
              f'printf \'{{"ok":true,"hostname":"%s","method":"%s"}}\\n\' '
              f'"LAB1-05" "$HOSTNAME_METHOD"')
     assert json.loads(out) == {
@@ -806,18 +808,18 @@ LINUX_MANIFEST = {
      ("btrfs", "partclone.btrfs"), ("vfat", "partclone.fat"), ("xfs", "partclone.dd")],
 )
 def test_every_supported_filesystem_has_a_partclone(fs, tool):
-    out = sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
+    out = sh(f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
              f'partclone_for_fs {fs}')
     assert out.strip() == tool
 
 
 def test_expansion_knows_every_filesystem_family():
     """ntfsresize ל-Windows, resize2fs ל-ext4, btrfs resize, xfs_growfs."""
-    source = (AGENT / "lib" / "grow.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "restore" / "grow.sh").read_text(encoding="utf-8")
     grow = source[source.index("grow_filesystem() {"):]
     # #2196: the NTFS grow is one function every path shares (ntfsunhib.sh)
     assert 'ntfs) ntfs_grow_target "$2"' in grow
-    unhib = (AGENT / "lib" / "ntfsunhib.sh").read_text(encoding="utf-8")
+    unhib = (AGENT / "lib" / "restore" / "ntfsunhib.sh").read_text(encoding="utf-8")
     assert "ntfsresize -f -f" in unhib[unhib.index("ntfs_grow_target() {"):]
     assert "resize2fs" in grow
     assert "btrfs filesystem resize max" in grow
@@ -825,8 +827,8 @@ def test_expansion_knows_every_filesystem_family():
 
 
 def test_swap_is_recreated_not_streamed():
-    restore = (AGENT / "lib" / "restore.sh").read_text(encoding="utf-8")
-    capture = (AGENT / "lib" / "capture.sh").read_text(encoding="utf-8")
+    restore = (AGENT / "lib" / "restore" / "restore.sh").read_text(encoding="utf-8")
+    capture = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     assert "mkswap" in restore
     assert '"role\\":\\"swap\\"' in capture and '"file\\":null' in capture
     # ‏mkswap מוחק את החתימה הישנה, ולכן ה-UUID של מערכת הקבצים חייב
@@ -846,8 +848,8 @@ def test_a_linux_image_is_named_through_etc_hostname(tmp_path):
     out = sh(
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(tmp_path / "nodev")!r} '
         f'LOG_FILE={posix(run / "log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+        f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
         f'write_hostname sda {posix(manifest)!r} LAB1-05 || true'
     )
     result = json.loads(out.strip().splitlines()[-1])
@@ -864,7 +866,7 @@ def test_linux_hostname_files_are_rewritten_the_installer_way(tmp_path):
     (etc / "hosts").write_text(
         "127.0.0.1\tlocalhost\n127.0.1.1\tubuntu-build\n\n::1 ip6-localhost\n",
         encoding="utf-8")
-    sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+    sh(f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
        f'_write_linux_files {posix(etc)!r} LAB2-INS')
     assert (etc / "hostname").read_text(encoding="utf-8") == "LAB2-INS\n"
     hosts = (etc / "hosts").read_text(encoding="utf-8").splitlines()
@@ -877,7 +879,7 @@ def test_linux_hosts_line_is_added_when_missing(tmp_path):
     etc = tmp_path / "etc"
     etc.mkdir()
     (etc / "hostname").write_text("x\n", encoding="utf-8")
-    sh(f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+    sh(f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
        f'_write_linux_files {posix(etc)!r} LAB1-07')
     assert "127.0.1.1\tLAB1-07" in (etc / "hosts").read_text(encoding="utf-8")
 
@@ -905,8 +907,8 @@ def test_a_linux_hostname_write_that_cannot_unmount_is_not_success(tmp_path):
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake2; }}; '
         f'write_hostname sda /dev/null LAB1-05 || true'
@@ -942,8 +944,8 @@ def test_a_windows_hostname_write_that_cannot_unmount_is_not_success(tmp_path):
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake1; }}; '
         f'write_hostname sda /dev/null LAB1-05 || true'
@@ -982,8 +984,8 @@ def test_an_unreadable_control_set_fails_instead_of_defaulting_to_001(tmp_path):
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake1; }}; '
         f'write_hostname sda /dev/null LAB1-05 || true'
@@ -994,14 +996,14 @@ def test_an_unreadable_control_set_fails_instead_of_defaulting_to_001(tmp_path):
 
 
 def test_capture_derives_the_os_from_the_roles():
-    lib = f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+    lib = f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
     win = sh(lib + '_image_os \'{"role":"esp"},{"role":"windows"}\'').strip()
     lin = sh(lib + '_image_os \'{"role":"esp"},{"role":"linux"},{"role":"swap"}\'').strip()
     assert (win, lin) == ("windows", "linux")
 
 
 def test_a_linux_root_that_is_last_is_expandable():
-    lib = f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+    lib = f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
     parts = '{"role":"esp","expandable":false},{"role":"linux","expandable":false}'
     out = sh(lib + f"_mark_expandable '{parts}'")
     assert out.count('"expandable":true') == 1
@@ -1013,7 +1015,7 @@ def test_a_root_with_swap_behind_it_is_still_expandable():
     במניפסט ולא משודרת, ולכן השחזור מעביר אותה לזנב ומרחיב את מה
     שלפניה: המועמד הוא המחיצה האחרונה שאינה swap (#46). זה גם בדיוק
     הכלל שהקליטה בשרת אוכפת."""
-    lib = f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+    lib = f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
     parts = ('{"role":"esp","expandable":false},'
              '{"role":"linux","expandable":false},'
              '{"role":"swap","expandable":false}')
@@ -1047,7 +1049,7 @@ def test_the_candidate_is_the_last_one_on_the_disk_not_in_the_list():
     """‏#58, הבאג הראשון: הסימון קרא את סדר המערך ולא את הסדר על הדיסק.
     באימג' הענן השורש הוא מחיצה 1, האחרון ברשימה הוא 16 (`data`) — ולכן
     לא סומן דבר, ושחזור 256→500 נגמר בשקט עם 244GB לא מוקצים."""
-    lib = f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+    lib = f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
     out = sh(lib + f"_mark_expandable '{CLOUD_LINUX_PARTS}'")
     assert out.count('"expandable":true') == 1
     assert '"index":1,"role":"linux","start_sector":2099200,"expandable":true' in out
@@ -1058,7 +1060,7 @@ def test_a_recovery_partition_behind_the_windows_one_no_longer_blocks_it():
     היא ברירת המחדל של Windows 11, והשומר שנועד למנוע את *ניפוחה* מנע
     כל הרחבה של Windows בכלל. עכשיו היא עוברת לזנב בשחזור ונכתבת שם
     מקובץ הזרם שלה, בדיוק כמו ה-swap שלפניה (#46)."""
-    lib = f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+    lib = f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
     out = sh(lib + f"_mark_expandable '{WINDOWS_PARTS}'")
     assert out.count('"expandable":true') == 1
     assert '"role":"windows","start_sector":649216,"expandable":true' in out
@@ -1068,7 +1070,7 @@ def test_a_recovery_partition_behind_the_windows_one_no_longer_blocks_it():
 def test_an_image_without_a_system_partition_is_never_marked():
     """המועמד הוא תמיד windows/linux. בלי אחת כזו — אין הרחבה, ו-recovery
     או data לא ינופחו במקומה (עיקרון 1: מצב לא ברור נגמר בלי נגיעה)."""
-    lib = f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+    lib = f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
     parts = ('{"role":"esp","start_sector":2048,"expandable":false},'
              '{"role":"recovery","start_sector":616448,"expandable":false}')
     out = sh(lib + f"_mark_expandable '{parts}'")
@@ -1132,7 +1134,7 @@ def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share
     אותו דפוס של דריסת פונקציה אחרי ה-source.
 
     ‏`override` = ``EXPAND_OVERRIDE`` (#59) — הבחירה מהקונסולה, שמגיעה
-    ל-`_expand_candidate` בדיוק כפי ש-`imagectl-agent` מציב אותה לפני
+    ל-`_expand_candidate` בדיוק כפי ש-`imagesrv-agent` מציב אותה לפני
     שהוא קורא ל-`run_restore`/`run_restore_drawers`. ‏`None` (ברירת
     המחדל) משאיר אותו **בלתי מוצב** — זה בדיוק סוכן ישן, או `pulls.py`/
     `station.py` שלא עודכנו: אותה ריצה בדיוק כמו לפני #59."""
@@ -1173,8 +1175,8 @@ def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export SYSROOT={posix(box)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r}; ' + override_export
-        + f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; '
+        + f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+        f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
         f'manifest_plan() {{ cat {posix(plan_file)!r}; }}; '
         # הבדיקות האלה על *הגיאומטריה* של הטבלה, לא על הראיה שהיא הגיעה
         # לדיסק — זו נבדקת בפני עצמה ב-test_restore_evidence.py, ושם גם
@@ -1192,9 +1194,9 @@ def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share
     # assertions below compare the rest of the call.
     geometry = []
     for c in calls.read_text().splitlines() if calls.exists() else []:
-        assert sorted(re.findall(r" -c (\d+):imagectl-incomplete", c)) \
+        assert sorted(re.findall(r" -c (\d+):imagesrv-incomplete", c)) \
             == sorted(re.findall(r" -n (\d+):", " " + c)), c
-        geometry.append(re.sub(r" -c \d+:imagectl-incomplete", "", c))
+        geometry.append(re.sub(r" -c \d+:imagesrv-incomplete", "", c))
     return (
         out.strip(),
         geometry,
@@ -1474,8 +1476,8 @@ def test_the_filesystem_grows_only_for_the_partition_that_was_widened(tmp_path):
     run.mkdir()
     lib = (
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run / "log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
         f'grow_filesystem() {{ echo "grow:$1:$2"; }}; '
     )
     assert sh(lib + 'grow_expanded sda; echo "rc=$?"').strip() == "rc=0"
@@ -1489,7 +1491,7 @@ def test_the_table_is_widened_before_the_data_arrives():
     """סדר שאין עליו ויכוח: ה-swap עוברת לזנב לפני השחזור, ולכן ה-mkswap
     של הלולאה נוחת על מקומה הסופי — פעם אחת. הגדלת מערכת הקבצים היא
     השלב היחיד שחייב לחכות לנתונים."""
-    source = (AGENT / "lib" / "restore.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "restore" / "restore.sh").read_text(encoding="utf-8")
     run = source[source.index("run_restore() {"):]
     grow = "finish_grow" if "finish_grow" in run else "grow_expanded"
     assert run.index("expand_last") < run.index("restore_partition") \
@@ -1542,8 +1544,8 @@ def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_pat
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r} WAIT_POLL_S=1; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-        f'. {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/drawers.sh; '   # #1906: restore_pipe
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+        f'. {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/drawers.sh; '   # #1906: restore_pipe
         "stream_source() { printf 'recovery-bytes'; }; "
         # ‏/dev/sda4 אינו קיים בסביבת הבדיקה, ובדיקת ההתקן היא הבדיקה
         # הראשונה בצינור (#51). היא מוחלפת כאן ונבדקת בנפרד.
@@ -1595,9 +1597,9 @@ def swap_box(tmp_path, disks=("sda",)):
         f"chmod 0755 {posix(stub_dir)}/mkswap\n"
         f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-        f'. {posix(AGENT)}/lib/progress.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+        f'. {posix(AGENT)}/lib/core/progress.sh; '
+        f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; '
         "log() { :; }; "
         # ‏/dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
         # של כל כתיבה (#51). היא נבדקת בנפרד ב-test_restore_evidence.py.
@@ -1668,7 +1670,7 @@ def test_the_drawers_settle_the_table_before_the_swap_is_made():
     המחיצות, ולכן ה-mkswap של החדר נוחת על המיקום הסופי. ‏mkswap עצמו
     אינו מופיע כאן בכלל: הוא עובר דרך make_swap של restore.sh, שהיא
     הכתיבה היחידה למחיצה."""
-    source = (AGENT / "lib" / "drawers.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "restore" / "drawers.sh").read_text(encoding="utf-8")
     room = source[source.index("run_restore_drawers() {"):]
     assert room.index("expand_last") < room.index("restore_partition_drawers")
     assert re.findall(r"^\s*mkswap ", source, flags=re.M) == []
@@ -1689,8 +1691,8 @@ def test_the_capture_reads_the_filesystem_uuid_not_the_gpt_guid(tmp_path):
         "STUB\n"
         f"chmod 0755 {posix(stub_dir)}/blkid\n"
         f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/manifest.sh; _uuid_of /dev/sda3'
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/capture/manifest.sh; _uuid_of /dev/sda3'
     )
     assert out.strip() == SWAP_UUID
     assert calls.read_text().strip() == "-o value -s UUID /dev/sda3"
@@ -1698,7 +1700,7 @@ def test_the_capture_reads_the_filesystem_uuid_not_the_gpt_guid(tmp_path):
 
 def test_the_agent_writes_the_name_after_a_restore():
     """הקישור עצמו: אחרי שחזור מוצלח נקראת כתיבת השם, לפני האתחול."""
-    source = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    source = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert "name_this_machine" in source
     restore_at = source.index('run_restore "multicast"')
     naming_at = source.index("name_this_machine \"$_disk\"")
@@ -1711,18 +1713,20 @@ def test_every_lib_file_is_loaded_and_packed():
     אמיתית — בדיוק הצורה של #84, שם עץ מודולים שלא נארז הפיל
     ‏used_bytes ואת שם המחשב בלי מילה. שני השערים נבדקים כאן: הבנאי
     אורז את `lib/*.sh` בגלוב (ולכן קובץ חדש נתפס מאליו), אבל הטעינה
-    ב-`imagectl-agent` היא **רשימה מפורשת** — ורשימה מפורשת שוכחת."""
-    # A lib file is loaded by imagectl-agent, or by init when it must run
+    ב-`imagesrv-agent` היא **רשימה מפורשת** — ורשימה מפורשת שוכחת."""
+    # A lib file is loaded by imagesrv-agent, or by init when it must run
     # before the agent exists (initmods.sh, #1702); still one of the two.
-    agent_src = ((AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    agent_src = ((AGENT / "imagesrv-agent").read_text(encoding="utf-8")
                  + (AGENT / "init").read_text(encoding="utf-8"))
-    missing = [p.name for p in sorted((AGENT / "lib").glob("*.sh"))
+    missing = [p.name for p in lib_files(AGENT / "lib")
                if f'. "$LIB_DIR/{p.name}"' not in agent_src]
-    assert missing == [], f"קבצי lib שאינם נטענים ב-imagectl-agent או ב-init: {missing}"
+    assert missing == [], f"קבצי lib שאינם נטענים ב-imagesrv-agent או ב-init: {missing}"
 
+    # #2239: the builder packs agent/lib through agent-lib-flatten.sh, which
+    # walks it recursively and checks the count (tests/test_agentlib_2239.py).
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
-    assert '"$AGENT_DIR"/lib/*.sh' in builder, \
-        "הבנאי אינו אורז את agent/lib/*.sh — כל הסוכן חסר ב-initramfs"
+    assert 'agent-lib-flatten.sh" "$AGENT_DIR/lib" "$ROOT/usr/lib/imagesrv"' in builder, \
+        "הבנאי אינו אורז את agent/lib — כל הסוכן חסר ב-initramfs"
 
 
 def test_arm_wol_is_callable_after_sourcing_common_in_fresh_shell(tmp_path):
@@ -1731,7 +1735,7 @@ def test_arm_wol_is_callable_after_sourcing_common_in_fresh_shell(tmp_path):
     (sysroot / "sys" / "class" / "net").mkdir(parents=True)
     out = sh(
         f'export SYSROOT={posix(sysroot)!r} RUN_DIR={posix(tmp_path)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; command -V arm_wol; '
+        f'. {posix(AGENT)}/lib/core/common.sh; command -V arm_wol; '
         'arm_wol || printf "%s\\n" expected-no-interface')
     assert "arm_wol is a function" in out
     assert out.rstrip().endswith("expected-no-interface")
@@ -1828,7 +1832,7 @@ def _fanout_buffer_for(tmp_path, mem_available_kb, drawers):
     )
     out = sh(
         f"export SYSROOT={posix(root)!r}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         f"_fanout_buffer {drawers}"
     )
     return int(out.strip())
@@ -1858,7 +1862,7 @@ def test_fanout_buffer_never_shrinks_below_read_chunk(tmp_path):
 # ברירת המחדל היא כיבוי, ובכוונה: מגירות מוחלפות במכונה כבויה (נספח
 # א׳). אבל במעבדה מרוחקת מכונה שכבתה היא מכונה שאיש אינו יכול להדליק,
 # ואיתה נעלמת היכולת להמשיך. המתג נכתב בזמן הבנייה ואינו מגיע משורת
-# הפקודה של הקרנל — שם מותר רק `imagectl.server` ו-`imagectl.mode`.
+# הפקודה של הקרנל — שם מותר רק `imagesrv.server` ו-`imagesrv.mode`.
 
 
 def _finish_and_stop(tmp_path, after_task, role=None):
@@ -1870,12 +1874,12 @@ def _finish_and_stop(tmp_path, after_task, role=None):
     ‏`role` מזריק את D_ROLE — המשתנה שהסוכן קובע מתשובת ה-hello —
     כדי לבדוק את הברירה תלוית-התפקיד בלי override מפורש."""
     box = tmp_path / "box"
-    (box / "etc" / "imagectl").mkdir(parents=True, exist_ok=True)
+    (box / "etc" / "imagesrv").mkdir(parents=True, exist_ok=True)
     if after_task is not None:
-        (box / "etc" / "imagectl" / "after-task").write_text(
+        (box / "etc" / "imagesrv" / "after-task").write_text(
             after_task + "\n", encoding="utf-8", newline="\n")
     out = tmp_path / "called"
-    body = (REPO / "agent" / "lib" / "common.sh").read_text(encoding="utf-8")
+    body = (REPO / "agent" / "lib" / "core" / "common.sh").read_text(encoding="utf-8")
     assert "finish_and_stop() {" in body, "הפונקציה נעלמה מ-common.sh"
     role_line = f'export D_ROLE={role}; ' if role is not None else ''
     script = (
@@ -1884,9 +1888,9 @@ def _finish_and_stop(tmp_path, after_task, role=None):
         'reboot()   { echo reboot   >> "$OUT"; }; '
         'sync()     { :; }; log() { :; }; '
         + role_line +
-        'export AFTER_TASK_FILE="$BOX/etc/imagectl/after-task"; '
+        'export AFTER_TASK_FILE="$BOX/etc/imagesrv/after-task"; '
         # הפונקציה האמיתית, לא עותק שלה
-        '. ' + posix(AGENT) + '/lib/common.sh; '
+        '. ' + posix(AGENT) + '/lib/core/common.sh; '
         # These tests isolate after-task selection.  A separate shim suite
         # exercises real arm_wol success and every failure state.
         'arm_wol() { :; }; finish_and_stop')
@@ -1939,7 +1943,7 @@ def test_explicit_override_beats_the_role(tmp_path):
 def _monitor_spawn_args(tmp_path, role=None, flag="1", ip="10.0.0.9",
                         secret=True):
     """מריץ monitor_start עם _monitor_spawn מזויף ומחזיר את הארגומנטים
-    שנמסרו ל-imagectl-monitor, או None אם המוניטור לא הופעל בכלל.
+    שנמסרו ל-imagesrv-monitor, או None אם המוניטור לא הופעל בכלל.
 
     ‏_monitor_spawn מוגדר-מחדש **אחרי** טעינת monitor.sh (הטעינה מגדירה
     את האמיתי). ‏MONITOR_BIN=/bin/sh רק כדי לעבור את בדיקת `[ -x ]`; הוא
@@ -1955,15 +1959,15 @@ def _monitor_spawn_args(tmp_path, role=None, flag="1", ip="10.0.0.9",
     role_line = f'export D_ROLE={role}; ' if role is not None else ''
     script = (
         'OUT=' + repr(posix(out)) + '; '
-        f'export IMAGECTL_MONITOR={flag}; '
-        'export IMAGECTL_SERVER=http://10.0.0.1:8080; '
+        f'export IMAGESRV_MONITOR={flag}; '
+        'export IMAGESRV_SERVER=http://10.0.0.1:8080; '
         'export RUN_DIR=' + repr(posix(run)) + '; '
         'export IP=' + ip + '; export MONITOR_BIN=/bin/sh; export FB_DEV=/dev/null; '
         # #1475: no GUI mirror here -- serve fb0 at once instead of waiting.
         'export MONITOR_MIRROR_WAIT_S=0; '
         'log() { :; }; '
         + role_line +
-        '. ' + posix(AGENT) + '/lib/monitor.sh; '
+        '. ' + posix(AGENT) + '/lib/core/monitor.sh; '
         '_monitor_spawn() { echo "$@" > "$OUT"; _monitor_pid=4242; }; '
         'monitor_start')
     subprocess.run([BASH, "-c", script], capture_output=True,
@@ -1994,7 +1998,7 @@ def test_monitor_never_starts_on_a_classroom_machine(tmp_path):
 
 
 def test_monitor_stays_off_without_the_boot_flag(tmp_path):
-    """בלי imagectl.monitor=1 (IMAGECTL_MONITOR!=1) — לא עולה, בכל תפקיד."""
+    """בלי imagesrv.monitor=1 (IMAGESRV_MONITOR!=1) — לא עולה, בכל תפקיד."""
     assert _monitor_spawn_args(tmp_path, role="build", flag="0") is None
 
 
@@ -2008,7 +2012,7 @@ def test_monitor_gets_the_boot_secret_file(tmp_path):
 
 
 def test_monitor_gets_allow_from_the_server_ip(tmp_path):
-    """‏#1077: peer-check — רק IP השרת מ-imagectl.server. בלי זה 5900
+    """‏#1077: peer-check — רק IP השרת מ-imagesrv.server. בלי זה 5900
     היה פתוח לכל הווילן גם עם HMAC."""
     args = _monitor_spawn_args(tmp_path, role="cloner").split()
     assert "--allow-from" in args, args
@@ -2022,7 +2026,7 @@ def test_monitor_does_not_start_without_a_boot_secret(tmp_path):
 
 
 def test_monitor_does_not_start_without_a_server_ip(tmp_path):
-    """בלי imagectl.server אין למי להגביל את 5900 — לא עולים.
+    """בלי imagesrv.server אין למי להגביל את 5900 — לא עולים.
 
     ‏MONITOR_MIRROR_WAIT_S=0 כמו ב-`_monitor_spawn_args` (#1475): בלעדיו,
     מוניטור שעולה בטעות ממתין קודם למראת ה-GUI, וה-`assert` רץ לפני ה-spawn
@@ -2034,12 +2038,12 @@ def test_monitor_does_not_start_without_a_server_ip(tmp_path):
     (run / "monitor.secret").write_text("00112233445566778899aabbccddeeff\n")
     script = (
         'OUT=' + repr(posix(out)) + '; '
-        'export IMAGECTL_MONITOR=1 IMAGECTL_SERVER=; '
+        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=; '
         'export RUN_DIR=' + repr(posix(run)) + '; '
         'export D_ROLE=build IP=10.0.0.9 MONITOR_BIN=/bin/sh FB_DEV=/dev/null; '
         'export MONITOR_MIRROR_WAIT_S=0; '
         'log() { :; }; '
-        '. ' + posix(AGENT) + '/lib/monitor.sh; '
+        '. ' + posix(AGENT) + '/lib/core/monitor.sh; '
         '_monitor_spawn() { echo "$@" > "$OUT"; _monitor_pid=4242; }; '
         'monitor_start')
     subprocess.run([BASH, "-c", script], capture_output=True,
@@ -2079,7 +2083,7 @@ def _used_bytes(tmp_path, mount_rc, used_kib=None):
         stubs
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
         f'_used_bytes /dev/fake ext4')
     return out.strip()
 

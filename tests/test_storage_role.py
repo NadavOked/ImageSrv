@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from server import storage_nodes
+from server.interserver import storage_nodes
 from server.db import SCHEMA, now_iso, set_setting
 
 
@@ -186,7 +186,7 @@ def test_partial_storage_nodes_table_fails_loud(tmp_path):
 
     from server import db
 
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     raw = sqlite3.connect(path)
     # טבלה חלקית: יש id+label, חסרות base_url/…/disabled_at.
     raw.execute("CREATE TABLE storage_nodes (id TEXT PRIMARY KEY, label TEXT)")

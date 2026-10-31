@@ -31,9 +31,8 @@
 # בשני הצדדים, אפס הפרשים, ואותו ניב לכל קובץ.** אותו קובץ רץ ללא
 # שינוי בשני הריפואים — קובץ שאינו קיים פשוט אינו נמצא ואינו מפיל.
 #
-# `vendor/` מנוכה במפורש: הוא חור **מוצהר עם נימוק** ב-
-# `tests/test_shellcheck_coverage.py` (EXEMPT, ‏#231), ושתי ההצהרות
-# חייבות להישאר תואמות — הטסט נופל אם נוסף כאן ניכוי שאין לו נימוק שם.
+# ניכוי חדש כאן חייב נימוק ב-`EXEMPT` של `tests/test_shellcheck_coverage.py`
+# — הטסט נופל אם נוסף כאן ניכוי שאין לו נימוק שם.
 
 name: shellcheck
 
@@ -73,11 +72,11 @@ jobs:
       - name: Collect shell files from the tree
         run: |
           set -euo pipefail
-          find . -name .git -prune -o -path ./vendor -prune -o \
+          find . -name .git -prune -o \
                  -type f -name '*.sh' -print \
             | sed 's|^\./||' > "$RUNNER_TEMP/all"
           # שתי נקודות הכניסה של הסוכן אינן נושאות סיומת `.sh`.
-          for extra in agent/imagectl-agent agent/init; do
+          for extra in agent/imagesrv-agent agent/init; do
             if [ -f "$extra" ]; then echo "$extra" >> "$RUNNER_TEMP/all"; fi
           done
           LC_ALL=C sort -o "$RUNNER_TEMP/all" "$RUNNER_TEMP/all"
@@ -89,7 +88,7 @@ jobs:
               # קבצי הסוכן: הניב **מוצהר** ולא נגזר, כי `agent/lib/*.sh`
               # נטענים ב-`.` ואין להם shebang. זו ההצהרה היחידה שנשארה,
               # והם גם הקבוצה היחידה שיש לה החרגות מנומקות.
-              agent/lib/*.sh|agent/imagectl-agent|agent/init)
+              agent/lib/*.sh|agent/imagesrv-agent|agent/init)
                 echo "$f" >> "$RUNNER_TEMP/agent" ;;
               # לכל השאר הניב נגזר מה-shebang. הניסיון הראשון (#247)
               # פיצל לפי ניחוש, וה-CI נפל על bashisms שהוצהרו כ-POSIX.

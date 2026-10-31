@@ -7,7 +7,7 @@
 # data: errors.<field>=...); non-zero = the bridge could not do its job, and
 # the GUI says "the installer is not available (<action>)", never "ok".
 #
-#   inventory      disk= lines (imagectl-install --inventory) + nic= lines
+#   inventory      disk= lines (imagesrv-install --inventory) + nic= lines
 #                  + virt= and raid_default= (#1989)
 #   validate       the form (+ step) -> errors.<field>=... or nothing
 #   apply          writes the answers (0600), starts the engine, job=
@@ -17,7 +17,7 @@
 #   finish         what the done screen shows after a reboot-less handoff
 #   eject          eject the install medium (reported, never fatal)
 #   reboot         reboot -f; only the GUI's "restart" (button/countdown, #1250)
-#   boot-local     eject + reboot, for a disk that already carries ImageCtl
+#   boot-local     eject + reboot, for a disk that already carries ImageSrv
 #
 # No jq-less JSON parsing: jq is in the image (agent/ uses it). Every value
 # the GUI sends is read with `jq -r`, never eval'd.
@@ -26,8 +26,8 @@ LC_ALL=C; export LC_ALL
 
 case "$0" in */*) BRIDGE_DIR=${0%/*} ;; *) BRIDGE_DIR=. ;; esac
 BRIDGE_DIR=$(CDPATH="" cd "$BRIDGE_DIR" && pwd) || exit 2
-ENGINE="${ENGINE:-$BRIDGE_DIR/imagectl-install}"
-RUN_DIR="${RUN_DIR:-/run/imagectl}"
+ENGINE="${ENGINE:-$BRIDGE_DIR/imagesrv-install}"
+RUN_DIR="${RUN_DIR:-/run/imagesrv}"
 STATE_FILE="${STATE_FILE:-$RUN_DIR/install.state}"
 ANSWERS="${ANSWERS:-$RUN_DIR/answers}"
 ENGINE_LOG="${ENGINE_LOG:-$RUN_DIR/install.log}"

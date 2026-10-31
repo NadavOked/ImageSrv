@@ -14,6 +14,7 @@ import pytest
 from test_smart import AGENT, BASH, posix, sh  # noqa: F401 -- the same bash, declared skip without it
 
 from native import requires_native
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -31,7 +32,7 @@ def verdict(tmp_path, disks: dict[str, int | str | None], states: dict[str, str]
         (t / "write_check_state").write_text("ok")
         if mbps is not None:
             (t / "write_check_mbps").write_text(str(mbps))
-    prelude = "".join(f"[ ! -f {posix(AGENT)}/lib/{n}.sh ] || . {posix(AGENT)}/lib/{n}.sh; " for n in LIBS)
+    prelude = "".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh; " for n in LIBS)
     out = sh(f"export RUN_DIR={posix(run)!r} {env}; {prelude}"
              f"write_speed_verdict {' '.join(disks)}; echo \"RC $?\"")
     assert out.returncode == 0, out.stderr

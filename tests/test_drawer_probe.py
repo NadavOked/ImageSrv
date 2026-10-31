@@ -64,7 +64,7 @@ def probe(sysroot: Path, dmesg_body: str, bindir: Path) -> str:
     return sh(
         _dmesg_stub(posix(bindir), dmesg_body)
         + f'export SYSROOT={posix(sysroot)!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'disk_probe'
     ).strip()
 
@@ -121,7 +121,7 @@ def _hello(sysroot: Path, dev: Path, bindir: Path, dmesg_body: str) -> dict:
         _dmesg_stub(posix(bindir), dmesg_body)
         + f'export SYSROOT={posix(sysroot)!r} DEVROOT={posix(dev)!r} '
         f'RUN_DIR={posix(sysroot)!r} IFACE=eth0 IP=10.44.12.9; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'build_hello'
     )
     return json.loads(out)

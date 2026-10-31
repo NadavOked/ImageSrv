@@ -14,7 +14,7 @@ partition, as before, and the log says which and why ("approximate"). An
 identity check that cannot run is a "no", never a reuse (principle 5). A valid
 measurement with a hole in it keeps the hole: null, never filled from df.
 
-**Negative control:** with ``agent/lib/lcplan.sh`` and ``agent/lib/lcsize.sh``
+**Negative control:** with ``agent/lib/localclone/lcplan.sh`` and ``agent/lib/localclone/lcsize.sh``
 back at feat/1443-exact-size (a4e1a19a), ``test_the_run_total_is_the_number_shown_before_the_start``
 fails: the total is df's sum (0.5 GB + 212 GB), not partclone's (203.1 GB),
 and the log has no line saying which number the run counts.

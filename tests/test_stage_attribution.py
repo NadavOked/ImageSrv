@@ -20,8 +20,8 @@
 
 בקרה שלילית — להחזיר **את כל** קבצי הסוכן, לא אחד::
 
-    git checkout origin/main -- agent/lib/drawers.sh \\
-        agent/lib/expand.sh agent/lib/grow.sh agent/lib/restore.sh
+    git checkout origin/main -- agent/lib/restore/drawers.sh \\
+        agent/lib/restore/expand.sh agent/lib/restore/grow.sh agent/lib/restore/restore.sh
     python -m pytest tests/test_stage_attribution.py -q
 """
 
@@ -155,10 +155,10 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
     out = run_sh(
         make_stubs(tmp_path / "stubs", extra)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
-        f". {posix(AGENT)}/lib/writecheck.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/restore/writecheck.sh; "
         "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
@@ -185,9 +185,9 @@ def grow_station(tmp_path, *, fs="ntfs", stubs=None, mark=True) -> tuple[Path, s
     out = run_sh(
         make_stubs(tmp_path / "stubs", extra)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; "
         "disk_fits() { return 0; }; boot_ca_preflight() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
@@ -386,11 +386,11 @@ def _plan_drawers(tmp_path, *, plan_cmd, restore_cmd="return 0",
     out = run_sh(
         make_stubs(tmp_path / "stubs", {"ntfsfix": OK, "ntfsresize": OK, "sgdisk": OK})   # #1798: the mark's table read
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
-        f". {posix(AGENT)}/lib/writecheck.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/restore/writecheck.sh; "
         "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file

@@ -19,7 +19,7 @@ enum { KIND_DRM, KIND_FBDEV, KIND_MEM };
 
 /* ---- mem: a framebuffer file for the remote monitor (#835) -------------------
  * No display attached (every connector down, so i915 creates no /dev/fb0 --
- * cloner 2): the screens are drawn into a file that imagectl-monitor mmaps
+ * cloner 2): the screens are drawn into a file that imagesrv-monitor mmaps
  * and serves over RFB. Layout, docs/interfaces.md s15: a 4096-byte header,
  * then XRGB8888 rows of `stride` bytes. `seq` is a seqlock -- odd while a
  * frame is being copied in -- so the reader can skip a torn frame instead of
@@ -30,7 +30,7 @@ enum { KIND_DRM, KIND_FBDEV, KIND_MEM };
 #define MEMFB_FORMAT_XRGB8888 1
 #define MEMFB_W 1280
 #define MEMFB_H 800
-#define MEMFB_DEFAULT_PATH "/run/imagectl/fb.mem"
+#define MEMFB_DEFAULT_PATH "/run/imagesrv/fb.mem"
 
 struct memfb_header {
     char magic[8];
@@ -216,7 +216,7 @@ static int mem_open(Backend *b, const char *path, char *err, size_t n) {
 }
 
 /* ---- mirror (#1475) ------------------------------------------------------------------
- * With a display, imagectl-monitor used to read /dev/fb0 itself: a full
+ * With a display, imagesrv-monitor used to read /dev/fb0 itself: a full
  * 1920x1080 read from write-combined video memory on every tick, changed or
  * not -- 60% of a hardware thread on cloner 2 during a local clone (i5-650,
  * owner, 16/10). The GUI already holds each frame in RAM, so it also writes

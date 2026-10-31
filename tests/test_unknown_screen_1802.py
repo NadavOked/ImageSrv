@@ -34,7 +34,7 @@ from test_failure_screen_1569 import (GUI_BUILD, _build_gui, _count_color,  # no
                                       _png, _png_rgb, _token, run_agent, values)
 
 from boot.grub_menu import AGENT, GrubConfig, LOCAL, decide, render      # noqa: E402
-from server import deploy_net, dhcp                                     # noqa: E402
+from server.net import deploy_net, dhcp                                     # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -59,7 +59,7 @@ def decision(text: str) -> str:
 
 def linux_args(text: str) -> list[str]:
     line = next(ln for ln in text.splitlines() if ln.strip().startswith("if linux "))
-    return [word for word in line.split() if word.startswith("imagectl.")]
+    return [word for word in line.split() if word.startswith("imagesrv.")]
 
 
 def age_mark(server, mac: str, minutes: int) -> None:
@@ -78,9 +78,9 @@ def test_the_flag_boots_the_agent_with_a_clean_kernel_line():
               "unregistered_screen": True}
     assert decide(answer).action == AGENT and decide(answer).code == "unregistered-screen"
     text = render(answer, CFG)
-    assert "set default=imagectl" in text and "set timeout=0" in text
+    assert "set default=imagesrv" in text and "set timeout=0" in text
     # עיקרון 2: רק הכתובת. בלי mode, בלי MAC, בלי שום דבר מהתשובה
-    assert linux_args(text) == ["imagectl.server=http://10.44.12.10:8080"]
+    assert linux_args(text) == ["imagesrv.server=http://10.44.12.10:8080"]
     assert "unregistered" not in text.split("# decision: ")[1].split("\n", 1)[1]
     assert "--id local" in text                                        # הדיסק נשאר כנפילה
     text.encode("ascii")
@@ -101,8 +101,8 @@ def test_anything_but_true_is_today_local_disk(flag):
 def test_an_unregistered_machine_on_the_deploy_vlan_gets_the_agent_once(server):
     first = menu(server, STRANGER)
     assert decision(first) == "# decision: unregistered-screen", first
-    assert "set default=imagectl" in first
-    assert linux_args(first) == ["imagectl.server=http://10.44.12.10:8080"]
+    assert "set default=imagesrv" in first
+    assert linux_args(first) == ["imagesrv.server=http://10.44.12.10:8080"]
     assert STRANGER not in first.split('menuentry "ImageSrv"')[1]     # ה-MAC אינו בערך הסוכן
     first.encode("ascii")
     # אין לולאה: האתחול הבא של אותו MAC (אחרי ה-reboot של ui_unknown) — לדיסק, מיד
@@ -132,9 +132,9 @@ def test_off_the_deploy_vlan_or_in_doubt_nothing_changes(server, base):
     for _ in range(3):
         text = menu(server, STRANGER, base)
         assert decision(text) == "# decision: unregistered"
-        # ‏CLAUDE.md "תרחישי QA קריטיים" (#140, ‏#17): ערך אחד, ‏`timeout=0`, בלי ImageCtl
+        # ‏CLAUDE.md "תרחישי QA קריטיים" (#140, ‏#17): ערך אחד, ‏`timeout=0`, בלי ImageSrv
         assert text.count("menuentry ") == 1 and "set timeout=0" in text
-        assert "--id imagectl" not in text and "vmlinuz" not in text
+        assert "--id imagesrv" not in text and "vmlinuz" not in text
     assert decision(menu(server, STRANGER)) == "# decision: unregistered-screen"
 
 
@@ -171,7 +171,7 @@ CLASS = dict(GOOD, range_start="10.44.20.50", range_end="10.44.20.200",
 
 
 def _rendered(tmp_path, images_root, clock, source: str, interface: str | None) -> str:
-    from server import console_dhcp
+    from server.console import console_dhcp
     from server.app import create_app
     from server.db import set_setting
     app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock)
@@ -255,7 +255,7 @@ def test_ui_unknown_waits_ten_seconds_by_default_and_never_longer_than_its_cap(t
 
 
 def test_the_agent_main_loop_hands_an_unknown_answer_to_ui_unknown():
-    agent = (REPO / "agent" / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (REPO / "agent" / "imagesrv-agent").read_text(encoding="utf-8")
     branch = agent[agent.index("        unknown)"):]
     branch = branch[:branch.index(";;")]
     assert 'ui_unknown "$MAC"' in branch and "sleep 10" not in branch, branch

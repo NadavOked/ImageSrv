@@ -18,11 +18,12 @@ import shutil
 
 import pytest
 
-from server import minfree
-from server.images import required_bytes
+from server.library import minfree
+from server.library.images import required_bytes
 
 from test_agent import AGENT, BASH, posix, run_expand, sh, tail_n
 from test_cloner_gui import sh as sh_run   # CompletedProcess, with a timeout
+from agentlib import flat_lib
 
 needs_shell = pytest.mark.skipif(
     BASH is None or shutil.which("jq") is None, reason="bash and jq are required")
@@ -112,7 +113,7 @@ def _agent_free(tmp_path, m: dict, disk: int, approved: bool = True) -> str:
     path = tmp_path / "m.json"
     path.write_text(json.dumps(m), encoding="utf-8")
     out = sh(f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path)!r}/log SHARE_HEAD={'1' if approved else ''}; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                        ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
              + f'system_free_after {posix(path)!r} {disk} {required_bytes(m)} 3')
     return out.strip().splitlines()[-1]
@@ -159,7 +160,7 @@ def _plan(tmp_path, m: dict, disk_sectors: int) -> list[str]:
     (tmp_path / "sys/block/sda/size").write_text(f"{disk_sectors}\n", newline="\n")
     (tmp_path / "m.json").write_text(json.dumps(m), encoding="utf-8")
     out = sh_run(f"export RUN_DIR={posix(run)!r} SYSROOT={posix(tmp_path)!r} LOG_FILE={posix(run)!r}/log; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in LIBS)
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in LIBS)
              + f'share_plan sda {posix(tmp_path / "m.json")!r}; echo "rc=$?"')
     lines = out.stdout.strip().splitlines()
     assert lines and lines[-1] == "rc=0", out.stdout + out.stderr
@@ -199,8 +200,8 @@ def _gate(tmp_path, answer: str | None):
              "N=$(IFS='|' read -r n _ < \"$GUI_DIR/ask-request\"; echo \"$n\"); "
              f"printf '%s|{answer}\\n' \"$N\" > \"$GUI_DIR/ask-decision\" ) & " if answer else "")
     out = sh_run(f"export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} SYSROOT={posix(tmp_path)!r} "
-             f"LOG_FILE={posix(run)!r}/log IMAGECTL_TEST=1; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in LIBS)
+             f"LOG_FILE={posix(run)!r}/log IMAGESRV_TEST=1; "
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in LIBS)
              + "attended() { shift; \"$@\"; }; attended_power_check() { :; }; "
              + 'disk_port() { case "$1" in sda) echo 1;; sdb) echo 2;; esac; }; '
              + "sleep 30 & _gui_pid=$!; " + reply
@@ -259,7 +260,7 @@ def test_disk_fits_counts_c_s_share_only_when_the_split_was_approved(tmp_path, a
     out = sh(_stub(stubs / "blockdev", f"echo {DISK * 512}")
              + f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
              f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                        ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
              + "raid_member_reason() { :; }; "
              + f'disk_fits sda {posix(tmp_path / "m.json")!r}; echo "rc=$?"')

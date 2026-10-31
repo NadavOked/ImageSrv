@@ -29,7 +29,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import hello_body
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 from test_capture import (
     PART_A, do_capture, make_task, manifest_for, setup_build_machine, task_token,
 )
@@ -166,7 +166,7 @@ def test_a_cancel_that_removed_the_staging_folder_is_409_not_500(server, images_
     (FileNotFoundError). That was a 500 before the task-state check could say
     409 -- the Testrunner caught it, Windows cannot (an open file pins its
     folder). Here the record's folder is simply missing."""
-    import server.capture as capture
+    import server.library.capture as capture
     gone = tmp_path / "removed-staging"
     monkeypatch.setattr(capture, "upload_sha_path", lambda path: gone / (path.name + ".sha256"))
     mac = setup_build_machine(server)

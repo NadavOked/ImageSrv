@@ -208,7 +208,7 @@ def test_a_windows_partition_with_an_empty_file_never_enters_the_library(
     נשאה נתונים ולכן "יש מה לשדר", והשחזור קרא לה swap. אף אחת מהן לא
     שאלה למה מחיצת NTFS היא בלי קובץ.
     """
-    from server.images import ImageLibrary
+    from server.library.images import ImageLibrary
 
     broken = copy.deepcopy(MANIFEST_256)
     broken["id"] = "img_bad001"
@@ -228,7 +228,7 @@ def test_a_partition_labelled_swap_but_holding_ntfs_is_refused(server, images_ro
     עם `role: "swap"` ו-`fs: "ntfs"` עברה את הקליטה בשלמותה והגיעה
     ל-`mkswap`. ‏`fs` הוא המכריע בשני הצדדים, ורשומה כזו נפסלת.
     """
-    from server.images import ImageLibrary
+    from server.library.images import ImageLibrary
 
     broken = copy.deepcopy(MANIFEST_256)
     broken["id"] = "img_bad002"
@@ -241,7 +241,7 @@ def test_a_partition_labelled_swap_but_holding_ntfs_is_refused(server, images_ro
 
 def test_a_real_swap_image_still_enters_the_library(server, images_root):
     """בקרה חיובית לצד הקליטה: אימג' Linux עם swap אמיתי נשאר תקין."""
-    from server.images import ImageLibrary
+    from server.library.images import ImageLibrary
 
     write_image(images_root, MANIFEST_LINUX)
     assert ImageLibrary._validate(MANIFEST_LINUX) is None

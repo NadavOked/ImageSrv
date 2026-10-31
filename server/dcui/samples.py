@@ -23,7 +23,7 @@ TODAY = datetime(2026, 10, 12, 20, 17, 22)
 CLOCK = "20:17"
 NOW = 1000.0
 UP = {name: ServiceState("active", "enabled") for name in
-      ("imagectl-server", "dnsmasq", "nftables")}
+      ("imagesrv-server", "dnsmasq", "nftables")}
 
 PRIMARY = Snapshot(
     hostname="TA", version="v0.71.0", console_url="https://10.20.10.5:8081",
@@ -91,7 +91,7 @@ def runtimes() -> dict[str, Runtime]:
                     NicInfo("ens34", "", "dhcp", "no carrier", "unknown",
                             "00:50:56:aa:44:37")))
     restarted = actions.ActionResult(True, "Services restarted.",
-                                     ("imagectl-server: active", "dnsmasq: active"))
+                                     ("imagesrv-server: active", "dnsmasq: active"))
     return {
         "1-primary-ok": _runtime(PRIMARY, PRIMARY_EXTRAS),
         "2-primary-problem": _runtime(problem, PRIMARY_EXTRAS),

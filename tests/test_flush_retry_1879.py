@@ -1,13 +1,13 @@
 """#1879 -- a transient ``blockdev --flushbufs`` refusal is retried; a persistent
 one still fails the drawer, by name.
 
-Run through the real ``readback_drawers`` (agent/lib/readback.sh), with the
+Run through the real ``readback_drawers`` (agent/lib/restore/readback.sh), with the
 stand-ins of test_readback_agent_1805.py. Here ``blockdev`` refuses
 ``--flushbufs`` on a node as many times as ``$BOX/flaky.<node>`` says, then
 accepts -- the shape seen on the Testrunner (20/10): rc=1 on partition 1 of a
 loop target right after its table changed, and a pass on the next run.
 
-**Negative control** (agent/lib/readback.sh of 9001fc91, before #1879): the
+**Negative control** (agent/lib/restore/readback.sh of 9001fc91, before #1879): the
 two-refusal test fails -- sdc is ``failed`` after ONE call. The persistent test
 fails there on the count of tries only: a refusal that stays is a failure before
 and after the fix (principle 5).

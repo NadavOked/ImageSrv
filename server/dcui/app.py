@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from server import netcfg_rollback
+from server.net import netcfg_rollback
 from server.db import connect
 
 from . import actions, pairing
@@ -112,8 +112,8 @@ def render_main(snapshot: Snapshot, message: str = "") -> list[str]:
     else:
         deploy = snapshot.deploy
         canvas.put(10, 23, f"{deploy.name}  {deploy.address or 'no IPv4'}  link {deploy.link}")
-    canvas.put(12, 4, "imagectl-server:")
-    canvas.put(12, 23, _service(snapshot, "imagectl-server"))
+    canvas.put(12, 4, "imagesrv-server:")
+    canvas.put(12, 23, _service(snapshot, "imagesrv-server"))
     canvas.put(13, 4, "dnsmasq:")
     canvas.put(13, 23, _service(snapshot, "dnsmasq"))
     canvas.put(14, 4, "nftables:")
@@ -200,7 +200,7 @@ def render_auth(failures: int = 0, lockout_seconds: int = 0,
     masked = "*" * min(password_length, 25) + "_"
     canvas.put(10, 12, f"Password:     [ {masked:<27} ]")
     canvas.put(12, 12, "The password is verified locally against the server DB;")
-    canvas.put(13, 12, "it works even when imagectl-server is not running.")
+    canvas.put(13, 12, "it works even when imagesrv-server is not running.")
     if lockout_seconds:
         status = f"Locked after 3 failures. Try again in {lockout_seconds} s."
     else:
@@ -267,7 +267,7 @@ def render_menu(snapshot: Snapshot, selected: int = 0, seconds: int = 90) -> lis
         ("Restart Management Network", f"ifdown/ifup {snapshot.management.name} with its saved",
          "configuration. Nothing changes, so", "nothing is armed or confirmed.",
          "Success = the address read back live."),
-        ("Restart Services", "Restarts imagectl-server and dnsmasq only", "when dnsmasq is enabled, then reads back", "each service state."),
+        ("Restart Services", "Restarts imagesrv-server and dnsmasq only", "when dnsmasq is enabled, then reads back", "each service state."),
         ("Display TLS Certificate", "Shows SHA-256, certificate SANs and", "the not-after date read from the cert."),
         ("Primary-Visible Address", "The address at which the primary", "server reaches this secondary (port",
          "8443); behind NAT, the outside one.", "F4 shows it on the pairing screen."),
@@ -588,7 +588,7 @@ def _preinstall_form(snapshot: Snapshot) -> dict[str, str]:
 
 
 def _refresh(runtime: Runtime) -> None:
-    db_path = runtime.data_dir / "imagectl.db"
+    db_path = runtime.data_dir / "imagesrv.db"
     if runtime.conn is None and db_path.is_file():
         runtime.conn = connect(db_path)
     runtime.snapshot = collect_snapshot(runtime.data_dir, conn=runtime.conn)
@@ -1089,7 +1089,7 @@ def _draw(stdscr, lines: list[str], curses_module) -> None:
 
 def new_runtime(data_dir: Path) -> Runtime:
     """The state both screens start from (text and graphical, #1203)."""
-    db_path = data_dir / "imagectl.db"
+    db_path = data_dir / "imagesrv.db"
     conn = connect(db_path) if db_path.is_file() else None
     snapshot = collect_snapshot(data_dir, conn=conn)
     runtime = Runtime(data_dir, conn, snapshot,
@@ -1150,5 +1150,5 @@ def run(data_dir: Path = DATA_DIR, text_only: bool = False) -> None:
 
     from . import gui
     why = "text screen requested (--text)" if text_only else gui.run(data_dir)
-    print(f"imagectl-dcui: text screen: {why}", file=sys.stderr, flush=True)
+    print(f"imagesrv-dcui: text screen: {why}", file=sys.stderr, flush=True)
     curses.wrapper(curses_main, data_dir, why)

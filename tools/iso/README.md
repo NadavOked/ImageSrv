@@ -1,8 +1,8 @@
 <div dir="rtl">
 
-# `tools/iso/` — ISO ההתקנה של ImageCtl (#1139)
+# `tools/iso/` — ISO ההתקנה של ImageSrv (#1139)
 
-‏ISO אחד שמתקין דביאן 13 + ImageCtl על שרת פיזי או VM, ‏UEFI (Secure Boot
+‏ISO אחד שמתקין דביאן 13 + ImageSrv על שרת פיזי או VM, ‏UEFI (Secure Boot
 דלוק) וגם BIOS, **בלי אינטרנט** בזמן ההתקנה. בסופו השרת עולה במצב "רשת
 ההפצה לא הוגדרה" — האשף (#910) / הקונסולה מקבלים את המנהל. התוכנית:
 `docs/research/answers/R25-installer-iso-external.md`; ההכרעות שנקלטו:
@@ -12,10 +12,10 @@
 | קובץ | תפקיד |
 |---|---|
 | `packages.txt` | **האיחוד** של כל רשימות ה-apt: ‏`PKGS` של המתקין, הבסיס/GUI/toolbox של `build_initramfs.sh`, ומה שרק ה-ISO מוסיף. ‏`tests/test_iso_build.py` נופל אם רשימה זזה בלי הקובץ הזה |
-| `make-pool.sh` | ‏`apt-get download` של הרשימה **וכל התלויות** (מול status ריק — כלום לא "כבר מותקן") → `pool/{main,contrib}/imagectl/`, ואינדקסי `dists/` (‏`--index-only` מאנדקס עץ ISO). נכשל בלי `trixie-security` במקורות של המארח (‏#1411). ‏`--security`: רק חבילות trixie-security של הסגירה, כ-tar + `security-pool.json` לכפתור העדכון |
+| `make-pool.sh` | ‏`apt-get download` של הרשימה **וכל התלויות** (מול status ריק — כלום לא "כבר מותקן") → `pool/{main,contrib}/imagesrv/`, ואינדקסי `dists/` (‏`--index-only` מאנדקס עץ ISO). נכשל בלי `trixie-security` במקורות של המארח (‏#1411). ‏`--security`: רק חבילות trixie-security של הסגירה, כ-tar + `security-pool.json` לכפתור העדכון |
 | `preseed.cfg` | ‏d-i אוטומטי: mirror כבוי, חבילות מה-ISO (מסלול ה-cdrom של d-i), הדיסק הראשון שאינו USB, root בלבד, `late_command` |
-| `late-command.sh` | רץ **בתוך המתקין**: מעתיק את הקוד ל-`/opt/imagectl-src`, מתקין את היחידה, ורושם ל-`/etc/imagectl/` **עובדות** — הכרטיס ש-d-i הגדיר (‏`installer-nic`), התפקיד (‏`installer-role`), המניפסט (‏`iso-release.json`) |
-| `firstboot.sh` + `imagectl-firstboot.service` | האתחול הראשון: בונה `initrd.img`/`initrd.img.gui`/`vmlinuz`, ואז מפעיל את אשף ה-HTTPS עם עובדות הכרטיס והתפקיד כברירות מחדל |
+| `late-command.sh` | רץ **בתוך המתקין**: מעתיק את הקוד ל-`/opt/imagesrv-src`, מתקין את היחידה, ורושם ל-`/etc/imagesrv/` **עובדות** — הכרטיס ש-d-i הגדיר (‏`installer-nic`), התפקיד (‏`installer-role`), המניפסט (‏`iso-release.json`) |
+| `firstboot.sh` + `imagesrv-firstboot.service` | האתחול הראשון: בונה `initrd.img`/`initrd.img.gui`/`vmlinuz`, ואז מפעיל את אשף ה-HTTPS עם עובדות הכרטיס והתפקיד כברירות מחדל |
 | `build-iso.sh` | ‏netinst רשמי (מאומת sha256) + pool + קוד (`git archive` של ה-ref) + preseed + תפריט → ISO hybrid ב-`xorriso -boot_image any replay`; מדפיס `-report_el_torito` |
 | `test-iso.sh` | ‏QEMU/OVMF עם Secure Boot, שני שלבים (התקנה → אתחול ראשון) — **טרם הורץ** (אין KVM במעבדה) |
 
@@ -31,41 +31,41 @@ sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v
 **סיסמת root אינה חלק מה-ISO** (‏#1632, הכרעת נדב 24/10): המפעיל בוחר אותה
 במסך ההתקנה, במסך חשבון הניהול ליד סיסמת ה-admin (אותם כללים, שדה אימות),
 והמנוע כותב ל-root את גיבוב ה-`$6$` שלה — בלי `chage -d 0`, כי היא כבר של
-המפעיל. ‏`--root-password` ו-`IMAGECTL_ROOT_PASSWORD` **מסורבים** בהודעה
-בשם, ו-`imagectl/root-password.hash` אינו נכתב עוד. התקנה בלי סיסמת root
+המפעיל. ‏`--root-password` ו-`IMAGESRV_ROOT_PASSWORD` **מסורבים** בהודעה
+בשם, ו-`imagesrv/root-password.hash` אינו נכתב עוד. התקנה בלי סיסמת root
 מהמסך נכשלת בשם (`[invalid-root-password]` / `[root-password-missing]`) לפני
 שנוגעים בדיסק.
 
-הפלט: `imagectl-<tag>-amd64.iso`, ‏`SHA256SUMS`, ‏`*.el_torito.txt` (הראיה
-ששני קטעי האתחול — BIOS ו-UEFI — נשמרו), ‏`imagectl-iso.json` (כולל
+הפלט: `imagesrv-<tag>-amd64.iso`, ‏`SHA256SUMS`, ‏`*.el_torito.txt` (הראיה
+ששני קטעי האתחול — BIOS ו-UEFI — נשמרו), ‏`imagesrv-iso.json` (כולל
 ‏`live_kernel` ו-`live_initrd_sha256`). ‏build-iso עוצר אם גרסת הקרנל
-ב-pool אינה זו של המודולים ב-initramfs, ואם תווית הכרך אינה `IMAGECTL_INSTALL`.
+ב-pool אינה זו של המודולים ב-initramfs, ואם תווית הכרך אינה `IMAGESRV_INSTALL`.
 
 ## מה קורה כשמאתחלים ממנו (#1190 — הכרעת נדב 21/09: "כמו ESXi")
 
 1. ‏GRUB/isolinux עולים **ישר** (‏`timeout=0`) ל-`/live/vmlinuz` + `/live/initrd.img`
-   עם `imagectl.mode=installer` — אותו initramfs של מחשבי הבנייה, עם
+   עם `imagesrv.mode=installer` — אותו initramfs של מחשבי הבנייה, עם
    ‏`installer/` (המנוע) והגואי. אין מתקין דביאן ואין preseed על ה-ISO.
 2. ‏`agent/init` (‏`installer_boot.sh`): DHCP זמני על כל כרטיס עם קישור
-   (תוצאה לכל כרטיס ב-`/run/imagectl/dhcp/<if>`), עיגון המדיה לפי התווית
-   ב-`/cdrom`, ו-exec ל-`imagectl-installer` — שמעלה את הגואי על fb0. בלי
+   (תוצאה לכל כרטיס ב-`/run/imagesrv/dhcp/<if>`), עיגון המדיה לפי התווית
+   ב-`/cdrom`, ו-exec ל-`imagesrv-installer` — שמעלה את הגואי על fb0. בלי
    מסך/מקלדת/מדיה: הודעה באנגלית על הקונסולה, המתנה — לעולם לא reboot.
 3. הגואי (מסכי `docs/design/console-redesign/mockups/install-*`): דיסק
    (רשימה + אישור מחיקה) → תפקיד → רשת ניהול → שם → admin → סיכום →
-   התקדמות. ‏`installer/gui-bridge.sh` מפעיל את המנוע `imagectl-install`:
+   התקדמות. ‏`installer/gui-bridge.sh` מפעיל את המנוע `imagesrv-install`:
    ‏GPT, debootstrap מ-`/cdrom`, ‏`packages.txt` מה-pool, ‏GRUB לשתי הקושחות,
-   ‏`/etc/imagectl/answers` (+ `answers.secret` 0600), ‏`iso-release.json`,
-   והמאגר המקומי `/var/lib/imagectl/apt-repo` — ‏`pool/` **כולו** ו-`dists/`
+   ‏`/etc/imagesrv/answers` (+ `answers.secret` 0600), ‏`iso-release.json`,
+   והמאגר המקומי `/var/lib/imagesrv/apt-repo` — ‏`pool/` **כולו** ו-`dists/`
    (‏#1371: האינדקס מונה גם את חבילות ה-netinst; ההעתקה נבדקת — לכל `Filename`
    יש קובץ, אחרת ההתקנה נעצרת ב-`apt-repo-check`).
 4. "הסר את מדיית ההתקנה והפעל מחדש" → eject + reboot.
-5. אתחול ראשון: ‏`imagectl-firstboot` בונה את שני ה-initrd (שלב א'), ואז —
+5. אתחול ראשון: ‏`imagesrv-firstboot` בונה את שני ה-initrd (שלב א'), ואז —
    כשיש `answers` — `firstboot-answers.sh` מריץ את `setup-boot-server.sh`
    מהתשובות (הסיסמה דרך FD 3 מ-`answers.secret`, שנמחק), מאמת את המטען,
    חותם, ומדליק את ה-DCUI על tty1. **בלי אשף.** בלי `answers` (שרת בלי
    מסך שהותקן אחרת) — המסלול הישן: DHCP זמני, DCUI טרום-התקנה, אשף ב-8081.
 
-**מצבי האתחול הראשון** (`/etc/imagectl/firstboot.status`): ‏`wizard-running`
+**מצבי האתחול הראשון** (`/etc/imagesrv/firstboot.status`): ‏`wizard-running`
 עד שהמפעיל מחיל; אחר כך `done` או מצב הכשל בשם. כרטיס חסר או MAC שלא נמצא
 הם `network-nic-undecidable` ביומן ומחייבים בחירה באשף — **לא מנחשים**.
 `check-error` הוא כשל בבדיקה עצמה. המתקין אינו רץ עד אישור המפעיל; כשל
@@ -97,7 +97,7 @@ sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v
 
 * **Hyper-V Gen2 + Secure Boot וברזל** — הבנייה במעבדה, ה-boot אצל נדב
   (תבנית "Microsoft UEFI Certificate Authority").
-* **שרת משני**: המתקין מחייב `--primary-url`; בלי `imagectl.primary=<url>`
+* **שרת משני**: המתקין מחייב `--primary-url`; בלי `imagesrv.primary=<url>`
   בשורת האתחול האשף מציג שדה חובה ריק (`secondary-needs-primary`). האם
   המתקין צריך לקבל משני בלי primary (ה-pairing מהקונסולה) — הכרעת מוצר.
 * ‏reproducibility — אותו ref + netinst + pool → אותו sha256: לא נמדד.
@@ -109,8 +109,8 @@ sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v
 ## הקשר לשתי התיקיות האחרות
 
 ‏`tools/iso/` **בונה**: היא אורזת את `installer/` (המנוע החי, רץ ב-initramfs
-לפני שיש שרת) ואת עץ הקוד, כולל `install/` (הגדרת השרת המותקן —
+לפני שיש שרת) ואת עץ הקוד, כולל `deploy/` (הגדרת השרת המותקן —
 ‏`setup-boot-server.sh` והיחידות). ‏`firstboot.sh` שכאן הוא החוליה
-ביניהן: הוא מפעיל את `install/setup-boot-server.sh` באתחול הראשון.
+ביניהן: הוא מפעיל את `deploy/setup-boot-server.sh` באתחול הראשון.
 
 </div>

@@ -1,7 +1,7 @@
 """#1907 / QA-G47 -- the read-back check list that did not come down (Nadav 22/10).
 
 The agent downloads the server's list of each partition once for the whole round
-(``_rb_plan``, agent/lib/readback.sh). Until #1907 one failed ``http_get`` (404,
+(``_rb_plan``, agent/lib/restore/readback.sh). Until #1907 one failed ``http_get`` (404,
 500, a timeout -- after curl's own ``--retry``) put every drawer of the round at
 ``unverified`` with the same words as "the image has no list yet".
 
@@ -151,8 +151,10 @@ def _t(dev: str, **kw) -> dict:
 
 
 def test_a_done_drawer_whose_list_did_not_come_down_is_in_the_journal_once(tmp_path):
-    from server import db, journal_he, reports
-    conn = db.connect(tmp_path / "imagectl.db")
+    from server import db
+    from server.console import journal_he
+    from server.agent import reports
+    conn = db.connect(tmp_path / "imagesrv.db")
     _session(conn, "ses_g47")
     targets = [_t("sdb", readback="unverified", readback_reason="r", readback_why="list_not_fetched"),
                _t("sdc", readback="unverified", readback_reason="no list yet"),
@@ -167,8 +169,9 @@ def test_a_done_drawer_whose_list_did_not_come_down_is_in_the_journal_once(tmp_p
 
 
 def test_drawer_list_carries_the_reason_only_with_unverified(tmp_path):
-    from server import db, room
-    conn = db.connect(tmp_path / "imagectl.db")
+    from server import db
+    from server.rounds import room
+    conn = db.connect(tmp_path / "imagesrv.db")
     db.net_seen(conn, MAC, "10.0.0.7", disks_json=json.dumps(
         [{"dev": d, "serial": f"S-{d}", "port": n} for n, d in enumerate(("sdb", "sdc", "sdd"), 1)]))
     member = {"targets_json": json.dumps([

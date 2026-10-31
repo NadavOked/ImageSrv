@@ -18,9 +18,9 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login
-from server.deploy_net import DeployState
+from server.net.deploy_net import DeployState
 
-RULES = ('table inet imagectl {\n\tchain input {\n\t\tiifname "lo" accept\n'
+RULES = ('table inet imagesrv {\n\tchain input {\n\t\tiifname "lo" accept\n'
          '\t\tiifname "ens192" udp dport 67 accept\n'
          '\t\tiifname "ens192" udp dport 69 accept\n\t}\n}\n')
 
@@ -31,7 +31,7 @@ def _nic(name):
 
 @pytest.fixture()
 def health(tmp_path: Path, images_root: Path, clock):
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     fake = {"interfaces": [_nic("ens192")],

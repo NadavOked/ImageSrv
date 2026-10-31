@@ -33,7 +33,7 @@ const NETCFG={interfaces:[
   live:{checked:true,reason:'',routes:['default via 10.44.10.254','10.44.13.0/24 via 10.44.10.254'],nameservers:['10.44.10.2']},
   management_interface:'ens18',
   sourced:true,resolv_path:'/etc/resolv.conf',
-  rollback:{armed:true,armed_detail:'active',unit:'imagectl-netrollback.timer',window_seconds:60,pending:false,interface:'',seconds_left:0,expired:false,corrupt:false}};
+  rollback:{armed:true,armed_detail:'active',unit:'imagesrv-netrollback.timer',window_seconds:60,pending:false,interface:'',seconds_left:0,expired:false,corrupt:false}};
 const NET=[
   {mac:C1,ip:'10.44.9.118',description:'',first_seen:ago(9000),last_seen:ago(10),registered:true,name:'מחשב 1',group_id:'grp_CLONERS',group_label:'מחשבי שיכפול',role:'cloner',
    boot:{step:'hello',label:'hello · בסוכן',index:9,total:9,at:ago(10),seconds:10,next_step:null,next_label:'',stalled:false}},

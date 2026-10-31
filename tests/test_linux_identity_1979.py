@@ -22,6 +22,8 @@ import os
 import re
 from pathlib import Path
 
+from agentlib import lib_files
+
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_captured_stdout import LINUX_PLAN, WIN_PLAN, sh, stub
@@ -70,9 +72,9 @@ def box(tmp_path: Path, plan: str = LINUX_PLAN, **disk_kw) -> tuple[str, Path]:
     setup += (
         f'export PATH="$(cd {posix(bindir)!r} && pwd):/usr/bin:/bin" '
         f'RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "agent.log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; '
-        f'. {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/writemark.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+        f'. {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
         f"manifest_plan() {{ printf '%s\\n' {' '.join(repr(ln) for ln in plan.splitlines())}; }}; "
         'partition_node() { printf "/dev/%s%s\\n" "$1" "$2"; }; '
         'boot_hidden_disk() { return 0; }; '   # #2015: the hidden sectors have their own file
@@ -180,7 +182,7 @@ def test_a_linux_partition_that_does_not_mount_is_said(tmp_path):
 def test_every_finish_grow_call_in_the_agent_passes_the_manifest():
     """‏`finish_grow` בלי מניפסט מדלג על האיפוס — ולכן כל קורא מעביר אותו."""
     calls = []
-    for f in sorted((AGENT / "lib").glob("*.sh")) + [AGENT / "imagectl-agent"]:
+    for f in lib_files(AGENT / "lib") + [AGENT / "imagesrv-agent"]:
         for line in f.read_text(encoding="utf-8").splitlines():
             code = line.split("#", 1)[0]
             calls += [(f.name, m) for m in re.findall(r'finish_grow ("[^"]*" "[^"]*" "[^"]*"|[^;}|]*)', code)
@@ -202,7 +204,7 @@ ALLOWED = {("installer_boot.sh", "blkid -L")}
 
 def test_no_disk_is_found_by_uuid_or_label_in_the_agent():
     found = []
-    for f in sorted((AGENT / "lib").glob("*.sh")) + [AGENT / "imagectl-agent", AGENT / "init"]:
+    for f in lib_files(AGENT / "lib") + [AGENT / "imagesrv-agent", AGENT / "init"]:
         for no, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             code = line.split("#", 1)[0] if not line.lstrip().startswith("#") else ""
             m = LOOKUP.search(code)

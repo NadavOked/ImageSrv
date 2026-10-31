@@ -14,7 +14,7 @@ import copy
 import pytest
 
 from conftest import write_image
-from server.disk_reserve import SYSTEM_RESERVE_BYTES
+from server.storage.disk_reserve import SYSTEM_RESERVE_BYTES
 from test_vmupdate import SOURCE, FakeMachine, lab, refusal   # noqa: F401 — fixture
 
 #: #1737: this module reasons about the system reserve -- it stays 10GiB here
@@ -96,7 +96,7 @@ def test_a_missing_used_bytes_is_not_a_measurement(lab):
 def test_a_used_bytes_that_is_not_a_count_never_reaches_the_vm_update(lab, bad):
     """‏#1407 (77557596): ‏used_bytes שאינו מונה הוא מניפסט פגום — הספרייה
     דוחה אותו בשמו, והעדכון אינו מגיע לחשב עליו מקום."""
-    from server.images import ImageLibrary
+    from server.library.images import ImageLibrary
 
     manifest = tel_aviv(measured=True)
     manifest["partitions"][2]["used_bytes"] = bad

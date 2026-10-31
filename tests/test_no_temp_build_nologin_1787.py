@@ -5,13 +5,13 @@ Nadav, 19/10: "למחוק לפני v1". The switch let a build machine restore a
 capture with no console session, so a leftover line is a way around the
 sign-in -- not dead code. This scans the product trees for its names.
 
-`install/vmupdate-host.sh` gives a system user the shell `/usr/sbin/nologin`;
+`deploy/vmupdate-host.sh` gives a system user the shell `/usr/sbin/nologin`;
 that is unrelated, and the patterns below do not match it (checked here too).
 """
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PRODUCT_DIRS = ("agent", "server", "native-gui", "install")
+PRODUCT_DIRS = ("agent", "server", "native-gui", "deploy")
 
 # Split so that a repo-wide grep for the marker finds nothing once it is gone.
 MARKER = "TEMP-BUILD-" + "NOLOGIN"
@@ -44,8 +44,8 @@ def test_no_trace_of_the_temporary_switch_in_the_product():
     files = _product_files()
     names = {p.relative_to(ROOT).as_posix() for p in files}
     # Positive evidence that the scan saw the files the switch lived in.
-    for must in ("agent/lib/guibridge.sh", "server/api.py", "server/hello.py",
-                 "native-gui/src/main.c", "install/vmupdate-host.sh"):
+    for must in ("agent/lib/gui/guibridge.sh", "server/agent/api.py", "server/agent/hello.py",
+                 "native-gui/src/main.c", "deploy/vmupdate-host.sh"):
         assert must in names, f"the scan did not reach {must}"
     found = []
     for path in files:
@@ -61,7 +61,7 @@ def test_the_switch_files_are_gone():
 
 
 def test_the_system_user_shell_is_not_caught():
-    text = (ROOT / "install" / "vmupdate-host.sh").read_text(encoding="utf-8")
+    text = (ROOT / "deploy" / "vmupdate-host.sh").read_text(encoding="utf-8")
     assert "/usr/sbin/nologin" in text   # still there, untouched
     assert _hits('        --shell /usr/sbin/nologin "$VM_USER" \\') == []
     # ...and every pattern does catch the line it is there for.

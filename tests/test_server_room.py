@@ -29,8 +29,8 @@ def room_server(tmp_path: Path, monkeypatch):
         pytest.skip("fastapi is required")
     from test_sender import Recorder                       # noqa: PLC0415
 
-    from server import sender as sender_module
-    from server import users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from server.app import create_app
 
     # ה-runner המזויף הוא הראיה שהשידור עצמו בשליטת הטסט. גם בדיקת
@@ -233,7 +233,7 @@ def test_sender_failure_stops_room_until_operator_opens_it_again(room_server):
 
 
 def test_tally_requires_the_serial_that_was_present_at_done(room_server):
-    from server import room as room_module                  # noqa: PLC0415
+    from server.rounds import room as room_module                  # noqa: PLC0415
 
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     opened = deploy.post(
@@ -266,7 +266,7 @@ def test_tally_requires_the_serial_that_was_present_at_done(room_server):
 def test_close_marks_closing_before_sender_stop_so_tick_opens_no_wave(
     room_server, monkeypatch,
 ):
-    from server import room as room_module                  # noqa: PLC0415
+    from server.rounds import room as room_module                  # noqa: PLC0415
 
     deploy, ctx = room_server["deploy"], room_server["ctx"]
     opened = deploy.post(
@@ -857,7 +857,7 @@ def test_a_future_last_seen_is_not_awake():
     "ערה" לכל משך הסטייה. חותמת עתידית אינה ראיה שהמכונה חיה עכשיו."""
     from datetime import datetime, timedelta, timezone         # noqa: PLC0415
 
-    from server.room import AWAKE_SECONDS, _is_awake            # noqa: PLC0415
+    from server.rounds.room import AWAKE_SECONDS, _is_awake            # noqa: PLC0415
 
     future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     assert _is_awake(future) is False
@@ -873,7 +873,7 @@ def test_a_recent_last_seen_is_still_awake():
     """רדיוס הפגיעה: חותמת עדכנית בעבר הקרוב עדיין "ערה"."""
     from datetime import datetime, timedelta, timezone         # noqa: PLC0415
 
-    from server.room import _is_awake                          # noqa: PLC0415
+    from server.rounds.room import _is_awake                          # noqa: PLC0415
 
     recent = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
     assert _is_awake(recent) is True
@@ -889,7 +889,7 @@ def test_fresh_progress_keeps_a_machine_awake_without_hello():
     לקבל את שתי הראיות: חותמת progress עדכנית לצד hello ישן = ערה."""
     from datetime import datetime, timedelta, timezone         # noqa: PLC0415
 
-    from server.room import _is_awake                          # noqa: PLC0415
+    from server.rounds.room import _is_awake                          # noqa: PLC0415
 
     stale = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
     fresh = (datetime.now(timezone.utc) - timedelta(seconds=4)).isoformat()

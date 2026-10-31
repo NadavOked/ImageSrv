@@ -29,7 +29,7 @@ def ports_server(tmp_path: Path, images_root: Path, clock):
     בודק boot_files/shim, ואין להם בכלל hooks כאן."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import monitor, users
+    from server.console import monitor, users
     from server.app import create_app
     from server.db import set_setting
 
@@ -44,7 +44,7 @@ def ports_server(tmp_path: Path, images_root: Path, clock):
             # אמיתיים). המתג עצמו נבדק ב-test_port_toggles.py.
             "ss_tcp": "",
             "nft_ruleset": (
-                "table inet imagectl {\n"
+                "table inet imagesrv {\n"
                 "\tchain input {\n"
                 "\t\tiifname \"lo\" accept\n"
                 "\t}\n"
@@ -252,7 +252,7 @@ def test_firewall_that_could_not_be_read_is_not_checked_never_open(ports_server)
     """עיקרון 5: nft שלא נקרא, טבלה שלא נטענה, או טבלה בלי policy ידוע —
     ‏`None` ("לא נבדק"), לעולם לא "open"."""
     for ruleset, phrase in ((None, "לא נבדק"), ("", "לא נטענה"),
-                            ("table inet imagectl {\n\tchain input {\n\t}\n}\n", "לא ידוע")):
+                            ("table inet imagesrv {\n\tchain input {\n\t}\n}\n", "לא ידוע")):
         ports_server["fake"]["nft_ruleset"] = ruleset
         rows = by_id(ports_server["admin"].get("/api/console/ports").json())
         for pid in ("http_console", "interserver"):
@@ -261,8 +261,8 @@ def test_firewall_that_could_not_be_read_is_not_checked_never_open(ports_server)
 
 
 def test_port_firewall_ignores_comments_drops_and_longer_port_numbers():
-    from server.ports import port_firewall
-    body = ("table inet imagectl {\n\tchain input {\n"
+    from server.net.ports import port_firewall
+    body = ("table inet imagesrv {\n\tchain input {\n"
             "\t\ttype filter hook input priority filter; policy drop;\n"
             "\t\t# tcp dport 8081 accept — הערה, לא כלל\n"
             "\t\tiifname \"x\" tcp dport 80810 accept\n"
@@ -277,7 +277,7 @@ def test_port_firewall_ignores_comments_drops_and_longer_port_numbers():
     # טווח/קבוצה שלא פוענחו אינם ראיה ל"חסום" — לא נבדק
     ranged = body.replace("80810", "8000-8100")
     assert port_firewall(ranged, "tcp", "8081") == (
-        None, "יש בטבלת imagectl כלל טווח/קבוצה שלא פוענח — לא נבדק")
+        None, "יש בטבלת imagesrv כלל טווח/קבוצה שלא פוענח — לא נבדק")
     # ‏כללי udp של ההפצה אינם נוגעים לשאלה על tcp (‏#1310: בראשי 8443 פתוח)
     assert port_firewall(_nft("primary.conf"), "tcp", "8443")[0] == "open"
     assert port_firewall(_nft("primary.conf"), "tcp", "4444")[0] == "blocked"

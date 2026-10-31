@@ -3,8 +3,8 @@
 ועל יעד הגיבוי. ‏rsync שסיים אינו "גיבוי תקין": כל מחיצה נבדקת ב-sha256
 מול המניפסט, וזו הראיה החיובית (עיקרון 5).
 
-    python3 tools/verify-images.py /backup/imagectl/images
-    python3 tools/verify-images.py /srv/imagectl/images --quiet
+    python3 tools/verify-images.py /backup/imagesrv/images
+    python3 tools/verify-images.py /srv/imagesrv/images --quiet
 
 יציאה: 0 = כל האימג'ים אומתו · 1 = חסר/פגום (הפירוט בפלט) · 3 = לא נמצא
 אף אימג' — "לא היה מה לבדוק" אינו "נבדק ותקין", אלא אם `--allow-empty`.

@@ -55,9 +55,9 @@ def kiosk(tmp_path: Path, keys: list[str], data: str = "mounted", pre: str = "")
     """usbset_open, the keys, the frame. The same stick (usbdata) across calls in one test."""
     usb = tmp_path / "usbdata"; usb.mkdir(exist_ok=True)
     (tmp_path / "sysroot").mkdir(exist_ok=True)   # no disks, no model: never this host's /sys
-    script = (KIOSK + f'echo {data} > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; {pre} usbset_open; '
-              + "".join(f'usbset_key {k!r}; ' for k in keys) + 'cat "$GUI_DIR/usbset.frame"')
-    return run(tmp_path, script, IMAGECTL_MODE="usbclone", SYSROOT=posix(tmp_path / "sysroot")), usb
+    script = KIOSK + f'echo {data} > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; {pre} usbset_open; '
+    steps = [*(f'usbset_key {k!r};' for k in keys), 'cat "$GUI_DIR/usbset.frame"']
+    return run(tmp_path, script, steps=steps, IMAGESRV_MODE="usbclone", SYSROOT=posix(tmp_path / "sysroot")), usb
 
 
 def dialog_title(frame: str) -> str | None:
@@ -147,7 +147,9 @@ def test_the_sticks_defaults_are_the_servers_where_the_server_has_one(monkeypatc
     decision of its own, kept and named here, not a twin."""
     import sys
     sys.path.insert(0, str(REPO))
-    from server import minfree, readbackhash, smart_history
+    from server.library import minfree
+    from server.agent import readbackhash
+    from server.disks import smart_history
     text = (LIB / "usbclone.sh").read_text(encoding="utf-8")
     got = dict(re.findall(r"^USB_DEF_(\w+)=(\S+)", text, re.M))
     assert int(got["MIN_FREE_GB"]) == minfree.MIN_FREE_GB_DEFAULT

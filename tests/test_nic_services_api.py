@@ -102,7 +102,7 @@ def test_monitor_websocket_is_gated_only_after_an_edit(rig):
     עריכה היא נחסמת (עיקרון 5: "לא ידוע" אינו "מותר"); לפני עריכה — היום."""
     from starlette.websockets import WebSocketDisconnect
 
-    from server import auth
+    from server.console import auth
     client = rig["via"]("10.10.10.8")
 
     def close_code():

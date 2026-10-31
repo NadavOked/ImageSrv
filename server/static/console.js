@@ -1,4 +1,4 @@
-/* ImageCtl — מעטפת הקונסולה: אימות, ניווט, drawer/modal.
+/* ImageSrv — מעטפת הקונסולה: אימות, ניווט, drawer/modal.
    תוכן העמודים (נתונים אמיתיים) נכנס בשלבים הבאים. */
 "use strict";
 
@@ -374,7 +374,7 @@ const WIN_ICONS = {
 };
 const winCloseBtn = (attrs) => `<button type="button" class="n-x" aria-label="סגור" ${attrs}>${WIN_ICONS.x}</button>`;
 
-/* רכיב סיסמה אחד: "הצג/הסתר" + מדיניות חיה. המדיניות זהה לשרת (server/users.py validate_password):
+/* רכיב סיסמה אחד: "הצג/הסתר" + מדיניות חיה. המדיניות זהה לשרת (server/console/users.py validate_password):
    8 תווים, אותיות, ספרות, ותו מהקבוצה !@#$%^&*(),.?":{}|<> — לא "כל תו", אחרת הרשימה תהיה ירוקה והשרת יסרב. */
 const PW_RULES = [["לפחות 8 תווים", /.{8,}/], ["אותיות", /[A-Za-z]/], ["ספרות", /[0-9]/], ["תו מיוחד", /[!@#$%^&*(),.?":{}|<>]/]];
 /* ‏value + readonly (#1268): סיסמה זמנית שמוצגת פעם אחת — אותו שדה ואותו "הצג", רק לקריאה. */
@@ -604,7 +604,7 @@ function confirmSheet(title, sub, submitLabel, onConfirm, impacts = null, danger
    auto = בהיר, ושום דבר לא עוקב אחרי מערכת ההפעלה. המתג מחליף בין בהיר
    לכהה ונשמר למשתמש. localStorage הוא מטמון בלבד — מונע הבהוב בטעינה
    כשהבחירה אינה auto, ונמחק ב-logout וב-auto. */
-const THEME_KEY = "imagectl-theme";
+const THEME_KEY = "imagesrv-theme";
 const THEME_CYCLE = ["light", "dark"];
 const THEME_TITLE = { light: "בהיר", dark: "כהה" };
 let themePref = "auto";
@@ -681,7 +681,7 @@ function noteActivity() {
    תוכן). רק הכיוון מוניטור → קונסולה; דבר אינו נשלח מכאן. */
 function listenMonitorActivity() {
   if (typeof BroadcastChannel !== "function") return null;
-  const channel = new BroadcastChannel("imagectl-activity");
+  const channel = new BroadcastChannel("imagesrv-activity");
   channel.onmessage = () => noteActivity();
   return channel;
 }
@@ -2649,7 +2649,7 @@ function deploy(tab = 0) {
 
 
 /* ‏#447 + קצב אוטומטי (11/10): באיזה קצב הגל יוצא, ולמה (/room.round.wave_rate). השרת
-   מחליט לבד, לעולם לא מעל IMAGECTL_MAX_BITRATE (בלעדיו 900m). ‏null = לא ידוע (מחשב בנייה,
+   מחליט לבד, לעולם לא מעל IMAGESRV_MAX_BITRATE (בלעדיו 900m). ‏null = לא ידוע (מחשב בנייה,
    גל בלי בחירה) — לא מוצג. ‏no_ceiling — רק בגלים שנבחרו לפני הקצב האוטומטי. */
 /* #1758: climb/peak/back — הקצב נבחר לפי goodput (בייטים שנכתבו לשנייה), לא לפי האבדן */
 const WAVE_RATE_WHY = { start: "קצב פתיחה — מחשב שיכפול בלי גל קודם",
@@ -3670,11 +3670,11 @@ function bulkDelete() {
 function imgDragStart(ev, id) {
   id = decodeURIComponent(id);
   const ids = IMG.sel.has(id) ? [...IMG.sel] : [id];
-  ev.dataTransfer.setData("application/x-imagectl-images", JSON.stringify(ids));
+  ev.dataTransfer.setData("application/x-imagesrv-images", JSON.stringify(ids));
   ev.dataTransfer.effectAllowed = "move";
 }
 function folderDragStart(ev, name) {
-  ev.dataTransfer.setData("application/x-imagectl-folder", decodeURIComponent(name));
+  ev.dataTransfer.setData("application/x-imagesrv-folder", decodeURIComponent(name));
   ev.dataTransfer.effectAllowed = "move";
 }
 function imgDragOver(ev) {
@@ -3685,14 +3685,14 @@ function imgDragOver(ev) {
 async function imgDrop(ev, folder) {
   ev.preventDefault(); ev.currentTarget.classList.remove("over");
   folder = folder == null ? null : decodeURIComponent(folder);
-  const ids = ev.dataTransfer.getData("application/x-imagectl-images");
+  const ids = ev.dataTransfer.getData("application/x-imagesrv-images");
   if (ids) { await moveImages(JSON.parse(ids), folder); return; }
-  const name = ev.dataTransfer.getData("application/x-imagectl-folder");
+  const name = ev.dataTransfer.getData("application/x-imagesrv-folder");
   if (name && folder && name !== folder) await reorderFolderBefore(name, folder);
 }
 async function imgDropOnRow(ev, targetId) {
   ev.preventDefault(); ev.currentTarget.classList.remove("over");
-  const ids = ev.dataTransfer.getData("application/x-imagectl-images");
+  const ids = ev.dataTransfer.getData("application/x-imagesrv-images");
   if (!ids) return;
   const [id] = JSON.parse(ids);
   await reorderImageBefore(id, decodeURIComponent(targetId));
@@ -4182,7 +4182,7 @@ function drawerSlots(m) {
 /* מספר הדיסק של כונן לפי המיפוי; ‏null = לא ממופה. */
 function diskNumber(m, d) { const k = connKey(d), i = k ? drawerSlots(m).indexOf(k) : -1; return i >= 0 ? i + 1 : null; }
 /* ‏#704: השם שהמפעיל נתן לחיבור (‏/machines[].slot_names). המפתח הוא החיבור —
-   ‏sata:<port>, ולכונן בלי port (‏NVMe/USB) ‏serial:<serial> — כמו server/slot_names.py.
+   ‏sata:<port>, ולכונן בלי port (‏NVMe/USB) ‏serial:<serial> — כמו server/disks/slot_names.py.
    חריץ ריק (d=null) הוא החיבור שהמיפוי נותן לדיסק n. בלי שם: "דיסק N". */
 function slotKey(d) { return d.port != null ? `sata:${Number(d.port)}` : d.serial ? `serial:${d.serial}` : null; }
 function slotName(m, n, d) {
@@ -4743,7 +4743,7 @@ const SMART_UNCHECKED_HE = { no_health: "הדיסק אינו מדווח על ב�
   open_failed: "smartctl לא הצליח לפתוח את הדיסק", no_smart: "הדיסק אינו תומך ב-SMART", ro_unread: "לא נקרא אם הדיסק במצב קריאה בלבד",
   cmd_failed: "פקודת SMART לדיסק נכשלה", no_attrs: "הדיסק לא החזיר טבלת מאפייני SMART",   /* #1903 */
   no_table: "טבלת הידע של SMART חסרה — לא נבדק" };
-/* #1859 (Nadav 20/10): the orange -- smart.sh SMART_WARN_REASONS; the learned ones are server/smart_history.py LEARNED_HE. */
+/* #1859 (Nadav 20/10): the orange -- smart.sh SMART_WARN_REASONS; the learned ones are server/disks/smart_history.py LEARNED_HE. */
 const SMART_WARN_HE = { critical_rose: "מאפיין קריטי עלה מאז הסבב הקודם — להחליף את הדיסק", downshift_rose: "ירידות מהירות SATA (183) עלו מאז הסבב הקודם",
   timeout_rose: "פקודות שנתקעו (188) עלו מאז הסבב הקודם", hot: "הדיסק התחמם בכתיבה בסבב הקודם", reported_uncorrectable: "שגיאות שלא תוקנו (187)",
   reallocated: "סקטורים שהועברו (5)", realloc_event: "אירועי העברה (196)", spin_retry: "ניסיונות סיבוב חוזרים (10)", ssd_worn: "הדיסק שחוק — 90% או יותר",
@@ -4767,7 +4767,7 @@ function smartText(d) {
   if (d.smart === "failed_last") return "נכשל בשיכפול הקודם";
   return "SMART לא נבדק";
 }
-/* #1859 (Nadav 20/10): every SMART attribute of a disk, in Hebrew (server/smart_names.py), the critical
+/* #1859 (Nadav 20/10): every SMART attribute of a disk, in Hebrew (server/disks/smart_names.py), the critical
    ones marked, and what rose since this serial's previous round -- a critical one adds "להחליף את הדיסק".
    No previous round is "אין עדיין השוואה", never "stable". Fetched when the machine's panel opens. */
 const SMART_ATTRS = {};
@@ -4794,7 +4794,7 @@ function smartAttrsHtml(mac, d) {
   if (!one || !one.read) return `<div class="muted">SMART לא נקרא מהדיסק הזה — לא נבדק</div>`;
   const head = one.compared ? `<div class="cap">הושווה לסבב הקודם (${esc(fmtWhen(one.previous_at))})${one.learned ? ` · <b>${esc(smartReasonHe(one.learned))}</b>` : ""}</div>`
     : `<div class="cap">${esc(all.no_history_he || "אין עדיין השוואה")}</div>`;
-  // #1921 (Nadav 20/10): the hardware table's notes (server/smart_names.py, the agent's hw-issues.tsv) -- the
+  // #1921 (Nadav 20/10): the hardware table's notes (server/disks/smart_names.py, the agent's hw-issues.tsv) -- the
   // cable or the drawer, said beside the disk and never as its colour
   const hw = (one.hw || []).map((h) => UI.note("warn", `הערת חומרה (מגירה/כבל — לא הדיסק): ${esc(h.he || h.word)}`)).join("");
   return hw + `<details class="smart-attrs"><summary>כל מאפייני ה-SMART (${one.attributes.length})</summary>${head}`
@@ -7477,7 +7477,7 @@ function healthCheckById(id) {
 /* ---------- #1267: רשת › פורטים — כרטיס לכל רשת ----------
    מוקאפ: docs/design/apple-mockups/console-full.html (P.network ports, W.portDrawer);
    docs/interfaces.md §16. הכול מ-/ports: השורות, `network` (לאיזו רשת שייכת השורה)
-   ו-`firewall`/`firewall_detail` (טבלת inet imagectl של השרת — רק לפורטים שבין רשתות).
+   ו-`firewall`/`firewall_detail` (טבלת inet imagesrv של השרת — רק לפורטים שבין רשתות).
    נדב 10/10: ברשת ההפצה השרת מנהל את הפורטים — אין עמודת חומת אש ואין פעולות;
    בניהול ובין שרתים — חומת אש (פתוח=ירוק, חסום=אדום, לא נבדק=אפור) ו"מה לפתוח
    בחומת האש של המכללה" מה-note. אין "פתח/סגור פורט" בשום מקום — רק "בדוק עכשיו"
@@ -7646,7 +7646,7 @@ function monitorViewerHtml(list, enabled) {
     const node = m.node || SERVER_CTX;
     const q = `monitor.html?mac=${encodeId(m.mac)}&name=${encodeId(m.name || m.mac)}${node ? `&node=${encodeId(node)}` : ""}`;
     body = `<div class="mon-bar"><strong>${esc(m.name || m.mac)}</strong><span class="mono">${esc(m.ip || "")}</span><span class="sp"></span>`
-      + `<a class="btn sm" href="${q}" target="imagectl-monitor-${esc(m.mac)}" rel="noopener" onclick="monitorPopOut()">פתח בחלון נפרד</a></div>`
+      + `<a class="btn sm" href="${q}" target="imagesrv-monitor-${esc(m.mac)}" rel="noopener" onclick="monitorPopOut()">פתח בחלון נפרד</a></div>`
       + `<iframe class="mon-frame" title="מסך ${esc(m.name || m.mac)}" src="${q}"></iframe>`;
   }
   return UI.card({ title: "צפייה במסך", small: m ? m.name || m.mac : "", cls: "c6", flush: !!m && m.online && enabled, body });
@@ -7743,7 +7743,7 @@ const SETTING_ROWS = [
     sheetSub: "כמה זמן הסבב מחכה למשכפל שהפסיק לדווח (כבל שזז, סוויץ׳ שמתאתחל), לפני שהוא מסומן \"אבד\".",
     sheetNote: "הערך עובר לכל משכפל בהתחברות הבאה שלו ובתחילת כל סבב. משכפל שלא אישר את הערך עובד עם 3 דקות, ומוצג כאן כ\"לא הוחל\"." },
   // ‏#1303 (נדב 12/10): הקצב הנלמד של המולטיקאסט (‏drive_rates); ‏"false" בלבד מכבה — חסר = אוטומטי.
-  { key: "learned_rate_enabled", card: "deploy", label: "קצב שידור אוטומטי לפי הכוננים בחדר", more: "כבוי = תמיד התקרה הקבועה (IMAGECTL_MAX_BITRATE). השינוי חל מהגל הבא", type: "switch", defaultOn: true },
+  { key: "learned_rate_enabled", card: "deploy", label: "קצב שידור אוטומטי לפי הכוננים בחדר", more: "כבוי = תמיד התקרה הקבועה (IMAGESRV_MAX_BITRATE). השינוי חל מהגל הבא", type: "switch", defaultOn: true },
   // ‏#1354 (נדב 13/10): יעד שיישארו בו פחות מזה במחיצת המערכת — "לא נכנס". הסוכן מקבל ב-hello.
   { key: "min_free_gb", card: "deploy", label: "מקום פנוי מינימלי אחרי שחזור", type: "number", min: 0, max: 500, unit: "GB", more: "יעד שיישאר עם פחות מזה יוצג כ'לא נכנס'" },
   // ‏#1366 (נדב 13/10): מגירה שמונה ה-CRC שלה מעל זה — כתומה: "כבל או מגירה חשודים". 0 = כבוי, ברירת המחדל. הסוכן מקבל ב-hello.
@@ -8694,7 +8694,7 @@ function treeKeydown(e) {
    פותח את העץ המלא כמגירה עם מסך מעומעם (Esc / לחיצה על הרקע סוגרים, והפוקוס חוזר ל-☰). הבחירה נשמרת
    רק במסך רחב (localStorage — נוחות בלבד). הפס נבנה מהעץ שב-index.html עצמו: אותם צמתים, אייקונים,
    הרשאות (hidden) ופעולות — אין רשימת ניווט שנייה שתיסחף. */
-const NAV_KEY = "imagectl.nav";
+const NAV_KEY = "imagesrv.nav";
 let NAV_PREF = "full", NAV_MQ = null;
 function navIsNarrow() { return window.matchMedia("(max-width:900px)").matches; }   // ‏#1300: כמו המוקאפ
 function navStored() { try { return localStorage.getItem(NAV_KEY); } catch (e) { return null; } }
@@ -9027,7 +9027,7 @@ function syncTaskPanel() {
   } catch (e) { /* no layout here */ }
 }
 /* נדב 17/10: הדוק סגור בכל כניסה. מה שהמשתמש פתח נזכר ב-sessionStorage — לאותו סשן בלבד (רענון), ו-showLogin מוחק. */
-const DOCK_KEY = "imagectl.dock.open";
+const DOCK_KEY = "imagesrv.dock.open";
 function dockStore(v) { try { if (v) sessionStorage.setItem(DOCK_KEY, "1"); else sessionStorage.removeItem(DOCK_KEY); } catch (e) { /* העדפה בלבד */ } }
 function toggleTaskPanel() {
   const panel = document.getElementById("taskPanel");
@@ -10247,12 +10247,12 @@ function editImageDescription(id) {
 function monitorMachine(mac) {
   const m=findMachine(mac), g=(GROUPS || []).find(g=>g.id===machineGroupId(m));
   if (!isAdmin() || !m || !["build","cloner"].includes(g?.role)) return;
-  window.open("monitor.html?mac="+encodeId(m.mac)+"&name="+encodeId(machineName(m)),"imagectl-monitor-"+m.mac);
+  window.open("monitor.html?mac="+encodeId(m.mac)+"&name="+encodeId(machineName(m)),"imagesrv-monitor-"+m.mac);
 }
 
 /* #827: הדלקה דורשת הקלדת
    מילת האישור, כיבוי לא. ‏confirm חייב לתאום בדיוק את מה שהשרת דורש
-   (imagectl.monitor, #690).
+   (imagesrv.monitor, #690).
    ‏#1227 (עיקרון 5): ההודעה נגזרת מה-`enabled` שחזר בתשובה, לא ממה
    שביקשנו — תשובה בלי `enabled` היא "לא אומת", לא הצלחה בשתיקה. */
 function monitorToggle(enabling) {
@@ -10276,7 +10276,7 @@ function monitorToggle(enabling) {
     danger: true, submitLabel: "הדלקת המוניטור",
     note: impactList([["w", "כל מחשב בנייה/שיכפול שיעלה מעכשיו יריץ שירות צפייה מרחוק (RFB, בלי סיסמה)"],
       ["ok", "תופס באתחול הבא של כל תחנה — לא במכונות שכבר רצות"]]) + offMeansNote(PORT_OFF_MEANS.monitor),
-    onSubmit: () => send({ confirm: "imagectl.monitor" }),
+    onSubmit: () => send({ confirm: "imagesrv.monitor" }),
   });
 }
 /* ‏#954 גל 4: אין עוד מגירת סבב — "פרטים" מוביל ללשונית "כיתה" בדף ההפצה. */

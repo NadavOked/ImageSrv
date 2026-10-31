@@ -18,7 +18,7 @@ import shutil
 
 import pytest
 
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 from test_capture import do_capture, make_task, manifest_for, setup_build_machine, task_token
 
 pytest.importorskip("fastapi")

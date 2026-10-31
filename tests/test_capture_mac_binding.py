@@ -24,6 +24,8 @@ import json
 import re
 from pathlib import Path
 
+from agentlib import server_files
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -284,16 +286,17 @@ def test_every_module_that_opens_a_restore_consults_the_binding():
     המודול החמישי שיפתח סבב ייתפס כאן ביום שהוא נכתב, ולא מול כיתה.
     """
     server_dir = REPO / "server"
+    paths = server_files(server_dir)
     opens = {
-        path.name for path in server_dir.glob("*.py")
+        path.name for path in paths
         if re.search(r"store\.open\(|pulls\.open_pull\(",
                      path.read_text(encoding="utf-8"))
     } - {"sessions.py", "pulls.py"}
     assert opens == RESTORE_OPENERS, (
         f"מסלול שחזור שאינו ברשימה, או שנעלם ממנה: {opens ^ RESTORE_OPENERS}")
-    missing = [name for name in sorted(opens)
+    missing = [str(path.relative_to(server_dir)) for path in paths if path.name in opens
                if "restore_refusal" not in
-               (server_dir / name).read_text(encoding="utf-8")]
+               path.read_text(encoding="utf-8")]
     assert not missing, f"פותח שחזור שאינו בודק את הקשירה: {missing}"
 
 

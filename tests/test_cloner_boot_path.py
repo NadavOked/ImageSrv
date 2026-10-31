@@ -6,7 +6,7 @@
 
 **הקובץ הזה בודק את מה שנרנדר, לא את ההחלטה.** ‏`decide()` החזיר
 `Decision(AGENT, "cloner-wait")` נכון מאז #17, ובכל זאת הקובץ שיצא בפועל
-הכיל שני ערכים — `imagectl` **ו**-`menuentry "Boot from local disk"` עם
+הכיל שני ערכים — `imagesrv` **ו**-`menuentry "Boot from local disk"` עם
 ‏`chain_local` שמאחוריו, שמנסה `chainloader` על שנים-עשר נתיבי EFI. החלטה
 נכונה אינה מוכיחה קובץ נכון, וזה בדיוק הפער ש-#320 סגר.
 
@@ -74,7 +74,7 @@ def test_the_cloner_file_holds_exactly_one_entry(a):
     היא בחירה בין הסוכן לבין כתיבה על הסחורה."""
     text = render(a, CFG)
     assert text.count("menuentry ") == 1
-    assert 'menuentry "ImageSrv" --id imagectl {' in text
+    assert 'menuentry "ImageSrv" --id imagesrv {' in text
 
 
 @pytest.mark.parametrize("a", CLONER_ANSWERS)
@@ -107,7 +107,7 @@ def test_the_cloner_file_shows_no_menu_and_waits_for_nobody(a):
     conf = settings(render(a, CFG))
     assert conf["set timeout"] == "0"
     assert conf["set timeout_style"] == "hidden"
-    assert conf["set default"] == "imagectl"
+    assert conf["set default"] == "imagesrv"
 
 
 @pytest.mark.parametrize("a", CLONER_ANSWERS)
@@ -117,7 +117,7 @@ def test_the_cloner_file_still_loads_the_agent(a):
     text = render(a, CFG)
     assert "linux (http,10.44.12.10:8080)/boot/vmlinuz" in text
     assert "initrd (http,10.44.12.10:8080)/boot/initrd.img" in text
-    assert "imagectl.server=http://10.44.12.10:8080" in text
+    assert "imagesrv.server=http://10.44.12.10:8080" in text
 
 
 @pytest.mark.parametrize("a", CLONER_ANSWERS)
@@ -141,7 +141,7 @@ def test_gui_cloner_still_has_one_hidden_agent_entry(a):
     conf = settings(text)
     assert conf["set timeout"] == "0"
     assert conf["set timeout_style"] == "hidden"
-    assert conf["set default"] == "imagectl"
+    assert conf["set default"] == "imagesrv"
     assert text.count("menuentry ") == 1
     assert "--id local {" not in text
     assert "chainloader" not in text
@@ -153,16 +153,16 @@ def test_gui_cloner_still_has_one_hidden_agent_entry(a):
 
 
 @pytest.mark.parametrize("role", ["classroom", "build"])
-def test_a_gui_role_auto_boots_imagectl_with_a_hidden_local_entry(role):
-    """‏#641: תחנת כיתה ומחשב בנייה בלי משימה עולים ישר ל-ImageCtl
-    (‏`default=imagectl`, ‏`timeout=0`), אבל הדיסק המקומי **נשאר בקובץ**
+def test_a_gui_role_auto_boots_imagesrv_with_a_hidden_local_entry(role):
+    """‏#641: תחנת כיתה ומחשב בנייה בלי משימה עולים ישר ל-ImageSrv
+    (‏`default=imagesrv`, ‏`timeout=0`), אבל הדיסק המקומי **נשאר בקובץ**
     (חבוי) — בשונה מ-cloner, שאין לו דיסק כלל. שני ערכים, ו-chain_local
     מאחורי הערך המקומי."""
     text = render(answer(role=role), CFG)
     conf = settings(text)
     assert conf["set timeout"] == "0"
     assert conf["set timeout_style"] == "hidden"
-    assert conf["set default"] == "imagectl"
+    assert conf["set default"] == "imagesrv"
     assert text.count("menuentry ") == 2
     assert "--id local {" in text
     assert "chainloader" in text
@@ -171,7 +171,7 @@ def test_a_gui_role_auto_boots_imagectl_with_a_hidden_local_entry(role):
 def test_a_menu_role_outside_the_gui_set_keeps_its_visible_menu():
     """תפקיד רשום שאינו ב-ROLES_WITH_GUI (למשל unknown) לא השתנה ב-#641:
     הוא עדיין מקבל את התפריט הגלוי של #140, בלי טיימר, עם הדיסק לצד
-    ImageCtl."""
+    ImageSrv."""
     text = render(answer(role="unknown"), CFG)
     conf = settings(text)
     assert conf["set timeout"] == "-1"
@@ -199,7 +199,7 @@ def test_a_classroom_station_with_a_task_keeps_its_local_fallback():
 # ל-`chain_local` על שנים-עשר נתיבי EFI מול הכוננים המחוברים.
 #
 # מה שכן זמין לו לפני כל פנייה לשרת הוא `$grub_platform`: מי שעלה עם
-# ליבת ה-i386-pc הוא מחשב Legacy BIOS, כי `server/dhcp.py` מוסר את
+# ליבת ה-i386-pc הוא מחשב Legacy BIOS, כי `server/net/dhcp.py` מוסר את
 # ‏`grub/i386-pc/core.0` אך ורק ל-`client-arch 0` — וברשת הזאת מחשבי
 # השיכפול הם היחידים שאין להם UEFI (#38, אפיון סעיף 4).
 

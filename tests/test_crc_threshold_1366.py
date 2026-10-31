@@ -25,12 +25,12 @@ TEXT = "כבל או מגירה חשודים — {} שגיאות"
     (1_000_001, None), (5.5, None), (None, None),
 ])
 def test_parse_takes_a_whole_number_in_range_only(raw, want):
-    from server import crcwarn   # in the test: the rest of the module runs without it (negative control)
+    from server.disks import crcwarn   # in the test: the rest of the module runs without it (negative control)
     assert crcwarn.parse(raw) == want
 
 
 def test_suspect_has_three_states():
-    from server import crcwarn
+    from server.disks import crcwarn
     assert crcwarn.suspect(667, 500) is True
     assert crcwarn.suspect(500, 500) is False            # "מעל" -- over, not at
     assert crcwarn.suspect(55242, 0) is False            # 0 = the warning is off
@@ -96,7 +96,7 @@ def test_a_first_wave_warns_before_start_on_an_absolute_count(room_server):
 
 def test_the_default_is_500_since_21_10():
     """Nadav 21/10 (#1921) replaced the 0 of 13/10: 500, as on USB -- a drawer/cable note."""
-    from server import crcwarn
+    from server.disks import crcwarn
     assert crcwarn.DEFAULT == 500
 
 

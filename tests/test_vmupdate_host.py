@@ -1,7 +1,7 @@
 """‏#1334 — המארח מוכן לעדכון ב-VM גם כשהשרת מתעדכן מהכפתור ולא מה-ISO.
 
-‏`install/vmupdate-host.sh` מתקין את install/vmupdate-packages.txt (המקור היחיד)
-ויוצר את imagectl-vm, באופן אידמפוטנטי, ומצליח רק על **ראיה חיובית** (dpkg-query
+‏`deploy/vmupdate-host.sh` מתקין את deploy/vmupdate-packages.txt (המקור היחיד)
+ויוצר את imagesrv-vm, באופן אידמפוטנטי, ומצליח רק על **ראיה חיובית** (dpkg-query
 לכל חבילה, ‏id למשתמש). ‏`tools/server-upgrade.sh` מריץ אותו אחרי ה-checkout:
 כשל **אינו** מפיל את העדכון וגם **אינו** נבלע — הסיבה בסטטוס (`warning`), והעדכון
 מגיע ל-"אומת — אבל עדכון ב-VM לא זמין".
@@ -24,8 +24,8 @@ from test_server_upgrade_1193 import _success_tools
 pytestmark = requires_native(("bash", BASH), why="the host/upgrade scripts are bash")
 
 REPO = Path(__file__).resolve().parent.parent
-HOST = REPO / "install" / "vmupdate-host.sh"
-LIST = REPO / "install" / "vmupdate-packages.txt"
+HOST = REPO / "deploy" / "vmupdate-host.sh"
+LIST = REPO / "deploy" / "vmupdate-packages.txt"
 
 
 @pytest.fixture()
@@ -62,10 +62,10 @@ def host_env(bindir: Path) -> dict:
     """‏/etc/apt של הטסט — תיקייה ריקה (שרת שאינו מה-ISO), לעולם לא של המכונה."""
     apt_etc = bindir.parent / "etc-apt"
     (apt_etc / "sources.list.d").mkdir(parents=True, exist_ok=True)
-    return {"IMAGECTL_APT": "fakeapt", "IMAGECTL_DPKG_QUERY": "fakedpkg",
-            "IMAGECTL_ID": "fakeid", "IMAGECTL_USERADD": "fakeuseradd",
-            "IMAGECTL_APT_ETC": posix(apt_etc), "IMAGECTL_PYTHON": posix(Path(sys.executable)),
-            "IMAGECTL_APT_REPO": posix(bindir.parent / "apt-repo")}
+    return {"IMAGESRV_APT": "fakeapt", "IMAGESRV_DPKG_QUERY": "fakedpkg",
+            "IMAGESRV_ID": "fakeid", "IMAGESRV_USERADD": "fakeuseradd",
+            "IMAGESRV_APT_ETC": posix(apt_etc), "IMAGESRV_PYTHON": posix(Path(sys.executable)),
+            "IMAGESRV_APT_REPO": posix(bindir.parent / "apt-repo")}
 
 
 def run_host(tmp_path, bindir):
@@ -88,7 +88,7 @@ def test_installs_the_list_and_creates_the_user(tmp_path, bindir):
     assert apt[0].split()[1:3] == ["update", "-qq"] and not any("https" in a for a in apt)
     # ‏#1987: בלי Recommends — רק הרשימה ומה שהיא חייבת.
     assert apt[1].split()[1:5] == ["install", "-y", "-qq", "--no-install-recommends"] and apt[1].split()[5:] == packages()
-    assert any(row.startswith("fakeuseradd --system") and row.endswith("imagectl-vm") for row in log)
+    assert any(row.startswith("fakeuseradd --system") and row.endswith("imagesrv-vm") for row in log)
 
 
 def test_is_idempotent_with_an_existing_user(tmp_path, bindir):
@@ -114,26 +114,26 @@ def test_apt_exit_0_is_not_evidence(tmp_path, bindir):
 def test_a_user_that_was_not_created_fails(tmp_path, bindir):
     tools(bindir, useradd="false")
     proc = run_host(tmp_path, bindir)
-    assert proc.returncode == 5 and "imagectl-vm" in proc.stdout.splitlines()[-1]
+    assert proc.returncode == 5 and "imagesrv-vm" in proc.stdout.splitlines()[-1]
 
 
 # --- ‏#1371/#1459: שרת מה-ISO — המאגר המקומי עקבי, ואין מקור apt חי ---------
 
 
 def iso_server(tmp_path: Path, bindir: Path) -> tuple[dict, Path, Path]:
-    """שרת מה-ISO כמו שרת ת"א (‏13/10): imagectl-iso.list, ומאגר מקומי שהאינדקס
+    """שרת מה-ISO כמו שרת ת"א (‏13/10): imagesrv-iso.list, ומאגר מקומי שהאינדקס
     שלו מונה חבילה (‏openssh-server) שהקובץ שלה לא הועתק."""
     env = host_env(bindir)
-    apt_etc = Path(env["IMAGECTL_APT_ETC"])
-    (apt_etc / "sources.list.d" / "imagectl-iso.list").write_text(
-        "deb [trusted=yes] file:/var/lib/imagectl/apt-repo trixie main contrib\n", encoding="utf-8")
-    repo = Path(env["IMAGECTL_APT_REPO"])
-    (repo / "pool" / "main" / "imagectl").mkdir(parents=True)
-    (repo / "pool" / "main" / "imagectl" / "qemu_1_amd64.deb").write_bytes(b"deb")
+    apt_etc = Path(env["IMAGESRV_APT_ETC"])
+    (apt_etc / "sources.list.d" / "imagesrv-iso.list").write_text(
+        "deb [trusted=yes] file:/var/lib/imagesrv/apt-repo trixie main contrib\n", encoding="utf-8")
+    repo = Path(env["IMAGESRV_APT_REPO"])
+    (repo / "pool" / "main" / "imagesrv").mkdir(parents=True)
+    (repo / "pool" / "main" / "imagesrv" / "qemu_1_amd64.deb").write_bytes(b"deb")
     index = repo / "dists" / "trixie" / "main" / "binary-amd64" / "Packages.gz"
     index.parent.mkdir(parents=True)
     index.write_bytes(gzip.compress(
-        b"Package: qemu\nFilename: pool/main/imagectl/qemu_1_amd64.deb\n\n"
+        b"Package: qemu\nFilename: pool/main/imagesrv/qemu_1_amd64.deb\n\n"
         b"Package: openssh-server\nFilename: pool/main/o/openssh/openssh-server_1_amd64.deb\n"))
     (repo / "dists" / "trixie" / "Release").write_text("Suite: stable\nSHA256:\n", encoding="utf-8")
     return env, apt_etc, index
@@ -145,8 +145,8 @@ def test_an_iso_server_gets_no_live_apt_source(tmp_path, bindir):
     env, apt_etc, _index = iso_server(tmp_path, bindir)
     proc = run_bash(f'bash "{posix(HOST)}"', tmp_path, bindir, env=env)
     assert proc.returncode == 0, proc.stdout
-    assert not (apt_etc / "sources.list.d" / "imagectl-debian.list").exists()
-    assert not (apt_etc / "preferences.d" / "imagectl-debian.pref").exists()
+    assert not (apt_etc / "sources.list.d" / "imagesrv-debian.list").exists()
+    assert not (apt_etc / "preferences.d" / "imagesrv-debian.pref").exists()
     written = "".join(p.read_text(encoding="utf-8") for p in apt_etc.rglob("*") if p.is_file())
     assert "debian.org" not in written and "http" not in written
     log = " ".join(calls(tmp_path))
@@ -158,12 +158,12 @@ def test_an_iso_server_that_got_the_live_source_before_has_it_removed(tmp_path, 
     tools(bindir)
     env, apt_etc, _index = iso_server(tmp_path, bindir)
     (apt_etc / "preferences.d").mkdir()
-    (apt_etc / "sources.list.d" / "imagectl-debian.list").write_text(
+    (apt_etc / "sources.list.d" / "imagesrv-debian.list").write_text(
         "deb https://deb.debian.org/debian trixie main contrib\n", encoding="utf-8")
-    (apt_etc / "preferences.d" / "imagectl-debian.pref").write_text("Pin: origin deb.debian.org\n", encoding="utf-8")
+    (apt_etc / "preferences.d" / "imagesrv-debian.pref").write_text("Pin: origin deb.debian.org\n", encoding="utf-8")
     assert run_bash(f'bash "{posix(HOST)}"', tmp_path, bindir, env=env).returncode == 0
-    assert not (apt_etc / "sources.list.d" / "imagectl-debian.list").exists()
-    assert not (apt_etc / "preferences.d" / "imagectl-debian.pref").exists()
+    assert not (apt_etc / "sources.list.d" / "imagesrv-debian.list").exists()
+    assert not (apt_etc / "preferences.d" / "imagesrv-debian.pref").exists()
 
 
 def test_everything_installed_never_touches_apt(tmp_path, bindir):
@@ -194,8 +194,8 @@ def test_a_server_not_from_the_iso_keeps_its_own_sources(tmp_path, bindir):
     tools(bindir)
     env = host_env(bindir)
     assert run_bash(f'bash "{posix(HOST)}"', tmp_path, bindir, env=env).returncode == 0
-    apt_etc = Path(env["IMAGECTL_APT_ETC"])
-    assert not (apt_etc / "sources.list.d" / "imagectl-debian.list").exists()
+    apt_etc = Path(env["IMAGESRV_APT_ETC"])
+    assert not (apt_etc / "sources.list.d" / "imagesrv-debian.list").exists()
     assert not (apt_etc / "preferences.d").exists()
 
 
@@ -213,7 +213,7 @@ def test_a_package_the_release_does_not_carry_is_a_named_failure_not_a_fetch(tmp
 def test_a_local_repo_that_cannot_be_checked_fails_by_name(tmp_path, bindir):
     tools(bindir)
     env = host_env(bindir)
-    (Path(env["IMAGECTL_APT_ETC"]) / "sources.list.d" / "imagectl-iso.list").write_text("x\n", encoding="utf-8")
+    (Path(env["IMAGESRV_APT_ETC"]) / "sources.list.d" / "imagesrv-iso.list").write_text("x\n", encoding="utf-8")
     proc = run_bash(f'bash "{posix(HOST)}"', tmp_path, bindir, env=env)   # אין apt-repo בכלל
     assert proc.returncode == 6 and "לא נבדק" in proc.stdout.splitlines()[-1]
     assert not any(row.startswith("fakeapt ") for row in calls(tmp_path))
@@ -225,7 +225,7 @@ def test_a_local_repo_that_cannot_be_checked_fails_by_name(tmp_path, bindir):
 def upgrade_repo(tmp_path: Path, *, host_rc: int | None) -> Path:
     repo = _fake_repo(tmp_path, live_ok=True)
     if host_rc is not None:
-        (repo / "install" / "vmupdate-host.sh").write_text(
+        (repo / "deploy" / "vmupdate-host.sh").write_text(
             '#!/usr/bin/env bash\nprintf "vmupdate-host\\n" >> "$FAKE_LOG"\n'
             + ('echo "עדכון ב-VM: 9 חבילות מותקנות"\nexit 0\n' if host_rc == 0
                else f'echo "apt-get install נכשל: E: Unable to fetch"\nexit {host_rc}\n'),
@@ -247,7 +247,7 @@ def test_the_upgrade_prepares_the_host_before_the_restart(tmp_path, bindir):
     proc = run_upgrade(tmp_path, bindir, repo, data)
     log = calls(tmp_path)
     assert proc.returncode == 0, (tmp_path / "upgrade.log").read_text(encoding="utf-8")
-    assert log.index("vmupdate-host") < log.index("systemctl restart imagectl-server")
+    assert log.index("vmupdate-host") < log.index("systemctl restart imagesrv-server")
     status = _status(data) or {}
     assert status.get("stage") == "done" and "warning" not in status
 
@@ -260,7 +260,7 @@ def test_a_failed_host_preparation_does_not_fail_the_upgrade_and_is_reported(tmp
     proc = run_upgrade(tmp_path, bindir, repo, data)
     log = calls(tmp_path)
     assert proc.returncode == 0, (tmp_path / "upgrade.log").read_text(encoding="utf-8")
-    assert "systemctl restart imagectl-server" in log
+    assert "systemctl restart imagesrv-server" in log
     assert not any(" checkout --detach v0.48.0" in row for row in log)   # לא חזר לתג הקודם
     status = _status(data)
     # ‏#1301: העדכון הסתיים ואומת (state/stage done) — והאזהרה נשמרת עד הסוף.
@@ -274,7 +274,7 @@ def test_a_vm_warning_keeps_an_earlier_upgrade_warning(tmp_path, bindir):
     data = tmp_path / "data"
     _seed_db(data)
     repo = upgrade_repo(tmp_path, host_rc=3)
-    (repo / "install" / "security-upgrade.sh").write_text(
+    (repo / "deploy" / "security-upgrade.sh").write_text(
         '#!/usr/bin/env bash\necho "אזהרה: kernel-warning"\nexit 0\n',
         encoding="utf-8", newline="\n")
     proc = run_upgrade(tmp_path, bindir, repo, data)

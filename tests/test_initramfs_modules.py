@@ -17,6 +17,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from agentlib import flat_lib
+
 import pytest
 
 from native import requires_native
@@ -32,7 +34,7 @@ pytestmark = requires_native("sh", why="הקטע מהבנאי רץ ב-sh")
 
 
 def module_list_snippet() -> str:
-    """הקטע שמייצר את /etc/imagectl/modules, כפי שהוא בסקריפט."""
+    """הקטע שמייצר את /etc/imagesrv/modules, כפי שהוא בסקריפט."""
     lines = BUILDER.read_text(encoding="utf-8").split("\n")
     start = next(i for i, l in enumerate(lines) if l.startswith("_phy_mods=$(find"))
     end = next(i for i, l in enumerate(lines) if l.startswith("} | awk "))
@@ -46,12 +48,12 @@ def generate(tmp_path: Path, phy: list[str], ethernet: list[str], pre: str = "")
         d.mkdir(parents=True, exist_ok=True)
         for name in names:
             (d / f"{name}.ko.xz").write_bytes(b"")
-    (root / "etc" / "imagectl").mkdir(parents=True, exist_ok=True)
+    (root / "etc" / "imagesrv").mkdir(parents=True, exist_ok=True)
 
     script = f'ROOT={root.as_posix()!r}\nKVER={KVER!r}\nWITH_GUI=0\n' + pre + module_list_snippet()
     subprocess.run(["sh", "-c", script], check=True, stdin=subprocess.DEVNULL,
                    capture_output=True)
-    out = root / "etc" / "imagectl" / "modules"
+    out = root / "etc" / "imagesrv" / "modules"
     return out.read_text(encoding="utf-8").split()
 
 
@@ -549,7 +551,7 @@ def test_the_local_clone_view_modules_are_packed_by_name(tmp_path: Path):
 def test_the_local_clone_view_modules_are_not_loaded_at_boot():
     """brd loaded at boot would come up at its default size, and the agent could not size it."""
     text = BUILDER.read_text(encoding="utf-8")
-    boot = text[text.index("printf '%s\\n' usbcore"):text.index('> "$ROOT/etc/imagectl/modules"')]
+    boot = text[text.index("printf '%s\\n' usbcore"):text.index('> "$ROOT/etc/imagesrv/modules"')]
     for mod in ("brd", "dm-snapshot", "dm_snapshot", "dm-mod", "dm_mod"):
         assert mod not in boot, mod
 
@@ -788,14 +790,14 @@ def test_the_build_emits_the_required_module_set_for_the_runtime(tmp_path: Path)
     הקובץ חייב לשקף את ההצהרה, ולא רשימה שנכתבה כאן בידיים.
     """
     root = tmp_path / "root"
-    (root / "etc" / "imagectl").mkdir(parents=True)
+    (root / "etc" / "imagesrv").mkdir(parents=True)
     (root / "lib" / "modules" / KVER).mkdir(parents=True)
     decl = declared("REQUIRED_FS_MODULES")
     script = (f"ROOT={root.as_posix()!r}\nKVER={KVER!r}\nWITH_GUI=0\n"
               f"REQUIRED_FS_MODULES=({' '.join(decl)})\n" + modules_region_snippet())
     subprocess.run([BASH, "-c", script], check=True, stdin=subprocess.DEVNULL,
                    capture_output=True, timeout=90)
-    out = root / "etc" / "imagectl" / "modules.required"
+    out = root / "etc" / "imagesrv" / "modules.required"
     assert out.is_file(), (
         "הבנייה לא הפיקה modules.required — agent/init לא יבחין חובה מרשות (#407)")
     assert out.read_text(encoding="utf-8").split() == decl
@@ -811,7 +813,7 @@ def init_module_block() -> str:
     שניסוח אחר שיאבד את ההבחנה ייכשל כאן.
     """
     lines = INIT.read_text(encoding="utf-8").split("\n")
-    start = next(i for i, l in enumerate(lines) if l.strip() == "mkdir -p /run/imagectl")
+    start = next(i for i, l in enumerate(lines) if l.strip() == "mkdir -p /run/imagesrv")
     end = next(i for i, l in enumerate(lines) if l.startswith("# efivars"))
     return "\n".join(lines[start + 1:end])
 
@@ -819,7 +821,7 @@ def init_module_block() -> str:
 def run_init_block(tmp_path: Path, modules: list[str], required: list[str],
                    fail: list[str], dmi: str = "", hypervisor: bool = False) -> str:
     """מריץ את קטע הטעינה עם `modprobe` מזויף שנכשל על `fail`."""
-    moddir = tmp_path / "etc" / "imagectl"
+    moddir = tmp_path / "etc" / "imagesrv"
     moddir.mkdir(parents=True)
     # ‏LF בלבד — הבנייה כותבת את הקבצים על דביאן, ו-`read -r` בסוכן משאיר
     # ‏`\r` שווינדוס היה מוסיף, כך שכל שם היה נראה שונה מהמצופה.
@@ -827,10 +829,10 @@ def run_init_block(tmp_path: Path, modules: list[str], required: list[str],
         "\n".join(modules) + "\n", encoding="utf-8", newline="\n")
     (moddir / "modules.required").write_text(
         "\n".join(required) + "\n", encoding="utf-8", newline="\n")
-    block = init_module_block().replace("/etc/imagectl", moddir.as_posix())
+    block = init_module_block().replace("/etc/imagesrv", moddir.as_posix())
     # #1702: the loop lives in lib/initmods.sh; no split files here, so it
     # runs the whole list in order, as before.
-    block = block.replace("/usr/lib/imagectl", (INIT.parent / "lib").as_posix())
+    block = block.replace("/usr/lib/imagesrv", flat_lib().as_posix())
     block = block.replace(
         'cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name 2>/dev/null',
         f'printf %s {dmi!r}').replace(
@@ -887,7 +889,7 @@ def test_only_detected_virtual_platform_failures_are_warned(tmp_path: Path):
 
 
 def test_init_has_no_old_user_visible_prefix():
-    assert "imagectl init:" not in INIT.read_text(encoding="utf-8")
+    assert "imagesrv init:" not in INIT.read_text(encoding="utf-8")
 
 
 def test_a_required_module_failure_is_named_not_a_silent_count(tmp_path: Path):
