@@ -22,7 +22,7 @@ SCREENS_C = (SRC / "screens.c").read_text(encoding="utf-8")
 MAIN_C = (SRC / "main.c").read_text(encoding="utf-8")
 UI_H = (SRC / "ui.h").read_text(encoding="utf-8")
 MAKEFILE = (SRC.parent / "Makefile").read_text(encoding="utf-8")
-BRIDGE = (SRC.parents[1] / "agent" / "lib" / "guibridge.sh").read_text(encoding="utf-8")
+BRIDGE = (SRC.parents[1] / "agent" / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
 
 
 def function_body(text: str, name: str) -> str:
@@ -158,7 +158,7 @@ def test_the_bridge_dispatches_both_tokens_behind_the_session_gate():
 # --- v1 בלי ארגז הכלים (הכרעת נדב 19/09; v1.1 = הכלים) ----------------------------
 #
 # הגואי יודע על יכולות השרת דרך קובץ המצב: hello/‏`/state` נושאים `tools`
-# (‏`server/capabilities.py`), ‏`tools_on` ב-`buildmenuitems.sh` קורא אותו
+# (‏`server/core/capabilities.py`), ‏`tools_on` ב-`buildmenuitems.sh` קורא אותו
 # (חסר = כבוי), ‏`guistate.sh` כותב `menu_tools=0|1` **תמיד**, ו-`screens.c`
 # מצייר את כפתור "כלים" רק על 1 — אותו ערוץ בדיוק כמו `menu_class` (#1081).
 
@@ -173,8 +173,8 @@ from native import requires_native
 
 STATE_C = (SRC / "state.c").read_text(encoding="utf-8")
 AGENT = SRC.parents[1] / "agent"
-ITEMS = (AGENT / "lib" / "buildmenuitems.sh").read_text(encoding="utf-8")
-GUISTATE = (AGENT / "lib" / "guistate.sh").read_text(encoding="utf-8")
+ITEMS = (AGENT / "lib" / "gui" / "buildmenuitems.sh").read_text(encoding="utf-8")
+GUISTATE = (AGENT / "lib" / "gui" / "guistate.sh").read_text(encoding="utf-8")
 
 
 def test_the_tools_button_is_drawn_only_when_menu_tools_is_on():
@@ -211,9 +211,9 @@ def _state_records(tmp_path: Path, hello: dict | None, station: dict = STATION) 
     a = posix(AGENT)
     script = (
         f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
-        f'. {a}/lib/common.sh; . {a}/lib/jsonq.sh; . {a}/lib/buildmenuitems.sh; . {a}/lib/buildmenu.sh; '
-        f'. {a}/lib/guistate.sh; . {a}/lib/askgui.sh; '
+        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
+        f'. {a}/lib/core/common.sh; . {a}/lib/core/jsonq.sh; . {a}/lib/gui/buildmenuitems.sh; . {a}/lib/gui/buildmenu.sh; '
+        f'. {a}/lib/gui/guistate.sh; . {a}/lib/gui/askgui.sh; '
         'disk_slot_records() { :; }; '   # #1495: disk numbering is test_drawer_map_gui_1495's
         + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; gui_state'
     )

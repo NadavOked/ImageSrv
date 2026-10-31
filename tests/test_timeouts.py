@@ -25,12 +25,13 @@ import pytest
 import hygiene
 from native import requires_native
 from test_agent import BASH, SH_FILES, posix
+from agentlib import lib_path
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
-WAITS = AGENT / "lib" / "waits.sh"
-WATCHDOG = AGENT / "lib" / "watchdog.sh"
-RESTORE = AGENT / "lib" / "restore.sh"
+WAITS = AGENT / "lib" / "core" / "waits.sh"
+WATCHDOG = AGENT / "lib" / "core" / "watchdog.sh"
+RESTORE = AGENT / "lib" / "restore" / "restore.sh"
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -64,7 +65,7 @@ def run_sh(script: str, timeout: int = TEST_TIMEOUT) -> str:
     שאינה סוף הסקריפט — כשל שנראה כמו באג בקוד שנבדק (נמדד ב-#926: נתיב
     ‏tmp_path של pytest ×20 זיופים + זיוף curl של 1.1KB עברו את הסף).
     """
-    out_file = Path(tempfile.mkdtemp(prefix="imagectl-wait-")) / "out"
+    out_file = Path(tempfile.mkdtemp(prefix="imagesrv-wait-")) / "out"
     wrapped = (
         'export PATH="/usr/bin:$PATH"\n'
         f"{{\n{script}\n}} > {posix(out_file)!r} 2>&1\n"
@@ -94,7 +95,7 @@ def waits_prelude(box: Path, **env) -> str:
     exports = " ".join(f"{k}={v!r}" for k, v in env.items())
     return (
         f"export RUN_DIR={posix(box)!r} {exports}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
     )
 
 
@@ -343,7 +344,7 @@ def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp
     run = box / "run"
     payload = box / "part.bin"
     box.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 4096)
+    payload.write_bytes(b"imagesrv" * 4096)
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     for dev in ("sda", "sdb"):
         target = run / "targets" / dev
@@ -358,9 +359,9 @@ def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp
         f"DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=3 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; echo \"rc=$?\""
@@ -394,8 +395,8 @@ def test_a_station_whose_stream_never_arrives_fails_instead_of_freezing(tmp_path
         f"DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_STREAM_START_S=3 WAIT_STREAM_STALL_S=3 "
         "WAIT_HELPER_S=3; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
         "stream_source() { sleep 120; }; "
         # הבדיקה הזו על התקרה של הזרם. בדיקת ההתקן שלפניה (#51) מוחלפת
         # כי אין התקן בלוקים בקופסה, ונבדקת בנפרד ב-test_restore_evidence.py.
@@ -457,7 +458,7 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
     run = box / "run"
     payload = box / "part.bin"
     box.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 512)
+    payload.write_bytes(b"imagesrv" * 512)
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     for dev in ("sda",):
         target = run / "targets" / dev
@@ -471,9 +472,9 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         f"UDP_ARGV={posix(argv)!r} UDP_PAYLOAD={posix(payload)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         # ‏wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
         "eval \"orig_$(declare -f wait_progress)\"; "
         f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
@@ -541,7 +542,7 @@ def test_a_drawer_room_waits_out_a_late_second_partition_instead_of_the_stall_ce
     השורש: ‏`$RUN_DIR/bytes.raw` של החדר אינו מתאפס בין מחיצות, והמונה
     הסופי של p1 נקרא ב-p14 כ"בייט ראשון" (ו-"0" של pv — באותה דרך).
 
-    כאן: הזרם השני שותק 5 שניות — יותר מתקרת השקט (2), פחות מתקרת
+    כאן: הזרם השני מחכה לשלוש דגימות — יותר מתקרת השקט (2), פחות מתקרת
     ההתחלה של מחיצה 2+ (20) — ואז מגיע. **בקרה שלילית:** על הקוד הישן
     המחיצה השנייה נכשלת "פג הזמן -- הזרם לא הגיע". שני הזיופים של המונה
     מכסים את שני המנגנונים: המונה של המחיצה הקודמת (drawers.sh) וה-"0"
@@ -550,37 +551,64 @@ def test_a_drawer_room_waits_out_a_late_second_partition_instead_of_the_stall_ce
     run = box / "run"
     payload = box / "part.bin"
     box.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 512)
+    payload.write_bytes(b"imagesrv" * 512)
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     target = run / "targets" / "sda"
     target.mkdir(parents=True)
     (target / "state").write_text("writing\n")
+    # Signal after the optional zero counter is written, before reading stdin.
+    # The source cannot send p3 until wait_progress has sampled three times.
+    feed = feed.replace('tmp="$(mktemp)"\n',
+                        '[ "${TEST_LATE:-0}" != 1 ] || printf "ready\\n" > "$RUN_DIR/test-ready"\n'
+                        'tmp="$(mktemp)"\n', 1)
+    assert 'printf "ready\\n"' in feed
+    clock = r'''
+mkfifo "$RUN_DIR/test-ready" "$RUN_DIR/test-send"
+_test_samples=0
+_nap() {
+    _nap_t=0
+    # Other waits, and p2, complete normally before we inspect their result.
+    if [ "${TEST_LATE:-0}" != 1 ] || [ "$1" != "${_p_pid:-}" ]; then
+        wait "$1"; return 0
+    fi
+    _test_samples=$((_test_samples + 1))
+    if [ "$_test_samples" = 1 ]; then read -r ready < "$RUN_DIR/test-ready"; fi
+    if [ "$_test_samples" -le 3 ]; then
+        echo sample >> "$RUN_DIR/test-samples"
+    else
+        printf 'send\n' > "$RUN_DIR/test-send"
+        wait "$1"
+    fi
+}
+'''
     out = run_sh(
         make_stubs(box / "stubs", {"fanout": feed})
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=2 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_START_LATER_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
-        # השולח ממתין לחדר לפני המחיצה השנייה: שקט ארוך מתקרת השקט.
-        f'stream_source() {{ [ "$4" = p3.zst ] && sleep 5; cat {posix(payload)!r}; }}; '
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
+        + clock +
+        f'stream_source() {{ if [ "$4" = p3.zst ]; then read -r send < "$RUN_DIR/test-send"; fi; cat {posix(payload)!r}; }}; '
         "target_init sda 4096; STREAMED_PARTITIONS=0; "
         f"restore_partition_drawers multicast http://s img 2 dd p2.zst {sha} '' sda "
         f"> {posix(box)}/pipe.out 2>&1; r1=$?; "
+        'export TEST_LATE=1; '
         f"restore_partition_drawers multicast http://s img 3 dd p3.zst {sha} '' sda "
         f">> {posix(box)}/pipe.out 2>&1; r2=$?; "
         'echo "rc=$r1$r2"'
     )
     log = log_of(run)
     assert out.strip().endswith("rc=00"), out + log
+    assert (run / "test-samples").read_text().splitlines() == ["sample"] * 3
     assert (target / "state").read_text().strip() != "failed", log
     assert "פג הזמן" not in log
 
 
 def test_the_later_ceiling_outlasts_the_senders_later_wait():
     """המספרים משני צידי הרשת חייבים להיות מסודרים, וזה נבדק כאן ולא
-    מונח: השולח (‏`server/sender.py`) ממתין למחיצות 2+ עד
+    מונח: השולח (‏`server/rounds/sender.py`) ממתין למחיצות 2+ עד
     ‏`max_wait_later` מהמקבל הראשון, ומוגבל ב-`start_timeout_later`
     שמכיל אותו; המקבל שהצטרף ראשון ממתין את כל ה-`max_wait_later`
     בעצמו, ולכן תקרת הבייט הראשון שלו חייבת להיות **גדולה** ממנו —
@@ -588,7 +616,7 @@ def test_the_later_ceiling_outlasts_the_senders_later_wait():
     ‏`start_timeout_later`, ולכן היא חייבת להיות גדולה גם ממנו.
     והמחיצה הראשונה — לא השתנתה: הראשונה עדיין 600, ואינה ארוכה
     יותר מהשנייה."""
-    from server import sender as sender_module
+    from server.rounds import sender as sender_module
 
     first = _sh_default(WAITS, "WAIT_STREAM_START_S")
     later = _sh_default(WAITS, "WAIT_STREAM_START_LATER_S")
@@ -625,7 +653,7 @@ def test_no_bare_wait_is_left_anywhere_in_the_agent():
 def test_every_streaming_library_waits_through_the_helpers(name):
     """שלושת הקבצים שמזרימים בייטים — שחזור תחנה, חדר שיכפולים, קליטה —
     עוברים כולם דרך אותם שני עוזרים. אין קובץ שממציא המתנה משלו."""
-    source = (AGENT / "lib" / name).read_text(encoding="utf-8")
+    source = (lib_path(name)).read_text(encoding="utf-8")
     assert "wait_progress " in source, f"{name} מזרים בלי שעון על ההתקדמות"
     assert "wait_pid " in source, f"{name} ממתין לתהליך עזר בלי תקרה"
 
@@ -649,10 +677,10 @@ def test_every_ceiling_is_defined_in_one_place():
     [
         # ‏curl: בלי תקרת משך (מחיצה גדולה לוקחת דקות) אבל עם תקרת
         # חוסר-התקדמות — חיבור שנפל יוצא במקום להיתלות.
-        ("lib/common.sh", ["--speed-limit", "--speed-time"]),
-        ("lib/capturesink.sh", ["--speed-limit", "--speed-time"]),   # #1217: capture_sink
+        ("lib/core/common.sh", ["--speed-limit", "--speed-time"]),
+        ("lib/capture/capturesink.sh", ["--speed-limit", "--speed-time"]),   # #1217: capture_sink
         # ‏udp-receiver ממתין לשדר לנצח כברירת מחדל. אלה התקרות שלו עצמו.
-        ("lib/restore.sh", ["--start-timeout", "--receive-timeout"]),
+        ("lib/restore/restore.sh", ["--start-timeout", "--receive-timeout"]),
     ],
     ids=lambda v: str(v),
 )
@@ -708,7 +736,7 @@ def test_fanout_bounds_the_fifo_open_itself():
 
 def test_run_sh_leaves_no_temp_dir_behind():
     """#1238: run_sh מנקה את התיקייה הזמנית שלו — גם אחרי ריצה תקינה."""
-    before = set(Path(tempfile.gettempdir()).glob("imagectl-wait-*"))
+    before = set(Path(tempfile.gettempdir()).glob("imagesrv-wait-*"))
     assert run_sh("echo hi").strip() == "hi"
-    after = set(Path(tempfile.gettempdir()).glob("imagectl-wait-*"))
+    after = set(Path(tempfile.gettempdir()).glob("imagesrv-wait-*"))
     assert after - before == set(), f"left behind: {sorted(after - before)}"

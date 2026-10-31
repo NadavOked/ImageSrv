@@ -1,0 +1,22 @@
+# ImageSrv — האתחול הראשון אחרי התקנה מה-ISO (#1139, R25 §2.4).
+# ‏late-command.sh מתקין את היחידה ומפעיל אותה; firstboot.sh כותב
+# ‏/var/lib/imagesrv/.firstboot-done בסיום — ומאז התנאי למטה מונע הרצה.
+# ‏oneshot, בלי Restart: כישלון נשאר אדום ב-`systemctl status`, ולא מוסתר
+# בניסיון חוזר. ‏TimeoutStartSec=0 — שתי בניות initrd הן דקות.
+[Unit]
+Description=ImageSrv first boot: build initrd, start installation wizard
+ConditionPathExists=!/var/lib/imagesrv/.firstboot-done
+After=network-online.target
+Wants=network-online.target
+Before=getty@tty1.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/imagesrv-firstboot
+TimeoutStartSec=0
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,4 @@
-"""#1805/#1864 -- the agent's read-back after the write (agent/lib/readback.sh,
+"""#1805/#1864 -- the agent's read-back after the write (agent/lib/restore/readback.sh,
 readbacklc.sh).
 
 What the shell does with what ``fanout --readback -x`` says (the C reader itself
@@ -32,6 +32,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_timeouts import make_stubs, run_sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH), "jq", why="the manifest is read with jq, as on the machine")
 
@@ -143,7 +144,7 @@ def prelude(box: Path) -> str:
         + make_stubs(box / "stubs", stubs)
         + f"export TMPDIR={posix(box)!r} RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         f"WAIT_POLL_S=1 WAIT_READBACK_S=60 RB_LIST_PAUSE_S=0\n"   # #1907: the list's tries, no pause in tests
-        + "".join(f". {posix(AGENT)}/lib/{n}.sh\n" for n in
+        + "".join(f". {posix(flat_lib())}/{n}.sh\n" for n in
                   ("common", "jsonq", "waits", "progress", "restore", "verdict", "failmark", "readback", "readbacklc"))
         + "ata_capture() { :; }\n"
         "lc_src_node() { partition_node \"$@\"; }\n"
@@ -441,19 +442,19 @@ def _text(rel: str) -> str:
 
 
 def test_every_write_path_reads_back_before_it_grows():
-    drawers_sh = _text("lib/drawers.sh")
+    drawers_sh = _text("lib/restore/drawers.sh")
     rd = drawers_sh.index('RB_SERVER=$_server RB_IMAGE=$_image readback_drawers "$_manifest" $_disks')
     assert drawers_sh.index('_written=$((_written + 1))') < rd < drawers_sh.index('finish_grow "$_d"')
     assert '[ "$?" -ne 127 ] || _fail_alive "$_disks"' in drawers_sh
     assert '{ RB_SERVER=$3 RB_IMAGE=$4 readback_drawers "$5" "$2" && finish_grow "$2" "" "$5"; } || { echo "failed"' \
-        in _text("lib/restore.sh")
-    lc = _text("lib/lccopy.sh")
+        in _text("lib/restore/restore.sh")
+    lc = _text("lib/localclone/lccopy.sh")
     body = lc[lc.index("lc_finish() {"):]
     assert body.index("readback_local") < body.index('finish_grow "$_lf_t"')
     assert '[ "$?" -ne 127 ] || _fail_alive "$*"' in body
-    agent = _text("imagectl-agent")
+    agent = _text("imagesrv-agent")
     assert re.search(r'\. "\$LIB_DIR/readback\.sh"; \. "\$LIB_DIR/readbacklc\.sh"', agent)
-    assert '$(rb_capture_json "$_node" "$_fs" "$((_sizesec * _sector_size))")' in _text("lib/capture.sh")
+    assert '$(rb_capture_json "$_node" "$_fs" "$((_sizesec * _sector_size))")' in _text("lib/capture/capture.sh")
 
 
 def test_the_console_says_sampled_and_has_the_switch():

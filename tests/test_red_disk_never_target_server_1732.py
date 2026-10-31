@@ -80,7 +80,7 @@ def test_server_cloner_round_refuses_its_own_red_drawer(identity_server):
 def ask_server(tmp_path, images_root):
     from fastapi.testclient import TestClient
 
-    from server import users
+    from server.console import users
     from server.app import create_app
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", wol_send=lambda _p: None)
     ctx = app.state.ctx

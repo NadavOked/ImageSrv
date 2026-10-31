@@ -13,10 +13,10 @@ import pytest
 pytest.importorskip("fastapi")
 
 from server.db import set_setting
-from server.wol import magic_packet
+from server.net.wol import magic_packet
 
 from conftest import Clock, hello_body, setup_classroom, write_image
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 from test_capture import task_token
 from conftest import MANIFEST_256, MANIFEST_500
 
@@ -44,7 +44,7 @@ def test_a_bad_mac_raises_instead_of_waking_nothing():
 def station(tmp_path, images_root, clock):
     from fastapi.testclient import TestClient
 
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     woken: list[bytes] = []
@@ -239,7 +239,7 @@ def test_round_open_passwords_go_through_the_login_guard(station, monkeypatch):
     """‏#1282: פתיחת סבב מהתחנה בדקה סיסמה בלי `login_guard` — בלי השהיה
     ובלי נעילה, בניגוד ל-`/agent/login` ולכניסה לקונסולה. אחרי 5 כשלונות
     גם הסיסמה הנכונה ממתינה."""
-    from server import login_guard
+    from server.console import login_guard
 
     monkeypatch.setattr(login_guard, "now", lambda: 1_000_000.0)
     ids = setup_classroom(station)
@@ -276,7 +276,7 @@ def add_user_with_role(station, username: str, password: str, role: str) -> None
     דרך `ignore_check_constraints`: הבדיקה מדמה **סכימה של מחר**, את
     היום שבו יתווסף תפקיד שלישי, וזו בדיוק השאלה שהקוד לא שאל.
     """
-    from server import users
+    from server.console import users
     conn = station["ctx"].conn
     conn.execute("PRAGMA ignore_check_constraints = ON")
     try:
@@ -499,7 +499,7 @@ def test_the_station_web_page_is_gone(station):
 
 def test_a_wake_failure_does_not_stop_the_rest(tmp_path, images_root, clock):
     """מוטב 29 ערות ואחת לא — כשל שליחה אחד לא מפיל את הפתיחה."""
-    from server import users
+    from server.console import users
     from server.app import create_app
     from fastapi.testclient import TestClient
 

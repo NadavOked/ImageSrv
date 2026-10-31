@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from server import vmdisk
+from server.vm import vmdisk
 
 GIB = 1 << 30
 SIZE = 64 << 20          # disk.raw — הגודל עצמו אינו נבדק כאן, רק שהוא נקרא בחזרה

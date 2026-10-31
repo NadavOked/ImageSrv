@@ -27,10 +27,13 @@ import hashlib
 import time
 from pathlib import Path
 
+import pytest
+
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_drawer_progress import COUNTING_FANOUT
 from test_timeouts import make_stubs, run_sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -60,7 +63,7 @@ def _room(tmp_path: Path, apply_gpt: str, drawers=("sda", "sdb", "sdc"), **env) 
     exports = " ".join(f"{k}={v}" for k, v in env.items())
     prelude = (
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev {exports}; "
-        + "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in LIBS)
+        + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
         + "log() { :; }; disk_fits() { return 0; }; write_check() { return 0; }; boot_hidden_disk() { return 0; }; "   # #2015
         "write_speed_verdict() { return 0; }; readback_drawers() { :; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
         f"apply_gpt() {{ {apply_gpt} }}; "
@@ -137,7 +140,7 @@ def test_two_drawers_planning_at_once_do_not_read_each_other_s_plan(tmp_path):
     (tmp_path / "m2").write_text("b1\nb2\nb3\n", encoding="utf-8", newline="\n")
     t = posix(tmp_path)
     out = run_sh(
-        f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; "
+        f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
         "log() { :; }; "
         'jq() { case "$2" in *length*) awk \'END { print NR }\' "$3" ;; '
         '*) while read -r l; do echo "$l"; sleep 0.3; done < "$3" ;; esac; }; '
@@ -155,8 +158,8 @@ def test_every_scratch_file_of_the_table_step_is_per_drawer():
     """The files apply_gpt's call tree writes under RUN_DIR (the plan, the gate,
     the preflight's plan and sparse disk, the table read-back) all carry PREP_TAG.
     One left shared is the race above on another file."""
-    restore = (AGENT / "lib" / "restore.sh").read_text(encoding="utf-8")
-    expand = (AGENT / "lib" / "expand.sh").read_text(encoding="utf-8")
+    restore = (AGENT / "lib" / "restore" / "restore.sh").read_text(encoding="utf-8")
+    expand = (AGENT / "lib" / "restore" / "expand.sh").read_text(encoding="utf-8")
     for needle, src in (('plan.$$${PREP_TAG:-}.txt', restore), ('preflight${PREP_TAG:-}.plan', restore),
                         ('preflight${PREP_TAG:-}.disk', restore), ('table${PREP_TAG:-}.plan', expand),
                         ('gate${PREP_TAG:-}.plan', expand)):
@@ -170,8 +173,8 @@ def test_every_scratch_file_of_the_table_step_is_per_drawer():
 def _waits(tmp_path: Path) -> str:
     box = tmp_path / "box"
     box.mkdir()
-    return (f"export RUN_DIR={posix(box)!r}; . {posix(AGENT)}/lib/common.sh; "
-            f". {posix(AGENT)}/lib/waits.sh; log() {{ :; }}; ")
+    return (f"export RUN_DIR={posix(box)!r}; . {posix(AGENT)}/lib/core/common.sh; "
+            f". {posix(AGENT)}/lib/core/waits.sh; log() {{ :; }}; ")
 
 
 def test_wait_pid_returns_when_the_process_ends_not_a_second_later(tmp_path):
@@ -200,6 +203,9 @@ def test_a_ceiling_is_still_a_ceiling_in_tenths(tmp_path):
     assert 1.5 <= extra <= 5.0, extra
 
 
+# #2118: a wall-clock bound under one second; under `-n auto` it measured
+# 8.2 s and 9.0 s (2/2) and passes alone (3/3). Serial phase, same bound.
+@pytest.mark.serial
 def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
     """restore_partition_drawers end to end with a stream that is over at once
     (64 KB, the counting fanout of test_drawer_progress): what is left is the
@@ -211,7 +217,7 @@ def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
     run = box / "run"
     payload = box / "part.bin"
     box.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 8192)
+    payload.write_bytes(b"imagesrv" * 8192)
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     for dev in ("sda", "sdb"):
         (run / "targets" / dev).mkdir(parents=True)
@@ -219,7 +225,7 @@ def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
         make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in
+        + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in
                   ("common", "waits", "progress", "restore", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot"))
         + "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ cat {posix(payload)!r}; }}; "

@@ -3,7 +3,7 @@
 הכרעת נדב 17/10: אין מסך לא-גרפי ואין מסך שחור. עד כאן כל עצירה הייתה
 ‏`ui_error_hold` — אנגלית על tty, מוסתרת מאחורי גואי חי או ריבועים
 בלעדיו — ו-`die_local` היה שורת FATAL ושלוש שניות. עכשיו שתי הכניסות
-האלה קוראות ל-`fail_screen` (‏`agent/lib/failscreen.sh`), שהופכת את
+האלה קוראות ל-`fail_screen` (‏`agent/lib/gui/failscreen.sh`), שהופכת את
 שורת האנגלית שכבר יש להן לרשומות `fail*` של מסך עברי אחד
 (‏`native-gui/src/screens_failure.c`): כותרת, "מה קרה" עם הסיבה של היעד,
 "מה עושים עכשיו", ופרטים טכניים מתקפלים.
@@ -31,6 +31,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, BASH, REPO, posix
 from test_cloner_gui import _build_gui, _count_color, _pkgconfig, _png, _png_rgb, _token
+from agentlib import flat_lib, lib_path
 
 SRC = REPO / "native-gui" / "src"
 MAC = "3C:52:82:A1:00:1F"
@@ -56,7 +57,7 @@ def _src(name: str) -> str:
 
 
 def _lib(name: str) -> str:
-    return (AGENT / "lib" / name).read_text(encoding="utf-8")
+    return (lib_path(name)).read_text(encoding="utf-8")
 
 
 def records(path: Path) -> list[tuple[str, str]]:
@@ -99,11 +100,11 @@ def run_agent(tmp_path: Path, script: str, *, targets: dict[str, tuple[str, str]
         stub.write_text(GUI_STUB, encoding="utf-8", newline="\n")
         stub.chmod(0o755)
         gui_env = f"FAIL_GUI_BIN={shlex.quote(posix(stub))} "
-    libs = "".join(f". {posix(AGENT)}/lib/{n}; "
+    libs = "".join(f". {posix(flat_lib())}/{n}; "
                    for n in ("common.sh", "sysinfo.sh", "jsonq.sh", "progress.sh", "guistate.sh", "hold.sh", "ui.sh", "failscreen.sh")
-                   if (AGENT / "lib" / n).exists())
+                   if (lib_path(n)).exists())
     full = (
-        f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC} IP=10.44.0.82 IMAGECTL_TEST=1 "
+        f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC} IP=10.44.0.82 IMAGESRV_TEST=1 "
         f"SYSROOT={shlex.quote(posix(sysroot))} AGENT_VERSION_FILE=/nonexistent FAIL_GUI_BIN=/nonexistent LOG_FILE= {gui_env}{env}; "
         + libs
         + 'LOG_FILE="$RUN_DIR/agent.log"; '
@@ -290,7 +291,7 @@ def test_the_two_entry_points_call_the_screen_and_the_agent_loads_it():
     common = _lib("common.sh")
     die = common[common.index("die_local() {"):common.index("\n}\n", common.index("die_local() {"))]
     assert 'fail_fatal "$1"' in die and die.index("fail_fatal") < die.index("sleep 3")
-    agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/failscreen.sh"' in agent
     assert 'cat "$RUN_DIR/fail.state"' in _lib("guistate.sh")
 

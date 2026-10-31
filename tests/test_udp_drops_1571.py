@@ -32,8 +32,8 @@ def snmp(rcvbuf: int, inerrors: int) -> str:
 
 
 def drops(sysroot: Path) -> tuple[str, int]:
-    out = sh(f"export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/common.sh 2>/dev/null; "
-             f". {posix(AGENT)}/lib/waits.sh; v=$(udp_drops); rc=$?; "
+    out = sh(f"export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/core/common.sh 2>/dev/null; "
+             f". {posix(AGENT)}/lib/core/waits.sh; v=$(udp_drops); rc=$?; "
              'printf "%s|%s" "$v" "$rc"')
     value, rc = out.rsplit("|", 1)
     return value, int(rc)
@@ -65,7 +65,7 @@ def _stream(tmp_path: Path, mode: str, before: str | None, after: str | None) ->
     payload = box / "part.bin"
     (sysroot / "proc/net").mkdir(parents=True)
     run.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 8192)
+    payload.write_bytes(b"imagesrv" * 8192)
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     snmp_file = sysroot / "proc/net/snmp"
     if before is not None:
@@ -82,10 +82,10 @@ def _stream(tmp_path: Path, mode: str, before: str | None, after: str | None) ->
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} SYSROOT={posix(sysroot)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; "
-        f". {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; "
+        f". {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ {swap}cat {posix(payload)!r}; }}; "
         f"restore_partition_drawers {mode} http://s img 3 dd part.zst "

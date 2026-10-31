@@ -2,10 +2,10 @@
 
 שני דברים נבדקים כאן:
 
-1. **הגשר** (`server/agent_shell.py`) — טוען את כל `agent/lib` בלי תופעות
+1. **הגשר** (`server/vm/agent_shell.py`) — טוען את כל `agent/lib` בלי תופעות
    לוואי, מחזיר את הסיבה שהסוכן נתן (‏`PLAN_ERROR` וחבריו), ו-`log` אינו
    מלכלך את ה-stdout שפונקציה מחזירה בו ערך.
-2. **ארבעת ההעתקים** ב-`server/vmdisk.py` (‏`partclone_for_fs`,
+2. **ארבעת ההעתקים** ב-`server/vm/vmdisk.py` (‏`partclone_for_fs`,
    ‏`partclone_mode`, ‏`partition_role`, ‏`mark_expandable`) — כל אחד מורץ
    מול המקור בסוכן על אותו קלט. סטייה = אדום.
 """
@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server import agent_shell, vmdisk
+from server.vm import agent_shell, vmdisk
 from test_agent import BASH, posix
 
 pytestmark = requires_native(("bash", BASH))
@@ -62,7 +62,7 @@ def test_the_bridge_loads_every_agent_lib_and_runs_a_function(tmp_path):
     got = call(tmp_path, "partclone_for_fs", "ntfs")
     assert got.ok, got.err
     assert got.out == "partclone.ntfs\n"     # רק הערך — אין שורת log על ה-stdout
-    assert all((agent_shell.AGENT_LIB / lib).is_file() for lib in agent_shell.LIBS)
+    assert all(agent_shell.lib_path(lib).is_file() for lib in agent_shell.LIBS)
 
 
 def test_the_agents_reason_comes_back_by_name(tmp_path):

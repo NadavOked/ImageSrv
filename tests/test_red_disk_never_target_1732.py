@@ -14,8 +14,8 @@
 
 בקרה שלילית (במעבדה, משורש הריפו, על הענף):
   base=$(git merge-base HEAD origin/integration/v0760-rc6)
-  git checkout "$base" -- agent/lib/smart.sh agent/lib/smartgate.sh agent/lib/single_restore.sh \\
-      agent/lib/srgui.sh agent/lib/localclone.sh server/room.py server/smart_ask.py server/room_console.py
+  git checkout "$base" -- agent/lib/smart/smart.sh agent/lib/smart/smartgate.sh agent/lib/restore/single_restore.sh \\
+      agent/lib/gui/srgui.sh agent/lib/localclone/localclone.sh server/rounds/room.py server/disks/smart_ask.py server/rounds/room_console.py
   python3 -m pytest tests/test_red_disk_never_target_1732.py -q      # כל הטסטים שמסומנים RED נופלים
   git checkout HEAD -- agent/ server/
 """
@@ -87,7 +87,7 @@ def test_restore_to_this_disk_refuses_a_red_disk_before_a_byte(tmp_path):
     from test_single_restore_progress_gui import body, cards, restore
     from test_smart import AGENT
     run_restore = ('run_restore() { echo STARTED >> "$RUN_DIR/trace"; return 0; }; '
-                   f'. {posix(AGENT)}/lib/smart.sh; smart_probe() {{ echo "${{SMART_V:-ok}}"; }}; ')
+                   f'. {posix(AGENT)}/lib/smart/smart.sh; smart_probe() {{ echo "${{SMART_V:-ok}}"; }}; ')
     r = restore(tmp_path, run_restore, env="SMART_V=fail")
     assert "STARTED" not in r["trace"], r["out"]
     last = body(cards(r["seen"])[-1]) if r["seen"] else ""
@@ -101,9 +101,13 @@ def test_restore_to_this_disk_goes_on_when_the_disk_is_not_red(tmp_path):
     from test_single_restore_progress_gui import restore
     from test_smart import AGENT
     run_restore = ('run_restore() { echo STARTED >> "$RUN_DIR/trace"; target_set "$2" done; return 0; }; '
-                   f'. {posix(AGENT)}/lib/smart.sh; smart_probe() {{ echo "${{SMART_V:-ok}}"; }}; ')
-    r = restore(tmp_path, run_restore, env="SMART_V=unchecked")
+                   f'. {posix(AGENT)}/lib/smart/smart.sh; smart_probe() {{ echo "${{SMART_V:-ok}}"; }}; ')
+    # The fake GUI must acknowledge success and exit, not spend 600 poll
+    # iterations alive while restore() waits for every background process.
+    r = restore(tmp_path, run_restore, env="SMART_V=unchecked GUI_UNTIL_DONE=1")
     assert "STARTED" in r["trace"], r["out"]
+    assert "RC=0" in r["out"] and r["rc"] == 0, r["out"]
+    assert "השחזור הושלם" in r["seen"], r["out"]
 
 
 # --- הסוכן: שיכפול מקומי ------------------------------------------------------------

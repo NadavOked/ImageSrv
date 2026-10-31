@@ -10,7 +10,7 @@
 ברשימה נדחה — שביל שמקבל כל מחרוזת אינו שביל, הוא ערימה.
 
 המודול טהור, כמו `grub_menu`: אין בו רשת, דיסק או DB. הוא מחזיר
-מחרוזות. האחסון והתצוגה יושבים ב-`server/boottrace.py`, ששואב את
+מחרוזות. האחסון והתצוגה יושבים ב-`server/agent/boottrace.py`, ששואב את
 הרשימה מכאן — מקור אמת אחד לשני הצדדים.
 """
 
@@ -47,13 +47,13 @@ TINY_BODY = b"."
 #:
 #:   menu         — השרת מסר את התפריט. נרשם בשרת עצמו, ולכן הוא הצעד
 #:                  היחיד שאינו תלוי בכך שהמכונה עוד מדברת.
-#:   entry        — ‏GRUB נכנס לערך ImageCtl.
+#:   entry        — ‏GRUB נכנס לערך ImageSrv.
 #:   http-ok      — ‏`insmod http` חזר.
 #:   pre-linux    — לפני משיכת הקרנל.
 #:   pre-initrd   — הקרנל נטען; לפני משיכת ה-initramfs.
 #:   pre-boot     — ה-initramfs נטען; סוף הערך, כלומר לפני `boot`.
 #:   agent-net    — ‏`init` ב-initramfs הרים רשת וקיבל כתובת.
-#:   agent-start  — ‏`imagectl-agent` התחיל וקרא את שורת הפקודה.
+#:   agent-start  — ‏`imagesrv-agent` התחיל וקרא את שורת הפקודה.
 #:   agent-hello  — לפני ה-hello הראשון.
 #:
 #: אין כאן צעד "‏`init` התחיל" לפני `agent-net`, ולא במקרה: לפני ש-DHCP
@@ -74,7 +74,7 @@ STEPS: tuple[str, ...] = (
 
 #: ‏#416: הענף השני — "Boot from local disk". זו **אינה** המשכה של
 #: הרשימה למעלה אלא הסתעפות ממנה אחרי `menu`: מכונה שבחרה בדיסק
-#: המקומי לא תגיע לעולם ל-`entry`, ומכונה שנכנסה ל-ImageCtl לא תגיע
+#: המקומי לא תגיע לעולם ל-`entry`, ומכונה שנכנסה ל-ImageSrv לא תגיע
 #: לכאן. הענף הזה היה השקט היחיד בקובץ — ובדיוק הוא שנכשל ב-#416
 #: (מחשב הבנייה, 05/09: "No operating system found" על דיסק שהקושחה
 #: כלל לא ראתה, ושעה של פירוק אימג' בגלל זה).
@@ -129,11 +129,11 @@ def parse_marks(raw: object) -> dict[str, float] | None:
 
 #: שם הפונקציה בקובץ ה-GRUB. מוקדם בכוונה — ‏`trace` לבדו קרוב מדי
 #: לשמות שגרסת GRUB עתידית עלולה לתפוס.
-GRUB_FUNCTION_NAME = "imagectl_trace"
+GRUB_FUNCTION_NAME = "imagesrv_trace"
 
 
 def is_step(name: object) -> bool:
-    """האם זה אחד מהצעדים המנויים — בשרשרת ImageCtl או בענף הדיסק
+    """האם זה אחד מהצעדים המנויים — בשרשרת ImageSrv או בענף הדיסק
     המקומי. כל דבר אחר אינו נרשם."""
     return isinstance(name, str) and name in STEP_INDEX
 

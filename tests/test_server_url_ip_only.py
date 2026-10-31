@@ -56,12 +56,12 @@ def _start(monkeypatch, fake_startup: dict, server_url: str) -> None:
 def test_hostname_server_url_is_refused_before_runtime(
         monkeypatch, fake_startup, capsys):
     with pytest.raises(SystemExit) as exc:
-        _start(monkeypatch, fake_startup, "http://imagectl.college:8080")
+        _start(monkeypatch, fake_startup, "http://imagesrv.college:8080")
     assert exc.value.code == 2                        # parser.error, לא קריסה
     assert "runtime" not in fake_startup              # לא הגיע ל-create_runtime
     err = capsys.readouterr().err
     assert "--server-url" in err and "498" in err
-    assert "imagectl.college" in err                  # אומר מה נדחה
+    assert "imagesrv.college" in err                  # אומר מה נדחה
 
 
 @pytest.mark.parametrize("server_url", [

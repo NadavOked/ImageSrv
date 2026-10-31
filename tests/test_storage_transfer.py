@@ -23,9 +23,12 @@ import pytest
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
 from conftest import MANIFEST_256, PARTITION_BYTES, write_image
-from server import (archive, db, disk_reserve, interserver_api, interserver_auth,
-                    storage_client, storage_locations, storage_nodes, storage_transfer)
-from server.images import ImageLibrary
+from server.library import archive
+from server import db
+from server.storage import disk_reserve, storage_locations
+from server.interserver import (interserver_api, interserver_auth, storage_client, storage_nodes,
+                                storage_transfer)
+from server.library.images import ImageLibrary
 
 try:
     from fastapi.testclient import TestClient
@@ -488,7 +491,7 @@ def test_ingress_receive_via_fastapi_routes(paired_ctx, tmp_path):
     ctx, peer, token = paired_ctx
     app = interserver_api.create_interserver_app(ctx, lambda _req: peer)
     client = TestClient(app)
-    headers = {"Authorization": f"Bearer {token}", "ImageCtl-Protocol-Version": "2.1"}
+    headers = {"Authorization": f"Bearer {token}", "ImageSrv-Protocol-Version": "2.1"}
     src = tmp_path / "src"
     write_image(src, MANIFEST_256)
     body = b"".join(archive.tar_stream(src / IMAGE, IMAGE))
@@ -501,7 +504,7 @@ def test_ingress_receive_via_fastapi_routes(paired_ctx, tmp_path):
     assert resp.json()["id"] == IMAGE
     assert client.get(f"/api/interserver/v1/images/{IMAGE}", headers=headers).json()["present"] is True
     assert client.get(f"/api/interserver/v1/images/{IMAGE}",
-                      headers={"ImageCtl-Protocol-Version": "2.1"}).status_code == 401
+                      headers={"ImageSrv-Protocol-Version": "2.1"}).status_code == 401
     assert hashlib.sha256(PARTITION_BYTES).hexdigest() == \
         ctx.library.get(IMAGE)["partitions"][0]["sha256"]
 

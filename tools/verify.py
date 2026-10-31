@@ -7,7 +7,7 @@
     python tools/verify.py            # הכול
     python tools/verify.py --no-sim   # בלי הסימולציה (מהיר)
 
-עם `IMAGECTL_REQUIRE_NATIVE=1` הדיווח על דילוגים הופך לפסק דין: ריצה
+עם `IMAGESRV_REQUIRE_NATIVE=1` הדיווח על דילוגים הופך לפסק דין: ריצה
 עם ולו דילוג אחד אינה ירוקה. זה המצב הנכון על שרת המעבדה וב-CI, שם
 הכלים אמורים להיות — "ירוק, אבל 22 דילוגים" הוא בדיוק המשפט שהחביא
 שלוש חבילות שלא רצו (#52).
@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-NATIVE_FLAG = "IMAGECTL_REQUIRE_NATIVE"
+NATIVE_FLAG = "IMAGESRV_REQUIRE_NATIVE"
 
 #: שם קבוצה ← קבצי הטסטים שלה (יחסית לשורש הריפו).
 GROUPS: dict[str, list[str]] = {

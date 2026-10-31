@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 #
-# ImageCtl — גיבוי השרת (‏#1128, עיצוב R41). רץ כ-root על השרת, מ-cron
+# ImageSrv — גיבוי השרת (‏#1128, עיצוב R41). רץ כ-root על השרת, מ-cron
 # או ביד:
 #
-#   sudo bash /opt/imagectl/tools/backup-server.sh --dest /backup/imagectl
+#   sudo bash /opt/imagesrv/tools/backup-server.sh --dest /backup/imagesrv
 #
 # מה נכנס, ולמה כך:
-#   db/imagectl-<ts>.db   עותק עקבי של ה-DB דרך ה-backup API של sqlite
-#                         (‏`server.backup.consistent_db_copy`) — לא `cp`:
-#                         ב-WAL חלק מהמצב יושב ב-imagectl.db-wal, ו-cp של
+#   db/imagesrv-<ts>.db   עותק עקבי של ה-DB דרך ה-backup API של sqlite
+#                         (‏`server.system.backup.consistent_db_copy`) — לא `cp`:
+#                         ב-WAL חלק מהמצב יושב ב-imagesrv.db-wal, ו-cp של
 #                         הקובץ הראשי בזמן ריצה מאבד טרנזאקציות (R40 #8).
 #                         ‏`PRAGMA integrity_check` = ok הוא הראיה שהעותק
 #                         קריא, לא רק שנכתב (עיקרון 5). ‏sqlite3 (ה-CLI)
 #                         אינו מותקן על השרת — python3 כן, ואותו API.
 #   data/                 שאר תיקיית הנתונים: תעודת הקונסולה, netcfg,
-#                         known_hosts — בלי imagectl.db*, בלי נקודות העיגון
+#                         known_hosts — בלי imagesrv.db*, בלי נקודות העיגון
 #                         של האחסון (‏storage/, ‏storage-test/), ובלי branding/
 #                         (לוגו מוסד מלפני #1302 — שארית, לא הגדרה).
-#   system/<ts>/          קובצי המערכת של ImageCtl: dnsmasq, nftables,
-#                         interfaces.d, ‏/etc/imagectl, שורות ImageCtl
+#   system/<ts>/          קובצי המערכת של ImageSrv: dnsmasq, nftables,
+#                         interfaces.d, ‏/etc/imagesrv, שורות ImageSrv
 #                         ב-fstab, יחידות ה-systemd וה-drop-ins שלהן.
 #   images/               rsync של תיקיית האימג'ים (אלא אם --no-images):
 #                         בלי `.capture-*`/`.import-*` (באמצע), **בלי
@@ -34,21 +34,21 @@
 set -euo pipefail
 
 DEST=""
-DATA_DIR="/var/lib/imagectl"
-IMAGES_DIR="/srv/imagectl/images"
+DATA_DIR="/var/lib/imagesrv"
+IMAGES_DIR="/srv/imagesrv/images"
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WITH_IMAGES=1
 SYS_ROOT="/"
 
 usage() {
     cat <<'EOF'
-ImageCtl — גיבוי השרת: DB (עותק עקבי), תיקיית הנתונים, קובצי מערכת, אימג'ים.
+ImageSrv — גיבוי השרת: DB (עותק עקבי), תיקיית הנתונים, קובצי מערכת, אימג'ים.
 
-  sudo bash tools/backup-server.sh --dest /backup/imagectl [אפשרויות]
+  sudo bash tools/backup-server.sh --dest /backup/imagesrv [אפשרויות]
 
   --dest DIR           חובה — יעד הגיבוי (דיסק אחר / NAS מעוגן)
-  --data-dir DIR       תיקיית הנתונים (ברירת מחדל /var/lib/imagectl)
-  --images DIR         תיקיית האימג'ים (ברירת מחדל /srv/imagectl/images)
+  --data-dir DIR       תיקיית הנתונים (ברירת מחדל /var/lib/imagesrv)
+  --images DIR         תיקיית האימג'ים (ברירת מחדל /srv/imagesrv/images)
   --app-dir DIR        שורש הקוד (ברירת מחדל: התיקייה שמעל הסקריפט)
   --system-root DIR    מאיפה לקרוא את קובצי המערכת (ברירת מחדל /; לבדיקות)
   --no-images          רק DB/נתונים/מערכת — לגיבוי השעתי; האימג'ים בלילי
@@ -76,8 +76,8 @@ say() { echo "backup-server: $*"; }
 
 [[ -n "$DEST" ]] || die "--dest חובה"
 [[ -d "$DATA_DIR" ]] || die "תיקיית הנתונים אינה קיימת: $DATA_DIR"
-[[ -f "$DATA_DIR/imagectl.db" ]] || die "אין imagectl.db ב-$DATA_DIR"
-[[ -f "$APP_DIR/server/backup.py" ]] || die "אין server/backup.py תחת $APP_DIR — --app-dir?"
+[[ -f "$DATA_DIR/imagesrv.db" ]] || die "אין imagesrv.db ב-$DATA_DIR"
+[[ -f "$APP_DIR/server/system/backup.py" ]] || die "אין server/system/backup.py תחת $APP_DIR — --app-dir?"
 # ‏rsync מגיע עם המתקין מ-v0.53.3; שרת שהותקן קודם (ה-ISO של v0.53.0) עובד
 # עם cp — לא מצטבר, אבל לא "אין גיבוי". נאמר בפלט, לא בשקט.
 HAVE_RSYNC=1
@@ -110,12 +110,12 @@ TS="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$DEST/db" "$DEST/data" "$DEST/system/$TS"
 
 # --- 1. DB: עותק עקבי + integrity_check -----------------------------------
-DB_OUT="$DEST/db/imagectl-$TS.db"
+DB_OUT="$DEST/db/imagesrv-$TS.db"
 say "DB → $DB_OUT"
-PYTHONPATH="$APP_DIR" python3 - "$DATA_DIR/imagectl.db" "$DB_OUT" <<'PYEOF'
+PYTHONPATH="$APP_DIR" python3 - "$DATA_DIR/imagesrv.db" "$DB_OUT" <<'PYEOF'
 import sqlite3, sys
 from pathlib import Path
-from server.backup import consistent_db_copy
+from server.system.backup import consistent_db_copy
 src, out = sys.argv[1], Path(sys.argv[2])
 conn = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
 try:
@@ -136,24 +136,24 @@ PYEOF
 
 # --- 2. שאר תיקיית הנתונים -----------------------------------------------
 say "data_dir → $DEST/data/"
-sync_dir "$DATA_DIR" "$DEST/data" 'imagectl.db' 'imagectl.db-wal' 'imagectl.db-shm' \
-    'imagectl.db-journal' 'storage' 'storage-test' 'branding'
+sync_dir "$DATA_DIR" "$DEST/data" 'imagesrv.db' 'imagesrv.db-wal' 'imagesrv.db-shm' \
+    'imagesrv.db-journal' 'storage' 'storage-test' 'branding'
 
-# --- 3. קובצי המערכת של ImageCtl ------------------------------------------
+# --- 3. קובצי המערכת של ImageSrv ------------------------------------------
 SYS="$DEST/system/$TS"
 say "קובצי מערכת → $SYS/"
 SYS_PATHS=(
     /etc/nftables.conf
-    /etc/imagectl
-    /srv/imagectl/boot/grub.cfg
-    /etc/systemd/system/imagectl-server.service
-    /etc/systemd/system/imagectl-server.service.d
-    /etc/systemd/system/imagectl-proxy.service
-    /etc/systemd/system/imagectl-proxy.service.d
-    /etc/systemd/system/imagectl-dcui.service
+    /etc/imagesrv
+    /srv/imagesrv/boot/grub.cfg
+    /etc/systemd/system/imagesrv-server.service
+    /etc/systemd/system/imagesrv-server.service.d
+    /etc/systemd/system/imagesrv-proxy.service
+    /etc/systemd/system/imagesrv-proxy.service.d
+    /etc/systemd/system/imagesrv-dcui.service
     /etc/iscsi/initiatorname.iscsi
-    '/etc/dnsmasq.d/imagectl*'                  # מצוטט: הגלוב מתרחב בלולאה, יחסית ל---system-root
-    '/etc/network/interfaces.d/imagectl-*'
+    '/etc/dnsmasq.d/imagesrv*'                  # מצוטט: הגלוב מתרחב בלולאה, יחסית ל---system-root
+    '/etc/network/interfaces.d/imagesrv-*'
 )
 copied=0
 # ‏--system-root: הבדיקות מצביעות על שורש מזויף ולא על /etc של המכונה
@@ -169,14 +169,14 @@ for path in "${SYS_PATHS[@]}"; do          # glob שלא תאם נשאר מיל�
     done
 done
 cd - >/dev/null
-# שורות ImageCtl ב-fstab: ‏grep 1 = אין שורות (תקין), ‏2 = הבדיקה נשברה.
+# שורות ImageSrv ב-fstab: ‏grep 1 = אין שורות (תקין), ‏2 = הבדיקה נשברה.
 set +e
-grep -i imagectl "$SYS_ROOT/etc/fstab" > "$SYS/fstab.imagectl"
+grep -i imagesrv "$SYS_ROOT/etc/fstab" > "$SYS/fstab.imagesrv"
 rc=$?
 set -e
 case "$rc" in
     0) copied=$((copied + 1)) ;;
-    1) rm -f "$SYS/fstab.imagectl" ;;
+    1) rm -f "$SYS/fstab.imagesrv" ;;
     *) die "grep על /etc/fstab נכשל (rc=$rc)" ;;
 esac
 say "קובצי מערכת: $copied הועתקו"
@@ -193,7 +193,7 @@ fi
 # --- 5. SHA256SUMS על מה שנוצר בריצה הזו -----------------------------------
 (
     cd "$DEST"
-    find "db/imagectl-$TS.db" "system/$TS" -type f -print0 | sort -z | xargs -0 sha256sum
+    find "db/imagesrv-$TS.db" "system/$TS" -type f -print0 | sort -z | xargs -0 sha256sum
 ) > "$DEST/SHA256SUMS-$TS"
 (cd "$DEST" && sha256sum --quiet -c "SHA256SUMS-$TS") || die "SHA256SUMS לא אומת מיד אחרי הכתיבה"
 

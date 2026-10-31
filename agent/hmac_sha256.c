@@ -1,5 +1,5 @@
 /*
- * SHA-256 + HMAC-SHA256 (RFC 6234 / RFC 2104). Packed with imagectl-monitor
+ * SHA-256 + HMAC-SHA256 (RFC 6234 / RFC 2104). Packed with imagesrv-monitor
  * so the initrd does not need libcrypto for the RFB handshake (#1077).
  */
 #include "hmac_sha256.h"

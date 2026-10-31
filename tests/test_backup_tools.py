@@ -91,12 +91,13 @@ posix_tools = requires_native(("bash", BASH), "sha256sum", "curl", posix=True,
 
 def _seed_server(tmp_path: Path) -> tuple[Path, Path]:
     """‏data_dir עם DB אמיתי של השרת (WAL, משתמש) ותיקיית אימג'ים עם אימג' אחד."""
-    from server import registry, users
+    from server.agent import registry
+    from server.console import users
     from server.db import connect
     data = tmp_path / "data"
     images = tmp_path / "images"
     data.mkdir()
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     users.create(conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     conn.execute("INSERT INTO groups (id, label, role, sort) VALUES ('cl', 'cloners', 'cloner', 0)")
     conn.commit()
@@ -112,10 +113,10 @@ def _seed_server(tmp_path: Path) -> tuple[Path, Path]:
     # שמריצה את הטסט — ב-CI יש שם קובץ iSCSI שרק root קורא.
     root = tmp_path / "sysroot"
     (root / "etc" / "dnsmasq.d").mkdir(parents=True)
-    (root / "etc" / "dnsmasq.d" / "imagectl-dhcp.conf").write_text("dhcp-range=...\n")
+    (root / "etc" / "dnsmasq.d" / "imagesrv-dhcp.conf").write_text("dhcp-range=...\n")
     (root / "etc" / "dnsmasq.d" / "other.conf").write_text("not ours\n")
-    (root / "etc" / "nftables.conf").write_text("table inet imagectl {}\n")
-    (root / "etc" / "fstab").write_text("UUID=1 / ext4 defaults 0 1\n//nas/img /srv/imagectl/images cifs imagectl 0 0\n")
+    (root / "etc" / "nftables.conf").write_text("table inet imagesrv {}\n")
+    (root / "etc" / "fstab").write_text("UUID=1 / ext4 defaults 0 1\n//nas/img /srv/imagesrv/images cifs imagesrv 0 0\n")
     return data, images
 
 
@@ -133,24 +134,24 @@ def test_backup_server_writes_a_consistent_db_data_dir_and_verified_images(tmp_p
     r = _sh(BACKUP_SH, "--dest", str(dest), "--data-dir", str(data), "--images", str(images),
             "--app-dir", str(REPO), "--system-root", str(tmp_path / "sysroot"))
     assert r.returncode == 0, r.stdout + r.stderr
-    dbs = sorted((dest / "db").glob("imagectl-*.db"))
+    dbs = sorted((dest / "db").glob("imagesrv-*.db"))
     assert len(dbs) == 1
     copy = sqlite3.connect(f"file:{dbs[0]}?mode=ro", uri=True)
     assert copy.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     assert copy.execute("SELECT count(*) FROM machines").fetchone()[0] == 1
     assert copy.execute("SELECT count(*) FROM users WHERE username='noc'").fetchone()[0] == 1
     assert not (dest / "data" / "branding").exists()             # #1302: שארית, לא הגדרה
-    assert not (dest / "data" / "imagectl.db").exists()          # רק דרך db/
+    assert not (dest / "data" / "imagesrv.db").exists()          # רק דרך db/
     assert not (dest / "data" / "storage-test").exists()
     assert (dest / "images" / "win-a" / "manifest.json").exists()
     assert not (dest / "images" / ".capture-7").exists()
     sysdirs = list((dest / "system").iterdir())
     assert len(sysdirs) == 1
     sysd = sysdirs[0]
-    assert (sysd / "etc" / "dnsmasq.d" / "imagectl-dhcp.conf").exists()
+    assert (sysd / "etc" / "dnsmasq.d" / "imagesrv-dhcp.conf").exists()
     assert not (sysd / "etc" / "dnsmasq.d" / "other.conf").exists()     # לא שלנו
     assert (sysd / "etc" / "nftables.conf").exists()
-    assert (sysd / "fstab.imagectl").read_text() == "//nas/img /srv/imagectl/images cifs imagectl 0 0\n"
+    assert (sysd / "fstab.imagesrv").read_text() == "//nas/img /srv/imagesrv/images cifs imagesrv 0 0\n"
     sums = list(dest.glob("SHA256SUMS-*"))
     assert len(sums) == 1 and dbs[0].name in sums[0].read_text(encoding="utf-8")
     assert oct(dbs[0].stat().st_mode & 0o777) == "0o600"        # umask 077 — סודות

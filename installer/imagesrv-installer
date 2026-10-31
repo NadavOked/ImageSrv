@@ -1,0 +1,70 @@
+#!/bin/sh
+# imagesrv-installer -- the live installer's console process (#1190). POSIX sh.
+# init exec's this after the media is mounted and temporary DHCP ran. It puts
+# the native GUI on the framebuffer in install mode; the GUI drives the engine
+# through installer/gui-bridge.sh (part 2), and asks the bridge to eject the
+# media and reboot when the person presses "restart" or the done screen's
+# countdown runs out (#1250). This process therefore
+# never reboots by itself, and when it cannot show anything it says why on
+# the text console and waits -- a person is in front of this screen.
+set -u
+
+INSTALLER_DIR="${INSTALLER_DIR:-/usr/lib/imagesrv/installer}"
+GUI_BIN="${GUI_BIN:-/usr/bin/imagesrv-station-gui}"
+BRIDGE="${BRIDGE:-$INSTALLER_DIR/gui-bridge.sh}"
+RUN_DIR="${RUN_DIR:-/run/imagesrv}"
+STATE_FILE="${STATE_FILE:-$RUN_DIR/install.state}"
+FB_DEV="${FB_DEV:-/dev/fb0}"
+CDROM="${CDROM:-/cdrom}"
+
+note() { printf 'imagesrv installer: %s\n' "$*"; }
+
+# Wait forever, loudly: the notice is repeated every minute so that a person
+# who arrives later still sees it, and a reboot never happens by surprise.
+hold() {
+    while :; do
+        note "$*"
+        note "Attach a screen and keyboard and power-cycle, or install from the web wizard image."
+        sleep 60
+    done
+}
+
+keyboard_present() {
+    # A keyboard advertises EV_KEY with the letter keys; udev names it in
+    # /sys/class/input/*/capabilities/key. Any input device with the 'kbd'
+    # handler is good enough here -- the GUI does its own evdev scan.
+    for _h in /sys/class/input/input*/handlers /proc/bus/input/devices; do
+        [ -r "$_h" ] || continue
+        grep -q kbd "$_h" 2>/dev/null && return 0
+    done
+    return 1
+}
+
+mkdir -p "$RUN_DIR" || hold "cannot create $RUN_DIR"
+umask 077
+
+[ -f "$CDROM/imagesrv-iso.json" ] || hold "install media is not mounted on $CDROM (no imagesrv-iso.json)"
+[ -x "$GUI_BIN" ] || hold "GUI binary $GUI_BIN is missing from this image"
+[ -x "$BRIDGE" ] || hold "GUI bridge $BRIDGE is missing from this image"
+[ -c "$FB_DEV" ] || hold "no framebuffer ($FB_DEV): no display attached"
+keyboard_present || hold "no keyboard found"
+
+export FONTCONFIG_FILE=/etc/imagesrv/fonts.conf
+printf 'state=ready\npct=0\ntitle=ready\n' > "$STATE_FILE"
+note "starting the install GUI on $FB_DEV"
+# --install-cmd is the option's name from #1190 part 2; the #1188 build still
+# calls it --wizard-cmd. Ask the binary which one it knows (positive evidence,
+# not a guess by version).
+if "$GUI_BIN" --help 2>&1 | grep -q -- '--install-cmd'; then _opt=--install-cmd; _cwd=--install-cwd; else _opt=--wizard-cmd; _cwd=--wizard-cwd; fi
+# cwd: the GUI chdir's there before exec'ing the bridge; the #1188 default
+# (/opt/imagesrv-src) does not exist in the live image -> "installer not
+# available" (ESXi, 21/09). Light theme: the mockups and the console are light.
+"$GUI_BIN" --screen install --backend fbdev --theme light --state "$STATE_FILE" "$_opt" "$BRIDGE" "$_cwd" "$INSTALLER_DIR"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+    # The bridge ejects and reboots on "restart"; reaching here means the GUI
+    # returned first. Give the reboot a moment, then say so rather than loop.
+    sleep 5
+    hold "the install GUI exited (0) but the machine did not restart -- last state: $(tail -n 3 "$STATE_FILE" 2>/dev/null | tr '\n' ' ')"
+fi
+hold "the install GUI exited with code $rc -- last state: $(tail -n 3 "$STATE_FILE" 2>/dev/null | tr '\n' ' ')"

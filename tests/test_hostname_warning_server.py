@@ -14,7 +14,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from test_closed_session_report import _session
-from server import reports
+from server.agent import reports
 
 WARNING = "שם המחשב לא נכתב: עריכת הרג׳יסטרי נכשלה"
 

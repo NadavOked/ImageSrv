@@ -18,7 +18,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import netcfg, netcfg_host, netcfg_rollback, users
+from server.net import netcfg, netcfg_host, netcfg_rollback
+from server.console import users
 from server.db import connect, set_setting
 from server.dcui import actions, view
 from server.dcui.app import Runtime, _current_lines, _handle_key
@@ -52,7 +53,7 @@ class FakeHost:
             "boot_id": lambda: "boot-1537",
             "netcfg_read_conf": lambda name, root: "previous\n",
             "read_resolv": lambda: "nameserver 10.44.9.2\n",
-            "hostname": lambda: "imagectl-1537",
+            "hostname": lambda: "imagesrv-1537",
             "netcfg_write_conf": record("write_conf"),
             "netcfg_write_resolv": record("write_resolv"),
             "netcfg_apply": lambda name: self.calls.append(("apply", name)) or self.apply_error,
@@ -73,7 +74,7 @@ def host(monkeypatch):
 
 
 def _runtime(tmp_path):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     users.create(conn, "admin", "before", "admin", by="test",
                  is_builtin=True, check_policy=False)
     set_setting(conn, netcfg.SETTING_PREFIX + NIC, SAVED.to_json())

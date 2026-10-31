@@ -32,8 +32,8 @@ from __future__ import annotations
 import pytest
 from conftest import hello_body
 
-from server import room
-from server.sessions import SessionStore
+from server.rounds import room
+from server.rounds.sessions import SessionStore
 
 from test_server_room import (          # noqa: F401 — ‏room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, room_body, report, room_server,
@@ -275,7 +275,7 @@ def test_an_exception_message_cannot_forge_a_line_in_the_systemd_journal(
     שורות בטבלה.
     """
     ctx = room_server["ctx"]
-    forged = "\nAug 31 04:00:00 imagectl imagectl[1]: הסבב הושלם בהצלחה"
+    forged = "\nAug 31 04:00:00 imagesrv imagesrv[1]: הסבב הושלם בהצלחה"
 
     def boom(_conn, _store):
         raise RuntimeError(f"database is locked{forged}")

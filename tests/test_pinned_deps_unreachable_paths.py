@@ -151,7 +151,7 @@ def test_server_code_does_not_use_the_vulnerable_paths() -> None:
 
 def test_the_only_curve_we_generate_is_p256() -> None:
     """ראיה חיובית לצד השלילית: מה שכן בשימוש הוא SECP256R1 (לא SECT)."""
-    text = (SERVER / "interserver_auth.py").read_text(encoding="utf-8")
+    text = (SERVER / "interserver" / "interserver_auth.py").read_text(encoding="utf-8")
     assert "ec.generate_private_key(ec.SECP256R1())" in text
 
 
@@ -253,5 +253,5 @@ def test_busybox_scanner_catches_and_ignores() -> None:
                  "ssl_client -s 3", "  unzip -o a.zip"):
         assert busybox_forbidden(line), line
     for line in ("udhcpc -i eth0 -n -q", "# wget was here", "curl -fsS http://s/wget",
-                 "log 'httpd-style'", "/etc/imagectl/udhcpc.script"):
+                 "log 'httpd-style'", "/etc/imagesrv/udhcpc.script"):
         assert not busybox_forbidden(line), line

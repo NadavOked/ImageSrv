@@ -30,6 +30,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, posix
 from test_timeouts import log_of, make_stubs, run_sh
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 pytestmark = requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc, ו-sysfs מזויף צריך symlink")
@@ -132,7 +133,7 @@ def station(tmp_path: Path, fanout_dir: Path, source: str, pcl: str) -> tuple[Pa
            f"RUN_DIR={posix(run)!r} DEVROOT={posix(box / 'dev')!r} TMPDIR={posix(tmp_path)!r} "
            "FANOUT_STALL_EVICT_MS=2000 WAIT_POLL_S=1 WAIT_DRAWER_S=4 WAIT_HELPER_S=4 "
            "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=5; ")
-    libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in (
+    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (
         "common", "jsonq", "sysinfo", "waits", "progress", "restore", "verdict", "failmark",
         "drawers"))   # #1906: restore_partition's pipe is restore_pipe (drawers.sh), as in the agent
     out = run_sh(
@@ -213,7 +214,7 @@ def pulled(tmp_path: Path, then: str) -> tuple[Path, str]:
     (box / "kmsg").write_text(KMSG)
     env = (f"export BOX={posix(box)!r} SYSROOT={posix(box)!r} RUN_DIR={posix(run)!r} "
            f"DEVROOT={posix(box / 'dev')!r}; ")
-    libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in (
+    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (
         "common", "jsonq", "sysinfo", "progress", "failmark"))
     out = run_sh(
         make_stubs(box / "stubs", {"dmesg": '#!/bin/sh\ncat "$BOX/kmsg"\n',
@@ -244,11 +245,11 @@ def test_a_pulled_drawer_keeps_its_slot_on_the_gui(tmp_path):
     """‏`drawer=0|sdb` של 17/10: הגואי מציג את הפורט שנשמר, לא ‏0."""
     gui = tmp_path / "gui"
     gui.mkdir()
-    libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in (
+    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (
         "disklink", "guistate", "askgui", "slotnames", "clonergui"))
     run, out = pulled(
         tmp_path,
-        f"export GUI_DIR={posix(gui)!r} IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff; "
+        f"export GUI_DIR={posix(gui)!r} IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff; "
         + libs + 'echo "{}" > "$RUN_DIR/response.json"; '
         'target_set sdb failed "נשלפה"; cloner_gui_state; echo "rc=$?"',
     )

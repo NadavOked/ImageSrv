@@ -1,0 +1,148 @@
+#!/bin/sh
+# imagesrv-install -- live ISO installer engine. POSIX sh (busybox ash).
+# shellcheck disable=SC1090 # runtime tree location selects the sourced modules
+
+set -u
+LC_ALL=C; export LC_ALL
+
+# The live image's /bin/sh is busybox ash, which runs its own applets
+# (chroot, dpkg, tar, chpasswd) instead of the packed tools whatever PATH
+# says. dash honours PATH, so the engine re-executes itself under it when
+# it is there (ESXi, 21/09: busybox chroot handed the target to busybox
+# dpkg, which ran the maintainer scripts with an empty argument).
+if [ -z "${IMAGESRV_INSTALL_SH:-}" ] && [ -x /usr/bin/dash ]; then
+    IMAGESRV_INSTALL_SH=dash exec /usr/bin/dash "$0" "$@"
+fi
+# The console process runs under umask 077 (its own state files) and the
+# engine inherits it through the GUI and the bridge: every mkdir on the
+# target came out 0700, and apt's sandbox user could not read
+# /var/lib/imagesrv/apt-repo on the installed server ("Permission denied"
+# on its own partial file, ESXi 21/09). The target is a system tree: 022;
+# the secrets get their 0600 explicitly (write_target).
+umask 022
+
+case "$0" in */*) INSTALLER_DIR=${0%/*} ;; *) INSTALLER_DIR=. ;; esac
+INSTALLER_DIR=$(CDPATH="" cd "$INSTALLER_DIR" && pwd) || { echo 'installer: cannot locate installer directory' >&2; exit 2; }
+# In the repo the agent libs are ../agent/lib, in topic folders (#2239) while the
+# engine sources them flat ($AGENT_LIB_DIR/<name>.sh): flatten a temporary copy
+# with the script the initramfs build uses. In the live image
+# (build_initramfs --installer) installer/ sits under /usr/lib/imagesrv next
+# to them, so ../common.sh is the second place to look.
+if [ -z "${AGENT_LIB_DIR:-}" ]; then
+    if [ -f "$INSTALLER_DIR/../agent/lib/core/common.sh" ]; then
+        AGENT_LIB_TMP=$(mktemp -d "${TMPDIR:-/tmp}/imagesrv-agent-lib.XXXXXX")             || { echo 'installer: cannot create a temporary directory for the agent libs' >&2; exit 2; }
+        trap 'rm -rf "$AGENT_LIB_TMP"' EXIT
+        bash "$INSTALLER_DIR/../tools/agent-lib-flatten.sh" "$INSTALLER_DIR/../agent/lib" "$AGENT_LIB_TMP"             || { echo 'installer: cannot flatten agent/lib' >&2; exit 2; }
+        AGENT_LIB_DIR="$AGENT_LIB_TMP"
+    else AGENT_LIB_DIR="$INSTALLER_DIR/.."; fi
+fi
+SYSROOT="${SYSROOT:-}"; DEVROOT="${DEVROOT:-/dev}"
+
+. "$INSTALLER_DIR/lib/progress.sh"
+. "$AGENT_LIB_DIR/common.sh"
+. "$AGENT_LIB_DIR/sysinfo.sh"
+. "$INSTALLER_DIR/lib/disks.sh"
+. "$INSTALLER_DIR/lib/answers.sh"
+. "$INSTALLER_DIR/lib/bootstrap.sh"
+. "$INSTALLER_DIR/lib/finish.sh"
+. "$INSTALLER_DIR/lib/raid.sh"
+
+DRY_RUN=0
+
+usage() {
+    printf 'usage: imagesrv-install <answers-file> [--dry-run] [--state FILE]\n' >&2
+    printf '       imagesrv-install --inventory\n' >&2
+    exit 2
+}
+
+print_command() {
+    printf '+'
+    for _pc_arg in "$@"; do
+        case "$_pc_arg" in *[!A-Za-z0-9_./:=,+-]*) printf " '%s'" "$_pc_arg" ;; *) printf ' %s' "$_pc_arg" ;; esac
+    done
+    printf '\n'
+}
+
+must_run() {
+    _mr_code=$1; _mr_message=$2; shift 2
+    if [ "$DRY_RUN" -eq 1 ]; then print_command "$@"; return; fi
+    "$@" || fail "$_mr_code" "$_mr_message"
+}
+
+write_target() {
+    _wt_mode=$1; _wt_path=$2; _wt_text=$3
+    if [ "$DRY_RUN" -eq 1 ]; then
+        printf '+ write-target mode=%s %s%s\n' "$_wt_mode" "$TARGET" "$_wt_path"
+        return
+    fi
+    mkdir -p "${TARGET}${_wt_path%/*}" || fail target-write "cannot create parent for $_wt_path"
+    printf '%s' "$_wt_text" > "$TARGET$_wt_path" || fail target-write "cannot write $_wt_path"
+    chmod "$_wt_mode" "$TARGET$_wt_path" || fail target-mode "cannot chmod $_wt_path"
+    chown 0:0 "$TARGET$_wt_path" || fail target-owner "cannot chown $_wt_path"
+}
+
+write_target_secret() {
+    _ws_path=$1; _ws_secret=$2
+    if [ "$DRY_RUN" -eq 1 ]; then printf '+ write-target-secret mode=0600 %s%s\n' "$TARGET" "$_ws_path"; return; fi
+    write_target 0600 "$_ws_path" "admin_pass=$_ws_secret
+"
+}
+
+if [ "${1:-}" = --inventory ]; then
+    [ "$#" -eq 1 ] || usage
+    print_inventory
+    exit 0
+fi
+
+[ "$#" -ge 1 ] || usage
+ANSWERS_FILE=$1; shift
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        # shellcheck disable=SC2034 # read by progress.sh (sourced above) at call time
+        --state) [ "$#" -ge 2 ] || usage; STATE_FILE=$2; shift 2 ;;
+        *) usage ;;
+    esac
+done
+
+parse_answers "$ANSWERS_FILE"
+validate_answers
+root_password_hash   # #1632 (finish.sh): no openssl fails here, before the disk is erased
+if [ "$DRY_RUN" -eq 0 ] && [ "${IMAGESRV_TEST:-0}" != 1 ]; then
+    [ "$(id -u)" -eq 0 ] || fail not-root "installation requires root"
+fi
+
+if [ "$RAID_LEVEL" = none ]; then
+    progress partitioning 5 "Preparing disk" "Erasing $ANSWER_DISK"
+    partition_disk "$DISK_NAME"
+else
+    progress partitioning 5 "Preparing disks" "Erasing $BOOT_DISKS for $RAID_LEVEL"
+    partition_raid
+fi
+mount_target_root
+progress bootstrap 18 "Installing Debian base" "Starting debootstrap"
+run_debootstrap
+progress packages 45 "Installing offline packages" "Using the ISO package pool"
+bind_target_filesystems
+install_target_packages
+raid_target_config
+progress bootloader 72 "Installing boot loader" "Configuring UEFI and BIOS boot"
+install_bootloader
+progress finishing 88 "Finishing installation" "Writing host and firstboot settings"
+write_host_configuration
+if [ "$DRY_RUN" -eq 1 ]; then
+    print_command umount "$TARGET/cdrom"; print_command umount "$TARGET/sys"
+    print_command umount "$TARGET/proc"; print_command umount "$TARGET/dev"
+    print_command umount "$TARGET/boot/efi"; print_command umount "$TARGET"
+    print_command sync
+else
+    cleanup_mounts
+    sync || fail sync-failed "sync failed"
+    # #2093: released = the kernel lists nothing under the target, read again
+    # after the umounts. A table that cannot be read is not "released".
+    _left=$(target_mounts) || fail unmount-unchecked "cannot read $PROC_MOUNTS to confirm the target is released"
+    # shellcheck disable=SC2086 # one mount point per line, joined for the message
+    [ -z "$_left" ] || fail unmount-failed "still mounted under $TARGET: $(printf '%s ' $_left)"
+fi
+progress "done" 100 "Installation complete" "Safe to restart"
+exit 0

@@ -9,7 +9,7 @@
 שלוש שכבות, וכולן על ראיה חיובית:
 
 1. **חסימה** — בתוך הטסטים מנוע השידור לא *יכול* להפעיל תהליך אמיתי.
-   ‏`block_real_processes` מחליף את `subprocess` בתוך `server.sender`
+   ‏`block_real_processes` מחליף את `subprocess` בתוך `server.rounds.sender`
    בלבד. כל ניסיון נרשם ב-`blocked_spawns`, והטסט שגרם לו נכשל בשמו —
    כי טסט שמגיע לשולח האמיתי אינו בודק את מה שהוא חושב שהוא בודק.
 2. **‏portbase שאינו יכול להתנגש** — ‏`assign_test_portbase` מקצה לריצה
@@ -42,7 +42,7 @@ blocked_spawns: list[list[str]] = []
 
 
 class _NoRealProcess:
-    """מחליף את המודול `subprocess` — בתוך `server.sender` בלבד.
+    """מחליף את המודול `subprocess` — בתוך `server.rounds.sender` בלבד.
 
     לא ‏`monkeypatch`: תהליכון השידור ממשיך לרוץ גם אחרי שהטסט נגמר,
     וכל החזרה של המקור בסוף טסט פותחת בדיוק את החלון שבו הוא מספיק
@@ -62,7 +62,7 @@ class _NoRealProcess:
 def block_real_processes() -> bool:
     """מתקין את החסימה. ‏False כשאין בכלל שרת לייבא (עמדה בלי fastapi)."""
     try:
-        from server import sender
+        from server.rounds import sender
     except ImportError:                        # pragma: no cover — עמדה חסרה
         return False
     sender.subprocess = _NoRealProcess
@@ -92,7 +92,7 @@ def assign_test_portbase() -> int | None:
     """
     global test_portbase
     try:
-        from server import sender
+        from server.rounds import sender
     except ImportError:                        # pragma: no cover — עמדה חסרה
         return None
     test_portbase = random.SystemRandom().randrange(*TEST_PORTBASE_RANGE)
@@ -103,7 +103,7 @@ def assign_test_portbase() -> int | None:
 def isolate_sender_log(worker: str | None):
     """‏#2099: לוג משלו לכל worker של pytest-xdist.
 
-    ‏`sender.SENDER_LOG` הוא `$TMPDIR/imagectl-sender.log` ברמת המודול, ולוג
+    ‏`sender.SENDER_LOG` הוא `$TMPDIR/imagesrv-sender.log` ברמת המודול, ולוג
     המחיצה נגזר ממנו ומשם הקובץ בלבד (`partition_log`) — כל טסט עם אותו
     מניפסט כותב **לאותו קובץ**. בריצה סדרתית זה בטוח (טסט אחד בכל רגע);
     במקביל, worker אחד כתב `Starting transfer` ללוג של טסט ב-worker אחר,
@@ -114,7 +114,7 @@ def isolate_sender_log(worker: str | None):
     if not worker:
         return None
     try:
-        from server import sender
+        from server.rounds import sender
     except ImportError:                        # pragma: no cover — עמדה חסרה
         return None
     log = sender.SENDER_LOG

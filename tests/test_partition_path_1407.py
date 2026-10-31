@@ -19,7 +19,7 @@ import os
 
 import pytest
 
-from server.images import ImageLibrary, guarded_image_path
+from server.library.images import ImageLibrary, guarded_image_path
 
 SECRET = b"root:x:0:0\n"
 

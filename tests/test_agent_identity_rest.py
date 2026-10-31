@@ -3,7 +3,7 @@
 ‏#855 סגר hello ו-progress. הנתיבים שנשארו לפי MAC מוצהר: ‏login, ‏pulls,
 ‏sessions (station.py), ‏disk-event, ‏shrink-open/close/note, ו-PUT המניפסט
 החי (direct.py). ו-`manifest`/`files` — בלי זהות בכלל: הסוכן לא שולח בהם
-MAC (‏`http_get` ב-`agent/lib/common.sh`), ולכן הזהות שם היא **הפוכה**:
+MAC (‏`http_get` ב-`agent/lib/core/common.sh`), ולכן הזהות שם היא **הפוכה**:
 כתובת המקור → חכירת ה-DHCP שיושבת עליה → ה-MAC של החכירה רשום ב-`machines`.
 בלי שינוי בסוכן, בלי initrd חדש.
 
@@ -20,8 +20,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from agentlib import flat_lib
 from conftest import hello_body, setup_classroom
-from server.tasks import TOKEN_HEADER, staging_dir
+from server.core.tasks import TOKEN_HEADER, staging_dir
 from test_capture import (PART_A, PART_B, make_task, manifest_for, sha,
                           setup_build_machine, task_token)
 from test_direct_server import _live_manifest, _open_direct
@@ -350,7 +351,7 @@ def test_the_live_manifest_needs_the_token_and_the_identity(identity_server):
 def test_the_agent_sends_a_mac_on_every_gated_post_and_none_on_manifest_gets():
     """הראיה שההכרעה על manifest/files נכונה: ‏`http_get` ב-common.sh אינו
     מוסיף MAC ולא כותרת, וכל POST שנחסם לפי MAC מוצהר אכן נושא אותו."""
-    root = Path(__file__).resolve().parents[1] / "agent" / "lib"
+    root = flat_lib()
     common = (root / "common.sh").read_text(encoding="utf-8")
     assert "http_get() {" in common and "mac" not in common.split("http_get() {")[1].split("}")[0].lower()
     # recovery.sh and classround.sh (the text login and the text class round)

@@ -8,7 +8,7 @@
 * דלוק — בדיוק מה שהיה (‏test_login_mfa.py רץ כולו כך).
 * שדרוג — שרת קיים עם מנהל כזה מקבל "false", ושורת יומן אומרת את זה.
 
-בקרה שלילית: ‏server/console_login.py ו-server/console_api.py (התנאי הישן), ו-db.py
+בקרה שלילית: ‏server/console/console_login.py ו-server/console/console_api.py (התנאי הישן), ו-db.py
 (בלי ברירת המחדל) מוחזרים יחד — הטסטים של "כבוי" נופלים.
 """
 
@@ -21,7 +21,8 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login
-from server import console_mfa, db, totp
+from server.console import console_mfa, totp
+from server import db
 from server.app import create_console_app
 
 
@@ -145,7 +146,7 @@ def test_the_builtin_admin_and_deploy_users_are_never_asked(server):
 
 def test_an_upgrade_turns_the_requirement_off_and_says_so(tmp_path):
     """שרת שהיה בו מנהל כזה ואין לו עדיין ההגדרה: אחרי העלייה "false", ושורת יומן."""
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     conn = db.connect(path)
     conn.execute("INSERT INTO users (username, pw_hash, role, created_at, is_builtin)"
                  " VALUES ('old', 'x', 'admin', '2026-09-01T00:00:00+00:00', 0)")
@@ -165,7 +166,7 @@ def test_an_upgrade_turns_the_requirement_off_and_says_so(tmp_path):
 
 
 def test_a_fresh_install_writes_no_upgrade_line(tmp_path):
-    conn = db.connect(tmp_path / "imagectl.db")
+    conn = db.connect(tmp_path / "imagesrv.db")
     assert db.get_setting(conn, console_mfa.SETTING) == "false"
     assert list(conn.execute("SELECT 1 FROM journal WHERE event = 'setting_change'")) == []
     conn.close()
@@ -175,7 +176,7 @@ def test_guessing_the_code_on_a_stolen_session_is_limited_like_the_login(server,
     """סקירת האבטחה על 7534e0e7: ‏/me/mfa/disable לא הגביל ניסיונות — session גנוב
     יכול לנחש קוד עד שיצליח. אותם ספים כמו ‏/login/mfa: אחרי 10 כשלונות נעילה, ובזמן
     הנעילה גם סיסמה וקוד נכונים נדחים; MFA נשאר מופעל."""
-    from server import login_guard
+    from server.console import login_guard
     t = {"now": 1_000_000.0}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
     _new_admin(server, "tal")
@@ -203,7 +204,7 @@ def test_guessing_the_code_on_a_stolen_session_is_limited_like_the_login(server,
 
 
 def test_after_five_failures_the_next_try_waits(server, monkeypatch):
-    from server import login_guard
+    from server.console import login_guard
     t = {"now": 2_000_000.0}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
     _new_admin(server, "noa")
@@ -312,5 +313,5 @@ def test_resetting_your_own_mfa_here_is_refused_with_the_way_to_do_it(server):
 
 
 def test_the_journal_says_who_reset_whom_in_hebrew(server):
-    from server.journal_he import EVENTS_HE
+    from server.console.journal_he import EVENTS_HE
     assert EVENTS_HE["mfa_reset"] == "אימות דו-שלבי אופס למשתמש"

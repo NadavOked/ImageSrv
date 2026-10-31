@@ -1,5 +1,5 @@
 /*
- * imagectl-monitor -- expose /dev/fb0 over standard RFB using LibVNCServer.
+ * imagesrv-monitor -- expose /dev/fb0 over standard RFB using LibVNCServer.
  * With --fb FILE (a regular file) it serves the memory framebuffer that
  * native-gui --backend mem draws when the machine has no display (#835).
  *
@@ -82,7 +82,7 @@ static unsigned char key_down[KEY_MAX + 1];
 /*
  * The session secret (#839, #1077). 5900 is bound to the distribution
  * address, so two gates sit in front of the RFB loop: (1) after accept,
- * only the ImageCtl server IP (--allow-from, from imagectl.server) is
+ * only the ImageSrv server IP (--allow-from, from imagesrv.server) is
  * kept -- everyone else is closed before the handshake; (2) RFB security
  * type 2 framing, 16-byte challenge, 16-byte response. The response is
  * HMAC-SHA256(secret, challenge) truncated to 16 bytes, not the secret
@@ -103,7 +103,7 @@ static void stop_handler(int signo) {
 }
 
 static void fatal(const char *what) {
-    fprintf(stderr, "imagectl-monitor: FATAL: %s: %s\n", what, strerror(errno));
+    fprintf(stderr, "imagesrv-monitor: FATAL: %s: %s\n", what, strerror(errno));
     exit(EXIT_FAILURE);
 }
 
@@ -135,7 +135,7 @@ static int parse_int(const char *text, int minimum, int maximum,
     errno = 0;
     value = strtol(text, &end, 10);
     if (errno || !end || *end || value < minimum || value > maximum) {
-        fprintf(stderr, "imagectl-monitor: invalid %s: %s\n", name, text);
+        fprintf(stderr, "imagesrv-monitor: invalid %s: %s\n", name, text);
         exit(EXIT_FAILURE);
     }
     return (int)value;
@@ -161,7 +161,7 @@ static void emit_event(unsigned short type, unsigned short code, int value) {
         return;
     dropped++;
     if (dropped <= 5 || dropped % 1000 == 0)
-        fprintf(stderr, "imagectl-monitor: dropped input event %lu: %s\n",
+        fprintf(stderr, "imagesrv-monitor: dropped input event %lu: %s\n",
                 dropped, strerror(errno));
 }
 
@@ -231,7 +231,7 @@ static int create_uinput(void) {
         ioctl(fd, UI_DEV_CREATE) < 0)
         fatal("create uinput device");
 
-    fprintf(stderr, "imagectl-monitor: input enabled through %s\n",
+    fprintf(stderr, "imagesrv-monitor: input enabled through %s\n",
             UINPUT_NAME);
     return fd;
 }
@@ -328,7 +328,7 @@ static void keyboard_event(rfbBool down, rfbKeySym symbol,
     if (code < 0) {
         if (down)
             fprintf(stderr,
-                    "imagectl-monitor: unmapped RFB keysym 0x%lx\n",
+                    "imagesrv-monitor: unmapped RFB keysym 0x%lx\n",
                     (unsigned long)symbol);
         return;
     }
@@ -381,7 +381,7 @@ static int write_secret_file(const unsigned char *bytes) {
  * the next secret cannot be computed without it. A failed file write keeps
  * the old secret and says so; the server re-learns it from hello.
  */
-static const char REKEY_LABEL[] = "imagectl-monitor-rekey";
+static const char REKEY_LABEL[] = "imagesrv-monitor-rekey";
 
 static void rekey_secret(const unsigned char *challenge) {
     unsigned char message[sizeof(REKEY_LABEL) - 1 + SECRET_LEN];
@@ -391,18 +391,18 @@ static void rekey_secret(const unsigned char *challenge) {
     memcpy(message + sizeof(REKEY_LABEL) - 1, challenge, SECRET_LEN);
     hmac_sha256(secret, SECRET_LEN, message, sizeof(message), next);
     if (write_secret_file(next) < 0) {
-        fprintf(stderr, "imagectl-monitor: could not write the next session "
+        fprintf(stderr, "imagesrv-monitor: could not write the next session "
                 "secret; keeping the old one until the next hello\n");
         return;
     }
     memcpy(secret, next, SECRET_LEN);
-    fprintf(stderr, "imagectl-monitor: rekeyed session secret\n");
+    fprintf(stderr, "imagesrv-monitor: rekeyed session secret\n");
 }
 
 static void client_gone(rfbClientPtr client) {
     int code, released = 0;
 
-    fprintf(stderr, "imagectl-monitor: client %s gone\n",
+    fprintf(stderr, "imagesrv-monitor: client %s gone\n",
             client->host ? client->host : "?");
     if (input_fd >= 0) {
         for (code = 0; code <= KEY_MAX; code++) {
@@ -437,7 +437,7 @@ static enum rfbNewClientAction new_client(rfbClientPtr client) {
     if (!peer_is_server(client)) {
         peer_rejects++;
         if (peer_rejects <= 10 || peer_rejects % 100 == 0)
-            fprintf(stderr, "imagectl-monitor: rejected peer %s "
+            fprintf(stderr, "imagesrv-monitor: rejected peer %s "
                     "(not the server, %lu so far)\n",
                     client->host ? client->host : "?", peer_rejects);
         return RFB_CLIENT_REFUSE;
@@ -474,7 +474,7 @@ static rfbBool secret_check(rfbClientPtr client, const char *response,
     }
     auth_failures++;
     if (auth_failures <= 10 || auth_failures % 100 == 0)
-        fprintf(stderr, "imagectl-monitor: rejected client %s "
+        fprintf(stderr, "imagesrv-monitor: rejected client %s "
                 "(bad HMAC, %lu so far)\n",
                 client->host ? client->host : "?", auth_failures);
     return FALSE;
@@ -505,7 +505,7 @@ static void load_secret(const char *path) {
     if (got == SECRET_LEN * 2 + 1 && text[SECRET_LEN * 2] == '\n')
         got--;
     if (got != SECRET_LEN * 2) {
-        fprintf(stderr, "imagectl-monitor: FATAL: %s: expected %d hex "
+        fprintf(stderr, "imagesrv-monitor: FATAL: %s: expected %d hex "
                 "characters, got %lld bytes\n", path, SECRET_LEN * 2,
                 (long long)got);
         exit(EXIT_FAILURE);
@@ -513,7 +513,7 @@ static void load_secret(const char *path) {
     for (i = 0; i < SECRET_LEN; i++) {
         int high = hex_nibble(text[2 * i]), low = hex_nibble(text[2 * i + 1]);
         if (high < 0 || low < 0) {
-            fprintf(stderr, "imagectl-monitor: FATAL: %s: not lowercase hex\n",
+            fprintf(stderr, "imagesrv-monitor: FATAL: %s: not lowercase hex\n",
                     path);
             exit(EXIT_FAILURE);
         }
@@ -585,8 +585,8 @@ static void pointer_event(int buttons, int x, int y, rfbClientPtr client) {
  * front of the proxy; it was never a gate in front of this port.
  * Any other cut text is an ordinary clipboard paste and is ignored.
  */
-#define POWER_REBOOT "imagectl-power:reboot"
-#define POWER_POWEROFF "imagectl-power:poweroff"
+#define POWER_REBOOT "imagesrv-power:reboot"
+#define POWER_POWEROFF "imagesrv-power:poweroff"
 
 static void run_power(char *const argv[]) {
     pid_t pid;
@@ -608,13 +608,13 @@ static void text_event(char *str, int len, rfbClientPtr client) {
 
     if (len == (int)strlen(POWER_REBOOT) && !memcmp(str, POWER_REBOOT, (size_t)len)) {
         char *argv[] = {(char *)"reboot", (char *)"-f", NULL};
-        fprintf(stderr, "imagectl-monitor: remote reboot requested\n");
+        fprintf(stderr, "imagesrv-monitor: remote reboot requested\n");
         run_power(argv);
     } else if (len == (int)strlen(POWER_POWEROFF) &&
                !memcmp(str, POWER_POWEROFF, (size_t)len)) {
         char *argv[] = {(char *)"/bin/sh", (char *)"-c",
-                (char *)". /usr/lib/imagectl/common.sh && safe_poweroff 'monitor: remote request'", NULL};
-        fprintf(stderr, "imagectl-monitor: remote poweroff requested\n");
+                (char *)". /usr/lib/imagesrv/common.sh && safe_poweroff 'monitor: remote request'", NULL};
+        fprintf(stderr, "imagesrv-monitor: remote poweroff requested\n");
         run_power(argv);
     }
 }
@@ -655,7 +655,7 @@ static void memfb_describe(int fd, off_t size, struct fb_var_screeninfo *var,
         (uint64_t)size < MEMFB_HEADER_BYTES +
             (uint64_t)header.stride * header.height) {
         fprintf(stderr,
-                "imagectl-monitor: FATAL: not a memory framebuffer: "
+                "imagesrv-monitor: FATAL: not a memory framebuffer: "
                 "%ux%u, stride %u, format %u, %lld bytes\n",
                 header.width, header.height, header.stride, header.format,
                 (long long)size);
@@ -672,7 +672,7 @@ static void memfb_describe(int fd, off_t size, struct fb_var_screeninfo *var,
     var->blue.offset = 0;
     fix->line_length = header.stride;
     fix->smem_len = (uint32_t)size;
-    fprintf(stderr, "imagectl-monitor: serving a memory framebuffer, %ux%u\n",
+    fprintf(stderr, "imagesrv-monitor: serving a memory framebuffer, %ux%u\n",
             header.width, header.height);
 }
 
@@ -860,12 +860,12 @@ int main(int argc, char **argv) {
     if (!bind_address || !secret_arg || !allow_arg)
         usage(argv[0]);
     if (strlen(secret_arg) >= sizeof(secret_path)) {
-        fprintf(stderr, "imagectl-monitor: FATAL: secret path too long\n");
+        fprintf(stderr, "imagesrv-monitor: FATAL: secret path too long\n");
         return EXIT_FAILURE;
     }
     memcpy(secret_path, secret_arg, strlen(secret_arg) + 1);
     if (inet_pton(AF_INET, allow_arg, &allow_from) != 1) {
-        fprintf(stderr, "imagectl-monitor: invalid --allow-from: %s\n",
+        fprintf(stderr, "imagesrv-monitor: invalid --allow-from: %s\n",
                 allow_arg);
         return EXIT_FAILURE;
     }
@@ -900,7 +900,7 @@ int main(int argc, char **argv) {
                 sscanf(geometry, "%ux%u", &var.xres, &var.yres) != 2 ||
                 !var.xres || !var.yres) {
                 fprintf(stderr,
-                        "imagectl-monitor: --fb FILE is not a memory framebuffer "
+                        "imagesrv-monitor: --fb FILE is not a memory framebuffer "
                         "(no " MEMFB_MAGIC " header) and no --geometry WxH was given\n");
                 return EXIT_FAILURE;
             }
@@ -912,7 +912,7 @@ int main(int argc, char **argv) {
             need = (uint64_t)var.xres * var.yres * 4;
             if ((uint64_t)fb_stat.st_size < need) {
                 fprintf(stderr,
-                        "imagectl-monitor: FATAL: %s holds %lld bytes, "
+                        "imagesrv-monitor: FATAL: %s holds %lld bytes, "
                         "geometry needs %llu\n",
                         fb_path, (long long)fb_stat.st_size,
                         (unsigned long long)need);
@@ -931,7 +931,7 @@ int main(int argc, char **argv) {
     refusal = pixel_format_error(&var);
     if (refusal) {
         fprintf(stderr,
-                "imagectl-monitor: FATAL: unsupported pixel format (%s): "
+                "imagesrv-monitor: FATAL: unsupported pixel format (%s): "
                 "%u bpp, R %u@%u G %u@%u B %u@%u (length@offset)\n",
                 refusal, var.bits_per_pixel,
                 var.red.length, var.red.offset,
@@ -942,7 +942,7 @@ int main(int argc, char **argv) {
     refusal = layout_error(&var, &fix, pixel_offset);
     if (refusal) {
         fprintf(stderr,
-                "imagectl-monitor: FATAL: framebuffer layout out of bounds "
+                "imagesrv-monitor: FATAL: framebuffer layout out of bounds "
                 "(%s): %ux%u at +%u+%u, stride %u, %u bytes mapped\n",
                 refusal, var.xres, var.yres, var.xoffset, var.yoffset,
                 fix.line_length, fix.smem_len);
@@ -1005,7 +1005,7 @@ int main(int argc, char **argv) {
     screen->ipv6port = 0;
     screen->listenInterface = inet_addr(bind_address);
     if (screen->listenInterface == INADDR_NONE) {
-        fprintf(stderr, "imagectl-monitor: invalid bind address: %s\n",
+        fprintf(stderr, "imagesrv-monitor: invalid bind address: %s\n",
                 bind_address);
         return EXIT_FAILURE;
     }
@@ -1021,7 +1021,7 @@ int main(int argc, char **argv) {
          * every event. Never NULL: the library does not check (#833). */
         screen->kbdAddEvent = keyboard_event_ignored;
         screen->ptrAddEvent = pointer_event_ignored;
-        fprintf(stderr, "imagectl-monitor: view-only mode; input disabled\n");
+        fprintf(stderr, "imagesrv-monitor: view-only mode; input disabled\n");
     }
 
     /* Power control travels over ClientCutText, independent of --input. */
@@ -1033,11 +1033,11 @@ int main(int argc, char **argv) {
     rfbInitServer(screen);
     if (!rfbIsActive(screen)) {
         fprintf(stderr,
-                "imagectl-monitor: FATAL: RFB server did not start on %s:%d\n",
+                "imagesrv-monitor: FATAL: RFB server did not start on %s:%d\n",
                 bind_address, port);
         return EXIT_FAILURE;
     }
-    fprintf(stderr, "imagectl-monitor: RFB listening on %s:%d, %ux%u@%dfps\n",
+    fprintf(stderr, "imagesrv-monitor: RFB listening on %s:%d, %ux%u@%dfps\n",
             bind_address, port, var.xres, var.yres, fps);
 
     while (!stopping && rfbIsActive(screen)) {
@@ -1084,7 +1084,7 @@ int main(int argc, char **argv) {
         } else if (began - stats_since >= STATS_US) {
             long long cpu = cpu_us();
 
-            fprintf(stderr, "imagectl-monitor: in %llds: cpu %lld ms (%lld%% of one "
+            fprintf(stderr, "imagesrv-monitor: in %llds: cpu %lld ms (%lld%% of one "
                     "thread), %lu scans avg %lld us, %lu unchanged ticks, "
                     "%lu tiles of %dx%d sent\n",
                     (began - stats_since) / 1000000LL, (cpu - stats_cpu) / 1000,

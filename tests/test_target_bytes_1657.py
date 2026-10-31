@@ -20,7 +20,7 @@ FIRST, SECOND = 32768, 12288
 
 
 def test_target_bytes_only_grows_and_never_counts_a_partition_twice(tmp_path: Path):
-    progress = Path(__file__).parents[1] / "agent" / "lib" / "progress.sh"
+    progress = Path(__file__).parents[1] / "agent" / "lib" / "core" / "progress.sh"
     samples = tmp_path / "samples"
     script = f"""
 set -eu

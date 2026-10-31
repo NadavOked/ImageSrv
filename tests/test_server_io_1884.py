@@ -11,7 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from server import db, drive_rates, learn_netloss, server_io
+from server import db
+from server.rounds import drive_rates
+from server.learn import learn_netloss, server_io
 
 MAC = "78:ac:c0:9b:18:84"
 SENT = 19_500_000_000
@@ -21,7 +23,7 @@ _seq = iter(range(10 ** 6))
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _proc(root: Path, read_sectors: int, write_sectors: int, io_ms: int, some_us, full_us) -> Path:
@@ -180,7 +182,7 @@ def test_the_wave_and_the_capture_are_wired():
     end_at = app.index('server_io.end(conn, "wave", session_id')
     assert app.index("drive_rates.record_stream(conn, session_id, outcome)") < end_at \
         < app.index("learn_netloss.evaluate(conn, session_id)")
-    cap = (root / "capture.py").read_text(encoding="utf-8")
+    cap = (root / "library" / "capture.py").read_text(encoding="utf-8")
     assert 'server_io.begin(ctx.conn, "capture", task_id' in cap
     assert 'server_io.end(ctx.conn, "capture", task_id' in cap
     doc = (root.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")

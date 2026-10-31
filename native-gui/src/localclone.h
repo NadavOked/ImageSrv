@@ -3,8 +3,8 @@
  * screen (LcUi). The screens decide nothing: every choice goes back to the
  * agent as a record (lc_state.c), and the agent checks it again before a
  * byte is written. Approved mockup: localclone.html (Nadav 13/10). */
-#ifndef IMAGECTL_LOCALCLONE_H
-#define IMAGECTL_LOCALCLONE_H
+#ifndef IMAGESRV_LOCALCLONE_H
+#define IMAGESRV_LOCALCLONE_H
 
 #define LC_MAX_DISKS 8
 #define LC_MAX_PARTS 16

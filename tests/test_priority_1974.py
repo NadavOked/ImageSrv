@@ -14,7 +14,8 @@ import threading
 
 import pytest
 
-from server import priority, sender
+from server.system import priority
+from server.rounds import sender
 
 LINUX = sys.platform.startswith("linux")
 #: ‏ioprio_get(2) — לקריאה בחזרה של מה ש-`lower_this_thread` כתב.
@@ -41,7 +42,7 @@ def test_udp_sender_runs_under_nice_and_ionice(monkeypatch, tmp_path):
 def test_a_missing_tool_is_said_and_the_sender_still_runs(monkeypatch, caplog):
     monkeypatch.setattr(priority.shutil, "which",
                         lambda name: None if name == "ionice" else f"/usr/bin/{name}")
-    with caplog.at_level("WARNING", logger="imagectl.priority"):
+    with caplog.at_level("WARNING", logger="imagesrv.priority"):
         assert priority.background_cmd(["udp-sender", "--x"]) == ["udp-sender", "--x"]
     assert "normal priority" in caplog.text
 
@@ -88,7 +89,7 @@ def test_the_capture_pool_threads_are_lowered_and_the_caller_is_not():
 
 
 def test_capture_bytes_are_written_on_the_lowered_pool(server, monkeypatch):
-    from server import capture
+    from server.library import capture
     from test_capture import do_capture, make_task, setup_build_machine
 
     threads = []
@@ -106,7 +107,7 @@ def test_capture_bytes_are_written_on_the_lowered_pool(server, monkeypatch):
 
 
 def test_the_verification_thread_lowers_itself(monkeypatch, tmp_path):
-    from server import capture
+    from server.library import capture
 
     lowered = []
     monkeypatch.setattr(capture.priority, "lower_this_thread",

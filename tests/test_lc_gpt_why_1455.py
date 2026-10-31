@@ -13,7 +13,7 @@ def _why(tmp_path, plan_error: str) -> str:
     log.write_text("one\nsgdisk: Problem opening /dev/sdb for writing!\nblockdev: BLKRRPART: Device or resource busy\n",
                    encoding="utf-8", newline="\n")
     pre = f"PLAN_ERROR={plan_error!r}; " if plan_error else "unset PLAN_ERROR; "
-    return sh(f"LOG_FILE={posix(log)!r}; {pre}. {posix(AGENT)}/lib/lccopy.sh; _lc_gpt_why").strip()
+    return sh(f"LOG_FILE={posix(log)!r}; {pre}. {posix(AGENT)}/lib/localclone/lccopy.sh; _lc_gpt_why").strip()
 
 
 def test_an_empty_plan_error_carries_the_logged_cause(tmp_path):

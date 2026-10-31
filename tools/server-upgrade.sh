@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # server-upgrade.sh — מסלול השדרוג של #748/#1193. רץ דרך
 # `systemd-run --collect`, מנותק מתהליך
-# imagectl-server, כי הצעד האחרון כאן הוא restart שלו.
+# imagesrv-server, כי הצעד האחרון כאן הוא restart שלו.
 #
 # שימוש: server-upgrade.sh <tag> <repo-dir>
 #
@@ -12,12 +12,12 @@
 #   2. fetch, אימות חתימת התג (#1277), checkout — מחוץ לארגז החול של שרת ה-web.
 #   3. יחידות systemd — קודם, כדי ש-daemon-reload יראה כל שינוי בהן.
 #   3א. ‏#1411: עדכוני האבטחה של Debian מהמאגר שבגרסה החתומה בלבד
-#      (install/security-upgrade.sh) — שלב `packages`; כשל = חזרה לתג הקודם.
+#      (deploy/security-upgrade.sh) — שלב `packages`; כשל = חזרה לתג הקודם.
 #   4. initrd (#1230) — tools/boot-payload-build.sh לפי הדגלים השמורים, מול
 #      הקרנל שנגזר עכשיו. בלי דגלים — ברירת המחדל המתועדת (‏#1546), לא דילוג.
 #   5. restart, ואז **ראיה חיובית** שהחדש רץ: is-active + `/health/live`
 #      שמדווח בדיוק את התג + verify-boot-payload.sh.
-#   5ב. ‏#1361: restart למסך השרת (imagectl-dcui) — אחרי האימות; כשל = אזהרה.
+#   5ב. ‏#1361: restart למסך השרת (imagesrv-dcui) — אחרי האימות; כשל = אזהרה.
 #   6. כשל בראיה → checkout לתג הקודם, יחידות, restart, וסטטוס `failed`
 #      עם הסיבה ב-DB (דרך update._set_status) — הקונסולה מציגה אותו.
 #   ‏#1301: כל מעבר שלב נכתב לסטטוס (stage + חותמת ב-stages), וכשל נושא reason
@@ -26,15 +26,15 @@
 # ‏#1074: שדרוג אינו מפעיל את חומת האש הראשית. שרת קיים לא ינותק. (‏#1334:
 # חבילת nftables מותקנת בצעד 3ב — הטבלה של ה-VM בלבד, לא ה-ruleset הראשי.)
 #
-# ‏#1334, צעד 3ב: install/vmupdate-host.sh של התג החדש (חבילות + המשתמש
-# imagectl-vm). כשל **אינו** מפיל את העדכון — השרת מתעדכן, ו"עדכון ב-VM"
+# ‏#1334, צעד 3ב: deploy/vmupdate-host.sh של התג החדש (חבילות + המשתמש
+# imagesrv-vm). כשל **אינו** מפיל את העדכון — השרת מתעדכן, ו"עדכון ב-VM"
 # לא זמין — וגם אינו נבלע: הסיבה נכתבת לסטטוס (`warning`), והקונסולה מציגה
 # "אומת — אבל …". המנוע עצמו מסרב בשם (missing_tool/vm_user) עד שזה יתוקן.
 #
-# משתני סביבה (לבדיקות — בייצור ברירות המחדל): IMAGECTL_DATA_DIR,
-# IMAGECTL_UNIT_DIR, IMAGECTL_JOURNALD_DIR, IMAGECTL_INITRD_FLAGS, IMAGECTL_ISO_MANIFEST,
-# IMAGECTL_HTTP_ROOT, IMAGECTL_UPGRADE_LOG, IMAGECTL_CONSOLE_URL,
-# IMAGECTL_LIVE_WAIT.
+# משתני סביבה (לבדיקות — בייצור ברירות המחדל): IMAGESRV_DATA_DIR,
+# IMAGESRV_UNIT_DIR, IMAGESRV_JOURNALD_DIR, IMAGESRV_INITRD_FLAGS, IMAGESRV_ISO_MANIFEST,
+# IMAGESRV_HTTP_ROOT, IMAGESRV_UPGRADE_LOG, IMAGESRV_CONSOLE_URL,
+# IMAGESRV_LIVE_WAIT.
 set -euo pipefail
 
 die() { echo "server-upgrade: $*" >&2; exit 1; }
@@ -42,14 +42,14 @@ die() { echo "server-upgrade: $*" >&2; exit 1; }
 [[ $# -eq 2 ]] || die "usage: server-upgrade.sh <tag> <repo-dir>"
 TAG=$1
 REPO_DIR=$2
-DATA_DIR="${IMAGECTL_DATA_DIR:-/var/lib/imagectl}"
-DB="$DATA_DIR/imagectl.db"
-UNIT_DIR="${IMAGECTL_UNIT_DIR:-/etc/systemd/system}"
-JOURNALD_DIR="${IMAGECTL_JOURNALD_DIR:-/etc/systemd/journald.conf.d}"
-FLAGS_FILE="${IMAGECTL_INITRD_FLAGS:-/etc/imagectl/initrd.flags}"
-ISO_MANIFEST="${IMAGECTL_ISO_MANIFEST:-/etc/imagectl/iso-release.json}"
-HTTP_ROOT="${IMAGECTL_HTTP_ROOT:-/srv/imagectl/boot}"
-UPGRADE_STATE="${IMAGECTL_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
+DATA_DIR="${IMAGESRV_DATA_DIR:-/var/lib/imagesrv}"
+DB="$DATA_DIR/imagesrv.db"
+UNIT_DIR="${IMAGESRV_UNIT_DIR:-/etc/systemd/system}"
+JOURNALD_DIR="${IMAGESRV_JOURNALD_DIR:-/etc/systemd/journald.conf.d}"
+FLAGS_FILE="${IMAGESRV_INITRD_FLAGS:-/etc/imagesrv/initrd.flags}"
+ISO_MANIFEST="${IMAGESRV_ISO_MANIFEST:-/etc/imagesrv/iso-release.json}"
+HTTP_ROOT="${IMAGESRV_HTTP_ROOT:-/srv/imagesrv/boot}"
+UPGRADE_STATE="${IMAGESRV_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
 PREV=""         # התג הקודם — נקרא בשלב 1; ריק עד אז (set_status קורא אותו)
 INITRD_NOTE=""   # נקבע בחזרה — האם המטען הקודם הוחזר
 # ‏#1287: עותק המטען הקודם (initrd/vmlinuz) — מוחזר יחד עם הקוד בחזרה.
@@ -59,9 +59,9 @@ PAYLOAD_SAVED=0  # 1 רק אחרי שהעותק של **הריצה הזו** הו�
 ENABLED_TIMERS=()
 FAILED_TIMER=""
 TIMER_NOTE=""
-LOG="${IMAGECTL_UPGRADE_LOG:-/var/log/imagectl/server-upgrade.log}"
-CONSOLE_URL="${IMAGECTL_CONSOLE_URL:-https://127.0.0.1:8081}"
-LIVE_WAIT="${IMAGECTL_LIVE_WAIT:-90}"
+LOG="${IMAGESRV_UPGRADE_LOG:-/var/log/imagesrv/server-upgrade.log}"
+CONSOLE_URL="${IMAGESRV_CONSOLE_URL:-https://127.0.0.1:8081}"
+LIVE_WAIT="${IMAGESRV_LIVE_WAIT:-90}"
 CERT="$DATA_DIR/console-tls/console.crt"
 [[ -f "$CERT" ]] || CERT=""
 
@@ -131,7 +131,7 @@ if state in ("failed", "done"):
 PYEOF
 }
 # ‏#1893: סמן עמיד (fsync + rename) של מה שהריצה הזו כבר עשתה — מה שיחידת
-# imagectl-upgrade-recover קוראת באתחול שאחרי הפסקת חשמל. ‏db_snap_ver ו-payload_saved
+# imagesrv-upgrade-recover קוראת באתחול שאחרי הפסקת חשמל. ‏db_snap_ver ו-payload_saved
 # הם של **הריצה הזו** בלבד: עותק DB או מטען שנשארו מעדכון קודם אינם דרך חזרה ממנה.
 write_recovery_marker() {
     python3 - "$UPGRADE_STATE" "$REPO_DIR" "$PREV" "$TAG" "$STAGE" "$HTTP_ROOT" \
@@ -217,7 +217,7 @@ fi
 # נוגע בעץ העבודה): גרסה שנחתמה במפתח זר אינה מביאה איתה את המפתח שיאשר
 # אותה. "לא נבדק" (2) הוא סירוב בדיוק כמו "לא חתום" (1), והצלחה דורשת ראיה
 # חיובית — קוד 0 **וגם** שורת `signed:` (עיקרון 5).
-SIGNERS="$REPO_DIR/install/release-signers"
+SIGNERS="$REPO_DIR/deploy/release-signers"
 stage verify
 if sig="$(python3 -I "$REPO_DIR/tools/verify-release-tag.py" "$REPO_DIR" "$TAG" "$SIGNERS" 2>&1)" \
         && [[ "$sig" == "signed: "* ]]; then
@@ -271,14 +271,14 @@ fi
 timer_files() {
     local files
     shopt -s nullglob
-    files=(install/*.timer)
+    files=(deploy/*.timer)
     shopt -u nullglob
     (( ${#files[@]} == 0 )) || printf '%s\n' "${files[@]}"
 }
 install_units() {
     local timers
     mapfile -t timers < <(timer_files)
-    install -m 0644 install/*.service "$UNIT_DIR/" || return 1
+    install -m 0644 deploy/*.service "$UNIT_DIR/" || return 1
     (( ${#timers[@]} == 0 )) || install -m 0644 "${timers[@]}" "$UNIT_DIR/" || return 1
 }
 # ‏#1957: טיימר שהגרסה מביאה (#1895: הגיבוי השעתי) מופעל גם בעדכון, לא רק
@@ -296,7 +296,7 @@ enable_timers() {
 drop_new_timers() {
     local name
     for name in "${ENABLED_TIMERS[@]}"; do
-        [[ ! -f "install/$name" ]] || continue
+        [[ ! -f "deploy/$name" ]] || continue
         if ! { systemctl disable --now "$name" && rm -f "$UNIT_DIR/$name"; }; then
             TIMER_NOTE="$TIMER_NOTE (כיבוי $name נכשל — הוא עדיין מופעל)"
         fi
@@ -309,7 +309,7 @@ ROLLBACK_STEP=""
 install_units_and_restart() {
     install_units || { ROLLBACK_STEP="התקנת היחידות של $PREV ל-$UNIT_DIR"; return 1; }
     systemctl daemon-reload || { ROLLBACK_STEP="systemctl daemon-reload"; return 1; }
-    systemctl restart imagectl-server || { ROLLBACK_STEP="systemctl restart imagectl-server"; return 1; }
+    systemctl restart imagesrv-server || { ROLLBACK_STEP="systemctl restart imagesrv-server"; return 1; }
 }
 
 # ‏#1287: הקבצים שהבנייה מחליפה — ה-vmlinuz וכל --output, באותו פענוח של
@@ -372,7 +372,7 @@ restore_db_if_migrated() {
         return 0
     fi
     (( now > DB_SNAP_VER )) || return 0
-    if systemctl stop imagectl-server && out="$(python3 - "$DB_SNAPSHOT" "$DB" <<'PYEOF' 2>&1
+    if systemctl stop imagesrv-server && out="$(python3 - "$DB_SNAPSHOT" "$DB" <<'PYEOF' 2>&1
 import sqlite3, sys
 snap, live = sys.argv[1:3]
 source, target = sqlite3.connect(snap), sqlite3.connect(live)
@@ -430,18 +430,18 @@ target=$(git rev-list -n 1 "$TAG" 2>&1) || rollback "git rev-list נכשל עב�
 install_units || rollback "התקנת יחידות systemd ל-$UNIT_DIR נכשלה"
 systemctl daemon-reload || rollback "systemctl daemon-reload נכשל"
 enable_timers || rollback "הפעלת $FAILED_TIMER נכשלה (systemctl enable --now)"
-# ‏#1893: יחידת השחזור (בתוך install/*.service שלמעלה) מופעלת כאן — לא לפני ה-fetch: עד שהעץ
+# ‏#1893: יחידת השחזור (בתוך deploy/*.service שלמעלה) מופעלת כאן — לא לפני ה-fetch: עד שהעץ
 # החתום נמשך ואומת לא נוגעים ב-systemd (#1193). היא שומרת על העדכון **הבא**; לעדכון הזה
 # היא כבר פעילה מההתקנה (setup-boot-server.sh) או מהעדכון הקודם. כשל = אזהרה גלויה, לא חזרה.
-systemctl enable imagectl-upgrade-recover.service \
-    || UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }יחידת השחזור של עדכון שנקטע (imagectl-upgrade-recover) לא הופעלה — הפסקת חשמל בעדכון הבא לא תוחזר באתחול"
+systemctl enable imagesrv-upgrade-recover.service \
+    || UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }יחידת השחזור של עדכון שנקטע (imagesrv-upgrade-recover) לא הופעלה — הפסקת חשמל בעדכון הבא לא תוחזר באתחול"
 
 # 3א. ‏#1411: עדכוני האבטחה של Debian — רק מהמאגר שהגרסה החתומה נושאת
-# (install/security-upgrade.sh; הגיבוב שלו בעץ התג, שאומת למעלה). לפני בניית
+# (deploy/security-upgrade.sh; הגיבוב שלו בעץ התג, שאומת למעלה). לפני בניית
 # ה-initrd, כדי שקרנל חדש מהמאגר ייכנס כבר לקבצי האתחול של המחשבים. כשל = חזרה
 # לתג הקודם, כמו כל כשל התקנה. חבילות שכבר הותקנו אינן מוחזרות (apt אינו מוריד
 # גרסה בבטחה) — הסיבה בסטטוס אומרת מה קרה. גרסה בלי הסקריפט = גרסה בלי היכולת.
-SEC_UP="install/security-upgrade.sh"
+SEC_UP="deploy/security-upgrade.sh"
 if [[ -f "$SEC_UP" ]]; then
     stage packages
     sec_out="$(bash "$SEC_UP" "$TAG" "$REPO_DIR" 2>&1)" \
@@ -459,14 +459,14 @@ fi
 
 # 3ב. ‏#1334 — עדכון ב-VM. גרסה בלי הסקריפט = גרסה בלי היכולת (חזרה לתג ישן),
 # לא כשל. ה-`if` מנטרל את ה-trap של ERR: הכשל כאן נרשם, לא מחזיר אחורה.
-VMU_HOST="install/vmupdate-host.sh"
+VMU_HOST="deploy/vmupdate-host.sh"
 if [[ -f "$VMU_HOST" ]]; then
     if vmu_out="$(bash "$VMU_HOST" 2>&1)"; then
         echo "$vmu_out"
     else
         vmu_rc=$?
         echo "$vmu_out"
-        vmu_why="עדכון ב-VM לא זמין: $(printf '%s\n' "$vmu_out" | tail -n 1) (install/vmupdate-host.sh, קוד $vmu_rc)"
+        vmu_why="עדכון ב-VM לא זמין: $(printf '%s\n' "$vmu_out" | tail -n 1) (deploy/vmupdate-host.sh, קוד $vmu_rc)"
         echo "server-upgrade: $vmu_why"
         UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$vmu_why"
         set_status running
@@ -477,11 +477,11 @@ fi
 
 # 3ג. ‏#1737: תקרה ליומן המערכת — גם לשרת שהותקן לפניה. גרסה בלי הקובץ = בלי
 # היכולת. כשל אינו מחזיר את הקוד אחורה (השרת עובד גם בלעדיה), אבל נאמר בסטטוס.
-JOURNALD_CONF="install/journald-imagectl.conf"
+JOURNALD_CONF="deploy/journald-imagesrv.conf"
 if [[ -f "$JOURNALD_CONF" ]]; then
-    if jd_out="$(install -D -m 0644 "$JOURNALD_CONF" "$JOURNALD_DIR/90-imagectl.conf" 2>&1 \
+    if jd_out="$(install -D -m 0644 "$JOURNALD_CONF" "$JOURNALD_DIR/90-imagesrv.conf" 2>&1 \
             && systemctl restart systemd-journald 2>&1)"; then
-        echo "תקרת היומן: $JOURNALD_DIR/90-imagectl.conf"
+        echo "תקרת היומן: $JOURNALD_DIR/90-imagesrv.conf"
     else
         jd_why="תקרת היומן (journald) לא הוחלה: $(printf '%s\n' "${jd_out:-אין פלט}" | tail -n 1)"
         echo "server-upgrade: $jd_why"
@@ -499,7 +499,7 @@ fi
 #   * חסר, בשרת שהותקן מה-ISO (יש $ISO_MANIFEST) — firstboot של לפני #1230
 #     בנה בדיוק את ברירת המחדל של ה-ISO ולא רשם אותה. בונים אותה ורושמים.
 #   * חסר, בשרת שהותקן ב-setup-boot-server.sh (‏#1546, שרת חיפה) — ברירת המחדל
-#     **המתועדת** (docs/server-install.md, ‏install/verify-boot-payload.sh):
+#     **המתועדת** (docs/server-install.md, ‏deploy/verify-boot-payload.sh):
 #     ‏initrd.img + initrd.img.gui ב-$HTTP_ROOT — אותן שורות. זה לא ניחוש
 #     דגלים: אלה הקבצים שהשרת מגיש. בנייה שנכשלת חוזרת לתג הקודם, בשם.
 if [[ -e "$FLAGS_FILE" ]]; then
@@ -522,16 +522,16 @@ bash tools/boot-payload-build.sh --http-root "$HTTP_ROOT" --manifest "$ISO_MANIF
 
 # 5. restart + ראיה חיובית
 stage restart
-systemctl restart imagectl-server || rollback "systemctl restart imagectl-server נכשל"
-systemctl is-active --quiet imagectl-server || rollback "imagectl-server אינו active אחרי restart"
-bash install/console-live.sh "$CONSOLE_URL" "$TAG" "$LIVE_WAIT" "$CERT" \
+systemctl restart imagesrv-server || rollback "systemctl restart imagesrv-server נכשל"
+systemctl is-active --quiet imagesrv-server || rollback "imagesrv-server אינו active אחרי restart"
+bash deploy/console-live.sh "$CONSOLE_URL" "$TAG" "$LIVE_WAIT" "$CERT" \
     || rollback "השרת לא ענה ב-/health/live עם הגרסה $TAG תוך $LIVE_WAIT ש'" timeout
 
-# כתובת הסוכן ל-verify-boot-payload: ‏IMAGECTL_URL מהיחידה (cli — המעבדה),
+# כתובת הסוכן ל-verify-boot-payload: ‏IMAGESRV_URL מהיחידה (cli — המעבדה),
 # אחרת מה שהקונסולה רשמה (deploy:url), אחרת loopback (רשת הפצה שטרם
 # הוגדרה, #1088). ‏sed ולא grep -o: "לא נמצא" הוא תשובה, לא כישלון (pipefail).
-AGENT_URL="$(systemctl show -p Environment --value imagectl-server \
-    | sed -n 's/.*IMAGECTL_URL=\([^ "]*\).*/\1/p' | head -n1)"
+AGENT_URL="$(systemctl show -p Environment --value imagesrv-server \
+    | sed -n 's/.*IMAGESRV_URL=\([^ "]*\).*/\1/p' | head -n1)"
 if [[ -z "$AGENT_URL" ]]; then
     AGENT_URL="$(python3 - "$DB" <<'PYEOF'
 import sqlite3, sys
@@ -541,17 +541,17 @@ print(row[0] if row and row[0] else "http://127.0.0.1:8080")
 PYEOF
 )" || AGENT_URL="http://127.0.0.1:8080"
 fi
-bash install/verify-boot-payload.sh --app-dir "$REPO_DIR" --http-root "$HTTP_ROOT" --server-url "$AGENT_URL" \
+bash deploy/verify-boot-payload.sh --app-dir "$REPO_DIR" --http-root "$HTTP_ROOT" --server-url "$AGENT_URL" \
     || rollback "verify-boot-payload.sh נכשל מול $AGENT_URL"
 
-# 5ב. ‏#1361: מסך השרת (imagectl-dcui על tty1) הוא תהליך python נפרד, והוא
+# 5ב. ‏#1361: מסך השרת (imagesrv-dcui על tty1) הוא תהליך python נפרד, והוא
 # מריץ את הקוד שנטען באתחול — בלי restart המפעיל רואה את המסך הישן עד
 # האתחול הבא. אחרי האימות בלבד: כשל כאן אינו כשל שדרוג (השרת החדש רץ
 # ואומת), ולכן אינו מחזיר אחורה — אבל גם אינו נבלע: הוא נכתב לאזהרה.
 # שלושה מצבים, כל אחד בשם: אין יחידה (שרת שלא הותקן מה-ISO) · עצורה
 # בכוונה (inactive) · כל השאר → restart + ראיה חיובית (is-active).
 # "לא הצלחנו לבדוק" אינו "אין מסך" (עיקרון 5).
-DCUI_UNIT=imagectl-dcui.service
+DCUI_UNIT=imagesrv-dcui.service
 dcui_warn() {
     echo "server-upgrade: $1"
     UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$1"

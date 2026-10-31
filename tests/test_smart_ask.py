@@ -1,4 +1,4 @@
-"""‏#989 ס׳ 2 — תשובת מפעיל לשאלת ה-SMART מהקונסולה (`server/smart_ask.py`).
+"""‏#989 ס׳ 2 — תשובת מפעיל לשאלת ה-SMART מהקונסולה (`server/disks/smart_ask.py`).
 
 השאלה נוסעת ב-hello של הדופק (`ask`), תשובת הקונסולה חוזרת ב-`ask_answer`
 של ה-hello הבא, ותשובה ליד המכונה נשלחת בהרשאה (`ask_answered`) — **הראשונה
@@ -26,7 +26,7 @@ BUILD = "b4:2e:99:07:1a:c5"
 
 @pytest.fixture()
 def server(tmp_path: Path, images_root):
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
@@ -232,7 +232,7 @@ def _open_ask(ctx, mac, answer=None, asked_at="2026-10-17T08:13:20+00:00"):
 
 def test_open_in_wave_names_a_live_member_with_an_unanswered_question(server):
     from datetime import datetime
-    from server import smart_ask
+    from server.disks import smart_ask
     ctx = server["ctx"]
     now = datetime.fromisoformat("2026-10-17T08:14:30+00:00")
     _wave_member(ctx, CLONER)
@@ -252,7 +252,7 @@ def test_open_in_wave_names_a_live_member_with_an_unanswered_question(server):
 def test_open_in_wave_does_not_hold_for_a_question_nobody_can_answer(
         server, member_state, last_seen, answer, asked_at):
     from datetime import datetime
-    from server import smart_ask
+    from server.disks import smart_ask
     ctx = server["ctx"]
     _wave_member(ctx, CLONER, member_state, last_seen)
     _open_ask(ctx, CLONER, answer, asked_at or "2026-10-17T08:13:20+00:00")
@@ -264,7 +264,7 @@ def test_release_overdue_frees_only_the_machine_past_the_ceiling(server):
     """התקרה לכל מכונה: מעל `ASK_HOLD_MAX_SECONDS` — ‏`failed` עם הסיבה ושורת
     יומן; שאלה צעירה מהתקרה לא נוגעים בה. פעם שנייה — אין שורה נוספת."""
     from datetime import datetime
-    from server import smart_ask
+    from server.disks import smart_ask
     ctx = server["ctx"]
     now = datetime.fromisoformat("2026-10-17T08:14:30+00:00")
     _wave_member(ctx, CLONER)
@@ -289,8 +289,8 @@ def test_the_server_ceiling_outlasts_the_agents():
     הוא רשת הביטחון. תקרה בשרת שקצרה מזו של הסוכן הייתה משחררת מהגל
     מכונה שעוד עומדת לקבל את הזרם."""
     import re
-    from server import smart_ask
-    waits = (Path(__file__).resolve().parent.parent / "agent/lib/waits.sh").read_text(encoding="utf-8")
+    from server.disks import smart_ask
+    waits = (Path(__file__).resolve().parent.parent / "agent/lib/core/waits.sh").read_text(encoding="utf-8")
     agent = int(re.search(r'WAIT_SMART_GUI_S="\$\{WAIT_SMART_GUI_S:-(\d+)\}"', waits).group(1))
     assert smart_ask.ASK_HOLD_MAX_SECONDS > agent
 
@@ -301,7 +301,7 @@ def test_the_ceiling_counts_from_the_wave_start_not_from_each_question(server):
     ששואלת שאלה חדשה כל חצי שעה. הגל התחיל לפני 35:30, השאלה הנוכחית בת
     דקה: המכונה משתחררת."""
     from datetime import datetime
-    from server import smart_ask
+    from server.disks import smart_ask
     ctx = server["ctx"]
     now = datetime.fromisoformat("2026-10-17T08:14:30+00:00")
     _wave_member(ctx, CLONER, started_at="2026-10-17T07:39:00+00:00")
@@ -320,7 +320,7 @@ def test_the_ceiling_counts_from_the_wave_start_not_from_each_question(server):
 def test_an_unreadable_stamp_falls_back_to_the_other_or_does_not_hold(
         server, started_at, asked_at, held):
     from datetime import datetime
-    from server import smart_ask
+    from server.disks import smart_ask
     ctx = server["ctx"]
     _wave_member(ctx, CLONER, started_at=started_at)
     _open_ask(ctx, CLONER, asked_at=asked_at)
@@ -352,7 +352,7 @@ def test_an_interruption_does_not_colour_the_disk(server, error):
     """‏#1580 (נדב 17/10): כשל שהוא עצירה באמצע (הסבב נעצר/נסגר, המכונה כובתה,
     הזרם לא הגיע) אינו שגיאת דיסק — hello אינו מחזיר אותו (הסוכן לא צובע),
     והקונסולה אינה מציגה אותו. ‏**בקרה שלילית:** על הקוד הישן הוא חוזר בשניהם."""
-    from server import disk_failures
+    from server.disks import disk_failures
     ctx = server["ctx"]
     _failure(ctx, CLONER, "S-OK", "unclassified", error)
     assert disk_failures.open_for(ctx.conn, CLONER, [{"serial": "S-OK"}]) == []
@@ -367,7 +367,7 @@ def test_an_interruption_does_not_colour_the_disk(server, error):
 ])
 def test_a_real_failure_still_colours_the_disk(server, cause, error):
     """הצד השני: שגיאת קו/דיסק מה-ATA, או כשל כתיבה שאינו עצירה — נשארים."""
-    from server import disk_failures
+    from server.disks import disk_failures
     ctx = server["ctx"]
     _failure(ctx, CLONER, "S-BAD", cause, error)
     assert [f["serial"] for f in disk_failures.open_for(ctx.conn, CLONER, [{"serial": "S-BAD"}])] == ["S-BAD"]
@@ -377,9 +377,9 @@ def test_a_real_failure_still_colours_the_disk(server, cause, error):
 def test_the_interruption_phrases_are_what_the_agent_writes():
     """הביטויים בשרת חייבים להיות המילים שהסוכן כותב — אחרת הסיווג "עובד"
     בטסט ולא על ברזל."""
-    from server import disk_failures
+    from server.disks import disk_failures
     agent = Path(__file__).resolve().parent.parent / "agent"
     source = "\n".join(p.read_text(encoding="utf-8") for p in agent.rglob("*.sh")) + \
-        (agent / "imagectl-agent").read_text(encoding="utf-8")
+        (agent / "imagesrv-agent").read_text(encoding="utf-8")
     for phrase in disk_failures.INTERRUPTION_PHRASES:
         assert phrase in source, phrase

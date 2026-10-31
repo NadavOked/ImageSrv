@@ -1,6 +1,6 @@
 """#2131 -- the clone stick beeps as the cloner does (#2067), and its own settings mute it.
 
-* The same five-tune table (agent/lib/roundbeep.sh) -- there is no second copy. On the
+* The same five-tune table (agent/lib/core/roundbeep.sh) -- there is no second copy. On the
   stick there is no server: usb_answer writes the answer a hello would have given, and
   the tunes play from the stick's local clone exactly where they play on a cloner --
   lc_end (all done = success; partial, or the source failed = failure) and drawer_watch
@@ -69,7 +69,7 @@ def stick(tmp_path: Path, script: str, *, reboot: bool = False):
         shutil.rmtree(tmp_path / "run", ignore_errors=True)
         (tmp_path / "dev/input/event5").unlink(missing_ok=True)
     pre = speaker(tmp_path) + KIOSK + f'echo mounted > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; '
-    out = run(tmp_path, pre + script, IMAGECTL_MODE="usbclone", SYSROOT=posix(tmp_path / "sysroot"))
+    out = run(tmp_path, pre + script, IMAGESRV_MODE="usbclone", SYSROOT=posix(tmp_path / "sysroot"))
     assert out.returncode == 0, out.stdout + out.stderr
     return out, usb
 

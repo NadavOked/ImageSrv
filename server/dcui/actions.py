@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from server import netcfg, netcfg_host, netcfg_rollback, users
+from server.net import netcfg, netcfg_host, netcfg_rollback
+from server.console import users
 from server.db import (_write_lock, get_setting, journal, set_setting,
                        writing)
 
@@ -136,7 +137,7 @@ def _text(result: CommandResult) -> str:
 
 
 def restart_services(conn, runner: Runner = run_argv) -> ActionResult:
-    units = ["imagectl-server"]
+    units = ["imagesrv-server"]
     enabled = runner(["systemctl", "is-enabled", "dnsmasq"])
     if enabled.returncode == 0 and enabled.stdout.strip() == "enabled":
         units.append("dnsmasq")
@@ -450,7 +451,7 @@ def request_network_rollback(conn, data_dir: Path,
     if marker is None:
         journal(conn, "dcui_net_rollback_requested", "no pending change", "dcui")
         return ActionResult(False, "No network change is waiting for rollback.")
-    result = runner(["systemctl", "start", "imagectl-netrollback.service"])
+    result = runner(["systemctl", "start", "imagesrv-netrollback.service"])
     ok = (result.returncode == 0
           and not netcfg_rollback.pending_path(data_dir / "netcfg").exists())
     journal(conn, "dcui_net_rollback_requested",
@@ -463,8 +464,8 @@ def request_network_rollback(conn, data_dir: Path,
 
 def blank_disks(hooks: dict | None = None) -> tuple[dict | None, ActionResult | None]:
     """(listing, None) or (None, the reason it could not be read)."""
-    from server import storage_disks
-    from server import storage_locations as sl
+    from server.storage import storage_disks
+    from server.storage import storage_locations as sl
     try:
         return storage_disks.blank_disks({**sl.default_hooks(), **(hooks or {})}), None
     except storage_disks.AddDiskError as exc:
@@ -484,8 +485,8 @@ def disk_name(conn, disk: dict) -> str:
 
 
 def add_disk(conn, data_dir: Path, disk: dict, hooks: dict | None = None) -> ActionResult:
-    from server import storage_disks
-    from server import storage_locations as sl
+    from server.storage import storage_disks
+    from server.storage import storage_locations as sl
     if conn is None:
         return ActionResult(False, "The server database is not available.")
     name = disk_name(conn, disk)

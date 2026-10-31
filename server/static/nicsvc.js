@@ -323,7 +323,7 @@ function nicsvcCountdown(from, total, done) {
 }
 
 /* --- הפס בכל דף: ממתין לאישור / חזר לבד --- */
-const NICSVC_DISMISS = "imagectl-nicsvc-dismissed";
+const NICSVC_DISMISS = "imagesrv-nicsvc-dismissed";
 function nicsvcDismissed(at) { try { return sessionStorage.getItem(NICSVC_DISMISS) === at; } catch (e) { return false; } }
 function nicsvcDismiss(enc) {
   let at = enc; try { at = decodeURIComponent(enc); } catch (e) {}

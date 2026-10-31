@@ -1,10 +1,10 @@
 """#1484 -- metal, cloner 2, 16/10: on the local clone screen the agent log
 filled every second with
 
-    /usr/bin/imagectl-kiosk: line 244: min_free_gb: not found
+    /usr/bin/imagesrv-kiosk: line 244: min_free_gb: not found
     sh: bad number
-    /usr/bin/imagectl-kiosk: line 88: can't open .../lc/run/src.base: no such file
-    /usr/bin/imagectl-kiosk: line 88: can't open .../lc/run/bytes.raw: no such file
+    /usr/bin/imagesrv-kiosk: line 88: can't open .../lc/run/src.base: no such file
+    /usr/bin/imagesrv-kiosk: line 88: can't open .../lc/run/bytes.raw: no such file
 
 1. The kiosk's load chain (``gui_libs``) did not carry ``diskfit.sh``, so
    ``lc_min_free`` (lcinv.sh) ran ``[ "$(min_free_gb)" -gt 0 ]`` on nothing --
@@ -25,6 +25,7 @@ from pathlib import Path
 from native import requires_native
 from test_cloner_gui import AGENT, BASH, env, posix, sh
 from test_local_clone_agent import run
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -49,8 +50,8 @@ def _kiosk_state(tmp_path: Path, min_free: str) -> tuple[list[str], str]:
     for path, text in files.items():
         path.write_text(text + "\n", encoding="utf-8", newline="\n")
     sysroot = tmp_path / "sys"; sysroot.mkdir()
-    out = sh(env(r, gui) + f'export SYSROOT={posix(sysroot)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-             f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; lc_gui_state')
+    out = sh(env(r, gui) + f'export SYSROOT={posix(sysroot)!r} LIB_DIR={posix(flat_lib())!r}; '
+             f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; lc_gui_state')
     assert out.returncode == 0, out.stderr
     return (gui / "state").read_text(encoding="utf-8").splitlines(), out.stderr
 

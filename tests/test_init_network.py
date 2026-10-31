@@ -25,7 +25,7 @@ def _network_block(net: Path, uptime: Path, short_deadline: bool = False) -> str
     end = next(i for i, line in enumerate(lines) if line.startswith("IP=$(ip -4 addr show"))
     block = "\n".join(lines[start:end]).replace("/sys/class/net", posix(net))
     block = block.replace("/proc/uptime", posix(uptime))
-    block = block.replace("/run/imagectl", posix(net.parent / "run"))   # #2040: the probe file
+    block = block.replace("/run/imagesrv", posix(net.parent / "run"))   # #2040: the probe file
     if short_deadline:
         block = block.replace("+ 90 ))", "+ 2 ))")
     tick = next((line for line in lines if line.startswith("poll_tick()")), "")
@@ -34,7 +34,7 @@ def _network_block(net: Path, uptime: Path, short_deadline: bool = False) -> str
     return tick + '\n_up=""\n' + mark + "\n" + block
 
 
-#: ‏#2040: ה-host של imagectl.server, וה-server-id של DHCP זר (רשת הכיתות).
+#: ‏#2040: ה-host של imagesrv.server, וה-server-id של DHCP זר (רשת הכיתות).
 SERVER_IP = "10.44.9.10"
 FOREIGN_SID = "192.168.50.1"
 
@@ -47,7 +47,7 @@ def udhcpc_prelude(net: Path, log: Path, ok_ifs: str, foreign_ifs: str = "") -> 
     (net.parent / "run").mkdir(exist_ok=True)
     return f"""
 LIB_DIR=/nonexistent-lib
-IMAGECTL_SERVER=http://{SERVER_IP}:8080
+IMAGESRV_SERVER=http://{SERVER_IP}:8080
 NET={posix(net)!r}
 LOG={posix(log)!r}
 RUN={posix(net.parent / "run")!r}

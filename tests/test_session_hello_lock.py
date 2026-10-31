@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 from server.db import connect
-from server.sessions import SessionStore
+from server.rounds.sessions import SessionStore
 
 GROUP = "grp_LAB1"
 IMAGE = "img_7f3a91"

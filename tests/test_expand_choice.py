@@ -24,7 +24,7 @@ pytest.importorskip("fastapi")
 
 from conftest import MANIFEST_256, hello_body, room_slots, setup_classroom
 
-from server.imagefit import validate_expand_choice
+from server.library.imagefit import validate_expand_choice
 from test_server_room import (CLONER1, CLONER2, cloner_hello, heartbeat,
                               report, room_server)  # noqa: F401
 

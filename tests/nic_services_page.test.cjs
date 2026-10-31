@@ -20,7 +20,7 @@ const NICS=[
 const cfgRow=(name,extra={})=>({name,mode:'static',mode_he:'כתובת סטטית',address:'',netmask:'255.255.255.0',gateway:'',dns:[],routes:[],present:true,state:'up',live_addresses:[],mismatches:[],...extra});
 const NETCFG={interfaces:[cfgRow('ens33',{live_addresses:['10.10.10.8/24']}),cfgRow('ens34',{live_addresses:['10.44.0.1/24']}),cfgRow('ens35',{mode:'manual',state:'down'})],
   live:{checked:true,reason:'',routes:[],nameservers:[]},management_interface:'ens33',sourced:true,resolv_path:'/etc/resolv.conf',
-  rollback:{armed:true,armed_detail:'active',unit:'imagectl-netrollback.timer',window_seconds:60,pending:false,interface:'',seconds_left:0,expired:false,corrupt:false}};
+  rollback:{armed:true,armed_detail:'active',unit:'imagesrv-netrollback.timer',window_seconds:60,pending:false,interface:'',seconds_left:0,expired:false,corrupt:false}};
 const L=(o={})=>({console:null,monitor:null,multicast:null,netboot:null,interserver:null,...o});
 const svcRow=(name,services,extra={})=>({name,present:true,address:null,services,source:'default',configured:services.length>0,unreadable:false,listening:L(),...extra});
 const TODAY={services:['console','monitor','multicast','netboot','interserver'],edited:false,window_seconds:60,pending:null,last:null,

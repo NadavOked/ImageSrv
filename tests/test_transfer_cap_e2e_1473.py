@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip("OpenSSL", reason="pyOpenSSL is needed for the inter-server mTLS (#740)")
 
 from conftest import write_image  # noqa: E402
-from server import interserver_auth, transfer_cap  # noqa: E402
+from server.interserver import interserver_auth, transfer_cap  # noqa: E402
 from test_storage_pull import PULL, PULL_ID  # noqa: E402
 from test_storage_transfer import IMAGE, _wait, paired, secondary  # noqa: E402,F401
 from test_transfer_cap_1473 import MBPS, _Virtual  # noqa: E402

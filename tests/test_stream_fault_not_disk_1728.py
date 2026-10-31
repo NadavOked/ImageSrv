@@ -27,7 +27,8 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server import db, disk_failures
+from server import db
+from server.disks import disk_failures
 from test_agent import BASH
 from test_stream_honesty import drawer_run, errors_of
 
@@ -100,7 +101,7 @@ def test_kernel_evidence_next_to_an_empty_stream_still_wins(conn):
 def test_the_stream_phrases_are_what_fanout_and_the_agent_write():
     """הביטוי חייב להיות המילים שנכתבות בפועל, אחרת הסיווג "עובד" רק בטסט."""
     fanout = (REPO / "agent" / "fanout.c").read_text(encoding="utf-8")
-    verdict = (REPO / "agent" / "lib" / "verdict.sh").read_text(encoding="utf-8")
+    verdict = (REPO / "agent" / "lib" / "restore" / "verdict.sh").read_text(encoding="utf-8")
     assert "(fanout: " in verdict
     # getattr: בבקרה השלילית הטסט נופל על ה-assert, לא על סמל חסר.
     assert getattr(disk_failures, "STREAM_PHRASES", ()) == (

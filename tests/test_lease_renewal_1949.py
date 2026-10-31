@@ -48,7 +48,7 @@ def test_the_lease_holder_stays_resident_to_renew(tmp_path):
     calls = [line.split() for line in
              Path(f"{log}.args").read_text(encoding="utf-8").splitlines()]
     assert [c[1] for c in calls] == ["eth0", "eth1", "eth1"]
-    holders = [c for c in calls if "/etc/imagectl/udhcpc.script" in c]
+    holders = [c for c in calls if "/etc/imagesrv/udhcpc.script" in c]
     assert [c[1] for c in holders] == ["eth1"], calls
     for call in holders:
         assert "-q" not in call, f"udhcpc יוצא אחרי החכירה ואינו מחדש אותה: {call}"
@@ -58,7 +58,7 @@ def test_the_lease_holder_stays_resident_to_renew(tmp_path):
 
 def _hook_text(resolv: Path) -> str:
     text = BUILD.read_text(encoding="utf-8")
-    m = re.search(r"cat > \"\$ROOT/etc/imagectl/udhcpc\.script\" << 'EOF'\n(.*?)\nEOF\n",
+    m = re.search(r"cat > \"\$ROOT/etc/imagesrv/udhcpc\.script\" << 'EOF'\n(.*?)\nEOF\n",
                   text, re.S)
     assert m, "the udhcpc hook heredoc moved -- update the extractor"
     return m.group(1).replace("/etc/resolv.conf", posix(resolv))
@@ -131,7 +131,7 @@ def test_a_repeated_refusal_is_journaled_once_per_window_with_a_count(
         identity_server, monkeypatch):  # noqa: F811
     """‏R2: שתי שורות כל 2 שניות. כל בקשה עדיין מסורבת (403) — רק הרישום
     מרוסן — והשורה שאחרי החלון אומרת כמה נבלעו."""
-    from server import api
+    from server.agent import api
 
     ids = setup_classroom(identity_server)
     for _ in range(5):

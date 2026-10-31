@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom, write_image
-from server.images import required_bytes
+from server.library.images import required_bytes
 from test_min_free_1354 import GIB, win11
 from test_room_image_fit import (CLONER1, CLONER2, DISK_256, DISK_500, fit_server,  # noqa: F401
                                  hello_with_disks, open_round)
@@ -120,7 +120,7 @@ def test_the_room_refuses_an_image_that_fits_by_size_but_leaves_too_little(fit_s
     """C: 225 GiB with 220 GiB used fits a 256 GB drawer by layout (~242.6 GB),
     and leaves 5 GiB + the ~12.6 GiB the drawer adds: short of 20. Refused
     before a wave opens, with the reason named; 0 in the console lets it by."""
-    from server import minfree   # lazy: the negative control removes the module
+    from server.library import minfree   # lazy: the negative control removes the module
     image = library_image(win11(size=225 * GIB, used=220 * GIB), id="img_7e1602", name="tight2")
     need = required_bytes(image)
     assert need < DISK_256 < minfree.min_disk_bytes(image, 20)

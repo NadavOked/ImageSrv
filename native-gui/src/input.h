@@ -5,8 +5,8 @@
  * he the same key in SI-1452 -- and main.c picks by the typing language,
  * which Alt+Shift switches (KEYSYM_LAYOUT). Keyboards are grabbed
  * (EVIOCGRAB) so the password does not also echo on the text VT. */
-#ifndef IMAGECTL_INPUT_H
-#define IMAGECTL_INPUT_H
+#ifndef IMAGESRV_INPUT_H
+#define IMAGESRV_INPUT_H
 
 #include <poll.h>
 

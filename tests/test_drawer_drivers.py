@@ -1,4 +1,4 @@
-"""‏#1269 — הנחת דרייברים על מגירות של מחשב שיכפול (`agent/lib/postdeploy.sh`).
+"""‏#1269 — הנחת דרייברים על מגירות של מחשב שיכפול (`agent/lib/postdeploy/postdeploy.sh`).
 
 אותו staging של #720 (‏`test_postdeploy.py` בודק את המנגנון עצמו), מנקודת
 המבט של המגירה: רק החריצים ש-hello אמר שנבחר להם דגם
@@ -150,8 +150,8 @@ def test_the_progress_report_carries_each_drawers_outcome(tmp_path):
             (run / "targets" / dev / name).write_text(value + "\n")
     (run / "targets/sdb/drivers.json").write_text('{"state":"staged","packages":["m70q"]}\n')
     (run / "state").write_text("done\n")
-    script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/common.sh; '
-              f'. {posix(AGENT)}/lib/progress.sh; build_progress ses_1 b4:2e:99:07:1a:c4')
+    script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; '
+              f'. {posix(AGENT)}/lib/core/progress.sh; build_progress ses_1 b4:2e:99:07:1a:c4')
     report = json.loads(subprocess.run([BASH, "-c", script], capture_output=True, text=True,
                                        stdin=subprocess.DEVNULL, cwd=str(AGENT.parent)).stdout)
     by_dev = {t["dev"]: t for t in report["targets"]}
@@ -161,7 +161,7 @@ def test_the_progress_report_carries_each_drawers_outcome(tmp_path):
 
 
 def test_the_cloner_stages_after_the_write_and_before_the_closing_report():
-    main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     body = main[main.index("do_restore_drawers() {"):main.index("do_restore() {")]
     i_write = body.index("run_restore_drawers ")
     i_stage = body.index('stage_drawer_drivers "$2" "$RUN_DIR/manifest.json" $_disks')
@@ -177,7 +177,7 @@ def test_the_real_jq_filters_read_driver_ports_and_chosen(tmp_path):
     def run(doc: dict, path: str) -> str:
         f = tmp_path / "doc.json"
         f.write_text(json.dumps(doc), encoding="utf-8")
-        script = f'. {posix(AGENT)}/lib/jsonq.sh; json_get {posix(f)!r} {path!r}'
+        script = f'. {posix(AGENT)}/lib/core/jsonq.sh; json_get {posix(f)!r} {path!r}'
         return subprocess.run([BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
                               capture_output=True, text=True, stdin=subprocess.DEVNULL).stdout
     ports = ".session.driver_ports // [] | .[]"

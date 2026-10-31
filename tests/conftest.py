@@ -61,7 +61,13 @@ def pytest_configure(config) -> None:
     # ב-CI הציבורי היא **מוסרת במפורש** (-m "not vm_it"), לא "מדולגת": דילוג
     # תחת REQUIRE_NATIVE=1 הוא כישלון, וזה מה שהפיל את tests מאז v0.73.2.
     config.addinivalue_line(
-        "markers", "vm_it: אינטגרציית עדכון ה-VM — IMAGECTL_VM_IT=1, root וכלי השרת"
+        "markers", "vm_it: אינטגרציית עדכון ה-VM — IMAGESRV_VM_IT=1, root וכלי השרת"
+    )
+    # ‏#2118: רגיש לעומס (זרם שמחכה ‏WAIT_STREAM_STALL, ערך של המוצר) — נכשל תחת
+    # ‏`-n auto` ועובר לבדו. רץ סדרתית אחרי השלב המקבילי: ‏`-m "not serial"`
+    # ואז ‏`-m serial`; השער סופר את שני השלבים יחד (lab_gate.py).
+    config.addinivalue_line(
+        "markers", "serial: רגיש לעומס; רץ סדרתית אחרי השלב המקבילי, #2118"
     )
     # לפני האיסוף: ‏`requires_native(("sgdisk", which("sgdisk")))` נקבע ביבוא
     # המודול, ו-busybox ash של הטסט מוצא את sgdisk באותו PATH (#1594).
@@ -77,7 +83,7 @@ def pytest_configure(config) -> None:
     hostguard.detach_host_dev()
 
 
-#: קובץ עקבות אופציונלי — ‏`IMAGECTL_TEST_TRACE=<נתיב>`.
+#: קובץ עקבות אופציונלי — ‏`IMAGESRV_TEST_TRACE=<נתיב>`.
 #:
 #: ‏07/09: ריצה מלאה נגמרה ב-87% **בלי שורת סיכום כלל**, כלומר לא היה
 #: ממה לקרוא תוצאה. מוות כזה הוא תהליך-בן שהרג את הריצה לפני
@@ -87,7 +93,7 @@ def pytest_configure(config) -> None:
 #:
 #: כבוי כברירת מחדל: כתיבה מסונכרנת לכל טסט היא תקורה אמיתית, והיא
 #: נחוצה רק כשמחפשים את הכשל הזה.
-_trace = os.environ.get("IMAGECTL_TEST_TRACE")
+_trace = os.environ.get("IMAGESRV_TEST_TRACE")
 
 
 def pytest_runtest_setup(item) -> None:
@@ -121,7 +127,7 @@ def _say(lines: list[str]) -> None:
 #: אדומה שנראית ירוקה (עיקרון 5). לכן ה-worker מוסר את הממצאים דרך
 #: ‏`workeroutput`, והמנהל מוסיף אותם לפסק שלו. הדילוגים וכשלי ווינדוס אינם
 #: עוברים כאן: הדוחות עצמם מגיעים למנהל (`pytest_runtest_logreport`).
-WORKER_PROBLEMS_KEY = "imagectl_problems"
+WORKER_PROBLEMS_KEY = "imagesrv_problems"
 _worker_problems: list[str] = []
 
 
@@ -141,9 +147,9 @@ def pytest_testnodedown(node, error) -> None:
 
 #: ‏#2121: שער המעבדה אינו קורא את קוד היציאה (הוא 1 בכל ריצה על ה-testrunner,
 #: שש שגיאות uinput), ולכן יתום או שולח אמיתי שנמצאו כאן — שאינם טסט ב-junit —
-#: היו נעלמים בו. ‏`IMAGECTL_SESSION_PROBLEMS=<נתיב>`: הרשימה נכתבת תמיד, גם
+#: היו נעלמים בו. ‏`IMAGESRV_SESSION_PROBLEMS=<נתיב>`: הרשימה נכתבת תמיד, גם
 #: ריקה — קובץ חסר אומר "לא נרשם", לא "אין בעיות" (עיקרון 5).
-SESSION_PROBLEMS_ENV = "IMAGECTL_SESSION_PROBLEMS"
+SESSION_PROBLEMS_ENV = "IMAGESRV_SESSION_PROBLEMS"
 
 
 def _record_session_problems(problems: list[str]) -> None:
@@ -322,7 +328,7 @@ def clock() -> Clock:
 
 def complete_console_login(client, conn, username: str, password: str) -> dict:
     """כניסה מלאה: מסיימת החלפת סיסמה / הרשמת MFA / TOTP לפי מה שהשרת דורש."""
-    from server import totp as totp_mod
+    from server.console import totp as totp_mod
 
     r = client.post(
         "/api/console/login", json={"username": username, "password": password},
@@ -356,7 +362,7 @@ def complete_console_login(client, conn, username: str, password: str) -> dict:
 
 def _build_server(tmp_path: Path, images_root: Path, clock: Clock, recorder) -> dict:
     """אפליקציה מלאה עם שולח מזויף, ולקוחות מחוברים בשני התפקידים."""
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     app = create_app(
@@ -394,7 +400,7 @@ def server(tmp_path: Path, images_root: Path, clock: Clock, monkeypatch):
     """
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import sender as sender_module             # noqa: PLC0415
+    from server.rounds import sender as sender_module             # noqa: PLC0415
     from test_sender import Recorder                       # noqa: PLC0415
 
     monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
@@ -417,7 +423,7 @@ def _classrooms_restore():
     מעבירים מילונים שונים). כאן הערך חוזר אחרי כל טסט — ל**מה שהיה לפניו**,
     ולא ל"מה שהיה כש-setup_classroom רץ": ‏autouse מתפרק אחרון, אחרי
     ‏`monkeypatch` של `classrooms_on`, ושחזור יחסי היה משאיר True דולף."""
-    from server import capabilities                        # noqa: PLC0415
+    from server.core import capabilities                        # noqa: PLC0415
     before = capabilities.CLASSROOMS
     yield
     capabilities.CLASSROOMS = before
@@ -435,14 +441,14 @@ def _host_free_space(request, monkeypatch):
     הקלט של הבדיקה (‏`reserve()` נקרא בזמן הקריאה בדיוק בשביל זה)."""
     if request.node.get_closest_marker("system_reserve"):
         return
-    from server import disk_reserve                        # noqa: PLC0415
+    from server.storage import disk_reserve                        # noqa: PLC0415
     monkeypatch.setattr(disk_reserve, "reserve", lambda: 0)
 
 
 @pytest.fixture()
 def classrooms_on(monkeypatch):
     """v1.2 לטסט אחד: כיתות דלוקות בשרת (‏`capabilities.CLASSROOMS`)."""
-    from server import capabilities                        # noqa: PLC0415
+    from server.core import capabilities                        # noqa: PLC0415
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
 
 
@@ -450,7 +456,7 @@ def setup_classroom(server: dict, expected: int = 2) -> dict:
     """קבוצת כיתה עם שתי מכונות רשומות; מחזיר מזהים שימושיים.
 
     מדליק את הכיתות (v1.2) עד סוף הטסט — ראה ‏`_classrooms_restore`."""
-    from server import capabilities                        # noqa: PLC0415
+    from server.core import capabilities                        # noqa: PLC0415
     capabilities.CLASSROOMS = True
     admin = server["admin"]
     assert admin.post(

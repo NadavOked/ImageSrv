@@ -43,7 +43,7 @@ KEYS = {"lost_wait_seconds": "lost_wait_seconds",
     ("gui_end_poweroff_seconds", 9, None), ("gui_end_poweroff_seconds", 301, None),
 ])
 def test_parse_takes_a_whole_number_in_range_only(key, raw, want):
-    from server import agent_timing   # inside the test: the negative control removes the module
+    from server.agent import agent_timing   # inside the test: the negative control removes the module
     assert agent_timing.parse(key, raw) == want
 
 
@@ -92,7 +92,7 @@ def test_only_an_admin_sets_them_and_the_change_is_journaled(room_server):
 
 
 def test_a_corrupt_stored_value_falls_back_to_the_default_not_to_zero_or_forever(room_server):
-    from server import agent_timing
+    from server.agent import agent_timing
     ctx = room_server["ctx"]
     ctx.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('lost_wait_seconds', '5')")
     ctx.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('gui_end_poweroff_seconds', 'x')")
@@ -192,8 +192,8 @@ def test_a_garbage_echo_is_ignored_and_keeps_the_previous_record(room_server):
 
 
 def test_the_senders_drop_ceiling_never_undercuts_the_configured_wait():
-    from server import agent_timing
-    from server.sender import DEFAULT_RETRIES_UNTIL_DROP, SenderEngine
+    from server.agent import agent_timing
+    from server.rounds.sender import DEFAULT_RETRIES_UNTIL_DROP, SenderEngine
     assert agent_timing.retries_until_drop(200, 180) == 200          # default: unchanged
     assert agent_timing.retries_until_drop(200, 1800) == 1895        # 30 min: scaled 200 per 190 s
     engine = SenderEngine(library=None, lost_wait=lambda: 600)
@@ -202,5 +202,5 @@ def test_the_senders_drop_ceiling_never_undercuts_the_configured_wait():
 
 
 def test_every_setting_has_a_journal_label():
-    from server.journal_he import SETTINGS_HE
+    from server.console.journal_he import SETTINGS_HE
     assert set(KEYS) <= set(SETTINGS_HE)

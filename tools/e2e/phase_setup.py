@@ -20,9 +20,9 @@ from .machines import SimMachine
 def run(data_dir, images_dir) -> SimpleNamespace:
     print("0. קונסולה ורישום")
     sys.path.insert(0, str(REPO))
-    from server import users                   # noqa: PLC0415
+    from server.console import users                   # noqa: PLC0415
     from server.db import connect              # noqa: PLC0415
-    conn = connect(data_dir / "imagectl.db")
+    conn = connect(data_dir / "imagesrv.db")
     users.create(conn, ADMIN["username"], ADMIN["password"], "admin", by="sim")
     conn.close()
 
@@ -31,7 +31,7 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     check("כניסה לקונסולה", status == 200, str(status))
     check("בלי המתג, admin אינו נדרש לרישום MFA בכניסה הראשונה (נדב 18/10)",
           not body.get("mfa_enrollment_required"), str(body))
-    from server import totp as totp_mod       # noqa: PLC0415
+    from server.console import totp as totp_mod       # noqa: PLC0415
     status, setup = console.json("POST", "/api/console/me/mfa/setup")
     check("הגדרת MFA מחזירה סוד", status == 200 and bool(setup.get("secret")), str(setup))
     status, _ = console.json("POST", "/api/console/me/mfa/enable",

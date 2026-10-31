@@ -27,18 +27,7 @@ WF = ROOT / ".github" / "workflows" / "shellcheck.yml"
 
 # קבצים שמוחרגים במכוון. כל חריג חייב סיבה — "פשוט לא ברשימה" אינו
 # חריג, הוא חור. מפתח שמסתיים ב-`/**` מחריג תת-עץ שלם.
-EXEMPT: dict = {
-    "vendor/**": (
-        "‏`vendor/diskless-pxe` היא חבילה חיצונית שנכנסה verbatim (#231) "
-        "ואינה מחוברת לשום מסלול אתחול. ‏36 קבצי המעטפת שבה **כן** נסרקו: "
-        "‏`shellcheck` על מעבדת ה-VM (10.10.10.8, 2026-09-02) החזיר 13 "
-        "ממצאים, מהם **0 ברמת `error`** — ‏6×SC1007 (הניב `CDPATH= cd`), "
-        "‏3×SC2086, ‏SC2046, ‏SC2044, ‏SC2013, ‏SC1091. הסריקה הזאת ידנית "
-        "וחד-פעמית, ולכן זה חור מוצהר ולא כיסוי: הוספת התת-עץ ל-"
-        "‏`.github/workflows/shellcheck.yml` פתוחה כ-Issue נפרד, וכל מי "
-        "שמחבר את החבילה למסלול אתחול חייב לסגור אותה קודם."
-    ),
-}
+EXEMPT: dict = {}
 
 
 def _is_exempt(path: str) -> bool:
@@ -108,7 +97,7 @@ def test_the_derivation_is_not_empty():
     """אפס קבצים פירושו שהגזירה נשברה — לא ש'הכול מכוסה'."""
     derived = _derived()
     assert len(derived) >= 20, f"רק {len(derived)} קבצים נגזרו — חשוד"
-    assert "agent/imagectl-agent" in derived and "agent/init" in derived, (
+    assert "agent/imagesrv-agent" in derived and "agent/init" in derived, (
         "נקודות הכניסה של הסוכן אינן נגזרות — אין להן סיומת .sh")
     assert any(p.startswith("agent/lib/") for p in derived), (
         "‏agent/lib/ אינו נגזר — זו השכבה שרצה כ-root מול דיסקים")
@@ -169,7 +158,7 @@ def test_the_shell_dialect_is_derived_and_not_guessed():
         "השלב אינו גוזר את סוג המעטפת מה-shebang")
     assert re.search(r'shellcheck -s "\$\w+"', flat), (
         "‏shellcheck נקרא עם סוג קבוע ולא עם הסוג שנגזר")
-    assert "agent/lib/*.sh|agent/imagectl-agent|agent/init)" in flat, (
+    assert "agent/lib/*.sh|agent/imagesrv-agent|agent/init)" in flat, (
         "‏agent/lib/ נטען ב-`.` ואין לו shebang — הניב שלו חייב להיות "
         "מוצהר, ולא נגזר מקובץ שאין ממה לגזור בו")
 

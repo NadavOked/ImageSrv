@@ -1,5 +1,5 @@
 // #927: after a capture that ran fine but whose source-restore step failed
-// (#87, agent/lib/shrink.sh writes the warning into the target's `error`),
+// (#87, agent/lib/shrink/shrink.sh writes the warning into the target's `error`),
 // the server closes the task as `done` with that `error` still attached
 // (reports.py COALESCE). Before this fix console.js only ever rendered the
 // capture bar for tasks whose state was "pending"/"running" -- the moment a
@@ -41,7 +41,7 @@ function makeElements() {
 }
 
 // A finished capture task carrying the shrink-restore warning, shaped like
-// what GET /api/console/tasks actually returns (server/capture.py, reports.py).
+// what GET /api/console/tasks actually returns (server/library/capture.py, reports.py).
 function warnedTask(overrides = {}) {
   return {
     id: 't1', mac: 'b4:2e:99:07:1a:c4', name: 'office365', state: 'done',

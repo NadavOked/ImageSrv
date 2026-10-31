@@ -95,9 +95,9 @@ def end(tmp_path: Path, targets: dict, call: str, env: str = "") -> tuple[subpro
     run = world(tmp_path, targets)
     script = (
         f"export RUN_DIR={q(run)} LC={q(run / 'lc')} LOG_FILE={q(run / 'agent.log')} MAC=aa:bb:cc:dd:ee:ff "
-        f"SERVER=http://127.0.0.1:9 IMAGECTL_TEST=0 {env}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/attended.sh; "
-        f". {posix(AGENT)}/lib/idle.sh; . {posix(AGENT)}/lib/lcwait.sh; "
+        f"SERVER=http://127.0.0.1:9 IMAGESRV_TEST=0 {env}; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/core/attended.sh; "
+        f". {posix(AGENT)}/lib/core/idle.sh; . {posix(AGENT)}/lib/localclone/lcwait.sh; "
         + HARNESS + call + '; echo "rc=$?"'
     )
     return bash(script, timeout=120), run
@@ -287,7 +287,7 @@ def test_the_round_hands_every_drawer_to_the_end(tmp_path, reports):
                'echo done > "$RUN_DIR/state"; return 0; }; '
                'end_countdown() { echo "END $1|$3|$4|$(echo $5 $6)" >> "$RUN_DIR/trace"; exit 0; }; ')
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
-                      stubs=partial, env="IMAGECTL_TEST=0 D_ROLE=cloner")
+                      stubs=partial, env="IMAGESRV_TEST=0 D_ROLE=cloner")
     assert "END partial|1|2|sdb sdc" in result["trace"], result["trace"]
 
 
@@ -299,7 +299,7 @@ def test_every_screen_carries_the_hold_and_its_problem_disks(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
     (run / "end.problems").write_text("sdc|r|הזרם נקטע\n", encoding="utf-8", newline="\n")
-    pre = f"export RUN_DIR={q(run)}; . {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/guistate.sh; "
+    pre = f"export RUN_DIR={q(run)}; . {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/gui/guistate.sh; "
     # a left-over list with no end on the screen draws nothing
     assert "end_problem" not in bash(pre + "gui_hello_state").stdout
     (run / "end.poweroff").write_text("0|partial|1|2|1\n", newline="\n")

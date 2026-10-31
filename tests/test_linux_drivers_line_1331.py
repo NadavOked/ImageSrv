@@ -124,7 +124,7 @@ def _cloner_lines(tmp_path: Path, drivers: dict[str, str]) -> list[str]:
         target(run, dev, "done", 100, 100, "")
         if dev in drivers:
             (run / "targets" / dev / "drivers.json").write_text(drivers[dev], encoding="utf-8", newline="\n")
-    out = sh(env(run, gui) + CLONER_PRELUDE + f'. {posix(AGENT)}/lib/drvgui.sh; ' + PORTS + "cloner_gui_state")
+    out = sh(env(run, gui) + CLONER_PRELUDE + f'. {posix(AGENT)}/lib/gui/drvgui.sh; ' + PORTS + "cloner_gui_state")
     assert out.returncode == 0, out.stderr
     lines = (gui / "state").read_text(encoding="utf-8").splitlines()
     return [x for x in lines if x.startswith("drawer=")]

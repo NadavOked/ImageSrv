@@ -127,7 +127,7 @@ def split_signature(raw: bytes) -> tuple[bytes, bytes]:
         raise Unsigned("התג אינו חתום (אין בו חתימה)")
     payload, sig = raw[:start], raw[start:]
     if not sig.startswith(SSH_BEGIN):
-        raise Unsigned("החתימה אינה חתימת SSH — מתקבלת רק חתימה מול install/release-signers")
+        raise Unsigned("החתימה אינה חתימת SSH — מתקבלת רק חתימה מול deploy/release-signers")
     lines = sig.split(b"\n")
     try:
         end = lines.index(SSH_END)

@@ -1,0 +1,14 @@
+# Project metadata only (#2246). Deliberately NOT here:
+#  * dependencies -- the pinned versions live in server/requirements.txt, matched to
+#    Debian 13 (#113); a second list here would drift from it;
+#  * tool settings -- pytest has no ini file on purpose (markers are registered in
+#    tests/conftest.py), and adding [tool.pytest] here would change how it runs;
+#  * [build-system] -- this is an application, not a pip-installable package.
+# The version is the latest git tag (`git describe --tags`), hence dynamic.
+[project]
+name = "imagesrv"
+dynamic = ["version"]
+description = "Image server and multicast disk-image deployment for college computer labs."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.14"

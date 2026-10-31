@@ -10,8 +10,8 @@ The capture (shrink.sh) keeps its minimum on purpose -- a small image -- and
 does not go through ``lc_shrink_source``; ``test_the_capture_plan_is_still_the_minimum``
 holds that line.
 
-**Negative control** (Testrunner, 26/10): with ``agent/lib/lcplan.sh`` and
-``agent/lib/localclone.sh`` at the base commit, 5 fail -- the 256GB case (refused:
+**Negative control** (Testrunner, 26/10): with ``agent/lib/localclone/lcplan.sh`` and
+``agent/lib/localclone/localclone.sh`` at the base commit, 5 fail -- the 256GB case (refused:
 28352 MB to move, 31443 MB of RAM, 11264 MB there), the smallest of several, the
 unread size (no log line), the measure plan, and lc_run's targets (none passed).
 4 pass in both states, the guards: never below the minimum, the minimum's refusal
@@ -65,7 +65,7 @@ def shrink_for(tmp_path: Path, devs: str, pre: str = "", **env) -> tuple[dict[st
     out = run(tmp_path, setup() + RELOC_BY_SIZE + pre + f'lc_shrink_source sdc "{devs}"; _rc=$?; ' + SHOW
               + 'echo "plan=$(cat "$LC/run/shrink.plan")"; ', **env)
     assert out.returncode == 0, out.stderr
-    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagectl:"))
+    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagesrv:"))
     log = tmp_path / "run" / "order.log"
     return got, (log.read_text(encoding="utf-8").splitlines() if log.exists() else []), tmp_path / "run"
 

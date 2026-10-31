@@ -6,8 +6,8 @@ an old machine drifts or has a dead battery (cloner 1).
 The fix, two links:
 
 * ``POST /api/v1/agent/hello`` answers with ``now`` -- the server's epoch,
-  read last (``server/api.py``). Only in the real hello, not the GRUB menu.
-* ``hello_post`` (``agent/lib/hello.sh``) sets the clock with ``date -s @now``
+  read last (``server/agent/api.py``). Only in the real hello, not the GRUB menu.
+* ``hello_post`` (``agent/lib/core/hello.sh``) sets the clock with ``date -s @now``
   when it is more than ``CLOCK_SLACK_S`` (2 s) off, logs the correction, and
   only then stamps ``hello.state``. No ``now`` (an older server) = untouched;
   a ``now`` that is not a number or a ``date -s`` that fails is logged and the
@@ -51,8 +51,8 @@ def _run(tmp_path: Path, reply: dict | None, local: int, *, curl_rc: int = 0,
     (tmp_path / "req.json").write_text("{}", newline="\n")
     script = (
         f"export RUN_DIR={posix(run)!r} HTTP_TIMEOUT=5 HTTP_RETRIES=0; "
-        f". {posix(AGENT)}/lib/hello.sh; "
-        + (f". {posix(AGENT)}/lib/jsonq.sh; " if real_jq else FAKE_JSON_GET)
+        f". {posix(AGENT)}/lib/core/hello.sh; "
+        + (f". {posix(AGENT)}/lib/core/jsonq.sh; " if real_jq else FAKE_JSON_GET)
         + f"log() {{ printf '%s\\n' \"$*\" >> {posix(tmp_path / 'log')!r}; }}; "
         # date: +%s reads the fake clock; -s @N records the call and moves it.
         f"date() {{ case \"$1\" in +%s) cat {posix(clock)!r} ;; "
@@ -158,5 +158,5 @@ def test_the_hello_reply_carries_the_server_time(server):
 def test_the_agent_never_writes_the_rtc():
     """The RTC of a Windows build machine keeps local time; the battery of a
     cloner may be dead. The correction is the system clock only."""
-    text = (AGENT / "lib" / "hello.sh").read_text(encoding="utf-8")
+    text = (AGENT / "lib" / "core" / "hello.sh").read_text(encoding="utf-8")
     assert "hwclock" not in text

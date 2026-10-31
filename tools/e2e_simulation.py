@@ -40,7 +40,7 @@ MIN_CHECKS = 126    # #855: +1 — MAC בלי חכירה מסורב בשם
 
 
 def main() -> int:
-    workdir = Path(tempfile.mkdtemp(prefix="imagectl-e2e-"))
+    workdir = Path(tempfile.mkdtemp(prefix="imagesrv-e2e-"))
     print(f"\nworkspace: {workdir}\nserver:    {harness.BASE}\n")
     server, data_dir, images_dir = harness.start_server(workdir)
     ctx = None

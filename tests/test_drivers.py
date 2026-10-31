@@ -15,8 +15,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import drivers                                        # noqa: E402
-from server.drivers import (DriverError, DriverLibrary, match,    # noqa: E402
+from server.library import drivers                                        # noqa: E402
+from server.library.drivers import (DriverError, DriverLibrary, match,    # noqa: E402
                             safe_relative, validate_manifest)
 
 from test_inventory import GOOD as INVENTORY, MAC                 # noqa: E402

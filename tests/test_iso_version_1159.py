@@ -3,7 +3,7 @@
 השורש המקורי (19/09): ה-ISO ארז את העץ ב-`git archive`, בלי `.git`, ו-`git
 describe` החזיר כלום → ‏`version: null`. ‏#1185 (‏3b0052f3) אורז מאז את ה-`.git`
 של clone רדוד מהציבורי **בתג** (`git clone --branch <tag> --depth 1`), ושני
-ה-`cp -a` בדרך (המתקין ל-/opt/imagectl-src, ‏setup-boot-server.sh ל-/opt/imagectl)
+ה-`cp -a` בדרך (המתקין ל-/opt/imagesrv-src, ‏setup-boot-server.sh ל-/opt/imagesrv)
 מעתיקים אותו כמו שהוא. הטסטים כאן מריצים **git אמיתי** על אותה צורה בדיוק —
 ה-hooks של השרת אינם מוזרקים — כדי שהראיה תהיה הגרסה שנקראה, לא mock.
 
@@ -64,13 +64,13 @@ def _public_repo(root: Path) -> Path:
 
 def _iso_install(root: Path, src: Path, tag: str) -> Path:
     """אותה שרשרת כמו ה-ISO: ‏build-iso.sh (clone רדוד בתג) → ‏bootstrap.sh
-    (‏`cp -a` ל-/opt/imagectl-src) → ‏setup-boot-server.sh (‏`cp -a` ל-/opt/imagectl)."""
+    (‏`cp -a` ל-/opt/imagesrv-src) → ‏setup-boot-server.sh (‏`cp -a` ל-/opt/imagesrv)."""
     clone = root / "public-src"
     _git("clone", "-q", "--branch", tag, "--depth", "1", src.resolve().as_uri(), str(clone), cwd=root)
     assert (clone / ".git" / "shallow").is_file(), "ה-clone אינו רדוד — הטסט אינו מודד את מה שה-ISO עושה"
-    staged = root / "opt" / "imagectl-src"
+    staged = root / "opt" / "imagesrv-src"
     shutil.copytree(clone, staged, symlinks=True)
-    app_dir = root / "opt" / "imagectl"
+    app_dir = root / "opt" / "imagesrv"
     shutil.copytree(staged, app_dir, symlinks=True)
     return app_dir
 
@@ -91,18 +91,18 @@ def test_a_tree_without_git_is_a_fixed_category_unauthenticated_and_the_detail_g
     """‏ה-ISO שלפני #1185 (או ‏`build-iso --source`): עץ בלי `.git`.
     ‏`/health/live` אינו דורש הזדהות — הוא מקבל קטגוריה קבועה בלבד, בלי
     נתיב ובלי stderr; הסיבה המלאה ביומן וב-`GET /update` של admin."""
-    from server import users
-    bare_tree = no_parent_repo / "opt" / "imagectl"
+    from server.console import users
+    bare_tree = no_parent_repo / "opt" / "imagesrv"
     (bare_tree / "server").mkdir(parents=True)
     app = create_app(no_parent_repo / "data", images_root, "http://10.44.12.10:8080",
                      now_fn=clock, repo_dir=bare_tree)
     anon = TestClient(app)
-    with caplog.at_level(logging.WARNING, logger="imagectl.update"):
+    with caplog.at_level(logging.WARNING, logger="imagesrv.update"):
         r = anon.get("/api/console/health/live")
     body = r.json()
     assert body == {"ok": True, "version": None, "version_error": "not-a-git-tree"}
     assert "/" not in body["version_error"] and "\\" not in body["version_error"]
-    for leak in ("not a git repository", "imagectl", "git describe"):
+    for leak in ("not a git repository", "imagesrv", "git describe"):
         assert leak not in r.text.lower(), f"stderr/נתיב דלף ל-/health/live ללא הזדהות: {leak}"
     logged = [rec.getMessage() for rec in caplog.records if "version: not read" in rec.getMessage()]
     assert logged and "not a git repository" in logged[0].lower(), \
@@ -120,7 +120,7 @@ def test_a_tree_without_git_is_a_fixed_category_unauthenticated_and_the_detail_g
 
 @pytest.mark.parametrize("stderr, category", [
     ("fatal: not a git repository (or any of the parent directories): .git", "not-a-git-tree"),
-    ("fatal: detected dubious ownership in repository at '/opt/imagectl'", "dubious-ownership"),
+    ("fatal: detected dubious ownership in repository at '/opt/imagesrv'", "dubious-ownership"),
     ("fatal: No names found, cannot describe anything.", "no-tag"),
     ("fatal: No tags can describe 'abc123'.", "no-tag"),
     ("git אינו מותקן בשרת הזה — הותקן מ-ISO ישן (#1185)? התקנה מחדש מ-ISO עדכני", "git-missing"),
@@ -129,10 +129,10 @@ def test_a_tree_without_git_is_a_fixed_category_unauthenticated_and_the_detail_g
 ])
 def test_every_describe_failure_maps_to_a_fixed_category(monkeypatch, stderr, category):
     monkeypatch.setattr(update_mod, "_run", lambda *_a, **_k: (False, "", stderr))
-    got = update_mod.read_version(update_mod.default_hooks(), "/opt/imagectl")
+    got = update_mod.read_version(update_mod.default_hooks(), "/opt/imagesrv")
     assert got.version is None and got.error == category
     assert got.error in update_mod.VERSION_ERRORS
-    assert "/opt/imagectl" in got.detail                              # המלא — ליומן/admin
+    assert "/opt/imagesrv" in got.detail                              # המלא — ליומן/admin
 
 
 def test_read_version_never_returns_null_without_a_category():

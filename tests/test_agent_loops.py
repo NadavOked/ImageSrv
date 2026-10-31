@@ -23,8 +23,8 @@ pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom              # noqa: E402
 
-from server import agent_loops                                # noqa: E402
-from server.agent_loops import loop_checks                    # noqa: E402
+from server.agent import agent_loops                                # noqa: E402
+from server.agent.agent_loops import loop_checks                    # noqa: E402
 
 try:
     from fastapi.testclient import TestClient
@@ -51,7 +51,7 @@ def loop_server(tmp_path: Path, images_root: Path, clock):
         pytest.skip("fastapi is required")
     from test_sender import Recorder                           # noqa: PLC0415
 
-    from server import users                                   # noqa: PLC0415
+    from server.console import users                                   # noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
 
     tftp = tmp_path / "tftp"
@@ -226,7 +226,7 @@ def test_a_build_machine_waiting_for_a_capture_order_is_not_a_loop(loop_server):
 
     מחשב בנייה בלי משימה מקבל ``local`` **עם תפריט גלוי** — זו הכרעה
     מכוונת (#140): הוא לא עולה לסוכן מעצמו, אבל אדם שעומד מולו בוחר
-    בכך (זרימה 13.1). ואז `agent/lib/decide.sh` שולח אותו ל-
+    בכך (זרימה 13.1). ואז `agent/lib/core/decide.sh` שולח אותו ל-
     ``build_console`` להמתין לפקודת קליטה.
 
     שתי טבלאות ההחלטה נכונות כל אחת בפני עצמה, והגלאי פירש את הפער
@@ -395,7 +395,8 @@ def test_a_deploy_user_cannot_read_the_health_screen(loop_server):
 @pytest.mark.parametrize("hello_before_delete", [False, True])
 def test_deleted_running_agent_has_bounded_grace(
         loop_server, monkeypatch, group, hello_before_delete):
-    from server import console_api, db
+    from server.console import console_api
+    from server import db
 
     mac = "aa:bb:cc:00:18:73"
     admin = loop_server["admin"]
@@ -409,7 +410,7 @@ def test_deleted_running_agent_has_bounded_grace(
         "mac": mac, "name": "deleted-pc", "group_id": group,
     }).status_code == 200
     boot = loop_server["anon"].get(f"/boot/menu?mac={mac}")
-    assert boot.status_code == 200 and "set default=imagectl" in boot.text
+    assert boot.status_code == 200 and "set default=imagesrv" in boot.text
     if hello_before_delete:
         assert hello(loop_server, mac)["known"] is True
     # Exercise normalization too: the journal must contain the canonical MAC.

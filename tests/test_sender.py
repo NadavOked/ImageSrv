@@ -14,15 +14,15 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import sender as sender_module
-from server.images import ImageLibrary
-from server.room import active_round, close_round, round_label
-from server.sender import (
+from server.rounds import sender as sender_module
+from server.library.images import ImageLibrary
+from server.rounds.room import active_round, close_round, round_label
+from server.rounds.sender import (
     DEFAULT_RETRIES_UNTIL_DROP,
     DEFAULT_START_TIMEOUT,
     SenderEngine,
 )
-from server.sessions import SessionError
+from server.rounds.sessions import SessionError
 
 from conftest import MANIFEST_256, hello_body, setup_classroom, write_image
 
@@ -210,12 +210,12 @@ def test_the_bitrate_cap_reaches_the_command_when_configured(library, free_ports
 
 
 def test_the_bitrate_cap_is_tunable_by_env(library, free_ports, monkeypatch):
-    """הרסן ניתן לכוונון דרך `IMAGECTL_MAX_BITRATE` בלי בנייה מחדש —
+    """הרסן ניתן לכוונון דרך `IMAGESRV_MAX_BITRATE` בלי בנייה מחדש —
     רשת מהירה מהדיסקים דורשת רסן, ולא רוצים לקבע 100m בהארד-קוד.
 
     **בקרה שלילית:** קריאת ה-env ב-`__init__` היא מה שמעבירה אותו
     לפקודה; התעלמות ממנה תשאיר את הפקודה בלי `--max-bitrate`."""
-    monkeypatch.setenv("IMAGECTL_MAX_BITRATE", "150m")
+    monkeypatch.setenv("IMAGESRV_MAX_BITRATE", "150m")
     recorder = Recorder()
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 3})
@@ -237,7 +237,7 @@ def test_the_drop_ceiling_keeps_the_slow_receiver_and_is_not_udpcast_default(
     ⚠️ **היפוך מודע של #437.** הערך היה 15 כדי שמקבל *מת* ייזרק תוך
     שניות ("כשל בתחנה אחת לא עוצר את השאר"). כעת מקבל מת מקפיא את החדר
     כ-190ש' לפני שהוא נזרק — מחיר שנדב הכריע לשלם כדי שאימג' הדגל לא
-    ייכשל לגמרי. הערך ניתן לכוונון דרך `IMAGECTL_RETRIES_UNTIL_DROP`.
+    ייכשל לגמרי. הערך ניתן לכוונון דרך `IMAGESRV_RETRIES_UNTIL_DROP`.
 
     ⚠️ **מה הטסט הזה בודק, ומה לא.** הוא בודק שהתקרה **גבוהה מספיק כדי
     לא להפיל מקבל איטי** ואינה נשארת על ברירת המחדל של udpcast. הוא
@@ -269,13 +269,13 @@ def test_the_drop_ceiling_keeps_the_slow_receiver_and_is_not_udpcast_default(
 
 
 def test_the_drop_ceiling_is_tunable_by_env(library, free_ports, monkeypatch):
-    """‏`IMAGECTL_RETRIES_UNTIL_DROP` מאפשר למפעיל להחזיר את התקרה אם
+    """‏`IMAGESRV_RETRIES_UNTIL_DROP` מאפשר למפעיל להחזיר את התקרה אם
     הקפיאה בת ה-190ש' על מקבל מת (מחיר ההיפוך של #437) גרועה מהתקלה
     שהיא מונעת — בלי בנייה מחדש.
 
     **בקרה שלילית:** קריאת ה-env ב-`__init__` היא מה שהופך אותה לפעילה;
     התעלמות ממנה תשאיר את הפקודה על 200 ותפיל את ההשוואה ל-'42'."""
-    monkeypatch.setenv("IMAGECTL_RETRIES_UNTIL_DROP", "42")
+    monkeypatch.setenv("IMAGESRV_RETRIES_UNTIL_DROP", "42")
     recorder = Recorder()
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
@@ -287,7 +287,7 @@ def test_the_drop_ceiling_is_tunable_by_env(library, free_ports, monkeypatch):
 def test_a_nonpositive_retry_ceiling_falls_back_to_the_default(
     library, free_ports, monkeypatch,
 ):
-    """‏`IMAGECTL_RETRIES_UNTIL_DROP=0` או `-5` הוא הגדרה שגויה, לא בקשה:
+    """‏`IMAGESRV_RETRIES_UNTIL_DROP=0` או `-5` הוא הגדרה שגויה, לא בקשה:
     udp-sender סופר int חתום, ו-`0`/שלילי זורקים את המקבל הראשון שמפספס
     ACK כמעט מיד — בדיוק כשל ה-90% שהערך קיים כדי למנוע. הערך נופל
     לברירת המחדל (200), לא עובר כמו-שהוא לפקודה.
@@ -295,7 +295,7 @@ def test_a_nonpositive_retry_ceiling_falls_back_to_the_default(
     **בקרה שלילית:** הסרת ה-`if value < 1` תעביר `0`/`-5` ל-argv
     ותפיל את ההשוואה ל-'200'."""
     for bad in ("0", "-5"):
-        monkeypatch.setenv("IMAGECTL_RETRIES_UNTIL_DROP", bad)
+        monkeypatch.setenv("IMAGESRV_RETRIES_UNTIL_DROP", bad)
         recorder = Recorder()
         engine = SenderEngine(library, runner=recorder)
         engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
@@ -303,7 +303,7 @@ def test_a_nonpositive_retry_ceiling_falls_back_to_the_default(
         cmd = recorder.commands[0]
         got = cmd[cmd.index("--retries-until-drop") + 1]
         assert got == str(DEFAULT_RETRIES_UNTIL_DROP), (
-            f"IMAGECTL_RETRIES_UNTIL_DROP={bad!r} הגיע לפקודה כ-{got!r} — "
+            f"IMAGESRV_RETRIES_UNTIL_DROP={bad!r} הגיע לפקודה כ-{got!r} — "
             "‏0/שלילי זורק מקבל מיד ומחזיר את כשל ה-90%"
         )
 
@@ -970,7 +970,7 @@ def test_a_question_open_past_its_ceiling_releases_only_that_machine(
 
     **בקרה שלילית:** על הקוד הישן אין עצירה ואין שחרור: השולח יוצא עם 2,
     ושתי המכונות נשארות חברות חיות."""
-    from server import smart_ask
+    from server.disks import smart_ask
     monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
     server, recorder = server_with_sender
     ctx = server["ctx"]
@@ -1009,7 +1009,7 @@ def test_a_machine_asking_question_after_question_is_released_after_one_ceiling(
     **בקרה שלילית:** על התקרה-לפי-שאלה (‏19a65ad1) השולח ממשיך להמתין; על
     main השולח יוצא מיד עם 2 מקבלים ואיש אינו משתחרר."""
     monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
-    from server import smart_ask
+    from server.disks import smart_ask
     server, recorder = server_with_sender
     ctx = server["ctx"]
     ids = setup_classroom(server)

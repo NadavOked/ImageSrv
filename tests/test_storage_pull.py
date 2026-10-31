@@ -17,9 +17,11 @@ import pytest
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
 from conftest import MANIFEST_256, PARTITION_BYTES, write_image
-from server import (db, disk_reserve, interserver_api, interserver_auth, storage_client,
-                    storage_nodes, storage_transfer)
-from server.images import ImageLibrary
+from server import db
+from server.storage import disk_reserve
+from server.interserver import (interserver_api, interserver_auth, storage_client, storage_nodes,
+                                storage_transfer)
+from server.library.images import ImageLibrary
 
 try:
     from fastapi.testclient import TestClient
@@ -277,7 +279,7 @@ def test_secondary_exposes_no_new_post_or_put(paired_ctx):
     write_image(Path(ctx.library.root), PULL)
     app = interserver_api.create_interserver_app(ctx, lambda _req: peer)
     client = TestClient(app)
-    headers = {"Authorization": f"Bearer {token}", "ImageCtl-Protocol-Version": "2.1"}
+    headers = {"Authorization": f"Bearer {token}", "ImageSrv-Protocol-Version": "2.1"}
     listed = client.get("/api/interserver/v1/images", headers=headers)
     assert listed.status_code == 200, listed.text
     assert any(i["id"] == PULL_ID for i in listed.json())
@@ -353,7 +355,7 @@ def test_list_images_and_manifest_from_disk(paired_ctx):
 
 def _rows_with_stat_failing_for(ctx, peer, token, monkeypatch, victim: str):
     """``list_images`` כשה-``stat`` של קובץ אחד נכשל (EIO) — השאר נמדדים."""
-    from server import images as images_mod
+    from server.library import images as images_mod
 
     real = images_mod.guarded_image_path
 
@@ -510,7 +512,7 @@ def test_secondary_416_reports_the_file_size(paired_ctx, via):
     ctx, peer, token = paired_ctx
     write_image(Path(ctx.library.root), PULL)
     headers = {"Authorization": f"Bearer {token}",
-               "ImageCtl-Protocol-Version": "2.1",
+               "ImageSrv-Protocol-Version": "2.1",
                "Range": f"bytes={len(PARTITION_BYTES)}-"}
     path = f"/api/interserver/v1/images/{PULL_ID}/files/p1.esp.pcl.zst"
     if via == "fastapi":

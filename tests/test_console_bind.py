@@ -155,7 +155,7 @@ def test_host_all_interfaces_only_when_explicit_and_warns(
 
 def test_console_source_allowlist_flag_is_gone_and_refused_by_name(capsys) -> None:
     """‏#1303: השומר לפי כתובת מקור (#151) נמחק — ההפרדה היא בחומת האש
-    בלבד (`install/firewall-rules.md`). יחידה ישנה שעוד מעבירה את הדגל
+    בלבד (`deploy/firewall-rules.md`). יחידה ישנה שעוד מעבירה את הדגל
     נעצרת בעלייה ואומרת את שמו; אחרת היה נראה כאילו הקונסולה מוגבלת."""
     import pytest
 

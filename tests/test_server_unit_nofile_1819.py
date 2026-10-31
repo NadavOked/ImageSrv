@@ -1,4 +1,4 @@
-"""#1819 — the imagectl-server unit sets its own open-files limit.
+"""#1819 — the imagesrv-server unit sets its own open-files limit.
 
 systemd's default soft limit is 1024 and Python does not raise it; agents,
 monitor WebSockets, image pulls and a sqlite connection per thread in a
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-UNIT = Path(__file__).resolve().parents[1] / "install" / "imagectl-server.service"
+UNIT = Path(__file__).resolve().parents[1] / "deploy" / "imagesrv-server.service"
 
 
 def directives(text: str) -> list[tuple[str, str, str]]:

@@ -63,7 +63,7 @@ def stick(tmp_path: Path, keys: list[str], then: str = "", model: str | None = M
     root = machine(tmp_path, model)
     script = (KIOSK + STUBS + f'echo {data} > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; usbset_open; '
               + "".join(f'usbset_key {k!r}; ' for k in keys) + 'cat "$GUI_DIR/usbset.frame"; echo "@@"; ' + then)
-    return run(tmp_path, script, IMAGECTL_MODE="usbclone", SYSROOT=posix(root)), usb
+    return run(tmp_path, script, IMAGESRV_MODE="usbclone", SYSROOT=posix(root)), usb
 
 
 def saved(usb: Path) -> dict:
@@ -129,6 +129,6 @@ def test_a_save_that_does_not_read_back_is_said(tmp_path):
     root = machine(tmp_path)
     script = (KIOSK + STUBS + f'echo mounted > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; usbset_open; '
               + "".join(f'usbset_key {k!r}; ' for k in TO_MAP + SATA1_ON) + pre_mv + 'usbset_key "KEY F2"; cat "$GUI_DIR/usbset.frame"')
-    out = run(tmp_path, script, IMAGECTL_MODE="usbclone", SYSROOT=posix(root))
+    out = run(tmp_path, script, IMAGESRV_MODE="usbclone", SYSROOT=posix(root))
     assert "הקריאה החוזרת לא החזירה את אותו מיפוי" in out.stdout, out.stdout + out.stderr
     assert dialog_title(out.stdout) == "מיפוי חיבורים"

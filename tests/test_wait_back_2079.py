@@ -24,11 +24,10 @@ from test_usb_settings_1959_1960 import native_gui
 
 import pytest
 import subprocess
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
-LIB = AGENT / "lib"
-
-
+LIB = flat_lib()
 def bridge(tmp_path: Path, env: str = "") -> tuple[str, Path]:
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     out = sh(f'export RUN_DIR={posix(run)!r} GUI_SCREEN=cloner {env}; . {posix(LIB)}/guibridge.sh; '

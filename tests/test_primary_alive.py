@@ -31,12 +31,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from server import db, interserver_auth, primary_alive, storage_nodes
+from server import db
+from server.interserver import interserver_auth, primary_alive, storage_nodes
 
 SPKI = "ab" * 32
 
 
-def _app(name="imagectl-ta", version="v0.60.0", fingerprint=SPKI):
+def _app(name="imagesrv-ta", version="v0.60.0", fingerprint=SPKI):
     return primary_alive.create_alive_app(name=lambda: name, version=lambda: version,
                                           fingerprint=fingerprint)
 
@@ -45,7 +46,7 @@ def test_alive_answers_exactly_name_version_fingerprint():
     with TestClient(_app()) as client:
         resp = client.get(primary_alive.ALIVE_PATH)
     assert resp.status_code == 200
-    assert resp.json() == {"name": "imagectl-ta", "version": "v0.60.0", "fingerprint": SPKI}
+    assert resp.json() == {"name": "imagesrv-ta", "version": "v0.60.0", "fingerprint": SPKI}
 
 
 def test_a_version_that_was_not_read_is_null_not_an_empty_string():
@@ -148,7 +149,7 @@ def _run_main(tmp_path: Path, monkeypatch, role: str, *argv: str) -> dict:
 
     data = tmp_path / "data"
     data.mkdir()
-    conn = db.connect(data / "imagectl.db")
+    conn = db.connect(data / "imagesrv.db")
     db.set_setting(conn, storage_nodes.ROLE_KEY, role)
 
     class Runtime:

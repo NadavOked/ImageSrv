@@ -20,7 +20,7 @@ from test_room_precheck_native_432_65 import _GUI, _build_gui, _count, _render
 
 MARK_HE = "כתיבה לא הושלמה — לא שמיש"
 
-STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagectl-ta\n"
+STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagesrv-ta\n"
            "cdisk=1|sda|Samsung SSD 870 EVO|500107862016|passed||6.0|6.0||1|SATA 0|clean\n"
            "cdisk=2|sdb|Samsung SSD 870 EVO|500107862016|passed||6.0|6.0||2|SATA 1|{mark}\n"
            "message=x|y\n")

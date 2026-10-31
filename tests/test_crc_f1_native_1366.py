@@ -24,6 +24,7 @@ from test_cloner_gui import sh as proc_sh
 from test_disklink_432 import _sata
 from test_room_precheck_native_432_65 import _GUI, C1, _build_gui, _count, _render, gui_state_lines
 import test_room_precheck_native_432_65 as precheck
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -41,8 +42,8 @@ def _standby_record(tmp_path: Path, smart: str, hello: dict | None) -> list[str]
     if hello is not None:
         (run / "response.json").write_text(json.dumps(hello), newline="\n")
     out = proc_sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-                  f'SYSROOT={posix(sysroot)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-                  f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; cloner_gui_state')
+                  f'SYSROOT={posix(sysroot)!r} LIB_DIR={posix(flat_lib())!r}; '
+                  f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; cloner_gui_state')
     assert out.returncode == 0, out.stderr
     assert "not found" not in out.stderr, out.stderr
     (line,) = [l for l in (gui / "state").read_text(encoding="utf-8").splitlines() if l.startswith("cdisk=")]
@@ -79,7 +80,7 @@ def test_gui_state_carries_the_crc_as_field_13(tmp_path, monkeypatch):
     assert crc == {"1": "667", "2": ""}, lines
 
 
-STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagectl-ta\n"
+STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagesrv-ta\n"
            "cdisk=1|sda|Samsung SSD 870 EVO|500107862016|passed||6.0|6.0|\n"
            "cdisk=2|sdb|Samsung SSD 870 EVO|500107862016|{smart}|{cause}|6.0|6.0|{crc}\n"
            "message=x|y\n")

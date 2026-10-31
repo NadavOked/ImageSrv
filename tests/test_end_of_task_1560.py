@@ -108,8 +108,8 @@ def countdown(tmp_path: Path, body: str, env: str = "") -> tuple[subprocess.Comp
     (run / "targets" / "sdb" / "readback").write_text("sampled\n", newline="\n")
     script = (
         f"export RUN_DIR={q(run)} LOG_FILE={q(run / 'agent.log')} MAC=aa:bb:cc:dd:ee:ff "
-        f"IMAGECTL_TEST=0 END_POWEROFF_S=20 {env}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/idle.sh; "
+        f"IMAGESRV_TEST=0 END_POWEROFF_S=20 {env}; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/idle.sh; "
         + POWER_STUB + body
     )
     return bash(script), run
@@ -164,8 +164,8 @@ def test_a_refused_power_off_returns_and_leaves_the_reason_on_every_screen(tmp_p
 def test_every_screen_carries_the_count(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
-    pre = (f"export RUN_DIR={q(run)}; . {posix(AGENT)}/lib/common.sh; "
-           f". {posix(AGENT)}/lib/guistate.sh; ")
+    pre = (f"export RUN_DIR={q(run)}; . {posix(AGENT)}/lib/core/common.sh; "
+           f". {posix(AGENT)}/lib/gui/guistate.sh; ")
     assert "end_poweroff" not in bash(pre + "gui_hello_state").stdout
     (run / "end.poweroff").write_text("1760000000|partial|2|3|0\n", newline="\n")
     lines = bash(pre + "gui_hello_state").stdout.splitlines()
@@ -177,8 +177,8 @@ def bridge_token(tmp_path: Path, token: str, counting: bool, kind: str = "drawer
     (run / "gui").mkdir(parents=True)
     if counting:
         (run / "end.poweroff").write_text(f"1760000000|{kind}|1|2|0\n", newline="\n")
-    bash(f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')}; . {posix(AGENT)}/lib/common.sh; "
-         f". {posix(AGENT)}/lib/guibridge.sh; gui_role() {{ return 1; }}; "
+    bash(f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')}; . {posix(AGENT)}/lib/core/common.sh; "
+         f". {posix(AGENT)}/lib/gui/guibridge.sh; gui_role() {{ return 1; }}; "
          f"token={token}; gui_dispatch; echo rc=$?")
     return run
 
@@ -229,8 +229,8 @@ def watch(tmp_path: Path, room: object, *, fetch_ok: bool = True, seen_ago: int 
     if frozen:
         get += f"date() {{ echo {now}; }}; "
     out = bash(f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')} LOG_FILE={q(run / 'agent.log')}; "
-               f". {posix(AGENT)}/lib/common.sh; "
-               f". {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/roomflow.sh; "
+               f". {posix(AGENT)}/lib/core/common.sh; "
+               f". {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/gui/roomflow.sh; "
                + get + "room_end_watch; echo rc=$?")
     return out, run
 
@@ -285,8 +285,8 @@ def test_opening_a_round_here_starts_the_watch_and_closing_it_here_ends_it(tmp_p
     stubs = ('console_post() { printf \'%s\' "$RESP_BODY" > "$3"; echo 200; }; '
              'console_say() { :; }; gui_role() { return 0; }; ')
     pre = (f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')} LOG_FILE={q(run / 'agent.log')}; "
-           f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-           f". {posix(AGENT)}/lib/roomflow.sh; . {posix(AGENT)}/lib/guibridge.sh; " + stubs)
+           f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+           f". {posix(AGENT)}/lib/gui/roomflow.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; " + stubs)
     out = bash(pre + "RESP_BODY='{\"id\":\"room_ab12cd34\",\"wave_session_id\":\"s\"}' room_open img_1 2")
     rid, seen = (run / "room.watch").read_text().strip().split("|")
     assert rid == "room_ab12cd34" and abs(int(seen) - time.time()) < 30, out.stderr
@@ -301,7 +301,7 @@ def test_opening_a_round_here_starts_the_watch_and_closing_it_here_ends_it(tmp_p
 
 # --- the call sites --------------------------------------------------------------
 
-DIRECT_ENV = "IMAGECTL_TEST=0 D_ROLE=build AFTER_TASK_FILE=/nonexistent/after-task"
+DIRECT_ENV = "IMAGESRV_TEST=0 D_ROLE=build AFTER_TASK_FILE=/nonexistent/after-task"
 STANDBY = '_build_standby=1; do_task; _r=$?; echo "STANDBY $_build_standby rc=$_r"'
 
 
@@ -333,8 +333,8 @@ def build_menu(tmp_path: Path, ended: bool, answer: str = "") -> tuple[subproces
     if ended:
         (run / "room.ended").write_text("room_ab12cd34\n", newline="\n")
     body = cut_function("build_console_screen")
-    script = (f"export RUN_DIR={q(run)} LOG_FILE={q(run / 'agent.log')} IMAGECTL_TEST=0 "
-              f"CE_ANSWER={answer!r}; . {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/task.sh; "
+    script = (f"export RUN_DIR={q(run)} LOG_FILE={q(run / 'agent.log')} IMAGESRV_TEST=0 "
+              f"CE_ANSWER={answer!r}; . {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/task.sh; "
               + END_STUBS + 'gui_parent() { return 0; }; shrink_offer_pending() { :; }; '
               + body + '\n_build_standby=1; build_console_screen; echo "STANDBY $_build_standby"')
     return bash(script), run
@@ -365,7 +365,7 @@ def test_a_cloner_round_counts_down_instead_of_powering_off_at_once(tmp_path, re
     """סבב מהשרת — וגם "שחזור אימג׳ מהשרת" (מקש 3), שהוא סבב של מכונה אחת
     ועובר באותו `do_restore_drawers` (lcpull.sh). עד 17/10: כיבוי מיד."""
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
-                      stubs=COUNT_STUB, env="IMAGECTL_TEST=0 D_ROLE=cloner")
+                      stubs=COUNT_STUB, env="IMAGESRV_TEST=0 D_ROLE=cloner")
     trace = result["trace"]
     assert "COUNTDOWN drawers 2/2" in trace and "POWEROFF-AT-ONCE" not in trace, trace
     assert [r["state"] for r in reports.received] == ["done"]
@@ -384,7 +384,7 @@ def test_a_failed_cloner_round_is_reported_and_counts_down_too(tmp_path, reports
     count = ('end_countdown() { echo "COUNTDOWN $1" >> "$RUN_DIR/trace"; return 1; }; '
              if stays_on else COUNT_STUB)
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
-                      restore_rc=1, stubs=count + HOLD_STUB, env="IMAGECTL_TEST=0 D_ROLE=cloner")
+                      restore_rc=1, stubs=count + HOLD_STUB, env="IMAGESRV_TEST=0 D_ROLE=cloner")
     trace = result["trace"]
     assert "COUNTDOWN failed 0/2" in trace or (stays_on and "COUNTDOWN failed" in trace), trace
     assert [r["state"] for r in reports.received][-1:] == ["failed"], reports.received
@@ -400,7 +400,7 @@ def test_a_round_where_every_drawer_was_skipped_counts_down_too(tmp_path, report
     אותו מסלול — כל המגירות דולגו (שער SMART). עד 17/10: ‏ui_error_hold."""
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
                       stubs=COUNT_STUB + HOLD_STUB + 'smart_gate() { return 1; }; ',
-                      env="IMAGECTL_TEST=0 D_ROLE=cloner")
+                      env="IMAGESRV_TEST=0 D_ROLE=cloner")
     trace = result["trace"]
     # #2024: the skipped drawers are the end's targets too (_all) -- "0 of 2", each with its reason
     assert "COUNTDOWN failed 0/2" in trace and "HOLD all drawers skipped" not in trace, trace
@@ -415,7 +415,7 @@ def test_a_round_where_some_drawers_failed_shows_the_results_and_counts(tmp_path
     partial = ('run_restore_drawers() { echo "DRAWERS" >> "$RUN_DIR/trace"; target_set sdb done; '
                'target_set sdc failed; echo done > "$RUN_DIR/state"; return 0; }; ')
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
-                      stubs=COUNT_STUB + partial, env="IMAGECTL_TEST=0 D_ROLE=cloner")
+                      stubs=COUNT_STUB + partial, env="IMAGESRV_TEST=0 D_ROLE=cloner")
     assert "COUNTDOWN partial 1/2" in result["trace"], result["trace"]
 
 
@@ -432,8 +432,8 @@ def local_clone(tmp_path: Path, target_state: str, phase: str = "done") -> list[
         'end_countdown() { echo "COUNTDOWN $1" >> "$RUN_DIR/trace"; exit 0; }; '
     )
     out = bash(f"export RUN_DIR={q(run)} LC={q(run / 'lc')} LOG_FILE={q(run / 'agent.log')}; "
-               f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/idle.sh; . {posix(AGENT)}/lib/lcwait.sh; "
-               f". {posix(AGENT)}/lib/localclone.sh; " + stubs + "lc_session")
+               f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/idle.sh; . {posix(AGENT)}/lib/localclone/lcwait.sh; "
+               f". {posix(AGENT)}/lib/localclone/localclone.sh; " + stubs + "lc_session")
     assert out.returncode == 0, out.stderr
     return trace_of(run)
 
@@ -469,9 +469,9 @@ def cloner_menu(tmp_path: Path, round_: str, call: str, extra: str = "") -> tupl
     run = tmp_path / "run"
     (run / "lc").mkdir(parents=True)
     out = bash(f"export RUN_DIR={q(run)} LC={q(run / 'lc')} ROUND={round_} LC_BOOT_S=60; "
-               f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/lcwait.sh; "
-               f". {posix(AGENT)}/lib/lcgui.sh; . {posix(AGENT)}/lib/localclone.sh; "
-               f". {posix(AGENT)}/lib/lcpull.sh; " + LC_WORLD + extra + call)
+               f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/localclone/lcwait.sh; "
+               f". {posix(AGENT)}/lib/localclone/lcgui.sh; . {posix(AGENT)}/lib/localclone/localclone.sh; "
+               f". {posix(AGENT)}/lib/localclone/lcpull.sh; " + LC_WORLD + extra + call)
     assert out.returncode == 0, out.stderr
     log = run / "agent.log"
     return trace_of(run), log.read_text(encoding="utf-8") if log.exists() else ""
@@ -531,7 +531,7 @@ def idle(tmp_path: Path, setup: dict[str, tuple[str, int]]) -> list[str]:
         os.utime(f, (now - age, now - age))
     out = bash(f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')} LOG_FILE={q(run / 'agent.log')} "
                f"IDLE_POWEROFF_S=300 IDLE_WARN_S=3 D_SESSION_STATE=none D_TASK=null; "
-               f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/idle.sh; "
+               f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/idle.sh; "
                'power_check() { return 0; }; sleep() { :; }; '
                'safe_poweroff() { echo "POWEROFF" >> "$RUN_DIR/trace"; return 0; }; '
                "idle_check; echo rc=$?")
@@ -715,7 +715,7 @@ def test_a_failed_cloner_round_the_server_did_not_confirm_still_counts_down(tmp_
     reports.refuse_first = -1
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
                       restore_rc=1, stubs=COUNT_STUB + HOLD_STUB,
-                      env="IMAGECTL_TEST=0 D_ROLE=cloner")
+                      env="IMAGESRV_TEST=0 D_ROLE=cloner")
     trace = result["trace"]
     assert "COUNTDOWN failed 0/2" in trace, trace
     assert not [t for t in trace if t.startswith("HOLD")], trace

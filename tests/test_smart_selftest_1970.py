@@ -29,7 +29,7 @@ def _env(tmp_path: Path, smartctl_body: str = "exit 0") -> str:
     run_sh(f"chmod +x {posix(tool)!r}")
     return (f"export PATH={posix(bindir)!r}:$PATH RUN_DIR={posix(run)!r} DEVROOT=/fake-dev SMARTCTL=smartctl "
             "D_ROLE=cloner; "   # common.sh: LOG_FILE=$RUN_DIR/agent.log
-            f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/smartselftest.sh; "
+            f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/smart/smartselftest.sh; "
             "list_drawers() { echo sda; echo sdb; }; "
             f'smart_probe() {{ echo "probe $1" >> {posix(tmp_path / "calls")!r}; echo fail; }}; ')
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pytest
 
-from server import storage_nodes
+from server.interserver import storage_nodes
 from server.db import now_iso, set_setting
 
 try:
@@ -163,7 +163,7 @@ TOOLS_BODY = {"build": [], "student": []}
 
 def test_tools_capability_is_hardcoded_off_in_v1():
     """לא הגדרה למפעיל — קבוע בקוד, ליד `classrooms`. v1.1 מדליק."""
-    from server import capabilities
+    from server.core import capabilities
     assert capabilities.TOOLS is False
     assert capabilities.tools() is False
 
@@ -186,7 +186,7 @@ def test_the_tools_api_does_not_exist_in_v1_404_by_name(server, clients):
 def test_turning_the_tools_flag_on_brings_the_api_and_the_capability_back(server, clients, monkeypatch):
     """המסלול ש-v1.1 מדליק: אותו קוד, הדגל True → ‏/me אומר `tools: true`,
     הקטלוג נקרא (admin 200), וההרשאות חוזרות למקומן (deploy 403)."""
-    from server import capabilities
+    from server.core import capabilities
     monkeypatch.setattr(capabilities, "TOOLS", True)
     assert clients["admin"].get("/api/console/me").json()["capabilities"]["tools"] is True
     assert clients["admin"].get("/api/console/tools/catalog").status_code == 200

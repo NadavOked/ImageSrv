@@ -10,7 +10,10 @@ import json
 
 import pytest
 
-from server import db, drive_rates, health, learn_netloss
+from server import db
+from server.rounds import drive_rates
+from server.system import health
+from server.learn import learn_netloss
 
 SENT = 19_500_000_000
 BLOCKS = -(-SENT // drive_rates.UDPCAST_BLOCK)
@@ -20,7 +23,7 @@ _seq = iter(range(10 ** 6))
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _wave(conn, loss: float | None, *, rate="400m", drawers=2, interface="eth1",

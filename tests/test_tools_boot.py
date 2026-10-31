@@ -21,7 +21,7 @@ from native import requires_native
 
 ROOT = Path(__file__).resolve().parent.parent
 AGENT = ROOT / "agent"
-BOOT_SH = AGENT / "lib" / "tools_boot.sh"
+BOOT_SH = AGENT / "lib" / "tools" / "tools_boot.sh"
 BUILDER = ROOT / "tools" / "build_initramfs.sh"
 
 BASH = shutil.which("bash") or shutil.which("sh")
@@ -75,7 +75,7 @@ BIN_PWD=$(pwd)
 export PATH="$BIN_PWD:$PATH"
 export RUN_DIR={posix(run_dir)!r}
 export MACHINE_NAME=lab-pc-01
-export IMAGECTL_TEST=1
+export IMAGESRV_TEST=1
 . {posix(BOOT_SH)!r}
 set +e
 tools_boot_run {tool_id!r} {arg!r} {confirm!r}

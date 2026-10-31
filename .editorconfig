@@ -1,0 +1,71 @@
+# EditorConfig -- describes the style the repo already has (#2246); it does not
+# set a new one. Measured on 31/10/2026 over every tracked text file (outside
+# vendored code): LF everywhere, UTF-8, 4 spaces in py/sh/c/h/ps1 and 2 spaces
+# in js/cjs/html/css/yml/json/svg. git normalises line endings too
+# (.gitattributes: * text=auto eol=lf).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{py,sh,c,h,ps1}]
+indent_size = 4
+
+# Extensionless POSIX sh (the agent, the installer and a lab helper).
+[{agent/init,agent/imagesrv-agent,installer/imagesrv-install,installer/imagesrv-installer,tools/lab/ic-diff}]
+indent_size = 4
+
+[*.{js,cjs,html,css,yml,yaml,json,svg}]
+indent_size = 2
+
+# Markdown: nesting depth varies from file to file, and 28 files carry trailing
+# spaces (a double space is a markdown hard line break) -- so no indent size and
+# no trimming.
+[*.md]
+trim_trailing_whitespace = false
+
+# make requires a tab before every recipe line (also native-gui/ and vendor/).
+[Makefile]
+indent_style = tab
+
+# PowerShell: UTF-8 *with* a BOM. Windows PowerShell 5.1 reads a BOM-less file as
+# ANSI and garbles Hebrew; tests/test_demo_script.py, test_pull_model.py and
+# test_agent_runner_repo.py assert the three bytes. 15 of the 18 files have it.
+[*.ps1]
+charset = utf-8-bom
+
+# The three .ps1 files without a BOM today: two are ASCII-only (a BOM changes
+# nothing), and tools/lab/ic-run.ps1 holds Hebrew -- a latent 5.1 problem that is
+# NOT fixed by this file; it is kept as it is until its own issue decides.
+[{tools/agents/bot-closed-trigger,tools/agents/bot_processes,tools/lab/ic-run}.ps1]
+charset = utf-8
+
+# server/static/console.css is also UTF-8 with a BOM; left alone.
+[server/static/console.css]
+charset = utf-8-bom
+
+# The only text file with CRLF in the tree (a pasted research answer), and mixed
+# at that: about 4000 lines end in CRLF and about 600 in LF. git treats it
+# as non-text (`git ls-files --eol`: i/-text), so .gitattributes does not
+# normalise it. Left unset so a save does not rewrite every line.
+[docs/research/answers/codex-multicast-answer2.md]
+end_of_line = unset
+
+# Vendored third-party code keeps its own style (noVNC uses 4-space js).
+[{vendor/**,server/static/vendor/**}]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = unset
+insert_final_newline = unset
+
+# Captured command output used as test input: byte-exact, tabs included
+# (tests/fixtures/nftables/*.conf are tab-indented).
+[tests/fixtures/**]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = unset
+insert_final_newline = unset

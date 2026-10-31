@@ -46,7 +46,7 @@ def _safe_poweroff(tmp_path: Path, poweroff_body: str) -> tuple[int, str]:
               f'poweroff() {{ echo "POWEROFF-ARGS=[$*]"; {poweroff_body} }}; '
               'export LOG_FILE="$RUN_DIR/agent.log"; '
               'safe_poweroff "test"; echo "rc=$?"; echo "why=${POWEROFF_WHY:-}"; cat "$LOG_FILE" 2>/dev/null',
-              IMAGECTL_TEST="0")
+              IMAGESRV_TEST="0")
     assert out.returncode == 0, out.stderr
     rc = int(re.search(r"^rc=(\d+)$", out.stdout, re.M).group(1))
     return rc, out.stdout
@@ -68,7 +68,7 @@ def test_a_poweroff_that_came_back_is_on_every_screen(tmp_path):
     out = run(tmp_path, FAKE + 'arm_wol() { return 0; }; sync() { :; }; poweroff() { return 0; }; '
               'export LOG_FILE="$RUN_DIR/agent.log"; safe_poweroff "idle"; gui_hello_state; '
               'echo "---"; arm_wol() { return 1; }; send_hello() { :; }; safe_poweroff "idle"; gui_hello_state',
-              IMAGECTL_TEST="0")
+              IMAGESRV_TEST="0")
     assert out.returncode == 0, out.stderr
     after_return, after_wol = out.stdout.split("---", 1)
     toasts = [l for l in after_return.splitlines() if l.startswith("toast=")]
@@ -87,7 +87,7 @@ def test_a_task_complete_poweroff_that_came_back_is_not_called_wol(tmp_path):
               'poweroff() { echo "POWEROFF-ARGS=[$*]"; return 0; }; '
               'export LOG_FILE="$RUN_DIR/agent.log" D_ROLE=build AFTER_TASK_FILE=/nonexistent/after-task; '
               'finish_and_stop; task_done_stays_on "Capture complete."; echo "---LOG"; cat "$LOG_FILE"',
-              IMAGECTL_TEST="0")
+              IMAGESRV_TEST="0")
     assert out.returncode == 0, out.stderr
     screen, log = out.stdout.split("---LOG", 1)
     assert "POWEROFF-ARGS=[-f]" in screen, screen
@@ -140,7 +140,7 @@ def test_enter_on_the_result_of_an_all_failed_run_powers_off_within_seconds(tmp_
 def _state(tmp_path: Path, script: str) -> list[str]:
     out = run(tmp_path, FAKE + 'mkdir -p "$LC/run"; : > "$LC/run/targets"; echo local > "$LC/screen"; '
               'echo done > "$LC/phase"; export LOG_FILE="$RUN_DIR/agent.log"; ' + script +
-              '; lc_gui_state; cat "$GUI_DIR/state"', IMAGECTL_TEST="0")
+              '; lc_gui_state; cat "$GUI_DIR/state"', IMAGESRV_TEST="0")
     assert out.returncode == 0, out.stderr
     return out.stdout.splitlines()
 

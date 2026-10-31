@@ -3,7 +3,7 @@ the cloner that stays on because a disk has a problem (#2024) is the drawers' li
 "הסבב הסתיים — X מתוך Y נכתבו", one line of what was written, no summary cards (speed,
 received, disks), and "כבה את המחשב" as the screen's own button under the list; the #2024 bar
 is words only (one power-off button on the screen). What the screen says is read from the GUI's
-text log (IMAGECTL_GUI_TEXTLOG), on the real binary (lab only).
+text log (IMAGESRV_GUI_TEXTLOG), on the real binary (lab only).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _said(tmp_path, card: str) -> list[str]:
     st = tmp_path / "held.txt"
     st.write_text(HELD, encoding="utf-8", newline="\n")
     log = tmp_path / "text.log"
-    env = dict(os.environ, IMAGECTL_GUI_TEXTLOG=str(log))
+    env = dict(os.environ, IMAGESRV_GUI_TEXTLOG=str(log))
     if (GUI / "fonts.conf").exists():
         env["FONTCONFIG_FILE"] = str(GUI / "fonts.conf")
     run = subprocess.run([str(binary), "--png", posix(tmp_path / "c"), "--size", "1280x800", "--mac", "3C:52:82:A1:00:1F",

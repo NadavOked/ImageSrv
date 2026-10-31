@@ -27,7 +27,7 @@
 # (one sector per BIOS call, #2010). In the field (HP 8100, 25/10) it booted in IDE and
 # AHCI. GRUB stays for a BIOS that hangs after the syslinux banner (HP 8000 + AHCI, #2010).
 #
-# The boot chain is the PXE one (install/setup-boot-server.sh): shim-signed and
+# The boot chain is the PXE one (deploy/setup-boot-server.sh): shim-signed and
 # grub-efi-amd64-signed from Debian, the same packages -- grubx64.efi.signed
 # (the disk build) where PXE takes grubnetx64.efi.signed (the network build).
 # The kernel is the host's newest non-cloud Debian kernel (signed), and the
@@ -35,11 +35,11 @@
 # boot-payload-build.sh does. Secure Boot on or off: shim verifies GRUB, GRUB
 # verifies the kernel through shim; the initramfs is not signed and need not be.
 #
-# The kernel line is tools/usb/{grub,syslinux}.cfg.in: imagectl.mode=usbclone
+# The kernel line is tools/usb/{grub,syslinux}.cfg.in: imagesrv.mode=usbclone
 # and nothing else of ours (principle 2). tests/test_usb_clone.py guards it.
 #
 # --survey (#1914/#1921, Nadav 20/10): the survey stick -- the same image plus
-# the marker /imagesrv/survey on IMGSRV_USB (agent/lib/usbsurvey.sh reads it;
+# the marker /imagesrv/survey on IMGSRV_USB (agent/lib/usb/usbsurvey.sh reads it;
 # the kernel line does not change, principle 2), IMGSRV_DATA of 128 MiB with
 # survey/, and the name imagesrv-usb-survey-<version>.img. It keeps every
 # disk's SMART (no serial), so it is never --publish'ed as the console's download.
@@ -47,7 +47,7 @@
 # Output: $OUT/imagesrv-usb-<version>.img, .img.sha256 ("<sha>  <name>"), and
 # imagesrv-usb.json. --publish DATA_DIR also puts the three in
 # DATA_DIR/usb/ under fixed names, where the console's download reads them
-# (server/console_usb.py) -- each written to .new first, renamed together.
+# (server/console/console_usb.py) -- each written to .new first, renamed together.
 
 set -euo pipefail
 
@@ -56,8 +56,8 @@ die() { say "$*"; exit 1; }
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 OUT=""; INITRD=""; PUBLISH=""; SKIP_APT=(); BIOS=1; SURVEY=0
-MODULES_DIR="${IMAGECTL_MODULES_DIR:-/lib/modules}"
-KERNEL_DIR="${IMAGECTL_KERNEL_DIR:-/boot}"
+MODULES_DIR="${IMAGESRV_MODULES_DIR:-/lib/modules}"
+KERNEL_DIR="${IMAGESRV_KERNEL_DIR:-/boot}"
 SHIM="${USB_SHIM:-/usr/lib/shim/shimx64.efi.signed}"
 MOKMGR="${USB_MOKMGR:-/usr/lib/shim/mmx64.efi.signed}"
 GRUB="${USB_GRUB:-/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed}"
@@ -139,8 +139,8 @@ ikver=$( (zstd -dc "$INITRD" 2>/dev/null || gzip -dc "$INITRD" 2>/dev/null || ca
 STAGE="$WORK/esp"; install -d "$STAGE"
 sed "s/@VERSION@/$VERSION/g" "$REPO/tools/usb/grub.cfg.in" > "$STAGE/grub.cfg"
 sed "s/@VERSION@/$VERSION/g" "$REPO/tools/usb/syslinux.cfg.in" > "$STAGE/syslinux.cfg"
-grep -q '^ *linux /imagesrv/vmlinuz imagectl.mode=usbclone ' "$STAGE/grub.cfg" || die "grub.cfg has no usbclone kernel line"
-if grep -hv '^ *#' "$STAGE/grub.cfg" "$STAGE/syslinux.cfg" | grep -q 'imagectl\.server'; then die "imagectl.server on the stick's kernel line"; fi
+grep -q '^ *linux /imagesrv/vmlinuz imagesrv.mode=usbclone ' "$STAGE/grub.cfg" || die "grub.cfg has no usbclone kernel line"
+if grep -hv '^ *#' "$STAGE/grub.cfg" "$STAGE/syslinux.cfg" | grep -q 'imagesrv\.server'; then die "imagesrv.server on the stick's kernel line"; fi
 python3 - "$STAGE/imagesrv-usb.json" "$VERSION" "$KVER" "$EPOCH" "$(sha256sum "$INITRD" | cut -d' ' -f1)" "$SURVEY" <<'PY'
 import json, sys
 out, ver, kver, epoch, isha, survey = sys.argv[1:7]

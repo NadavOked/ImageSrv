@@ -18,7 +18,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import drivers                                        # noqa: E402
+from server.library import drivers                                        # noqa: E402
 from test_server_room import (CLONER1, CLONER2, cloner_hello,     # noqa: E402,F401
                               room, room_server)
 

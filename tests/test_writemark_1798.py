@@ -5,8 +5,8 @@ On metal (19/10, rc7nl2, cloner 2) a local clone cut by ``reboot -f`` after
 standby screen, "Windows · 4 מחיצות" on the local clone screen, and it could be
 picked as the SOURCE. /run (tmpfs) with every record of the failure was gone.
 
-``agent/lib/writemark.sh``: every partition of the table is NAMED
-``imagectl-incomplete`` in the same sgdisk call that writes the table
+``agent/lib/restore/writemark.sh``: every partition of the table is NAMED
+``imagesrv-incomplete`` in the same sgdisk call that writes the table
 (``apply_gpt``, and ``expand_last`` when it rebuilds partitions); the original
 names come back only after the whole image and the grow (``finish_grow``, the
 local clone too), each read back, and only then is the target done. Reading it is three answers: incomplete / clean / unchecked.
@@ -28,7 +28,7 @@ from test_restore_evidence import build_box, log_of, rc_of
 
 pytestmark = requires_native(("bash", BASH))
 
-MARK = "imagectl-incomplete"
+MARK = "imagesrv-incomplete"
 MARK_HE = "כתיבה לא הושלמה — לא שמיש"
 
 #: sgdisk that keeps the table's names in $B/name.<i> -- -n makes an unnamed
@@ -146,7 +146,7 @@ def test_a_cut_write_is_incomplete_after_the_reboot(tmp_path):
     fresh = tmp_path / "after-reboot"
     fresh.mkdir()
     out = sh(f'export PATH="$(cd {posix(box)!r}/stubs && pwd):$PATH" RUN_DIR={posix(fresh)!r} DEVROOT={posix(box)}/dev '
-             f'LOG_FILE={posix(fresh)}/log; log() {{ :; }}; . {posix(AGENT)}/lib/writemark.sh; '
+             f'LOG_FILE={posix(fresh)}/log; log() {{ :; }}; . {posix(AGENT)}/lib/restore/writemark.sh; '
              'writemark_state sda; writemark_json sda gpt')
     assert out.strip().splitlines() == ["incomplete", ',"write_mark":"incomplete"'], out
 
@@ -212,7 +212,7 @@ def test_a_table_that_cannot_be_read_is_unchecked_never_clean(tmp_path):
              f'echo "-p *" > {posix(box)}/sgdisk.fail; '
              'writemark_state sda; writemark_json sda gpt; echo; finish_grow sda; echo "rc=$?"')
     # log() echoes to stdout too: only the answers
-    lines = [l for l in out.strip().splitlines() if not l.startswith(("imagectl:", "["))]
+    lines = [l for l in out.strip().splitlines() if not l.startswith(("imagesrv:", "["))]
     assert lines[-3:] == ["unchecked", ',"write_mark":"unchecked"', "rc=1"], (out, log_of(run))
     assert _state(run)[0] == "failed"
     assert not _writes(box)[2:], "nothing is written over a table that was not read"
@@ -232,7 +232,7 @@ def test_the_local_clone_gets_the_sources_names_back_only_after_the_grow(tmp_pat
         encoding="utf-8", newline="\n")
     seen = box / "names_seen"
     names = f'for i in 1 2 3; do printf "%s|" "$(cat {posix(box)}/name.$i)"; done >> {posix(seen)}; echo >> {posix(seen)}'
-    out = sh(prelude + f'. {posix(AGENT)}/lib/lccopy.sh; . {posix(AGENT)}/lib/lcraw.sh; export LC={posix(lc)!r}; '
+    out = sh(prelude + f'. {posix(AGENT)}/lib/localclone/lccopy.sh; . {posix(AGENT)}/lib/localclone/lcraw.sh; export LC={posix(lc)!r}; '
              'apply_gpt sda m.json || exit 9; '
              # the names the target carries at the table check and at the grow
              f'lc_table_check() {{ {names}; LC_ERROR=""; }}; grow_expanded() {{ {names}; }}; boot_hidden_disk() {{ return 0; }}; '
@@ -252,7 +252,7 @@ def test_the_local_clone_prepare_leaves_the_mark_on(tmp_path):
     (lc / "run").mkdir(parents=True)
     (lc / "run" / "entries").write_text("1|EFI system partition|0\n2|x|0\n3|y|0\n",
                                         encoding="utf-8", newline="\n")
-    out = sh(prelude + f'. {posix(AGENT)}/lib/lcplan.sh; . {posix(AGENT)}/lib/lccopy.sh; export LC={posix(lc)!r}; '
+    out = sh(prelude + f'. {posix(AGENT)}/lib/localclone/lcplan.sh; . {posix(AGENT)}/lib/localclone/lccopy.sh; export LC={posix(lc)!r}; '
              'disk_fits() { return 0; }; expand_last() { return 0; }; '
              'lc_prepare_target sda m.json; echo "rc=$?"; writemark_state sda')
     assert out.strip().splitlines()[-2:] == ["rc=0", "incomplete"], (out, log_of(run))
@@ -285,8 +285,8 @@ def _inventory(tmp_path, names: dict[str, str | None], fail_read=False) -> dict[
             _fail(box, "-p *")
         out = sh(_stub(box) + f'export PATH="$(cd {posix(box)!r}/stubs && pwd):$PATH" RUN_DIR={posix(box)!r} '
                  f'DEVROOT={posix(box)}/dev SYSROOT={posix(box)} LOG_FILE={posix(box)}/log LC={posix(tmp_path)}/lc; '
-                 f'mkdir -p "$LC/inv"; log() {{ :; }}; . {posix(AGENT)}/lib/common.sh; '
-                 f'. {posix(AGENT)}/lib/lcinv.sh; . {posix(AGENT)}/lib/writemark.sh; ' + LCINV
+                 f'mkdir -p "$LC/inv"; log() {{ :; }}; . {posix(AGENT)}/lib/core/common.sh; '
+                 f'. {posix(AGENT)}/lib/localclone/lcinv.sh; . {posix(AGENT)}/lib/restore/writemark.sh; ' + LCINV
                  + f'lc_inv_disk {dev} > "$LC/inv/{dev}.line"; cat "$LC/inv/{dev}.line"; cat "$LC/inv/{dev}.mark"')
         line, mark = out.strip().splitlines()[-2:]
         out_lines[dev] = line.split("|") + [mark]
@@ -312,7 +312,7 @@ def test_the_kiosk_carries_the_mark_as_lc_disk_field_16(tmp_path):
     gui = tmp_path / "gui"
     gui.mkdir()
     out = sh(f'export RUN_DIR={posix(tmp_path)!r} GUI_DIR={posix(gui)!r} LC={posix(lc)!r}; log() {{ :; }}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/lcgui.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/localclone/lcgui.sh; '
              'gui_header_state() { :; }; gui_hello_state() { :; }; drawer_slots_refresh() { :; }; '
              'disk_drawer() { echo "2|SATA 1"; }; lc_gui_state; echo "rc=$?"')
     assert rc_of(out) == "rc=0", out
@@ -361,7 +361,7 @@ def _hello_disk(tmp_path, image: bytes, sgdisk: str | None) -> dict:
     (stubs / "sgdisk").write_text(body, encoding="utf-8", newline="\n")
     out = sh(f'chmod 0755 {posix(stubs)}/sgdisk; export PATH="$(cd {posix(stubs)!r} && pwd):$PATH" DEVROOT={posix(box)}/dev '
              f'SYSROOT={posix(box)}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; . {posix(AGENT)}/lib/writemark.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
              f'LOG_FILE={posix(box)}/log; build_disk_entry sda')   # after common.sh: it sets its own default
     entry = json.loads(out.strip().splitlines()[-1])
     entry["_sgdisk_calls"] = len(calls.read_text().splitlines()) if calls.exists() else 0
@@ -406,7 +406,7 @@ def test_the_standby_screen_record_carries_the_mark_as_field_12(tmp_path):
 def test_the_room_drawer_list_carries_the_mark_and_an_old_agent_is_not_clean():
     import pytest
     pytest.importorskip("fastapi")
-    from server import room
+    from server.rounds import room
 
     class _Conn:
         def __init__(self, disks):

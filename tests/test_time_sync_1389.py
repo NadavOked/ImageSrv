@@ -1,4 +1,4 @@
-from server import health
+from server.system import health
 from pathlib import Path
 
 

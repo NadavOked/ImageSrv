@@ -22,7 +22,7 @@ from native import requires_native
 
 ROOT = Path(__file__).resolve().parent.parent
 VERIFY = ROOT / "tools" / "verify-release-tag.py"
-SIGNERS = ROOT / "install" / "release-signers"
+SIGNERS = ROOT / "deploy" / "release-signers"
 KEYGEN = shutil.which("ssh-keygen")
 
 pytestmark = requires_native("ssh-keygen", "git", why="חתימות אמיתיות של git tag -s")
@@ -77,7 +77,7 @@ def make_repo(tmp: Path) -> Path:
 
 
 def sign(repo: Path, tag: str, key: Path) -> None:
-    git(repo, "-c", f"user.signingkey={key.as_posix()}", "tag", "-s", "-m", f"ImageCtl {tag}", tag)
+    git(repo, "-c", f"user.signingkey={key.as_posix()}", "tag", "-s", "-m", f"ImageSrv {tag}", tag)
 
 
 def verify(repo: Path, tag: str, signers: Path) -> subprocess.CompletedProcess:
@@ -151,7 +151,7 @@ def test_a_tag_edited_after_signing_is_refused(world):
     """אותה חתימה, הודעה אחרת — האימות הקריפטוגרפי עצמו נבדק, לא רק המפתח."""
     repo = world["repo"]
     sign(repo, "v1.0.0", world["release"])
-    raw = git(repo, "cat-file", "tag", "v1.0.0").replace("ImageCtl v1.0.0", "ImageCtl v1.0.0 evil")
+    raw = git(repo, "cat-file", "tag", "v1.0.0").replace("ImageSrv v1.0.0", "ImageSrv v1.0.0 evil")
     path = world["tmp"] / "forged-tag"
     path.write_bytes(raw.encode("utf-8"))                  # בייטים: בלי \r\n של ווינדוס
     forged = git(repo, "hash-object", "-t", "tag", "-w", path.as_posix()).strip()
@@ -220,9 +220,9 @@ def test_the_shipped_signers_file_is_well_formed():
 def _installed_tree(tmp: Path, signers: Path) -> Path:
     tree = tmp / "installed"
     (tree / "tools").mkdir(parents=True)
-    (tree / "install").mkdir()
+    (tree / "deploy").mkdir()
     shutil.copy(VERIFY, tree / "tools" / "verify-release-tag.py")
-    shutil.copy(signers, tree / "install" / "release-signers")
+    shutil.copy(signers, tree / "deploy" / "release-signers")
     return tree
 
 
@@ -268,7 +268,7 @@ case "$1" in
   *) echo "unexpected git $*" >&2; exit 64 ;;
 esac''')
     fake_tool(bindir, "systemctl",
-              'case "$1" in show) echo "IMAGECTL_URL=http://127.0.0.1:8080" ;; esac; exit 0')
+              'case "$1" in show) echo "IMAGESRV_URL=http://127.0.0.1:8080" ;; esac; exit 0')
     fake_tool(bindir, "curl", "exit 0")
 
 
@@ -279,7 +279,7 @@ def server(tmp_path: Path, world) -> dict:
     _seed_db(data)
     repo = _fake_repo(tmp_path, live_ok=True)
     shutil.copy(VERIFY, repo / "tools" / "verify-release-tag.py")
-    shutil.copy(world["signers"], repo / "install" / "release-signers")
+    shutil.copy(world["signers"], repo / "deploy" / "release-signers")
     git(repo, "init", "-q")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "installed tree")
@@ -342,7 +342,7 @@ def test_upgrade_to_a_tag_signed_by_another_key_is_refused(server, world):
 @requires_bash
 def test_an_installed_tree_without_a_release_key_refuses_every_update(server, world):
     """המעבר (fail-closed): שרת שהעץ שלו בלי מפתח — לא "פתוח עד שיגיע מפתח"."""
-    (server["repo"] / "install" / "release-signers").write_text("# no key\n", encoding="utf-8")
+    (server["repo"] / "deploy" / "release-signers").write_text("# no key\n", encoding="utf-8")
     sign(server["repo"], "v0.72.0", world["release"])
     _refused(server, _upgrade(server), "unchecked:", "אין אף מפתח")
 
@@ -381,7 +381,7 @@ def _iso_signer_check() -> str:
     ('imagectl-release namespaces="git" ssh-ed25519 AAAA', True),   # בלי שורה חדשה בסוף — עדיין מפתח
 ])
 def test_build_iso_refuses_a_tree_without_a_release_key(tmp_path, content, ok):
-    tree = tmp_path / "iso" / "imagectl-src" / "install"
+    tree = tmp_path / "iso" / "imagesrv-src" / "deploy"
     tree.mkdir(parents=True)
     if content is not None:
         (tree / "release-signers").write_text(content, encoding="utf-8", newline="\n")

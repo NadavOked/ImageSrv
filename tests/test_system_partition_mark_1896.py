@@ -26,7 +26,8 @@ pytest.importorskip("fastapi")
 
 from conftest import MANIFEST_256, write_image
 from native import requires_native
-from server import cloner_round, images as images_module, minfree
+from server.rounds import cloner_round
+from server.library import images as images_module, minfree
 from test_agent import AGENT, BASH, _stub, posix, sh
 from test_cloner_round_server import (URL, cloner, nonce, now)  # noqa: F401
 from test_machine_identity import MAC1, identity_server  # noqa: F401
@@ -50,7 +51,7 @@ def twins() -> dict:
          "start_sector": 206848 + SIZE // 512, "size_bytes": SIZE, "used_bytes": 1 << 30,
          "file": "p3.win.pcl.zst", "sha256": "cc" * 32, "expandable": True},
     ]
-    from server.images import required_bytes
+    from server.library.images import required_bytes
     m["min_target_bytes"] = required_bytes(m)
     return m
 

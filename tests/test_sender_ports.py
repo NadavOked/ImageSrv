@@ -30,9 +30,9 @@ from native import requires_native
 
 pytest.importorskip("fastapi")
 
-from server import sender                                     # noqa: E402
-from server.images import ImageLibrary                        # noqa: E402
-from server.sender import SenderEngine                        # noqa: E402
+from server.rounds import sender                                     # noqa: E402
+from server.library.images import ImageLibrary                        # noqa: E402
+from server.rounds.sender import SenderEngine                        # noqa: E402
 
 from conftest import MANIFEST_256, write_image                # noqa: E402
 from test_sender import Recorder, wait_for                    # noqa: E402

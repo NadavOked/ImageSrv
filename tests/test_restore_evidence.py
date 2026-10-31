@@ -205,16 +205,16 @@ def build_box(tmp_path, *, plan=PLAN, count=None, plan_cut=None, nodes=None,
         # ‏SYSROOT הוא שורש הקופסה: הסוכן מוסיף בעצמו `/sys/block/...`.
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(box)}/dev '
         f'SYSROOT={posix(box)} TABLE_SETTLE_S={settle} WAIT_POLL_S=1 REREAD_TRIES=1; '   # #1594: a refusal here is the test, not a busy disk to wait out
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-        f'. {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/progress.sh; '
-        f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/failmark.sh; '
-        f'. {posix(AGENT)}/lib/diskfit.sh; '   # #1217: disk_fits, split from restore.sh
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+        f'. {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+        f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/failmark.sh; '
+        f'. {posix(AGENT)}/lib/restore/diskfit.sh; '   # #1217: disk_fits, split from restore.sh
         # ‏#672: ‏boot_ca_preflight. ‏SYSROOT היא הקופסה ואין בה efivars -- unchecked, ממשיך.
-        f'. {posix(AGENT)}/lib/bootcadb.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/bootcadb.sh; '
         # ‏#1366: ‏write_check. ‏DEVROOT/sda בקופסה אינו התקן בלוק -- unchecked, ממשיך, ולא נכתב דבר.
-        f'. {posix(AGENT)}/lib/writecheck.sh; '
+        f'. {posix(AGENT)}/lib/restore/writecheck.sh; '
         # ‏#1212: ‏verify_table קורא בחזרה את GUID המחיצות דרך manifest.sh.
-        f'. {posix(AGENT)}/lib/manifest.sh; '
+        f'. {posix(AGENT)}/lib/capture/manifest.sh; '
         # הבדיקה היחידה שאי אפשר לזייף בלי root: התקן בלוקים אמיתי.
         # רשימת הצמתים ה"חיים" יושבת בקופסה, ולכן "הקרנל לא בנה את
         # /dev/sda3" הוא מצב שאפשר להעמיד בו את הקוד.

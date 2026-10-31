@@ -12,7 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from server import db, learn_eta, reports, restore_stages, room
+from server import db
+from server.agent import reports, restore_stages
+from server.rounds import room
+from server.learn import learn_eta
+from agentlib import flat_lib
 
 MAC = "78:ac:c0:9b:18:83"
 MARKS = [["gpt", 100.0], ["expand", 103.5], ["p1", 104.0], ["p2", 110.0],
@@ -21,7 +25,7 @@ MARKS = [["gpt", 100.0], ["expand", 103.5], ["p1", 104.0], ["p2", 110.0],
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 # --- הסימנים → משכים -----------------------------------------------------------
@@ -135,9 +139,7 @@ def test_a_failure_while_recording_is_zero_rows_not_a_crash(conn, monkeypatch):
 from native import requires_native                       # noqa: E402
 from test_agent import AGENT, BASH, posix, sh            # noqa: E402
 
-LIB = AGENT / "lib"
-
-
+LIB = flat_lib()
 def _agent(tmp_path: Path, script: str) -> dict:
     run = tmp_path / "run"
     (run / "targets").mkdir(parents=True)

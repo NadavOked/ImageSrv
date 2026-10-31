@@ -91,7 +91,7 @@ def test_the_last_admin_cannot_be_blocked(server):
     יכולים להתווסף — תסריט תחזוקה, מיגרציה, נתיב עתידי. שומר שקיים רק
     בשכבת ה-HTTP הוא שומר שנעלם ברגע שמישהו עוקף אותה.
     """
-    from server import users                                # noqa: PLC0415
+    from server.console import users                                # noqa: PLC0415
 
     conn = server["ctx"].conn
     # שני מנהלים בהתקנה: `admin` מההרצה הראשונה, ו-`noc` של הפיקסטורה.

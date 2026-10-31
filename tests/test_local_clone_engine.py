@@ -33,15 +33,16 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-LIB = REPO / "agent" / "lib"
+LIB = flat_lib()
 FIXTURE = REPO / "tests" / "localclone-fixture.sh"
 SBIN = "/usr/sbin:/sbin"
 #: #1594: the RAM view loads `brd`, a module of the whole machine: a second suite
 #: doing the same finds it "already loaded, not by the clone" and refuses (as it
 #: must). The Testrunner runs several suites at once, so the engine runs take turns.
-ENGINE_LOCK = "/tmp/imagectl-lc-engine.lock"
+ENGINE_LOCK = "/tmp/imagesrv-lc-engine.lock"
 
 
 def _sudo_ok() -> bool:
@@ -70,7 +71,7 @@ LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit",
 DRIVER = r'''
 set -u
 F=$1; TARGETS=$2; SHRINK=$3
-export RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff
+export RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff
 rm -rf "$RUN_DIR"; mkdir -p "$RUN_DIR"
 # #1594: a RAM view needs `brd` free. A suite that does not take the engine lock (an
 # older branch) holds it for a minute or two at a time; the engine refuses a brd it did
@@ -431,7 +432,7 @@ def test_a_copy_cut_by_a_reboot_leaves_the_target_marked_never_a_source_still_a_
     _engine(tmp_path / "cut", fx, fanout_bin, "same", 0, kill_at="3")
     cut = _table(devs["same"])
     assert cut["guid"] == src_table["guid"] and sorted(cut["parts"]) == [1, 2, 3, 4, 5], cut   # a full GPT...
-    assert {p["Partition name"] for p in cut["parts"].values()} == {"'imagectl-incomplete'"}, cut   # ...that says so
+    assert {p["Partition name"] for p in cut["parts"].values()} == {"'imagesrv-incomplete'"}, cut   # ...that says so
     after = _engine(tmp_path / "boot", fx, fanout_bin, "", 0, env=("INV_ONLY=1",))
     same, src = after["inv"]["same"], after["inv"]["src"]
     # usable | why | the mark (lc_disk field 16)

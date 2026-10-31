@@ -27,7 +27,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import auto_reboot, images, netcfg_rollback, storage_locations, storage_nodes, vmupdate
+from server import auto_reboot
+from server.library import images
+from server.net import netcfg_rollback
+from server.storage import storage_locations
+from server.interserver import storage_nodes
+from server.vm import vmupdate
 from server.db import connect
 from server.wizard.core import WizardState
 from test_atomic_writes_1908 import _HalfWriter
@@ -93,7 +98,7 @@ def leftovers(directory: Path, *keep: str) -> list[str]:
 # --- storage_nodes: ‏server.crt של זהות השרת בין אתרים -------------------------
 
 def test_interserver_cert_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     cert = tmp_path / storage_nodes.INTERSERVER_DIRNAME / "server.crt"
     cert.parent.mkdir()
     cert.write_text(OLD, encoding="utf-8")
@@ -104,7 +109,7 @@ def test_interserver_cert_survives_a_write_that_dies_halfway(tmp_path, monkeypat
 
 
 def test_interserver_cert_is_durable(tmp_path, fsynced):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     storage_nodes.ensure_identity(conn, tmp_path, host_sans=("10.0.0.1",))
     assert_durable(tmp_path / storage_nodes.INTERSERVER_DIRNAME / "server.crt", fsynced)
 
@@ -112,7 +117,7 @@ def test_interserver_cert_is_durable(tmp_path, fsynced):
 # --- console_tls: תעודת הקונסולה וסמן טביעת האצבע ------------------------------
 
 def test_console_cert_and_marker_are_durable_on_first_issue(tmp_path, fsynced):
-    from server import console_tls
+    from server.console import console_tls
     console_tls.ensure_console_cert(tmp_path, "10.0.0.1", hostname="imgsrv")
     directory = tmp_path / console_tls.CONSOLE_TLS_DIRNAME
     assert_durable(directory / console_tls.CERT_NAME, fsynced)
@@ -120,7 +125,7 @@ def test_console_cert_and_marker_are_durable_on_first_issue(tmp_path, fsynced):
 
 
 def test_console_cert_reissue_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
-    from server import console_tls
+    from server.console import console_tls
     console_tls.ensure_console_cert(tmp_path, "10.0.0.1", hostname="imgsrv")
     directory = tmp_path / console_tls.CONSOLE_TLS_DIRNAME
     before = (directory / console_tls.CERT_NAME).read_bytes()
@@ -131,7 +136,7 @@ def test_console_cert_reissue_survives_a_write_that_dies_halfway(tmp_path, monke
 
 
 def test_console_cert_reissue_is_durable(tmp_path, fsynced):
-    from server import console_tls
+    from server.console import console_tls
     console_tls.ensure_console_cert(tmp_path, "10.0.0.1", hostname="imgsrv")
     fsynced.clear()
     console_tls.reissue_self_signed(tmp_path, "imgsrv2")

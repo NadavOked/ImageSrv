@@ -57,7 +57,7 @@ function setup() {
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
   vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
-  run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"imagectl-srv",version:"v0.30.0",uptime_seconds:532802,deploy_ip:"10.44.12.1",capabilities:{enroll_secondary:true}}; current="home";');
+  run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"imagesrv-srv",version:"v0.30.0",uptime_seconds:532802,deploy_ip:"10.44.12.1",capabilities:{enroll_secondary:true}}; current="home";');
   return {run,node,requests,fixtures};
 }
 function balanced(html) {
@@ -117,7 +117,7 @@ test('UI.objHeader: crumbs, name, sub, pill, actions and role=tab buttons with r
   const {run}=setup();
   const html=run('UI.objHeader({crumbs:[{label:"שרת"},{label:"סקירה"}],name:"שרת אימג\'ים",sub:"x",pill:UI.pill("ok","תקין"),actions:"<button>a</button>",tabs:["א","ב","ג"],tab:1})');
   // ביקורת 10/10: הפריט הראשון בשביל הוא שורש העץ = שם השרת מ-/me (כמו ב-vCenter), לא הטקסט שהוזן
-  assert.match(html,/<div class="crumbs"><span>imagectl-srv<\/span><span>\/<\/span><span>סקירה<\/span><\/div>/);
+  assert.match(html,/<div class="crumbs"><span>imagesrv-srv<\/span><span>\/<\/span><span>סקירה<\/span><\/div>/);
   const tabs=[...html.matchAll(/<button type="button" class="tab( on)?" role="tab" aria-selected="(true|false)" tabindex="(0|-1)"/g)];
   assert.deepEqual(tabs.map(m=>[m[1]||'',m[2],m[3]]),[['','false','-1'],[' on','true','0'],['','false','-1']]);
   assert.match(html,/role="tablist"/); balanced(html);
@@ -186,7 +186,7 @@ test('home renders its own header (no generic toolbar, no "+ פעולה", no foo
   assert.match(html,/<div class="obj-name">סקירה כללית<span class="pill /,'the status pill sits in the title line (console-full.html .htxt h1)');
   // ‏#1300: משנה הכותרת = סיכום; זהות השרת (#968) עברה לכרטיס השירותים
   assert.match(html,/<div class="obj-sub"[^>]*>6 אימג&#39;ים · 12 מחשבים \(1 מחוברים\) · עודכן 09:45<\/div>/);
-  assert.match(html,/<div class="svc-who">imagectl-srv · <span class="mono">10\.44\.12\.1<\/span> · v0\.30\.0 · פעיל 6 ימים 4 שעות<\/div>/,'#968: hostname · IP · version · uptime, all from /me');
+  assert.match(html,/<div class="svc-who">imagesrv-srv · <span class="mono">10\.44\.12\.1<\/span> · v0\.30\.0 · פעיל 6 ימים 4 שעות<\/div>/,'#968: hostname · IP · version · uptime, all from /me');
   assert.doesNotMatch(html,/זמן פעילות — בקרוב/);
   // codeql[js/incomplete-sanitization] false positive: test code -- a constant list with no backslash becomes a RegExp for assert.doesNotMatch (#291)
   for(const gone of ['pageActionBtn','+ פעולה','footer-note','object-strip','vcenter-tabs','>Details<','אין נתונים להצגה']) assert.doesNotMatch(html,new RegExp(gone.replace(/[+]/g,'\\+')),gone);

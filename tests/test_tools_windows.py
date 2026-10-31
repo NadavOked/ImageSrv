@@ -17,7 +17,7 @@ import sizelimit
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = ROOT / "agent/lib/tools_windows.sh"
+SCRIPT = ROOT / "agent/lib/tools/tools_windows.sh"
 BUILDER = ROOT / "tools/build_initramfs.sh"
 SH = shutil.which("sh")
 pytestmark = pytest.mark.skipif(not SH, reason="POSIX sh is required")

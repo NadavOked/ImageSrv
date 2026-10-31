@@ -1,7 +1,7 @@
 """#1726: גואי שנהרג באמצע משיכה חוזר תוך 5 שניות — בכל מסלול.
 
 ברזל, ‏rc5 ‏(18/10, מחשב שיכפול 2): באמצע משיכה ל-2 מגירות נשלח `kill -9`
-ל-`imagectl-station-gui`. אחרי 20 שניות לא היה גואי, ואחרי 37 המסך עוד
+ל-`imagesrv-station-gui`. אחרי 20 שניות לא היה גואי, ואחרי 37 המסך עוד
 הראה את הפריים האחרון — 17%, קפוא — עד הכיבוי. ה-respawn של #1569 ישב
 ב-`gui_parent`, והסוכן קרא לו רק בין hello ל-hello; כתיבה, משיכה, שיכפול
 מקומי וספירת הסיום מחזיקים את המעטפת שלו דקות, ושם אף אחד לא שאל.
@@ -27,8 +27,9 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, REPO, posix
+from agentlib import flat_lib
 
-LIB = AGENT / "lib"
+LIB = flat_lib()
 #: the owner's bound for a GUI to be back (#1726)
 BACK_WITHIN_S = 5.0
 
@@ -80,7 +81,7 @@ def _start(tmp_path: Path, body: str, env: str = "") -> subprocess.Popen:
     sr_gui = _write(tmp_path / "sr-gui", SR_GUI)
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))} MAC=aa:bb:cc:dd:ee:ff IP=10.0.0.9 "
-        "SERVER=http://127.0.0.1:1 IMAGECTL_TEST=1 WAIT_HELPER_S=5 "
+        "SERVER=http://127.0.0.1:1 IMAGESRV_TEST=1 WAIT_HELPER_S=5 "
         f"GUI_KIOSK={shlex.quote(posix(kiosk))} GUI_STATION={shlex.quote(posix(station))} "
         f"SR_GUI_BIN={shlex.quote(posix(sr_gui))} SR_GUI_TICK_S=0.2 {env}; "
         f"SYSROOT={shlex.quote(posix(tmp_path / 'sysroot'))}; "
@@ -150,7 +151,7 @@ def _kill_and_await_the_next(tmp_path: Path, proc: subprocess.Popen) -> tuple[in
     return int(first[0]), int(second[0]), took
 
 
-#: The restore branch of the main loop (imagectl-agent): the GUI is started,
+#: The restore branch of the main loop (imagesrv-agent): the GUI is started,
 #: then do_restore_drawers holds the agent's shell for the whole write. The
 #: write here is a sleep in the foreground -- gui_parent is not called again.
 PULL = 'D_ROLE=cloner; gui_restore_parent; echo "PARENT rc=$?"; sleep 30; echo PULL-DONE'
@@ -264,7 +265,7 @@ def test_the_handoff_ends_the_keeper_without_a_restart(tmp_path):
 def test_the_bridge_records_its_gui_process_for_the_keeper():
     """The keeper reads $GUI_DIR/station.pid; the bridge writes it as it starts the GUI."""
     bridge = (LIB / "guibridge.sh").read_text(encoding="utf-8")
-    start = bridge.index("/usr/bin/imagectl-station-gui")
+    start = bridge.index("/usr/bin/imagesrv-station-gui")
     assert 'GUI_PID=$!; echo "$GUI_PID $GUI_STATE_PID" > "$GUI_DIR/station.pid"' in bridge[start:start + 400]
     assert bridge.index("GUI_STATE_PID=$!") < start          # the writer is started first, its pid is known
     keeper = (LIB / "guiparent.sh").read_text(encoding="utf-8")

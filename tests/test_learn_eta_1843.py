@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, learn_eta
+from server import db
+from server.learn import learn_eta
 
 from test_server_room import CLONER1, cloner_hello, room, room_body, room_server  # noqa: F401
 
@@ -25,7 +26,7 @@ _seq = iter(range(10 ** 6))
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _wave(conn, delivered: dict, *, wall: float, total: float, ended: str = "send_done",
@@ -215,7 +216,7 @@ def test_capture_before_the_partitions_are_measured(conn):
 
 def test_the_first_report_stamps_started_at_once(tmp_path):
     """‏`tasks.started_at` — הדיווח הראשון, ולא זז בדיווחים הבאים."""
-    from server import reports
+    from server.agent import reports
     conn = db.connect(tmp_path / "x.db")
     conn.execute("INSERT INTO machines (mac, suffix, group_id, added_at) VALUES"
                  " (?, '01', 'grp_BUILD', 'x')", (MAC,))

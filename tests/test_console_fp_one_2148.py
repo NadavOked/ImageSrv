@@ -36,7 +36,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _identity(host: str) -> tuple[bytes, bytes]:
-    from server.interserver_auth import generate_self_signed
+    from server.interserver.interserver_auth import generate_self_signed
     return generate_self_signed("imagesrv-console", ip_sans=[host], dns_sans=["fp-2148"])
 
 
@@ -83,7 +83,7 @@ def _free_port() -> tuple[str, int]:
 def _snapshot(tmp_path: Path, monkeypatch, address, state: str):
     """collect_snapshot on an installed server whose disk holds a stale console
     identity (canonical and serving/ copy), with the console at ``address``."""
-    from server import console_tls
+    from server.console import console_tls
     from server.dcui import data
     from server.dcui.data import CommandResult, collect_snapshot
 
@@ -116,7 +116,7 @@ def _snapshot(tmp_path: Path, monkeypatch, address, state: str):
 
 
 def test_the_dcui_shows_what_the_console_presents_not_a_stale_serving_copy(tmp_path, monkeypatch):
-    from server import console_tls
+    from server.console import console_tls
     from server.dcui import view
     live_cert, live_key = _identity("10.68.0.84")
     with _console(live_cert, live_key, tmp_path) as address:
@@ -141,7 +141,7 @@ def test_a_console_that_does_not_answer_is_unavailable_not_the_file(tmp_path, mo
 def test_while_first_boot_runs_no_fingerprint_is_shown(tmp_path, monkeypatch):
     """First boot replaces the certificate at its end: none, rather than one
     that is about to change -- even when a console already answers."""
-    from server import console_tls
+    from server.console import console_tls
     from server.dcui import view
     from datetime import datetime
     live_cert, live_key = _identity("127.0.0.1")
@@ -154,7 +154,7 @@ def test_while_first_boot_runs_no_fingerprint_is_shown(tmp_path, monkeypatch):
 
 # --- the build log ----------------------------------------------------------------
 
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 BASH = shutil.which("bash")
 posix_bash = pytest.mark.skipif(BASH is None or os.name == "nt", reason="bash (Linux)")
 FP = ":".join(["AB"] * 32)
@@ -170,7 +170,7 @@ def _summary(tmp_path: Path, **env: str) -> str:
     script.write_text("\n".join(lines[start:end + 1]) + "\n", encoding="utf-8", newline="\n")
     base = {"CONSOLE_FP": FP, "CONSOLE_TLS_HOST": "", "ADMIN_PASS": "x", "ADMIN_USER": "admin",
             "SERVERS_IF": "ens33", "SERVERS_MODE": "static", "IFACE": "", "SERVER_URL": "",
-            "TFTP_ROOT": "/srv/tftp", "DATA_DIR": "/var/lib/imagectl", "IMAGES_DIR": "/srv/images"}
+            "TFTP_ROOT": "/srv/tftp", "DATA_DIR": "/var/lib/imagesrv", "IMAGES_DIR": "/srv/images"}
     got = subprocess.run([BASH, str(script)], capture_output=True, text=True, timeout=30,
                          env={**os.environ, **base, **env}, stdin=subprocess.DEVNULL)
     assert got.returncode == 0, got.stderr
@@ -179,7 +179,7 @@ def _summary(tmp_path: Path, **env: str) -> str:
 
 @posix_bash
 def test_first_boot_s_log_has_no_fingerprint_to_compare_with(tmp_path):
-    out = _summary(tmp_path, IMAGECTL_CONSOLE_FP_ON_DCUI="1")
+    out = _summary(tmp_path, IMAGESRV_CONSOLE_FP_ON_DCUI="1")
     assert FP not in out, "first boot's log still names the fingerprint it replaces"
     assert "DCUI" in out
 

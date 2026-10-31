@@ -36,11 +36,11 @@ function ctxWith(state) {
 
 const DAY = 86400000;
 const cert = (overrides = {}) => ({
-  subject: 'imagectl.college.ac.il', issuer: 'College CA', self_signed: false,
-  sans: ['imagectl.college.ac.il'], not_after: new Date(Date.now() + 400 * DAY).toISOString(),
+  subject: 'imagesrv.college.ac.il', issuer: 'College CA', self_signed: false,
+  sans: ['imagesrv.college.ac.il'], not_after: new Date(Date.now() + 400 * DAY).toISOString(),
   fingerprint_sha256: Array(32).fill('AB').join(':'), ...overrides,
 });
-const tls = (extra = {}) => ({TLS_STATUS: {enabled: true, on_disk: cert(), pending_restart: false, covers_hostname: true, hostname: 'imagectl', ...extra}});
+const tls = (extra = {}) => ({TLS_STATUS: {enabled: true, on_disk: cert(), pending_restart: false, covers_hostname: true, hostname: 'imagesrv', ...extra}});
 
 test('unread /tls differs from a console that runs without TLS', () => {
   const unread = ctxWith({TLS_STATUS: null, tlsError: 'שגיאה 500'}).tlsRowHtml();
@@ -73,14 +73,14 @@ test('expired and soon-to-expire certificates are flagged in the row itself', ()
 });
 
 test('pending restart and a hostname missing from the cert are said in the row and explained in the details, not hidden', () => {
-  const ctx = ctxWith(tls({pending_restart: true, covers_hostname: false, hostname: 'imagectl-ta'}));
+  const ctx = ctxWith(tls({pending_restart: true, covers_hostname: false, hostname: 'imagesrv-ta'}));
   const row = ctx.tlsRowHtml();
   assert.match(row, /<pill warn>ממתינה לאתחול/);
   assert.match(row, /<pill warn>השם אינו בתעודה/);
   ctx.tlsDetailsSheet();
   const note = ctx.sheets.at(-1).note;
   assert.match(note, /באתחול השרת/);
-  assert.match(note, /<span class="mono" dir="ltr">imagectl-ta<\/span> אינו בתעודה/);
+  assert.match(note, /<span class="mono" dir="ltr">imagesrv-ta<\/span> אינו בתעודה/);
 });
 
 test('#1676: an unread value says "לא נקרא"; a raw system error (path, Errno) sits behind "פרטים טכניים", a Hebrew sentence stays in the row', () => {

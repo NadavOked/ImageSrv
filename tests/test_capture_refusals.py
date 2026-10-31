@@ -28,6 +28,8 @@ import re
 import shutil
 from pathlib import Path
 
+from agentlib import lib_files
+
 import pytest
 
 from native import requires_native
@@ -175,7 +177,7 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
     ‏`disk_scheme` לעומת זאת רץ באמת — `dd` על קובץ רגיל קורא בדיוק כמו
     על צומת, ולכן המחרוזת שמגיעה להודעה היא זו שהכלי באמת החזיר.
 
-    שרשרת הטעינה היא זו של `agent/imagectl-agent`, באותו סדר. ‏`manifest.sh`
+    שרשרת הטעינה היא זו של `agent/imagesrv-agent`, באותו סדר. ‏`manifest.sh`
     נעדר ממנה עד #338, ובסביבת בדיקה זה כשל **שקט**: ב-POSIX sh פונקציה
     שאינה מוגדרת היא "command not found" ל-stderr, הריצה ממשיכה ומחזירה
     ‏`rc=0`, והמניפסט יוצא עם `os` ריק ו-`partitions` ריק. שני השומרים
@@ -226,25 +228,25 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} "
         f"SYSROOT={posix(box)!r} SERVER=http://s; " + extra_env
         # ‏#926: jsonq.sh — shrink_open_record קורא את תשובת השרת (ok/id) ב-json_get.
-        + f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/progress.sh; "
+        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/core/progress.sh; "
         # ‏manifest.sh (#338) ואז bootca.sh, בדיוק כסדר של
-        # `imagectl-agent`: ‏`capture_disk` קורא לשניהם בשורת המניפסט,
+        # `imagesrv-agent`: ‏`capture_disk` קורא לשניהם בשורת המניפסט,
         # ופונקציה שאינה טעונה היא מניפסט פגום — לא שגיאה.
-        f". {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/manifest.sh; "
-        f". {posix(AGENT)}/lib/bootca.sh; . {posix(AGENT)}/lib/hibernation.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; "
+        f". {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/capture/manifest.sh; "
+        f". {posix(AGENT)}/lib/postdeploy/bootca.sh; . {posix(AGENT)}/lib/capture/hibernation.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; "
         # ‏#87: shrink.sh לפני capture.sh כמו בסוכן; הוא עצמו קורא ל-attended
         # (‏#906) ול-ui.sh, ולכן גם הם כאן — פונקציה שאינה טעונה היא כשל שקט.
-        f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/attended.sh; "
+        f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/core/attended.sh; "
         # ‏#926: shrinkmem.sh — הרשומה בשרת לפני הכיווץ; נטען אחרי shrink.sh כמו בסוכן.
         # ‏#929: shrinkplan.sh (המדידה והשאלה) לפניו, shrinkoffer.sh (ההצעה באתחול) אחריו.
-        f". {posix(AGENT)}/lib/shrinkplan.sh; . {posix(AGENT)}/lib/shrink.sh; . {posix(AGENT)}/lib/lcsnap.sh; "   # #1466: the RAM view
-        f". {posix(AGENT)}/lib/shrinkmem.sh; . {posix(AGENT)}/lib/shrinkoffer.sh; "
-        f". {posix(AGENT)}/lib/capturedetail.sh; "   # #1505: the console's partition table, loaded before capture.sh like the agent does
-        f". {posix(AGENT)}/lib/diskfit.sh; . {posix(AGENT)}/lib/capturegate.sh; "   # #1901/#1900 the source gates; #1808 the RAID check (diskfit.sh)
-        f"if [ -f {posix(AGENT)}/lib/captureview.sh ]; then . {posix(AGENT)}/lib/captureview.sh; fi; "   # #2213: negative control can remove the new library
-        f". {posix(AGENT)}/lib/capture.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/capturesink.sh; "   # #1217
-        f". {posix(AGENT)}/lib/readback.sh; . {posix(AGENT)}/lib/readbacklc.sh; "   # #1805: rb_capture_json (a direct send's digest; nothing here)
+        f". {posix(AGENT)}/lib/shrink/shrinkplan.sh; . {posix(AGENT)}/lib/shrink/shrink.sh; . {posix(AGENT)}/lib/localclone/lcsnap.sh; "   # #1466: the RAM view
+        f". {posix(AGENT)}/lib/shrink/shrinkmem.sh; . {posix(AGENT)}/lib/shrink/shrinkoffer.sh; "
+        f". {posix(AGENT)}/lib/capture/capturedetail.sh; "   # #1505: the console's partition table, loaded before capture.sh like the agent does
+        f". {posix(AGENT)}/lib/restore/diskfit.sh; . {posix(AGENT)}/lib/capture/capturegate.sh; "   # #1901/#1900 the source gates; #1808 the RAID check (diskfit.sh)
+        f"if [ -f {posix(AGENT)}/lib/capture/captureview.sh ]; then . {posix(AGENT)}/lib/capture/captureview.sh; fi; "   # #2213: negative control can remove the new library
+        f". {posix(AGENT)}/lib/capture/capture.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/capture/capturesink.sh; "   # #1217
+        f". {posix(AGENT)}/lib/restore/readback.sh; . {posix(AGENT)}/lib/localclone/readbacklc.sh; "   # #1805: rb_capture_json (a direct send's digest; nothing here)
         f'node_is_block() {{ grep -qxF "$1" {posix(nodes)!r} 2>/dev/null; }}; '
         # ‏#1808: שער ה-RAID נבדק ב-test_capture_gates.py (‏raid=True); כאן הוא
         # מוחלף כמו node_is_block — קופסאות רבות מזייפות גודל דיסק ב-sysfs.
@@ -293,7 +295,7 @@ def test_a_disk_that_is_not_there_says_so(tmp_path):
 def test_a_source_disk_that_is_not_gpt_names_what_was_found(tmp_path, scheme):
     """הגדרת ה"גמור" של #106 מילה במילה: לא "capture failed" אלא
     "הכונן אינו GPT (נמצא: mbr)". המגבלה עצמה נשארת — ‏GPT בלבד היא
-    החלטת אפיון (‏`docs/imagectl-spec.md:52`) — הבאג הוא שהיא הגיעה
+    החלטת אפיון (‏`docs/imagesrv-spec.md:52`) — הבאג הוא שהיא הגיעה
     ליעד בלי סיבה."""
     box, run, out = capture_run(
         tmp_path, image={"mbr": MBR_DISK, "none": BLANK_DISK}[scheme])
@@ -373,7 +375,7 @@ def capture_body() -> list[str]:
     הנעילות שלמטה נשענות על סדר וצמידות, ושתיהן היו נופלות או עוברות
     בטעות על טקסט בהערה או על `\\` בסוף שורה. בדיקת נעילה ששוברת אותה
     הערה חדשה אינה נעילה, היא רעש."""
-    source = (AGENT / "lib" / "capture.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     body = source[source.index("capture_disk() {"):]
     body = body[:body.index("\n}\n")]
     lines, buf = [], ""
@@ -435,7 +437,7 @@ def test_the_interfaces_document_says_when_the_capture_target_appears():
 
 def test_the_harness_loads_every_lib_that_capture_calls():
     """‏`213dc1f` הוסיף את `test_every_lib_file_is_loaded_and_packed` בדיוק
-    בשביל הכשל הזה — אבל הוא בודק את `agent/imagectl-agent` בלבד. הבקרה
+    בשביל הכשל הזה — אבל הוא בודק את `agent/imagesrv-agent` בלבד. הבקרה
     השלילית שלו מדווחת שכשהוסרה משם שורת הטעינה **כל שאר 1365 הטסטים
     עברו**. אותה עיוורון בדיוק השאירה את `manifest.sh` מחוץ להרנס הזה:
     חמש פונקציות החזירו "command not found" ל-stderr, והטסטים ספרו
@@ -445,13 +447,13 @@ def test_the_harness_loads_every_lib_that_capture_calls():
     פונקציה ש-`capture.sh` קורא לה בקוד חייבת להיות בשרשרת. ה-lib הבא
     שייחתך מ-`capture.sh` (‏#211) ייתפס כאן ביום שהוא נוצר.
     """
-    chain = set(re.findall(r"lib/(\w+\.sh)", inspect.getsource(capture_run)))
+    chain = set(re.findall(r"lib/(?:\w+/)?(\w+\.sh)", inspect.getsource(capture_run)))
     # ההערות יורדות: `ui_clear` מוזכר בהערה ב-capture.sh ואינו נקרא ממנה,
     # והשומר היה דורש את `ui.sh` בשרשרת בלי סיבה.
     body = re.sub(r"(?m)(?<!\S)#.*$", "",
-                  (AGENT / "lib" / "capture.sh").read_text(encoding="utf-8"))
+                  (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8"))
     missing = {}
-    for lib in sorted((AGENT / "lib").glob("*.sh")):
+    for lib in lib_files(AGENT / "lib"):
         if lib.name in chain:
             continue
         defined = re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_]*)\(\)",

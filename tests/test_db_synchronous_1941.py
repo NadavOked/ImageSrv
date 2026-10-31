@@ -38,13 +38,13 @@ def normal_by_default(monkeypatch):
 
 
 def test_the_connection_is_full_whatever_the_library_says(tmp_path, normal_by_default):
-    database = db.connect(tmp_path / "imagectl.db")
+    database = db.connect(tmp_path / "imagesrv.db")
     assert database.execute("PRAGMA synchronous").fetchone()[0] == FULL
 
 
 def test_a_second_thread_gets_its_own_connection_at_full_too(tmp_path, normal_by_default):
     """uvicorn runs every plain ``def`` in a pool thread, each with its own connection (#54)."""
-    database = db.connect(tmp_path / "imagectl.db")
+    database = db.connect(tmp_path / "imagesrv.db")
     seen: list[int] = []
     worker = threading.Thread(target=lambda: seen.append(database.execute("PRAGMA synchronous").fetchone()[0]))
     worker.start()
@@ -77,12 +77,12 @@ def test_a_value_that_did_not_hold_stops_the_server(tmp_path, monkeypatch):
 
     monkeypatch.setattr(db.sqlite3, "connect", lambda *a, **k: Stuck(real(*a, **k)))
     with pytest.raises(RuntimeError, match="synchronous"):
-        db.connect(tmp_path / "imagectl.db").execute("SELECT 1")
+        db.connect(tmp_path / "imagesrv.db").execute("SELECT 1")
 
 
 def test_the_data_still_lands(tmp_path):
     """The guard: an ordinary database opens, writes and reads back as before."""
-    database = db.connect(tmp_path / "imagectl.db")
+    database = db.connect(tmp_path / "imagesrv.db")
     database.execute("CREATE TABLE t (v TEXT)")
     database.execute("INSERT INTO t VALUES ('x')")
     database.commit()

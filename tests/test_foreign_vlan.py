@@ -23,8 +23,9 @@ pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom              # noqa: E402
 
-from server import agent_loops, foreign_vlan                  # noqa: E402
-from server.foreign_vlan import vlan_checks                   # noqa: E402
+from server.agent import agent_loops  # noqa: E402
+from server.net import foreign_vlan  # noqa: E402
+from server.net.foreign_vlan import vlan_checks                   # noqa: E402
 
 try:
     from fastapi.testclient import TestClient
@@ -51,7 +52,7 @@ def vlan_server(tmp_path: Path, images_root: Path, clock):
         pytest.skip("fastapi is required")
     from test_sender import Recorder                           # noqa: PLC0415
 
-    from server import users                                   # noqa: PLC0415
+    from server.console import users                                   # noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
 
     tftp = tmp_path / "tftp"

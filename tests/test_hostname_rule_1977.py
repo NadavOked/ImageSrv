@@ -6,7 +6,7 @@
 הכלל. שם שנרשם לפני #1997 ("עמדה 3") נוחת כאן, ומי שקורא את שורת המכונה
 צריך לדעת מה לשנות.
 
-מ-#1997 השרת אוכף את אותו כלל ברישום (`server/hostname_rule.py`,
+מ-#1997 השרת אוכף את אותו כלל ברישום (`server/core/hostname_rule.py`,
 ‏`test_hostname_rule_1997` — שם גם ההשוואה בין הסוכן לשרת).
 """
 
@@ -27,7 +27,7 @@ def refuse(tmp_path, name: str) -> dict:
     run.mkdir()
     out = sh(
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; '
         f'write_hostname sda /nonexistent.json {name!r} || true'
     )
     result = json.loads(out.strip().splitlines()[-1])

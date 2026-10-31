@@ -19,8 +19,8 @@ Then three things went wrong, one test group each:
    drawers skipped: the count now counts the red skip -- `partial 1/2`.
 
 Negative control (each group fails on the code before the fix): `git stash`
-of server/room.py, server/disk_failures.py, server/disk_events.py, server/db.py
-and agent/imagectl-agent together -- all of them (#439).
+of server/rounds/room.py, server/disks/disk_failures.py, server/disks/disk_events.py, server/db.py
+and agent/imagesrv-agent together -- all of them (#439).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import hello_body
-from server import ata_cause, disk_failures
+from server.disks import ata_cause, disk_failures
 from server.db import now_iso
 from test_final_report import (  # noqa: F401 -- `reports` is a fixture
     IMAGE, SESSION, native_tools, reports, run_path, url_of,
@@ -193,7 +193,7 @@ def test_a_wave_with_one_red_and_one_healthy_drawer_starts_at_once(room_server):
 def test_a_wave_where_every_drawer_is_red_fails_by_name_not_open_forever(room_server):
     """Both selected drawers red: nothing to write. The round fails visibly with the
     reason -- not a wave left `open` with the cloner waiting on it."""
-    from server import room as room_module               # noqa: PLC0415
+    from server.rounds import room as room_module               # noqa: PLC0415
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     opened = _open_two(room_server)
     body = hello_body(CLONER1)
@@ -267,5 +267,5 @@ def test_a_round_with_a_red_skip_ends_as_partial_one_of_two(tmp_path, reports):
     """The count is over the round's drawers, the red skip included: `partial 1/2`
     ("השיכפול הסתיים: 1 מתוך 2 דיסקים נכתבו"), not `drawers 1/1` ("הדיסקים נכתבו")."""
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
-                      stubs=RED_SKIP, env="IMAGECTL_TEST=0 D_ROLE=cloner")
+                      stubs=RED_SKIP, env="IMAGESRV_TEST=0 D_ROLE=cloner")
     assert "COUNTDOWN partial 1/2" in result["trace"], result["trace"]

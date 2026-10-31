@@ -10,7 +10,7 @@
 // לא עברה hover): לפני התיקון עמודותיה [194,384,239,60]px במנוחה קפצו ל-
 // [151,298,186,244]px ברגע ש*שורה אחרת* עברה hover (הטבלה כולה "קפצה" —
 // זה בדיוק התלונה); אחרי התיקון העמודות [151,298,186,244]px קבועות בשני
-// המצבים. צילומים: docs/design/console-redesign/built/polish/hover-*.png.
+// המצבים.
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

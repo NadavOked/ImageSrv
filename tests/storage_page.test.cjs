@@ -47,13 +47,13 @@ function setup(fixtures, role = 'admin') {
 }
 
 const IQN = 'iqn.2005-10.org.freenas.ctl:images', PORTAL = '10.44.3.75:3260';
-const LOCAL = {id: 'loc_local', name: 'מקומי', type: 'local', type_label: 'תיקייה', target: '/srv/imagectl/images', mount_point: '/srv/imagectl/images',
+const LOCAL = {id: 'loc_local', name: 'מקומי', type: 'local', type_label: 'תיקייה', target: '/srv/imagesrv/images', mount_point: '/srv/imagesrv/images',
   state: 'connected', state_label: 'מחובר', state_since: '2026-09-18T09:00:00+00:00', state_detail: '', free_bytes: 312 * 1024 ** 3, total_bytes: 926 * 1024 ** 3,
   images: 6, unavailable_images: 0, subtitle: 'דיסק השרת · ברירת המחדל לקליטה', params: {}, removable: false};
-const NAS = {id: 'loc_aaaa0001', name: 'nas-images', type: 'nfs', type_label: 'NFS', target: '10.44.10.20:/mnt/pool/images', mount_point: '/srv/imagectl/storage/nas-images',
+const NAS = {id: 'loc_aaaa0001', name: 'nas-images', type: 'nfs', type_label: 'NFS', target: '10.44.10.20:/mnt/pool/images', mount_point: '/srv/imagesrv/storage/nas-images',
   state: 'connected', state_label: 'מחובר', state_since: '2026-09-18T09:00:00+00:00', state_detail: '', free_bytes: 1.8 * 1024 ** 4, total_bytes: 4 * 1024 ** 4,
   images: 14, unavailable_images: 0, subtitle: 'nfs 4.1', params: {server: '10.44.10.20', export: '/mnt/pool/images', version: '4.1', readonly: false}, removable: true};
-const SAN = {id: 'loc_bbbb0002', name: 'san-lun1', type: 'iscsi', type_label: 'iSCSI', target: IQN, mount_point: '/srv/imagectl/storage/san-lun1',
+const SAN = {id: 'loc_bbbb0002', name: 'san-lun1', type: 'iscsi', type_label: 'iSCSI', target: IQN, mount_point: '/srv/imagesrv/storage/san-lun1',
   state: 'unreachable', state_label: 'לא נגיש', state_since: '2026-09-18T09:12:00+00:00', state_detail: 'no route to ' + PORTAL, free_bytes: 800 * 1000 ** 3, total_bytes: 800 * 1000 ** 3,
   images: 2, unavailable_images: 2, subtitle: 'ext4 · images', params: {portal: PORTAL, iqn: IQN, auto: true, fs_type: 'ext4', fs_label: 'images'}, removable: true};
 const OFF = {...NAS, id: 'loc_cccc0003', name: 'old-nas', state: 'disconnected', state_label: 'מנותק', state_detail: 'המפעיל ניתק', images: 0, unavailable_images: 0, free_bytes: null, total_bytes: null};
@@ -203,14 +203,14 @@ test('4. SMB: identity fields, scan sends the creds, params carry username/secre
   let html = run('storagePage()');
   assert.match(html, /SMB2 ומעלה · SMB1 אינו מוצע/);
   assert.match(html, /id="st-secret" type="password"/);
-  run(`storageField('username','imagectl'); storageField('secret','p4ss'); storageField('domain','COLLEGE'); storageField('server','fs01.college.local')`);
+  run(`storageField('username','imagesrv'); storageField('secret','p4ss'); storageField('domain','COLLEGE'); storageField('server','fs01.college.local')`);
   await run('storageScan()'); await settle();
-  assert.deepEqual(requests.find(r => r.url === '/storage-locations/scan').body, {type: 'smb', server: 'fs01.college.local', creds: {username: 'imagectl', secret: 'p4ss', domain: 'COLLEGE'}});
+  assert.deepEqual(requests.find(r => r.url === '/storage-locations/scan').body, {type: 'smb', server: 'fs01.college.local', creds: {username: 'imagesrv', secret: 'p4ss', domain: 'COLLEGE'}});
   html = run('storagePage()');
   assert.match(html, /software/);
   run(`storagePick('share', 'images'); storageField('readonly', true)`);
   await run('storageTest()'); await settle();
-  assert.deepEqual(requests.find(r => r.url === '/storage-locations/test').body, {type: 'smb', params: {server: 'fs01.college.local', share: 'images', username: 'imagectl', secret: 'p4ss', domain: 'COLLEGE', readonly: true}});
+  assert.deepEqual(requests.find(r => r.url === '/storage-locations/test').body, {type: 'smb', params: {server: 'fs01.college.local', share: 'images', username: 'imagesrv', secret: 'p4ss', domain: 'COLLEGE', readonly: true}});
   html = run('storagePage()');
   assert.match(html, /<span class="st ok">הצליח<\/span>/);
   assert.match(html, /לקריאה בלבד — לא נבדקה/);
@@ -218,7 +218,7 @@ test('4. SMB: identity fields, scan sends the creds, params carry username/secre
 });
 
 test('5. iSCSI א\': discover → pick target → CHAP fields → התחבר runs test → create → iscsi-login and shows the session; then 6. ב\' reads the disk', async () => {
-  const created = {...SAN, state: 'unchecked', state_label: 'לא נבדק', params: {portal: PORTAL, iqn: IQN, auto: true, chap_user: 'imagectl'}};
+  const created = {...SAN, state: 'unchecked', state_label: 'לא נבדק', params: {portal: PORTAL, iqn: IQN, auto: true, chap_user: 'imagesrv'}};
   let disk = {device: '/dev/sdb', disk_status: 'fs', fs_type: 'ext4', fs_label: 'images', fs_uuid: '7c1e0000-0000-0000-0000-00000000a94f', fs_size: 800 * 1000 ** 3};
   const fixtures = {...BASE,
     'POST /storage-locations/scan': {ok: true, items: [{portal: PORTAL, iqn: IQN}, {portal: PORTAL, iqn: IQN.replace('images', 'backup')}]},
@@ -245,7 +245,7 @@ test('5. iSCSI א\': discover → pick target → CHAP fields → התחבר run
   assert.match(html, /<span class="step done">1 פורטל<\/span>/);
   assert.match(html, /<span class="step done">2 גילוי<\/span>/);
   assert.match(html, /freenas\.ctl:backup/);
-  run(`storagePick('iqn', ${JSON.stringify(IQN)}); storageField('chap', true); storageField('chap_user', 'imagectl'); storageField('chap_secret', 'secretsecret'); storageField('name', 'san-lun1')`);
+  run(`storagePick('iqn', ${JSON.stringify(IQN)}); storageField('chap', true); storageField('chap_user', 'imagesrv'); storageField('chap_secret', 'secretsecret'); storageField('name', 'san-lun1')`);
   html = run('storagePage()');
   assert.match(html, /id="st-chap_user"/);
   assert.match(html, /<span class="step done">3 יעד ו-CHAP<\/span>/);
@@ -255,7 +255,7 @@ test('5. iSCSI א\': discover → pick target → CHAP fields → התחבר run
   const seq = requests.filter(r => r.method === 'POST').map(r => r.url);
   assert.deepEqual(seq, ['/storage-locations/scan', '/storage-locations/test', '/storage-locations', '/storage-locations/loc_bbbb0002/iscsi-login']);
   const create = requests.find(r => r.method === 'POST' && r.url === '/storage-locations');
-  assert.deepEqual(create.body, {name: 'san-lun1', type: 'iscsi', params: {portal: PORTAL, iqn: IQN, auto: true, chap_user: 'imagectl', chap_secret: 'secretsecret'}, tested: true});
+  assert.deepEqual(create.body, {name: 'san-lun1', type: 'iscsi', params: {portal: PORTAL, iqn: IQN, auto: true, chap_user: 'imagesrv', chap_secret: 'secretsecret'}, tested: true});
   html = run('storagePage()');
   assert.match(html, /<span class="st ok">session פעילה<\/span>/);
   assert.match(html, /\/dev\/sdb/);
@@ -273,7 +273,7 @@ test('5. iSCSI א\': discover → pick target → CHAP fields → התחבר run
   assert.match(html, /class="btn primary" onclick="storageMount\('loc_bbbb0002'\)"/);
   assert.match(html, /class="btn danger" onclick="storageFormatSheet\('loc_bbbb0002'\)"/);
   assert.match(html, /<input value="san-lun1" disabled>/, 'name fixed after create');
-  assert.match(html, /\/srv\/imagectl\/storage\/san-lun1/);
+  assert.match(html, /\/srv\/imagesrv\/storage\/san-lun1/);
   run(`storageFormatSheet('loc_bbbb0002')`);
   assert.equal(run('sheets.length'), 1);
   assert.equal(run('sheets[0].danger'), true);

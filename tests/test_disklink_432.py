@@ -16,6 +16,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, BASH, fake_machine, posix, sh  # noqa: F401 — fixture
 from test_cloner_gui import sh as proc_sh   # CompletedProcess, לא stdout
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -53,8 +54,8 @@ def _disk(fake_machine, libs: str = "") -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
-        f'. {posix(AGENT)}/lib/disklink.sh; {libs} build_hello'
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/hw/disklink.sh; {libs} build_hello'
     )
     (disk,) = json.loads(out)["disks"]
     return disk
@@ -121,7 +122,7 @@ def _smart_cache(fake_machine, line: str) -> None:
 
 def test_the_crc_count_rides_the_hello_when_smartctl_read_it(fake_machine):
     _smart_cache(fake_machine, "ok ok 0 0 0 137")
-    assert _disk(fake_machine, f'. {posix(AGENT)}/lib/smart.sh;')["crc"] == 137
+    assert _disk(fake_machine, f'. {posix(AGENT)}/lib/smart/smart.sh;')["crc"] == 137
 
 
 @pytest.mark.parametrize("line", ["unchecked open_failed 0 0 0 0",
@@ -129,11 +130,11 @@ def test_the_crc_count_rides_the_hello_when_smartctl_read_it(fake_machine):
                                   "unchecked no_smart 0 0 0 0"])
 def test_a_crc_smartctl_did_not_read_is_null_not_zero(fake_machine, line):
     _smart_cache(fake_machine, line)
-    assert _disk(fake_machine, f'. {posix(AGENT)}/lib/smart.sh;')["crc"] is None
+    assert _disk(fake_machine, f'. {posix(AGENT)}/lib/smart/smart.sh;')["crc"] is None
 
 
 def test_no_smart_probe_yet_is_a_null_crc(fake_machine):
-    assert _disk(fake_machine, f'. {posix(AGENT)}/lib/smart.sh;')["crc"] is None
+    assert _disk(fake_machine, f'. {posix(AGENT)}/lib/smart/smart.sh;')["crc"] is None
 
 
 def test_hello_without_the_lib_carries_none_of_the_fields(fake_machine):
@@ -142,15 +143,15 @@ def test_hello_without_the_lib_carries_none_of_the_fields(fake_machine):
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; build_hello'
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; build_hello'
     )
     (disk,) = json.loads(out)["disks"]
     assert not {"link_gbps", "link_max_gbps", "crc"} & set(disk)
 
 
 def test_the_agent_and_the_kiosk_load_the_lib():
-    assert '"$LIB_DIR/disklink.sh"' in (AGENT / "imagectl-agent").read_text(encoding="utf-8")
-    assert '"$LIB_DIR/disklink.sh"' in (AGENT / "lib/guibridge.sh").read_text(encoding="utf-8")
+    assert '"$LIB_DIR/disklink.sh"' in (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
+    assert '"$LIB_DIR/disklink.sh"' in (AGENT / "lib/gui/guibridge.sh").read_text(encoding="utf-8")
 
 
 def test_the_cloner_standby_record_carries_the_link(tmp_path):
@@ -163,8 +164,8 @@ def test_the_cloner_standby_record_carries_the_link(tmp_path):
     (sysroot / "sys/block/sda/size").write_text("1000\n", newline="\n")
     _sata(sysroot, spd="1.5 Gbps")
     out = proc_sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-             f'SYSROOT={posix(sysroot)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-             f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; cloner_gui_state')
+             f'SYSROOT={posix(sysroot)!r} LIB_DIR={posix(flat_lib())!r}; '
+             f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; cloner_gui_state')
     assert out.returncode == 0, out.stderr
     assert "not found" not in out.stderr, out.stderr
     (line,) = [l for l in (gui / "state").read_text().splitlines() if l.startswith("cdisk=")]

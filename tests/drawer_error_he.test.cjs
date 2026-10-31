@@ -71,8 +71,8 @@ test('fanout reasons keep their numbers and their wording',()=>{
 
 /* ---- העטיפות: איך הסוכן שם את סיבת fanout ב-error ---- */
 test('the wrappers in the agent are the ones the console parses (verdict.sh _write_fail, lccopy.sh lc_judge)',()=>{
-  assert.ok(fs.readFileSync(path.join(agent,'lib/verdict.sh'),'utf8').includes('partition $2: הכתיבה לדיסק נכשלה (fanout: ${3:-אין דיווח}; partclone rc=${_prc:-לא נרשם}${_plog:+; $_plog})'));
-  assert.ok(fs.readFileSync(path.join(agent,'lib/lccopy.sh'),'utf8').includes('מחיצה $2: שגיאת כתיבה אחרי $_lj_at$LC_RLM — ${_lj_line#* failed }${_lj_log:+ · $_lj_log}'));
+  assert.ok(fs.readFileSync(path.join(agent,'lib/restore/verdict.sh'),'utf8').includes('partition $2: הכתיבה לדיסק נכשלה (fanout: ${3:-אין דיווח}; partclone rc=${_prc:-לא נרשם}${_plog:+; $_plog})'));
+  assert.ok(fs.readFileSync(path.join(agent,'lib/localclone/lccopy.sh'),'utf8').includes('מחיצה $2: שגיאת כתיבה אחרי $_lj_at$LC_RLM — ${_lj_line#* failed }${_lj_log:+ · $_lj_log}'));
 });
 const PCL='Partclone fail, please check /var/log/partclone.log !';          // השורה האחרונה של partclone.log — גולמית
 test('every fanout reason, inside both wrappers, with a partclone log line behind it: Hebrew, the log line is cut',()=>{

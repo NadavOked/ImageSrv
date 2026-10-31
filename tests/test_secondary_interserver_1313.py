@@ -1,6 +1,6 @@
 """‏#1313 — משני שהותקן מה-ISO לא האזין ב-8443.
 
-נמדד במעבדה (12/10): חיפה, ‏role=secondary, ‏imagectl-server active — ומ-FW-TA
+נמדד במעבדה (12/10): חיפה, ‏role=secondary, ‏imagesrv-server active — ומ-FW-TA
 ‏`curl https://<חיפה>:8443/` → connection refused. השורש: ‏`server/main.py`
 מרים את מאזין ה-enrollment הבין-שרתי רק כשניתן ‏`--interserver-host`, והמתקין
 (‏`setup-boot-server.sh`, שגם האשף וגם firstboot מה-ISO קוראים לו) לא העביר
@@ -32,7 +32,7 @@ from native import requires_native
 from test_installer_1131 import BASH
 
 REPO = Path(__file__).resolve().parent.parent
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 PRIMARY = "https://10.30.0.5:8443"
 
 needs_bash = requires_native(("bash", BASH), why="קטע המתקין הוא bash")
@@ -49,7 +49,7 @@ def storage_args_block() -> str:
                  if line == 'if [[ "$STORAGE_ROLE" == "secondary" ]]; then'
                  and lines[i + 1].lstrip().startswith('STORAGE_ARGS="--storage-role secondary'))
     end = next(i for i, line in enumerate(lines) if i > start and line.startswith(
-        "write_file /etc/systemd/system/imagectl-server.service.d/override.conf"))
+        "write_file /etc/systemd/system/imagesrv-server.service.d/override.conf"))
     return "\n".join(lines[start:end])
 
 
@@ -60,7 +60,7 @@ def installer_storage_args(role: str, *, servers_if: str = "ens18",
         "set -euo pipefail\n"
         f"STORAGE_ROLE={role}\n"
         f"PRIMARY_URL={PRIMARY}\n"
-        "HTTP_ROOT=/srv/imagectl/boot\n"
+        "HTTP_ROOT=/srv/imagesrv/boot\n"
         "TFTP_ROOT=/srv/tftp\n"
         "IFACE=\n"
         f"SERVERS_IF={servers_if}\n"
@@ -122,7 +122,8 @@ def run_main(tmp_path: Path, monkeypatch, *, stored_role: str,
 
     import uvicorn
 
-    from server import ifaddr, ports, primary_alive, storage_nodes
+    from server.net import ifaddr, ports
+    from server.interserver import primary_alive, storage_nodes
 
     threaded: list[dict] = []
     ALIVE.clear()
@@ -197,7 +198,7 @@ def legacy_secondary_argv() -> list[str]:
     """ה-override.conf של משני שהותקן לפני התיקון (חיפה, v0.71.0) — כפי
     שהמתקין כתב אותו: ‏`--console-host <כרטיס השרתים>`, בלי ‏`--interserver-host`."""
     return ["--storage-role", "secondary", "--primary-url", PRIMARY,
-            "--boot-dir", "/srv/imagectl/boot", "--console-host", "ens18"]
+            "--boot-dir", "/srv/imagesrv/boot", "--console-host", "ens18"]
 
 
 def test_an_already_installed_secondary_gets_the_listener_after_the_update(
@@ -214,7 +215,7 @@ def test_an_already_installed_secondary_gets_the_listener_after_the_update(
 def test_the_console_host_fallback_never_opens_8443_on_a_standalone(
         tmp_path: Path, monkeypatch):
     """אותו override בדיוק, אבל standalone — אין מאזין (הראשי אינו מאזין)."""
-    argv = ["--storage-role", "standalone", "--boot-dir", "/srv/imagectl/boot",
+    argv = ["--storage-role", "standalone", "--boot-dir", "/srv/imagesrv/boot",
             "--console-host", "ens18"]
     assert run_main(tmp_path, monkeypatch, stored_role="standalone", argv=argv) == []
 

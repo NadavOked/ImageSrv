@@ -2,8 +2,8 @@
  * One window for the cloner's "שיכפול במקביל" and the build machine's
  * distribution screen, after the approved mockup
  * (docs/design/native/cancel-drawer-1386/mockup.html). */
-#ifndef IMAGECTL_CANCELDLG_H
-#define IMAGECTL_CANCELDLG_H
+#ifndef IMAGESRV_CANCELDLG_H
+#define IMAGESRV_CANCELDLG_H
 #include <cairo.h>
 #include "input.h"
 #include "ui.h"

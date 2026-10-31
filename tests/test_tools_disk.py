@@ -22,7 +22,7 @@ from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
-DISK_SH = AGENT / "lib" / "tools_disk.sh"
+DISK_SH = AGENT / "lib" / "tools" / "tools_disk.sh"
 BUILDER = REPO / "tools" / "build_initramfs.sh"
 
 

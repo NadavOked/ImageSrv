@@ -15,8 +15,8 @@ partition whose writeback failed (errseq; the real thing is in the PR, a
 dm-error device on the lab). Then the drawer's failure line as verdict.sh
 builds it, classified by the server.
 
-**Negative control** (imagectl-agent, drawers.sh, verdict.sh, restore.sh,
-smart.sh, server/ata_cause.py of 9001fc91; writeback.sh removed; Testrunner
+**Negative control** (imagesrv-agent, drawers.sh, verdict.sh, restore.sh,
+smart.sh, server/disks/ata_cause.py of 9001fc91; writeback.sh removed; Testrunner
 22/10): all three fail -- the EIO pipe runs to the end of the stream with rc 0
 and no ``writeback.failed``; the clean target and the killed pipe were never
 watched (no fsync at all).
@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server import ata_cause
+from server.disks import ata_cause
 from test_agent import AGENT, BASH, posix
 
 pytestmark = requires_native(("bash", BASH), posix=True, why="fifos, #! stand-ins and kill -9")
@@ -64,15 +64,15 @@ def _pipe(tmp_path: Path, *, eio_after_s: float | None, shape: str | None = None
     (box / "node").write_bytes(b"")
     node = posix(box / "node")
     call = (f'restore_pipe "$T" partclone.ntfs {node!r} pipeline.rc; ' if shape is None else
-            f'. {posix(AGENT)}/lib/drawerfeed.sh; DRAWER_NICE=""; DRAWER_DIRECT=""; '
+            f'. {posix(AGENT)}/lib/restore/drawerfeed.sh; DRAWER_NICE=""; DRAWER_DIRECT=""; '
             f'partition_node() {{ echo {node!r}; }}; '
             f'_drawer_pipeline sdb ntfs 3 {shape}; wait "$(cat "$T/pipeline.pid")"; ')
     script = (
         f'export PATH={posix(box / "bin")!r}:"$PATH" BOX={posix(box)!r} RUN_DIR={posix(run)!r} '
         'WRITE_FSYNC_INTERVAL_S=1; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/verdict.sh; '
-        f'. {posix(AGENT)}/lib/writeback.sh 2>/dev/null; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/verdict.sh; '
+        f'. {posix(AGENT)}/lib/restore/writeback.sh 2>/dev/null; '
         f'T={posix(t)!r}; mkfifo "$T/feed"; '
         f'( i=0; while [ "$i" -lt {STREAM_S * 4} ]; do head -c 4096 /dev/zero; sleep 0.25; i=$((i + 1)); done ) > "$T/feed" & '
         + call
@@ -136,8 +136,8 @@ def test_the_watcher_leaves_with_a_pipe_that_was_killed(tmp_path):
     script = (
         f'export PATH={posix(box / "bin")!r}:"$PATH" BOX={posix(box)!r} RUN_DIR={posix(box / "run")!r} '
         'WRITE_FSYNC_INTERVAL_S=0.3; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/writeback.sh 2>/dev/null; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/writeback.sh 2>/dev/null; '
         f'T={posix(t)!r}; mkfifo "$T/feed"; '
         # every process here is stopped by its pid, and none holds this test's pipe
         '( exec 3> "$T/feed"; exec sleep 30 ) > /dev/null 2>&1 & feeder=$!; '

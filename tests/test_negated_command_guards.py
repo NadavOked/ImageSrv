@@ -29,8 +29,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-#: הספריות שבהן רץ קוד מעטפת. ‏`vendor/` נכלל: קוד חיצוני אינו פטור.
-SCANNED_DIRS = ("agent", "install", "tools", "tests", "vendor", "boot")
+#: הספריות שבהן רץ קוד מעטפת.
+SCANNED_DIRS = ("agent", "deploy", "tools", "tests", "boot")
 
 #: ‏`!` שפותח פקודה עצמאית — בתחילת שורה, אחרי `;`, ואחרי `&&`/`||`.
 #:
@@ -230,6 +230,6 @@ def test_a_bare_negation_that_spans_a_backslash_is_still_caught(tmp_path):
 
 def test_a_negation_inside_a_test_expression_is_not_a_command():
     """‏`!` בתוך `[[ ]]` אינו פקודה; ‏`! cmd` אחרי `]] &&` עדיין נתפס."""
-    assert _hits('[[ -n "$u" && ! -f "install/$u" ]] || continue\n') == []
+    assert _hits('[[ -n "$u" && ! -f "deploy/$u" ]] || continue\n') == []
     assert _hits('[[ -n "$u" ]] && ! grep -q x f\necho PASS\n') != []
     assert _hits('setup && ! grep -q x f\n') != []

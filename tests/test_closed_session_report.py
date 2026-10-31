@@ -20,7 +20,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import setup_classroom
-from server import reports
+from server.agent import reports
 
 
 def _payload(session_id: str, mac: str, state: str = "writing") -> dict:

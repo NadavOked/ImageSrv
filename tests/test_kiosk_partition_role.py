@@ -19,6 +19,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_cloner_gui import AGENT, BASH, posix, sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH), "jq")
 
@@ -35,16 +36,16 @@ def _lc_min_free(tmp_path: Path, roles: str | None, after_libs: str = "") -> tup
     (inv / "sda.used").write_text(f"1|{390 * G}\n", newline="\n")
     if roles is not None:
         (inv / "sda.roles").write_text(roles, newline="\n")
-    out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(tmp_path / "gui")!r} IMAGECTL_TEST=1 '
-             f'LIB_DIR={posix(AGENT / "lib")!r}; . {posix(AGENT)}/lib/guibridge.sh; gui_libs; '
+    out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(tmp_path / "gui")!r} IMAGESRV_TEST=1 '
+             f'LIB_DIR={posix(flat_lib())!r}; . {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; '
              f'{after_libs} lc_min_free sda {410 * G} {posix(inv)}/sda.parts')
     assert out.returncode == 0, out.stderr
     return out.stdout.strip(), out.stderr
 
 
 def test_the_kiosk_chain_knows_where_partition_role_is(tmp_path):
-    out = sh(f'export RUN_DIR={posix(tmp_path)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-             f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; type _partition_role')
+    out = sh(f'export RUN_DIR={posix(tmp_path)!r} LIB_DIR={posix(flat_lib())!r}; '
+             f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; type _partition_role')
     assert out.returncode == 0, out.stdout + out.stderr
 
 

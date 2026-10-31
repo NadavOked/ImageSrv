@@ -2,7 +2,7 @@
 
 `run_path` הוא המסלול של סוף משימה (גם #1916). ברירת המחדל שלו
 `D_ROLE=classroom`. אחרי 'כבה' (`end_countdown` → `finish_and_stop`)
-תחנת כיתה מגיעה ל-`reboot -f`, ובלי שומר `IMAGECTL_TEST`. הפקודה
+תחנת כיתה מגיעה ל-`reboot -f`, ובלי שומר `IMAGESRV_TEST`. הפקודה
 האמיתית נכשלת רק כשהמריץ אינו root; תחת sudo (#2066) המכונה עולה מחדש.
 
 הזיוף ב-PATH נכשל אם נקרא (127, ו-126 כשאין לאן לרשום). הראיה היא
@@ -24,7 +24,7 @@ _fail=0
 for _c in reboot poweroff safe_poweroff; do
     _p=$(type -P "$_c" 2>/dev/null || true)
     case "$_p" in
-        "$IMAGECTL_POWER_STUB_DIR"/$_c) ;;
+        "$IMAGESRV_POWER_STUB_DIR"/$_c) ;;
         *) printf 'REAL-ON-PATH %s %s\n' "$_c" "${_p:-missing}"; _fail=1 ;;
     esac
 done
@@ -44,13 +44,13 @@ def test_a_classroom_task_end_hits_the_reboot_stub_and_it_fails(tmp_path):
     """**לב #2077.** סוף משימה בכיתה: `reboot -f` דרך הזיוף, והזיוף נכשל.
 
     בלי הזיוף השומר רואה את הפקודה האמיתית ויוצא (`REAL-ON-PATH`) לפני
-    שהיא רצה. קריאה בלי `IMAGECTL_POWER_LOG` נכשלת גם היא (126) — אין
+    שהיא רצה. קריאה בלי `IMAGESRV_POWER_LOG` נכשלת גם היא (126) — אין
     הצלחה שקטה כשהראיה לא נכתבה.
     """
     result = run_path(
         tmp_path, "http://127.0.0.1:9",
         GUARD + 'finish_and_stop; echo "AFTER rc=$?"; '
-        'IMAGECTL_POWER_LOG= "$IMAGECTL_POWER_STUB_DIR/reboot" -f; '
+        'IMAGESRV_POWER_LOG= "$IMAGESRV_POWER_STUB_DIR/reboot" -f; '
         'echo "UNSET rc=$?"',
         env=NO_AFTER,
     )
@@ -58,7 +58,7 @@ def test_a_classroom_task_end_hits_the_reboot_stub_and_it_fails(tmp_path):
     assert "POWER-STUB-" not in result["out"], result["out"]
     assert "AFTER rc=127" in result["out"], result["out"]
     assert "UNSET rc=126" in result["out"], result["out"]
-    assert "IMAGECTL_POWER_LOG is unset" in result["out"], result["out"]
+    assert "IMAGESRV_POWER_LOG is unset" in result["out"], result["out"]
     assert "task complete -- rebooting (after-task=reboot)" in result["log"], result["log"]
     assert _calls(tmp_path).splitlines() == ["STUB reboot -f"]
 
@@ -66,7 +66,7 @@ def test_a_classroom_task_end_hits_the_reboot_stub_and_it_fails(tmp_path):
 def test_poweroff_and_safe_poweroff_fail_closed(tmp_path):
     """כיבוי (`safe_poweroff` האמיתי, ואז הפקודה עצמה) פוגע בזיוף ונכשל.
 
-    ‏`IMAGECTL_TEST=0` כדי שהפונקציה לא תחזור ב-`TEST-POWEROFF` לפני
+    ‏`IMAGESRV_TEST=0` כדי שהפונקציה לא תחזור ב-`TEST-POWEROFF` לפני
     ‏`poweroff -f`. ‏`arm_wol` מצליח — אחרת הפונקציה חוזרת בלי לכבות,
     והבדיקה לא הייתה רואה את הפקודה.
     """
@@ -75,7 +75,7 @@ def test_poweroff_and_safe_poweroff_fail_closed(tmp_path):
         GUARD + 'finish_and_stop; echo "AFTER rc=$?"; '
         'command safe_poweroff from-test; echo "CMD rc=$?"',
         stubs='arm_wol() { return 0; }; ',
-        env=f"IMAGECTL_TEST=0 D_ROLE=build {NO_AFTER}",
+        env=f"IMAGESRV_TEST=0 D_ROLE=build {NO_AFTER}",
     )
     assert "REAL-ON-PATH" not in result["out"], result["out"]
     assert "POWER-STUB-" not in result["out"], result["out"]

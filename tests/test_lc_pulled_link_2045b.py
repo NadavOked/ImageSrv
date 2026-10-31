@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server import local_clone_report
+from server.agent import local_clone_report
 from test_local_clone_agent import posix, run
 
 pytestmark = requires_native("bash", posix=True, why="sysfs symlinks and a POSIX shell")

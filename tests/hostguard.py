@@ -38,7 +38,7 @@ import pkgutil
 #: מהחריגה עצמה; זה כאן כדי שאפשר יהיה לספור בסוף ריצה.
 blocked_host_reads: list[str] = []
 
-#: אתרי הקישור שהוחלפו בפועל (‏`server.dhcp.list_interfaces` וכו').
+#: אתרי הקישור שהוחלפו בפועל (‏`server.net.dhcp.list_interfaces` וכו').
 patched_sites: list[str] = []
 
 #: מודולים בחבילת `server` שהייבוא שלהם נכשל — ולכן **לא נסרקו**.
@@ -79,8 +79,18 @@ def _server_modules() -> list:
     """
     import server
 
+    def failed_package(name):
+        # walk_packages otherwise suppresses ImportError in a package and
+        # silently omits its descendants.
+        raise AssertionError(f"hostguard could not walk package {name}")
+
+    discovered = list(pkgutil.walk_packages(
+        server.__path__, server.__name__ + ".", onerror=failed_package))
+    assert len(discovered) >= 155, (
+        f"hostguard found {len(discovered)} server modules; expected >= 155"
+    )
     modules = [server]
-    for info in pkgutil.iter_modules(server.__path__, server.__name__ + "."):
+    for info in discovered:
         try:
             modules.append(importlib.import_module(info.name))
         except Exception as error:             # noqa: BLE001 — נרשם, לא נבלע
@@ -99,7 +109,7 @@ def block_real_host_reads() -> list[str]:
     """
     global _original
     try:
-        from server import dhcp_host
+        from server.net import dhcp_host
     except ImportError:                        # pragma: no cover — עמדה חסרה
         return []
     if _original is not None:
@@ -133,7 +143,7 @@ def unguarded_sites() -> list[str]:
 #: שהריץ את נתיב הכישלון של #845 בלי DEVROOT משלו סימן את דיסק המערכת
 #: של שרת המעבדה (#870). ‏`test_tests_never_touch_host_dev.py` תופס
 #: הגדרה מפורשת של ‏`/dev` של המארח; זה תופס את ה**היעדר**.
-NO_HOST_DEV = "/nonexistent/imagectl-tests-never-touch-host-dev"
+NO_HOST_DEV = "/nonexistent/imagesrv-tests-never-touch-host-dev"
 
 
 def detach_host_dev() -> str:
@@ -141,4 +151,3 @@ def detach_host_dev() -> str:
     טסט שצריך התקן מצביע על תיקייה משלו — לעולם לא על ‏`/dev`."""
     os.environ["DEVROOT"] = NO_HOST_DEV
     return NO_HOST_DEV
-

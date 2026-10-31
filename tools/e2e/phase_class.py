@@ -92,7 +92,7 @@ def run(ctx) -> None:
                                  {"session_wait_seconds": "2"})
     check("ה-API דוחה טיימר של שתי שניות (#1794)", status == 400, str(status))
     from server.db import connect, set_setting      # noqa: PLC0415
-    conn = connect(ctx.data_dir / "imagectl.db")
+    conn = connect(ctx.data_dir / "imagesrv.db")
     try:
         set_setting(conn, "session_wait_seconds", "2")
     finally:

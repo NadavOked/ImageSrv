@@ -329,7 +329,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--dependabot", action="store_true")
     ap.add_argument("--dependabot-only", action="store_true",
                     help="only the Dependabot rows -- for the workstation, where gh is and apt is not")
-    ap.add_argument("--github-repo", default="NadavOked/ImageCtl-archive")
+    ap.add_argument("--github-repo", default="NadavOked/ImageSrv-dev")
     a = ap.parse_args(argv)
     if not a.dependabot_only and not a.tag:
         ap.error("--tag is required (or --dependabot-only)")

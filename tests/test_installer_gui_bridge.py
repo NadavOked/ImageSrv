@@ -88,7 +88,7 @@ def bridge(m: dict, action: str, form: dict | None = None, **env: str) -> tuple[
 
 
 FORM = {"disk": "/dev/sda", "role": "standalone", "primary_url": "", "interface": "ens33", "mode": "dhcp",
-        "address": "", "netmask": "", "gateway": "", "dns": "", "hostname": "imagectl-ta",
+        "address": "", "netmask": "", "gateway": "", "dns": "", "hostname": "imagesrv-ta",
         "admin_user": "nadav", "password": "Aa123456!", "password_confirm": "Aa123456!",
         "root_password": "R00t!screen", "root_password_confirm": "R00t!screen"}   # #1632
 
@@ -189,12 +189,12 @@ def test_eject_failure_is_reported_and_reboot_only_after_eject(tmp_path):
 # --- #1310: "בדוק חיבור" — ירוק רק על ראיה חיובית, וחוסם את "הבא" ----------
 
 ALIVE = "/api/interserver/v1/alive"
-SECONDARY = {**FORM, "role": "secondary", "hostname": "imagectl-haifa", "primary_url": "192.168.68.250"}
+SECONDARY = {**FORM, "role": "secondary", "hostname": "imagesrv-haifa", "primary_url": "192.168.68.250"}
 
 
 def _primary_cert(tmp_path: Path, name: str = "primary") -> tuple[Path, str]:
     """תעודה אמיתית (כמו זהות הראשי) ו-SHA-256 של ה-SPKI שלה."""
-    from server import interserver_auth
+    from server.interserver import interserver_auth
     cert, _key = interserver_auth.generate_self_signed(name, ip_sans=["127.0.0.1"])
     pem = tmp_path / f"{name}.pem"
     pem.write_bytes(cert)
@@ -236,8 +236,8 @@ def test_check_primary_takes_a_bare_ip_and_asks_the_alive_path_on_8443(tmp_path,
 
 def test_check_primary_takes_a_host_name_too(tmp_path):
     m = _machine(tmp_path)
-    bridge(m, "check-primary", {"primary_url": "imagectl-ta.college.ac.il"})
-    assert _curl_urls(m) == ["https://imagectl-ta.college.ac.il:8443" + ALIVE]
+    bridge(m, "check-primary", {"primary_url": "imagesrv-ta.college.ac.il"})
+    assert _curl_urls(m) == ["https://imagesrv-ta.college.ac.il:8443" + ALIVE]
 
 
 @pytest.mark.parametrize("typed", ["", "http://192.168.68.250", "192.168.68.250:9443",
@@ -271,9 +271,9 @@ def test_a_real_failure_is_red_with_its_reason(tmp_path, curl_rc, stderr, reason
 def test_green_shows_name_version_fingerprint_and_records_the_check(tmp_path):
     m = _machine(tmp_path)
     pem, spki = _primary_cert(tmp_path)
-    out, _ = _answer(m, tmp_path, {"name": "imagectl-ta", "version": "v0.60.0", "fingerprint": spki},
+    out, _ = _answer(m, tmp_path, {"name": "imagesrv-ta", "version": "v0.60.0", "fingerprint": spki},
                      pem=pem)
-    assert out["ok"] == ["1"] and out["name"] == ["imagectl-ta"]
+    assert out["ok"] == ["1"] and out["name"] == ["imagesrv-ta"]
     assert out["version"] == ["v0.60.0"] and out["fingerprint"] == [spki]
     record = (m["run"] / "primary-check").read_text()
     assert record == f"url=https://192.168.68.250:8443\nfingerprint={spki}\n", \
@@ -297,7 +297,7 @@ def test_a_line_break_in_name_or_version_cannot_plant_a_fingerprint(tmp_path, fi
     m = _machine(tmp_path)
     pem, spki = _primary_cert(tmp_path)
     _, planted = _primary_cert(tmp_path, "attacker")
-    body = {"name": "imagectl-ta", "version": "v1", "fingerprint": spki}
+    body = {"name": "imagesrv-ta", "version": "v1", "fingerprint": spki}
     body[field] = f"x\nfingerprint={planted}"
     out, _ = _answer(m, tmp_path, body, pem=pem)
     assert out["ok"] == ["0"], out
@@ -351,7 +351,7 @@ def test_a_fingerprint_that_is_not_the_key_tls_showed_is_red(tmp_path):
     m = _machine(tmp_path)
     _, other_spki = _primary_cert(tmp_path, "someone-else")
     pem, _ = _primary_cert(tmp_path, "the-one-that-answered")
-    out, _ = _answer(m, tmp_path, {"name": "imagectl-ta", "version": None, "fingerprint": other_spki},
+    out, _ = _answer(m, tmp_path, {"name": "imagesrv-ta", "version": None, "fingerprint": other_spki},
                      pem=pem)
     assert out["ok"] == ["0"] and "טביעת האצבע" in out["error"][0]
 
@@ -374,7 +374,7 @@ def test_answers_carry_the_fingerprint_only_from_a_green_check_of_the_same_addre
     assert "primary_fingerprint=\n" in seen.read_text(), "not checked = no fingerprint"
 
     pem, spki = _primary_cert(tmp_path)
-    out, _ = _answer(m, tmp_path, {"name": "imagectl-ta", "version": "v1", "fingerprint": spki}, pem=pem)
+    out, _ = _answer(m, tmp_path, {"name": "imagesrv-ta", "version": "v1", "fingerprint": spki}, pem=pem)
     assert out["ok"] == ["1"]
     bridge(m, "validate", {**SECONDARY, "primary_url": "https://192.168.68.250:8443/", "step": "2",
                            "primary_fingerprint": "ff" * 32})
@@ -409,7 +409,7 @@ def test_engine_refusal_lands_on_the_address_field(tmp_path):
 
 
 def test_check_primary_green_end_to_end_against_the_real_listener(tmp_path):
-    """הראשי האמיתי (‏`server.primary_alive` + זהות + uvicorn TLS) על
+    """הראשי האמיתי (‏`server.interserver.primary_alive` + זהות + uvicorn TLS) על
     כתובת loopback משלו בפורט 8443, ו-curl/openssl/jq **אמיתיים**: ירוק,
     והטביעה היא זהות הראשי."""
     import socket
@@ -417,13 +417,14 @@ def test_check_primary_green_end_to_end_against_the_real_listener(tmp_path):
     uvicorn = pytest.importorskip("uvicorn")
     if not shutil.which("openssl"):
         pytest.fail("openssl is part of the installer image; the test host must have it too")
-    from server import db, primary_alive, storage_nodes
+    from server import db
+    from server.interserver import primary_alive, storage_nodes
     host = "127.13.10.8"
     with socket.socket() as probe:
         probe.bind((host, 8443))      # free? a busy port fails here, by name -- not a skip
     conn = db.connect(tmp_path / "p.db")
     ident = storage_nodes.ensure_identity(conn, tmp_path / "data", host_sans=[host])
-    app = primary_alive.create_alive_app(name=lambda: "imagectl-ta", version=lambda: "v0.60.0",
+    app = primary_alive.create_alive_app(name=lambda: "imagesrv-ta", version=lambda: "v0.60.0",
                                          fingerprint=ident["server_spki"])
     server = uvicorn.Server(primary_alive.server_config(app, ident, host, 8443))
     thread = threading.Thread(target=server.run, daemon=True)
@@ -439,7 +440,7 @@ def test_check_primary_green_end_to_end_against_the_real_listener(tmp_path):
         rc, out, err = bridge(m, "check-primary", {"primary_url": host})
         assert rc == 0, err
         assert out["ok"] == ["1"], out
-        assert out["name"] == ["imagectl-ta"] and out["version"] == ["v0.60.0"]
+        assert out["name"] == ["imagesrv-ta"] and out["version"] == ["v0.60.0"]
         assert out["fingerprint"] == [ident["server_spki"]]
     finally:
         server.should_exit = True

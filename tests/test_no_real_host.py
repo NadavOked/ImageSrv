@@ -24,8 +24,8 @@ import hostguard
 #: אתרי הקישור שקיימים בקוד היום. ‏`console_dhcp`, ‏`console_netcfg`
 #: ו-`health` מרכיבים את ה-hook בזמן קריאה (‏`dhcp.list_interfaces`
 #: בתוך גוף `default_hooks`), ולכן הם נפתרים דרך שני השמות האלה.
-KNOWN_SITES = {"server.dhcp.list_interfaces",
-               "server.dhcp_host.list_interfaces"}
+KNOWN_SITES = {"server.net.dhcp.list_interfaces",
+               "server.net.dhcp_host.list_interfaces"}
 
 
 def test_the_guard_is_installed_and_says_where():
@@ -51,7 +51,7 @@ def test_every_module_in_the_package_was_scanned():
 
 def test_reading_the_machine_fails_loudly_and_names_the_fix():
     """ברירת המחדל — ‏`/sys/class/net` האמיתי — נכשלת, ובשם."""
-    from server import dhcp
+    from server.net import dhcp
 
     before = len(hostguard.blocked_host_reads)
     with pytest.raises(AssertionError) as caught:
@@ -64,7 +64,7 @@ def test_reading_the_machine_fails_loudly_and_names_the_fix():
 def test_an_injected_root_still_reads_normally(tmp_path):
     """השומר חוסם את המכונה, לא את הפונקציה: שורש מוזרק עובד כרגיל —
     אחרת הבדיקה של `list_interfaces` עצמה הייתה נעלמת יחד עם הבאג."""
-    from server import dhcp
+    from server.net import dhcp
 
     for name, state in (("lo", "unknown"), ("eth0", "up")):
         card = tmp_path / name
@@ -79,7 +79,8 @@ def test_the_console_apps_never_fall_back_to_the_machine():
     """הראיה מהצד של ה-HTTP: כל ראוטר שיש לו hook בשם `interfaces`
     מקבל אותו מ-`default_hooks()`, ובריצת בדיקות ברירת המחדל הזאת
     היא השומר. ‏endpoint שלא הוזרק לו hook ייכשל — ולא יקרא מכונה."""
-    from server import console_dhcp, console_netcfg, health
+    from server.console import console_dhcp, console_netcfg
+    from server.system import health
 
     for module in (console_dhcp, console_netcfg, health):
         hook = module.default_hooks()["interfaces"]

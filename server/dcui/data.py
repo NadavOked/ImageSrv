@@ -17,16 +17,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from server import (console_tls, deploy_net, ifaddr, netcfg, netcfg_host,
-                    netcfg_rollback)
-from server import storage_nodes
+from server.console import console_tls
+from server.net import deploy_net, ifaddr, netcfg, netcfg_host, netcfg_rollback
+from server.interserver import storage_nodes
 from server.db import connect, get_setting
 
-DATA_DIR = Path("/var/lib/imagectl")
-STATUS_FILE = Path("/etc/imagectl/firstboot.status")
-ISO_MANIFEST = Path("/etc/imagectl/iso-release.json")
-PREINSTALL_REPO = Path("/opt/imagectl-src")
-SERVER_OVERRIDE = Path("/etc/systemd/system/imagectl-server.service.d/override.conf")
+DATA_DIR = Path("/var/lib/imagesrv")
+STATUS_FILE = Path("/etc/imagesrv/firstboot.status")
+ISO_MANIFEST = Path("/etc/imagesrv/iso-release.json")
+PREINSTALL_REPO = Path("/opt/imagesrv-src")
+SERVER_OVERRIDE = Path("/etc/systemd/system/imagesrv-server.service.d/override.conf")
 SYS_NET = Path("/sys/class/net")
 
 
@@ -282,7 +282,7 @@ def _version(runner: Runner, repo_dir: Path,
     for tag in candidates:
         checked = runner([
             sys.executable, "-I", str(repo_dir / "tools" / "verify-release-tag.py"),
-            str(repo_dir), tag, str(repo_dir / "install" / "release-signers"),
+            str(repo_dir), tag, str(repo_dir / "deploy" / "release-signers"),
         ])
         if checked.returncode == 0 and checked.stdout.startswith("signed: "):
             value = (tag, True)
@@ -299,13 +299,13 @@ def _version(runner: Runner, repo_dir: Path,
         manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError):
         return "unknown", False
-    return str(manifest.get("imagectl_tag") or "unknown"), False
+    return str(manifest.get("imagesrv_tag") or "unknown"), False
 
 
 def system_updates_date(data_dir: Path = DATA_DIR,
                         manifest_file: Path = ISO_MANIFEST) -> str:
     """#1411: the day of this server's Debian packages -- the security pool the
-    update button last installed (install/security-upgrade.sh), else the pool the
+    update button last installed (deploy/security-upgrade.sh), else the pool the
     ISO carried.  "" = not known: a state file that exists and cannot be read is
     not silently replaced by the older ISO date (principle 5)."""
     for path, key in ((data_dir / "security-pool.json", "date"), (manifest_file, "pool_date")):
@@ -323,7 +323,7 @@ def is_pre_install(data_dir: Path = DATA_DIR,
                    status_file: Path = STATUS_FILE) -> bool:
     """The wizard status alone is insufficient once the real DB exists."""
     return (_read_key_values(status_file).get("state") == "wizard-running"
-            and not (data_dir / "imagectl.db").exists())
+            and not (data_dir / "imagesrv.db").exists())
 
 
 def _preinstall_snapshot(rows: list[dict], runner: Runner, sys_net: Path,
@@ -383,16 +383,16 @@ def _console_certificate(status_file: Path) -> tuple[str, tuple[str, ...], str]:
 def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
                      sys_net: Path = SYS_NET, status_file: Path = STATUS_FILE,
                      override_file: Path = SERVER_OVERRIDE,
-                     repo_dir: Path = Path("/opt/imagectl"),
+                     repo_dir: Path = Path("/opt/imagesrv"),
                      manifest_file: Path = ISO_MANIFEST,
                      now: datetime | None = None, conn=None) -> Snapshot:
     rows = _interface_rows(sys_net, runner)
     current = now or datetime.now()
     if is_pre_install(data_dir, status_file):
-        source_repo = PREINSTALL_REPO if repo_dir == Path("/opt/imagectl") else repo_dir
+        source_repo = PREINSTALL_REPO if repo_dir == Path("/opt/imagesrv") else repo_dir
         return _preinstall_snapshot(
             rows, runner, sys_net, source_repo, manifest_file, current)
-    conn = conn or connect(data_dir / "imagectl.db")
+    conn = conn or connect(data_dir / "imagesrv.db")
     deploy_state = deploy_net.resolve(conn, None, None)
     deploy_name = deploy_state.interface or ""
     management_name = _management_name(
@@ -410,7 +410,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
     marker = netcfg_rollback.read_pending(data_dir / "netcfg")
     seconds = max(0, int(marker.deadline - current.timestamp())) if marker else 0
     services = {name: service_state(name, runner) for name in (
-        "imagectl-server", "dnsmasq", "nftables")}
+        "imagesrv-server", "dnsmasq", "nftables")}
     version, version_verified = _version(runner, repo_dir)
     return Snapshot(
         hostname=socket.gethostname(), version=version,
@@ -450,7 +450,7 @@ def demo_snapshot() -> Snapshot:
         ),
         deploy=None,
         services={name: ServiceState("active", "enabled") for name in
-                  ("imagectl-server", "nftables")} | {
+                  ("imagesrv-server", "nftables")} | {
                       "dnsmasq": ServiceState("inactive", "disabled")},
         storage_role="standalone", secondary_count=1,
         deploy_round=DeployRound("ses_demo", "LAB303", "running", 2, 3,

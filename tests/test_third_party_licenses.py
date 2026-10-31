@@ -53,5 +53,5 @@ def test_third_party_notices_cover_main_gpl_components() -> None:
 
 def test_iso_places_third_party_notices_at_its_root() -> None:
     text = BUILD_ISO.read_text(encoding="utf-8")
-    assert '[[ -f "$ISO_TREE/imagectl-src/THIRD_PARTY_NOTICES.md" ]]' in text
+    assert '[[ -f "$ISO_TREE/imagesrv-src/THIRD_PARTY_NOTICES.md" ]]' in text
     assert '"$ISO_TREE/THIRD_PARTY_NOTICES.md"' in text

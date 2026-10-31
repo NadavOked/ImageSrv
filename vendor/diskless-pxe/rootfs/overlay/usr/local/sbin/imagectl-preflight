@@ -1,8 +1,0 @@
-#!/bin/sh
-set -eu
-fail=0
-for x in ip curl lsblk; do command -v "$x" >/dev/null 2>&1 || { echo "FAIL missing:$x"; fail=1; }; done
-ip link show >/dev/null 2>&1 || { echo 'FAIL network-stack'; fail=1; }
-[ -d /sys/firmware/efi ] && echo 'INFO boot-mode=UEFI' || echo 'WARN boot-mode=non-UEFI'
-[ "$fail" -eq 0 ] && echo 'PASS preflight'
-exit "$fail"

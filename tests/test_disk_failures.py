@@ -2,11 +2,11 @@
 
 הכרעת נדב 16/09: הסימון על הדיסק (#845) נפסל. במקומו:
 
-* **הסיווג** (`server/ata_cause.py`) — הסוכן שולח את שורות ה-ATA של הקרנל
+* **הסיווג** (`server/disks/ata_cause.py`) — הסוכן שולח את שורות ה-ATA של הקרנל
   כמות שהן, והשרת אומר כבל/חריץ, הדיסק, או "לא סווג" (עיקרון 5 — לא ניחוש).
   שני הדפוסים נבדקים בדיוק: השורות מ-`/root/dmesg-sda-20260916-070036.txt`
   (מחשב 2, דיסק 1) = `cable`; דוגמה ריאלית עם `media error` + `UNC` = `disk`.
-* **הזיכרון** (`server/disk_failures.py`, טבלת `disk_failures`) — נכתב
+* **הזיכרון** (`server/disks/disk_failures.py`, טבלת `disk_failures`) — נכתב
   מדיווח ההתקדמות של יעד שנכשל (ממשק 4), פעם אחת ליעד, לפי סידורי
   **וגם** לפי מכונה+חריץ (בראיה השנייה הפורט אשם והדיסקים חפים).
 * **התשובה ל-hello** (ממשק 3, `disk_failures`) — רק רשומות פתוחות
@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from server import ata_cause, db, disk_failures
+from server.disks import ata_cause, disk_failures
+from server import db
 from test_server_api import hello, open_session
 
 pytest.importorskip("fastapi")

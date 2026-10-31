@@ -23,7 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from server import auth, storage_nodes, users
+from server.console import auth, users
+from server.interserver import storage_nodes
 
 try:
     from fastapi.testclient import TestClient
@@ -65,7 +66,7 @@ def _safe_hooks(tmp_path: Path) -> dict:
     """הסריקות כאן עוברות על **כל** GET של הקונסולה — גם בריאות, רשת ו-DHCP,
     שבלי הזרקה קוראים את המכונה שהטסט רץ עליה (#113, `hostguard`). מזייפים
     את המינימום שה-GET-ים צורכים; כתיבה נכשלת בשם."""
-    from server import dhcp, netcfg_host
+    from server.net import dhcp, netcfg_host
     from test_machine_identity import _health_hooks       # noqa: PLC0415
 
     fail = lambda *a, **k: pytest.fail("בדיקה נגעה במכונה אמיתית")   # noqa: E731
@@ -271,7 +272,7 @@ def test_a_secondary_answers_its_admin_exactly_like_a_standalone(tmp_path, image
     """כל GET של הקונסולה, כפי שהאדמין המקומי רואה אותו: אותו קוד תשובה על
     משני ועל standalone — מלבד ההיררכיה, ששם ההבדל הוא הפיצ'ר (409/200
     הפוכים). כל נתיב אחר שסטה = משהו שהמשני מסתיר/מגביל, וזה באג."""
-    from server import sender as sender_module             # noqa: PLC0415
+    from server.rounds import sender as sender_module             # noqa: PLC0415
 
     monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     sa_app, sa = _combined_app(tmp_path, images_root, "standalone")

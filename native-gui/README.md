@@ -143,7 +143,7 @@ writes the mockup's states as frame files (`server/dcui/samples.py`).
 ## Contract with the agent (POSIX sh)
 
 ```
-imagectl-station-gui --mac AA:.. --ip 10.. --auth-cmd 'imagectl-login' --state /run/imagectl/station.txt
+imagesrv-station-gui --mac AA:.. --ip 10.. --auth-cmd 'imagesrv-login' --state /run/imagesrv/station.txt
 ```
 
 * `--auth-cmd CMD` — on כניסה, CMD receives `<user>\n<pass>\n` on stdin; exit 0
@@ -200,8 +200,8 @@ stdout is line-buffered so a record arrives as it happens.
 | `class-start` | התחל עכשיו | — | POST `/api/console/sessions/<id>/start` |
 | `class-close` | עצור סבב… → the confirm dialog (#1270) | `confirm=<session image>` (filled, not typed) | POST `/api/console/sessions/<id>/close {confirm_name}` (#581) |
 | `restore-start` | מחק ושחזר… → the confirm dialog (#1270) | `image=<id>`, `confirm=<machine_name>` (filled, not typed) | #706/#1073: hand-off to the agent (`handoff` file) — the bridge re-reads the machine's registered name from `GET /api/v1/agent/state` and accepts only a `confirm` equal to it; the agent re-validates the image against fresh `allowed_images`, then `single_restore_run` erases the internal disk and reboots |
-| `shrink-continue\|<nonce>` · `shrink-plain\|<nonce>` · `shrink-cancel\|<nonce>` | the shrink dialog (#928): כווץ וקלוט / קלוט בלי כיווץ / בטל קליטה, or keys 1 / 2 / 3, Esc = cancel | — (the token carries the nonce of the question on screen) | `gui_shrink_dispatch` (`agent/lib/shrinkgui.sh`) writes `nonce\|<answer>` to `$GUI_DIR/shrink-decision` only for the nonce of the active `shrink-request`; no console session is needed. One answer per question; Enter answers nothing |
-| `tool-list` | the "כלים" button of the build menu (#649) | — | the bridge writes `$GUI_DIR/tools` (`tools_gui_list` in `agent/lib/tools.sh`) |
+| `shrink-continue\|<nonce>` · `shrink-plain\|<nonce>` · `shrink-cancel\|<nonce>` | the shrink dialog (#928): כווץ וקלוט / קלוט בלי כיווץ / בטל קליטה, or keys 1 / 2 / 3, Esc = cancel | — (the token carries the nonce of the question on screen) | `gui_shrink_dispatch` (`agent/lib/shrink/shrinkgui.sh`) writes `nonce\|<answer>` to `$GUI_DIR/shrink-decision` only for the nonce of the active `shrink-request`; no console session is needed. One answer per question; Enter answers nothing |
+| `tool-list` | the "כלים" button of the build menu (#649) | — | the bridge writes `$GUI_DIR/tools` (`tools_gui_list` in `agent/lib/tools/tools.sh`) |
 | `tool-run\|<id>\|<arg>\|<confirm>` | הרץ on a tool's confirm view, or a `ro` row with no argument (#649) | — (the token carries the fields; `\|` and newlines never travel) | `tools_gui_run`: the framework refuses `rw`/`destroy` unless `confirm` equals the machine's registered name, runs the domain module, and writes `$GUI_DIR/tool-result` |
 
 #1269 `drivers=<mac>|<port>|<vendor>|<model>|<mac>|<port>|…` — four fields
@@ -243,7 +243,7 @@ title=<text>  sub=<text>            # override the head texts (cloner / receiver
 # forces #st-message (the !state.known / wrong-role cases)
 message=<title>|<sub>
 
-# #1569: the one failure screen (agent/lib/failscreen.sh; mockup PR #1550).
+# #1569: the one failure screen (agent/lib/gui/failscreen.sh; mockup PR #1550).
 # fail= opens the block; a non-empty title routes to it before everything.
 fail=<tone bad|warn|inf>|<hold 0/1>|<title>|<sub>|<role>   # all Hebrew; the English line is in fail_code only
                                     # inf (#1802): not a failure -- ui_unknown, "המחשב הזה לא רשום" (blue, an i)
@@ -267,7 +267,7 @@ machine_name=<name>
 # #1252: the server this machine talks to -- the header ("שרת", "גרסה"), the
 # login foot and the standby line. name/version from GET /api/v1/agent/state
 # (.server_name / .server_version, null -> empty); the address is the host of
-# imagectl.server ($SERVER), written also in the failure snapshot and by
+# imagesrv.server ($SERVER), written also in the failure snapshot and by
 # clonergui.sh. Empty = drawn as "לא ידוע", never a made-up value.
 server_name=<name>
 server_addr=<host>
@@ -481,10 +481,10 @@ agent, as before.
 
 When no display is attached (every connector down, so i915 creates no
 `/dev/fb0` — cloner 2), the screens are drawn into a 1280×800 framebuffer
-file that `imagectl-monitor --fb <file>` serves over RFB, so the console's
+file that `imagesrv-monitor --fb <file>` serves over RFB, so the console's
 monitor page shows the machine anyway. `--backend mem [--fb-file PATH]`
-(default `/run/imagectl/fb.mem`); `auto` falls back to it after drm and
-fbdev. The kiosk (`agent/lib/guibridge.sh`) picks `mem` exactly when
+(default `/run/imagesrv/fb.mem`); `auto` falls back to it after drm and
+fbdev. The kiosk (`agent/lib/gui/guibridge.sh`) picks `mem` exactly when
 `/dev/fb0` is not a character device, and `fbdev` otherwise, as before. The
 file layout — a 4096-byte header with magic, geometry and a frame seqlock,
 then XRGB8888 rows — is the contract in `docs/interfaces.md` §15.
@@ -520,7 +520,7 @@ status bar, no background art. What each part is drawn from:
 | on screen | source |
 |---|---|
 | green dot "מחובר. ממתין לסבב." / red X "השרת לא עונה" / grey dot "ממתין לתשובה מהשרת" | `hello_rc`/`hello_age`: 200 at most 120 s old / anything else / no hello yet |
-| "מחובר אל imagectl-ta" | `server_name=`, else `server_addr=` (#1252) |
+| "מחובר אל imagesrv-ta" | `server_name=`, else `server_addr=` (#1252) |
 | "מאז 12:41" (server down) | only when the last code was a 200 that went stale -- `hello.state` keeps the last *attempt*, so after a failed one the last success is not known and the line is left out |
 | bay mapping and name source (#1495; since #2030 the card's name is the connection, see below) | the bay is drawer N of the mapping (`cdrawer_slot=`, #1495); its name is the slot name there (or `cslot_name=` without a mapping, #704), else "דיסק N"; the connection is that record's `conn`. A disk whose `cdisk=` drawer is 0 is an extra row after the bays: "—" / "לא ממופה" in the number box, "SATA n (לא ממופה)" as its name. A `coptical=` drive is "כונן CD/DVD" in its bay (or an extra row), never "ריק" |
 | size, model | `cdisk=` fields 3–4; the size in market units (500107862016 → "500 GB") |
@@ -633,15 +633,15 @@ tools/run-smoke.sh           # 1. Hebrew first. Stop here if it fails.
 make png                     # 2. out/station-*-{light,dark}.png: compare to the HTML
 tools/measure-size.sh        # 3. the real initramfs cost, uncompressed and zstd'd
 # 4. on a VM console (root, no compositor running):
-FONTCONFIG_FILE=$PWD/fonts.conf ./imagectl-station-gui --demo --mac 00:15:5D:01:02:03 --state /tmp/state.txt
+FONTCONFIG_FILE=$PWD/fonts.conf ./imagesrv-station-gui --demo --mac 00:15:5D:01:02:03 --state /tmp/state.txt
 ```
 
 For the initramfs (a later change to `tools/build_initramfs.sh`, not made
-here): `copy_bin imagectl-station-gui` pulls the library closure exactly as it
+here): `copy_bin imagesrv-station-gui` pulls the library closure exactly as it
 does for every other binary; add the six font files (the faces `index.html`
 loads: Sans Hebrew 400/500/600/700, Mono 400/500 — `measure-size.sh` names
 them) under `/usr/share/fonts/truetype/ibm-plex`, `fonts.conf` as
-`/etc/imagectl/fonts.conf`, and export `FONTCONFIG_FILE` in the kiosk
+`/etc/imagesrv/fonts.conf`, and export `FONTCONFIG_FILE` in the kiosk
 wrapper. With that file, `/etc/fonts` and `/usr/share/fontconfig` need not
 be packed. Kernel side: a KMS driver for the target must be in
 `REQUIRED_MODULES` — `simpledrm` covers any UEFI machine from the firmware

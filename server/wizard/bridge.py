@@ -8,12 +8,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from server.console_tls import fingerprint_sha256
+from server.console.console_tls import fingerprint_sha256
 
 API_BASE = "https://127.0.0.1:8081/api/wizard"
-STATUS_FILE = Path("/etc/imagectl/firstboot.status")
-ROLE_FILE = Path("/etc/imagectl/installer-role")
-CERT_FILE = Path("/var/lib/imagectl/console-tls/console.crt")
+STATUS_FILE = Path("/etc/imagesrv/firstboot.status")
+ROLE_FILE = Path("/etc/imagesrv/installer-role")
+CERT_FILE = Path("/var/lib/imagesrv/console-tls/console.crt")
 TIMEOUT = 10
 
 

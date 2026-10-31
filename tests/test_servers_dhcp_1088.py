@@ -28,7 +28,8 @@ uvicorn = pytest.importorskip("uvicorn")
 
 import server.app
 import server.main
-from server import deploy_net, dhcp, health, ifaddr, netcfg, netcfg_host, ports
+from server.net import deploy_net, dhcp, ifaddr, netcfg, netcfg_host, ports
+from server.system import health
 
 try:
     from fastapi.testclient import TestClient
@@ -36,8 +37,8 @@ except ImportError:                                   # pragma: no cover
     TestClient = None
 
 REPO = Path(__file__).resolve().parent.parent
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
-UNIT = REPO / "install" / "imagectl-server.service"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
+UNIT = REPO / "deploy" / "imagesrv-server.service"
 
 
 # --- 1. ifaddr ------------------------------------------------------------------
@@ -160,7 +161,7 @@ lease {
   interface "eth0";
   fixed-address 10.1.2.3;
   option dhcp-server-identifier 10.1.0.1;
-  option host-name "imagectl";
+  option host-name "imagesrv";
   renew 4 2026/09/18 06:00:00;
   expire 4 2026/09/18 12:00:00;
 }
@@ -192,8 +193,8 @@ def test_servers_nic_status_three_states():
     lease = ifaddr.parse_dhclient_leases(LEASES)
     assert ifaddr.servers_nic_status("eth0", None, None, lookup_failed="ip נפל")[0] == "unknown"
     assert ifaddr.servers_nic_status("eth0", None, None)[0] == "warn"
-    state, detail = ifaddr.servers_nic_status("eth0", "10.1.2.9", lease, hostname="imagectl")
-    assert state == "ok" and "DHCP" in detail and "פג ב-" in detail and "imagectl" in detail
+    state, detail = ifaddr.servers_nic_status("eth0", "10.1.2.9", lease, hostname="imagesrv")
+    assert state == "ok" and "DHCP" in detail and "פג ב-" in detail and "imagesrv" in detail
     state, detail = ifaddr.servers_nic_status("eth0", "10.1.2.9", None)
     assert state == "ok" and "סטטי" in detail
     state, detail = ifaddr.servers_nic_status("eth0", "10.1.2.3", lease)
@@ -437,7 +438,7 @@ def _run_main_no_url(tmp_path, monkeypatch, interface_for=None):
 
 def test_without_server_url_and_without_a_console_record_the_server_is_unconfigured(
         tmp_path, monkeypatch, capsys):
-    """התקנה נקייה (#1088): היחידה מעבירה ${IMAGECTL_URL} ריק. השרת עולה —
+    """התקנה נקייה (#1088): היחידה מעבירה ${IMAGESRV_URL} ריק. השרת עולה —
     סוכן על loopback בלבד, ומצב ההפצה נאמר: source=none."""
     configs, captured = _run_main_no_url(tmp_path, monkeypatch)
     assert captured["args"][2] == "http://127.0.0.1:8080"
@@ -453,7 +454,7 @@ def test_without_server_url_the_console_record_wins(tmp_path, monkeypatch):
     from server.db import connect
     data = tmp_path / "data"
     data.mkdir()
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     deploy_net.record(conn, "eth1", "http://10.44.9.10:8080")
     conn.close()
     configs, captured = _run_main_no_url(tmp_path, monkeypatch,
@@ -471,7 +472,7 @@ def test_a_console_record_whose_address_left_the_nic_degrades_instead_of_dying(
     from server.db import connect
     data = tmp_path / "data"
     data.mkdir()
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     deploy_net.record(conn, "eth1", "http://10.44.9.10:8080")
     conn.close()
 
@@ -487,7 +488,7 @@ def test_server_url_flag_still_wins_and_is_still_ip_only(tmp_path, monkeypatch):
     """‏#498 לא נשבר: עם הדגל — אותה בדיקה, אותה דחייה."""
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: pytest.fail("הגיע ל-runtime"))
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://imagectl.college:8080",
+        "server.main", "--server-url", "http://imagesrv.college:8080",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img")])
     with pytest.raises(SystemExit):
         server.main.main()
@@ -514,7 +515,7 @@ def test_write_grub_cfg_uses_the_installers_generator(tmp_path):
     assert deploy_net.write_grub_cfg("http://10.44.9.10:8080", tmp_path) is None
     text = (tmp_path / "grub" / "grub.cfg").read_text(encoding="ascii")
     assert text == render_bootstrap(GrubConfig(server_base="http://10.44.9.10:8080"))
-    assert "set imagectl_fallback=10.44.9.10:8080" in text
+    assert "set imagesrv_fallback=10.44.9.10:8080" in text
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX umask and modes")
@@ -579,7 +580,7 @@ def _fake_nft(calls, *, load_fails=False):
     def run(cmd, **kw):
         calls.append(list(cmd))
         if cmd[0] == "sh":
-            return True, "table inet imagectl { }\n", ""
+            return True, "table inet imagesrv { }\n", ""
         if cmd[:2] == ["nft", "-c"]:
             return True, "", ""
         if cmd[:2] == ["nft", "-f"] and cmd[2].endswith(".candidate"):
@@ -593,12 +594,12 @@ def _fake_nft(calls, *, load_fails=False):
 def test_regenerate_firewall_replaces_the_file_only_after_the_kernel_took_it(tmp_path, monkeypatch):
     """‏#1121 ס' 2: הקובץ הישן נדרס רק אחרי `nft -f` שהצליח — ודרך candidate."""
     conf = tmp_path / "nftables.conf"
-    conf.write_text("# ImageCtl old\n", encoding="utf-8")
+    conf.write_text("# ImageSrv old\n", encoding="utf-8")
     calls = []
     monkeypatch.setattr(deploy_net, "_run", _fake_nft(calls))
     assert deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if="eth0",
                                           conf=conf) is None
-    assert conf.read_text(encoding="utf-8") == "table inet imagectl { }\n"
+    assert conf.read_text(encoding="utf-8") == "table inet imagesrv { }\n"
     nft = [c for c in calls if c[0] == "nft"]
     assert nft[0][:2] == ["nft", "-c"] and nft[1][:2] == ["nft", "-f"]
     assert nft[1][2].endswith(".candidate")                 # לא הקובץ החי
@@ -610,12 +611,12 @@ def test_regenerate_firewall_keeps_the_old_file_and_restores_the_old_ruleset_whe
     """‏`nft -c` עובר ו-`nft -f` נכשל → /etc/nftables.conf הישן נשאר, ה-ruleset
     הישן נטען חזרה ממנו, וה-candidate אינו נשאר על הדיסק."""
     conf = tmp_path / "nftables.conf"
-    conf.write_text("# ImageCtl old\n", encoding="utf-8")
+    conf.write_text("# ImageSrv old\n", encoding="utf-8")
     calls = []
     monkeypatch.setattr(deploy_net, "_run", _fake_nft(calls, load_fails=True))
     err = deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if="eth0", conf=conf)
     assert err and "could not process rule" in err and "הוחזר" in err
-    assert conf.read_text(encoding="utf-8") == "# ImageCtl old\n"
+    assert conf.read_text(encoding="utf-8") == "# ImageSrv old\n"
     assert calls[-1] == ["nft", "-f", str(conf)]                # ההחזרה — מהקובץ הישן
     assert not conf.with_name("nftables.conf.candidate").exists()
 
@@ -623,7 +624,7 @@ def test_regenerate_firewall_keeps_the_old_file_and_restores_the_old_ruleset_whe
 @pytest.mark.parametrize("services", [None, [("eth1", ["netboot"]), ("eth0", ["console"])]])
 def test_proxy_1829_regeneration_passes_interface_flags(tmp_path, monkeypatch, services):
     conf = tmp_path / "nftables.conf"
-    conf.write_text("# ImageCtl old\n", encoding="utf-8")
+    conf.write_text("# ImageSrv old\n", encoding="utf-8")
     calls = []
     monkeypatch.setattr(deploy_net, "_run", _fake_nft(calls))
     error = deploy_net.regenerate_firewall(
@@ -632,16 +633,16 @@ def test_proxy_1829_regeneration_passes_interface_flags(tmp_path, monkeypatch, s
     assert error is None
     assert calls[0][-6:] == ["--primary-ip", "10.1.2.3", "--proxy-if", "eth1", "--proxy-if", "eth2"]
     assert ("--per-nic" in calls[0]) is (services is not None)
-    assert conf.read_text(encoding="utf-8") == "table inet imagectl { }\n"
+    assert conf.read_text(encoding="utf-8") == "table inet imagesrv { }\n"
 
 
 @pytest.mark.parametrize("classrooms", [False, True])
 def test_proxy_1829_saved_modes_and_installer_use_the_same_edition_gate(
         tmp_path, monkeypatch, capsys, classrooms):
-    from server import capabilities
+    from server.core import capabilities
     from server.db import connect, set_setting
     monkeypatch.setattr(capabilities, "CLASSROOMS", classrooms)
-    db_path = tmp_path / "imagectl.db"
+    db_path = tmp_path / "imagesrv.db"
     conn = connect(db_path)
     for cfg in (dhcp.InterfaceConfig("eth1", proxy=True),
                 dhcp.InterfaceConfig("eth2", enabled=True),
@@ -661,10 +662,10 @@ def test_proxy_1829_saved_modes_and_installer_use_the_same_edition_gate(
 
 @pytest.mark.parametrize("raw,name", [("{broken", "eth1"), ('{"proxy": true}', "eth1\neth0")])
 def test_proxy_1829_unreadable_or_unsafe_settings_stop_completion(tmp_path, monkeypatch, raw, name):
-    from server import capabilities
+    from server.core import capabilities
     from server.db import connect, set_setting
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     set_setting(conn, dhcp.SETTING_PREFIX + name, raw)
     calls = []
     result = deploy_net.complete(_complete_ctx(tmp_path, _complete_hooks(calls)), conn,
@@ -676,10 +677,10 @@ def test_proxy_1829_unreadable_or_unsafe_settings_stop_completion(tmp_path, monk
 
 
 def test_proxy_1829_completion_preserves_existing_proxy_rules(tmp_path, monkeypatch):
-    from server import capabilities
+    from server.core import capabilities
     from server.db import connect, set_setting
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     set_setting(conn, "dhcp:eth2", dhcp.InterfaceConfig("eth2", proxy=True).to_json())
     calls, firewalls = [], []
     hooks = _complete_hooks(calls)
@@ -695,15 +696,15 @@ def test_proxy_1829_completion_preserves_existing_proxy_rules(tmp_path, monkeypa
 
 def test_restart_is_scheduled_under_a_unique_transient_unit(monkeypatch):
     """‏#1121 ס' 3: שתי השלמות בתוך חלון ה-3 ש' — שתי יחידות שונות, לא
-    "Unit imagectl-deploy-restart already exists"."""
+    "Unit imagesrv-deploy-restart already exists"."""
     calls = []
     monkeypatch.setattr(deploy_net, "_run", lambda cmd, **kw: calls.append(cmd) or (True, "", ""))
     assert deploy_net.restart_server_later() is None
     assert deploy_net.restart_server_later() is None
     units = [next(a for a in c if a.startswith("--unit=")) for c in calls]
-    assert all(u.startswith("--unit=imagectl-deploy-restart") for u in units)
+    assert all(u.startswith("--unit=imagesrv-deploy-restart") for u in units)
     assert units[0] != units[1]
-    assert all("--collect" in c and c[-3:] == ["systemctl", "restart", "imagectl-server"]
+    assert all("--collect" in c and c[-3:] == ["systemctl", "restart", "imagesrv-server"]
                for c in calls)
 
 
@@ -757,14 +758,14 @@ def test_complete_without_a_servers_nic_stops_only_when_a_firewall_is_installed(
     conf = tmp_path / "nftables.conf"
     assert deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if=None,
                                           conf=conf) is None
-    conf.write_text("# ImageCtl\n", encoding="utf-8")
+    conf.write_text("# ImageSrv\n", encoding="utf-8")
     err = deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if=None, conf=conf)
     assert err and "כרטיס השרתים אינו ידוע" in err
-    assert conf.read_text(encoding="utf-8") == "# ImageCtl\n"
+    assert conf.read_text(encoding="utf-8") == "# ImageSrv\n"
 
 
 def test_render_adds_the_deploy_interface_line_when_set_from_the_console():
-    """‏R20-F1 במסירה: imagectl.conf של המתקין בלי interface= — השורה
+    """‏R20-F1 במסירה: imagesrv.conf של המתקין בלי interface= — השורה
     נכתבת בקובץ של הקונסולה, גם בלי אף DHCP דלוק, ולא פעמיים."""
     text = dhcp.render([], deploy_interface="eth1")
     assert "bind-interfaces" in text and "interface=eth1" in text
@@ -806,10 +807,10 @@ def test_render_pins_tftp_to_loopback_when_no_file_names_an_interface():
                                             ("cli", False)])
 def test_render_dnsmasq_pins_tftp_unless_the_unit_names_the_deploy_nic(
         tmp_path, images_root, clock, source, pinned):
-    """‏cli = המתקין כתב `interface=<הפצה>` ב-imagectl.conf (המעבדה) — לא
+    """‏cli = המתקין כתב `interface=<הפצה>` ב-imagesrv.conf (המעבדה) — לא
     נוגעים בנתיב שעובד. ‏console/none = הקובץ של הקונסולה הוא היחיד, ובלי
     שם בו dnsmasq היה מגיש TFTP על כרטיס השרתים."""
-    from server import console_dhcp
+    from server.console import console_dhcp
     from server.app import create_app
     from server.db import set_setting
     app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080",
@@ -840,7 +841,7 @@ def console(tmp_path: Path, images_root: Path, clock):
     """שרת עם שני כרטיסים; eth1 נושא את 10.44.9.10, eth0 בלי הכתובת הזו."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     fake = {
@@ -881,13 +882,13 @@ def console(tmp_path: Path, images_root: Path, clock):
 
 @pytest.mark.parametrize("per_nic", [False, True])
 def test_proxy_1829_console_toggle_regenerates_and_removes_rule(console, monkeypatch, per_nic):
-    from server import capabilities
+    from server.core import capabilities
     from server.db import set_setting
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
     build, fake = console
     client, ctx, _deploy = build("cli")
     if per_nic:
-        from server import nic_services
+        from server.net import nic_services
         set_setting(ctx.conn, nic_services.SETTING_PREFIX + "eth1", json.dumps({"services": ["netboot"]}))
     for proxy in (True, False):
         response = client.put("/api/console/net/interfaces/eth1", json={
@@ -903,7 +904,7 @@ def test_proxy_1829_console_toggle_regenerates_and_removes_rule(console, monkeyp
 
 @pytest.mark.parametrize("failure", ["return", "raise", "missing"])
 def test_proxy_1829_console_reports_firewall_failure(console, monkeypatch, failure):
-    from server import capabilities
+    from server.core import capabilities
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
     build, fake = console
     client, ctx, _deploy = build("cli")
@@ -923,7 +924,7 @@ def test_proxy_1829_console_reports_firewall_failure(console, monkeypatch, failu
 
 
 def test_proxy_1829_forgetting_an_interface_removes_its_firewall_rule(console, monkeypatch):
-    from server import capabilities
+    from server.core import capabilities
     from server.db import set_setting
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
     build, fake = console
@@ -963,7 +964,7 @@ def test_first_deploy_from_the_deploy_window_derives_the_address_then_completes(
     בעבר זה היה שני מסכים ("עריכת כתובת" ואז "DHCP") בסדר שהמפעיל היה צריך לדעת."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     fake = {"interfaces": [
@@ -1078,7 +1079,7 @@ def test_full_dhcp_on_another_nic_after_console_deploy_is_409(console, classroom
 
 def test_first_enable_lock_refuses_a_concurrent_first_enable(console, monkeypatch):
     """הנעילה סביב ההדלקה הראשונה: כשהיא תפוסה — 409, לא השלמה כפולה."""
-    from server import console_dhcp
+    from server.console import console_dhcp
     build, fake = console
     client, ctx, _ = build("none")
     assert console_dhcp._first_enable_lock.acquire(blocking=False)
@@ -1115,7 +1116,7 @@ def test_dhcp_enable_with_a_cli_address_does_not_touch_the_install(console):
     r = client.put("/api/console/net/interfaces/eth1", json={**GOOD, "confirm": "eth1"})
     assert r.status_code == 200 and "deploy" not in r.json()
     assert fake["deploy_calls"] == [] and deploy_net.stored(ctx.conn) == (None, None)
-    # עם הדגל — imagectl.conf של המתקין נושא את interface=; כאן לא מכפילים.
+    # עם הדגל — imagesrv.conf של המתקין נושא את interface=; כאן לא מכפילים.
     assert "Deploy interface, set from the console" not in fake["applied"][-1]
 
 
@@ -1183,25 +1184,25 @@ def test_health_servers_nic_row_only_when_injected(health_ctx):
 
 def test_dhcp_stanza_sends_the_hostname():
     cfg = netcfg.NetConfig("eth0", mode=netcfg.MODE_DHCP)
-    text = netcfg.render(cfg, hostname="imagectl")
-    assert "iface eth0 inet manual\n    up /usr/sbin/dhcpcd -4 -b -h imagectl eth0\n" in text
+    text = netcfg.render(cfg, hostname="imagesrv")
+    assert "iface eth0 inet manual\n    up /usr/sbin/dhcpcd -4 -b -h imagesrv eth0\n" in text
     assert "hostname" not in netcfg.render(cfg)
     assert "hostname" not in netcfg.render(
-        netcfg.NetConfig("eth1", mode=netcfg.MODE_STATIC, address="10.44.9.10"), hostname="imagectl")
+        netcfg.NetConfig("eth1", mode=netcfg.MODE_STATIC, address="10.44.9.10"), hostname="imagesrv")
 
 
 def test_console_preview_writes_the_hostname_into_the_dhcp_file(tmp_path, images_root, clock):
-    from server import users
+    from server.console import users
     from server.app import create_app
     app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock,
-                     netcfg_hooks={"hostname": lambda: "imagectl-haifa",
+                     netcfg_hooks={"hostname": lambda: "imagesrv-haifa",
                                    "interfaces": lambda: [{"name": "eth0", "state": "up", "addresses": []}]})
     users.create(app.state.ctx.conn, "noc", "Admin-pass-123!", "admin", by="test")
     client = TestClient(app)
     client.post("/api/console/login", json={"username": "noc", "password": "Admin-pass-123!"})
     r = client.post("/api/console/net/config/eth0/preview", json={"mode": "dhcp"})
     assert r.status_code == 200, r.text
-    assert "up /usr/sbin/dhcpcd -4 -b -h imagectl-haifa eth0" in r.json()["after"]
+    assert "up /usr/sbin/dhcpcd -4 -b -h imagesrv-haifa eth0" in r.json()["after"]
 
 
 MAIN_IFACES = """# The primary network interface
@@ -1226,7 +1227,7 @@ def test_comment_out_stanzas_removes_only_that_interface():
     assert "iface eth1 inet static" in live and "    address 10.44.9.10" in live
     assert not any(l.split()[:2] == ["iface", "eth0"] for l in live)
     assert "allow-hotplug eth0" not in live
-    assert "# imagectl: iface eth0 inet dhcp" in text
+    assert "# imagesrv: iface eth0 inet dhcp" in text
     assert netcfg_host.comment_out_stanzas(MAIN_IFACES, "eth9") == (MAIN_IFACES, False)
 
 
@@ -1234,17 +1235,17 @@ def test_adopt_interface_backs_up_comments_out_sources_and_writes(tmp_path):
     main = tmp_path / "interfaces"
     root = tmp_path / "interfaces.d"
     main.write_text(MAIN_IFACES, encoding="utf-8")
-    text = netcfg.render(netcfg.NetConfig("eth0", mode="dhcp"), hostname="imagectl")
+    text = netcfg.render(netcfg.NetConfig("eth0", mode="dhcp"), hostname="imagesrv")
     notes, error = netcfg_host.adopt_interface("eth0", text, main=main, root=root, backup_suffix="t")
     assert error is None
-    assert (tmp_path / "interfaces.pre-imagectl.t").read_text(encoding="utf-8") == MAIN_IFACES
+    assert (tmp_path / "interfaces.pre-imagesrv.t").read_text(encoding="utf-8") == MAIN_IFACES
     new_main = main.read_text(encoding="utf-8")
     assert f"source {str(root).rstrip('/')}/*" in new_main
-    assert "# imagectl: iface eth0 inet dhcp" in new_main
-    assert (root / "imagectl-eth0").read_text(encoding="utf-8") == text
+    assert "# imagesrv: iface eth0 inet dhcp" in new_main
+    assert (root / "imagesrv-eth0").read_text(encoding="utf-8") == text
     # ריצה שנייה — אין מה להעיר, אין גיבוי נוסף, הקובץ נכתב שוב.
     notes2, error2 = netcfg_host.adopt_interface("eth0", text, main=main, root=root, backup_suffix="u")
-    assert error2 is None and not (tmp_path / "interfaces.pre-imagectl.u").exists()
+    assert error2 is None and not (tmp_path / "interfaces.pre-imagesrv.u").exists()
 
 
 # --- המתקין והיחידה -------------------------------------------------------------
@@ -1268,16 +1269,16 @@ def test_installer_netcfg_block_writes_dhcp_with_hostname_and_records_it(tmp_pat
     real = netcfg_host.adopt_interface
     monkeypatch.setattr(netcfg_host, "adopt_interface",
                         lambda name, text, **kw: real(name, text, main=main, root=root))
-    monkeypatch.setattr(socket, "gethostname", lambda: "imagectl-haifa")
+    monkeypatch.setattr(socket, "gethostname", lambda: "imagesrv-haifa")
     for k, v in {"SERVERS_IF": "eth0", "SERVERS_MODE": "dhcp", "SERVERS_ADDR": "",
                  "SERVERS_MASK": "", "SERVERS_GW": "", "SERVERS_DNS": ""}.items():
         monkeypatch.setenv(k, v)
-    exec(compile(code, "install/setup-boot-server.sh", "exec"), {})
-    written = (root / "imagectl-eth0").read_text(encoding="utf-8")
+    exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
+    written = (root / "imagesrv-eth0").read_text(encoding="utf-8")
     assert "iface eth0 inet manual" in written
-    assert "up /usr/sbin/dhcpcd -4 -b -h imagectl-haifa eth0" in written
-    assert "# imagectl: iface eth0 inet dhcp" in main.read_text(encoding="utf-8")
-    conn = connect(tmp_path / "imagectl.db")
+    assert "up /usr/sbin/dhcpcd -4 -b -h imagesrv-haifa eth0" in written
+    assert "# imagesrv: iface eth0 inet dhcp" in main.read_text(encoding="utf-8")
+    conn = connect(tmp_path / "imagesrv.db")
     assert json.loads(get_setting(conn, netcfg.SETTING_PREFIX + "eth0"))["mode"] == "dhcp"
 
 
@@ -1290,7 +1291,7 @@ def test_installer_netcfg_block_refuses_a_bad_static_address(tmp_path, monkeypat
                  "SERVERS_MASK": "", "SERVERS_GW": "", "SERVERS_DNS": ""}.items():
         monkeypatch.setenv(k, v)
     with pytest.raises(SystemExit) as exc:
-        exec(compile(code, "install/setup-boot-server.sh", "exec"), {})
+        exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
     assert "אינה תקינה" in str(exc.value)
 
 
@@ -1321,7 +1322,7 @@ def test_installer_static_nic_writes_the_dns_from_the_screen_to_resolv_conf(tmp_
     ‏`/etc/resolv.conf` אחרי firstboot — ‏`getent hosts` החזיר 2. ברשת בלי DHCP
     אף אחד אחר לא כותב אותו."""
     code, resolv = _netcfg_block(tmp_path, monkeypatch, "static", "10.68.0.1, 1.1.1.1")
-    exec(compile(code, "install/setup-boot-server.sh", "exec"), {})
+    exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
     servers = [line.split()[1] for line in resolv.read_text(encoding="utf-8").splitlines()
                if line.startswith("nameserver ")]
     assert servers == ["10.68.0.1", "1.1.1.1"]
@@ -1334,7 +1335,7 @@ def test_installer_leaves_resolv_conf_to_dhcpcd_or_alone_without_dns(tmp_path, m
     לכתוב, ומה שיש (lease זמני של firstboot) אינו נמחק."""
     before = "# Generated by dhcpcd from eth0.dhcp\nnameserver 192.168.68.1\n"
     code, resolv = _netcfg_block(tmp_path, monkeypatch, mode, dns, resolv_text=before)
-    exec(compile(code, "install/setup-boot-server.sh", "exec"), {})
+    exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
     assert resolv.read_text(encoding="utf-8") == before
 
 
@@ -1343,7 +1344,7 @@ def test_installer_resolv_conf_that_does_not_read_back_fails_by_name(tmp_path, m
     code, resolv = _netcfg_block(tmp_path, monkeypatch, "static", "10.68.0.1")
     monkeypatch.setattr(netcfg_host, "write_resolv", lambda text, path: None)   # "wrote" nothing
     with pytest.raises(SystemExit) as exc:
-        exec(compile(code, "install/setup-boot-server.sh", "exec"), {})
+        exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
     assert str(resolv) in str(exc.value)
 
 
@@ -1364,16 +1365,16 @@ def test_installer_text_deploy_is_optional_and_servers_nic_is_dhcp_by_default():
     assert "getent ahostsv4" in text                                # ראשי בשם → כתובת לחומת האש
 
 
-def test_unit_no_longer_requires_imagectl_url_and_can_write_the_tftp_root():
+def test_unit_no_longer_requires_imagesrv_url_and_can_write_the_tftp_root():
     text = UNIT.read_text(encoding="utf-8")
     assert "ExecStartPre" not in text
-    assert "${IMAGECTL_URL}" in text
+    assert "${IMAGESRV_URL}" in text
     rw = next(l for l in text.splitlines() if l.startswith("ReadWritePaths="))
     assert "-/srv/tftp" in rw
 
 
 def test_server_main_accepts_an_empty_server_url_argument():
-    """היחידה מעבירה ${IMAGECTL_URL} ריק כארגומנט ריק אחד — הפרסר מקבל."""
+    """היחידה מעבירה ${IMAGESRV_URL} ריק כארגומנט ריק אחד — הפרסר מקבל."""
     args = server.main.build_parser().parse_args(["--server-url", ""])
     assert args.server_url == "" and args.tftp_root == "/srv/tftp"
     assert server.main.build_parser().parse_args([]).server_url == ""
@@ -1383,9 +1384,9 @@ def test_server_main_accepts_an_empty_server_url_argument():
 
 
 def test_interserver_url_accepts_a_hostname_and_the_client_resolves_per_connection(monkeypatch):
-    from server import interserver_auth, storage_client
-    host, port, _ = interserver_auth.parse_interserver_url("https://imagectl.college.local:8443/")
-    assert (host, port) == ("imagectl.college.local", 8443)
+    from server.interserver import interserver_auth, storage_client
+    host, port, _ = interserver_auth.parse_interserver_url("https://imagesrv.college.local:8443/")
+    assert (host, port) == ("imagesrv.college.local", 8443)
     seen = []
 
     def fake_connect(addr, timeout=None):
@@ -1394,18 +1395,18 @@ def test_interserver_url_accepts_a_hostname_and_the_client_resolves_per_connecti
     monkeypatch.setattr(socket, "create_connection", fake_connect)
     with pytest.raises(Exception):
         storage_client.fetch_server_spki(host, port, timeout=0.1)
-    assert seen == [("imagectl.college.local", 8443)]          # השם, לא IP שנפתר מראש
+    assert seen == [("imagesrv.college.local", 8443)]          # השם, לא IP שנפתר מראש
 
 
 def test_the_parent_is_authenticated_by_certificate_not_by_address():
     """ה-SPKI-pin אינו תלוי בכתובת: ל-`TlsPeer` אין שדה כתובת בכלל, ולכן
     חילוף כתובת של הראשי אינו נוגע בטרסט. הראיה ההתנהגותית — #740."""
     from dataclasses import fields
-    from server import interserver_api
+    from server.interserver import interserver_api
     assert {f.name for f in fields(interserver_api.TlsPeer)} == {"tls_version", "cert_der", "exporter"}
-    from server.storage_nodes import normalize_config
-    assert normalize_config("secondary", "https://imagectl.college.local:8443")[1] == \
-        "https://imagectl.college.local:8443"
+    from server.interserver.storage_nodes import normalize_config
+    assert normalize_config("secondary", "https://imagesrv.college.local:8443")[1] == \
+        "https://imagesrv.college.local:8443"
 
 
 # --- ‏#1013: קובץ ה-dnsmasq הראשי נגזר מה-DB בעליית השרת --------------------------
@@ -1473,7 +1474,7 @@ def test_startup_sync_is_opt_in_like_known_macs(tmp_path, images_root, clock):
 def test_startup_honours_the_tftp_switch_and_the_console_deploy_interface(tmp_path, images_root, clock):
     """מה שנשמר ב-DB הוא מה שנכתב: מתג כבוי → בלי enable-tftp; כרטיס הפצה
     מהקונסולה → interface= בקובץ הזה; tftp_root מההתקנה."""
-    from server import ports as ports_mod
+    from server.net import ports as ports_mod
     from server.app import create_app
     applied: list[str] = []
     hooks = {"interfaces": lambda: [], "probe": lambda name: dhcp.ProbeResult(True, ()),

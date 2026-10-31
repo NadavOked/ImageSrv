@@ -1,0 +1,23 @@
+# ImageSrv first-boot installer on the server's own screen (#1188).
+[Unit]
+Description=ImageSrv native first-boot installer (tty1)
+After=imagesrv-wizard.service network-online.target
+Wants=imagesrv-wizard.service network-online.target
+Conflicts=getty@tty1.service imagesrv-dcui.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/imagesrv-src
+ExecStart=/opt/imagesrv-src/native-gui/imagesrv-station-gui --screen install --wizard-cwd /opt/imagesrv-src
+ExecStopPost=systemctl start imagesrv-dcui.service
+Restart=no
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+User=root
+
+[Install]
+WantedBy=multi-user.target

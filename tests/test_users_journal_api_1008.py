@@ -18,8 +18,8 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import complete_console_login  # noqa: E402
-from server import totp as totp_mod  # noqa: E402
-from server import users  # noqa: E402
+from server.console import totp as totp_mod  # noqa: E402
+from server.console import users  # noqa: E402
 from server.app import create_console_app  # noqa: E402
 from server.db import journal  # noqa: E402
 
@@ -71,7 +71,7 @@ def test_password_alone_does_not_count_until_the_second_factor(server):
     conn = server["ctx"].conn
     runtime = server["app"].state.runtime
     # נדב 18/10: החיוב כבוי כברירת מחדל — כאן הוא דלוק, כדי ש-mfa2 יירשם ב-MFA בכניסה הראשונה
-    from server import console_mfa
+    from server.console import console_mfa
     from server.db import set_setting
     set_setting(conn, console_mfa.SETTING, "true")
     users.create(conn, "mfa2", "Aa12345!-x", "admin", by="test", check_policy=False)

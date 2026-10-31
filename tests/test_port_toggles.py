@@ -18,7 +18,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import dhcp  # noqa: E402
+from server.net import dhcp  # noqa: E402
 
 try:
     from fastapi.testclient import TestClient
@@ -64,7 +64,7 @@ class FakeListeners:
         return [(h, PORTS[port_id]) for h in HOSTS[port_id]]
 
     def request(self, port_id, want, timeout=None):
-        from server.ports import ListenerError
+        from server.net.ports import ListenerError
         self.calls.append((port_id, want))
         if want and port_id in self.fail_open:
             raise ListenerError(f"{port_id}: address already in use")
@@ -91,7 +91,7 @@ class FakeDnsmasq:
         self.fail = False
 
     def apply(self, text: str) -> str | None:
-        from server import dhcp
+        from server.net import dhcp
         self.applied.append(text)
         if self.fail:
             return "dnsmasq לא הגיב ל-restart: (מזויף)"
@@ -105,7 +105,7 @@ class FakeDnsmasq:
 
 def _build(tmp_path: Path, images_root: Path, clock, listeners, *, base_port=80,
            installer_conf: str | None = INSTALLER_NEW):
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     tftp = tmp_path / "tftp"
@@ -234,7 +234,7 @@ def test_our_ports_point_at_the_ports_api_and_say_who_needs_the_name(toggles, cl
     assert rows["dhcp"]["toggle"] == "confirm"
     assert rows["pxe_proxy"]["toggle_url"] == "/api/console/net/interfaces/{name}"
     assert rows["monitor"]["toggle_url"] == "/api/console/monitor/settings"
-    assert rows["monitor"]["confirm_word"] == "imagectl.monitor"
+    assert rows["monitor"]["confirm_word"] == "imagesrv.monitor"
     # ולמי שאין מתג — אומרים למה.
     # ‏#1013: TFTP הפך למתג "confirm" (הקלדת שם השרת); מולטיקאסט נשאר בלי מתג.
     assert rows["tftp"]["toggle"] == "confirm" and rows["multicast"]["toggle"] == "none"
@@ -254,7 +254,7 @@ def test_enabled_but_nobody_listens_is_red_not_off(toggles):
 
 
 def test_disabled_but_still_listening_is_red(toggles):
-    from server import ports
+    from server.net import ports
     ports.set_enabled(toggles["conn"], "interserver", False)
     rows = rows_of(toggles)                        # ה-fake עדיין "מאזין"
     assert rows["interserver"]["enabled"] is False and rows["interserver"]["listening"] is True
@@ -312,7 +312,7 @@ def test_api_port_off_closes_the_listener_and_reads_back(toggles):
 
 
 def test_the_state_is_saved_so_it_survives_a_restart(toggles):
-    from server import ports
+    from server.net import ports
     assert ports.enabled(toggles["conn"], "interserver") is True
     toggles["admin"].put("/api/console/ports/interserver", json={"enabled": False})
     assert ports.enabled(toggles["conn"], "interserver") is False
@@ -410,7 +410,7 @@ def test_without_a_listener_manager_the_switch_says_it_did_not_apply(
     body = resp.json()
     assert body["ok"] is False and body["applied"] is False
     assert body["port"]["enabled"] is False
-    from server import ports
+    from server.net import ports
     assert ports.enabled(t["conn"], "http_boot") is False
 
 
@@ -449,7 +449,7 @@ def test_tftp_off_rewrites_dnsmasq_and_reads_back_from_ss(toggles):
     """הגדרת ה"גמור": כיבוי → הקובץ שהשרת מרנדר בלי enable-tftp, dnsmasq
     מופעל מחדש (hook), ו-ss (מוזרק) לא מראה 69; הדלקה → חוזר. הראיה היא
     הסוקט, לא ה-DB."""
-    from server import dhcp
+    from server.net import dhcp
     put = lambda body: toggles["admin"].put("/api/console/ports/tftp", json=body)  # noqa: E731
     resp = put({"enabled": False, "confirm": server_name(toggles)})
     assert resp.status_code == 200, resp.text
@@ -481,7 +481,7 @@ def test_tftp_off_needs_the_server_name(toggles):
 
 
 def test_tftp_switch_survives_a_restart(toggles):
-    from server import ports
+    from server.net import ports
     toggles["admin"].put("/api/console/ports/tftp",
                          json={"enabled": False, "confirm": server_name(toggles)})
     assert ports.enabled(toggles["conn"], "tftp") is False
@@ -513,13 +513,13 @@ def test_tftp_three_measured_states_off_is_never_faked(toggles):
 
 
 def test_old_installer_file_means_no_switch_and_says_why(tmp_path, images_root, clock):
-    """שדרוג בלי להריץ את המתקין (המעבדה): imagectl.conf עדיין נושא
+    """שדרוג בלי להריץ את המתקין (המעבדה): imagesrv.conf עדיין נושא
     enable-tftp, ו-dnsmasq מצטבר — המתג לא יכול לכבות. אז אין מתג, בשם;
     ‏PUT מסורב; המצב הנמדד נשאר ss."""
     t = _build(tmp_path, images_root, clock, FakeListeners(), installer_conf=INSTALLER_OLD)
     row = rows_of(t)["tftp"]
     assert row["toggle"] == "none" and row["enabled"] is None
-    assert "imagectl.conf" in row["off_means"] and "המתקין" in row["off_means"]
+    assert "imagesrv.conf" in row["off_means"] and "המתקין" in row["off_means"]
     assert row["state"] == "ok" and row["listening"] is True
     resp = t["admin"].put("/api/console/ports/tftp",
                           json={"enabled": False, "confirm": server_name(t)})
@@ -550,7 +550,7 @@ def test_tftp_switch_is_admin_only(toggles):
 def test_dhcp_apply_from_the_net_tab_honours_the_tftp_switch(toggles):
     """מקום אחד כותב את הקובץ: כיבוי TFTP ואחריו הדלקת DHCP מהלשונית — הקובץ
     החדש עדיין בלי enable-tftp (אחרת שינוי DHCP היה מדליק 69 בשקט)."""
-    from server import dhcp
+    from server.net import dhcp
     toggles["admin"].put("/api/console/ports/tftp",
                          json={"enabled": False, "confirm": server_name(toggles)})
     resp = toggles["admin"].put("/api/console/net/interfaces/eth0", json={

@@ -1,0 +1,22 @@
+# ImageSrv — אשף ההתקנה הראשונית (#910). יחידה זמנית: firstboot מפעיל אותה
+# בלי enable; בסיום מוצלח האשף משחרר את 8081 והקונסולה עולה במקומו.
+[Unit]
+Description=ImageSrv first-boot web wizard
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/imagesrv/.firstboot-done
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/imagesrv-src
+ExecStart=/usr/bin/python3 -m server.wizard --host 0.0.0.0 --port 8081 \
+    --data-dir /var/lib/imagesrv \
+    --status-file /etc/imagesrv/firstboot.status \
+    --installer-nic /etc/imagesrv/installer-nic \
+    --installer-role /etc/imagesrv/installer-role
+Restart=no
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

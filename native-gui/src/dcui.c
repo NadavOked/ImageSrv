@@ -14,7 +14,7 @@
 #include "dcui.h"
 
 #define MAX_COLS 12
-/* #1362: imagectl-dcui.service runs on TTYPath=/dev/tty1 */
+/* #1362: imagesrv-dcui.service runs on TTYPath=/dev/tty1 */
 #define DCUI_TTY "/dev/tty1"
 #define DCUI_VT 1
 

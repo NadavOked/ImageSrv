@@ -1,7 +1,7 @@
 """‏#874 — כשל כתיבה משאיר ראיה, לא סימון על הדיסק (הצד של הסוכן).
 
-הכרעת נדב 16/09: הסימון ‏IMAGECTL-FAILED של #845 נפסל — הסוכן אינו משנה
-דיסק מחוץ לשיכפול. ‏`agent/lib/failmark.sh` עושה במקומו שני דברים:
+הכרעת נדב 16/09: הסימון ‏IMAGESRV-FAILED של #845 נפסל — הסוכן אינו משנה
+דיסק מחוץ לשיכפול. ‏`agent/lib/restore/failmark.sh` עושה במקומו שני דברים:
 
 * **בכשל** (‏`fail_written_target`): ‏`target_set failed`, ואיסוף שורות
   ה-ATA של הקרנל על הפורט של היעד — ‏`dmesg` מסונן ל-`ata<N>` /
@@ -77,7 +77,7 @@ def zap_calls(box: Path) -> list[str]:
 
 def rename_calls(box: Path) -> list[str]:
     """קריאות שמשנות **שם** מחיצה (`-c`) — מה ש-#845 עשה. ‏`-n`/`-t`/`-e`
-    הן של apply_gpt, לפני הזרם, ונשארות — ו-#1798 ‏(`-c i:imagectl-incomplete`)
+    הן של apply_gpt, לפני הזרם, ונשארות — ו-#1798 ‏(`-c i:imagesrv-incomplete`)
     רוכב על אותה קריאה של הטבלה (`-n`), לפני הזרם: זו אינה סימון של כשל."""
     return [c for c in sgdisk_calls(box)
             if (c.startswith("-c ") or " -c " in c) and " -n " not in f" {c}"]
@@ -94,8 +94,8 @@ IDENT = ('disk_serial() { case "$1" in sda) printf S3TWNE0JB04745 ;; sdb) printf
          'disk_port() { case "$1" in sda) printf 1 ;; sdb) printf 2 ;; esac; }; '
          'ata_port_of() { case "$1" in sda) printf 1 ;; sdb) printf 2 ;; esac; }; ')
 
-LIBS = (f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/sysinfo.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/failmark.sh; ")
+LIBS = (f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/failmark.sh; ")
 
 
 def fail_run(tmp_path, *, script, state="writing", error="", since="300", dmesg=DMESG,
@@ -131,7 +131,7 @@ def fail_run(tmp_path, *, script, state="writing", error="", since="300", dmesg=
 
 def test_a_failed_target_wipes_the_gpt_after_recording_failure(tmp_path):
     """הבקרה המרכזית של #874: אחרי כשל **אין** קריאה ל-sgdisk כלל. בקרה
-    שלילית: על main (#845) ‏sgdisk.calls מכיל `-p` ואז `-c 1:IMAGECTL-FAILED`."""
+    שלילית: על main (#845) ‏sgdisk.calls מכיל `-p` ואז `-c 1:IMAGESRV-FAILED`."""
     box, run, out = fail_run(tmp_path, script='fail_written_target sda "partition 3: stream cut"; echo "rc=$?"')
     assert out.strip().endswith("rc=0"), out
     assert zap_calls(box) == [f"--zap-all {posix(box)}/dev/sda"]
@@ -303,7 +303,7 @@ def test_target_init_stamps_since_and_clears_old_evidence(tmp_path):
 def test_ata_port_of_reads_the_ata_component_of_the_device_link(tmp_path):
     box, run, out = fail_run(
         tmp_path,
-        script='unset -f ata_port_of; . ' + posix(AGENT) + '/lib/failmark.sh; '
+        script='unset -f ata_port_of; . ' + posix(AGENT) + '/lib/restore/failmark.sh; '
                'readlink() { echo "/sys/devices/pci0000:00/00:1f.2/ata3/host2/target2:0:0/2:0:0:0"; }; '
                'echo "p=$(ata_port_of sda)"; '
                'readlink() { echo "/sys/devices/pci0000:00/vmbus/host1/target1:0:0/1:0:0:0"; }; '

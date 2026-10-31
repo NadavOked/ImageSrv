@@ -1,7 +1,7 @@
 """גואי שלא עלה: האתחול הבא הולך לדיסק המקומי, והשרת שומע (נדב, 11/10).
 
 ‏`die_local` הוא אתחול, לא ירידה מובטחת לדיסק: מחשב build/classroom בלי
-משימה עולה אוטומטית ל-ImageCtl (#641), ושומר הלולאה של השרת אינו סופר
+משימה עולה אוטומטית ל-ImageSrv (#641), ושומר הלולאה של השרת אינו סופר
 אתחולים בלי הקשר — כך גואי שנכשל בכל אתחול היה לולאה. לפני ה-`die_local`:
 
 * ‏`boot_next_local` (‏localboot.sh) מכוון BootNext לרשומת Boot#### של דיסק
@@ -73,10 +73,10 @@ def run(tmp_path: Path, body: str, table: str = TABLE, efi: bool = True,
         f'chmod +x {shlex.quote(posix(stub))}/efibootmgr; '
         f'export PATH="$(cd {shlex.quote(posix(stub))} && pwd):$PATH"; '
         f"export SYSROOT={shlex.quote(posix(sysroot))} RUN_DIR={shlex.quote(posix(rd))} "
-        f"LOG_FILE={shlex.quote(posix(rd / 'agent.log'))} SERVER=http://x MAC=aa:bb IMAGECTL_TEST=1; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/localboot.sh; "
-        f". {posix(AGENT)}/lib/guiparent.sh; "
+        f"LOG_FILE={shlex.quote(posix(rd / 'agent.log'))} SERVER=http://x MAC=aa:bb IMAGESRV_TEST=1; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/gui/localboot.sh; "
+        f". {posix(AGENT)}/lib/gui/guiparent.sh; "
         'sleep() { :; }; '
         'build_hello() { printf %s "{\\"mac\\":\\"$MAC\\",\\"joining\\":$1}"; }; '
         'http_post_json() { cat "$2" >> "$RUN_DIR/hellos"; echo >> "$RUN_DIR/hellos"; return 0; }; '

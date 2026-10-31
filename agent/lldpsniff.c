@@ -1,6 +1,6 @@
-/* imagectl-lldpsniff -- one LLDP frame to JSON for hello (#1048).
- * Usage: imagectl-lldpsniff <iface> [timeout_s]
- *        imagectl-lldpsniff --from-file <path>   (tests, no socket)
+/* imagesrv-lldpsniff -- one LLDP frame to JSON for hello (#1048).
+ * Usage: imagesrv-lldpsniff <iface> [timeout_s]
+ *        imagesrv-lldpsniff --from-file <path>   (tests, no socket)
  * rc 0 = heard; 2 = timeout; 3 = could not listen. libc only.
  */
 #include <arpa/inet.h>
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
     if (argc >= 3 && strcmp(argv[1], "--from-file") == 0)
         return from_file(argv[2]);
     if (argc < 2)
-        return fail_listen("usage: imagectl-lldpsniff <iface> [timeout_s]");
+        return fail_listen("usage: imagesrv-lldpsniff <iface> [timeout_s]");
     if (argc >= 3) {
         wait_s = atoi(argv[2]);
         if (wait_s <= 0) wait_s = DEFAULT_WAIT;

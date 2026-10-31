@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 #
 # firstboot-answers.sh -- stage B from the live installer's answers (#1190).
-# Sourced by firstboot.sh when /etc/imagectl/answers exists: the person
+# Sourced by firstboot.sh when /etc/imagesrv/answers exists: the person
 # already answered everything on the server's screen, so there is no wizard
 # to wait for. This does what the wizard's apply does (server/wizard/core.py
 # `_apply`), in the same order and with the same flags, then verifies the
 # boot payload and writes the stamp -- and only then starts the DCUI.
 #
-# The admin password comes from /etc/imagectl/answers.secret through a file
+# The admin password comes from /etc/imagesrv/answers.secret through a file
 # descriptor (never argv/env/log), and the secret is shredded right after.
 # Every step reports by name; a failed step is a failed first boot that the
 # DCUI shows, not a server that "came up" half-configured.
 
-ANSWERS="${ANSWERS:-/etc/imagectl/answers}"
-ANSWERS_SECRET="${ANSWERS_SECRET:-/etc/imagectl/answers.secret}"
-APP_DIR="${APP_DIR:-/opt/imagectl}"
-DATA_DIR="${DATA_DIR:-/var/lib/imagectl}"
+ANSWERS="${ANSWERS:-/etc/imagesrv/answers}"
+ANSWERS_SECRET="${ANSWERS_SECRET:-/etc/imagesrv/answers.secret}"
+APP_DIR="${APP_DIR:-/opt/imagesrv}"
+DATA_DIR="${DATA_DIR:-/var/lib/imagesrv}"
 
 answers_get() { sed -n "s/^$1=//p" "$ANSWERS" | head -n1; }
 
@@ -64,7 +64,7 @@ firstboot_from_answers() {
     # read back, not exit code: hostnamectl without a system bus (no dbus) returns 1 with the
     # name already right in /etc/hostname from the engine -- and the reverse would be silent
     [[ "$(hostname)" == "$host" ]] || fail hostname-failed "hostname reads back '$(hostname)', not $host"
-    argv=(bash "$SRC/install/setup-boot-server.sh" --servers-if "$servers_if" --servers-mode "$mode")
+    argv=(bash "$SRC/deploy/setup-boot-server.sh" --servers-if "$servers_if" --servers-mode "$mode")
     if [[ "$mode" == static ]]; then
         argv+=(--servers-address "$(answers_get servers_addr)" --servers-netmask "$(answers_get servers_mask)")
         [[ -n "$(answers_get servers_gw)" ]] && argv+=(--servers-gateway "$(answers_get servers_gw)")
@@ -86,14 +86,14 @@ firstboot_from_answers() {
     set +e
     # #2148: the certificate is issued again below, once the NIC has its
     # address -- the fingerprint goes on the DCUI, not into this log
-    IMAGECTL_CONSOLE_FP_ON_DCUI=1 "${argv[@]}" 3< <(printf '%s\n' "$secret") >>"$BUILD_LOG" 2>&1
+    IMAGESRV_CONSOLE_FP_ON_DCUI=1 "${argv[@]}" 3< <(printf '%s\n' "$secret") >>"$BUILD_LOG" 2>&1
     rc=$?
     set -e
     unset secret
     shred -u "$ANSWERS_SECRET" 2>/dev/null || rm -f "$ANSWERS_SECRET"
     [[ $rc -eq 0 ]] || fail installer-failed "setup-boot-server.sh exited $rc; see $BUILD_LOG"
 
-    # setup-boot-server writes interfaces.d/imagectl-<nic> and deliberately does
+    # setup-boot-server writes interfaces.d/imagesrv-<nic> and deliberately does
     # no ifup (the web wizard is connected through that NIC); here nobody is,
     # and networking.service ran before the file existed -- without this the
     # first DCUI says "link down" until the next restart (ESXi, 21/09).
@@ -120,11 +120,11 @@ firstboot_from_answers() {
     # DCUI shows a fingerprint to photograph -- not on the second boot, after
     # the operator already trusted the first one.
     if [[ -n "$addr" ]]; then
-        systemctl restart imagectl-server.service >>"$BUILD_LOG" 2>&1 \
-            || fail installer-failed "imagectl-server did not restart after $servers_if got $addr"
+        systemctl restart imagesrv-server.service >>"$BUILD_LOG" 2>&1 \
+            || fail installer-failed "imagesrv-server did not restart after $servers_if got $addr"
     fi
 
-    bash "$APP_DIR/install/verify-boot-payload.sh" --app-dir "$APP_DIR" --http-root "$HTTP_ROOT" \
+    bash "$APP_DIR/deploy/verify-boot-payload.sh" --app-dir "$APP_DIR" --http-root "$HTTP_ROOT" \
         --server-url http://127.0.0.1:8080 >>"$BUILD_LOG" 2>&1 \
         || fail verify-failed "verify-boot-payload.sh failed; the installation is not marked complete (see $BUILD_LOG)"
     printf 'state=done\ntimestamp=%s\nservers_if=%s\nrole=%s\nsource=answers\n' "$(date -u +%FT%TZ)" "$servers_if" "$role" > "$STATUS"

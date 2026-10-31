@@ -35,7 +35,7 @@ def loud_client(server) -> TestClient:
 # --- #90: סוד חסר -----------------------------------------------------------
 
 def drop_secret(server) -> None:
-    from server import auth
+    from server.console import auth
     server["ctx"].conn.execute(
         "DELETE FROM settings WHERE key = ?", (auth.SECRET_KEY,)
     )
@@ -50,7 +50,7 @@ def test_a_missing_secret_does_not_become_the_key_0x00(server):
     """
     drop_secret(server)
     anon = loud_client(server)
-    anon.cookies.set("imagectl_session", forge(b"\x00", "mallory", "admin"))
+    anon.cookies.set("imagesrv_session", forge(b"\x00", "mallory", "admin"))
     assert anon.get("/api/console/users").status_code != 200
 
 
@@ -59,7 +59,7 @@ def test_a_missing_secret_fails_loudly_and_does_not_look_like_logged_out(server)
     "אין כאן משתמש" — שני מצבים שונים, עיקרון 5."""
     drop_secret(server)
     admin = loud_client(server)
-    admin.cookies.set("imagectl_session", forge(b"\x00", "noc", "admin"))
+    admin.cookies.set("imagesrv_session", forge(b"\x00", "noc", "admin"))
     assert admin.get("/api/console/users").status_code == 500
 
 
@@ -69,13 +69,13 @@ def test_a_missing_secret_refuses_to_issue_a_new_cookie(server):
         "/api/console/login", json={"username": "noc", "password": "admin-pass-123"}
     )
     assert r.status_code == 500
-    assert "imagectl_session" not in r.cookies
+    assert "imagesrv_session" not in r.cookies
 
 
 @pytest.mark.parametrize("value", ["", "   ", "zznothex", "00", "aabbccdd"])
 def test_a_corrupt_or_short_secret_is_refused(server, value):
     """‏hex לא תקין, וסוד קצר מדי שהוא שריד ולא סוד."""
-    from server import auth
+    from server.console import auth
     from server.db import set_setting
     set_setting(server["ctx"].conn, auth.SECRET_KEY, value)
     with pytest.raises(auth.SecretUnusable):
@@ -83,12 +83,12 @@ def test_a_corrupt_or_short_secret_is_refused(server, value):
 
 
 def test_a_healthy_install_has_a_secret_that_passes_the_startup_check(server):
-    from server import auth
+    from server.console import auth
     auth.assert_secret(server["ctx"].conn)          # ראיה חיובית, לא היעדר שגיאה
 
 
 def test_the_seeded_secret_is_long_enough_to_be_one(server):
-    from server import auth
+    from server.console import auth
     from server.db import get_setting
     raw = get_setting(server["ctx"].conn, auth.SECRET_KEY)
     assert len(bytes.fromhex(raw)) >= auth.MIN_SECRET_BYTES
@@ -143,7 +143,7 @@ def test_a_token_signed_for_a_user_who_never_existed_is_refused(server):
     from server.db import get_setting
     secret = bytes.fromhex(get_setting(server["ctx"].conn, "console_secret"))
     ghost = TestClient(server["app"])
-    ghost.cookies.set("imagectl_session", forge(secret, "ghost", "admin"))
+    ghost.cookies.set("imagesrv_session", forge(secret, "ghost", "admin"))
     assert ghost.get("/api/console/me").status_code == 401
 
 
@@ -152,7 +152,7 @@ def test_the_role_in_the_payload_is_ignored_even_when_signed(server):
     from server.db import get_setting
     secret = bytes.fromhex(get_setting(server["ctx"].conn, "console_secret"))
     client = TestClient(server["app"])
-    client.cookies.set("imagectl_session", forge(secret, "labtech", "admin"))
+    client.cookies.set("imagesrv_session", forge(secret, "labtech", "admin"))
     # ‏#1073: הטבלה אומרת deploy — ול-deploy אין קונסולה. הטוקן החתום "admin"
     # לא פותח אפילו את /me, ובוודאי לא את /users.
     me = client.get("/api/console/me")
@@ -166,13 +166,13 @@ def test_an_expired_token_is_still_refused(server):
     from server.db import get_setting
     secret = bytes.fromhex(get_setting(server["ctx"].conn, "console_secret"))
     client = TestClient(server["app"])
-    client.cookies.set("imagectl_session", forge(secret, "noc", "admin", seconds=-60))
+    client.cookies.set("imagesrv_session", forge(secret, "noc", "admin", seconds=-60))
     assert client.get("/api/console/me").status_code == 401
 
 
 def test_a_tampered_signature_is_still_refused(server):
     client = TestClient(server["app"])
-    client.cookies.set("imagectl_session", forge(b"not-the-secret", "noc", "admin"))
+    client.cookies.set("imagesrv_session", forge(b"not-the-secret", "noc", "admin"))
     assert client.get("/api/console/me").status_code == 401
 
 

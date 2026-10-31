@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 
-from server.tasks import TOKEN_HEADER  # noqa: E402
+from server.core.tasks import TOKEN_HEADER  # noqa: E402
 
 from test_capture import (PART_A, PART_B, make_task, manifest_for, setup_build_machine,  # noqa: E402
                           sha, task_token, wait_verified)

@@ -1,6 +1,6 @@
 """‏#1050 — הבחירה שנשמרה בקונסולה מגיעה ל-initrd ולתפריט התחנה.
 
-שני צדדים, טבלה אחת (`agent/lib/toolbins.sh`): הבנאי (`build_initramfs.sh
+שני צדדים, טבלה אחת (`agent/lib/tools/toolbins.sh`): הבנאי (`build_initramfs.sh
 --tools-selection`) אורז את הבינארים של מזהי ה-`build` שבקובץ, והתחנה
 מציעה רק אותם. כאן נבדק **התכנון** (`tools_bins_plan`) ולא initrd אמיתי —
 זה דביאן בלבד, אצל המתאם במעבדה — ומול הקובץ בצורה שהשרת כותב.
@@ -19,6 +19,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from agentlib import flat_lib, lib_files
+
 import pytest
 
 import sizelimit
@@ -26,7 +28,7 @@ from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
-LIB = AGENT / "lib"
+LIB = flat_lib()
 TOOLBINS = LIB / "toolbins.sh"
 BUILDER = REPO / "tools" / "build_initramfs.sh"
 CATALOG = json.loads((REPO / "server" / "tools_catalog.json").read_text(encoding="utf-8"))
@@ -178,9 +180,9 @@ def test_the_file_the_server_writes_is_parsed_with_its_real_whitespace(tmp_path)
 def test_the_builder_has_the_flag_and_uses_the_same_table():
     text = BUILDER.read_text(encoding="utf-8")
     assert "--tools-selection) TOOLS_SELECTION_FILE=" in text
-    assert '. "$AGENT_DIR/lib/toolbins.sh"' in text
+    assert '. "$AGENT_DIR/lib/tools/toolbins.sh"' in text
     assert 'tools_bins_plan "$TOOLS_SELECTION_FILE"' in text
-    assert '"$ROOT/etc/imagectl/tools-selection.json"' in text
+    assert '"$ROOT/etc/imagesrv/tools-selection.json"' in text
     # a plan that failed stops the build before apt
     assert "the selection is not packable" in text
     assert text.index("tools_bins_plan") < text.index("apt-get install")
@@ -270,8 +272,8 @@ def test_touched_lib_files_stay_within_the_limit(name):
 
 
 def test_the_agent_stays_within_300_lines_and_loads_the_table():
-    src = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
-    assert sizelimit.count_lines(AGENT / "imagectl-agent") <= 300
+    src = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
+    assert sizelimit.count_lines(AGENT / "imagesrv-agent") <= 300
     assert '. "$LIB_DIR/toolbins.sh"' in src
 
 
@@ -279,5 +281,5 @@ def test_no_tools_bins_module_shadows_the_glob():
     """‏tools_load מגלגל `tools_*.sh` כמודולים; קובץ `tools_bins.sh` היה נטען
     כתחום "bins" בלי `tools_bins_list` — לכן הטבלה היא `toolbins.sh`."""
     assert not (LIB / "tools_bins.sh").exists()
-    modules = sorted(p.name for p in LIB.glob("tools_*.sh"))
+    modules = sorted(p.name for p in lib_files(LIB) if p.match("tools_*.sh"))
     assert modules == ["tools_boot.sh", "tools_disk.sh", "tools_hw.sh", "tools_windows.sh"]

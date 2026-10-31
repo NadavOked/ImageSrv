@@ -18,7 +18,7 @@
 * **הגואי מופעל לפני הקריאה** — שאלת הכיווץ היא דיאלוג גרפי בלבד (#928).
 
 הכיבוי מזויף כ-`exit 0` (כמו `poweroff -f`: אינו חוזר), ו-`sleep` מזויף
-כרישום. ‏`IMAGECTL_TEST=0`: ה-`exit 0` של מצב הטסט יושב לפני הכיבוי.
+כרישום. ‏`IMAGESRV_TEST=0`: ה-`exit 0` של מצב הטסט יושב לפני הכיבוי.
 
 הפלט הולך לקובץ ולא ל-PIPE (גוטצ'ה ב-`CLAUDE.md`); ה-stdin הוא צינור
 משלנו ולא ירושה (‏#14).
@@ -71,7 +71,7 @@ def run_end(tmp_path: Path, server: str, *, answer: str | None,
         f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC!r} "
         f"SERVER={shlex.quote(server)} "
         f'RESP={shlex.quote(posix(run / "resp.json"))} '
-        f"IMAGECTL_TEST=0 HTTP_RETRIES=0 HTTP_TIMEOUT=4 PROGRESS_INTERVAL_S=0.2 "
+        f"IMAGESRV_TEST=0 HTTP_RETRIES=0 HTTP_TIMEOUT=4 PROGRESS_INTERVAL_S=0.2 "
         f"FINAL_REPORT_TRIES=2 FINAL_REPORT_GAP_S=0 D_ROLE=build CE_ANSWER={gui!r}; "
         + sourced_libs() + STUBS + CAPTURE_STUBS + END_STUBS + LOOP_STUB
         + f". {posix(funcs)}; "

@@ -105,13 +105,13 @@ def make_client(tmp_path, *, with_gui: bool):
 
 
 def test_an_unregistered_mac_never_gets_the_gui_even_when_it_is_installed(tmp_path):
-    """‏MAC לא רשום = דיסק מקומי מיד, בלי ImageCtl ובלי initrd כלשהו
+    """‏MAC לא רשום = דיסק מקומי מיד, בלי ImageSrv ובלי initrd כלשהו
     (עיקרון 1). הקובץ הגרפי קיים כאן דווקא כדי שהבדיקה תהיה אמיתית."""
     client = make_client(tmp_path, with_gui=True)
     text = client.get(f"/boot/menu?mac={MAC}").text
     assert GUI_INITRD_NAME not in text
     assert "initrd " not in text
-    assert "--id imagectl" not in text
+    assert "--id imagesrv" not in text
 
 
 def test_a_malformed_mac_never_gets_the_gui(tmp_path):
@@ -150,7 +150,7 @@ CLONER_MAC = "b4:2e:99:07:1a:d1"
 
 def registered_server(tmp_path, *, with_gui: bool):
     """אפליקציה אמיתית עם תיקיית אתחול, קבוצת כיתה וקבוצת שיכפול רשומות."""
-    from server import users
+    from server.console import users
 
     boot = tmp_path / "boot"
     boot.mkdir()
@@ -192,7 +192,7 @@ def test_a_registered_classroom_station_really_gets_the_gui_from_the_server(tmp_
     """
     client = registered_server(tmp_path, with_gui=True)
     text = client.get(f"/boot/menu?mac={CLASSROOM_MAC}").text
-    assert "--id imagectl" in text, "התחנה רשומה, ולכן יש לה ערך ImageCtl"
+    assert "--id imagesrv" in text, "התחנה רשומה, ולכן יש לה ערך ImageSrv"
     assert f"initrd (http,10.44.12.10:8080)/boot/{GUI_INITRD_NAME}" in text
 
 
@@ -206,7 +206,7 @@ def test_a_registered_cloner_really_gets_the_gui_initramfs_from_the_server(tmp_p
     diskless (נבדק ב-test_cloner_boot_path.py)."""
     client = registered_server(tmp_path, with_gui=True)
     text = client.get(f"/boot/menu?mac={CLONER_MAC}").text
-    assert "--id imagectl" in text
+    assert "--id imagesrv" in text
     assert f"initrd (http,10.44.12.10:8080)/boot/{GUI_INITRD_NAME}" in text
     assert "initrd (http,10.44.12.10:8080)/boot/initrd.img\n" not in text
 

@@ -60,7 +60,7 @@ def test_hostname_url_is_resolved_before_matching(monkeypatch):
         _socket, "getaddrinfo",
         lambda host, port: [(None, None, None, "", ("10.44.0.1", 0))],
     )
-    assert _interface_for("http://imagectl.lab:8080") == "eth0"
+    assert _interface_for("http://imagesrv.lab:8080") == "eth0"
 
 
 def test_ip_present_but_malformed_json_fails_loudly(monkeypatch):

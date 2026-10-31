@@ -2,10 +2,10 @@ r"""יוצר את tests/fixtures/system-mini.hiv — ‏hive רישום מיני
 
 רץ על Windows בלבד, פעם אחת (התוצר נכנס ל-git). ‏RegLoadAppKey יוצר
 קובץ hive חדש בלי הרשאות מנהל — בניגוד ל-reg save שדורש SeBackupPrivilege.
-המבנה מחקה את הפינה של SYSTEM שהסוכן נוגע בה (agent/lib/hostname.sh):
+המבנה מחקה את הפינה של SYSTEM שהסוכן נוגע בה (agent/lib/postdeploy/hostname.sh):
 ‏Select, ‏ComputerName, ו-Tcpip\Parameters עם ערכים שכנים מגוונים —
 שהטסטים יוכיחו ש-hivewrite משאיר אותם במקום (#33). ‏#1331: גם שני
-שירותי האחסון ה-in-box (agent/lib/bootstorage.sh) — ‏storahci עם
+שירותי האחסון ה-in-box (agent/lib/postdeploy/bootstorage.sh) — ‏storahci עם
 ‏StartOverride כמו במכונה שהותקנה במצב RAID, ו-stornvme בלעדיו.
 """
 

@@ -10,7 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import boottrace, db, learn_boot
+from server.agent import boottrace
+from server import db
+from server.learn import learn_boot
 
 MAC = "78:ac:c0:9b:11:c2"
 OTHER = "aa:bb:cc:00:00:32"
@@ -18,7 +20,7 @@ OTHER = "aa:bb:cc:00:00:32"
 
 @pytest.fixture()
 def conn(tmp_path, monkeypatch):
-    c = db.connect(tmp_path / "imagectl.db")
+    c = db.connect(tmp_path / "imagesrv.db")
     c.execute("INSERT INTO machines (mac, suffix, group_id, added_at) VALUES (?, '02',"
               " 'grp_CLONERS', 'x')", (MAC,))
     c.commit()
@@ -168,7 +170,7 @@ def test_a_broken_measurement_does_not_lose_the_breadcrumb(conn, clock, monkeypa
 
 def test_the_health_screen_carries_it():
     import inspect
-    from server import health
+    from server.system import health
     assert "_learn_boot.health_checks(ctx.conn)" in inspect.getsource(health.collect)
 
 

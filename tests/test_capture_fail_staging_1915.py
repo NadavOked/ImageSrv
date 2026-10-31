@@ -30,7 +30,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server.tasks import TOKEN_HEADER, staging_dir
+from server.core.tasks import TOKEN_HEADER, staging_dir
 from test_capture import (
     PART_A, PART_B, make_task, manifest_for, setup_build_machine, task_token,
 )
@@ -69,7 +69,7 @@ def _state(server, task_id) -> str:
 def test_no_room_before_the_first_byte_removes_the_work_area(
         server, images_root, monkeypatch):
     """‏507 לפני הבייט הראשון של מחיצה 3 — ומחיצה 1 כבר יושבת באזור."""
-    import server.capture as capmod
+    import server.library.capture as capmod
     task_id, folder = _started(server, images_root)
     fake = types.SimpleNamespace(total=10 ** 12, used=10 ** 12 - 4, free=4)
     monkeypatch.setattr(capmod.shutil, "disk_usage", lambda path: fake)
@@ -113,7 +113,7 @@ def test_a_receive_record_that_cannot_be_written_removes_the_work_area(
     """‏`_StagingGone` עם משימה פתוחה (‏500 בשם): רשומת ה-sha256 של מה
     שהתקבל לא נכתבה. כאן הנתיב שלה מזויף אל תת-תיקייה שאינה קיימת — כך
     המסלול נבחר בלי למחוק תיקייה שקובץ פתוח בתוכה (ווינדוס אינו מרשה)."""
-    import server.capture as capmod
+    import server.library.capture as capmod
     task_id, folder = _started(server, images_root)
     monkeypatch.setattr(capmod, "upload_sha_path",
                         lambda path: path.parent / "missing" / (path.name + ".sha256"))
@@ -151,7 +151,7 @@ def test_a_manifest_that_is_not_json_removes_the_work_area(server, images_root):
 def test_a_target_outside_the_library_removes_the_work_area(
         server, images_root, monkeypatch):
     """‏`inside` מחזיר None — מצב שאינו אמור לקרות, ולכן מזויף."""
-    import server.capture as capmod
+    import server.library.capture as capmod
     task_id, folder = _started(server, images_root)
     assert _put(server, task_id, "p3.windows.pcl.zst", PART_B).status_code == 200
     monkeypatch.setattr(capmod, "inside", lambda *a, **k: None)

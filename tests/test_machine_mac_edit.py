@@ -14,7 +14,7 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from server import users
+from server.console import users
 from server.app import create_app
 
 OLD = "b4:2e:99:07:1a:c4"

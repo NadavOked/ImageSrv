@@ -85,7 +85,7 @@ def test_dry_run_builds_one_array_over_every_member_and_boots_from_each(tmp_path
         assert f"+ mkfs.vfat -F 32 -n EFI <dev>/{name}1" in lines
         assert f"+ chroot <target> grub-install --target=i386-pc /dev/{name}" in lines
     create = [line for line in lines if line.startswith("+ mdadm --create")]
-    assert create == ["+ mdadm --create <dev>/md0 --run --metadata=1.2 --homehost=imagectl-ta " + mdadm_tail]
+    assert create == ["+ mdadm --create <dev>/md0 --run --metadata=1.2 --homehost=imagesrv-ta " + mdadm_tail]
     # the root filesystem is on the array, never on a member
     assert "+ mkfs.ext4 -F -L root <dev>/md0" in lines
     assert not any(line.startswith("+ mkfs.ext4") and "md0" not in line for line in lines)
@@ -99,7 +99,7 @@ def test_dry_run_builds_one_array_over_every_member_and_boots_from_each(tmp_path
     scan = lines.index("+ mdadm --detail --scan")
     assert lines[scan + 1] == "+ write-target mode=0644 <target>/etc/mdadm/mdadm.conf"
     assert lines[scan + 2] == "+ chroot <target> update-initramfs -u -k all"
-    assert lines[scan + 3] == "+ write-target mode=0644 <target>/etc/imagectl/raid"
+    assert lines[scan + 3] == "+ write-target mode=0644 <target>/etc/imagesrv/raid"
     assert lines.index("+ chroot <target> apt-get install -y --no-install-recommends busybox-static "
                        "linux-image-amd64 grub-efi-amd64-signed shim-signed grub-pc-bin") < scan
     assert scan < lines.index("+ chroot <target> update-grub")

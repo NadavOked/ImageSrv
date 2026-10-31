@@ -24,7 +24,7 @@ import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי")
 
-from server import interserver_auth, storage_client  # noqa: E402
+from server.interserver import interserver_auth, storage_client  # noqa: E402
 
 #: תקרת ה-join — הרבה מעל תקרות הבדיקה (0.5ש'), הרבה מתחת ל"לנצח".
 JOIN = 6.0

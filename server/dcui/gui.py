@@ -1,6 +1,6 @@
 """Drive the graphical server screen (#1203).
 
-``imagectl-station-gui --screen dcui`` only paints and reads the keyboard.
+``imagesrv-station-gui --screen dcui`` only paints and reads the keyboard.
 This process stays root, keeps the one state machine (:mod:`app`: password
 gating, the 3-failure lockout, the 90 s auto-logout, the 60 s network
 rollback) and runs every action through :mod:`actions`, exactly as the text
@@ -27,13 +27,13 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from server import netcfg_rollback
+from server.net import netcfg_rollback
 
 from . import app, view
 
 GUI_CANDIDATES = (
-    Path("/opt/imagectl/native-gui/imagectl-station-gui"),   # built by build_initramfs.sh
-    Path("/usr/bin/imagectl-station-gui"),
+    Path("/opt/imagesrv/native-gui/imagesrv-station-gui"),   # built by build_initramfs.sh
+    Path("/usr/bin/imagesrv-station-gui"),
 )
 #: The GUI must have its display open (READY) within this long.
 READY_SECONDS = 15.0
@@ -111,18 +111,18 @@ class Session:
             except queue.Empty:
                 break
             if line is None:
-                return f"imagectl-station-gui exited before opening the screen ({self.exit_code()})"
+                return f"imagesrv-station-gui exited before opening the screen ({self.exit_code()})"
             if line.startswith("FAIL "):
                 # #1362: the GUI could not show its first frame, or could not
                 # confirm it is on the screen, and says why -- that reason is
                 # what the text screen shows, not a bare exit code.
                 self.stop()
-                return line[5:].strip() or "imagectl-station-gui failed without a reason"
+                return line[5:].strip() or "imagesrv-station-gui failed without a reason"
             token = parse_token(line)
             if token and token[0] == "ready":
                 return ""
         self.stop()
-        return f"imagectl-station-gui did not open the screen within {seconds:.0f} s"
+        return f"imagesrv-station-gui did not open the screen within {seconds:.0f} s"
 
     def send(self, frame: str) -> bool:
         try:
@@ -223,7 +223,7 @@ def run(data_dir: Path, candidates=GUI_CANDIDATES, dev: Path = Path("/dev"),
     """Show the graphical screen until it cannot be shown; return why."""
     binary = find_binary(candidates)
     if binary is None:
-        return "imagectl-station-gui not found: " + ", ".join(str(p) for p in candidates)
+        return "imagesrv-station-gui not found: " + ", ".join(str(p) for p in candidates)
     problem = display_problem(dev)
     if problem:
         return problem

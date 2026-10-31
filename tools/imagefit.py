@@ -3,14 +3,14 @@
 הכלי שעונה על השאלה שנשאלת מול חומרה, בלי לנחש אותה מראש: מפעיל מודד
 כונן יעד אחד, מוסר את המספר, והכלי מכריע לכל אימג' בספרייה.
 
-    # על מכונת היעד, בבייטים ולא בג'יגה — מתוך מסך התחנה של ImageCtl:
+    # על מכונת היעד, בבייטים ולא בג'יגה — מתוך מסך התחנה של ImageSrv:
     blockdev --getsize64 /dev/sda
 
     # על השרת, עם המספר שהתקבל:
-    python tools/imagefit.py --images /var/lib/imagectl/images --target-bytes 256060514304
+    python tools/imagefit.py --images /var/lib/imagesrv/images --target-bytes 256060514304
 
 ‏`blockdev` ולא `lsblk`: זו הפקודה ש-`disk_fits` עצמו מריץ
-(`agent/lib/restore.sh`), והיא היחידה מבין השתיים שנארזת ב-initramfs
+(`agent/lib/restore/restore.sh`), והיא היחידה מבין השתיים שנארזת ב-initramfs
 (`BINARIES` ב-`tools/build_initramfs.sh`). למדוד באותה פקודה שהקוד
 משתמש בה מסלק מראש את "המספר שמדדתי אינו המספר שהקוד רואה".
 
@@ -35,8 +35,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from server.imagefit import expandable_candidate, shrink_bytes  # noqa: E402
-from server.images import ImageLibrary, required_bytes  # noqa: E402
+from server.library.imagefit import expandable_candidate, shrink_bytes  # noqa: E402
+from server.library.images import ImageLibrary, required_bytes  # noqa: E402
 
 #: המדידה שהכלי מבקש, מילה במילה — כדי שלא תומצא מחדש בכל פעם, וכדי
 #: שתהיה **אותה** פקודה שבדיקה 2.7 מריצה על הכונן עצמו.

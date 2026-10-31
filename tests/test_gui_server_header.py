@@ -1,14 +1,14 @@
 """‏#1252 (נמדד על ברזל 10/10, ‏HP-BUILD מול השרת החדש ב-v0.59.2): כותרת
-הגואי הנייטיב הציגה "שרת imagectl-srv · 10.10.10.1" ו-"גרסה v0.48.1",
-ותחתית מסך הכניסה "imagectl-srv · v0.48.1 · 10.10.10.1" — מחרוזות מוקאפ
+הגואי הנייטיב הציגה "שרת imagesrv-srv · 10.10.10.1" ו-"גרסה v0.48.1",
+ותחתית מסך הכניסה "imagesrv-srv · v0.48.1 · 10.10.10.1" — מחרוזות מוקאפ
 מקודדות ב-`screens.c`. בפועל השרת היה TA, ‏10.44.0.1, ‏v0.59.2. טכנאי
 שרואה v0.48.1 חושב שהמכונה עלתה מ-initrd ישן (עיקרון 5).
 
 שלוש החוליות:
 
-* ‏`gui_state` (‏`agent/lib/guistate.sh`) כותב `server_name=` ו-
+* ‏`gui_state` (‏`agent/lib/gui/guistate.sh`) כותב `server_name=` ו-
   ‏`server_version=` מ-`GET /api/v1/agent/state` (‏`null` → ריק), ו-
-  ‏`server_addr=` מ-`imagectl.server` (‏`$SERVER`) — גם בתמונת הכשל וגם
+  ‏`server_addr=` מ-`imagesrv.server` (‏`$SERVER`) — גם בתמונת הכשל וגם
   במסך המשכפל, כי את הכתובת הסוכן יודע בלי השרת.
 * ‏`state.c` מפרסר אותן, ו-`screens.c` מצייר אותן בכותרת, בתחתית הכניסה
   ובשורת ההמתנה. ערך ריק מצויר "לא ידוע" — לא מספר. שם המכונה, שנפל
@@ -36,7 +36,7 @@ SRC = GUI / "src"
 
 #: מחרוזות המוקאפ שהגיעו לייצור. ‏install.c מחוץ לרשימה: ה-`install_demo`
 #: שלו הוא נתוני `--png` בלבד, ולא מסך שרץ מול שרת.
-MOCKUP = ("imagectl-srv", "10.10.10.1", "v0.48.1", "CLONER-02")
+MOCKUP = ("imagesrv-srv", "10.10.10.1", "v0.48.1", "CLONER-02")
 
 
 def test_no_mockup_server_values_in_the_screens():
@@ -55,8 +55,8 @@ def test_no_mockup_server_values_in_the_screens():
     ("", ""),
 ])
 @requires_native(("bash", BASH), why="הסוכן הוא POSIX sh")
-def test_the_address_is_the_host_of_imagectl_server(server, addr):
-    out = sh(f'SERVER={server!r}; . {posix(AGENT)}/lib/guistate.sh; gui_server_addr')
+def test_the_address_is_the_host_of_imagesrv_server(server, addr):
+    out = sh(f'SERVER={server!r}; . {posix(AGENT)}/lib/gui/guistate.sh; gui_server_addr')
     assert out.returncode == 0, out.stderr
     assert out.stdout == f"server_addr={addr}\n"
 

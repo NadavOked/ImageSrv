@@ -31,7 +31,8 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server import agent_shell, gui_failure, vmdisk
+from server.vm import agent_shell, vmdisk
+from server.agent import gui_failure
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
 posix_only = requires_native(posix=True, why="ACL/xattr של POSIX")
@@ -214,10 +215,10 @@ def test_a_gui_failure_that_was_not_journaled_logs_the_mac_on_one_line(monkeypat
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr(gui_failure, "journal", broken)
-    with caplog.at_level(logging.ERROR, logger="imagectl.gui_failure"):
+    with caplog.at_level(logging.ERROR, logger="imagesrv.gui_failure"):
         noted = gui_failure.note(None, "aa:bb\r\nFORGED: admin logged in",
                                  {"screen": "build", "boot_next": "set"}, known=True)
     assert noted is False
-    messages = [r.getMessage() for r in caplog.records if r.name == "imagectl.gui_failure"]
+    messages = [r.getMessage() for r in caplog.records if r.name == "imagesrv.gui_failure"]
     assert len(messages) == 1 and "FORGED" in messages[0], messages
     assert "\n" not in messages[0] and "\r" not in messages[0], messages

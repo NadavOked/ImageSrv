@@ -13,7 +13,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login
-from server import totp, users
+from server.console import totp, users
 from server.app import create_console_app, create_runtime
 
 
@@ -32,7 +32,7 @@ def _fresh(tmp_path, images_root, clock, monkeypatch):
     ‏`create_app` המשולב שם את הקיוסק ראשון (#1073), ולכן login שם מדלג
     על MFA. בייצור הם על שני פורטים.
     """
-    from server import sender as sender_module
+    from server.rounds import sender as sender_module
     from test_sender import Recorder
     monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     rt = create_runtime(
@@ -180,7 +180,7 @@ def test_2114_mfa_setup_rejects_active_mfa_without_changing_it(server):
 
 def test_mfa_pending_secret_expires(server, monkeypatch):
     """‏#2101: הסוד הממתין מוגבל בזמן — אחרי `PENDING_TTL` בלי אישור, setup מגריל חדש."""
-    from server import console_mfa
+    from server.console import console_mfa
     first = _setup_as_new_admin(server, "stale")
     later = time.time() + console_mfa.PENDING_TTL + 1
     monkeypatch.setattr(console_mfa, "_now", lambda: later)
@@ -321,7 +321,7 @@ def test_old_remember_cookie_does_not_skip_mfa(server):
     )
     server["ctx"].conn.commit()
     c = _console_client(server)
-    c.cookies.set("imagectl_trusted", raw)
+    c.cookies.set("imagesrv_trusted", raw)
     login = c.post("/api/console/login", json={"username": "rem", "password": "Aa12345!"})
     assert login.status_code == 200
     assert login.json().get("mfa_required") is True
@@ -332,7 +332,7 @@ def test_old_remember_cookie_does_not_skip_mfa(server):
         "remember_browser": True,
     })
     assert verified.status_code == 200
-    assert "imagectl_trusted" not in verified.cookies
+    assert "imagesrv_trusted" not in verified.cookies
 
 
 def test_builtin_cannot_setup_mfa(tmp_path, images_root, clock, monkeypatch):
@@ -361,7 +361,7 @@ def test_admin_disable_mfa_forces_reenrollment(server):
 
 
 def test_five_failures_delay_and_ten_lock(server, monkeypatch):
-    from server import login_guard
+    from server.console import login_guard
     t = {"now": 1_000_000.0}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
     anon = server["anon"]
@@ -489,7 +489,7 @@ def test_reset_password_forces_change(server):
 
 def test_deploy_with_mfa_still_refused_on_console_before_mfa(server):
     """#1073 לפני #1085: deploy עם MFA מופעל מקבל deploy_no_console, לא mfa_required."""
-    from server import auth
+    from server.console import auth
     conn = server["ctx"].conn
     conn.execute(
         "UPDATE users SET mfa_enabled = 1, mfa_secret = 'MFRGGZDFMY' "
@@ -561,7 +561,7 @@ def test_1120_wrong_mfa_code_consumes_the_challenge(server):
         "challenge": challenge, "code": totp.totp_code(secret),
     })
     assert again.status_code == 401, again.text
-    assert "imagectl_session" not in again.cookies
+    assert "imagesrv_session" not in again.cookies
     # אחרי כניסה מחדש — challenge חדש עובד
     c2, r2 = _challenge(server, "burn")
     ok = c2.post("/api/console/login/mfa", json={
@@ -572,7 +572,7 @@ def test_1120_wrong_mfa_code_consumes_the_challenge(server):
 
 def test_1120_ten_mfa_failures_lock_the_account(server, monkeypatch):
     """10 קודים שגויים ב-/login/mfa → נעילה 15 דקות, גם על /login."""
-    from server import login_guard
+    from server.console import login_guard
     t = {"now": 2_000_000.0}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
     _mfa_user(server, "brute")
@@ -600,7 +600,7 @@ def test_1120_ten_mfa_failures_lock_the_account(server, monkeypatch):
 
 def test_1120_five_mfa_failures_delay_and_success_clears(server, monkeypatch):
     """5 כשלים → 429 עם Retry-After ב-/login/mfa; TOTP נכון מאפס את המונה."""
-    from server import login_guard
+    from server.console import login_guard
     t = {"now": 3_000_000.0}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
     _, secret = _mfa_user(server, "slow")
@@ -676,7 +676,7 @@ def test_1120_a_challenge_issued_before_the_lock_dies_with_the_lock(server, monk
     תקף בזמן — ובלי הבדיקה, מי שמחזיק אותו נכנס לחשבון נעול עם קוד נכון.
     עד כאן אף טסט לא הפיל את הסרת הבדיקה (בקרה רטרואקטיבית, 24/10): שאר
     טסטי #1120 עוברים דרך `/login`, שנועל לפני שה-challenge נוצר."""
-    from server import login_guard
+    from server.console import login_guard
     t = {"now": 4_000_000.0}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
     _, secret = _mfa_user(server, "early")
@@ -694,7 +694,7 @@ def test_1120_a_challenge_issued_before_the_lock_dies_with_the_lock(server, monk
     })
     assert late.status_code == 403, late.text
     assert "15 דקות" in late.json()["detail"]
-    assert "imagectl_session" not in late.cookies
+    assert "imagesrv_session" not in late.cookies
 
 
 def test_1243_idle_default_is_600_on_every_login_path(server):

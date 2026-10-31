@@ -23,7 +23,7 @@ def finish_probe(tmp_path, *, after="poweroff", mode="ok", role=None):
 SYSROOT={shlex.quote(posix(tmp_path))}
 AFTER_TASK_FILE={shlex.quote(posix(config))}
 {role_line}
-. {shlex.quote(posix(AGENT / 'lib/common.sh'))}
+. {shlex.quote(posix(AGENT / 'lib/core/common.sh'))}
 mode={shlex.quote(mode)}
 log() {{ printf 'LOG %s\n' "$*"; }}
 sync() {{ echo SYNC; }}

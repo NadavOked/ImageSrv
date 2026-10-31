@@ -180,7 +180,7 @@ test('drag: image onto a folder = PUT folder (selection travels), folder onto fo
   assert.doesNotMatch(html,/ondrop="imgDrop\(event,null\)"/,'"all images" is not a folder');
   const data={}; ctx.EV=dragEvent(data);
   run('IMG.sel.add("img_7f3a91"); IMG.sel.add("img_a1b2c3"); imgDragStart(EV,"img_7f3a91")');
-  assert.deepEqual(JSON.parse(data['application/x-imagectl-images']),['img_7f3a91','img_a1b2c3'],'dragging a selected row drags the whole selection');
+  assert.deepEqual(JSON.parse(data['application/x-imagesrv-images']),['img_7f3a91','img_a1b2c3'],'dragging a selected row drags the whole selection');
   await run('imgDrop(EV,"Linux")');
   const puts=requests.filter(r=>r.options.method==='PUT').map(r=>[r.url,JSON.parse(r.options.body).folder]);
   assert.deepEqual(puts,[['/api/console/images/img_7f3a91','Linux'],['/api/console/images/img_a1b2c3','Linux']]);

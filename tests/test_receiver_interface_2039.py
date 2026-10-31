@@ -1,7 +1,7 @@
 """‏#2039: ‏`udp-receiver` מצטרף לזרם על הכרטיס שקיבל DHCP — לא על ברירת המחדל.
 
 ‏`udp-sender` של ההפצה הישירה כבר קיבל `--interface "$IFACE"`
-(‏`agent/lib/directsend.sh`), אבל המקלט (‏`stream_source`, ‏`agent/lib/restore.sh`)
+(‏`agent/lib/capture/directsend.sh`), אבל המקלט (‏`stream_source`, ‏`agent/lib/restore/restore.sh`)
 — שמשמש גם את התחנה (‏`restore_partition`) וגם את המגירות (‏`drawers.sh`) —
 נקרא בלי הדגל, ו-udpcast בחר כרטיס בעצמו. במחשב עם שני כרטיסי רשת (מחשבי
 הבנייה במכללה) ההצטרפות לקבוצת ה-multicast יכלה לקרות על הכרטיס הלא נכון.
@@ -38,8 +38,8 @@ def _receiver_stub(stub_dir, argv) -> str:
 
 def _libs(tmp_path) -> str:
     return (f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path / 'agent.log')!r}\n"
-            f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-            f". {posix(AGENT)}/lib/restore.sh\n")
+            f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+            f". {posix(AGENT)}/lib/restore/restore.sh\n")
 
 
 def _receive(tmp_path, before: str):

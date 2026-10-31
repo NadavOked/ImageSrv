@@ -46,7 +46,7 @@ def _shim(box: Path) -> str:
 
 def _scheme(box: Path, fail: str) -> str:
     return sh(_shim(box) + f'export DD_FAIL={fail} SYSROOT={posix(box)!r} DEVROOT={posix(box / "dev")!r}; '
-              f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+              f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
               'disk_scheme "$DEVROOT/sda"').strip().splitlines()[-1]
 
 
@@ -77,9 +77,9 @@ def _unreadable_entry(tmp_path: Path, role: str) -> dict:
     stubs.mkdir()
     (stubs / "sgdisk").write_text("#!/bin/sh\necho 'Number  Start'\n", encoding="utf-8", newline="\n")
     out = sh(_shim(box) + f'chmod 0755 {posix(stubs)}/sgdisk; export DD_FAIL=all SYSROOT={posix(box)!r} '
-             f'DEVROOT={posix(box / "dev")!r} D_ROLE={role}; . {posix(AGENT)}/lib/common.sh; '
-             f'. {posix(AGENT)}/lib/sysinfo.sh; '
-             f'. {posix(AGENT)}/lib/writemark.sh; LOG_FILE={posix(box)}/log; build_disk_entry sda')
+             f'DEVROOT={posix(box / "dev")!r} D_ROLE={role}; . {posix(AGENT)}/lib/core/common.sh; '
+             f'. {posix(AGENT)}/lib/hw/sysinfo.sh; '
+             f'. {posix(AGENT)}/lib/restore/writemark.sh; LOG_FILE={posix(box)}/log; build_disk_entry sda')
     return json.loads(out.strip().splitlines()[-1])
 
 

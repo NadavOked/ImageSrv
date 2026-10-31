@@ -16,7 +16,7 @@
 כדי שכיבוי שלא היה צריך לקרות ייראה בעקבה. השרת האמיתי בתהליכון סופר
 את הדיווחים.
 
-‏`IMAGECTL_TEST=0`: ה-`exit 0` של מצב הטסט יושב לפני `finish_and_stop`,
+‏`IMAGESRV_TEST=0`: ה-`exit 0` של מצב הטסט יושב לפני `finish_and_stop`,
 ובלי לעבור אותו אין מה לבדוק. ‏stdin הוא ‏`DEVNULL` — אין מסך, ושאלת סוף
 הקליטה (#409) נגמרת ב"אין תשובה" = כיבוי, כלומר בדיוק ב-`finish_and_stop`.
 """
@@ -48,7 +48,7 @@ WOL_UNARMED = (
     'ui_error_hold() { echo "HOLD $1" >> "$RUN_DIR/trace"; echo "  FAILED: $1"; }; '
 )
 
-ENV = "IMAGECTL_TEST=0 D_ROLE=build AFTER_TASK_FILE=/nonexistent/after-task"
+ENV = "IMAGESRV_TEST=0 D_ROLE=build AFTER_TASK_FILE=/nonexistent/after-task"
 
 #: ‏`_build_standby=0` — מצב התפריט; אחרי התיקון המסך נשאר (‏=1) ולא נמחק.
 CALL = '_build_standby=0; do_task; echo "RETURNED rc=$? standby=$_build_standby"'
@@ -62,7 +62,7 @@ DIRECT_ANSWER = {
 #: ההפצה עצמה אינה מה שנבדק כאן (‏test_directsend.py בודק אותה) — היא
 #: מזויפת כהצלחה, ומה שנבדק הוא מה שקורה אחריה.
 DIRECT_STUBS = (
-    f". {posix(AGENT)}/lib/directsend.sh; "
+    f". {posix(AGENT)}/lib/capture/directsend.sh; "
     'direct_send_run() { echo "SENT $1" >> "$RUN_DIR/trace"; return 0; }; '
 )
 
@@ -134,7 +134,7 @@ def test_a_direct_send_that_could_not_arm_wol_stays_done(tmp_path, reports):
 
 # --- חדר השיכפולים: ‏`do_restore_drawers` ------------------------------------
 
-ROOM_ENV = "IMAGECTL_TEST=0 D_ROLE=cloner AFTER_TASK_FILE=/nonexistent/after-task"
+ROOM_ENV = "IMAGESRV_TEST=0 D_ROLE=cloner AFTER_TASK_FILE=/nonexistent/after-task"
 
 
 @native_tools
@@ -157,7 +157,7 @@ def test_a_cloning_round_that_could_not_arm_wol_stays_done(tmp_path, reports):
 #: ‏awaiting_replace ומחזיר. ‏hold_watch האמיתית אינה חוזרת לעולם; המזויפת
 #: רושמת עם איזו שורה היא נקראה ויוצאת, כמו שהאמיתית "לא חוזרת".
 REPLACE_STUBS = (
-    f". {posix(AGENT)}/lib/smartgate.sh; "
+    f". {posix(AGENT)}/lib/smart/smartgate.sh; "
     'smart_gate() { shift; mkdir -p "$RUN_DIR/smart"; '
     'echo sdb > "$RUN_DIR/smart/awaiting_replace"; echo "$@"; return 2; }; '
     'hold_watch() { echo "WATCH $1 [$HOLD_PROMPT]" >> "$RUN_DIR/trace"; exit 0; }; '
@@ -198,7 +198,7 @@ def test_a_replace_that_could_not_arm_wol_holds_without_a_false_reason(
 #: אותו זיוף כמו ‏`REPLACE_STUBS` בחדר השיכפולים, על הדיסק היחיד של
 #: התחנה (‏`pick_internal_disk` מזויף כ-`sda` ב-STUBS של test_final_report).
 STATION_REPLACE_STUBS = (
-    f". {posix(AGENT)}/lib/smartgate.sh; "
+    f". {posix(AGENT)}/lib/smart/smartgate.sh; "
     'smart_gate() { shift; mkdir -p "$RUN_DIR/smart"; '
     'echo sda > "$RUN_DIR/smart/awaiting_replace"; echo "$@"; return 2; }; '
     'hold_watch() { echo "WATCH $1 [$HOLD_PROMPT]" >> "$RUN_DIR/trace"; exit 0; }; '
@@ -208,7 +208,7 @@ STATION_REPLACE_STUBS = (
 @native_tools
 def test_a_station_replace_with_after_task_poweroff_and_no_wol_holds_without_a_false_reason(
         tmp_path, reports):
-    """תחנת כיתה, `/etc/imagectl/after-task` מכיל `poweroff` במפורש
+    """תחנת כיתה, `/etc/imagesrv/after-task` מכיל `poweroff` במפורש
     (כלי הטכנאי כותב את זה לצי המעבדה), המפעיל בחר "החלף דיסק" בשער
     ה-SMART, וה-WoL לא נדרך. הקוד הישן המשיך לשורה הבאה והציג
     "FAILED: the disk was skipped -- nothing written" — סיבה שגויה
@@ -217,7 +217,7 @@ def test_a_station_replace_with_after_task_poweroff_and_no_wol_holds_without_a_f
     סיום — הסבב לא הסתיים למכונה הזאת."""
     after_task = tmp_path / "after-task"
     after_task.write_text("poweroff\n", encoding="utf-8")
-    env = f"IMAGECTL_TEST=0 D_ROLE=classroom AFTER_TASK_FILE={posix(after_task)}"
+    env = f"IMAGESRV_TEST=0 D_ROLE=classroom AFTER_TASK_FILE={posix(after_task)}"
 
     result = run_path(
         tmp_path, url_of(reports), "do_restore",

@@ -2,7 +2,7 @@
 own screen, with no user name and password (Nadav: being at the machine is
 the authorization).
 
-The route is narrow on purpose (``server/cloner_round.py``): only a
+The route is narrow on purpose (``server/rounds/cloner_round.py``): only a
 registered cloner, identified like every agent route (#855/#997); only its
 own attached, mapped drawers -- the body carries ports, never MACs; only an
 image allowed for this machine; never while another round is active. It
@@ -25,7 +25,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import MANIFEST_256, hello_body, write_image
-from server import cloner_round, room
+from server.rounds import cloner_round, room
 from server.db import set_setting
 from test_machine_identity import (BUILD, MAC1, MAC2, identity_server,  # noqa: F401
                                    journal_details)
@@ -181,7 +181,7 @@ def test_an_unregistered_mac_is_refused(identity_server):
 
 @pytest.mark.parametrize("mac,group", [(BUILD, "grp_BUILD"), (MAC1, "grp_LAB1")])
 def test_a_build_machine_or_a_student_station_is_refused(identity_server, monkeypatch, mac, group):
-    from server import capabilities
+    from server.core import capabilities
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)   # a classroom group needs v1.2 on
     srv = identity_server
     register(srv, MAC2, "grp_CLONERS", "2")          # a cloner exists: the refusal is about the caller

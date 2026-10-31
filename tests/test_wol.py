@@ -1,6 +1,6 @@
 """‏Wake-on-LAN — קבוצה 7 בתוכנית הבדיקות (`docs/lab-test-plan.md`).
 
-עד כאן ל-`server/wol.py` לא היה קובץ טסטים משלו: מה שנבדק (חבילת
+עד כאן ל-`server/net/wol.py` לא היה קובץ טסטים משלו: מה שנבדק (חבילת
 הקסם, ההחרגה של הפותח) נבדק דרך `test_station.py`, כלומר דרך פתיחת
 סבב. כאן נבדקת היחידה עצמה — בניית החבילה, מאיפה מגיעים ה-MACים,
 לאן החבילה יוצאת, ומה קורה כששליחה נכשלת.
@@ -20,9 +20,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import wol
+from server.net import wol
 from server.db import connect
-from server.wol import (LINK_DOWN, LINK_UNKNOWN, LINK_UP, broadcast_sender,
+from server.net.wol import (LINK_DOWN, LINK_UNKNOWN, LINK_UP, broadcast_sender,
                         link_state, magic_packet, wake_group)
 
 MAC1 = "b4:2e:99:07:1a:c4"
@@ -430,7 +430,7 @@ def server(tmp_path: Path, images_root, classrooms_on):
     """שרת אמיתי עם WoL נתפס, ושתי קבוצות: כיתה ומחשבי שיכפול."""
     from fastapi.testclient import TestClient
 
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     woken: list[bytes] = []

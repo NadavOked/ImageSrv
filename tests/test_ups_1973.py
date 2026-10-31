@@ -10,7 +10,7 @@ import threading
 
 import pytest
 
-from server import ups
+from server.system import ups
 from server.db import connect, set_settings
 
 
@@ -115,7 +115,7 @@ def test_bad_targets_are_refused(text):
 
 @pytest.fixture()
 def conn(tmp_path):
-    db = connect(tmp_path / "imagectl.db")
+    db = connect(tmp_path / "imagesrv.db")
     set_settings(db, {ups.MODE: "net", ups.TARGET: "rack@10.0.0.5"})
     return db
 
@@ -308,7 +308,7 @@ def test_an_unreadable_ups_after_apply_is_returned_not_hidden(tmp_path):
 
 
 def test_the_console_endpoint_validates_and_applies(server):
-    from server import console_ups
+    from server.console import console_ups
 
     admin = server["admin"]
     host = Host()

@@ -25,7 +25,7 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from server import capabilities
+from server.core import capabilities
 from server.app import create_agent_app
 
 from conftest import setup_classroom

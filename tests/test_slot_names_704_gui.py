@@ -62,7 +62,7 @@ def _slotnames(tmp_path: Path, responses: list[object]) -> tuple[str, str]:
         f.write_text(body if isinstance(body, str) else json.dumps(body, ensure_ascii=False),
                      encoding="utf-8", newline="\n")
         steps.append(f'cp {posix(f)!r} "$RUN_DIR/response.json"; slot_names_refresh || :')
-    out = sh(f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/slotnames.sh; '
+    out = sh(f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/hw/slotnames.sh; '
              + "; ".join(steps) + "; slot_names_records")
     assert out.returncode == 0, out.stderr
     kept = run / "slot_names"
@@ -92,7 +92,7 @@ def test_an_empty_object_clears_the_names(tmp_path):
 
 
 def test_no_file_means_no_records(tmp_path):
-    out = sh(f'export RUN_DIR={posix(tmp_path)!r}; . {posix(AGENT)}/lib/slotnames.sh; slot_names_records')
+    out = sh(f'export RUN_DIR={posix(tmp_path)!r}; . {posix(AGENT)}/lib/hw/slotnames.sh; slot_names_records')
     assert out.returncode == 0 and out.stdout == ""
 
 
@@ -113,7 +113,7 @@ def test_the_cloner_state_file_carries_the_names(tmp_path):
 
 def test_the_kiosk_load_chain_sources_slotnames():
     """‏#834: lib שחסר ב-`gui_libs` הוא `not found` פעם בשנייה על הברזל."""
-    bridge = (AGENT / "lib" / "guibridge.sh").read_text(encoding="utf-8")
+    bridge = (AGENT / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
     chain = bridge[bridge.index("gui_libs() {"):bridge.index("\n}", bridge.index("gui_libs() {"))]
     assert '. "$LIB_DIR/slotnames.sh"' in chain
     assert chain.index("slotnames.sh") < chain.index("clonergui.sh")
@@ -142,7 +142,7 @@ def _room_records(tmp_path: Path, room: dict) -> list[str]:
     (run / "room.json").write_text(json.dumps(room, ensure_ascii=False), encoding="utf-8", newline="\n")
     (gui / "mode").write_text("direct\n", newline="\n")
     out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
+             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
              + STATE_PRELUDE
              + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '
              + f'gui_get() {{ case "$1" in room) cp {posix(run / "room.json")!r} "$2" ;; *) return 1 ;; esac; }}; '

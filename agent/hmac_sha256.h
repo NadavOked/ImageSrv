@@ -1,5 +1,5 @@
-#ifndef IMAGECTL_HMAC_SHA256_H
-#define IMAGECTL_HMAC_SHA256_H
+#ifndef IMAGESRV_HMAC_SHA256_H
+#define IMAGESRV_HMAC_SHA256_H
 
 #include <stddef.h>
 #include <stdint.h>

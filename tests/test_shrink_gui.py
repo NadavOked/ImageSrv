@@ -4,7 +4,7 @@ Until #928 the kiosk was stopped before the question (it was stopped by a helper
 and the operator answered on the text console. Now the agent publishes the
 plan through the same handshake as the cloner's SMART choice:
 
-* `gui_shrink_choice` (`agent/lib/shrinkgui.sh`) validates the whole plan,
+* `gui_shrink_choice` (`agent/lib/shrink/shrinkgui.sh`) validates the whole plan,
   writes `$GUI_DIR/shrink-request` atomically (``nonce|count`` + one
   ``idx|old|new`` row per partition) and waits for a decision bound to that
   nonce. A dead GUI, a malformed plan, a stale/garbage decision or no answer
@@ -50,9 +50,9 @@ def setup(tmp_path: Path, extra: str = "") -> tuple[str, Path]:
     run = tmp_path / "run"; run.mkdir()
     gui = run / "gui"; gui.mkdir()
     (run / "shrink.plan").write_text(PLAN, newline="\n")
-    pre = (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} IMAGECTL_TEST=1; '
-           f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-           f'. {posix(AGENT)}/lib/shrinkgui.sh; {extra}')
+    pre = (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} IMAGESRV_TEST=1; '
+           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+           f'. {posix(AGENT)}/lib/shrink/shrinkgui.sh; {extra}')
     return pre, gui
 
 
@@ -170,7 +170,7 @@ gui_shrink_choice "$RUN_DIR/shrink.plan"; echo "rc=$?"; kill $_gui_pid
 
 
 def ask_setup(tmp_path: Path) -> tuple[str, Path]:
-    return setup(tmp_path, f'. {posix(AGENT)}/lib/shrinkplan.sh; '
+    return setup(tmp_path, f'. {posix(AGENT)}/lib/shrink/shrinkplan.sh; '
                            'ui_clear() { :; }; ui_header() { :; }; ')
 
 
@@ -229,7 +229,7 @@ def test_the_capture_keeps_the_gui_and_asks_it(tmp_path):
     to the GUI (a request is published), the kiosk is still running when the
     answer is in, and "cancel" stops the capture with nothing shrunk."""
     pre, gui = setup(tmp_path, (
-        f'. {posix(AGENT)}/lib/shrinkplan.sh; . {posix(AGENT)}/lib/shrink.sh; '
+        f'. {posix(AGENT)}/lib/shrink/shrinkplan.sh; . {posix(AGENT)}/lib/shrink/shrink.sh; '
         'ui_clear() { :; }; ui_header() { :; }; '
         'shrink_plan() { :; }; shrink_records_refresh() { :; }; '
         'shrink_pending_for() { return 1; }; attended() { shift; "$@"; }; '
@@ -254,9 +254,9 @@ kill $G 2>/dev/null; true
 # --- guistate.sh: the request becomes state records ------------------------------
 
 
-STATE_PRE = (f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-             f'. {posix(AGENT)}/lib/buildmenuitems.sh; . {posix(AGENT)}/lib/guistate.sh; '
-             f'. {posix(AGENT)}/lib/askgui.sh; '
+STATE_PRE = (f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+             f'. {posix(AGENT)}/lib/gui/buildmenuitems.sh; . {posix(AGENT)}/lib/gui/guistate.sh; '
+             f'. {posix(AGENT)}/lib/gui/askgui.sh; '
              'disk_slot_records() { :; }; ')   # #1495: disk numbering is test_drawer_map_gui_1495's
 
 
@@ -280,7 +280,7 @@ def test_the_state_file_carries_the_question(tmp_path):
     (gui / "mode").write_text("menu\n", newline="\n")
     (gui / "shrink-request").write_text("4-0|1\n3|1000|500\n", newline="\n")
     out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-             'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
+             'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
              + STATE_PRE + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; gui_state')
     assert out.returncode == 0, out.stderr
     lines = (gui / "state").read_text().splitlines()
@@ -307,8 +307,8 @@ def bridge(tmp_path: Path, screen: str) -> tuple[str, Path]:
     run = tmp_path / "run"; run.mkdir()
     pre = (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
            f'GUI_SCREEN={screen} MAC=aa:bb:cc:dd:ee:ff SERVER=http://x; '
-           f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
-           f'. {posix(AGENT)}/lib/shrinkgui.sh; . {posix(AGENT)}/lib/guibridge.sh; '
+           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+           f'. {posix(AGENT)}/lib/shrink/shrinkgui.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; '
            'gui_role() { echo GUI_ROLE_CALLED >&2; return 1; }; ')
     return pre, gui
 

@@ -333,7 +333,7 @@ def _beat(tmp_path, answer: str, extra: str = "") -> subprocess.CompletedProcess
 def test_a_confirmed_power_off_during_the_copy_marks_the_targets_reports_and_powers_off(tmp_path):
     out = _beat(tmp_path, '{"known":true,"power_action":"poweroff","power_confirmed":true}', 'arm_wol() { return 0; }; ')
     # ‏#1378 (170b9bec): כיבוי עובר ב-safe_poweroff — WoL נדרך ואז poweroff
-    # (‏IMAGECTL_TEST: ‏TEST-POWEROFF וחזרה, ולכן "after rc=" כן מודפס כאן)
+    # (‏IMAGESRV_TEST: ‏TEST-POWEROFF וחזרה, ולכן "after rc=" כן מודפס כאן)
     assert "TEST-POWEROFF" in out.stdout, out.stdout + out.stderr
     assert out.stdout.index("REPORT") < out.stdout.index("TEST-POWEROFF")   # the journal is told first
     assert "the console confirmed 'poweroff' in the middle of the copy" in out.stdout

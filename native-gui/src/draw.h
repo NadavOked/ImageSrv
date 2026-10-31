@@ -2,8 +2,8 @@
  * borders, the layered login gradient and an approximation of box-shadow.
  * All coordinates are device pixels -- the CSS was authored at 1x and the
  * station screen is drawn at 1x, so 1 CSS px == 1 pixel here. */
-#ifndef IMAGECTL_DRAW_H
-#define IMAGECTL_DRAW_H
+#ifndef IMAGESRV_DRAW_H
+#define IMAGESRV_DRAW_H
 
 #include <cairo.h>
 #include "theme.h"

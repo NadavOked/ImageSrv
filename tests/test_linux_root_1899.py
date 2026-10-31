@@ -2,7 +2,7 @@
 
 ברירת המחדל של Fedora (ונפוץ באובונטו עם LVM): ‏ESP, ‏/boot של 1GB, שורש
 ‏btrfs — שתיים עם GUID של linux. "הראשונה על הדיסק" (min-free, ‏`diskfit.sh`
-ו-`server/minfree.py`) ו"הראשונה באינדקס" (שם המחשב, ‏`hostname_linux.sh`)
+ו-`server/library/minfree.py`) ו"הראשונה באינדקס" (שם המחשב, ‏`hostname_linux.sh`)
 בחרו את /boot: האימג' נדחה בכל דיסק ("יישארו 0.8GB") ושם המחשב נכשל ב-no_etc.
 
 מעכשיו הקליטה מסמנת את השורש על ראיה (‏etc/os-release או etc/fstab בעיגון
@@ -19,10 +19,11 @@ from pathlib import Path
 
 import pytest
 
-from server import minfree
-from server.images import required_bytes
+from server.library import minfree
+from server.library.images import required_bytes
 
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import flat_lib
 
 needs_shell = pytest.mark.skipif(
     BASH is None or shutil.which("jq") is None, reason="bash and jq are required")
@@ -60,7 +61,7 @@ def _probe(tmp_path: Path, fs: str, layout: str, mount_rc: int = 0) -> tuple[str
     run = tmp_path / "run"
     run.mkdir(parents=True)
     out = sh(f"export RUN_DIR={posix(run)!r} LOG_FILE={posix(run)!r}/log; "
-             f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; "
+             f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; "
              f'_probe_mount() {{ [ {mount_rc} = 0 ] || return 1; for f in {layout}; do '
              'mkdir -p "$4/$(dirname "$f")"; : > "$4/$f"; done; }; '
              'umount() { rm -rf "$1"/*; }; '
@@ -102,7 +103,7 @@ def _agent(tmp_path: Path, m: dict, disk: int) -> str:
     path.write_text(json.dumps(m), encoding="utf-8")
     (tmp_path / "min_free_gb").write_text("20\n")
     out = sh(f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path)!r}/log; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                        ("common", "jsonq", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "diskfit"))
              + f'min_free_check {posix(path)!r} {disk} {required_bytes(m)}')
     return out.strip().splitlines()[-1]
@@ -140,8 +141,8 @@ def test_the_hostname_mounts_the_marked_root(tmp_path):
                      for p in fedora()["partitions"])
     (tmp_path / "plan").write_text(plan + "\n")
     out = sh(f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
-             f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; "
-             f". {posix(AGENT)}/lib/hostname_linux.sh; "
+             f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+             f". {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; "
              f'mount() {{ echo "$*" >> {posix(run)!r}/mounts; mkdir -p "$RUN_DIR/linux/etc"; }}; '
              f'_mount_linux sda {posix(path)!r} {posix(tmp_path / "plan")!r}')
     assert out.strip().splitlines()[-1].endswith("/linux")

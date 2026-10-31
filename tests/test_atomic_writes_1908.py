@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from server import deploy_net, dhcp_host, netcfg_host
+from server.net import deploy_net, dhcp_host, netcfg_host
 
 OLD = "# the previous, good config\ninterface=eth1\n"
 NEW = "# the new config\n" + "dhcp-range=10.0.0.10,10.0.0.200\n" * 50
@@ -62,7 +62,7 @@ def _only_target(directory: Path, name: str) -> list[str]:
 
 
 def test_dnsmasq_conf_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
-    conf = tmp_path / "imagectl-dhcp.conf"
+    conf = tmp_path / "imagesrv-dhcp.conf"
     conf.write_text(OLD, encoding="utf-8")
     with disk_fills_mid_write(monkeypatch):
         error = dhcp_host._write(NEW, conf)
@@ -100,7 +100,7 @@ def test_resolv_conf_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
 
 
 def test_a_normal_write_lands_whole(tmp_path):
-    conf = tmp_path / "imagectl-dhcp.conf"
+    conf = tmp_path / "imagesrv-dhcp.conf"
     conf.write_text(OLD, encoding="utf-8")
     assert dhcp_host._write(NEW, conf) is None
     assert conf.read_text(encoding="utf-8") == NEW
@@ -115,10 +115,10 @@ pytest.importorskip("fastapi")
 def test_a_capture_manifest_cut_halfway_never_appears_as_manifest_json(server, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from server.capture import staging_dir
+    from server.library.capture import staging_dir
     from test_capture import (PART_A, PART_B, make_task, manifest_for,
                               setup_build_machine, task_token)
-    from server.tasks import TOKEN_HEADER
+    from server.core.tasks import TOKEN_HEADER
 
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()

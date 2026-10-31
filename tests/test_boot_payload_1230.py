@@ -78,9 +78,9 @@ def _host(tmp_path: Path) -> Path:
 
 
 def _host_env(host: Path) -> dict:
-    return {"IMAGECTL_MODULES_DIR": posix(host / "modules"),
-            "IMAGECTL_KERNEL_DIR": posix(host / "kernels"),
-            "IMAGECTL_BUILD_TMPDIR": posix(host / "var-tmp")}
+    return {"IMAGESRV_MODULES_DIR": posix(host / "modules"),
+            "IMAGESRV_KERNEL_DIR": posix(host / "kernels"),
+            "IMAGESRV_BUILD_TMPDIR": posix(host / "var-tmp")}
 
 
 def _with_payload_builder(tree: Path) -> None:
@@ -104,7 +104,7 @@ def _firstboot_stage_a() -> str:
 
 
 def _run_firstboot(tmp_path: Path, host: Path, bindir: Path, env: dict | None = None):
-    src = tmp_path / "src"                       # ‏/opt/imagectl-src של בניית --source: בלי .git
+    src = tmp_path / "src"                       # ‏/opt/imagesrv-src של בניית --source: בלי .git
     _with_payload_builder(src)
     script = (
         "set -euo pipefail\n"
@@ -173,7 +173,7 @@ case "$1" in
   *) echo "unexpected git $*" >&2; exit 64 ;;
 esac''')
     fake_tool(bindir, "systemctl",
-              'case "$1" in show) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;; esac; exit 0')
+              'case "$1" in show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac; exit 0')
     fake_tool(bindir, "curl", "exit 0")
 
 
@@ -183,13 +183,13 @@ def _upgrade(tmp_path: Path, host: Path, bindir: Path, *, flags: Path | None,
     _seed_db(data, previous="v0.59.0")
     repo = _fake_repo(tmp_path, live_ok=True)
     _with_payload_builder(repo)
-    (repo / ".git").mkdir()                      # ‏/opt/imagectl אחרי #1185: עץ git
+    (repo / ".git").mkdir()                      # ‏/opt/imagesrv אחרי #1185: עץ git
     _upgrade_tools(bindir)
     (tmp_path / "units").mkdir(exist_ok=True)
     env = {**_upgrade_env(tmp_path, repo, data), **_host_env(host), "FAKE_TAG": tag,
-           "IMAGECTL_HTTP_ROOT": posix(host / "boot"),
-           "IMAGECTL_INITRD_FLAGS": posix(flags or tmp_path / "missing.flags"),
-           "IMAGECTL_ISO_MANIFEST": posix(host / "etc" / "iso-release.json") if iso_manifest
+           "IMAGESRV_HTTP_ROOT": posix(host / "boot"),
+           "IMAGESRV_INITRD_FLAGS": posix(flags or tmp_path / "missing.flags"),
+           "IMAGESRV_ISO_MANIFEST": posix(host / "etc" / "iso-release.json") if iso_manifest
            else posix(tmp_path / "not-an-iso-server.json"),
            **(extra or {})}
     proc = run_bash(f'bash "{posix(repo / "tools" / "server-upgrade.sh")}" {tag} "{posix(repo)}"',
@@ -240,7 +240,7 @@ def test_upgrade_without_flags_on_a_non_iso_server_builds_the_documented_default
     bindir = tmp_path / "bin"
     bindir.mkdir()
     (host / "boot" / "initrd.img").write_text("old initrd\n", encoding="utf-8")
-    flags = tmp_path / "etc-imagectl" / "initrd.flags"
+    flags = tmp_path / "etc-imagesrv" / "initrd.flags"
 
     proc, log, status = _upgrade(tmp_path, host, bindir, flags=flags)
     assert proc.returncode == 0, log
@@ -260,7 +260,7 @@ def test_upgrade_without_flags_on_an_iso_server_builds_the_iso_default_and_recor
     host = _host(tmp_path)
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    flags = tmp_path / "etc-imagectl" / "initrd.flags"   # firstboot מלפני #1230 לא כתב אותו
+    flags = tmp_path / "etc-imagesrv" / "initrd.flags"   # firstboot מלפני #1230 לא כתב אותו
 
     proc, log, status = _upgrade(tmp_path, host, bindir, flags=flags, iso_manifest=True)
     assert proc.returncode == 0, log

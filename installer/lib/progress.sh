@@ -1,7 +1,7 @@
 # progress.sh -- atomic installer state records. POSIX sh (busybox ash).
 # shellcheck disable=SC2034,SC2154 # sourced module shares state with the entry point
 
-STATE_FILE="${STATE_FILE:-/run/imagectl/installer.state}"
+STATE_FILE="${STATE_FILE:-/run/imagesrv/installer.state}"
 PROGRESS_PCT=0
 PROGRESS_LOG=
 _FAIL_ACTIVE=0

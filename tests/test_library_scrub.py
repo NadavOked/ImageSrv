@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 
-import server.library_scrub as library_scrub
-from server.images import ImageLibrary
-from server.library_scrub import scrub_library
+import server.library.library_scrub as library_scrub
+from server.library.images import ImageLibrary
+from server.library.library_scrub import scrub_library
 from conftest import ESP_GUID, LINUX_GUID, SWAP_GUID
 
 

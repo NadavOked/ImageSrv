@@ -2,7 +2,7 @@
 
 תחנה מחוץ לווילן ההפצה (תרחיש 3 באפיון, בדיקות 3.4–3.5) מושכת את התפריט
 דרך ‎$net_default_server — הכתובת שבאמת ענתה לה. עד #39 התפריט שהיא קיבלה
-הפנה את linux/initrd ואת imagectl.server לכתובת ההפצה הקבועה, שלא נגישה
+הפנה את linux/initrd ואת imagesrv.server לכתובת ההפצה הקבועה, שלא נגישה
 מהרשת שלה: משיכת הקרנל נכשלה והמסלול נפל ל-chain_local.
 
 הבדיקות כאן מריצות את אפליקציית ה-ASGI ישירות, כי מה שנבדק הוא בדיוק
@@ -21,7 +21,7 @@ CONFIGURED = "10.44.12.10:8080"
 CONFIG = GrubConfig(server_base=f"http://{CONFIGURED}")
 
 #: תשובת שרת (ממשק 3) שמייצרת רשומת סוכן — שם מופיעות שורות
-#: ה-linux/initrd וגם imagectl.server, כלומר כל שלוש הכתובות.
+#: ה-linux/initrd וגם imagesrv.server, כלומר כל שלוש הכתובות.
 ANSWER = {"schema": 1, "known": True, "role": "classroom", "task": {"type": "deploy"}}
 
 
@@ -69,7 +69,7 @@ def test_menu_points_at_the_address_the_station_actually_reached():
 
     assert "linux (http,10.10.10.8:8080)/boot/vmlinuz" in text
     assert "initrd (http,10.10.10.8:8080)/boot/initrd.img" in text
-    assert "imagectl.server=http://10.10.10.8:8080" in text
+    assert "imagesrv.server=http://10.10.10.8:8080" in text
     # שום שריד של כתובת ההפצה, שמהרשת הזו לא נגישה בכלל.
     assert CONFIGURED not in text
 
@@ -100,7 +100,7 @@ def test_anything_unusable_falls_back_to_the_configured_address(server):
     text = fetch_menu(server=server)
 
     assert f"linux (http,{CONFIGURED})/boot/vmlinuz" in text
-    assert f"imagectl.server=http://{CONFIGURED}" in text
+    assert f"imagesrv.server=http://{CONFIGURED}" in text
 
 
 def test_only_the_server_address_is_replaced():
@@ -125,5 +125,5 @@ def test_derived_menu_keeps_the_kernel_command_line_clean():
     cmdline = next(line for line in text.splitlines() if " linux (http," in line)
     assert "deploy" not in cmdline
     assert "classroom" not in cmdline
-    assert "imagectl.mode=recovery" not in cmdline
+    assert "imagesrv.mode=recovery" not in cmdline
     assert text.isascii()

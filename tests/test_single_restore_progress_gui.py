@@ -2,7 +2,7 @@
 
 Nadav saw it on metal on 17/10, on the build machine. The bridge released the
 display for the write, and the whole restore was English on a black tty:
-``imagectl:`` lines, curl errors, and Hebrew drawn as squares. Owner, 17/10:
+``imagesrv:`` lines, curl errors, and Hebrew drawn as squares. Owner, 17/10:
 "no screen that is not graphic in our design". The checks:
 
 * **During the write**, ``single_restore_run`` shows ``--screen progress``
@@ -137,7 +137,7 @@ def restore(tmp_path: Path, run_restore: str, *, gui: str | None = "live", manif
     """The real single_restore_run with the system's edges stubbed: the
     network (http_get, pull_post, http_post_json), the disk
     (pick_internal_disk, disk_port), the write (run_restore) and the power
-    (arm_wol; IMAGECTL_TEST makes safe_poweroff say TEST-POWEROFF)."""
+    (arm_wol; IMAGESRV_TEST makes safe_poweroff say TEST-POWEROFF)."""
     run = tmp_path / "run"
     (run / "gui").mkdir(parents=True, exist_ok=True)
     (run / "targets").mkdir(exist_ok=True)
@@ -157,13 +157,13 @@ def restore(tmp_path: Path, run_restore: str, *, gui: str | None = "live", manif
         f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC!r} SERVER=http://127.0.0.1:1 "
         f"SR_GUI_BIN={shlex.quote(posix(gui_bin))} GUI_MODE={gui or 'none'} SR_GUI_TICK_S=0.2 "
         "AFTER_TASK_FILE=/nonexistent/after-task D_ROLE=build "
-        f"IMAGECTL_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1 {env}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/pull.sh; "
-        f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/guibridge.sh; "
-        f". {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/slotnames.sh; "
-        f". {posix(AGENT)}/lib/single_restore.sh; . {posix(AGENT)}/lib/srgui.sh; "
-        f". {posix(AGENT)}/lib/guistate.sh; "   # gui_header_state: the header's machine and server
+        f"IMAGESRV_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1 {env}; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/pull.sh; "
+        f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "
+        f". {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/hw/slotnames.sh; "
+        f". {posix(AGENT)}/lib/restore/single_restore.sh; . {posix(AGENT)}/lib/gui/srgui.sh; "
+        f". {posix(AGENT)}/lib/gui/guistate.sh; "   # gui_header_state: the header's machine and server
         "disk_port() { echo 1; }; pick_internal_disk() { echo sda; }; stage_drivers() { :; }; "
         "sr_share_gate() { return 0; }; "   # #1898: the split question -- its own tests (test_single_restore_share_1898.py)
         f"http_get() {{ {get}; }}; "
@@ -284,7 +284,7 @@ def test_without_a_gui_the_restore_goes_on(tmp_path):
     r = restore(tmp_path, progress_stub(watch=False), gui=None, then=END)
     assert "RC=0" in r["out"] and "TEST-POWEROFF" in r["out"], r["out"]
     assert "no GUI for the progress" in r["log"]
-    assert "imagectl: unicast pull registered as ses_1" in r["out"], r["out"]
+    assert "imagesrv: unicast pull registered as ses_1" in r["out"], r["out"]
 
 
 def test_a_refusal_before_the_write_is_in_hebrew_on_the_gui(tmp_path):
@@ -369,8 +369,8 @@ def agent_state(tmp_path: Path, stage: str = "writing") -> Path:
     out = tmp_path / f"{stage}.state"
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; "
-        f". {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/srgui.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; "
+        f". {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/gui/srgui.sh; "
         f'target_init sda {TOTAL}; target_set sda writing; echo writing > "$RUN_DIR/state"; '
         'echo 2 > "$RUN_DIR/targets/sda/partition"; echo 18000000000 >> "$RUN_DIR/targets/sda/bytes.raw"; '
         + STAGES[stage] +

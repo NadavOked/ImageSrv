@@ -71,7 +71,7 @@ def test_a_bad_hello_file_drops_only_the_hello_records(tmp_path):
 
 # --- הגואי: המסך עצמו ----------------------------------------------------------
 
-HEAD = ("machine_name=BUILD-01\nserver_name=imagectl-ta\nserver_addr=10.44.0.1\n"
+HEAD = ("machine_name=BUILD-01\nserver_name=imagesrv-ta\nserver_addr=10.44.0.1\n"
         "server_version=v0.59.2\nagent_version=v0.59.2\nmessage=x|y\n")
 TWO = ("cslot_name=1|מגירה עליונה\n"
        "cdisk=1|sda|Samsung SSD 870 EVO|500107862016|passed|\n"

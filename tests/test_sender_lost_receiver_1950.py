@@ -5,7 +5,7 @@
 מחיצה 4 יצאה עם `--min-receivers 1`; ‏VCLONE-2 הגיע אליה ראשון, השולח
 התחיל, ומשכפל 2 — החבר החי היחיד — הצטרף 4 שניות אחריו וקיבל זרם ריק
 (‏`fanout … took 0 bytes`). ‏udpcast אינו מצרף מקלט באמצע מחיצה
-(‏`agent/lib/waits.sh`: מי שהצטרף באמצע ממתין לשידור הבא).
+(‏`agent/lib/core/waits.sh`: מי שהצטרף באמצע ממתין לשידור הבא).
 
 התיקון: חבר `lost` שקיבל את המחיצה הקודמת **עד סופה** (התחבר, לא נזרק,
 לפי הלוג של udp-sender) נספר שוב. חבר שנזרק (‏`Dropping client`) — לא, כמו
@@ -20,8 +20,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import sender as sender_module
-from server.sender import SenderEngine
+from server.rounds import sender as sender_module
+from server.rounds.sender import SenderEngine
 
 from conftest import hello_body, setup_classroom
 from test_sender import Recorder, free_ports, library, wait_for  # noqa: F401

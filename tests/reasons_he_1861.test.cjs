@@ -27,12 +27,12 @@ const read=(p)=>fs.readFileSync(path.join(repo,p),'utf8');
 const visible=(html)=>html.replace(/<[^>]*>/g,' ').replace(/onclick="[^"]*"/g,' ');
 
 /* the producers */
-const smartSh=read('agent/lib/smart.sh');
+const smartSh=read('agent/lib/smart/smart.sh');
 const warnWords=((smartSh.match(/^SMART_WARN_REASONS="([^"]*)"/m)||[])[1]||'').split(/\s+/).filter(Boolean);   // #1859: the orange words
 const smartReasons=[...new Set([...[...smartSh.matchAll(/(?:echo "|_smart_store "\$1" |set -- )(?:ok|fail|warn|unchecked) (\w+)/g)].map(m=>m[1]),...warnWords])].filter(r=>r!=='ok');
-const causes=[...read('server/ata_cause.py').match(/^CAUSES = \(([^)]*)\)/m)[1].matchAll(/"(\w+)"/g)].map(m=>m[1]);
+const causes=[...read('server/disks/ata_cause.py').match(/^CAUSES = \(([^)]*)\)/m)[1].matchAll(/"(\w+)"/g)].map(m=>m[1]);
 const states=new Set(['waiting','failed']);
-for(const f of fs.readdirSync(path.join(repo,'agent/lib')).filter(f=>f.endsWith('.sh')))
+for(const f of fs.readdirSync(path.join(repo,'agent/lib'),{recursive:true}).filter(f=>f.endsWith('.sh')))
   for(const m of read('agent/lib/'+f).matchAll(/\btarget_set "?\$[\w{}]+"? "?([a-z_]+)"?/g)) states.add(m[1]);
 
 test('the scans see what they were written for', () => {

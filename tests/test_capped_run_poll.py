@@ -22,7 +22,7 @@ def _run(body: str) -> tuple[subprocess.CompletedProcess[str], float]:
     prefix = (
         'export PATH="/usr/bin:$PATH"; '
         'RUN_DIR=$(mktemp -d); export RUN_DIR; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
     )
     started = time.monotonic()
     proc = subprocess.run(

@@ -115,7 +115,7 @@ def test_waking_with_every_chosen_disk_gone_does_not_join(room_server):
 
 
 def test_a_hello_without_an_inventory_decides_nothing_and_writes_no_bound_slot(room_server):
-    from server import room as room_module
+    from server.rounds import room as room_module
     _open_asleep(room_server)
     room_module.wake_check(room_server["ctx"].conn, CLONER1, None)
     assert _item(room_server, CLONER1)["expect"] == {"1": "S1", "2": "S2"}

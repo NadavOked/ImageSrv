@@ -24,14 +24,17 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from agentlib import flat_lib, lib_files
+
 import pytest
 
-from server import journal_he, reports
-from server.ata_cause import CAUSES
+from server.console import journal_he
+from server.agent import reports
+from server.disks.ata_cause import CAUSES
 from test_smart import BASH, HEALTH_FAIL, HEALTH_OK, PRELUDE, full, preflight
 
 REPO = Path(__file__).resolve().parent.parent
-LIB = REPO / "agent" / "lib"
+LIB = flat_lib()
 ROUNDS = REPO / "native-gui" / "src" / "screens_rounds.c"
 CONSOLE = REPO / "server" / "static" / "console.js"
 HEBREW = re.compile("[א-ת]")
@@ -80,7 +83,7 @@ def target_states() -> list[str]:
     """Every state word the agent writes for a target (progress.sh target_set /
     fail_written_target, and target_init's waiting)."""
     found = {"waiting"}   # target_init (progress.sh)
-    for path in LIB.glob("*.sh"):
+    for path in lib_files(LIB):
         for m in re.finditer(r'\btarget_set "?\$[\w{}]+"? "?([a-z_]+)"?', _read(path)):
             found.add(m.group(1))
     found.add("failed")   # fail_written_target
@@ -150,7 +153,7 @@ def die_local_lines() -> list[str]:
     """Every line die_local can be handed: the literals, the dynamic ones with their
     variables filled, and sr_refused's English (srgui.sh hands it on)."""
     lines: set[str] = set()
-    for path in [REPO / "agent" / "imagectl-agent", *LIB.glob("*.sh")]:
+    for path in [REPO / "agent" / "imagesrv-agent", *lib_files(LIB)]:
         text = _read(path)
         for m in re.finditer(r'\b(?:die_local|sr_refused "?[\w$-]+"?) "([^"]*)"', text):
             raw = m.group(1)

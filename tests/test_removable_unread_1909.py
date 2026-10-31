@@ -22,7 +22,7 @@ from test_internal_disk_1807_1832 import _entry, _machine, _pick, _sh
 
 pytestmark = requires_native(("bash", BASH))
 
-FAILSCREEN = f". {posix(AGENT)}/lib/failscreen.sh; "
+FAILSCREEN = f". {posix(AGENT)}/lib/gui/failscreen.sh; "
 
 
 def _unread(box: Path, name: str) -> None:
@@ -45,7 +45,7 @@ def test_the_picker_does_not_take_a_disk_whose_removable_did_not_read(tmp_path):
 def test_a_disk_whose_removable_did_not_read_is_not_a_drawer(tmp_path):
     box = _machine(tmp_path, {"sda": ("0", "sata"), "sdb": ("0", "sata")})
     _unread(box, "sda")
-    out = _sh(box, "list_drawers", f". {posix(AGENT)}/lib/drawers.sh; ").split()
+    out = _sh(box, "list_drawers", f". {posix(AGENT)}/lib/restore/drawers.sh; ").split()
     assert out == ["sdb"], out
 
 

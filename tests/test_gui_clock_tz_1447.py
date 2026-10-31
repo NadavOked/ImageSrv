@@ -14,7 +14,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from native import requires_native
-from server import timezone
+from server.system import timezone
 from server.db import connect, set_setting
 from test_class_deploy_switch import STATION, state_records
 from test_cloner_gui import BASH, posix, sh
@@ -134,7 +134,7 @@ def test_gui_state_emits_tz_and_empty_for_null_or_missing(tmp_path):
 def test_cloner_cached_hello_emits_tz(tmp_path):
     response = tmp_path / "response.json"
     response.write_text('{"tz":"IST-2IDT,M3.4.4/26,M10.5.0"}', newline="\n")
-    script = f'. {posix(AGENT)}/lib/guistate.sh; gui_header_state {posix(response)!r}'
+    script = f'. {posix(AGENT)}/lib/gui/guistate.sh; gui_header_state {posix(response)!r}'
     out = sh(script)
     assert out.returncode == 0, out.stderr
     assert "tz=IST-2IDT,M3.4.4/26,M10.5.0" in out.stdout.splitlines()

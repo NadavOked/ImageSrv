@@ -136,7 +136,7 @@ def test_the_wrong_password_is_still_wrong_at_another_iteration_count(server):
 
 
 def test_a_new_password_is_stored_with_the_current_default(server):
-    from server import users
+    from server.console import users
     server["admin"].put("/api/console/users/labtech",
                         json={"password": "Brand-new-1!"})
     stored = server["ctx"].conn.execute(
@@ -155,7 +155,7 @@ def test_a_new_password_is_stored_with_the_current_default(server):
 ])
 def test_a_record_we_cannot_read_is_refused_not_guessed(server, stored):
     """עיקרון 5: "לא הבנו את הרשומה" איננו "ננחש את ברירת המחדל"."""
-    from server import users
+    from server.console import users
     conn = server["ctx"].conn
     conn.execute("UPDATE users SET pw_hash = ? WHERE username = 'labtech'", (stored,))
     conn.commit()

@@ -8,7 +8,7 @@ tries, and works only when an admin signed in to the primary's console types
 it there (after comparing the fingerprint this screen shows).
 
 The channel is this process itself: root on tty1, straight to the DB through
-:mod:`server.storage_nodes`, like every other action of the screen.  There is
+:mod:`server.interserver.storage_nodes`, like every other action of the screen.  There is
 no route and no network address for any of it -- the loopback API
 (``/api/console/storage-pairing-window``) is untouched and still needs an
 admin session.
@@ -20,7 +20,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from server import interserver_auth, storage_nodes
+from server.interserver import interserver_auth, storage_nodes
 from server.db import journal
 
 from .actions import ActionResult

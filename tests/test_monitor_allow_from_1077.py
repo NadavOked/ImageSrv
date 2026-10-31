@@ -29,12 +29,12 @@ def _start(tmp_path, server: str) -> tuple[int, str | None, str]:
     (run / "monitor.secret").write_text("00112233445566778899aabbccddeeff\n")
     script = (
         'OUT=' + repr(posix(out)) + '; LOGF=' + repr(posix(logf)) + '; '
-        'export IMAGECTL_MONITOR=1 IMAGECTL_SERVER=' + repr(server) + '; '
+        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=' + repr(server) + '; '
         'export RUN_DIR=' + repr(posix(run)) + '; '
         'export D_ROLE=build IP=10.0.0.9 MONITOR_BIN=/bin/sh FB_DEV=/dev/null; '
         'export MONITOR_MIRROR_WAIT_S=0; '
         'log() { echo "$*" >> "$LOGF"; }; '
-        '. ' + posix(AGENT) + '/lib/monitor.sh; '
+        '. ' + posix(AGENT) + '/lib/core/monitor.sh; '
         '_monitor_spawn() { echo "$@" > "$OUT"; _monitor_pid=4242; }; '
         'monitor_start')
     proc = subprocess.run([BASH, "-c", script], capture_output=True, text=True,
@@ -45,8 +45,8 @@ def _start(tmp_path, server: str) -> tuple[int, str | None, str]:
 
 
 @pytest.mark.parametrize("server", [
-    "",                                   # אין imagectl.server בשורת הקרנל
-    "http://imagectl.college:8080",       # שם מארח — אין IPv4 להגביל אליו
+    "",                                   # אין imagesrv.server בשורת הקרנל
+    "http://imagesrv.college:8080",       # שם מארח — אין IPv4 להגביל אליו
 ])
 def test_no_parsable_server_ip_means_no_monitor(tmp_path, server):
     rc, args, log = _start(tmp_path, server)

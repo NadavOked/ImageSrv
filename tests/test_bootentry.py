@@ -1,4 +1,4 @@
-"""‏#433 — רשומת Boot#### לווינדוס המשוחזר על UEFI (`agent/lib/bootentry.sh`).
+"""‏#433 — רשומת Boot#### לווינדוס המשוחזר על UEFI (`agent/lib/postdeploy/bootentry.sh`).
 
 שחזור מחיצות משחזר דיסק, לא NVRAM: הרשומה שהקושחה מעלה ממנה יושבת על
 הלוח. ‏`ensure_boot_entry` רץ על ה-sh האמיתי עם efibootmgr מזויף שמחזיק
@@ -87,9 +87,9 @@ class Box:
                        f'LOG_FILE={posix(self.run / "agent.log")!r} SYSROOT={posix(self.sys)!r} '
                        f'LIB_DIR={posix(AGENT)!r}/lib FAKE_NVRAM={posix(self.nvram)!r} '
                        f'FAKE_PARTUUID={ESP_UUID} {env}; '
-                       f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-                       f'. {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/progress.sh; '
-                       f'. {posix(AGENT)}/lib/bootentry.sh; '
+                       f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+                       f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+                       f'. {posix(AGENT)}/lib/postdeploy/bootentry.sh; '
                        f'manifest_plan() {{ cat {posix(tmp_path / "plan")!r}; }}; ')
 
     def ensure(self) -> dict:
@@ -225,13 +225,13 @@ def test_an_empty_efivars_directory_is_a_mount_that_failed(tmp_path):
 
 
 def test_the_stage_hook_runs_the_boot_entry_after_the_drivers():
-    post = (AGENT / "lib" / "postdeploy.sh").read_text(encoding="utf-8")
+    post = (AGENT / "lib" / "postdeploy" / "postdeploy.sh").read_text(encoding="utf-8")
     body = post[post.index("stage_drivers() {") : post.index("_stage_drivers() {")]
     assert body.index('_stage_drivers "$@"') < body.index('ensure_boot_entry "$@"')
     assert "done" not in body.split("return 0")[0].split('ensure_boot_entry "$@"')[1]   # #1935: done is the caller's
-    # הטעינה היא ברשימה המפורשת של imagectl-agent (test_every_lib_file_is_loaded_and_packed),
+    # הטעינה היא ברשימה המפורשת של imagesrv-agent (test_every_lib_file_is_loaded_and_packed),
     # לפני postdeploy.sh שקורא ל-ensure_boot_entry — לא self-sourcing מתוך lib.
-    main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert main.index('"$LIB_DIR/bootentry.sh"') < main.index('"$LIB_DIR/postdeploy.sh"')
 
 
@@ -244,8 +244,8 @@ def test_the_builder_packs_efibootmgr():
 @pytest.mark.parametrize("flag", ["-c ", " -o "])
 def test_boot_order_is_never_rewritten(flag):
     """‏`-c` בלי ‏`-C` מקדים את הרשומה ל-BootOrder — וברשת הזאת PXE חייב
-    להישאר ראשון, אחרת התחנה לא חוזרת ל-ImageCtl לעולם."""
-    text = (AGENT / "lib" / "bootentry.sh").read_text(encoding="utf-8")
+    להישאר ראשון, אחרת התחנה לא חוזרת ל-ImageSrv לעולם."""
+    text = (AGENT / "lib" / "postdeploy" / "bootentry.sh").read_text(encoding="utf-8")
     for line in text.splitlines():
         if line.lstrip().startswith("efibootmgr"):
             assert flag not in line, line

@@ -90,7 +90,7 @@ def test_die_local_offers_reboot_now_and_says_when(tmp_path):
 
 
 def test_the_failure_texts_in_the_sources_never_send_to_it():
-    for path in ("lib/failscreen.sh", "lib/srgui.sh", "lib/single_restore.sh"):
+    for path in ("lib/gui/failscreen.sh", "lib/gui/srgui.sh", "lib/restore/single_restore.sh"):
         code = "\n".join(ln for ln in (AGENT / path).read_text(encoding="utf-8").splitlines()
                          if not ln.lstrip().startswith("#"))
         for bad in ("פנו ל-IT", "לטכנאי", "עד שמגיע טכנאי"):
@@ -103,7 +103,7 @@ STUBS = (
     'safe_poweroff() { echo "POWEROFF $1"; return ${OFF_RC:-0}; }; reboot() { echo "REBOOT $*"; }; sync() { :; }; '
     'boot_next_local() { echo "${BOOT_NEXT:-skipped:אין efivars}"; case "${BOOT_NEXT:-}" in set:*) return 0;; esac; return 1; }; '
     'smart_probe() { echo "${SMART_V:-ok}"; }; smart_field() { echo pending_sectors; }; '
-    '. ' + shlex.quote(posix(AGENT / "lib/smart.sh")) + ' 2>/dev/null; '
+    '. ' + shlex.quote(posix(AGENT / "lib/smart/smart.sh")) + ' 2>/dev/null; '
     'smart_probe() { echo "${SMART_V:-ok}"; }; smart_field() { echo pending_sectors; }; '
 )
 
@@ -158,7 +158,7 @@ def test_start_windows_sets_bootnext_or_says_why_not(tmp_path):
 
 def test_die_local_reboots_at_once_on_the_button(tmp_path):
     """‏`fail_fatal` מחכה FAIL_SHOW_S שניות -- "אתחל עכשיו" מקצר את ההמתנה."""
-    fs = AGENT / "lib" / "failscreen.sh"
+    fs = AGENT / "lib" / "gui" / "failscreen.sh"
     script = (f'. {shlex.quote(posix(fs))}; RUN_DIR={shlex.quote(posix(tmp_path))}; mkdir -p "$RUN_DIR/gui"; '
               'FAIL_SHOW_S=30; fail_screen() { :; }; echo reboot > "$RUN_DIR/gui/fail.action"; '
               'start=$(date +%s); fail_fatal x; echo "WAITED $(( $(date +%s) - start ))"')

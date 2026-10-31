@@ -1,10 +1,10 @@
 """השער שאומר אם תחנה יכולה בכלל לעלות דרך השרת שהותקן (#332).
 
-בהתקנה נקייה מאפס המתקין יצא **0** והדפיס `מוכן.` בזמן ש-`/srv/imagectl/boot`
+בהתקנה נקייה מאפס המתקין יצא **0** והדפיס `מוכן.` בזמן ש-`/srv/imagesrv/boot`
 הייתה ריקה, ושני הקבצים שתפריט ה-GRUB מפנה אליהם — ‏`/boot/vmlinuz`
 ו-`/boot/initrd.img` — החזירו **404**. שרת מוכן שאף מחשב לא עולה דרכו.
 
-הבדיקות כאן מריצות את `install/verify-boot-payload.sh` **בפועל**, מול שרת
+הבדיקות כאן מריצות את `deploy/verify-boot-payload.sh` **בפועל**, מול שרת
 ‏HTTP אמיתי, ובודקות **קוד יציאה והודעה**. בדיקת נוכחות טקסט בסקריפט
 הייתה עוברת גם על שער שאינו רץ.
 """
@@ -22,11 +22,11 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server.health import BOOT_ASSETS, MIN_ASSET_BYTES
+from server.system.health import BOOT_ASSETS, MIN_ASSET_BYTES
 
 REPO = Path(__file__).resolve().parent.parent
-SCRIPT = REPO / "install" / "verify-boot-payload.sh"
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+SCRIPT = REPO / "deploy" / "verify-boot-payload.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 BASH = shutil.which("bash")
 
 #: גוף ה-404 של ‎/boot — **תשעה** בייטים. זה המספר שהוגש ב-200 מדומה
@@ -147,7 +147,7 @@ def test_files_on_disk_that_the_server_does_not_serve_are_refused(tmp_path: Path
 def test_a_boot_directory_that_is_not_the_one_being_served_is_refused(tmp_path: Path):
     """‏200 וגודל מלא — ובכל זאת כישלון, כי התיקייה שנמסרה ריקה.
 
-    ‏`--boot-dir` של השרת הוא `/srv/imagectl/boot` (server/main.py), וזה
+    ‏`--boot-dir` של השרת הוא `/srv/imagesrv/boot` (server/main.py), וזה
     גם ה-`--http-root` של המתקין. כששניהם אינם אותו נתיב, המפעיל מילא
     תיקייה שאיש אינו מגיש — ו-HTTP לבדו היה מאשר את זה.
     """

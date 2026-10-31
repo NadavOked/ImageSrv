@@ -16,7 +16,7 @@
   `hygiene.run_group`, שהורג קבוצה שלמה.
 * בלי `/proc` (ווינדוס) אין ראיה, והשומר כבוי -- ונאמר בכותרת הריצה
   (`header_line`), לא בשקט.
-* ‏`IMAGECTL_ORPHAN_GUARD=off`: רק לטסט שמודד את העוזרים בלי השומר
+* ‏`IMAGESRV_ORPHAN_GUARD=off`: רק לטסט שמודד את העוזרים בלי השומר
   (`test_no_orphans_1736`); לא לריצות רגילות.
 """
 
@@ -30,7 +30,7 @@ from pathlib import Path
 
 import pytest
 
-OFF_ENV = "IMAGECTL_ORPHAN_GUARD"
+OFF_ENV = "IMAGESRV_ORPHAN_GUARD"
 GRACE_S = 3.0
 
 

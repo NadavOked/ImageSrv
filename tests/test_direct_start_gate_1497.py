@@ -46,7 +46,7 @@ def _wait(tmp_path, *, gate_at=None, move_after_gate=False, exit_at=None,
     gate_vars = 'WAIT_STARTED_LOG="$gate" WAIT_STARTED_TEXT="Starting transfer:"' if set_gate else ":"
     make_gate = ': > "$gate"' if gate_log == "sender.log" else ":"   # an unreadable log is never created
     script = f'''
-        . {AGENT.as_posix()!r}/lib/waits.sh
+        . {AGENT.as_posix()!r}/lib/core/waits.sh
         WAIT_POLL_S=10; t=0; counter={str(tmp_path.as_posix() + "/counter")!r}
         gate={str(tmp_path.as_posix() + "/" + gate_log)!r}; : > "$counter"; {make_gate}
         log() {{ :; }}
@@ -102,7 +102,7 @@ def test_ungated_call_keeps_existing_counter_behaviour(tmp_path):
 
 def test_gate_variables_are_one_shot(tmp_path):
     script = f'''
-        . {AGENT.as_posix()!r}/lib/waits.sh
+        . {AGENT.as_posix()!r}/lib/core/waits.sh
         WAIT_POLL_S=10; t=0; counter={str((tmp_path / "counter").as_posix())!r}
         gate={str((tmp_path / "gate").as_posix())!r}; : > "$counter"; : > "$gate"
         log() {{ :; }}; unblock_fifo() {{ :; }}

@@ -106,19 +106,19 @@ def test_a_scope_that_says_nothing_useful_behaves_exactly_as_before(server):
         ({"server": "10.10.10.8:8080"}, VLAN),       # לא tuple
         ({"server": ("999.1.1.1", 8080)}, VLAN),     # לא כתובת תקינה
         ({"server": ("10.10.10.8", 8080)}, None),    # אין כתובת שרת מוגדרת
-        ({"server": ("10.10.10.8", 8080)}, "http://imagectl.local:8080"),  # שם בתצורה
+        ({"server": ("10.10.10.8", 8080)}, "http://imagesrv.local:8080"),  # שם בתצורה
         ({"server": ("10.44.12.10", 9999)}, VLAN),   # אותה כתובת, פורט אחר
     ],
     ids=["absent", "none", "hostname", "short", "string", "bad-ip",
          "no-base", "named-base", "other-port"],
 )
 def test_only_a_comparable_pair_can_mark_a_request_as_off_vlan(scope, base):
-    from server.hello import off_deploy_vlan
+    from server.agent.hello import off_deploy_vlan
 
     assert off_deploy_vlan(scope, base) is False
 
 
 def test_a_different_local_address_is_off_vlan():
-    from server.hello import off_deploy_vlan
+    from server.agent.hello import off_deploy_vlan
 
     assert off_deploy_vlan({"server": ("10.10.10.8", 8080)}, VLAN) is True

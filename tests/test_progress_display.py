@@ -46,7 +46,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import reports, room
+from server.agent import reports
+from server.rounds import room
 
 
 

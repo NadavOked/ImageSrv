@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from server import raid_status
+from server.system import raid_status
 from test_server_health import health_server  # noqa: F401 -- the fixture
 
 HEALTHY = """Personalities : [raid1] [raid6] [raid5] [raid4]
@@ -140,7 +140,7 @@ def test_hooks_not_injected_add_no_row():
 
 def test_the_health_page_carries_the_raid_row_from_the_hooks(health_server):
     """health.collect, the page's own list -- not only the module."""
-    from server import health
+    from server.system import health
     from test_server_health import SS_DNSMASQ
     base = {**health.default_hooks(),
             "ss": lambda: SS_DNSMASQ, "unit_active": lambda n: "active",

@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 
 AGENT = Path(__file__).resolve().parent.parent / "agent"
-GUIBRIDGE = AGENT / "lib" / "guibridge.sh"
+GUIBRIDGE = AGENT / "lib" / "gui" / "guibridge.sh"
 
 #: The data path. None of these may ever be started under nice.
 DATA_PATH = ("partclone", "fanout", "zstd", "udp-sender", "udp-receiver",
@@ -32,9 +32,9 @@ def _code_lines(path: Path) -> list[str]:
 
 def test_the_native_gui_starts_under_nice_10():
     starts = [line for line in _code_lines(GUIBRIDGE)
-              if "/usr/bin/imagectl-station-gui" in line and "--help" not in line]
+              if "/usr/bin/imagesrv-station-gui" in line and "--help" not in line]
     assert len(starts) == 1, starts
-    assert starts[0].strip().startswith("/usr/bin/nice -n 10 /usr/bin/imagectl-station-gui "), starts[0]
+    assert starts[0].strip().startswith("/usr/bin/nice -n 10 /usr/bin/imagesrv-station-gui "), starts[0]
 
 
 def test_the_nice_the_gui_starts_under_is_packed_from_coreutils():

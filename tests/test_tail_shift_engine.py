@@ -54,7 +54,7 @@ pytestmark = requires_native(
 DRIVER = r'''
 set -u
 F=$1; SHRINK=$2
-export RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff
+export RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff
 rm -rf "$RUN_DIR"; mkdir -p "$RUN_DIR"
 export DEVROOT=$F/dev; mkdir -p "$DEVROOT"
 for d in $(awk '{ print $2 }' "$F/devs"); do n=${d#/dev/}; ln -sf "$d" "$DEVROOT/$n"

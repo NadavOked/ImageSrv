@@ -26,7 +26,7 @@ from test_server_upgrade_1193 import _git_shim, _run
 pytestmark = requires_native(("bash", BASH), why="server-upgrade.sh is bash")
 
 REPO = Path(__file__).resolve().parent.parent
-CONF = REPO / "install" / "journald-imagectl.conf"
+CONF = REPO / "deploy" / "journald-imagesrv.conf"
 
 
 @pytest.fixture()
@@ -41,7 +41,7 @@ def _tools(bindir: Path, journald: str = "exit 0") -> None:
     fake_tool(bindir, "systemctl", f'''
 case "$*" in
   "restart systemd-journald") {journald} ;;
-  show*) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;;
+  show*) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;;
 esac
 exit 0''')
     fake_tool(bindir, "curl", "exit 0")
@@ -49,7 +49,7 @@ exit 0''')
 
 def _repo_with_conf(tmp_path: Path) -> Path:
     repo = _fake_repo(tmp_path, live_ok=True)
-    shutil.copy(CONF, repo / "install" / "journald-imagectl.conf")
+    shutil.copy(CONF, repo / "deploy" / "journald-imagesrv.conf")
     return repo
 
 
@@ -61,7 +61,7 @@ def test_the_upgrade_installs_the_journal_ceiling_and_restarts_journald(tmp_path
     proc = _run(tmp_path, bindir, _repo_with_conf(tmp_path), data)
 
     assert proc.returncode == 0, (tmp_path / "upgrade.log").read_text(encoding="utf-8")
-    installed = tmp_path / "journald.conf.d" / "90-imagectl.conf"
+    installed = tmp_path / "journald.conf.d" / "90-imagesrv.conf"
     assert installed.read_bytes() == CONF.read_bytes()
     assert "systemctl restart systemd-journald" in calls(tmp_path)
     status = _status(data)

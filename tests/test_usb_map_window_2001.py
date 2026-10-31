@@ -78,9 +78,9 @@ def stick(tmp_path: Path, keys: list[str], then: str = "", model: str | None = M
     if settings is not None:
         (usb / "settings.json").write_text(json.dumps(settings, ensure_ascii=False), encoding="utf-8")
     root = machine(tmp_path, model)
-    script = (KIOSK + STUBS + stubs + f'echo {data} > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; usbset_open; '
-              + "".join(f'usbset_key {k!r}; ' for k in keys) + pre + 'cat "$GUI_DIR/usbset.frame"; echo "@@"; ' + then)
-    return run(tmp_path, script, IMAGECTL_MODE="usbclone", SYSROOT=posix(root)), usb
+    script = KIOSK + STUBS + stubs + f'echo {data} > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; usbset_open; '
+    steps = [*(f'usbset_key {k!r};' for k in keys), pre + 'cat "$GUI_DIR/usbset.frame"; echo "@@"; ' + then]
+    return run(tmp_path, script, steps=steps, IMAGESRV_MODE="usbclone", SYSROOT=posix(root)), usb
 
 
 def recs(frame: str, kind: str) -> list[list[str]]:

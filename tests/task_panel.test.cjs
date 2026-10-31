@@ -143,13 +143,13 @@ test('dock: closed on login (activity already running at login does not open it)
   assert.equal(run('cls.has("open")'),false,'activity already there at login: stays closed');
   run('rows=[]; homeDockAuto(); rows=[{}]; homeDockAuto()');
   assert.equal(run('cls.has("open")'),true,'activity that STARTS after login still opens it (#1300)');
-  assert.equal(run('store["imagectl.dock.open"]'),'1','remembered for this session');
+  assert.equal(run('store["imagesrv.dock.open"]'),'1','remembered for this session');
   run('cls.delete("open"); bodyCls.delete("tasks-open"); restoreTaskDock()');
   assert.equal(run('cls.has("open")'),true,'a reload in the same session restores it');
   run('store={}; cls.delete("open"); restoreTaskDock()');
   assert.equal(run('cls.has("open")'),false,'nothing remembered = closed');
-  run('dockStore(true)'); assert.equal(run('"imagectl.dock.open" in store'),true);
-  run('dockStore(false)'); assert.equal(run('"imagectl.dock.open" in store'),false);
+  run('dockStore(true)'); assert.equal(run('"imagesrv.dock.open" in store'),true);
+  run('dockStore(false)'); assert.equal(run('"imagesrv.dock.open" in store'),false);
 });
 
 test('sidebar: nav and rail end above the dock (34px closed, + panel height open) so the foot card is never hidden',()=>{

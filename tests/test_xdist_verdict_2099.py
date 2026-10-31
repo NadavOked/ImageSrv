@@ -56,8 +56,8 @@ def test_the_controller_fails_the_run_on_a_finding_a_worker_handed_over(monkeypa
 def test_each_worker_writes_its_own_sender_logs(monkeypatch):
     """לוג המחיצה נגזר מ-`SENDER_LOG` ומשם הקובץ בלבד — שני workers עם אותו
     מניפסט כתבו לאותו קובץ (שם ראה טסט אחד את `Starting transfer` של אחר)."""
-    from server import sender
-    shared = sender.SENDER_LOG.with_name("imagectl-sender.log")
+    from server.rounds import sender
+    shared = sender.SENDER_LOG.with_name("imagesrv-sender.log")
     part = "/x/images/img_7f3a91/p1.esp.pcl.zst"
     seen = []
     for worker in ("gw0", "gw1"):
@@ -69,7 +69,7 @@ def test_each_worker_writes_its_own_sender_logs(monkeypatch):
 
 
 def test_a_serial_run_keeps_the_sender_log_where_it_was(monkeypatch):
-    from server import sender
+    from server.rounds import sender
     monkeypatch.setattr(sender, "SENDER_LOG", sender.SENDER_LOG)
     before = sender.SENDER_LOG
     assert hygiene.isolate_sender_log(None) is None

@@ -1,6 +1,6 @@
 """‏#705: השרת אוכף שירותים לכל כרטיס רשת — ההחלטות, הנעילה העצמית והחזרה.
 
-כאן הלוגיקה (`server/nic_services.py`) עם hooks מזויפים: כרטיסים, שעון,
+כאן הלוגיקה (`server/net/nic_services.py`) עם hooks מזויפים: כרטיסים, שעון,
 מזהה אתחול, טיימר ושלושת שלבי האכיפה. הראיה שהמאזין באמת נסגר/נפתח על
 סוקט — ב-`test_nic_listeners.py`; ה-API וה-RBAC — ב-`test_nic_services_api.py`.
 """
@@ -11,9 +11,9 @@ import json
 
 import pytest
 
-from server import dhcp, nic_services
+from server.net import dhcp, nic_services
 from server.db import connect, get_setting
-from server.nic_services import Baseline, NicServices, ServiceError
+from server.net.nic_services import Baseline, NicServices, ServiceError
 
 NICS = [
     {"name": "ens33", "state": "up", "mac": "00:50:56:a1:07:11", "addresses": ["10.10.10.8/24"]},
@@ -33,7 +33,7 @@ class Clock:
 
 @pytest.fixture()
 def rig(tmp_path):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     clock, scheduled, calls = Clock(), [], []
     boot = {"id": "boot-1"}
 
@@ -321,7 +321,7 @@ def test_multicast_gate_refuses_a_nic_with_multicast_off(rig):
 
 
 def test_sender_fails_by_name_when_multicast_is_off(tmp_path):
-    from server.sender import SenderEngine
+    from server.rounds.sender import SenderEngine
     events_seen = []
     engine = SenderEngine(library=None, interface="ens34", simulate=True,
                           on_event=lambda e, d: events_seen.append((e, d)))
@@ -350,7 +350,7 @@ def test_dnsmasq_shuts_netboot_off_by_name_even_against_the_installer_file():
 
 
 def test_firewall_services_and_deploy_completion_carry_the_per_nic_choice(rig, tmp_path):
-    from server import deploy_net
+    from server.net import deploy_net
     svc = rig["svc"]
     svc.set("ens35", ["console"], local_address="10.10.10.8")
     per = dict(svc.firewall_services())

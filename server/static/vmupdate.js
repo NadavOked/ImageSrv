@@ -855,7 +855,7 @@ function vmnetChoose() {
   const v = VMNET || {};
   const nics = (typeof NETW !== "undefined" && Array.isArray(NETW.nics)) ? NETW.nics : [];
   const options = [{ value: "", label: "— לא נבחר (ה-VM לא יודלק) —" }].concat(nics
-    .filter((n) => n.name && n.name !== "lo" && n.name !== "imagectl-vm0")
+    .filter((n) => n.name && n.name !== "lo" && n.name !== "imagesrv-vm0")
     .map((n) => ({ value: n.name, label: n.name === v.deploy_interface ? `${n.name} — כרטיס ההפצה (לא ניתן)` : n.name })));
   sheet({ title: "כרטיס לעדכוני VM", sub: "הרשת שבה ה-VM לעדכון יקבל כתובת משלו",
     fields: [{ id: "nic", type: "select", label: "כרטיס", value: v.interface || "", options,

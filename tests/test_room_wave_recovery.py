@@ -35,7 +35,7 @@ import sys
 
 import pytest
 
-from server import room, sessions
+from server.rounds import room, sessions
 
 from conftest import room_slots
 from test_server_room import (          # noqa: F401 — ‏room_server הוא fixture

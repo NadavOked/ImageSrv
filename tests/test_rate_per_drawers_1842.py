@@ -23,7 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, drive_rates
+from server import db
+from server.rounds import drive_rates
 
 from test_rate_by_goodput_1758 import (  # noqa: F401 — ה-fixture ‏conn
     CLONER2, OTHER, SENT, _drives, _next, _seed, conn)

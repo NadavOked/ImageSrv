@@ -1,6 +1,6 @@
 # מדיניות אבטחה
 
-ImageCtl מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחול חתומה, יכול לחלק
+ImageSrv מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחול חתומה, יכול לחלק
 כתובות DHCP, וכותב לכוננים של כיתות שלמות. חולשה כאן אינה "באג באתר" —
 היא גישה לכתיבה על מחשבים של אנשים אחרים.
 
@@ -8,7 +8,7 @@ ImageCtl מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחו�
 
 | ריפו | נראות | מה Issue שם עושה |
 |---|---|---|
-| `NadavOked/ImageCtl-archive` | **פרטי** | Issue אינו מפרסם דבר. זה מקום הדיווח. |
+| `NadavOked/ImageSrv-dev` | **פרטי** | Issue אינו מפרסם דבר. זה מקום הדיווח. |
 | `NadavOked/ImageSrv` | ציבורי | ענף, PR או Issue שם מפרסמים את החולשה לפני שיש תיקון. |
 
 **דיווח על חולשה בארכיון הפרטי הוא Issue, והוא מותר ורצוי.** מה שאסור
@@ -36,13 +36,13 @@ ImageCtl מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחו�
 
 ## לאן מדווחים
 
-**אם יש גישה ל-`NadavOked/ImageCtl-archive` (הריפו הפרטי):** Issue שם,
+**אם יש גישה ל-`NadavOked/ImageSrv-dev` (הריפו הפרטי):** Issue שם,
 עם תווית `security`. הוא אינו מפרסם דבר. זה המסלול הרגיל.
 
 **אם נראה רק `NadavOked/ImageSrv` (הציבורי):** אין גישה לארכיון. דיווח
 דרך GitHub Security Advisories בלבד — לשונית **Security** ← **Report a
 vulnerability**, או
-<https://github.com/NadavOked/ImageCtl-archive/security/advisories/new>.
+<https://github.com/NadavOked/ImageSrv-dev/security/advisories/new>.
 Issue או PR בציבורי מפרסם את החולשה לפני שיש תיקון.
 
 **אין כתובת דוא"ל לאבטחה, ואין תוכנית תגמול.** הפרויקט מתוחזק על ידי
@@ -89,7 +89,7 @@ Advisory נדרש כשהחולשה נוגעת **למי שאינו נדב**:
   של אימג'ים, ה-API של הקונסולה.
 - **הסוכן ושרשרת האתחול** (`agent/`, `boot/`) — מה שמריץ מכונה שעולה
   ברשת, ומה שנכתב לכונן שלה.
-- **המתקין ויחידות ה-systemd** (`install/`) — הרשאות, `ReadWritePaths`,
+- **המתקין ויחידות ה-systemd** (`deploy/`) — הרשאות, `ReadWritePaths`,
   קבצים שנוצרים על השרת.
 
 ## מה לא בתחום
@@ -177,11 +177,11 @@ python tools/security-recheck.py --dependabot-only
 
 ## Reporting a vulnerability (English)
 
-ImageCtl is a network boot and disk-imaging server for a college lab.
+ImageSrv is a network boot and disk-imaging server for a college lab.
 
 Two repositories, two disclosure surfaces:
 
-- `NadavOked/ImageCtl-archive` is **private**. An issue there does not
+- `NadavOked/ImageSrv-dev` is **private**. An issue there does not
   publish anything. That is the working repo — file the issue there, with
   the `security` label.
 - `NadavOked/ImageSrv` is public. A branch, PR, or issue there discloses
@@ -189,7 +189,7 @@ Two repositories, two disclosure surfaces:
 
 If you can only see the public repo, report through GitHub Security
 Advisories:
-<https://github.com/NadavOked/ImageCtl-archive/security/advisories/new>
+<https://github.com/NadavOked/ImageSrv-dev/security/advisories/new>
 
 A Security Advisory is **also** required when the weakness affects someone
 other than the maintainer (a student whose disk is written, another college

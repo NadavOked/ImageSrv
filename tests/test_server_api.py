@@ -200,7 +200,7 @@ def test_late_machine_waits_for_the_next_round(server):
 def test_hello_cannot_join_a_wave_that_started_after_its_read(server, monkeypatch):
     """בקרה שלילית #1126: בקוד שלפני התיקון הקריאה ואז ההכנסה יוצרות
     חבר, אף שה-hook מעביר את הסבב ל-``running`` בדיוק ביניהן."""
-    from server.sessions import SessionStore             # noqa: PLC0415
+    from server.rounds.sessions import SessionStore             # noqa: PLC0415
 
     ids = open_session(server, expected=2)
     original = SessionStore.record_hello
@@ -468,18 +468,18 @@ def test_extra_cmdline_reaches_the_boot_menu(tmp_path, images_root, clock):
     """תוספות מפעיל לשורת הקרנל (קונסולה טורית) עוברות כהגדרה — לא
     בעריכת קוד על השרת, שהולידה fork חי (#18).
 
-    ‏`imagectl.debug` יוצא מן הכלל: מעטפת הניפוי של הסוכן אינה מוגשת
+    ‏`imagesrv.debug` יוצא מן הכלל: מעטפת הניפוי של הסוכן אינה מוגשת
     מ-PXE לעולם. עד #1266 רק מתג ה-SSH בקונסולה הכניס אותו; המתג יצא
     מהמוצר, והדגל נשאר מוסר גם כשהמפעיל מעביר אותו כאן."""
     from fastapi.testclient import TestClient
 
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     app = create_app(
         tmp_path / "data", images_root, "http://10.44.12.10:8080",
         now_fn=clock,
-        extra_cmdline=("console=ttyS0,115200", "imagectl.debug=1"),
+        extra_cmdline=("console=ttyS0,115200", "imagesrv.debug=1"),
     )
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     admin = TestClient(app)
@@ -489,7 +489,7 @@ def test_extra_cmdline_reaches_the_boot_menu(tmp_path, images_root, clock):
 
     text = TestClient(app).get("/boot/menu?mac=b4:2e:99:07:1a:c4").text
     assert "console=ttyS0,115200" in text
-    assert "imagectl.debug" not in text
+    assert "imagesrv.debug" not in text
 
 
 def test_boot_menu_never_errors_on_garbage(server):
@@ -539,7 +539,7 @@ def test_idle_timeout_reaches_every_signed_in_user(server):
     """זמן הניתוק מוחזר ב-`/me` ובתשובת הכניסה. (עד #1073 נבדק כאן על
     deploy; מאז אין לו `/me` — הקונסולה סגורה בפניו — ולכן על מנהל שני.)"""
     from fastapi.testclient import TestClient                  # noqa: PLC0415
-    from server import users                                    # noqa: PLC0415
+    from server.console import users                                    # noqa: PLC0415
     users.create(server["ctx"].conn, "noc2", "admin-pass-456", "admin",
                  by="test", is_builtin=True, check_policy=False)
     second = TestClient(server["app"])

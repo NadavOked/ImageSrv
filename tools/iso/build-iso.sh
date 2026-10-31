@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ImageCtl — בניית ISO ההתקנה (#1139, #1190): ציוד האתחול החתום של דביאן 13
+# ImageSrv — בניית ISO ההתקנה (#1139, #1190): ציוד האתחול החתום של דביאן 13
 # netinst + ‏pool/ מקומי + הקוד + **המתקין החי שלנו** (קרנל + initramfs עם
 # הגואי והמנוע), כ-ISO hybrid (BIOS + UEFI/Secure Boot).
 #
@@ -10,11 +10,11 @@
 #
 # ‏#1632 (הכרעת נדב 24/10): סיסמת root **אינה** חלק מה-ISO. המפעיל בוחר אותה
 # במסך ההתקנה, ליד סיסמת ה-admin, והמנוע כותב את הגיבוב שלה ביעד. ‏--root-password
-# ו-IMAGECTL_ROOT_PASSWORD מסורבים בשם — כדי שאיש לא יחשוב שקבע בהם משהו.
+# ו-IMAGESRV_ROOT_PASSWORD מסורבים בשם — כדי שאיש לא יחשוב שקבע בהם משהו.
 #
 # ‏#1190 (הכרעת נדב 21/09): ה-ISO **אינו** מריץ את מתקין דביאן. הוא עולה
 # ישר ל-initramfs שלנו (`build_initramfs.sh --installer --with-gui`) עם
-# ‏`imagectl.mode=installer`; הגואי שואל דיסק/תפקיד/רשת/שם/admin על מסך
+# ‏`imagesrv.mode=installer`; הגואי שואל דיסק/תפקיד/רשת/שם/admin על מסך
 # השרת, המנוע (installer/) מתקין מה-pool שעל ה-ISO, ואחרי הריסטרט
 # ‏firstboot משלים מהתשובות בלי אשף. הקרנל ל-/live הוא זה שמודולי
 # ה-initramfs נבנו מולו — build-iso מאמת את ההתאמה ועוצר בלעדיה.
@@ -37,8 +37,8 @@
 # בניות מאותו ref + אותו netinst + אותו pool אמורות לתת אותו SHA256 —
 # **לא נמדד עדיין** (ראה README).
 #
-# הפלט: ‏$OUT/imagectl-<tag>-amd64.iso, ‏SHA256SUMS, ‏*.el_torito.txt (הראיה
-# ששני קטעי האתחול נשמרו), ו-imagectl-iso.json (המניפסט, גם בתוך ה-ISO).
+# הפלט: ‏$OUT/imagesrv-<tag>-amd64.iso, ‏SHA256SUMS, ‏*.el_torito.txt (הראיה
+# ששני קטעי האתחול נשמרו), ו-imagesrv-iso.json (המניפסט, גם בתוך ה-ISO).
 
 set -euo pipefail
 
@@ -51,11 +51,11 @@ REF="HEAD"
 # הקוד שנכנס ל-ISO מגיע מהריפו **הציבורי** (NadavOked/ImageSrv) — עותק
 # הפרסום הנקי, בלי כלי סוכנים, יומנים ותשובות מחקר. ‏`--source DIR` מאפשר
 # עץ מקומי (למעבדה), ובכל מקרה השומר למטה מסרב לארוז נתיבים פרטיים.
-PUBLIC_URL="${IMAGECTL_PUBLIC_URL:-https://github.com/NadavOked/ImageSrv.git}"
+PUBLIC_URL="${IMAGESRV_PUBLIC_URL:-https://github.com/NadavOked/ImageSrv.git}"
 SOURCE=""
 LIVE_INITRD=""
 LAB=false
-VOLID="IMAGECTL_INSTALL"
+VOLID="IMAGESRV_INSTALL"
 CDIMAGE_URL="https://cdimage.debian.org/debian-cd/current/amd64/iso-cd"
 
 usage() {
@@ -80,10 +80,10 @@ EOF
 
 # #1632: סיסמת root נקבעת במסך ההתקנה, לא כאן — סירוב בשם, לפני כל עבודה.
 refuse_root_password() {
-    printf 'build-iso: %s\n' "סיסמת root אינה נקבעת עוד בבניית ה-ISO (#1632): המפעיל בוחר אותה במסך ההתקנה, ליד סיסמת ה-admin. הסר את --root-password / IMAGECTL_ROOT_PASSWORD." >&2
+    printf 'build-iso: %s\n' "סיסמת root אינה נקבעת עוד בבניית ה-ISO (#1632): המפעיל בוחר אותה במסך ההתקנה, ליד סיסמת ה-admin. הסר את --root-password / IMAGESRV_ROOT_PASSWORD." >&2
     exit 2
 }
-[[ -z "${IMAGECTL_ROOT_PASSWORD:-}" ]] || refuse_root_password
+[[ -z "${IMAGESRV_ROOT_PASSWORD:-}" ]] || refuse_root_password
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -209,22 +209,22 @@ for comp in main contrib; do
 done
 
 # --- הקוד -----------------------------------------------------------------------
-say "מכניס את הקוד ($REF) כ-imagectl-src/"
-git -C "$REPO" archive --format=tar --prefix=imagectl-src/ --mtime="@$EPOCH" "$COMMIT" \
+say "מכניס את הקוד ($REF) כ-imagesrv-src/"
+git -C "$REPO" archive --format=tar --prefix=imagesrv-src/ --mtime="@$EPOCH" "$COMMIT" \
     | tar -x -C "$ISO_TREE" || die "git archive נכשל"
-[[ -f "$ISO_TREE/imagectl-src/server/main.py" && -f "$ISO_TREE/imagectl-src/install/setup-boot-server.sh" ]] \
-    || die "imagectl-src חסר את server/main.py או install/setup-boot-server.sh"
-# ‏#1277: כפתור העדכון מסרב לכל תג שאינו חתום במפתח שב-install/release-signers
+[[ -f "$ISO_TREE/imagesrv-src/server/main.py" && -f "$ISO_TREE/imagesrv-src/deploy/setup-boot-server.sh" ]] \
+    || die "imagesrv-src חסר את server/main.py או deploy/setup-boot-server.sh"
+# ‏#1277: כפתור העדכון מסרב לכל תג שאינו חתום במפתח שב-deploy/release-signers
 # של העץ המותקן. ISO בלי מפתח שם = שרת שלא יתעדכן לעולם — עוצרים כאן ולא שם.
 signer_keys=0
 while IFS= read -r line || [[ -n "$line" ]]; do
     [[ "$line" =~ ^[[:space:]]*(#|$) ]] || signer_keys=$((signer_keys + 1))
-done < "$ISO_TREE/imagectl-src/install/release-signers" \
-    || die "imagectl-src/install/release-signers לא נקרא — שרת מה-ISO לא יוכל לאמת אף עדכון"
-((signer_keys > 0)) || die "אין מפתח ב-install/release-signers של $TAG — שרת מה-ISO היה מסרב לכל עדכון (docs/server-install.md, חתימה על גרסאות)"
+done < "$ISO_TREE/imagesrv-src/deploy/release-signers" \
+    || die "imagesrv-src/deploy/release-signers לא נקרא — שרת מה-ISO לא יוכל לאמת אף עדכון"
+((signer_keys > 0)) || die "אין מפתח ב-deploy/release-signers של $TAG — שרת מה-ISO היה מסרב לכל עדכון (docs/server-install.md, חתימה על גרסאות)"
 say "release-signers: $signer_keys מפתחות חתימה — כפתור העדכון יאמת מולם"
 # ‏#1185: כפתור העדכון (server/update.py) הוא `git describe` / `git fetch --tags`
-# / `git checkout <tag>` על /opt/imagectl. עץ מ-`git archive` הוא עץ בלי
+# / `git checkout <tag>` על /opt/imagesrv. עץ מ-`git archive` הוא עץ בלי
 # ‏.git — השרת הראשון שהותקן מה-ISO (20/09) הציג "לא ידועה (אין תגית git
 # על העץ)" ולא יכול היה לעדכן לעולם. לכן ה-.git של ה-clone הרדוד מהציבורי
 # נארז לצד העץ: ‏origin = הריפו הציבורי, התג של ה-ISO נמצא בו, ו-fetch של
@@ -233,45 +233,45 @@ say "release-signers: $signer_keys מפתחות חתימה — כפתור העד
 if [[ -z "$SOURCE" ]]; then
     origin=$(git -C "$REPO" remote get-url origin 2>/dev/null || true)
     [[ "$origin" == "$PUBLIC_URL" ]] || die "ה-.git שנארז חייב להצביע על הציבורי ($PUBLIC_URL), לא על $origin"
-    cp -a "$REPO/.git" "$ISO_TREE/imagectl-src/.git"
+    cp -a "$REPO/.git" "$ISO_TREE/imagesrv-src/.git"
     # ה-mtime של .git (כמו של העץ) מקובע ל-SOURCE_DATE_EPOCH — קבצי ה-pack
     # עצמם אינם reproducible בין שני clone-ים, וזה מחיר ידוע.
-    find "$ISO_TREE/imagectl-src/.git" -exec touch -h -d "@$EPOCH" {} +
-    say "imagectl-src/.git: clone רדוד של $origin ב-$TAG — כפתור העדכון יעבוד"
+    find "$ISO_TREE/imagesrv-src/.git" -exec touch -h -d "@$EPOCH" {} +
+    say "imagesrv-src/.git: clone רדוד של $origin ב-$TAG — כפתור העדכון יעבוד"
 else
-    say "אזהרה: --source — imagectl-src נארז בלי .git; כפתור העדכון לא יעבוד בשרת הזה (מעבדה בלבד)"
+    say "אזהרה: --source — imagesrv-src נארז בלי .git; כפתור העדכון לא יעבוד בשרת הזה (מעבדה בלבד)"
 fi
 # השומר: מה שאסור לו להיות ב-ISO גם אם המקור הוא עץ פרטי (אותה רשימה
 # כמו HARD_DENY ב-publish-to-public.sh, ועוד מה שרק הפרטי מחזיק).
 leaked=()
 for deny in .claude .agents .otogit tools/agents AGENTS.md logs docs/research; do
-    [[ -e "$ISO_TREE/imagectl-src/$deny" ]] && leaked+=("$deny")
+    [[ -e "$ISO_TREE/imagesrv-src/$deny" ]] && leaked+=("$deny")
 done
 if ((${#leaked[@]} > 0)); then
-    printf 'build-iso: נתיב פרטי בתוך imagectl-src: %s\n' "${leaked[@]}" >&2
-    die "המקור אינו העץ הציבורי (${#leaked[@]} נתיבים פרטיים) — בנה מהריפו הציבורי, לא מ-ImageCtl-archive"
+    printf 'build-iso: נתיב פרטי בתוך imagesrv-src: %s\n' "${leaked[@]}" >&2
+    die "המקור אינו העץ הציבורי (${#leaked[@]} נתיבים פרטיים) — בנה מהריפו הציבורי, לא מ-ImageSrv-dev"
 fi
-say "imagectl-src: אין נתיבים פרטיים ($(find "$ISO_TREE/imagectl-src" -type f | wc -l) קבצים)"
+say "imagesrv-src: אין נתיבים פרטיים ($(find "$ISO_TREE/imagesrv-src" -type f | wc -l) קבצים)"
 
 # The notices are documentation for the distributed ISO itself, not only for
 # the source tree embedded in it. Keep a copy at the ISO root where a recipient
 # can find it without installing or unpacking anything (#1707).
-[[ -f "$ISO_TREE/imagectl-src/THIRD_PARTY_NOTICES.md" ]] \
+[[ -f "$ISO_TREE/imagesrv-src/THIRD_PARTY_NOTICES.md" ]] \
     || die "THIRD_PARTY_NOTICES.md חסר ממקור הקוד"
-install -m 0644 "$ISO_TREE/imagectl-src/THIRD_PARTY_NOTICES.md" \
+install -m 0644 "$ISO_TREE/imagesrv-src/THIRD_PARTY_NOTICES.md" \
     "$ISO_TREE/THIRD_PARTY_NOTICES.md"
 
 # --- המטען החי: קרנל + initramfs + הקבצים ש-firstboot והמנוע קוראים ----------------
-install -d "$ISO_TREE/imagectl" "$ISO_TREE/live"
-install -m 0755 "$SCRIPT_DIR/firstboot.sh" "$ISO_TREE/imagectl/firstboot.sh"
-install -m 0644 "$SCRIPT_DIR/imagectl-firstboot.service" "$ISO_TREE/imagectl/imagectl-firstboot.service"
+install -d "$ISO_TREE/imagesrv" "$ISO_TREE/live"
+install -m 0755 "$SCRIPT_DIR/firstboot.sh" "$ISO_TREE/imagesrv/firstboot.sh"
+install -m 0644 "$SCRIPT_DIR/imagesrv-firstboot.service" "$ISO_TREE/imagesrv/imagesrv-firstboot.service"
 # אין גיבוב root על ה-ISO (#1632): סיסמת root נבחרת במסך ההתקנה, והמנוע
 # (installer/lib/finish.sh) מגבב אותה ביעד.
 
 # הקרנל: מה-linux-image שב-pool (זה שהמותקן יקבל), והמודולים ב-initramfs
 # חייבים להיות שלו — מודול של קרנל אחר לא נטען, וזה נראה כמו "אין דיסקים".
 # הגבוה לפי גרסה, לא לפי נתיב: ה-netinst מביא קרנל ישן ב-pool/main/l/, ו-pool
-# שלנו מביא חדש יותר ב-pool/main/imagectl/ — מיון נתיבים בחר את הישן (12/10).
+# שלנו מביא חדש יותר ב-pool/main/imagesrv/ — מיון נתיבים בחר את הישן (12/10).
 kdeb=$(find "$ISO_TREE/pool" -name 'linux-image-6*-amd64_*.deb' -printf '%f\t%p\n' | sort -V | tail -n1 | cut -f2)
 [[ -n "$kdeb" ]] || die "אין linux-image-6.*-amd64 ב-pool — packages.txt מבקש linux-image-amd64?"
 KTMP="$WORK/kernel"; rm -rf "$KTMP"; install -d "$KTMP"
@@ -292,22 +292,22 @@ say "live: vmlinuz-$KVER + initrd.img ($(du -h "$LIVE_INITRD" | cut -f1)) — מ
 # מתקין דביאן יורד מהעץ: לא מוצע בתפריט, ולא תופס 100MB.
 rm -rf "$ISO_TREE/install.amd" "$ISO_TREE/preseed.cfg"
 
-# --- תפריטי האתחול: ערך ImageCtl אחד ב-BIOS וב-UEFI ---------------------------------
-# ‏#1190: שורת הקרנל נושאת רק imagectl.mode=installer (עיקרון 2 — כמו
+# --- תפריטי האתחול: ערך ImageSrv אחד ב-BIOS וב-UEFI ---------------------------------
+# ‏#1190: שורת הקרנל נושאת רק imagesrv.mode=installer (עיקרון 2 — כמו
 # ב-PXE, בלי פרטי משימה); אין תפריט — ה-ISO עולה ישר למתקין החי, ומחיקת
 # הדיסק מאושרת בגואי. ‏DI_ARGS הוא השם ההיסטורי של הפרמטרים בתבניות.
-DI_ARGS="imagectl.mode=installer"
-[[ -f "$SCRIPT_DIR/imagectl.cfg.in" ]] || die "חסרה תבנית imagectl.cfg.in"
+DI_ARGS="imagesrv.mode=installer"
+[[ -f "$SCRIPT_DIR/imagesrv.cfg.in" ]] || die "חסרה תבנית imagesrv.cfg.in"
 [[ -f "$SCRIPT_DIR/isolinux-menu.cfg.in" ]] || die "חסרה תבנית isolinux-menu.cfg.in"
 [[ -f "$ISO_TREE/isolinux/menu.cfg" ]] || die "חסר isolinux/menu.cfg ב-netinst"
-sed "s|@DI_ARGS@|$DI_ARGS|g" "$SCRIPT_DIR/imagectl.cfg.in" > "$ISO_TREE/isolinux/imagectl.cfg"
-grep -q '^label imagectl$' "$ISO_TREE/isolinux/imagectl.cfg" || die "יצירת isolinux/imagectl.cfg נכשלה"
-if grep -q '@DI_ARGS@' "$ISO_TREE/isolinux/imagectl.cfg"; then die "הפרמטרים לא הוזרקו ל-isolinux/imagectl.cfg"; fi
-n_isolinux=$(grep -c '^label ' "$ISO_TREE/isolinux/imagectl.cfg" || true)
-[[ "$n_isolinux" -eq 1 ]] || die "isolinux/imagectl.cfg אינו מכיל בדיוק ערך אחד (נמצאו $n_isolinux)"
+sed "s|@DI_ARGS@|$DI_ARGS|g" "$SCRIPT_DIR/imagesrv.cfg.in" > "$ISO_TREE/isolinux/imagesrv.cfg"
+grep -q '^label imagesrv$' "$ISO_TREE/isolinux/imagesrv.cfg" || die "יצירת isolinux/imagesrv.cfg נכשלה"
+if grep -q '@DI_ARGS@' "$ISO_TREE/isolinux/imagesrv.cfg"; then die "הפרמטרים לא הוזרקו ל-isolinux/imagesrv.cfg"; fi
+n_isolinux=$(grep -c '^label ' "$ISO_TREE/isolinux/imagesrv.cfg" || true)
+[[ "$n_isolinux" -eq 1 ]] || die "isolinux/imagesrv.cfg אינו מכיל בדיוק ערך אחד (נמצאו $n_isolinux)"
 install -m 0644 "$SCRIPT_DIR/isolinux-menu.cfg.in" "$ISO_TREE/isolinux/menu.cfg"
-[[ "$(cat "$ISO_TREE/isolinux/menu.cfg")" == $'include stdmenu.cfg\ninclude imagectl.cfg\ntimeout 1' ]] || die "isolinux/menu.cfg מכיל ערכים שאינם של ImageCtl"
-n_default=$(grep -cE '^[[:space:]]+menu default$' "$ISO_TREE/isolinux/imagectl.cfg" || true)
+[[ "$(cat "$ISO_TREE/isolinux/menu.cfg")" == $'include stdmenu.cfg\ninclude imagesrv.cfg\ntimeout 1' ]] || die "isolinux/menu.cfg מכיל ערכים שאינם של ImageSrv"
+n_default=$(grep -cE '^[[:space:]]+menu default$' "$ISO_TREE/isolinux/imagesrv.cfg" || true)
 [[ "$n_default" -eq 1 ]] || die "לא בדיוק menu default אחד בתפריט הראשי (נמצאו $n_default)"
 
 [[ -f "$SCRIPT_DIR/grub.cfg.in" ]] || die "חסרה תבנית grub.cfg.in"
@@ -325,21 +325,21 @@ n_grub=$(grep -c '^menuentry ' "$ISO_TREE/boot/grub/grub.cfg" || true)
 [[ "$n_grub" == 1 ]] || die "GRUB: $n_grub ערכים במקום אחד — רק המתקין החי (#1190)"
 grep -q '^set timeout=0$' "$ISO_TREE/boot/grub/grub.cfg" || die "GRUB אינו עולה ישר למתקין (#1190)"
 grep -q "ImageSrv $TAG installer" "$ISO_TREE/boot/grub/grub.cfg" || die "כותרת ImageSrv חסרה מ-GRUB"
-grep -q '^ *linux */live/vmlinuz imagectl.mode=installer' "$ISO_TREE/boot/grub/grub.cfg" || die "GRUB אינו מעלה את /live/vmlinuz במצב installer"
-if grep -q 'install.amd\|preseed' "$ISO_TREE/boot/grub/grub.cfg" "$ISO_TREE/isolinux/imagectl.cfg"; then die "שרידי מתקין דביאן בתפריטים"; fi
+grep -q '^ *linux */live/vmlinuz imagesrv.mode=installer' "$ISO_TREE/boot/grub/grub.cfg" || die "GRUB אינו מעלה את /live/vmlinuz במצב installer"
+if grep -q 'install.amd\|preseed' "$ISO_TREE/boot/grub/grub.cfg" "$ISO_TREE/isolinux/imagesrv.cfg"; then die "שרידי מתקין דביאן בתפריטים"; fi
 if grep -qE 'Graphical install|Advanced options|Accessible dark contrast' "$ISO_TREE/boot/grub/grub.cfg"; then
     die "ערכי Debian נשארו ב-boot/grub/grub.cfg"
 fi
 
 # --- המניפסט (R61) --------------------------------------------------------------
-say "כותב imagectl-iso.json"
-POOL_DATE="$(cat "$POOL/pool-date" 2>/dev/null || true)" KVER="$KVER" LAB_OVERLAY="$lab_overlay" SOURCE_GIT="$([[ -z "$SOURCE" ]] && echo true || echo false)" python3 - "$ISO_TREE" "$OUT/imagectl-iso.json" "$TAG" "$COMMIT" "$EPOCH" "$(basename "$NETINST")" "$NETINST_SHA" "${PKGS[*]}" <<'PY'
+say "כותב imagesrv-iso.json"
+POOL_DATE="$(cat "$POOL/pool-date" 2>/dev/null || true)" KVER="$KVER" LAB_OVERLAY="$lab_overlay" SOURCE_GIT="$([[ -z "$SOURCE" ]] && echo true || echo false)" python3 - "$ISO_TREE" "$OUT/imagesrv-iso.json" "$TAG" "$COMMIT" "$EPOCH" "$(basename "$NETINST")" "$NETINST_SHA" "${PKGS[*]}" <<'PY'
 import hashlib, json, os, subprocess, sys
 tree, out, tag, commit, epoch, netinst, netinst_sha, pkgs = sys.argv[1:9]
 debs = []
 for root, _dirs, files in os.walk(os.path.join(tree, "pool")):
     for f in sorted(files):
-        if not f.endswith(".deb") or os.path.basename(root) != "imagectl":
+        if not f.endswith(".deb") or os.path.basename(root) != "imagesrv":
             continue
         p = os.path.join(root, f)
         ctl = subprocess.run(["dpkg-deb", "-f", p, "Package", "Version"], check=True,
@@ -350,7 +350,7 @@ for root, _dirs, files in os.walk(os.path.join(tree, "pool")):
                      "sha256": hashlib.sha256(open(p, "rb").read()).hexdigest()})
 debs.sort(key=lambda d: d["path"])
 manifest = {
-    "imagectl_tag": tag, "git_commit": commit, "source_date_epoch": int(epoch),
+    "imagesrv_tag": tag, "git_commit": commit, "source_date_epoch": int(epoch),
     "netinst": netinst, "netinst_sha256": netinst_sha,
     "xorriso": subprocess.run(["xorriso", "-version"], capture_output=True, text=True).stdout.splitlines()[0],
     "requested_packages": pkgs.split(),
@@ -364,7 +364,7 @@ manifest = {
     "pool_debs": debs,
 }
 s = json.dumps(manifest, indent=1, ensure_ascii=False, sort_keys=True) + "\n"
-for dst in (out, os.path.join(tree, "imagectl-iso.json")):
+for dst in (out, os.path.join(tree, "imagesrv-iso.json")):
     open(dst, "w", encoding="utf-8", newline="\n").write(s)
 print(f"build-iso: manifest: {len(debs)} debs")
 PY
@@ -373,7 +373,7 @@ PY
 find "$ISO_TREE" -exec touch -h -d "@$EPOCH" {} +
 
 # --- ה-ISO עצמו --------------------------------------------------------------
-ISO="$OUT/imagectl-$TAG-amd64.iso"
+ISO="$OUT/imagesrv-$TAG-amd64.iso"
 rm -f "$ISO"
 say "בונה $ISO (replay של ציוד האתחול מה-netinst)"
 xorriso -indev "$NETINST" -outdev "$ISO" \

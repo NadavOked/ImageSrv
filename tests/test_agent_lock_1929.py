@@ -1,5 +1,5 @@
 """#1929 (M3, 20/10): after `kill -9` to the agent in the middle of a pull,
-more processes named imagectl-agent with ppid 1 were seen, each with its own
+more processes named imagesrv-agent with ppid 1 were seen, each with its own
 lldpsniff -- the hello's probe.
 
 What the code says (investigated, not measured on metal):
@@ -33,7 +33,7 @@ def _sh(tmp_path: Path, script: str, timeout: int = 30) -> subprocess.CompletedP
     run = tmp_path / "run"
     run.mkdir(exist_ok=True)
     pre = (f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "log")!r}; '
-           f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/watchdog.sh; ')
+           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/watchdog.sh; ')
     return hygiene.run_group([BASH, "-c", pre + script], capture_output=True, text=True,
                              timeout=timeout, stdin=subprocess.DEVNULL)
 
@@ -45,7 +45,7 @@ def test_the_first_agent_takes_the_lock(tmp_path):
 
 
 def test_a_second_agent_stops_while_the_first_is_alive(tmp_path):
-    fake = tmp_path / "imagectl-agent"                       # a live process with the agent's name
+    fake = tmp_path / "imagesrv-agent"                       # a live process with the agent's name
     fake.write_text("sleep 20\n", newline="\n")
     out = _sh(tmp_path, f'sh {posix(fake)!r} > /dev/null 2>&1 & a=$!; sleep 0.5; '
                         'echo "$a" > "$RUN_DIR/agent.pid"; agent_lock; echo "rc=$?"; '
@@ -71,7 +71,7 @@ def test_a_live_process_that_is_not_an_agent_does_not_hold_the_lock(tmp_path):
 
 
 def test_the_agent_takes_the_lock_before_anything_else():
-    main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert main.index("agent_lock || exit 1") < main.index("parse_cmdline\n")
 
 
@@ -82,7 +82,7 @@ def test_a_beat_whose_agent_was_killed_stops(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
     agent = (f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "log")!r} ATTENDED_BEAT_S=1; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/attended.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/attended.sh; '
              'attended_hello() { echo b >> "$RUN_DIR/beats"; }; attended_start q; sleep 60')
     (tmp_path / "agent.sh").write_text(agent + "\n", newline="\n")
     out = _sh(tmp_path, f'bash {posix(tmp_path / "agent.sh")!r} > /dev/null 2>&1 & a=$!; sleep 3; kill -9 $a; sleep 1.5; '

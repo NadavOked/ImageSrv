@@ -34,7 +34,7 @@ def _beep(tmp_path: Path, result: str, ui: dict | None = None, speaker: bool = T
     log = tmp_path / "agent.log"   # common.sh: LOG_FILE=$RUN_DIR/agent.log
     run_sh(f"export SYSROOT={posix(root)!r} DEVROOT={posix(dev)!r} RUN_DIR={posix(tmp_path)!r} "
            f"RESP={posix(resp)!r} D_ROLE={role}; "
-           f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/roundbeep.sh; "
+           f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/core/roundbeep.sh; "
            f"sleep() {{ :; }}; round_beep {result}; wait")
     node = dev / "input/event5"
     data = node.read_bytes() if node.exists() else b""
@@ -78,7 +78,8 @@ def test_the_cloner_and_the_build_machine_beep_a_classroom_does_not(tmp_path):
 
 
 def test_server_default_is_on_and_reaches_the_cloner_and_build_hello(tmp_path, monkeypatch):
-    from server import db, hello
+    from server import db
+    from server.agent import hello
     assert db.DEFAULT_SETTINGS["cloner_beep"] == "true"
     monkeypatch.setattr(hello, "login_required", lambda *a: False)
     monkeypatch.setattr(hello, "get_setting", lambda conn, key: "false" if key == "cloner_beep" else None)

@@ -2,8 +2,8 @@
  * holds. One window for every place that writes to, or reads from, a disk
  * with a SMART warning: the cloner's prompt, the restore onto this machine's
  * disk, the capture, and the local clone's target and source. */
-#ifndef IMAGECTL_SMARTDLG_H
-#define IMAGECTL_SMARTDLG_H
+#ifndef IMAGESRV_SMARTDLG_H
+#define IMAGESRV_SMARTDLG_H
 #include <cairo.h>
 #include "input.h"
 #include "ui.h"

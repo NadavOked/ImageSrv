@@ -35,7 +35,7 @@ def _env(tmp_path: Path, dd_body: str = "") -> str:
     run_sh(f"chmod +x {posix(dd)!r}")
     return (f"export PATH={posix(bindir)!r}:$PATH SYSROOT={posix(root)!r} DEVROOT=/fake-dev "
             f"RUN_DIR={posix(run)!r} GUI_DIR={posix(run / 'gui')!r} LOG_FILE={posix(tmp_path / 'log')!r} D_ROLE=cloner; "
-            f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/identify.sh; "
+            f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/identify.sh; "
             "list_drawers() { echo sda; echo sdb; }; ")
 
 

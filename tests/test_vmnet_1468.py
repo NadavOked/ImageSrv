@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from server import vmnet, vmupdate
+from server.vm import vmnet, vmupdate
 from server.db import get_setting, set_setting
 from test_vmupdate import LEASE, TAP_FD, FakeMachine, events, lab, refusal, wait_for  # noqa: F401
 
@@ -308,7 +308,7 @@ class FakeSock:
                 self.stop_when_empty.append(True)
             raise socket.timeout()
         frame, kind = self.frames.pop(0)
-        return frame, ("imagectl-vm0", 0x0800, kind, 1, b"")
+        return frame, ("imagesrv-vm0", 0x0800, kind, 1, b"")
 
     def close(self):
         self.closed = True
@@ -318,7 +318,7 @@ def watch(frames, timeout=60):
     """עד שהמסגרות נגמרו (ואז "ה-VM כבה"); מחזיר (התוצאה, הקריאות ל-on_ack)."""
     done, acks = [], []
     sock = FakeSock(frames, stop_when_empty=done)
-    got = vmnet.watch_lease("imagectl-vm0", MAC, timeout, lambda: bool(done),
+    got = vmnet.watch_lease("imagesrv-vm0", MAC, timeout, lambda: bool(done),
                             lambda a, s: acks.append((a, s)), open_socket=lambda _i: sock)
     assert sock.closed
     return got, acks
@@ -362,7 +362,7 @@ def test_watch_lease_keeps_listening_and_reports_a_renewal():
 def test_watch_lease_times_out_without_an_address():
     ticks = iter(range(0, 1000, 10))
     sock = FakeSock([REQ])
-    got = vmnet.watch_lease("imagectl-vm0", MAC, 30, lambda: False, open_socket=lambda _i: sock,
+    got = vmnet.watch_lease("imagesrv-vm0", MAC, 30, lambda: False, open_socket=lambda _i: sock,
                             clock=lambda: next(ticks))
     assert got["address"] is None and got["requests"] == 1 and got["error"] is None
 
@@ -370,7 +370,7 @@ def test_watch_lease_times_out_without_an_address():
 def test_watch_lease_that_cannot_listen_says_so():
     def boom(_ifname):
         raise PermissionError(1, "Operation not permitted")
-    got = vmnet.watch_lease("imagectl-vm0", MAC, 30, lambda: False, open_socket=boom)
+    got = vmnet.watch_lease("imagesrv-vm0", MAC, 30, lambda: False, open_socket=boom)
     assert got["address"] is None and "Operation not permitted" in got["error"]
 
 

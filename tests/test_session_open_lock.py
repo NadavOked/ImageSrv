@@ -17,7 +17,7 @@
 הייתה הופכת את הבאג לאיטי במקום למנוע אותו.
 
 **הבקרה השלילית שהורצה** (‏02/09, תחנת פיתוח ווינדוס, פייתון 3.12):
-הסרת ה-``except Exception`` מ-`server/sessions.py` — ‏`grep -c` על
+הסרת ה-``except Exception`` מ-`server/rounds/sessions.py` — ‏`grep -c` על
 ``self.conn.rollback()`` ירד **מ-2 ל-1** ועל ``except Exception``
 **מ-1 ל-0**, כלומר ראיה חיובית שהשומר באמת איננו — ואז::
 
@@ -42,7 +42,7 @@ from pathlib import Path
 import pytest
 
 from server.db import connect
-from server.sessions import SessionStore
+from server.rounds.sessions import SessionStore
 
 GROUP = "grp_LAB1"
 IMAGE = "img_7f3a91"

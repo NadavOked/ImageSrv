@@ -1,12 +1,12 @@
 """--http-root של המתקין חייב להגיע לשרת כ---boot-dir (#395).
 
-הדגל יצר תיקייה והעתיק אליה את הקרנל, אבל imagectl-server.service
+הדגל יצר תיקייה והעתיק אליה את הקרנל, אבל imagesrv-server.service
 הריץ את server.main בלי --boot-dir — ברירת המחדל הקשיחה
-/srv/imagectl/boot. התקנה שנראית מוצלחת, ואף תחנה אינה יכולה לעלות.
+/srv/imagesrv/boot. התקנה שנראית מוצלחת, ואף תחנה אינה יכולה לעלות.
 
-ההכרעה: א' — המתקין מזריק --boot-dir דרך IMAGECTL_STORAGE_ARGS ב-drop-in
+ההכרעה: א' — המתקין מזריק --boot-dir דרך IMAGESRV_STORAGE_ARGS ב-drop-in
 הקיים. הטסט בונה את argv ש-systemd היה מעביר, ופותח אותו ב-build_parser
-האמיתי: בלי התיקון boot_dir נשאר /srv/imagectl/boot גם כש-HTTP_ROOT אחר.
+האמיתי: בלי התיקון boot_dir נשאר /srv/imagesrv/boot גם כש-HTTP_ROOT אחר.
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ import pytest
 from server.main import build_parser
 
 REPO = Path(__file__).resolve().parent.parent
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
-UNIT = REPO / "install" / "imagectl-server.service"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
+UNIT = REPO / "deploy" / "imagesrv-server.service"
 
-DEFAULT_ROOT = "/srv/imagectl/boot"
-CUSTOM_ROOT = "/mnt/bigdisk/imagectl-boot"
+DEFAULT_ROOT = "/srv/imagesrv/boot"
+CUSTOM_ROOT = "/mnt/bigdisk/imagesrv-boot"
 
 _STORAGE_ASSIGN = re.compile(r'^\s*STORAGE_ARGS="([^"]*)"', re.MULTILINE)
 
@@ -76,11 +76,11 @@ def parsed_boot_dir(http_root: str, role: str = "standalone") -> str:
         .replace("$PRIMARY_URL", "http://10.0.0.2:8080")
     )
     exec_line = exec_start_line(UNIT.read_text(encoding="utf-8"))
-    assert "$IMAGECTL_STORAGE_ARGS" in exec_line, exec_line
+    assert "$IMAGESRV_STORAGE_ARGS" in exec_line, exec_line
     expanded = (
         exec_line
-        .replace("${IMAGECTL_URL}", "http://10.44.12.10:8080")
-        .replace("$IMAGECTL_STORAGE_ARGS", storage)
+        .replace("${IMAGESRV_URL}", "http://10.44.12.10:8080")
+        .replace("$IMAGESRV_STORAGE_ARGS", storage)
     )
     parts = expanded.split()
     idx = parts.index("server.main")
@@ -96,7 +96,7 @@ def test_a_custom_http_root_reaches_server_main_as_boot_dir(role: str):
 
 def test_the_default_http_root_still_serves_from_the_hardcoded_path():
     """הצד החיובי — ברירת המחדל לא נשברה. עובר גם בלי התיקון, כי שני
-    הצדדים כבר היו קשיחים על /srv/imagectl/boot."""
+    הצדדים כבר היו קשיחים על /srv/imagesrv/boot."""
     assert parsed_boot_dir(DEFAULT_ROOT) == DEFAULT_ROOT
     parser = build_parser()
     args = parser.parse_args(["--server-url", "http://10.44.12.10:8080"])
@@ -107,4 +107,4 @@ def test_the_http_root_flag_still_exists():
     """הכרעה א' (#395): הדגל נשאר. הסרה שלו הייתה תשובה ב', והיא לא נבחרה."""
     text = INSTALLER.read_text(encoding="utf-8")
     assert re.search(r"--http-root\)", text)
-    assert 'HTTP_ROOT="/srv/imagectl/boot"' in text
+    assert 'HTTP_ROOT="/srv/imagesrv/boot"' in text

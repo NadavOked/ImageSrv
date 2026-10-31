@@ -400,8 +400,8 @@ def test_a_pull_that_reports_within_the_ceiling_still_blocks(server):
 def test_the_ceiling_is_far_above_the_agents_report_gap():
     """התקרה מעל קצב הדיווח (‏~2ש', ‏curl ‏--max-time 10 ‏--retry 3) וגם מעל
     אתחול שרת; מתחת לחדר (‏180) הייתה מפילה משיכה בריאה בעדכון שרת."""
-    from server import room                                # noqa: PLC0415
-    from server.pulls import SILENT_SECONDS                # noqa: PLC0415
+    from server.rounds import room                                # noqa: PLC0415
+    from server.rounds.pulls import SILENT_SECONDS                # noqa: PLC0415
     assert room.LOST_SECONDS < SILENT_SECONDS <= 30 * 60
 
 
@@ -411,7 +411,7 @@ def test_the_background_clock_sweeps_pulls(tmp_path, monkeypatch):
     import threading                                       # noqa: PLC0415
     from fastapi.testclient import TestClient              # noqa: PLC0415
     from conftest import Clock, write_image, MANIFEST_256  # noqa: PLC0415
-    from server import pulls as pulls_mod                  # noqa: PLC0415
+    from server.rounds import pulls as pulls_mod                  # noqa: PLC0415
     from server.app import create_app                      # noqa: PLC0415
 
     images = tmp_path / "images"
@@ -433,7 +433,7 @@ def test_a_pull_sweep_that_throws_is_journaled_and_the_clock_goes_on(tmp_path, m
     import threading                                       # noqa: PLC0415
     from fastapi.testclient import TestClient              # noqa: PLC0415
     from conftest import Clock, write_image, MANIFEST_256  # noqa: PLC0415
-    from server import pulls as pulls_mod                  # noqa: PLC0415
+    from server.rounds import pulls as pulls_mod                  # noqa: PLC0415
     from server.app import create_app                      # noqa: PLC0415
 
     images = tmp_path / "images"
@@ -536,7 +536,7 @@ def test_a_wrong_password_does_not_open_a_pull(server):
 def test_pull_passwords_go_through_the_login_guard(server, monkeypatch):
     """‏#1282: הסיסמה של משיכה נבדקה בלי `login_guard` — בלי השהיה ובלי
     נעילה, בניגוד ל-`/agent/login`. אחרי 5 כשלונות גם הנכונה ממתינה."""
-    from server import login_guard
+    from server.console import login_guard
 
     monkeypatch.setattr(login_guard, "now", lambda: 1_000_000.0)
     lab2 = second_class(server)

@@ -24,9 +24,10 @@ from pathlib import Path
 
 import pytest
 
-from server.images import required_bytes
+from server.library.images import required_bytes
 
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import flat_lib, lib_path
 
 needs_shell = pytest.mark.skipif(
     BASH is None or shutil.which("jq") is None, reason="bash and jq are required")
@@ -93,7 +94,7 @@ def box(tmp_path: Path, image: dict, disk: int, gb: str | None = None):
         f"chmod 0755 {posix(stubs)}/blockdev; "
         f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
-        + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+        + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                   ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
         + "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
     )
@@ -214,7 +215,7 @@ def test_every_restore_path_goes_through_disk_fits():
                       ("writecheck.sh", 'disk_fits "$_wr_d" "$_wr_m" && '),   # #1808: raid_wipe, then write_check
                       ("restore.sh", 'disk_fits "$2" "$5"'),
                       ("lccopy.sh", 'disk_fits "$1" "$2"')):
-        assert call in (AGENT / "lib" / lib).read_text(encoding="utf-8"), lib
+        assert call in (lib_path(lib)).read_text(encoding="utf-8"), lib
 
 
 # --- the value from the server ----------------------------------------------
@@ -227,7 +228,7 @@ def take(tmp_path: Path, answer: dict, before: str | None = None) -> tuple[str, 
         (run / "min_free_gb").write_text(before + "\n")
     (tmp_path / "resp.json").write_text(json.dumps(answer), encoding="utf-8")
     out = sh(f"export RUN_DIR={posix(run)!r} LOG_FILE={posix(run)!r}/log; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in ("common", "jsonq", "diskfit"))
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in ("common", "jsonq", "diskfit"))
              + f'min_free_take {posix(tmp_path / "resp.json")!r}; min_free_gb')
     log = (run / "agent.log").read_text(encoding="utf-8") if (run / "agent.log").exists() else ""
     return out.strip().splitlines()[-1], log
@@ -290,7 +291,7 @@ def lc_box(tmp_path: Path, used_c: str, target: int, gb: str = "20", shrink: boo
         (lc / "measure" / "src").write_text("none||\n")
     run = tmp_path / "run"
     out = sh(f"export RUN_DIR={posix(run)!r} LOG_FILE={posix(run)!r}/log LC={posix(lc)!r}; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                        ("common", "jsonq", "progress", "restore", "expand", "diskfit", "manifest", "lcinv"))
              + "lc_verdict_for src tgt")
     return out.strip().splitlines()[-1]
@@ -352,8 +353,8 @@ def test_the_local_clone_screen_shows_the_reason_of_a_short_verdict():
 
 
 def test_the_default_and_the_range_are_one_number_in_agent_and_server():
-    from server import minfree   # lazy: the negative control removes the module
-    text = (AGENT / "lib" / "diskfit.sh").read_text(encoding="utf-8")
+    from server.library import minfree   # lazy: the negative control removes the module
+    text = (AGENT / "lib" / "restore" / "diskfit.sh").read_text(encoding="utf-8")
     assert re.search(r"^MIN_FREE_GB_DEFAULT=(\d+)$", text, re.M).group(1) == str(minfree.MIN_FREE_GB_DEFAULT)
     assert re.search(r"^MIN_FREE_GB_MAX=(\d+)$", text, re.M).group(1) == str(minfree.MIN_FREE_GB_MAX)
 
@@ -368,7 +369,7 @@ CASES = [
 @pytest.mark.parametrize("image,disk", CASES)
 @needs_shell
 def test_the_server_says_exactly_what_the_agent_says(tmp_path, image, disk):
-    from server import minfree   # lazy: the negative control removes the module
+    from server.library import minfree   # lazy: the negative control removes the module
     _rc, err, _ = fits(tmp_path, image, disk)
     assert err == (minfree.refusal(image, disk, 20) or "")
 
@@ -376,7 +377,7 @@ def test_the_server_says_exactly_what_the_agent_says(tmp_path, image, disk):
 @needs_shell
 def test_the_smallest_disk_the_console_shows_is_the_agents_boundary(tmp_path):
     """"Fits a disk from X" = the agent passes at X and refuses at X-1."""
-    from server import minfree   # lazy: the negative control removes the module
+    from server.library import minfree   # lazy: the negative control removes the module
     smallest = minfree.min_disk_bytes(win11(), 20)
     assert smallest == NEED + 12 * GIB
     assert fits(tmp_path / "a", win11(), smallest)[0] == "rc=0"
@@ -384,21 +385,21 @@ def test_the_smallest_disk_the_console_shows_is_the_agents_boundary(tmp_path):
 
 
 def test_min_disk_is_the_layout_when_there_is_room_already_or_the_rule_is_off():
-    from server import minfree   # lazy: the negative control removes the module
+    from server.library import minfree   # lazy: the negative control removes the module
     roomy = win11(size=200 * GIB, used=50 * GIB)
     assert minfree.min_disk_bytes(roomy, 20) == required_bytes(roomy)
     assert minfree.min_disk_bytes(win11(), 0) == NEED
 
 
 def test_min_disk_is_unknown_when_c_was_not_measured():
-    from server import minfree   # lazy: the negative control removes the module
+    from server.library import minfree   # lazy: the negative control removes the module
     assert minfree.min_disk_bytes(win11(used=None), 20) is None
 
 
 def test_min_disk_never_lands_inside_expand_lasts_threshold():
     """Short by half a GiB: expand_last does not stretch by less than 1 GiB,
     so the smallest disk is past that threshold, not at +0.5 GiB."""
-    from server import minfree   # lazy: the negative control removes the module
+    from server.library import minfree   # lazy: the negative control removes the module
     image = win11(size=60 * GIB, used=40 * GIB + GIB // 2)
     assert minfree.min_disk_bytes(image, 20) == required_bytes(image) + GIB + 1
 
@@ -407,5 +408,5 @@ def test_min_disk_never_lands_inside_expand_lasts_threshold():
                                       ("501", None), (-1, None), ("020", None), ("x", None),
                                       (True, None), (1.5, None), ("", None), (None, None)])
 def test_parse_gb(raw, want):
-    from server import minfree   # lazy: the negative control removes the module
+    from server.library import minfree   # lazy: the negative control removes the module
     assert minfree.parse_gb(raw) == want

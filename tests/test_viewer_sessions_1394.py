@@ -1,6 +1,6 @@
 import asyncio
 
-from server import viewer_sessions
+from server.console import viewer_sessions
 
 
 def test_revoking_a_console_cookie_cancels_its_live_viewer():

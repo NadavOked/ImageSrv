@@ -1,7 +1,7 @@
 """#1505 — פירוט קליטה חי בקונסולה: טבלת מחיצות, קצב בחלון, ETA רק כשנמדד.
 
 שלוש שכבות:
-* ‏`server/capture_detail.py` — חישוב טהור עם שעון מוזרק: ‏done_bytes מ-source_progress,
+* ‏`server/library/capture_detail.py` — חישוב טהור עם שעון מוזרק: ‏done_bytes מ-source_progress,
   קצב מחלון (לא ממוצע), `None` עד שנמדד, ‏`None` אחרי שתיקה, ETA רק כשכל המחיצות נמדדו.
 * ה-API — דיווח עם `partitions` מגיע ל-`/api/console/tasks` כ-`capture_detail`; טבלה
   פגומה נזרקת בשלמותה; סוכן ישן (בלי טבלה) = `null`, לא טבלה ריקה.
@@ -16,7 +16,7 @@ import types
 
 import pytest
 
-from server import capture_detail as cd
+from server.library import capture_detail as cd
 
 GB = 1024 ** 3
 
@@ -165,7 +165,7 @@ def test_sanitize_removes_a_bad_table_and_a_bad_compression_but_keeps_the_target
 # --- through the API ---------------------------------------------------------------
 
 pytest.importorskip("fastapi")
-from server.tasks import TOKEN_HEADER  # noqa: E402
+from server.core.tasks import TOKEN_HEADER  # noqa: E402
 from test_capture import make_task, setup_build_machine, task_token  # noqa: E402
 
 

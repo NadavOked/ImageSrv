@@ -1,5 +1,5 @@
-#ifndef IMAGECTL_SCREENS_INSTALL_H
-#define IMAGECTL_SCREENS_INSTALL_H
+#ifndef IMAGESRV_SCREENS_INSTALL_H
+#define IMAGESRV_SCREENS_INSTALL_H
 
 #include "install.h"
 #include "widgets.h"

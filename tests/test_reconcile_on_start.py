@@ -29,14 +29,15 @@ from fastapi.testclient import TestClient  # noqa: E402
 from test_server_room import CLONER1, CLONER2, cloner_hello, report, room  # noqa: E402,F401
 
 try:
-    from server.reconcile import RESTARTED_SESSION, RESTARTED_TASK
+    from server.rounds.reconcile import RESTARTED_SESSION, RESTARTED_TASK
 except ImportError:   # בקרה שלילית: בלי המודול הטסטים רצים ונופלים על ההתנהגות, לא על ImportError
     RESTARTED_SESSION = RESTARTED_TASK = "השרת עלה מחדש"
 
 
 def _boot(tmp_path: Path, monkeypatch, *, seed: bool, **runtime_options):
     """שרת על `tmp_path/data`. ‏`seed=True` בפעם הראשונה: משתמשים ומכונות."""
-    from server import sender as sender_module, users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from server.app import create_app
     from test_sender import Recorder
 

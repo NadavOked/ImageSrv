@@ -65,9 +65,9 @@ def run(tmp_path: Path, body: str, login: dict | None, code: str = "200") -> tup
         f"export RUN_DIR={shlex.quote(posix(rd))} GUI_DIR={shlex.quote(posix(rd / 'gui'))} "
         f"LOG_FILE={shlex.quote(posix(rd / 'agent.log'))} SERVER=http://srv MAC=aa:bb "
         f"CONSOLE_JAR={shlex.quote(posix(rd / 'gui' / 'console.jar'))} "
-        "IMAGECTL_TEST=1 HTTP_TIMEOUT=1 HTTP_RETRIES=0; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/buildmenu.sh; . {posix(AGENT)}/lib/guibridge.sh; "
+        "IMAGESRV_TEST=1 HTTP_TIMEOUT=1 HTTP_RETRIES=0; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/gui/buildmenu.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "
         + jq
         # the login itself is the server's (test_user_theme.py); here it saved its answer
         + f'console_signin() {{ cp {shlex.quote(posix(answer))} "$RUN_DIR/console_login.json"; }}; '
