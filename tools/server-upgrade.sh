@@ -206,8 +206,8 @@ fi
 # 2. רק היחידה המנותקת רשאית לכתוב לעץ. כשל git נכתב לסטטוס כלשונו,
 # ולפני שנגענו ביחידות, ב-initrd או בשירות הרץ.
 stage fetch
-if ! git_error="$(git -C "$REPO_DIR" fetch --tags 2>&1)"; then
-    why="git fetch --tags נכשל: $git_error"
+if ! git_error="$(git -C "$REPO_DIR" fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG" 2>&1)"; then
+    why="git fetch $TAG נכשל: $git_error"
     set_status failed "$why" fetch "$why"
     rm -f "$UPGRADE_STATE"
     die "$why"

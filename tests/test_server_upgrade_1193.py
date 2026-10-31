@@ -1,12 +1,13 @@
 """‏#1193 — git writes happen inside the detached upgrade script.
 
 The real bash script runs against PATH shims.  The assertions cover the
-observable command order and the persisted status; no git, systemd, curl, or
-installed unit on the test host is touched.
+observable command order and the persisted status.  The fetch regression also
+uses real git repositories confined to tmp_path; no installed unit is touched.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ import pytest
 from native import requires_native
 from test_installer_1131 import (
     BASH,
+    UPGRADE,
     _fake_repo,
     _seed_db,
     _status,
@@ -88,7 +90,8 @@ def test_fetch_and_checkout_precede_units_restart_and_verification(tmp_path, bin
     log = calls(tmp_path)
 
     assert proc.returncode == 0, (tmp_path / "upgrade.log").read_text(encoding="utf-8")
-    fetch = next(i for i, row in enumerate(log) if row.startswith("git -C ") and row.endswith(" fetch --tags"))
+    fetch = next(i for i, row in enumerate(log) if row.startswith("git -C ") and row.endswith(
+        " fetch --no-tags origin refs/tags/v0.53.0:refs/tags/v0.53.0"))
     checkout = next(i for i, row in enumerate(log) if row.startswith("git -C ") and " checkout --detach v0.53.0" in row)
     units = log.index("systemctl daemon-reload")
     restart = log.index("systemctl restart imagectl-server")
@@ -114,11 +117,64 @@ def test_fetch_failure_records_git_error_and_touches_no_units_or_service(tmp_pat
 
     assert proc.returncode != 0
     assert status and status["state"] == "failed" and status["tag"] == "v0.53.0"
-    assert "git fetch --tags" in status["error"]
+    assert status["reason"] == "fetch"
+    assert "git fetch" in status["error"] and "v0.53.0" in status["error"]
     assert "Read-only file system" in status["error"]
     assert not any(" checkout " in row for row in log)
     assert not any(row.startswith("systemctl ") for row in log)
     assert not (tmp_path / "units" / "imagectl-server.service").exists()
+
+
+@requires_native(("git", shutil.which("git")), why="tag conflicts require real git")
+def test_fetch_requested_tag_ignores_unrelated_local_tag_conflict(tmp_path, bindir):
+    """#2237: execute the actual fetch block, not a copy of its command.
+
+    Restoring the old production script must fail at the success assertion
+    with 'would clobber existing tag'.  Status/stage reporting and die are
+    lightweight stubs; the fetch and its failure branch come from production.
+    """
+    source = UPGRADE.read_text(encoding="utf-8")
+    start = source.index("\nstage fetch\n")
+    end = source.index("\n# \u200f#1277:", start)
+    fetch_block = source[start:end]
+    proc = run_bash('''\
+set -euo pipefail
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+export LC_ALL=C
+git init origin
+git -C origin -c user.name=Test -c user.email=test@example.invalid \\
+    -c commit.gpgsign=false commit --allow-empty -m initial
+git clone --no-tags origin local
+git -C local tag v0.76.4
+local_tag=$(git -C local rev-parse refs/tags/v0.76.4)
+local_head=$(git -C local rev-parse HEAD)
+git -C origin -c user.name=Test -c user.email=test@example.invalid \\
+    -c commit.gpgsign=false commit --allow-empty -m release
+git -C origin tag v0.76.4
+git -C origin tag v0.77.0
+git -C origin tag v0.77.1
+remote_tag=$(git -C origin rev-parse refs/tags/v0.76.4)
+target=$(git -C origin rev-parse refs/tags/v0.77.0)
+[ "$local_tag" != "$remote_tag" ]
+printf 'conflict established\\n'
+TAG=v0.77.0
+REPO_DIR="$PWD/local"
+UPGRADE_STATE="$PWD/upgrade.state"
+stage() { printf 'stage: %s\\n' "$1"; }
+set_status() { printf 'status: %s\\n' "$*"; }
+die() { printf '%s\\n' "$*" >&2; exit 1; }
+''' + fetch_block + '''
+[ "$(git -C local rev-parse refs/tags/v0.77.0)" = "$target" ]
+[ "$(git -C local rev-parse refs/tags/v0.76.4)" = "$local_tag" ]
+[ "$(git -C local rev-parse HEAD)" = "$local_head" ]
+[ "$(git -C local tag --list v0.77.1)" = "" ]
+printf 'requested tag fetched; unrelated tags and HEAD preserved\\n'
+''', tmp_path, bindir)
+
+    assert "conflict established" in proc.stdout, proc.stdout + proc.stderr
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "requested tag fetched; unrelated tags and HEAD preserved" in proc.stdout
+    assert "status: failed" not in proc.stdout
 
 
 def test_checkout_failure_records_git_error_and_does_not_restart(tmp_path, bindir):

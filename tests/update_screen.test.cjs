@@ -346,6 +346,8 @@ test('dlfail: firewall and DNS to check, and "try again" re-applies the same tag
   assert.deepEqual(steps(h), ['fail', 'skip', 'skip', 'skip']);
   assert.match(h, /השרת לא הצליח להגיע ל-github\.com/);
   assert.match(h, /חומת האש של המכללה[\s\S]*שרת ה-DNS/);
+  assert.match(h, /<h3>מה לבדוק<\/h3><ol class="u-chk">/);
+  assert.doesNotMatch(h, /ההורדה נכשלה מסיבה שאינה קשורה לרשת/);
   assert.match(h, /onclick="updRetry\(\)">נסה שוב</);
   t.fixtures['/update/status'] = running('fetch');
   await t.run('updRetry()');
@@ -354,11 +356,19 @@ test('dlfail: firewall and DNS to check, and "try again" re-applies the same tag
   assert.equal(t.run('UPD.phase'), 'run');
 });
 
-test('dlfail that is not a network error does not blame github.com', async () => {
+for (const error of [
+  'git fetch נכשל: cannot open .git/FETCH_HEAD: Read-only file system',
+  'git fetch נכשל: ! [rejected] v0.76.4 -> v0.76.4 (would clobber existing tag)',
+]) test(`dlfail without network advice: ${error}`, async () => {
   const t = await started();
-  t.fixtures['/update/status'] = failed('fetch', 'fetch', {error: 'git fetch --tags נכשל: cannot open .git/FETCH_HEAD: Read-only file system'});
+  t.fixtures['/update/status'] = failed('fetch', 'fetch', {error});
   await t.poll();
-  assert.doesNotMatch(t.html(), /לא הצליח להגיע ל-github\.com/);
+  const h = t.html();
+  assert.equal(t.run('UPD.phase'), 'dlfail');
+  assert.doesNotMatch(h, /לא הצליח להגיע ל-github\.com|חומת האש|DNS|class="u-chk"|מה לבדוק/);
+  assert.match(h, /ההורדה נכשלה מסיבה שאינה קשורה לרשת/);
+  assert.match(h, /הפרטים הטכניים למטה מציגים את השגיאה שהתקבלה/);
+  assert.ok(h.includes(error.replaceAll('>', '&gt;')), 'technical evidence remains visible and escaped');
 });
 
 test('rollback: the failed step in red, the restart as "returned", and the server answers on the old version', async () => {
