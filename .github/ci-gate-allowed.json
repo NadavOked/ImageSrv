@@ -1,0 +1,12 @@
+{
+  "_doc": [
+    "#2164: the declared set of the public `tests` workflow, read by tools/git/lab_gate.py verdict -- the same verdict as the",
+    "lab gate (#2121), with the public run's own list. Green = every id `--collect-only` found ran (by id, against the junit),",
+    "nothing FAILED/ERROR/SKIPPED outside this list, and the session's own checks (conftest: orphans, real sender) empty.",
+    "Empty on purpose: the public runner has root, the native tools and REQUIRE_NATIVE=1, and its serial runs before #2164",
+    "skipped nothing (run 40819406095, 29/10: 11679 passed, 0 skipped). uinput and vm_it are deselected by -m, not skipped.",
+    "Adding an entry is a decision with a reason in 'why' -- never a way to make a red run green, and never for a test that",
+    "fails only under xdist (that is a race: an issue, not a declaration)."
+  ],
+  "entries": []
+}

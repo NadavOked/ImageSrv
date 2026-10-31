@@ -27,6 +27,9 @@ from .db import agent_seen, disk_full, journal, note_disk_full
 from . import direct, gui_failure, learn_wol, local_clone_report, readbackhash, room_console, smart_ask
 from . import agent_logs   # #1882
 from . import held   # #2031
+from . import agent_timing   # #2056
+from . import disk_sets   # #1857
+from . import firmware_image   # #2080
 from .readbackhash import mode as readback_mode
 from .hello import (build_answer, hello_payload_oversized, login_required, off_deploy_vlan,
                     well_formed_monitor_auth, well_formed_monitor_secret)
@@ -339,6 +342,23 @@ def create_agent_router(ctx: ServerContext,
         # polling חדש. רק ב-hello האמיתי (לא בתפריט האתחול), ורק למכונה
         # רשומה; השדה חסר כשאין בקשה, וסוכן ישן מתעלם ממנו.
         if answer["known"]:
+            # ‏#2056/#2059: מה שהסוכן אומר שהוא מחיל (זמני המתנה/כיבוי) -- נרשם, ומשם "הוחל ב-N מתוך M".
+            agent_timing.note_applied(ctx.conn, mac, body.get("applied_timing"))
+            # ‏#2080: תמונת הקושחה (אתחול, בקר, BIOS, דיסק לכל חיבור) -- שורה חדשה רק כשהשתנתה
+            try:
+                firmware_image.record(ctx.conn, mac, body)
+            except sqlite3.OperationalError as exc:
+                if not disk_full(exc):
+                    raise
+                note_disk_full(f"hello firmware_image {mac}")
+            # ‏#1857: מלאי הדיסקים (דגם/גודל/מקום) של משכפל ושל מחשב בנייה -- לרשימת "כל הדיסקים" ולשיוך לסטים
+            if answer.get("role") in ("cloner", "build"):
+                try:
+                    disk_sets.note_hello(ctx.conn, mac, disks)
+                except sqlite3.OperationalError as exc:   # מחיצה מלאה אינה מפילה hello (#1892)
+                    if not disk_full(exc):
+                        raise
+                    note_disk_full(f"hello disk_inventory {mac}")
             power_action, power_confirmed = room_console.take_power(ctx.conn, mac)
             # ‏#2031: hello מצטרף = המכונה חזרה לתור; כיבוי שנמסר = היא יוצאת מההחזקה
             if joining or power_action is not None:

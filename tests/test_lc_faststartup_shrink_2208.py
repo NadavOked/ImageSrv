@@ -144,9 +144,9 @@ def test_a_store_that_fills_during_the_drop_is_refused_by_name(tmp_path):
     assert not any(l.startswith("ntfsresize -s") for l in order), order
 
 
-def test_the_capture_never_probes_or_drops_on_its_views(tmp_path):
-    """The capture calls lc_snap_shrink without ``unhib``: it refused a hibernated
-    source before making any view (#651), and its path is not this Issue's."""
+def test_the_plain_snapshot_mode_never_probes_or_drops_on_its_views(tmp_path):
+    """Clean captures still use the plain mode. #2213's hibernated captures
+    opt into `capture`; no-flag callers retain their previous behavior."""
     out = run(tmp_path, setup() + HIB + 'lc_shrink_plan sdc; lc_snap_shrink sdc; echo "rc=$?"; '
               'echo "unhib=$(cat "$LC/run/src_unhib" 2>/dev/null)"')
     assert out.returncode == 0, out.stderr

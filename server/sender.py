@@ -477,6 +477,7 @@ class SenderEngine:
         link_speed: Callable[[str | None], dict] | None = None,
         pending_asks: Callable[[str], list[str]] | None = None,
         lost_receivers: Callable[[str], list[str | None]] | None = None,
+        lost_wait: Callable[[], int] | None = None,
     ):
         self.library = library
         self.runner = runner
@@ -497,6 +498,8 @@ class SenderEngine:
             retries_until_drop if retries_until_drop is not None
             else _env_retries_until_drop()
         )
+        # ‏#2056: ההמתנה למחשב שהתנתק (הגדרה בקונסולה, בשניות). ‏None = ללא הגדרה: התקרה כמות שהיא.
+        self.lost_wait = lost_wait
         # ריסון קצב: מקבל חסום על כתיבה לדיסק גם שותק בפרוטוקול, וה-sender
         # זורק אותו ("Dropped by server"). ברשת 1G הכבל מרסן מעצמו; ברשת
         # מהירה (מעבדת VM, ‏10G) חייבים רסן מפורש בקצב שהדיסקים מעכלים (#24).
@@ -780,6 +783,14 @@ class SenderEngine:
         """‏`--start-timeout` למחיצות 2+ — חייב להכיל את `max_wait_later`."""
         return later_start_timeout(self.max_wait, self.start_timeout)
 
+    def effective_retries_until_drop(self) -> int:
+        """‏#2056: התקרה שמועברת ל-udp-sender -- לא פחות מההמתנה שהוגדרה לאובדן, כדי שהשולח
+        לא יזרוק מקבל שהשרת עוד מחכה לו. ההמרה: 200 בקשות ≈ 190ש' (ראו למעלה)."""
+        if self.lost_wait is None:
+            return self.retries_until_drop
+        from . import agent_timing   # noqa: PLC0415 -- בלי מעגל ייבוא בעלייה
+        return agent_timing.retries_until_drop(self.retries_until_drop, self.lost_wait())
+
     def command_for(self, path: Path, receivers: int, number: int = 1,
                     max_bitrate: str | None | bool = False) -> list[str]:
         # ‏number = מספר המחיצה בסדר השידור (1 = הראשונה). מהשנייה והלאה
@@ -798,7 +809,7 @@ class SenderEngine:
             str(self.start_timeout_later if later else self.start_timeout),
             # מקבל שמת אינו שולח CMD_DISCONNECT — הוא פשוט מפסיק לענות,
             # וכל שאר החדר ממתין לו. זו התקרה על ההמתנה הזאת (#437).
-            "--retries-until-drop", str(self.retries_until_drop),
+            "--retries-until-drop", str(self.effective_retries_until_drop()),
             "--rexmit-hello-interval", str(HELLO_INTERVAL_MS),
             "--nokbd",
             "--file", str(path),
@@ -829,7 +840,7 @@ class SenderEngine:
             # למחיצות 2+ (#957) — מחשב הבנייה בוחר לפי מספר המחיצה, כמונו.
             "max_wait_later": self.max_wait_later,
             "start_timeout_later": self.start_timeout_later,
-            "retries_until_drop": self.retries_until_drop,
+            "retries_until_drop": self.effective_retries_until_drop(),
             "max_bitrate": self.max_bitrate or None,
         }
 

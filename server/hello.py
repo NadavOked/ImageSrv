@@ -18,7 +18,7 @@ import sqlite3
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
-from . import (bootguard, capabilities, crcwarn, direct, disk_failures, drawer_slots,
+from . import (agent_timing, bootguard, disk_sets, capabilities, crcwarn, direct, disk_failures, drawer_slots,
                inventory, minfree, probe, registry, room, room_drivers, shrink_records,
                slot_names, smart_history, timezone, unknown_screen)
 from .agent_version import server_version
@@ -377,6 +377,11 @@ def build_answer(
         # ‏#1864 (נדב 20/10): האימות אחרי הכתיבה — "sample"/"full". בכל תשובה, כמו
         # min_free_gb: השיכפול המקומי (בלי מניפסט מהשרת) קורא את האחרון שהגיע.
         "readback_mode": readbackhash.mode(conn),
+        # ‏#1857 (מוקאפ 04): שם הסט והמדבקה של דיסקים ששלח המשכפל ({serial: {set, label, text}}); דיסק בלי סט חסר.
+        "disk_labels": disk_sets.labels_for(conn, disks),
+        # ‏#2056/#2059: זמני ההמתנה והכיבוי האוטומטי (הגדרות בקונסולה). בכל תשובה לרשומה,
+        # ולכל תפקיד. הסוכן מחזיר את מה שהחיל ב-`applied_timing` (ראו interfaces.md).
+        **agent_timing.hello_fields(conn),
     }
     if machine["role"] == "cloner" and machine["drawer_count"] is not None:
         answer["drawer_count"] = machine["drawer_count"]

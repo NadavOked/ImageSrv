@@ -178,8 +178,8 @@ end_problems() {
 }
 
 end_record() {
-    # $1 = kind, $2/$3 = done/targets. Counting: the epoch of the power-off; held: 0.
-    _er_at=0; [ "$_ec_held" = 1 ] || _er_at=$(( $(date +%s) + END_POWEROFF_S ))
+    # $1 = kind, $2/$3 = done/targets. Counting: the power-off epoch; held/disabled: 0.
+    _er_at=0; [ "$_ec_held" = 1 ] || [ "$_ec_off" = 1 ] || _er_at=$(( $(date +%s) + _ec_s ))
     printf '%s|%s|%s|%s|%s\n' "$_er_at" "$1" "$2" "$3" "$_ec_held" > "$RUN_DIR/end.poweroff"
 }
 
@@ -195,6 +195,13 @@ end_countdown() {
     # machine stayed on (the screen says why), 2 when END_ABORT_FILE came.
     # No kiosk: it runs all the same.
     _ec_k=$1; _ec_w=$2; _ec_d=${3:-}; _ec_t=${4:-}
+    _ec_s=$END_POWEROFF_S; _ec_off=0
+    if [ "${IMAGECTL_MODE:-}" = usbclone ] && [ "$_ec_k" = localclone ]; then
+        _ec_s=${USB_POWEROFF_S:-0}   # #2198: an unread setting never starts a count
+        case "$_ec_s" in 0*|*[!0-9]*|?????*) _ec_s=0 ;; esac
+        [ "$_ec_s" -le 3600 ] || _ec_s=0
+        [ "$_ec_s" != 0 ] || _ec_off=1
+    fi
     if [ "$#" -ge 4 ]; then shift 4; else set --; fi
     rm -f "$RUN_DIR/end.now" "$RUN_DIR/end.hold"
     _ec_held=0; case "$_ec_k" in partial|failed) _ec_held=1 ;; esac   # the caller's own count says so
@@ -202,9 +209,10 @@ end_countdown() {
     end_record "$_ec_k" "$_ec_d" "$_ec_t"
     if [ "$_ec_held" = 1 ]; then
         log "$_ec_w -- a disk has a problem: the results stay on the screen until 'כבה', no count (#2024): $(tr '\n' ';' < "$RUN_DIR/end.problems" 2>/dev/null)"
-    else log "$_ec_w -- powering off in ${END_POWEROFF_S}s, or at once on 'כבה עכשיו'"; fi
+    elif [ "$_ec_off" = 1 ]; then log "$_ec_w -- automatic power-off disabled; waiting for 'כבה עכשיו'"
+    else log "$_ec_w -- powering off in ${_ec_s}s, or at once on 'כבה עכשיו'"; fi
     _ec_n=0   # counted like idle_check's warning; the screen counts to the epoch
-    while [ "$_ec_held" = 1 ] || [ "$_ec_n" -lt "$END_POWEROFF_S" ]; do
+    while [ "$_ec_held" = 1 ] || [ "$_ec_off" = 1 ] || [ "$_ec_n" -lt "$_ec_s" ]; do
         if [ -f "$RUN_DIR/end.now" ]; then log "$_ec_w -- 'כבה עכשיו' pressed"; break; fi
         # a request of the screen's own (END_ABORT_FILE, lcwait.sh: the local clone's
         # end.req) is the person's: the count gives way to it, its caller acts on it

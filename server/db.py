@@ -384,6 +384,65 @@ CREATE TABLE IF NOT EXISTS machine_slot_names (
     PRIMARY KEY (mac, slot)
 );
 
+-- ‏#1857 (מוקאפ 04, נדב 24/10): סטים של דיסקים -- "קוריאים", קידומת xx, מדבקות xx-INS, xx-1 …
+-- ‏השם הולך עם הדיסק לפי הסידורי ולא עם המגירה, ותצוגה בלבד (לא נכתב ל-Windows).
+-- ‏`students` = כמה מספרים מתוכננים (‏xx-1…xx-N), ‏`instructor` = יש xx-INS.
+CREATE TABLE IF NOT EXISTS disk_sets (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    prefix     TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    students   INTEGER NOT NULL,
+    instructor INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    created_by TEXT NOT NULL DEFAULT ''
+);
+-- ‏דיסק אחד בסט אחד לכל היותר (serial = מפתח), ושם אחד לדיסק אחד בסט (UNIQUE set_id+suffix).
+CREATE TABLE IF NOT EXISTS disk_set_members (
+    serial      TEXT PRIMARY KEY,
+    set_id      INTEGER NOT NULL REFERENCES disk_sets(id) ON DELETE CASCADE,
+    suffix      TEXT NOT NULL,          -- "INS" או מספר
+    assigned_at TEXT NOT NULL,
+    assigned_by TEXT NOT NULL DEFAULT '',
+    UNIQUE (set_id, suffix)
+);
+-- ‏דיסק שיצא מסט (הוחלף / הוסר): נשמר בהיסטוריה, השם עבר הלאה.
+CREATE TABLE IF NOT EXISTS disk_set_history (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    serial    TEXT NOT NULL,
+    set_id    INTEGER NOT NULL,
+    suffix    TEXT NOT NULL,
+    left_at   TEXT NOT NULL,
+    reason    TEXT NOT NULL,            -- replaced|removed
+    replaced_by TEXT,
+    left_by   TEXT NOT NULL DEFAULT ''
+);
+-- ‏כל דיסק שהשרת ראה ב-hello של משכפל/מחשב בנייה: דגם, גודל ומקום אחרון (לרשימת "כל הדיסקים" ולשיוך).
+CREATE TABLE IF NOT EXISTS disk_inventory (
+    serial     TEXT PRIMARY KEY,
+    model      TEXT,
+    size_bytes INTEGER,
+    mac        TEXT,
+    port       INTEGER,
+    first_seen TEXT NOT NULL,
+    last_seen  TEXT NOT NULL
+);
+
+-- ‏#2080 (מוקאפ 06, נדב 24/10): תמונת הקושחה של כל מכונה -- שורה חדשה רק כשהתמונה השתנתה
+-- (מצב אתחול, מצב בקר הדיסקים, גרסת BIOS, דיסק בכל חיבור SATA). ‏`fw_baseline` = "זו ההגדרה הנכונה".
+CREATE TABLE IF NOT EXISTS fw_snapshots (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    mac       TEXT NOT NULL,
+    at        TEXT NOT NULL,
+    snap_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fw_snapshots_mac ON fw_snapshots (mac, id);
+CREATE TABLE IF NOT EXISTS fw_baseline (
+    mac       TEXT PRIMARY KEY,
+    at        TEXT NOT NULL,
+    snap_json TEXT NOT NULL,
+    by        TEXT NOT NULL DEFAULT ''
+);
+
 -- ‏#2001: מיפוי חיבורים לפי דגם (‏DMI ``product_name`` מה-hello) — "כל מחשבי הדגם".
 -- ‏`slots_json` = החיבורים הפעילים בסדר החיבורים (‏sata:<port> / nvme:<PCI> /
 -- ‏nvme#<n> שעוד לא נראה כונן בו); ‏`names_json` = ‏{חיבור: שם}. עדיפות: מכונה
@@ -883,6 +942,9 @@ ADDED_COLUMNS = [
      "INTEGER NOT NULL DEFAULT 3 CHECK (drawer_count BETWEEN 1 AND 8)"),
     ("machines", "drawer_slots", "TEXT"),
     ("net_devices", "optical_json", "TEXT"),
+    # ‏#2056/#2059: מה הסוכן החזיר ב-hello שהוא מחיל (``applied_timing``, JSON). NULL = לא
+    # דיווח (סוכן ישן) -- "לא הוחל", לא "הוחל" (עיקרון 5).
+    ("net_devices", "applied_timing", "TEXT"),
     # בחירת דיסקי היעד לסבב, לכל מכונה. NULL = סבב ישן (התנהגות "כל הדיסקים").
     # '[]' הוא בחירה ריקה מפורשת ואינו חוקי לסבב חדש (#695).
     ("room_rounds", "target_slots_json", "TEXT"),
@@ -1310,7 +1372,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7   # ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:

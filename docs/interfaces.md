@@ -74,6 +74,17 @@
 
 ### כללים
 
+- **`src_unhib`** (#2213, optional, image-level) — `"unhibernated"` or
+  `"unhibernated_logfile"`: capture dropped Windows Fast Startup on a RAM
+  copy-on-write view and verified it clean before reading that view. The
+  latter records that clearing `$LogFile` was needed. The source was never
+  written. Applies to agent capture and direct-send manifests;
+  absence means no drop was recorded, not a claim about older images.
+  The capture/direct-send task also carries the existing local-clone Hebrew
+  warning in its target `error` field even on success (orange completion).
+  Capture reports this warning before uploading the manifest, since accepting
+  the manifest can close the task before its next periodic report.
+
 - **`compression`** — הרמה ש-`zstd` באמת קיבלה בקליטה, נגזרת מ-`CAPTURE_LEVEL` של הסוכן ולא נכתבת בנפרד. **תיאור, לא הבטחה:** אימג'ים שנקלטו לפני #72 אומרים `zstd-9` ונקראים כרגיל — הפירוק אינו תלוי ברמה. ברירת המחדל היא `3` מאז #72, אחרי מדידה: רמה 9 עלתה פי 3.1 בזמן והחזירה 1.1% בגודל (‏~80MB על אימג' 7.3GB, כארבע שניות בשידור שאורך 5:54). מספר התהליכונים (`CAPTURE_THREADS`, ברירת מחדל `0` = כל הליבות מאז 16/10; עד אז `2`) **אינו** בשדה — הוא אינו משנה את הפורמט ולא את הפירוק — ולכן הוא נרשם ביומן הסוכן ליד ה-`stderr` של `zstd` עצמו.
 - **`family`** — `256` או `500` בלבד. נגזר אוטומטית מגודל כונן המקור (מתחת ל-300GiB — `256`). **תווית תצוגה בלבד, לא מסנן** (‏#1863, הכרעת נדב 20/10): אף מסלול אינו מכריע לפיה אם אימג' מתאים לדיסק. ההכרעה היא הגודל האמיתי בלבד — `min_target_bytes` (הנגזר, ראו למטה) ועוד `min_free_gb` (‏#1354) מול הדיסק שנבחר — בקונסולה, במסך המשכפל, במחשב הבנייה וב-`allowed_images`. עד #1863 היא הייתה תקרה נוספת ב-`allowed_for_disks`, ומאז הכיווץ (#1171) היא הסתירה אימג' "500" שנכנס לדיסק 256 ממסך המשכפל בזמן שהקונסולה אישרה אותו.
 - **`min_target_bytes`** — כונן יעד קטן מזה נחסם. **הערך הוא סוף הפריסה, לא גודל דיסק המקור** (‏#82): המחיצה האחרונה שהמניפסט מצהיר עליה (`start_sector × sector_size + size_bytes`, המקסימום על פני כל המחיצות), ועוד **256KiB** לעותק הגיבוי של ה-GPT (33 סקטורים: 16,896 בייט בכונן 512, ‏135,168 ב-4Kn) — ולכל היותר `source_disk_bytes`, שהרי דיסק המקור החזיק את הפריסה הזו בפועל.
@@ -482,6 +493,13 @@
   בלי השדה מנקה — כמו `prompt`. **נחשף** כ-`local_copy` (בוליאני, ורק כשה-hello
   טרי — ‏`AWAKE_SECONDS`) ב-`GET /api/console/machines`, במכונות של `GET /room`
   וב-`round.missing`. ממנו הקונסולה יודעת להזהיר לפני "כבה אותו" / "אתחל".
+- **`applied_timing`** (‏#2056, ‏#2059; מוקאפ 05) — מה שהסוכן **באמת מחיל** מזמני ההמתנה והכיבוי
+  של השרת: `{"lost_wait_seconds": N, "idle_poweroff_seconds": N, "end_poweroff_seconds": N}`
+  (שניות; אותם שמות כמו בתשובה). הסוכן ממלא רק מה שהוא קרא ויישם — ערך שלא קיבל או שלא יישם
+  **חסר** מהאובייקט (עיקרון 5). השרת שומר את הערכים התקינים (בטווח) לכל מכונה **רשומה**
+  (`net_devices.applied_timing`, JSON): hello בלי השדה (סוכן ישן) משאיר את הרישום הקודם, hello
+  עם השדה דורס אותו, ושדה פגום/מחוץ לטווח נזנח. ממנו נגזר `agent_timing_applied` ב-`GET
+  /api/console/settings` ("הוחל ב-N מתוך M").
 - **`direct_finished`** (‏#1952) — רק ממחשב בנייה שהוא המקור של הפצה ישירה
   (‏`direct_send`), ב-hello שלפני כל מחיצה **מהשנייה** (‏`direct_hello`,
   ‏`agent/lib/directrecv.sh`): רשימת הכתובות שקיבלו את המחיצה הקודמת עד סופה,
@@ -946,6 +964,9 @@
   "drawer_slots": ["sata:1", "sata:2", "sata:3"],
   "crc_warn_threshold": 500,
   "min_free_gb": 20,
+  "lost_wait_seconds": 180,
+  "idle_poweroff_seconds": 300,
+  "end_poweroff_seconds": 20,
   "tz": "IST-2IDT,M3.4.4/26,M10.5.0",
   "now": 1760600000
 }
@@ -1077,6 +1098,23 @@
   `crc_warn_threshold`" להלן). המסך הממתין של מחשב השיכפול צובע ממנו **כתום** מגירה
   שמונה ה-CRC שלה (199, כשנקרא באמת) מעליו: "כבל או מגירה חשודים — N שגיאות"
   (‏`cdisk=` שדה 9, ‏`native-gui/README.md`). שרת ישן שאינו שולח — הסוכן אינו צובע.
+- **`lost_wait_seconds`, `idle_poweroff_seconds`, `end_poweroff_seconds`** (‏#2056, ‏#2059; מוקאפ 05,
+  נדב 24/10) — ההגדרות `lost_wait_seconds` (ברירת מחדל 180, **מותר רק להגדיל**, 180–1800),
+  `gui_idle_poweroff_seconds` (300, 60–3600) ו-`gui_end_poweroff_seconds` (20, 10–300) בשניות, כפי
+  שהקונסולה שומרת. בכל תשובה למכונה **רשומה**, בכל תפקיד (הגדרה אחת לכל הסוגים); לא נשלחות
+  למכונה לא רשומה. *הראשון* — כמה זמן הסבב מחכה למשכפל שהפסיק לדווח לפני ש-`room._mark_lost`
+  מסמן אותו `lost`; הוא גם מגדיל את `--retries-until-drop` של השולח באותו יחס
+  (‏`agent_timing.retries_until_drop`: 200 בקשות ≈ 190ש'), כדי שהשולח לא יזרוק מקבל לפני כן.
+  *השניים האחרונים* — הכיבוי האוטומטי של הגואי הקטן: אחרי כמה שניות בלי פעילות
+  (`IDLE_POWEROFF_S`) ואחרי כמה שניות ספירה בסוף משימה (`END_POWEROFF_S`, ‏`agent/lib/idle.sh`).
+  מחשב עם דיסק בעייתי **אינו נכבה לבד** (#2024) -- כלל קבוע בסוכן, לא הגדרה. חסר/פגום בשרת =
+  ברירת המחדל (בשקט / עם שורת יומן), לעולם לא "אינסוף" ולא 0; סוכן שלא קיבל ערך משתמש בקבוע שלו.
+  הסוכן מחזיר מה שהחיל ב-`applied_timing` (בבקשה). `POST /api/console/settings` (מנהל בלבד):
+  מספר שלם בטווח, אחרת 400 "<שם>: מספר שלם של שניות, <מ>–<עד>" לפני שנכתב דבר (#1794);
+  ב-`GET` — הערך שבתוקף (מחרוזת) ובנוסף `agent_timing_applied`:
+  `{"<key>": {"applied": N, "connected": M}}` לכל אחד משלושת המפתחות -- M המכונות הרשומות מהתפקידים
+  הרלוונטיים (משכפל; ולשני האחרים גם מחשב בנייה) שנראו ב-90 השניות האחרונות, N מביניהן שהחזירו
+  בדיוק את הערך שבתוקף. ‏`schema` נשאר 1; סוכן ישן מתעלם מהשדות.
 - **`shrink_open`** — **זיכרון הכיווץ בשרת** (‏#926, סעיף 20): הרשומות
   **הפתוחות** מטבלת `shrink_records` שהסידורי שלהן הוא אחד מה-`serial`
   שהמכונה שלחה ב-`disks` — דיסק מקור שכווץ לקליטה (‏#87) ולא הוחזר לגודלו.
@@ -3137,13 +3175,18 @@ proxy ישנה מה-DB (‏`console_dhcp.proxy_configs`), ו-`GET /net/proxy-sup
   את התוצאות). הגשר כותב `$RUN_DIR/end.now` רק בזמן ספירה, ו-`$RUN_DIR/end.hold`
   רק ל-`partial`/`failed`; בלי כניסה. רשומה פגומה — אין דיאלוג. הכיבוי —
   ‏`finish_and_stop` (‏`arm_wol`); כיבוי שסורב נשאר על המסך כ-`toast=`.
+  **‏#2198:** ב-USB עם `poweroff_s=0`, הצלחה נשלחת כ-`0|localclone|N|N|0`
+  (‏N חיובי): דיאלוג ההצלחה נשאר בלי ספירה ועם "כבה עכשיו". זה החריג היחיד
+  שמתיר epoch ‏0 בלי `held=1`; אינו מסמן בעיה בדיסק. ערך חיובי קובע את הזמן
+  רק לשיכפול מקומי ב-USB; הסוכן קורא מחדש את הגדרות ה-USB לפני הספירה.
+  קריאה שנכשלה = ‏0 (אין ספירה), ונאמרת על המסך ב-`usb.notice` (‏toast) עד סוף ההמתנה.
   **‏#2024 (הכרעת נדב 22/10) — יעד עם בעיה: בלי ספירה ובלי תקרה.** ‏`END_HOLD_S`
   בוטל. ‏`end_countdown` מקבל אחרי `<done>|<targets>` את רשימת היעדים, ובודק כל
   אחד (‏`end_problem`): נקי = ‏`state` ‏`done`, בלי `error`, ‏`readback` ‏`verified`
   או `sampled`, ‏`write_check_state` שאינו `slow`, ו-`drivers.json` (אם יש) בלי
   ‏`state=failed`, בלי `boot.state=failed` ובלי `linux.state` ‏hostonly/unsupported/failed.
   כל השאר — וכן רשימה ריקה, קובץ שאינו נקרא ו-kind ‏`partial`/`failed` — **מחזיק**:
-  ‏`held=1` ו-**`epoch=0`** (אין זמן; ‏`epoch=0` בלי `held=1` — פגומה), והכיבוי רק
+  ‏`held=1` ו-**`epoch=0`** (אין זמן), והכיבוי רק
   ב-`end.now` ("כבה"), בכפתור של מסך התוצאה המקומי (‏`END_ABORT_FILE`, ‏rc 2), או
   בכיבוי מהקונסולה (‏`attended_power_check` — מתשובת דיווח ה-held, או מפעימה שרצה).
   להחזקה אין **hello**, כמו לספירה: ‏hello היה הופך אותה ל"נראית" לגל חדש, ואז
@@ -6458,6 +6501,10 @@ Pango markup, וכל ערך דינמי בתוכם עובר `esc`; ערך לטי�
 (`agent/lib/usbset.sh`, ‏`usbmap.sh`), ונשמרות ב-`settings.json` במחיצה
 ‏IMGSRV_DATA: ‏`min_free_gb`, ‏`readback_mode`, ‏`crc_warn_threshold`, ‏`temp_warn_c`,
 ‏`cloner_beep` (‏#2131: ‏JSON ‏`true`/`false` בלבד, חסר = דלוק, כל ערך אחר נדחה בקול),
+‏`poweroff_s` (‏#2198: מספר שלם ב-JSON, ‏0–3600, ברירת מחדל 20; חסר = 20,
+ערך פגום נדחה ונרשם ביומן = 20). חל רק אחרי שיכפול מקומי מוצלח ב-USB;
+0 = המתנה למפעיל בלי כיבוי אוטומטי, וגם אז "כבה עכשיו" פעיל. כשל או דיסק כתום
+מחזיקים בלי ספירה בכל ערך. איפוס ההגדרות מחזיר 20.
 ו-`drawer_slots` — **מילון לפי דגם המחשב** (DMI ‏`product_name`) של רשימות
 ‏#1485 (‏1–8 מפתחות `sata:<ataN>`/`nvme:<PCI>` בלי כפילות), לעולם לא לפי סידורי
 של דיסק. ‏**#2001** (המוקאפ שנדב אישר, ‏slot-map-2001): העורך הוא חלון אחד
@@ -7664,3 +7711,63 @@ array=/dev/md0
 
 "התראה כשכונן נופל" = הנורה האדומה כאן (ספירת הכשלים בקונסולה). מייל — #1751, עוד לא קיים.
 **v2, לא כאן:** הפיכת כונן קיים ל-RAID משרת רץ.
+
+## 40. סטים של דיסקים ודף "דיסקים" (‏#1857, מוקאפ 04, נדב 24/10)
+
+סט = **שם + קידומת** ("קוריאים" / `xx`): מדבקות `xx-INS` (מרצה) ו-`xx-1` … `xx-N`. **השם הולך עם הדיסק לפי
+הסידורי, לא עם המגירה**, ו**תצוגה בלבד** (לא נכתב ל-Windows). מקור האמת הוא המסד (אין לזה ייצוג טבעי
+כקבצים): `disk_sets`, ‏`disk_set_members` (`serial` מפתח — דיסק בסט אחד; ‏`UNIQUE(set_id, suffix)` — שני דיסקים
+לא יקבלו אותו שם), ‏`disk_set_history` (דיסק שהוחלף/הוצא), ‏`disk_inventory` (כל דיסק שנראה ב-hello של משכפל או
+מחשב בנייה: `model`, ‏`size_bytes`, מקום אחרון — כדי שדיסק שכבר יצא מהמשכפל עדיין יופיע). **כל הנתיבים: מנהל
+בלבד** (deploy → 403), תחת `/api/console`. סיבת כשל/שגיאה — `HTTPException` בעברית, ‏`409` להתנגשות, ‏`404` למי שלא נמצא.
+
+| נתיב | מה |
+|---|---|
+| `GET /disk-sets` | `[{id, name, prefix, students, instructor, capacity, assigned, counts:{red,orange,unchecked,ok}, grid:[red\|orange\|ok\|unchecked\|empty], plan:["INS","1",…], next_free}]` — `grid` ריבוע לכל מדבקה מתוכננת (`empty` = עוד לא שויכה) |
+| `POST /disk-sets` | `{name, prefix, students, instructor}` → `{id}`. שם: 1–40 תווים; קידומת: 1–8 אותיות לטיניות/ספרות; תלמידים 0–200; סט בלי דיסקים — 400; שם או קידומת (בלי הבדל אותיות) שכבר קיימים — 409 |
+| `GET /disk-sets/{id}/members` | `{id, name, prefix, disks:[דיסק]}` ממוין: אדום, כתום, לא נבדק, תקין — ואז לפי המדבקה |
+| `POST /disk-sets/{id}/assign` | `{items:[{serial, suffix}]}` — **הכול או כלום**. `suffix` = `INS` או מספר שלם בלי אפס מוביל (עד 4 ספרות). שם שכבר שייך לדיסק אחר — 409 "xx-12 כבר שייך לדיסק אחר"; דיסק שכבר בסט אחר — 409 (קודם מוציאים אותו); כפילות בתוך הבקשה — 409/400 |
+| `POST /disk-sets/{id}/replace` | `{suffix, new_serial}` — הדיסק הישן יוצא מהסט ונשמר ב-`disk_set_history` (`reason: replaced`, `replaced_by`), והשם עובר לחדש. חדש שכבר בסט — 409; מדבקה בלי דיסק — 404 |
+| `DELETE /disk-sets/members/{serial}` | הוצאה מהסט בלי תחליף (`reason: removed`) |
+| `GET /disk-sets/rounds` | ההרצות שאפשר לשייך מהן, 40 אחרונות: `[{session_id, mac, machine, at, image_id, drawers:[{port, serial, model, written, result, in_set}]}]` לפי סדר המגירות; `written` = היעד `done` ב-`session_members.targets_json`, ‏`in_set` = המדבקה אם כבר בסט |
+| `GET /disks` | `{disks:[דיסק]}` — כל דיסק שהשרת מכיר (מלאי ∪ אירועי SMART ∪ סטים) |
+
+**דיסק:** `{serial, model, size_bytes, set_id, set_name, label ("xx-12"), suffix, state, reason, last_good_write, last_fail, in_machine, mac, machine, port, last_seen}`.
+**`state`** נגזר ממה שכבר נאסף, בלי איסוף חדש: `red` = אירוע SMART אחרון `fail`, או כשל פתוח של דיסק (`disk_failures` בלי `cleared_at`, ‏`cause=disk`);
+`orange` = `warn`, או כשל פתוח אחר (כבל…); `ok` = `ok` ואין כשל פתוח; **`unchecked` = אין אף אירוע — "לא נבדק" ואינו "תקין"** (עיקרון 5).
+`reason` — הקוד (כמו ב-SMART; הקונסולה מתרגמת). `last_good_write` — סוף הסבב האחרון שבו הסידורי ב-`written_serials`; ‏`last_fail` — כשל אחרון ב-`disk_failures`.
+`in_machine` — הדיסק ב-hello האחרון של איזושהי מכונה; אחרת `mac`/`port` הם המקום האחרון שנראה (מהמלאי).
+
+**ב-hello (תשובה, מכונה רשומה): `disk_labels`** — `{"<serial>": {"set": "קוריאים", "label": "xx-7", "text": "קוריאים · xx-7"}}` לדיסקים שהמכונה שלחה
+ושיש להם סט; דיסק בלי סט **חסר** מהאובייקט (מוצג כמו היום: דגם + מגירה). `{}` = אין. הצריכה בגואי המשכפל — שינוי נפרד (לא כאן); סוכן ישן מתעלם. ‏`schema` נשאר 1.
+
+**יומן:** `disk_set_created`, ‏`disk_set_assigned`, ‏`disk_set_replaced`, ‏`disk_set_removed`.
+**לא בגרסה הזו:** הצגת המדבקה במגירות המכונה, ביומן וב"כשלי דיסק" של הקונסולה; לשונית "לפי מחשב" בדף הדיסקים (#1765).
+
+## 41. תמונת הקושחה של מכונה ו"השתנה מאז ההדלקה הקודמת" (‏#2080, מוקאפ 06, נדב 24/10)
+
+נדב: "השרת צריך לקחת מהברזל מידע לפני, ולפי זה לדעת. ככה הוא לא יפספס כלום." (הרקע: ‏F1 של `IDE device failed`
+אחרי שינוי מצב SATA ב-BIOS, #1858.) השרת שומר **תמונה** לכל מכונה **רשומה** ומשווה להדלקה הקודמת.
+
+**ב-hello (בקשה) — שני שדות חדשים, אופציונליים** (סוכן שלא שולח אותם: "לא דווח", ואינו נספר כשינוי):
+
+- **`sata_mode`** — `"ahci"` / `"ide"` / `"raid"`. נגזר מהדרייבר שלינוקס טען לבקר (`ahci` / `ata_piix`+`pata_*` / VMD). ערך אחר — נזנח.
+- **`bios`** — `{"version": "786H1 v01.13", "date": "2012-03-01", "vendor": "HP"}` (DMI `bios_*`); בלי `version` — נזנח.
+
+ומה שכבר נשלח: `firmware` (`uefi`/`bios`), `secure_boot`, ‏`inventory.dmi.product_name` (הדגם), ו-`disks[]` (`port`, ‏`serial`, ‏`model`, ‏`size_bytes`, ‏`link_gbps`) — ה-`port` הוא ‏`ataN` (‏`ata1` = SATA 0).
+**כל שדה שחסר ב-hello נלקח מהתמונה הקודמת**, ו-hello בלי `disks` אינו מרוקן את החיבורים (‏`disks: []` כן — "אין דיסקים").
+
+**אחסון:** `fw_snapshots` (שורה חדשה רק כשהתמונה השתנתה; ‏20 אחרונות לכל מכונה) ו-`fw_baseline` ("זו ההגדרה הנכונה"). התמונה:
+`{boot, secure_boot, sata_mode, bios_version, bios_date, model, slots: {"<port>": {serial, model, size_bytes, link_gbps}} | null}`.
+**ההשוואה** — להפניה: התמונה ש"זו ההגדרה הנכונה" שמרה, ואם אין — ההדלקה הקודמת. **רק כששני הצדדים נקראו** (‏`null` מול ערך אינו שינוי);
+החיבורים — רק כששתי התמונות נושאות רשימה. סוגי שינוי: `field` (‏`sata_mode`/`boot`/`secure_boot`/`bios_version`, עם `was`/`now`),
+‏`moved` (אותו סידורי, חיבור אחר: `from`/`to`), ‏`gone` (סידורי שנעלם). שינוי בין שתי תמונות רושם ביומן `fw_changed` (אזהרה, "<MAC>: מצב בקר הדיסקים השתנה: AHCI ← IDE · …"). **שינוי הוא אזהרה, לא חסימה.**
+
+| נתיב (מנהל בלבד) | מה |
+|---|---|
+| `GET /api/console/machines/{mac}/firmware` | `{mac, current:{…תמונה, at}, changes:[{kind, text, …}], ref_at, ref_kind ("baseline"\|"previous"), slots:[{port, connection:"SATA 1", disk:{serial,model,size_bytes,link_gbps}\|null, was, note, changed}], gap_below_populated, peers:[{mac, name, boot, sata_mode, bios_version, differs:[…]}]}` — `peers` = מכונות מאותו דגם; ‏404 למכונה לא רשומה |
+| `POST /api/console/machines/{mac}/firmware/accept` | "זו ההגדרה הנכונה — שמור": התמונה הנוכחית הופכת ל-baseline, יומן `fw_accepted`. ‏409 כשהמכונה עוד לא דיווחה |
+| `GET /api/console/machines` | נוסף לכל מכונה **`fw_changes`**: מספר השינויים מול ההפניה (‏`0` = אין, או שאין עם מה להשוות) — מ"קושחה השתנתה ב-N" בכותרת דף המחשבים ומהתג בשורה |
+
+`gap_below_populated` — חיבור SATA ריק בזמן שגבוה ממנו מאוכלס (הדוגמה של #1858; **הכלל עצמו עוד לא נמדד על ה-8100**, ולכן הקונסולה מציגה אותו רק כהערה ליד שינוי).
+**לא בגרסה הזו:** (1) הגואי של המשכפל (אזהרת "החיבורים השתנו" במסך ההמתנה) — שינוי בסוכן/בגואי; (2) **התאמה לאימג׳** ("בקר IDE, האימג׳ נקלט ב-AHCI: Windows לא יעלה" לפני סבב) — דורשת שהקליטה תרשום את `sata_mode` של מכונת המקור במניפסט; (3) שליחת `sata_mode`/`bios` בפועל — הסוכן.

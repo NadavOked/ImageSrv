@@ -298,6 +298,12 @@ EVENTS_HE = {
     "net_deploy_bond_failed": "עדכון הכרטיס השני ברשת ההפצה נכשל — ההגדרה הקודמת הוחזרה",
     "dhcp_synced_at_startup": "תצורת DHCP/TFTP נכתבה מחדש מה-DB בעלייה",
     "disk_decision": "הכרעה על דיסק (SMART) נרשמה",
+    "fw_changed": "הקושחה השתנתה מאז ההדלקה הקודמת",   # #2080
+    "fw_accepted": "תמונת הקושחה נשמרה כהגדרה הנכונה",
+    "disk_set_created": "סט דיסקים נוצר",   # #1857
+    "disk_set_assigned": "דיסקים שויכו לסט",
+    "disk_set_replaced": "דיסק בסט הוחלף",
+    "disk_set_removed": "דיסק הוצא מסט",
     "machine_drawer_count": "מספר המגירות של מכונה עודכן",
     "machine_drawer_slots": "מיפוי חיבורי הדיסקים של מכונה עודכן",
     "machine_slot_map": "מיפוי החיבורים נשמר (מחשב או כל מחשבי הדגם)",
@@ -383,6 +389,7 @@ _SEVERITY_ERR = {
     "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
 }
 _SEVERITY_WARN = {
+    "fw_changed",   # #2080
     "unknown_mac", "drive_rates_failed", "boot_loop_local", "boot_loop_unverified", "agent_loop",
     "agent_loop_unverified", "report_from_nonmember", "identity_unverifiable", "room_rejoin",
     "capture_cancel", "direct_cancel", "task_boot_cancel", "send_stopped", "dhcp_proxy_risk",
@@ -439,6 +446,10 @@ SETTINGS_HE = {
     "min_free_gb": "מינימום מקום פנוי אחרי שחזור (GB)",   # #1354
     "intersite_rate_cap_mbps": "הגבלת קצב בין אתרים (Mb/s)",   # #1473
     "igmp_querier": "IGMP querier ברשת ההפצה",   # #1972
+    # ‏#2056/#2059 (מוקאפ 05): אותן תוויות כמו בהגדרות הקונסולה; הערך בשניות
+    "lost_wait_seconds": "המתנה למחשב שהתנתק באמצע שיכפול (שניות)",
+    "gui_idle_poweroff_seconds": "כיבוי כשאין פעילות (שניות)",
+    "gui_end_poweroff_seconds": "ספירה לכיבוי בסוף משימה (שניות)",
     "auto_reboot": "הפעלה מחדש אוטומטית",
     "auto_reboot_time": "שעה",
     "auto_reboot_weekday": "יום",
