@@ -52,7 +52,7 @@ function setup(fixtures) {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => (value === undefined ? {} : JSON.parse(JSON.stringify(value)))};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'reorder.js', 'net.js', 'netcfg.js', 'storage_nodes.js', 'drivers.js', 'storage.js', 'branches.js']) {
+  for (const f of ['progress.js', 'console.js', 'reorder.js', 'net.js', 'netcfg.js', 'storage_nodes.js', 'drivers.js', 'storage.js', 'disks.js', 'branches.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, {filename: f});
   }
   const run = (s) => vm.runInContext(s, ctx);
@@ -67,7 +67,7 @@ function setup(fixtures) {
 
 // Same data for both servers, so any difference between the pages is the context's.
 const DATA = {
-  '/overview': {session: null, images: 0, machines: 0, storage: {}}, '/machines': [], '/groups': [],
+  '/overview': {session: null, images: 0, machines: 0, storage: {}}, '/machines': [], '/disks': {disks: []}, '/disk-sets': [], '/disk-sets/rounds': [], '/groups': [],
   '/disk-failures': [], '/shrink-records': [], '/net': [], '/net/config': {interfaces: []},
   '/net/deploy': {configured: true, source: 'cli', interface: null, url: null, hint: null},
   '/net/interfaces': [], '/room': {round: null, machines: []}, '/room/history': [], '/room/driver-models': [],
@@ -85,7 +85,7 @@ const both = () => {
   return f;
 };
 // The secondary's pages: every leaf of its tree except "העברות" (a primary page about it).
-const PAGES = ['home', 'deploy', 'images', 'machines', 'health', 'storage', 'network', 'monitor', 'drivers', 'permissions', 'logs', 'settings'];
+const PAGES = ['home', 'deploy', 'images', 'machines', 'disks', 'health', 'storage', 'network', 'monitor', 'drivers', 'permissions', 'logs', 'settings'];
 
 const tabsOf = (html) => [...html.matchAll(/role="tab"[^>]*>([^<]*)/g)].map((m) => m[1]);
 const cardsOf = (html) => [...html.matchAll(/class="card-h"><span>([^<]*)/g)].map((m) => m[1]);

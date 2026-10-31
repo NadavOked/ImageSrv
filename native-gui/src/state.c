@@ -660,11 +660,13 @@ void state_parse(State *s, FILE *fp) {
         } else if (KEY("end_poweroff")) {
             /* #1560: <epoch>|<kind>|<done>|<targets>|<held>; done/targets
              * may be empty (not said). All or nothing: a record this screen
-             * cannot read draws no count. #2024: epoch 0 + held 1 is unlimited. */
+             * cannot read draws no count. #2024: epoch 0 + held 1 is unlimited;
+             * #2198: epoch 0 + held 0 is a successful local clone waiting by choice. */
             unsigned long long at = 0, dn = 0, tot = 0, held = 2; int kind = END_NONE;
             if (split(val, f, 6) == 5 && parse_uint(f[0], &at) && at < (1ULL << 40) &&
                 (!f[2][0] || parse_uint(f[2], &dn)) && (!f[3][0] || parse_uint(f[3], &tot)) &&
-                dn <= tot && tot < 100 && parse_uint(f[4], &held) && held <= 1 && (at > 0 || held == 1)) {
+                dn <= tot && tot < 100 && parse_uint(f[4], &held) && held <= 1 &&
+                (at > 0 || held == 1 || (!strcmp(f[1], "localclone") && dn == tot && tot > 0))) { /* #2198: 0 seconds, success held by choice */
                 if (!strcmp(f[1], "drawers")) kind = END_DRAWERS;
                 else if (!strcmp(f[1], "partial")) kind = END_PARTIAL;   /* some targets failed */
                 else if (!strcmp(f[1], "localclone")) kind = END_LOCALCLONE;

@@ -218,6 +218,63 @@ def test_returns_before_playback_finishes(tmp_path):
     assert frequencies(tmp_path) == expected("failure")
 
 
+def test_lock_vanishing_after_failed_mkdir_does_not_skip_failure(tmp_path):
+    run_ash(prelude(tmp_path) + """
+        command mkdir "$RUN_DIR/beep.lock"
+        attempts=0
+        mkdir() {
+            attempts=$((attempts + 1))
+            echo "$attempts" >> "$RUN_DIR/lock-attempts"
+            if [ "$attempts" = 1 ]; then
+                command rmdir "$RUN_DIR/beep.lock"
+                return 1
+            fi
+            command mkdir "$@"
+        }
+        event_beep failure; wait
+    """, timeout=10)
+    assert frequencies(tmp_path) == expected("failure")
+    assert (tmp_path / "lock-attempts").read_text().split() == ["1", "2"]
+    assert "cannot lock the speaker" not in "\n".join(log_lines(tmp_path))
+    assert not (tmp_path / "beep.lock").exists()
+
+
+def test_persistent_mkdir_failure_without_directory_is_bounded_and_logged(tmp_path):
+    run_ash(prelude(tmp_path) + """
+        mkdir() { echo attempt >> "$RUN_DIR/lock-attempts"; return 1; }
+        event_beep failure; wait
+    """, timeout=10)
+    assert frequencies(tmp_path) == []
+    assert (tmp_path / "lock-attempts").read_text().split() == ["attempt"] * 3
+    assert (tmp_path / "sleeps").read_text().split() == [".05"] * 2
+    assert log_lines(tmp_path) == ["beep failure: cannot lock the speaker -- not heard"]
+    assert not (tmp_path / "beep.lock").exists()
+
+
+def test_stale_owner_check_does_not_remove_a_replacement_owners_lock(tmp_path):
+    run_ash(prelude(tmp_path) + """
+        command mkdir "$RUN_DIR/beep.lock"
+        echo stale-owner > "$RUN_DIR/beep.lock/pid"
+        _rb_alive() {
+            # A third tune acquired the directory after we read the dead PID.
+            echo "$$" > "$RUN_DIR/beep.lock/pid"
+            return 1
+        }
+        sleep() {
+            [ "$1" = .05 ] || return 0
+            current=; read -r current < "$RUN_DIR/beep.lock/pid"
+            [ "$current" != "$$" ] || echo retained > "$RUN_DIR/replacement-lock"
+            # The replacement owner now finishes, letting the waiter play.
+            command rm -rf "$RUN_DIR/beep.lock"
+        }
+        event_beep failure; wait
+    """, timeout=10)
+    assert (tmp_path / "replacement-lock").read_text().split() == ["retained"]
+    assert frequencies(tmp_path) == expected("failure")
+    assert log_lines(tmp_path) == []
+    assert not (tmp_path / "beep.lock").exists()
+
+
 def test_serialization_never_skips_a_failure(tmp_path):
     run_ash(prelude(tmp_path) + """
         sleep() {

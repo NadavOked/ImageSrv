@@ -263,6 +263,7 @@ void draw_end_dialog(App *a, cairo_t *cr, double W, double H) {
     a->nhits = 0; a->clip_on = 0;             /* modal: only its buttons are clickable */
 
     const int k = a->st.end_kind, can_hold = k == END_PARTIAL || k == END_FAILED;
+    const int disabled = k == END_LOCALCLONE && a->st.end_poweroff_at == 0; /* #2198: success, 0 in USB settings */
     char what[200], lead_s[200], left_s[48];
     if (k == END_PARTIAL && a->st.end_total > 0)
         snprintf(what, sizeof what, "השיכפול הסתיים: %d מתוך %d דיסקים נכתבו", a->st.end_done, a->st.end_total);
@@ -272,13 +273,15 @@ void draw_end_dialog(App *a, cairo_t *cr, double W, double H) {
         : k == END_PARTIAL ? "השיכפול הסתיים — חלק מהדיסקים לא נכתבו"
         : "השיכפול הושלם — הדיסקים נכתבו");
     end_left(a, left_s, sizeof left_s);
-    snprintf(lead_s, sizeof lead_s, "המחשב ייכבה בעוד %s.", left_s);
+    if (disabled) snprintf(lead_s, sizeof lead_s, "המחשב לא ייכבה לבד (כיבוי אוטומטי: 0 בהגדרות).");
+    else snprintf(lead_s, sizeof lead_s, "המחשב ייכבה בעוד %s.", left_s);
     double dw = W - 2 * 32 < ASK_W_MAX ? W - 2 * 32 : ASK_W_MAX;
     double inner = dw - 2 * ASK_PAD;
     Text title = rtl_block_make(cr, 22, 600, what, inner);
     Text lead = rtl_block_make(cr, 18, 600, lead_s, inner);
     Text hint = text_make(cr, FONT_SANS, ASK_HINT_PX, 400,
         can_hold ? "הסיבה נשמרה בקונסולה. כדי לקרוא כאן מה נכשל — עצרו את הספירה"
+                 : disabled ? "כשמסיימים — Enter לכיבוי, ואחריו אפשר להחליף דיסקים"
                  : "אין צורך לעשות דבר — המחשב יכבה לבד, ואחרי הכיבוי אפשר להחליף דיסקים",
         (int)inner, DIR_RTL);
     pango_layout_set_alignment(hint.layout, PANGO_ALIGN_CENTER);

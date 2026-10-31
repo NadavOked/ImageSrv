@@ -34,7 +34,9 @@ from .journal_he import EVENTS_HE, JournalTranslator, severity
 from .session_view import label as session_label
 from .sessions import SessionError
 from .station import ROUND_OPENER_ROLES
-from . import auto_reboot, igmp_querier
+from . import agent_timing, auto_reboot, igmp_querier
+from . import console_disk_sets   # #1857
+from . import firmware_image   # #2080
 from . import model_slots   # #2001
 from . import held   # #2031
 
@@ -81,6 +83,8 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   readbackhash.SETTING,
                   # ‏#1972 (נדב 22/10): השרת כ-IGMP querier ברשת ההפצה. חסר = דלוק.
                   igmp_querier.SETTING,
+                  # ‏#2056/#2059 (מוקאפ 05, נדב 24/10): זמני ההמתנה והכיבוי האוטומטי.
+                  *agent_timing.KEYS,
                   auto_reboot.MODE, auto_reboot.TIME, auto_reboot.WEEKDAY}
 
 BOOLEAN_SETTINGS = {
@@ -155,6 +159,12 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
             if querier is None:
                 raise HTTPException(400, "IGMP querier: true או false")
             normalized[key] = querier
+        elif key in agent_timing.KEYS:
+            seconds = agent_timing.parse(key, value)
+            if seconds is None:
+                _default, low, high = agent_timing.RANGES[key]
+                raise HTTPException(400, f"{agent_timing.LABELS[key]}: מספר שלם של שניות, {low}–{high}")
+            normalized[key] = str(seconds)
         elif key == auto_reboot.MODE:
             if not isinstance(value, str) or value not in auto_reboot.MODES:
                 raise HTTPException(400, "הפעלה מחדש אוטומטית: מצב לא מוכר")
@@ -586,6 +596,24 @@ def create_console_router(
         journal(ctx.conn, "group_delete", gid, user[0])
         return {"ok": True}
 
+    @router.get("/machines/{mac}/firmware")
+    def machine_firmware(mac: str, user=Depends(admin_only)):
+        """‏#2080: תמונת הקושחה של מכונה, מה השתנה, החיבורים, והשוואה לדגם."""
+        canonical = registry.normalize_mac(mac)
+        if canonical is None or ctx.conn.execute("SELECT 1 FROM machines WHERE mac = ?", (canonical,)).fetchone() is None:
+            raise HTTPException(404, "מכונה לא רשומה")
+        return firmware_image.view(ctx.conn, canonical)
+
+    @router.post("/machines/{mac}/firmware/accept")
+    def accept_firmware(mac: str, user=Depends(admin_only)):
+        """‏"זו ההגדרה הנכונה": התמונה הנוכחית נשמרת, ומכאן משווים אליה."""
+        canonical = registry.normalize_mac(mac)
+        if canonical is None or ctx.conn.execute("SELECT 1 FROM machines WHERE mac = ?", (canonical,)).fetchone() is None:
+            raise HTTPException(404, "מכונה לא רשומה")
+        if not firmware_image.accept(ctx.conn, canonical, user[0]):
+            raise HTTPException(409, "המכונה עוד לא דיווחה על הקושחה — אין מה לשמור")
+        return {"ok": True}
+
     @router.get("/machines")
     def machines(group: str | None = None, user=Depends(current_user)):
         # #417: המלאי האחרון שהמכונה דיווחה ב-hello, ליד מסך המכונה.
@@ -617,12 +645,14 @@ def create_console_router(
         # ‏#2001: מיפוי לפי דגם — מכונה ← דגם ← ברירת מחדל.
         model_maps, models = model_slots.all_maps(ctx.conn), model_slots.models_by_mac(ctx.conn)
         crc_limit = crcwarn.threshold(ctx.conn)   # #1366
+        fw_counts = firmware_image.change_counts(ctx.conn)   # ‏#2080
         result = []
         for r in rows:
             row = dict(r)
             disks_json = row.pop("disks_json")
             row["disks"] = json.loads(disks_json) if disks_json is not None else None
             stored_slots = row.pop("drawer_slots")
+            row["fw_changes"] = fw_counts.get(row["mac"], 0)   # ‏#2080: כמה שינויי קושחה מול ההפניה (0 = אין / לא נקרא)
             row["slot_model"] = models.get(row["mac"])
             model_map = model_maps.get(row["slot_model"])
             row["model_slot_map"] = ({"slots": model_map["slots"], "names": model_map["names"]}
@@ -1311,6 +1341,10 @@ def create_console_router(
         # ‏#1956: יעד גיבוי המסד — לקריאה בלבד כאן (בלי סוד); בוחרים ב-POST /backup-target, שכותב
         # ומקריא קובץ בדיקה. ‏`backup_dest` אינו ב-WRITE_SETTINGS — אין דרך לעקוף את הבדיקה.
         values[backup_target.SETTING] = backup_target.describe(ctx.conn)
+        # ‏#2056/#2059: הערך שבתוקף (ברירת המחדל כשלא נקבע) + כמה מכונות מחוברות החזירו אותו.
+        for key in agent_timing.KEYS:
+            values[key] = str(agent_timing.seconds(ctx.conn, key))
+        values["agent_timing_applied"] = agent_timing.applied_counts(ctx.conn)
         mode, at, weekday = auto_reboot.settings(ctx.conn)
         values.update({auto_reboot.MODE: mode, auto_reboot.TIME: at,
                        auto_reboot.WEEKDAY: str(weekday)})
@@ -1336,4 +1370,5 @@ def create_console_router(
         return {"ok": True}
 
     console_mfa.register(router, ctx, current_user, admin_only, tls)
+    console_disk_sets.register(router, ctx, admin_only)   # ‏#1857
     return router
