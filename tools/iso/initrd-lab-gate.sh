@@ -15,7 +15,7 @@ trap 'rm -f "$listing"' EXIT
 
 # #1412: what a lab overlay leaves in the image -- the marker build_initramfs.sh
 # writes for any overlay, a site hook, dropbear, an authorized_keys anywhere.
-LAB_RE='(^|/)dropbear$|(^|/)authorized_keys$|(^|/)etc/imagectl/overlay\.txt$|(^|/)etc/imagectl/hooks\.d/[^/]+$'
+LAB_RE='(^|/)dropbear$|(^|/)authorized_keys$|(^|/)etc/imagesrv/overlay\.txt$|(^|/)etc/imagesrv/hooks\.d/[^/]+$'
 # grep: 0 = found, 1 = not found (an answer), anything else = the check broke (#346, #1630).
 rc=0; grep -Eq "$LAB_RE" "$listing" || rc=$?
 case $rc in

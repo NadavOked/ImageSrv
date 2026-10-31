@@ -1,12 +1,12 @@
 """#1632 (Nadav 24/10): "root's password -- I set it, as part of the install."
 
 Before, ``tools/iso/build-iso.sh`` demanded ``--root-password`` /
-``IMAGECTL_ROOT_PASSWORD``, hashed it into ``imagectl/root-password.hash`` on the
+``IMAGESRV_ROOT_PASSWORD``, hashed it into ``imagesrv/root-password.hash`` on the
 ISO, and every server installed from that ISO got the same root password. Now
 the operator picks it on the install screen, so the build:
 
 * goes on without any root password (it stopped there before);
-* refuses ``--root-password`` (both spellings) and ``IMAGECTL_ROOT_PASSWORD`` by
+* refuses ``--root-password`` (both spellings) and ``IMAGESRV_ROOT_PASSWORD`` by
   name, before any work -- nobody should believe they set something there.
 
 The real build-iso.sh runs on a scratch ``--source`` repo up to its first ISO step
@@ -64,7 +64,7 @@ def test_the_build_needs_no_root_password(tmp_path):
 @pytest.mark.parametrize(("extra", "env"), [
     (("--root-password", "S3cret!x"), None),
     (("--root-password=S3cret!x",), None),
-    ((), {"IMAGECTL_ROOT_PASSWORD": "S3cret!x"}),
+    ((), {"IMAGESRV_ROOT_PASSWORD": "S3cret!x"}),
 ], ids=["flag", "flag=", "env"])
 def test_a_root_password_at_build_time_is_refused_by_name_before_any_work(tmp_path, extra, env):
     run = _build(tmp_path, *extra, env=env)
@@ -79,4 +79,4 @@ def test_the_iso_carries_no_root_password_hash():
     assert "root-password.hash" not in build
     assert "openssl passwd" not in build
     finish = (BUILD_ISO.parents[2] / "installer" / "lib" / "finish.sh").read_text(encoding="utf-8")
-    assert "root-password.hash" not in finish and "$CDROM/imagectl/root" not in finish
+    assert "root-password.hash" not in finish and "$CDROM/imagesrv/root" not in finish

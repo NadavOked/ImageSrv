@@ -5,7 +5,7 @@
 התעדכנה, התפקיד נשאר deploy, והמתקין הדפיס את השם כמנהל. בכניסה
 הראשונה כל פעולת ניהול קיבלה 403.
 
-הטסט מריץ את בלוק ה-Python שמוטמע ב-`install/setup-boot-server.sh`,
+הטסט מריץ את בלוק ה-Python שמוטמע ב-`deploy/setup-boot-server.sh`,
 לא העתק שלו: סטייה בין הסקריפט לבדיקה הייתה בדיוק החור.
 """
 
@@ -18,11 +18,11 @@ from pathlib import Path
 
 import pytest
 
-from server import users
+from server.console import users
 from server.db import connect
 
 REPO = Path(__file__).resolve().parent.parent
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 
 
 def installer_admin_python() -> str:
@@ -51,19 +51,19 @@ def run_installer_admin(data_dir: Path, username: str, password: str,
     os.dup2(read_end, 3)
     os.close(read_end)
     try:
-        exec(compile(code, "install/setup-boot-server.sh", "exec"), {})
+        exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
     finally:
         os.dup2(saved, 3)
         os.close(saved)
 
 
 def _role(data_dir: Path, username: str, password: str) -> str | None:
-    return users.verify(connect(data_dir / "imagectl.db"), username, password)
+    return users.verify(connect(data_dir / "imagesrv.db"), username, password)
 
 
 def test_existing_deploy_user_becomes_admin(tmp_path, monkeypatch):
     """התרחיש של #504: labtech כבר deploy, המתקין רץ עם אותו שם."""
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     users.create(conn, "labtech", "deploy-pass-1", "deploy", by="seed", check_policy=False)
     run_installer_admin(tmp_path, "labtech", "new-admin-9", monkeypatch)
     assert _role(tmp_path, "labtech", "new-admin-9") == "admin"

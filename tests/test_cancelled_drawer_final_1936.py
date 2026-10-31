@@ -13,7 +13,7 @@ place like a red skip (#1760) -- no further wave, no wake, not a failure. The
 cancel window says "in the next round the disk is chosen as a normal write":
 the next round, not wave 2 of this one.
 
-Negative control: revert server/room.py and server/db.py together (#439).
+Negative control: revert server/rounds/room.py and server/db.py together (#439).
 """
 
 from __future__ import annotations

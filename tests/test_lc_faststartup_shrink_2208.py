@@ -15,8 +15,8 @@ the smaller target by name; a view whose state does not read is refused.
 The tools are stubs (``test_lc_readonly_source``'s FAKES); the real ntfs-3g on a
 real hibernated view is ``test_local_clone_engine.py`` (the Testrunner).
 
-**Negative control** (Testrunner, 26/10): with ``agent/lib/lcsnap.sh``,
-``agent/lib/lcinv.sh``, ``agent/lib/hibernation.sh`` and ``agent/lib/lcplan.sh``
+**Negative control** (Testrunner, 26/10): with ``agent/lib/localclone/lcsnap.sh``,
+``agent/lib/localclone/lcinv.sh``, ``agent/lib/capture/hibernation.sh`` and ``agent/lib/localclone/lcplan.sh``
 at the base commit (#2207's a2523575), 10 fail: 9 here (the drop on the view,
 the journal's second try, the drop that fails, the budget, the unread state,
 the store that fills, both orange notes, the measure of rc 14) and the engine's
@@ -61,7 +61,7 @@ def shrink(tmp_path: Path, pre: str = "", flags: tuple[str, ...] = (), **env) ->
     out = run(tmp_path, setup() + IN_PLACE + pre + marks + 'lc_shrink_source sdc; _rc=$?; ' + SHOW
               + 'echo "unhib=$(cat "$LC/run/src_unhib" 2>/dev/null)"; ', **env)
     assert out.returncode == 0, out.stderr
-    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagectl:"))
+    got = dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line and not line.startswith("imagesrv:"))
     log = tmp_path / "run" / "order.log"
     return got, (log.read_text(encoding="utf-8").splitlines() if log.exists() else []), tmp_path / "run"
 

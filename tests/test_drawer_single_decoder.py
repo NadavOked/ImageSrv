@@ -31,6 +31,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import random
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -38,13 +39,19 @@ from pathlib import Path
 
 import pytest
 
+import hygiene
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_timeouts import log_of, make_stubs
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 BUSYBOX = shutil.which("busybox")
-pytestmark = requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc ו-fifo")
+pytestmark = [
+    requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc ו-fifo"),
+    # #2118: WAIT_STREAM_STALL (20s, ערך של המוצר) נחצה תחת -n auto; סדרתי עובר ב-3s.
+    pytest.mark.serial,
+]
 
 _rng = random.Random(1018)
 #: ~6MB that compress about 3:1 -- more than the 2MB rings, so the rings wrap.
@@ -76,19 +83,47 @@ def fanout_dir(tmp_path_factory):
     out = tmp_path_factory.mktemp("fanout-bin")
     subprocess.run(["gcc", "-O2", "-Wall", "-Wextra", "-Werror", "-o", str(out / "fanout"),
                     str(REPO / "agent" / "fanout.c")], check=True, stdin=subprocess.DEVNULL)
+    # Integration tests exercise decoding/bytes, not fanout's five-second
+    # reader-start deadline. Rendezvous with the real FIFO readers first.
+    # Keep only WRITE descriptors: an absent/dead reader still causes EPIPE.
+    # exec closes these at fanout exit, so readers still receive EOF.
+    ready = out / "ready"
+    ready.mkdir()
+    wrapper = ready / "fanout"
+    wrapper.write_text(
+        '#!/bin/sh\n'
+        'rendezvous() {\n'
+        '  while :; do case "$1" in -S|-P|-U|-H) shift 2 ;; *) break ;; esac; done\n'
+        '  shift\n'
+        '  n=3\n'
+        '  for fifo; do\n'
+        '    [ -p "$fifo" ] || continue\n'
+        '    case "$n" in\n'
+        '      3) exec 3>"$fifo" ;;\n'
+        '      4) exec 4>"$fifo" ;;\n'
+        '      5) exec 5>"$fifo" ;;\n'
+        '      *) echo "unexpected fourth test drawer" >&2; exit 2 ;;\n'
+        '    esac\n'
+        '    n=$((n + 1))\n'
+        '  done\n'
+        '}\n'
+        'rendezvous "$@"\n'
+        f'exec {shlex.quote(str(out / "fanout"))} "$@"\n',
+        encoding="utf-8", newline="\n")
+    wrapper.chmod(0o755)
     return out
 
 
 def run_in(shell: str, script: str, timeout: int = 60) -> str:
     """Like test_timeouts.run_sh, in the shell asked for: output to a file,
     DEVNULL for the pipes (an orphan must not hold the test)."""
-    out_file = Path(tempfile.mkdtemp(prefix="imagectl-feed-")) / "out"
+    out_file = Path(tempfile.mkdtemp(prefix="imagesrv-feed-")) / "out"
     script_file = out_file.with_name("script.sh")
     script_file.write_text('export PATH="/usr/bin:$PATH"\n'
                            f"{{\n{script}\n}} > {posix(out_file)!r} 2>&1\n",
                            encoding="utf-8", newline="\n")
     argv = [shell, "sh", posix(script_file)] if shell == BUSYBOX else [shell, posix(script_file)]
-    subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    hygiene.run_group(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                    stdin=subprocess.DEVNULL, cwd=str(REPO), timeout=timeout)
     return out_file.read_text(encoding="utf-8", errors="replace")
 
@@ -110,12 +145,12 @@ def room(tmp_path: Path, fanout_dir: Path, shell: str = BASH, payload: bytes = P
     (box / "part.gz").write_bytes(payload)
     if tune:
         (run / "tune").write_text(tune, encoding="utf-8")
-    libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in (
+    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (
         "common", "sysinfo", "waits", "progress", "restore", "drawers", "drawerfeed",
         "verdict", "failmark", "ntfsboot"))
     out = run_in(shell,
         make_stubs(box / "stubs", STUBS)
-        + f'export PATH="{posix(fanout_dir)}:$PATH"\n'
+        + f'export PATH="{posix(fanout_dir / "ready")}:$PATH"\n'
         + f"export BOX={posix(box)!r} SYSROOT={posix(box)!r} RUN_DIR={posix(run)!r} "
         f"DEVROOT={posix(dev)!r} TMPDIR={posix(tmp_path)!r} FANOUT_BUFFER=2097152 "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=5 WAIT_STREAM_START_S=20 "
@@ -159,7 +194,7 @@ def test_one_decoder_feeds_every_drawer_every_byte(tmp_path, fanout_dir, shell):
 
 
 def test_the_lab_switch_brings_back_a_decoder_per_drawer(tmp_path, fanout_dir):
-    box, run, out = room(tmp_path, fanout_dir, tune="IMAGECTL_DRAWER_DECODE=each\n")
+    box, run, out = room(tmp_path, fanout_dir, tune="IMAGESRV_DRAWER_DECODE=each\n")
     log = log_of(run)
     assert "rc=0" in out, out + log
     assert len(lines(box / "zstd.calls")) == 3, lines(box / "zstd.calls")
@@ -182,7 +217,7 @@ def test_one_drawer_keeps_its_own_decoder(tmp_path, fanout_dir):
 
 
 def test_direct_io_is_handed_to_partclone_when_asked(tmp_path, fanout_dir):
-    box, run, out = room(tmp_path, fanout_dir, tune="IMAGECTL_DRAWER_DIRECTIO=1\n")
+    box, run, out = room(tmp_path, fanout_dir, tune="IMAGESRV_DRAWER_DIRECTIO=1\n")
     assert "rc=0" in out, out + log_of(run)
     args = lines(box / "pcl.args")
     assert len(args) == 3 and all("--write-direct-io" in a for a in args), args
@@ -190,18 +225,18 @@ def test_direct_io_is_handed_to_partclone_when_asked(tmp_path, fanout_dir):
 
 def test_a_switch_value_it_does_not_know_is_refused_out_loud(tmp_path, fanout_dir):
     box, run, out = room(tmp_path, fanout_dir,
-                         tune="IMAGECTL_DRAWER_DECODE=fast\nIMAGECTL_DRAWER_NICE=-5\n"
-                              "IMAGECTL_DRAWER_DIRECTIO=yes\n")
+                         tune="IMAGESRV_DRAWER_DECODE=fast\nIMAGESRV_DRAWER_NICE=-5\n"
+                              "IMAGESRV_DRAWER_DIRECTIO=yes\n")
     log = log_of(run)
     assert "rc=0" in out, out + log
-    assert "IMAGECTL_DRAWER_DECODE=fast is not auto|shared|each" in log
-    assert "IMAGECTL_DRAWER_NICE=-5 is not 0-19" in log
-    assert "IMAGECTL_DRAWER_DIRECTIO=yes is not 0|1" in log
+    assert "IMAGESRV_DRAWER_DECODE=fast is not auto|shared|each" in log
+    assert "IMAGESRV_DRAWER_NICE=-5 is not 0-19" in log
+    assert "IMAGESRV_DRAWER_DIRECTIO=yes is not 0|1" in log
     assert len(lines(box / "zstd.calls")) == 1
 
 
 def test_the_writers_are_niced_and_the_receiver_is_not(tmp_path, fanout_dir):
-    box, run, out = room(tmp_path, fanout_dir, tune="IMAGECTL_DRAWER_NICE=7\n")
+    box, run, out = room(tmp_path, fanout_dir, tune="IMAGESRV_DRAWER_NICE=7\n")
     assert "rc=0" in out, out + log_of(run)
     assert [line.split()[1] for line in lines(box / "zstd.calls")] == ["7"]
     assert [line.split()[1] for line in lines(box / "pcl.calls")] == ["7", "7", "7"]

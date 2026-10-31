@@ -15,12 +15,11 @@ import pytest
 from native import requires_native
 
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
-LIB = AGENT / "lib"
-
-
+LIB = flat_lib()
 def run_idle(tmp_path: Path, setup: str, script: str) -> str:
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     calls = tmp_path / "calls"
@@ -99,7 +98,7 @@ def test_the_clock_beats_only_in_poll_sleep_and_the_failure_hold_never_reaches_i
     assert "POLL_MARK_CHANGED=1" in poll
     ui = (LIB / "ui.sh").read_text(encoding="utf-8") + (LIB / "hold.sh").read_text(encoding="utf-8")
     assert "poll_sleep" not in ui, "מסך כשל שמגיע ל-poll_sleep היה מגיע לשעון הכיבוי"
-    agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/idle.sh"' in agent
     bridge = (LIB / "guibridge.sh").read_text(encoding="utf-8")
     assert 'touch "$RUN_DIR/idle.touch" || return 1' in bridge, "מקש בגואי חייב להגיע לשעון"

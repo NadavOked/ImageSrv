@@ -1,9 +1,0 @@
-{
- "asset": "imagectl-security-pool-2026-10-31.tar",
- "date": "2026-10-31",
- "packages": 974,
- "security": 112,
- "sha256": "6a8d998ecaac2ceb7d99f1b4eda19d67dc55f4ea4e1b6e9d82779451272bc436",
- "size": 749137920,
- "suite": "trixie+trixie-security"
-}

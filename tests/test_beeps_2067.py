@@ -26,8 +26,9 @@ import pytest
 import hygiene
 from native import requires_native
 from test_agent import AGENT, REPO, posix
+from agentlib import flat_lib
 
-BUSYBOX = os.environ.get("IMAGECTL_BUSYBOX") or shutil.which("busybox")
+BUSYBOX = os.environ.get("IMAGESRV_BUSYBOX") or shutil.which("busybox")
 pytestmark = requires_native(
     ("busybox", BUSYBOX), posix=True,
     why="the agent runs under busybox ash; bash would hide a bashism",
@@ -46,7 +47,7 @@ TUNES = {
 
 def run_ash(script: str, timeout: int = 45) -> str:
     """test_timeouts.run_sh, under `busybox ash`: output to a file, the group killed."""
-    out_file = Path(tempfile.mkdtemp(prefix="imagectl-beep-")) / "out"
+    out_file = Path(tempfile.mkdtemp(prefix="imagesrv-beep-")) / "out"
     script_file = out_file.with_name("script.sh")
     script_file.write_text(f"{{\n{script}\n}} > {posix(out_file)!r} 2>&1\n",
                            encoding="utf-8", newline="\n")
@@ -76,7 +77,7 @@ def prelude(tmp_path: Path, *, speaker=True, enabled=True, role="cloner") -> str
         export RUN_DIR={posix(tmp_path)!r} SYSFS_INPUT={posix(tmp_path / 'sys')!r}
         export DEVROOT={posix(tmp_path / 'dev')!r} D_ROLE={role!r}
         RESP="$RUN_DIR/response.json"; LOG_FILE="$RUN_DIR/agent.log"
-        LIB_DIR={posix(AGENT / 'lib')!r}; GUI_DIR="$RUN_DIR/gui"
+        LIB_DIR={posix(flat_lib())!r}; GUI_DIR="$RUN_DIR/gui"
         . "$LIB_DIR/jsonq.sh"; . "$LIB_DIR/roundbeep.sh"
         log() {{ printf '%s\\n' "$*" >> "$LOG_FILE"; }}
         sleep() {{ printf '%s\\n' "$1" >> "$RUN_DIR/sleeps"; }}
@@ -352,7 +353,7 @@ def test_repeat_suppressed_for_five_seconds_only(tmp_path, kind):
 @pytest.mark.parametrize("state,kind", [("done", "success"), ("failed", "failure"),
                                         ("skipped", "failure")])
 def test_real_round_end_uses_all_drawers(tmp_path, state, kind):
-    script = prelude(tmp_path) + _function(AGENT / "imagectl-agent", "do_restore_drawers", "do_restore() {")
+    script = prelude(tmp_path) + _function(AGENT / "imagesrv-agent", "do_restore_drawers", "do_restore() {")
     script += f"""
         . "$LIB_DIR/idle.sh"
         for fn in identify_watch_stop smart_selftest_cancel session_stream job_reset crc_delta_measure smart_note_apply stage_drawer_drivers writemark_release_done report_final agent_log_send; do eval "$fn() {{ :; }}"; done
@@ -368,7 +369,7 @@ def test_real_round_end_uses_all_drawers(tmp_path, state, kind):
         }}
         _machine_state() {{ echo done; }}
         end_countdown() {{ :; }}
-        SERVER=unused; MAC=unused; IMAGECTL_TEST=0
+        SERVER=unused; MAC=unused; IMAGESRV_TEST=0
         do_restore_drawers image session
         wait
     """
@@ -377,7 +378,7 @@ def test_real_round_end_uses_all_drawers(tmp_path, state, kind):
 
 
 def test_a_round_whose_drawers_were_all_skipped_ends_in_failure(tmp_path):
-    script = prelude(tmp_path) + _function(AGENT / "imagectl-agent", "do_restore_drawers", "do_restore() {")
+    script = prelude(tmp_path) + _function(AGENT / "imagesrv-agent", "do_restore_drawers", "do_restore() {")
     script += """
         for fn in identify_watch_stop smart_selftest_cancel session_stream job_reset target_init progress_loop end_failed_round; do eval "$fn() { :; }"; done
         resolve_target_drawers() { _disks='sda sdb'; }
@@ -395,7 +396,7 @@ def test_a_round_whose_drawers_were_all_skipped_ends_in_failure(tmp_path):
 def test_build_machine_restore_end(tmp_path, restored, kind):
     # Nadav 24/10: the build machine beeps at the end of a restore too. On
     # success the tune is over before the reboot that would cut it.
-    script = prelude(tmp_path, role="build") + _function(AGENT / "imagectl-agent", "do_restore", "# --- main loop")
+    script = prelude(tmp_path, role="build") + _function(AGENT / "imagesrv-agent", "do_restore", "# --- main loop")
     script += f"""
         . "$LIB_DIR/waits.sh"   # wait_pid: the bounded wait before the reboot
         for fn in job_reset target_init smart_note_apply name_this_machine stage_drivers ui_clear ui_header session_stream report_final writemark_release_done sync; do eval "$fn() {{ :; }}"; done
@@ -408,7 +409,7 @@ def test_build_machine_restore_end(tmp_path, restored, kind):
         ui_error_hold() {{ echo "held: $1" >> "$RUN_DIR/held"; }}
         reboot() {{ wc -c < "$DEVROOT/input/event5" > "$RUN_DIR/at-reboot"; }}
         sleep() {{ command sleep .01; }}
-        SERVER=unused; MAC=unused; IMAGECTL_TEST=0
+        SERVER=unused; MAC=unused; IMAGESRV_TEST=0
         do_restore
         wait
     """
@@ -428,7 +429,7 @@ def test_build_machine_restore_end(tmp_path, restored, kind):
 ])
 def test_local_clone_end(tmp_path, states, stopped, kinds):
     script = prelude(tmp_path) + '. "$LIB_DIR/idle.sh"\n' + _function(
-        AGENT / "lib/localclone.sh", "lc_end", "lc_gb_short() {")
+        AGENT / "lib/localclone/localclone.sh", "lc_end", "lc_gb_short() {")
     script += f"""
         _lr_r="$RUN_DIR/lcrun"; LC="$RUN_DIR/lc"; mkdir -p "$_lr_r" "$LC"
         _lr_all="sda sdb "; _lr_beat=999999

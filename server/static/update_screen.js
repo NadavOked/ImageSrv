@@ -14,10 +14,10 @@ const UPD_POLL_MS = 3000;          // בקשה זעירה כל 3 שניות, מ�
 const UPD_CEIL_MS = 10 * 60 * 1000; // תקרת הזמן: 10 דקות בלי התקדמות
 /* ‏#1463: תקרה לשלב, כשהשרת עונה. בניית ה-initrd לבדה: 498 ש' בשרת המעבדה (6 vCPU, הרצה נפרדת,
    ‏16/10) — 10 דקות היו מכריזות "לא התקדם" על שרת איטי יותר שעדיין בונה. */
-/* ‏#1411: ‏packages — עדכוני Debian מהמאגר שבגרסה; ל-apt בשרת תקרה של 20 דקות (install/security-upgrade.sh). */
+/* ‏#1411: ‏packages — עדכוני Debian מהמאגר שבגרסה; ל-apt בשרת תקרה של 20 דקות (deploy/security-upgrade.sh). */
 const UPD_STAGE_CEIL_MS = { payload: 25 * 60 * 1000, packages: 25 * 60 * 1000 };
 const UPD_RELOAD_S = 5;            // "נכנס לקונסולה בעוד 5 ש׳"
-const UPD_LOG = "/var/log/imagectl/server-upgrade.log";
+const UPD_LOG = "/var/log/imagesrv/server-upgrade.log";
 /* ארבעת השלבים — מול stage שהסקריפט כותב (‏done = אחרי האחרון). ‏payload (‏#1463) הוא חלק
    מ"מתקין" על המסך (המוקאפ של 13/10), אבל שלב משלו לתקרה ולתיאור. */
 const UPD_STEPS = [

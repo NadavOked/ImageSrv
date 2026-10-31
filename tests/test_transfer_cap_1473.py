@@ -16,7 +16,8 @@ import logging
 
 import pytest
 
-from server import db, transfer_cap
+from server import db
+from server.interserver import transfer_cap
 
 MBPS = transfer_cap.BYTES_PER_MBPS
 
@@ -48,7 +49,7 @@ def test_a_stored_cap_is_bytes_per_second(tmp_path):
 def test_a_garbled_stored_value_is_unlimited_and_said(tmp_path, caplog):
     conn = db.connect(tmp_path / "x.db")
     db.set_setting(conn, transfer_cap.SETTING, "fast")
-    with caplog.at_level(logging.WARNING, logger="imagectl.transfer_cap"):
+    with caplog.at_level(logging.WARNING, logger="imagesrv.transfer_cap"):
         assert transfer_cap.cap_mbps(conn) == 0
     assert "fast" in caplog.text
 

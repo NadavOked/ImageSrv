@@ -1,0 +1,90 @@
+# ImageSrv — יחידת systemd לשרת ולקונסולה.
+#
+# התקנה (אחרי clone ל-/opt/imagesrv והתקנת התלויות — ראו docs/server.md):
+#
+#   sudo cp deploy/imagesrv-server.service /etc/systemd/system/
+#   sudo systemctl edit imagesrv-server     # קובעים את IMAGESRV_URL
+#   sudo systemctl enable --now imagesrv-server
+#
+# הכתובת חייבת להיות זו שהלקוחות רואים — לא localhost. אותה כתובת
+# שהוזנה למתקין שרת האתחול. ‏#1088: ריק = רשת ההפצה מוגדרת **מהקונסולה**
+# (המתקין במסירה אינו יודע מי כרטיס ההפצה): server.main קורא את
+# הכרטיס והכתובת ממה שהקונסולה רשמה, ובלעדיהם עולה במצב "רשת ההפצה לא
+# הוגדרה" — סוכן וקיוסק על loopback, והקונסולה אומרת מה לעשות.
+
+[Unit]
+Description=ImageSrv image server and console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# נקבע ב-systemctl edit: Environment=IMAGESRV_URL=http://10.44.12.10:8080
+# ריק (#1088) = מהקונסולה; ${IMAGESRV_URL} מתרחב לארגומנט ריק אחד, וזה
+# מה שאומר ל-server.main לקרוא את הכתובת מה-DB.
+Environment=IMAGESRV_URL=
+# תצורת ה-Storage Node (#655/#723) — נכתב על ידי המתקין ל-override.conf.
+# ריק = ברירת המחדל של server.main (standalone), ולכן שרת ותיק בלי
+# override עולה בדיוק כמו קודם. ‏$IMAGESRV_STORAGE_ARGS (בלי סוגריים)
+# מתפצל למילים על ידי systemd; ריק מתרחב ללא ארגומנטים.
+# ‏#703 (tracer 5): גם `--console-host <כרטיס-הניהול>` נכנס לכאן (המתקין
+# עם --console-host, או systemctl edit). הקונסולה על 8081 היא HTTPS
+# בלבד; התעודה ב-/var/lib/imagesrv/console-tls/ (בתוך ReadWritePaths).
+Environment=IMAGESRV_STORAGE_ARGS=
+WorkingDirectory=/opt/imagesrv
+ExecStart=/usr/bin/python3 -m server.main --server-url ${IMAGESRV_URL} \
+    --data-dir /var/lib/imagesrv --images /srv/imagesrv/images $IMAGESRV_STORAGE_ARGS
+Restart=on-failure
+RestartSec=3
+# ‏#1819: גבול הקבצים הפתוחים. ברירת המחדל של systemd היא גבול רך של 1024,
+# ו-Python אינו מעלה אותו; סוכנים, WebSocket של המוניטור, הזרמת אימג'ים
+# וחיבור sqlite לכל תהליכון בסבב כיתה יכולים לעבור אותו — ואז accept נכשל
+# ב-EMFILE. ‏65536 = רך וקשיח, ליחידה הזו בלבד. לא infinity: דליפת
+# descriptors צריכה להיעצר בגבול, לא לאכול את המערכת.
+LimitNOFILE=65536
+
+# הקשחה בסיסית: השרת נוגע רק בנתונים, בספרייה שלו, ובשני קבצי ה-DHCP
+# שהוא כותב (לשונית הרשת, אפיון סעיף 24): זה של האינסטנס הראשי
+# ב-/etc/dnsmasq.d, וזה של אינסטנס ה-proxy המבודד ב-/etc/imagesrv (#36).
+# ה-restart של dnsmasq ושל imagesrv-proxy, והאזנה לפורט 68 (זיהוי DHCP
+# קיים), דורשים root — וזה ה-User של היחידה.
+#
+# ‏/etc/imagesrv מסומן אופציונלי (מקף) בכוונה: בשרת ותיק שהתיקייה עוד
+# לא נוצרה בו, השרת יעלה כרגיל ורק כתיבת קובץ ה-proxy תיכשל עם הודעה
+# בקונסולה — עדיף על שרת שלא עולה. יוצרים אותה ומפעילים מחדש.
+#
+# ‏#55–#57: הגדרות הרשת של השרת עצמו נכתבות ל-`/etc/network/interfaces.d`
+# ‏(קובץ לכל כרטיס, `imagesrv-<שם>`) ול-`/etc/resolv.conf`. שתי הדרישות
+# האלה הן מה שהופך "ההגדרה נשמרה" ל"הקובץ נכתב"; בלעדיהן ההחלה נכשלת
+# בגלוי והקונסולה אומרת זאת. ‏`/etc` כולו ב-ReadWritePaths אך ורק בגלל
+# ‏resolv.conf — הוא קובץ בשורש, ואין דרך לפתוח אותו לבדו.
+#
+# ההחזרה האוטומטית של שינוי רשת שלא אושר אינה כאן אלא ביחידה נפרדת
+# (`imagesrv-netrollback`), ובכוונה: שינוי שהפיל את הרשת מפיל לעיתים
+# גם את השירות הזה, ומי שאמור להחזיר חייב לשרוד את זה.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+#
+# ‏#1088: ‏/srv/tftp — הקונסולה כותבת grub/grub.cfg כשרשת ההפצה מוגדרת
+# ממנה (deploy_net.write_grub_cfg). אופציונלי (מקף): שרת עם --tftp-root
+# אחר אינו נופל על תיקייה שאינה קיימת.
+#
+# ‏#1123: מיקומי אחסון (SMB) — קובצי credentials ‏0600 ב-/etc/imagesrv/creds/
+# (מכוסה ב--/etc/imagesrv), ו-/etc/fstab נכתב אטומית דרך קובץ זמני לצידו
+# (מכוסה ב-/etc). אין נתיב חדש להוסיף.
+#
+# ‏#1241: ‏ifup/ifdown כותבים נעילה ומצב ל-/run/network/ifstate.<כרטיס>,
+# ו-dhcpcd ל-/run/dhcpcd ול-/var/lib/dhcpcd. בלעדיהם החלת כתובת מהקונסולה
+# נכשלה ב-"Read-only file system" על שרת מה-ISO (10/10). אופציונליים
+# (מקף): נתיב שעוד לא קיים בעליית היחידה לא מפיל את מרחב השמות.
+#
+# ‏#1552: ‏iscsiadm (אשף האחסון, #1066) יוצר את נעילתו ב-/run/lock/iscsi
+# ושומר רשומות discovery/node ב-/var/lib/iscsi. בלעדיהם "גלה יעדים" נכשל
+# ב-"Read-only file system" בשרת חיפה (17/10). ‏/run/lock ולא /run/lock/iscsi:
+# התת-תיקייה אינה קיימת עד ההרצה הראשונה, ומקף היה מדלג עליה בשקט.
+ReadWritePaths=/var/lib/imagesrv /srv/imagesrv/images /etc/dnsmasq.d -/etc/imagesrv /etc/network/interfaces.d /etc/chrony/conf.d /etc -/srv/tftp -/run/network -/run/dhcpcd -/var/lib/dhcpcd -/run/lock -/var/lib/iscsi
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

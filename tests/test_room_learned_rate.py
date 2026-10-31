@@ -144,7 +144,7 @@ def test_a_finished_wave_teaches_the_next_one(room_server):
 
 
 def test_without_a_configured_cap_the_wave_goes_out_at_600m(room_server):
-    """שרת מה-ISO אינו מגדיר `IMAGECTL_MAX_BITRATE`. עד ההכרעה udp-sender
+    """שרת מה-ISO אינו מגדיר `IMAGESRV_MAX_BITRATE`. עד ההכרעה udp-sender
     יצא בלי `--max-bitrate` כלל; מעכשיו — בקצב הפתיחה."""
     admin = room_server["admin"]
     assert room_server["ctx"].sender.max_bitrate is None

@@ -1,5 +1,5 @@
-#ifndef IMAGECTL_INSTALL_RAID_H
-#define IMAGECTL_INSTALL_RAID_H
+#ifndef IMAGESRV_INSTALL_RAID_H
+#define IMAGESRV_INSTALL_RAID_H
 
 /* #1989 (Nadav, 22/10): RAID on the disk step. The installer counts the
  * suitable disks -- not the install medium, not removable, not on USB (the

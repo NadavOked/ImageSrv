@@ -10,7 +10,7 @@
 
 המפרש מכיר רק את מה שהפונקציות האלה משתמשות בו: ‏function/for/if/else/
 fi/while, ‏set/unset, ‏echo עם הרחבת משתנים, ‏`[ -n ]`/`[ -z ]`/`[ = ]`,
-ו-`search`/`probe`/`chainloader`/`boot`/`ls`/`imagectl_trace` כפקודות
+ו-`search`/`probe`/`chainloader`/`boot`/`ls`/`imagesrv_trace` כפקודות
 מדומות. פקודה שאינו מכיר היא שגיאה — טסט שמריץ תחביר חדש בשקט אינו טסט.
 """
 
@@ -279,7 +279,7 @@ def test_the_local_breadcrumbs_are_the_declared_local_steps():
 
 
 def test_each_local_breadcrumb_stands_alone_on_its_line():
-    """כמו בערך ImageCtl: לא לפני &&, לא באותה שורה עם פקודת אתחול."""
+    """כמו בערך ImageSrv: לא לפני &&, לא באותה שורה עם פקודת אתחול."""
     for line in dynamic().splitlines():
         if trace.GRUB_FUNCTION_NAME in line and "function " not in line and "cat " not in line:
             assert re.fullmatch(rf"\s*{trace.GRUB_FUNCTION_NAME} [a-z-]+", line), line

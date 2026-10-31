@@ -82,7 +82,7 @@ def disk_box(tmp_path: Path, image: bytes, block_size: str | None = "512",
 def scheme_of(box: Path, name: str = "sda") -> str:
     return sh(
         f'export SYSROOT={posix(box)!r} DEVROOT={posix(box / "dev")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'disk_scheme "$DEVROOT/{name}"'
     ).strip()
 
@@ -199,7 +199,7 @@ def hello_of(fake) -> dict:
         f'export SYSROOT={posix(fake["sysroot"])!r} '
         f'DEVROOT={posix(fake["dev"])!r} '
         f'RUN_DIR={posix(fake["run"])!r} IFACE=eth0 IP=10.44.12.187 D_ROLE=build; '   # #1924: only the build machine says what is on a disk
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'build_hello'
     )
     return json.loads(out)

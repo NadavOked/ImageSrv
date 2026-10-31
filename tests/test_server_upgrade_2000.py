@@ -16,10 +16,10 @@ from test_installer_1131 import (  # noqa: F401 -- bindir is a fixture
 
 
 def _prev_tree_without_units(bindir):
-    git = bindir / "git"   # העץ של v0.48.0 — ‏install/*.service אינם בו, ‏install נכשל
+    git = bindir / "git"   # העץ של v0.48.0 — ‏deploy/*.service אינם בו, ‏install נכשל
     git.write_text(git.read_text(encoding="utf-8").replace(
         "checkout) exit 0 ;;",
-        'checkout) if [ "$3" = v0.48.0 ]; then rm -f install/*.service; fi; exit 0 ;;'),
+        'checkout) if [ "$3" = v0.48.0 ]; then rm -f deploy/*.service; fi; exit 0 ;;'),
         encoding="utf-8", newline="\n")
 
 
@@ -41,7 +41,7 @@ def test_a_unit_install_that_fails_during_rollback_is_not_a_successful_rollback(
     assert "התקנת היחידות" in status["error"], status                # הצעד בשמו
     assert "health/live" in status["detail"], status                 # הסיבה המקורית נשארת
     # השרת לא הופעל מחדש על חזרה חלקית, והסמן נשאר לשחזור באתחול (#1893).
-    assert seen.count("systemctl restart imagectl-server") == 1, seen
+    assert seen.count("systemctl restart imagesrv-server") == 1, seen
     assert (data / "server-upgrade.state").exists()
 
 
@@ -55,5 +55,5 @@ def test_a_whole_rollback_still_reports_rollback(tmp_path, bindir):
     assert proc.returncode != 0
     status = _status(data)
     assert status and status["reason"] == "rollback" and "הוחזר ל-v0.48.0" in status["error"], status
-    assert calls(tmp_path).count("systemctl restart imagectl-server") == 2
+    assert calls(tmp_path).count("systemctl restart imagesrv-server") == 2
     assert not (data / "server-upgrade.state").exists()

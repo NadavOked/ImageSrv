@@ -1,4 +1,4 @@
-/* ImageCtl — #954 גל 7: דף "שרתי משנה" (רשימת שרתי המשנה) ודף "שרת משנה" (הצומת
+/* ImageSrv — #954 גל 7: דף "שרתי משנה" (רשימת שרתי המשנה) ודף "שרת משנה" (הצומת
    בעץ, #936). לפי docs/design/console-redesign/branches.md.
 
    "שרתי משנה" הוא דף "own" (UI.objHeader/datagrid כמו drivers.js): כותרת עם
@@ -742,7 +742,7 @@ function openBranchGroupSheet() {
 function branchMonitor(nid, mac, name) {
   if (!isAdmin()) return;
   window.open(`monitor.html?node=${encodeId(nid)}&mac=${encodeId(mac)}&name=${encodeId(name)}`,
-              `imagectl-monitor-${nid}-${mac}`);
+              `imagesrv-monitor-${nid}-${mac}`);
 }
 
 function renderBranchTransfers(nid, target = null, limit = 8) {
@@ -889,7 +889,7 @@ async function loadBranchView() {
    אופציונלי, ברירת מחדל ללא הגבלה; Mb/s לכל העברה, על push ועל pull. הערך הוא
    מה שבתוקף בשרת (GET /settings → intersite_rate_cap_mbps, "0" = ללא הגבלה);
    לא נקרא — נאמר שלא נקרא ולמה, לא "ללא הגבלה" (עיקרון 5). השינוי תופס גם
-   העברה שכבר רצה, תוך שתי שניות (server/transfer_cap.py). */
+   העברה שכבר רצה, תוך שתי שניות (server/interserver/transfer_cap.py). */
 const TRANSFER_CAP_KEY = "intersite_rate_cap_mbps";
 const TRANSFER_CAP_MAX = 100000;
 let TRANSFER_CAP = { mbps: null, error: "" };

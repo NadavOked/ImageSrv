@@ -72,7 +72,7 @@ def _probe(tmp_path: Path, call: str, ntfs3g: str = NTFS3G) -> tuple[str, Path]:
     out = sh(stubs
              + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
              f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "log")!r}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/manifest.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
              + call)
     return out.strip(), run
 
@@ -229,8 +229,8 @@ def _name_old_image(tmp_path, plan: list[str]) -> tuple[dict, Path]:
              + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
              f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
              f'LOG_FILE={posix(run / "log")!r}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-             f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+             f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
              f"manifest_plan() {{ printf '{lines}\\n'; }}; "
              'partition_node() { echo /dev/fake$2; }; '
              'write_hostname sda /dev/null LAB1-05 || true')

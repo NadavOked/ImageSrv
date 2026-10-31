@@ -34,6 +34,8 @@ import ast
 import re
 from pathlib import Path
 
+from agentlib import lib_files
+
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
@@ -292,7 +294,7 @@ def _journal_details() -> list[tuple[str, str, str]]:
 
 
 def test_every_english_journal_detail_has_a_translation_rule():
-    from server.journal_he_detail import he_detail
+    from server.console.journal_he_detail import he_detail
 
     assert len(_journal_details()) > 80
     bad = []
@@ -351,13 +353,13 @@ def test_every_dcui_action_message_is_translated_for_the_graphic_screen():
 
 #: קודי מכונה (‏JS מתרגם אותם) וממשקי סוכן — שם התשובה נקראת על ידי קוד, לא אדם.
 HTTP_ENGLISH_OK = {
-    ("server/auth.py", "password_change_required"),
-    ("server/auth.py", "mfa_enrollment_required"),
-    ("server/console_mfa.py", "builtin_no_mfa"),
-    ("server/console_storage.py", "{}: {}"),
+    ("server/console/auth.py", "password_change_required"),
+    ("server/console/auth.py", "mfa_enrollment_required"),
+    ("server/console/console_mfa.py", "builtin_no_mfa"),
+    ("server/console/console_storage.py", "{}: {}"),
 }
 #: מודולים שהם ממשק סוכן↔שרת בלבד: התשובה נרשמת ביומן הסוכן.
-AGENT_PROTOCOL = {"server/capture.py", "server/direct.py"}
+AGENT_PROTOCOL = {"server/library/capture.py", "server/rounds/direct.py"}
 
 
 def test_console_http_errors_are_hebrew():
@@ -392,13 +394,13 @@ def test_console_http_errors_are_hebrew():
     ("net_config_refused", "eth0 pending change", "eth0 · יש שינוי ממתין לאישור"),
 ])
 def test_journal_details_read_in_hebrew(event, raw, expect):
-    from server.journal_he_detail import he_detail
+    from server.console.journal_he_detail import he_detail
 
     assert he_detail(event, raw) == expect
 
 
 def test_a_hebrew_detail_and_an_unknown_event_pass_through_unchanged():
-    from server.journal_he_detail import he_detail
+    from server.console.journal_he_detail import he_detail
 
     assert he_detail("capture_done", 'img_1 "וינדוס"') == 'img_1 "וינדוס"'
     assert he_detail("no_such_event", "a b c") == "a b c"
@@ -410,7 +412,7 @@ def test_a_hebrew_detail_and_an_unknown_event_pass_through_unchanged():
 
 def _shell_scripts() -> list[Path]:
     agent = REPO / "agent"
-    return sorted(list((agent / "lib").glob("*.sh")) + [agent / "init", agent / "imagectl-agent",
+    return sorted(lib_files(agent / "lib") + [agent / "init", agent / "imagesrv-agent",
                                                          REPO / "installer" / "gui-bridge.sh",
                                                          REPO / "installer" / "lib" / "fielderrors.sh"])
 

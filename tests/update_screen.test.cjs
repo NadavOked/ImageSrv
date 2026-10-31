@@ -207,7 +207,7 @@ test('timeout: 10 minutes without an answer stops the checking and names what to
   assert.match(h, /השרת התנתק ב-11:02:13 ולא ענה מאז/, 'the time is on the server clock (skew from the last status)');
   assert.match(h, /<span class="u-led e"><\/span><span><b>אין תשובה מאז 11:02:13<\/b>/);
   assert.match(h, /<small>בלי תשובה<\/small>/);
-  assert.match(h, /מסך השרת עצמו[\s\S]*https:\/\/10\.10\.10\.10:8081[\s\S]*\/var\/log\/imagectl\/server-upgrade\.log/);
+  assert.match(h, /מסך השרת עצמו[\s\S]*https:\/\/10\.10\.10\.10:8081[\s\S]*\/var\/log\/imagesrv\/server-upgrade\.log/);
   assert.match(h, /הבדיקה האוטומטית נעצרה\. אף שלב לא בוטל בשרת\./);
   assert.match(h, /onclick="updWaitMore\(\)">חכה עוד 10 דקות<[\s\S]*onclick="updCheckNow\(\)">בדוק עכשיו</);
   assert.doesNotMatch(h, /updClose/, 'the console is unusable while the server is down — no way "back" into it');
@@ -373,7 +373,7 @@ for (const error of [
 
 test('rollback: the failed step in red, the restart as "returned", and the server answers on the old version', async () => {
   const t = await started({}, 'install');
-  t.fixtures['/update/status'] = failed('rollback', 'install', {detail: 'בניית ה-initrd נכשלה (הפירוט ב-/var/log/imagectl/server-upgrade.log)',
+  t.fixtures['/update/status'] = failed('rollback', 'install', {detail: 'בניית ה-initrd נכשלה (הפירוט ב-/var/log/imagesrv/server-upgrade.log)',
     error: 'בניית ה-initrd נכשלה · הוחזר ל-v0.71.0 (וה-initrd הקודם הוחזר)', current: 'v0.71.0'});
   await t.poll();
   const h = t.html();

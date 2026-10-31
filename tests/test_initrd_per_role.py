@@ -68,9 +68,9 @@ def initrd_lines(text: str) -> list[str]:
             if line.strip().startswith(("initrd ", "if initrd "))]
 
 
-#: כל מסלול שבו נוצר ערך `menuentry "ImageCtl"` — כלומר כל מסלול שבו
+#: כל מסלול שבו נוצר ערך `menuentry "ImageSrv"` — כלומר כל מסלול שבו
 #: יש בכלל שורת initrd בקובץ. מ-#641 כל ארבעת המסלולים (כולל no-task)
-#: מגיעים ל-AGENT עבור build/classroom, ובכולם ערך ה-ImageCtl נטען
+#: מגיעים ל-AGENT עבור build/classroom, ובכולם ערך ה-ImageSrv נטען
 #: מה-initramfs של התפקיד.
 AGENT_ROUTES = [
     pytest.param({}, id="no-task"),
@@ -86,7 +86,7 @@ AGENT_ROUTES = [
 @pytest.mark.parametrize("route", AGENT_ROUTES)
 @pytest.mark.parametrize("role", ["build", "classroom", "cloner"])
 def test_gui_roles_get_the_gui_initramfs_on_every_route(role, route):
-    """שלושת התפקידים שיש להם מסך, בכל מסלול שמייצר ערך ImageCtl.
+    """שלושת התפקידים שיש להם מסך, בכל מסלול שמייצר ערך ImageSrv.
 
     ‏cloner נוסף בהכרעת הבעלים: למחשב השיכפול יש מסך, והוא מציג
     התקדמות פר-מגירה ותפריט SMART גרפי. הפרמטריזציה על המסלולים אינה
@@ -145,7 +145,7 @@ def test_a_non_string_role_gets_the_text_initramfs(route):
 
 
 def test_an_unregistered_mac_loads_no_initramfs_at_all():
-    """‏known=false אינו מקבל ערך ImageCtl בכלל — לא גרפי ולא טקסטואלי.
+    """‏known=false אינו מקבל ערך ImageSrv בכלל — לא גרפי ולא טקסטואלי.
     בקרה על כך שההרחבה לא הצמיחה שורת initrd במסלול שלא הייתה בו."""
     text = render(answer(known=False, role="build"), CFG)
     assert initrd_lines(text) == []
@@ -179,13 +179,13 @@ def test_the_default_config_has_no_gui_path():
 
 @pytest.mark.parametrize("role", ["build", "classroom"])
 def test_the_gui_roles_keep_everything_else_around_the_initrd(role):
-    """‏#641 שינה את האתחול לאוטומטי (`default=imagectl`, `timeout=0`),
-    אבל #144 לא זז — שני ערכים, הדיסק המקומי לצד ImageCtl — ו-#32 נוגע
+    """‏#641 שינה את האתחול לאוטומטי (`default=imagesrv`, `timeout=0`),
+    אבל #144 לא זז — שני ערכים, הדיסק המקומי לצד ImageSrv — ו-#32 נוגע
     בשורת ה-initrd ובה בלבד."""
     text = render(answer(role=role), CFG)
     assert "set timeout=0" in text
     assert "set timeout_style=hidden" in text
-    assert "set default=imagectl" in text
+    assert "set default=imagesrv" in text
     assert text.count("menuentry ") == 2
     assert "--id local {" in text
     assert "chainloader" in text
@@ -206,9 +206,9 @@ def test_the_file_stays_pure_ascii_with_a_gui_path(role):
 
 
 def test_a_recovery_entry_follows_the_role_too():
-    """תחנת כיתה בלי משימה מקבלת את ערך ImageCtl במצב `recovery` (#144).
+    """תחנת כיתה בלי משימה מקבלת את ערך ImageSrv במצב `recovery` (#144).
     גם הוא נטען מה-initramfs של התפקיד — הבחירה היא לפי תפקיד, לא לפי
     מצב הערך. אחרת אותה מכונה הייתה מקבלת מסך שונה בשני מסלולים."""
     text = render(answer(role="classroom"), CFG)
-    assert "imagectl.mode=recovery" in text
+    assert "imagesrv.mode=recovery" in text
     assert initrd_lines(text) == [GUI_INITRD]

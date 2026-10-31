@@ -18,9 +18,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from server import auth, vmdisk, vmupdate
+from server.console import auth
+from server.vm import vmdisk, vmupdate
 from server.db import set_setting
-from server.vmupdate_api import create_vmupdate_viewer_router, qemu_handshake
+from server.vm.vmupdate_api import create_vmupdate_viewer_router, qemu_handshake
 from test_vmupdate import FakeMachine, FakeQemu, fake_build, wait_for
 
 BASE = "/api/console/vmupdate"
@@ -99,11 +100,11 @@ def test_save_rejects_a_bad_name_by_name(server, vm):
 
 
 def _api_log(caplog) -> list[str]:
-    return [r.getMessage() for r in caplog.records if r.name == "imagectl.vmupdate_api"]
+    return [r.getMessage() for r in caplog.records if r.name == "imagesrv.vmupdate_api"]
 
 
 def test_a_settings_refusal_states_the_rule_and_not_the_exception_1535(server, vm, caplog):
-    with caplog.at_level(logging.INFO, logger="imagectl.vmupdate_api"):
+    with caplog.at_level(logging.INFO, logger="imagesrv.vmupdate_api"):
         bad = server["admin"].put(BASE + "/settings", json={"evil\r\nkey": 1})
     body = bad.json()
     assert bad.status_code == 400 and body["code"] == "settings"
@@ -120,7 +121,7 @@ def test_a_bad_version_name_is_refused_by_the_rule_without_echoing_it_1535(serve
     wait_for(vm["engine"], "running")
     admin.post(BASE + "/shutdown")
     wait_for(vm["engine"], "stopped")
-    with caplog.at_level(logging.INFO, logger="imagectl.vmupdate_api"):
+    with caplog.at_level(logging.INFO, logger="imagesrv.vmupdate_api"):
         bad = admin.post(BASE + "/save", json={"name": "x\nFORGED<b>"})
     body = bad.json()
     assert bad.status_code == 400 and body["code"] == "name"
@@ -240,7 +241,7 @@ def test_qemu_handshake_refuses_a_vnc_that_demands_a_password():
         def __init__(self):
             self.chunks = [b"RFB 003.008\n", b"\x01\x02"]
 
-    from server.monitor import MachineAuthError
+    from server.console.monitor import MachineAuthError
     with pytest.raises(MachineAuthError):
         asyncio.run(qemu_handshake(PasswordOnly(), Writer()))
 
@@ -249,7 +250,7 @@ def test_qemu_handshake_refuses_a_vnc_that_demands_a_password():
 
 
 def second_admin(server):
-    from server import users
+    from server.console import users
     from conftest import complete_console_login
     users.create(server["ctx"].conn, "dana", "admin-pass-456", "admin", by="test",
                  check_policy=False)
@@ -381,7 +382,7 @@ def _closed_details(server):
 @pytest.mark.parametrize("revoked", [True, False])
 def test_only_a_revocation_is_journaled_as_a_revoked_session(server, vm, monkeypatch, revoked):
     import time
-    from server import viewer_sessions
+    from server.console import viewer_sessions
 
     sock = vm["engine"].workdir / "vnc.sock"
     monkeypatch.setattr(vm["engine"], "vnc_socket", lambda: sock)

@@ -28,74 +28,78 @@ from fastapi.staticfiles import StaticFiles
 from boot.grub_menu import GrubConfig
 from boot.http import create_boot_asgi, gui_initrd_path
 
-from . import auth, auto_reboot, boottrace, deploy_net, dhcp, drive_rates, pulls, registry
-from . import learn_netloss, learn_wol   # #1846, #1847
-from . import server_io   # #1884
-from . import pxe_log   # #1887
-from . import agent_timing   # #2056
-from . import timezone, timesync   # #1447, #1773
-from .api import ServerContext, boot_identity_ok, create_agent_router
-from .console_api import create_console_router
-from .console_data import create_console_data_router   # #1882-#1889
-from .console_hostcfg import create_hostcfg_router
-from .console_timezone import create_timezone_router
-from .console_timesync import create_timesync_router
-from .console_ups import create_ups_router
-from .console_tls import ConsoleTLS
-from .console_storage import create_storage_router
-from .console_backup_target import create_backup_target_router
-from .console_storage_locations import create_storage_locations_router
-from . import storage_locations
-from . import storage_heartbeat
-from . import housekeeping   # #1737
+from server.console import auth
+from . import auto_reboot
+from server.agent import boottrace, registry
+from server.rounds import drive_rates, pulls
+from server.net import deploy_net, dhcp
+from server.learn import learn_netloss, learn_wol   # #1846, #1847
+from server.learn import server_io   # #1884
+from server.net import pxe_log   # #1887
+from server.agent import agent_timing   # #2056
+from server.system import timezone, timesync   # #1447, #1773
+from server.agent.api import ServerContext, boot_identity_ok, create_agent_router
+from server.console.console_api import create_console_router
+from server.console.console_data import create_console_data_router   # #1882-#1889
+from server.console.console_hostcfg import create_hostcfg_router
+from server.console.console_timezone import create_timezone_router
+from server.console.console_timesync import create_timesync_router
+from server.console.console_ups import create_ups_router
+from server.console.console_tls import ConsoleTLS
+from server.console.console_storage import create_storage_router
+from server.console.console_backup_target import create_backup_target_router
+from server.console.console_storage_locations import create_storage_locations_router
+from server.storage import storage_locations
+from server.interserver import storage_heartbeat
+from server.system import housekeeping   # #1737
 from .db import journal
-from . import wol
-from . import direct
-from . import smart_ask
-from .sender import SenderEngine
-from .console_library import create_library_router
-from .console_drivers import create_agent_drivers_router, create_drivers_router   # #720
-from .console_tools import create_tools_router   # #649 שלב 1
-from .console_usb import create_usb_router   # #1914: the clone stick download
-from .drivers import DriverLibrary
-from .capture import (create_agent_capture_router, create_console_capture_router,
-                      start_verification)
-from .console_net import create_net_router
-from .nic_services import create_nic_services_router
-from . import console_dhcp
-from .console_dhcp import create_dhcp_router
-from .console_netcfg import create_netcfg_router, drain_crumbs
+from server.net import wol
+from server.rounds import direct
+from server.disks import smart_ask
+from server.rounds.sender import SenderEngine
+from server.console.console_library import create_library_router
+from server.console.console_drivers import create_agent_drivers_router, create_drivers_router   # #720
+from server.console.console_tools import create_tools_router   # #649 שלב 1
+from server.console.console_usb import create_usb_router   # #1914: the clone stick download
+from server.library.drivers import DriverLibrary
+from server.library.capture import (create_agent_capture_router, create_console_capture_router,
+                                    start_verification)
+from server.console.console_net import create_net_router
+from server.net.nic_services import create_nic_services_router
+from server.console import console_dhcp
+from server.console.console_dhcp import create_dhcp_router
+from server.console.console_netcfg import create_netcfg_router, drain_crumbs
 from .db import connect
-from .health import create_health_router
-from .health import default_hooks as health_default_hooks
+from server.system.health import create_health_router
+from server.system.health import default_hooks as health_default_hooks
 from .update import (PUBLIC_UPDATE_URL, create_update_router, current_version, display_version,
                      default_hooks as default_update_hooks, read_version,
                      VersionRead)
-from .hello import make_resolver, off_deploy_vlan, self_probe
-from .images import ImageLibrary
-from .kiosk import create_kiosk_router, mark_build_gui
-from .cloner_round import create_cloner_round_router
-from . import room
-from . import usedbackfill
-from . import readbackhash
-from .room import CLONERS_GROUP, create_room_router
-from .room_console import create_room_console_router
-from .wake_api import create_wake_router
-from .sessions import SessionStore
-from .users import ensure_admin
-from . import storage_nodes
-from . import monitor
-from .monitor import create_monitor_router
-from .vmhost import VmHost
-from .vmupdate import VmUpdate
-from .vmupdate_api import create_vmupdate_router, create_vmupdate_viewer_router
-from . import image_versions
-from .reconcile import reconcile_on_start
-from .work_areas import sweep as sweep_work_areas
+from server.agent.hello import make_resolver, off_deploy_vlan, self_probe
+from server.library.images import ImageLibrary
+from server.agent.kiosk import create_kiosk_router, mark_build_gui
+from server.rounds.cloner_round import create_cloner_round_router
+from server.rounds import room
+from server.library import usedbackfill
+from server.agent import readbackhash
+from server.rounds.room import CLONERS_GROUP, create_room_router
+from server.rounds.room_console import create_room_console_router
+from server.console.wake_api import create_wake_router
+from server.rounds.sessions import SessionStore
+from server.console.users import ensure_admin
+from server.interserver import storage_nodes
+from server.console import monitor
+from server.console.monitor import create_monitor_router
+from server.vm.vmhost import VmHost
+from server.vm.vmupdate import VmUpdate
+from server.vm.vmupdate_api import create_vmupdate_router, create_vmupdate_viewer_router
+from server.library import image_versions
+from server.rounds.reconcile import reconcile_on_start
+from server.library.work_areas import sweep as sweep_work_areas
 
-log = logging.getLogger("imagectl.app")
+log = logging.getLogger("imagesrv.app")
 
-STATIC_DIR = Path(__file__).parent / "static"
+from server.paths import REPO_ROOT, STATIC_DIR
 
 #: כל כמה שניות שעון-הרקע מריץ את הדופק של חדר השיכפולים (#456). זהו רק
 #: רשת-הביטחון לחדר **שקט לגמרי**: כשמכונות מדברות, ה-hello שלהן מקדם את
@@ -463,7 +467,7 @@ def create_runtime(
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    conn = connect(data_dir / "imagectl.db")
+    conn = connect(data_dir / "imagesrv.db")
     auto_reboot.consume_marker(conn, data_dir)
 
     # ‏#655/#723: תצורת ה-Storage Node נכתבת בהפעלה כשהיא הועברה (main).
@@ -502,7 +506,7 @@ def create_runtime(
         threading.Thread(target=_backfill_used_bytes, args=(conn, library),
                          name="used-bytes-backfill", daemon=True).start()
 
-    # ‏#56: זרוע ההחזרה (`imagectl-netrollback`) רצה כשהשרת **לא** רץ —
+    # ‏#56: זרוע ההחזרה (`imagesrv-netrollback`) רצה כשהשרת **לא** רץ —
     # זו כל מטרתה — ולכן אין לה חיבור ל-DB. היא משאירה פירור על הדיסק,
     # והוא הופך לשורת יומן כאן, בהפעלה שאחריה, עם זמן ההחזרה האמיתי.
     # מיד אחרי פתיחת ה-DB ולפני שהקונסולה יכולה לענות: מי שפותח את
@@ -675,7 +679,7 @@ def create_runtime(
         conn, library,
         # ‏ה-VM לעולם אינו יוצא לאינטרנט דרך כרטיס ההפצה (docs/vm-update.md).
         deploy_interface=lambda: deploy.state.interface if deploy else None)
-    host = (VmHost(engine.host_problem, repo_dir or Path(__file__).resolve().parents[1])
+    host = (VmHost(engine.host_problem, repo_dir or REPO_ROOT)
             if vm_host else None)
     if host is not None:
         health_hooks = {**(health_hooks or {}), "vm_host": host.health}
@@ -713,7 +717,8 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
     כרטיס ההפצה של השולח) ושני שלבי אכיפה שחיים כאן — dnsmasq וחומת האש.
     ‏dnsmasq מחובר רק כשיש hooks מפורשים או ‏`sync_dnsmasq` (‏main): ברירות
     המחדל האמיתיות כותבות ל-/etc ומפעילות שירות, ובדיקה אסור לה."""
-    from . import nic_services, timesync
+    from server.net import nic_services
+    from server.system import timesync
 
     hooks = dict(nic_hooks or {})
     # ‏#113: אותה רשימת כרטיסים שהוזרקה לשאר הלשוניות — בדיקה לא קוראת את המכונה
@@ -782,7 +787,7 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
 
 #: ‏#1266: הדגל שאינו מוגש לתחנות מ-PXE, גם כשהועבר ב-`--extra-cmdline`.
 #: הסוכן כבר אינו מכיר אותו (#1303); ההסרה נשארת בשביל initramfs ישן.
-STRIPPED_CMDLINE = "imagectl.debug"
+STRIPPED_CMDLINE = "imagesrv.debug"
 
 
 def _boot_asgi(rt: ServerRuntime):
@@ -793,9 +798,9 @@ def _boot_asgi(rt: ServerRuntime):
     ממקטין כותרות. ההסבר המלא ב-boot/http.py (issue #12). ‏extra_cmdline:
     תוספות מפעיל לשורת הקרנל דרך הגדרה — לא בעריכת קוד על השרת (#18).
 
-    התצורה נבנית **בכל בקשה**, כי `imagectl.monitor` אינו תוספת מפעיל
+    התצורה נבנית **בכל בקשה**, כי `imagesrv.monitor` אינו תוספת מפעיל
     אלא מתג בקונסולה (#690), שצריך לתפוס בלי להפעיל מחדש.
-    ‏`imagectl.debug` (מעטפת הניפוי המקומית של הסוכן) **מוסר** מתוספות
+    ‏`imagesrv.debug` (מעטפת הניפוי המקומית של הסוכן) **מוסר** מתוספות
     המפעיל תמיד: עד #1266 רק מתג ה-SSH בקונסולה הכניס אותו, והמתג יצא
     מהמוצר — אז הדגל אינו מוגש מ-PXE לעולם (`STRIPPED_CMDLINE`)."""
     conn = rt.conn
@@ -831,7 +836,7 @@ def _boot_asgi(rt: ServerRuntime):
                 # אחד), ובקשת אתחול היא ממילא אירוע נדיר לכל מכונה.
                 gui_initrd_path=gui_initrd_path(rt.boot_dir),
                 # #690: the monitor flag has one source of truth, the console
-                # switch; #1266: imagectl.debug is never served from PXE.
+                # switch; #1266: imagesrv.debug is never served from PXE.
                 extra_cmdline=monitor.station_cmdline(
                     tuple(p for p in rt.extra_cmdline
                           if not p.startswith(STRIPPED_CMDLINE)),
@@ -880,7 +885,7 @@ def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = Tr
 def _server_version(rt: ServerRuntime):
     """‏#1252: תג ה-git של השרת לכותרת הגואי (‏`/agent/state`) — אותו מקור
     כמו `/me.version` (‏#915) ואותה ברירת מחדל לתיקיית העץ (‏#748)."""
-    repo_dir = rt.repo_dir or Path(__file__).resolve().parents[1]
+    repo_dir = rt.repo_dir or REPO_ROOT
     hooks = {**default_update_hooks(), **(rt.update_hooks or {})}
     return lambda: current_version(hooks, repo_dir)
 
@@ -908,7 +913,7 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     health_hooks = dict(rt.health_hooks or {})
     # ‏#748: תיקיית העץ נופלת לתיקיית הקוד עצמה כשאין ``--repo-dir``
     # מפורש (בדיקות/הרצה ישירה) — ראו ``main.py``.
-    repo_dir = rt.repo_dir or Path(__file__).resolve().parents[1]
+    repo_dir = rt.repo_dir or REPO_ROOT
     # ‏#915/#1297: הגרסה שמוצגת בקונסולה נקראת מאותו מקור כמו כפתור
     # "עדכן". ההכרעה נשמרת לפי HEAD, ולכן בקשות /me אינן מריצות שוב את
     # המאמת; checkout מחליף את מפתח המטמון.
@@ -1039,7 +1044,8 @@ def create_alive_app(rt: ServerRuntime, fingerprint: str) -> FastAPI:
     """‏#1310: המאזין "אתה שם?" של הראשי על 8443 — אפליקציה **נפרדת**, בלי
     אף ראוטר של הקונסולה או הסוכן. השם הוא השם שהקונסולה מציגה בראש העץ,
     והגרסה מאותו מקור כמו `/me` (‏`_server_version`)."""
-    from . import ports, primary_alive
+    from server.net import ports
+    from server.interserver import primary_alive
     return primary_alive.create_alive_app(
         name=lambda: ports.server_name(rt.conn), version=_server_version(rt),
         fingerprint=fingerprint)

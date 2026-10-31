@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, disk_events
+from server import db
+from server.disks import disk_events
 from test_server_room import CLONER1, room_server  # noqa: F401
 
 
@@ -134,7 +135,7 @@ def test_room_drawer_list_carries_smart_for_before_start_health(room_server):
     """דרישת נדב #5: בריאות פר-מגירה מה-hello מגיעה לתצוגת החדר *לפני*
     start. ‏smart_probe_idle של הסוכן מדווח אותה ב-hello, ו-room.drawer_list
     מעביר אותה הלאה כדי שהמפעיל יראה "מגירה N: SMART אזהרה"."""
-    from server import room
+    from server.rounds import room
     anon, ctx = room_server["anon"], room_server["ctx"]
     body = {
         "schema": 1, "mac": CLONER1, "all_macs": [CLONER1], "ip": "10.44.12.50",
@@ -160,7 +161,7 @@ def test_room_view_carries_size_and_defaults_drawer_count(room_server):
     לא העביר size_bytes, ו-drawer_count נפל ל-null (‏#704 טרם נבנה) →
     guistate נפל ל-1 → הפרסר דחה פורט>1. כאן: size_bytes עובר, ותצוגת
     החדר נופלת לברירת מחדל של הפורט הגבוה (3) כשהעמודה NULL."""
-    from server import room
+    from server.rounds import room
     anon, ctx = room_server["anon"], room_server["ctx"]
     body = {
         "schema": 1, "mac": CLONER1, "all_macs": [CLONER1], "ip": "10.44.12.50",

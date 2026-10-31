@@ -19,7 +19,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import dhcp  # noqa: E402
+from server.net import dhcp  # noqa: E402
 
 try:
     from fastapi.testclient import TestClient
@@ -38,7 +38,8 @@ LEASES = (
 
 
 def _build(tmp_path: Path, images_root: Path, clock, *, leases: object = "file"):
-    from server import identity, users
+    from server.agent import identity
+    from server.console import users
     from server.app import create_app
 
     lease_path = tmp_path / "dnsmasq.leases"
@@ -85,7 +86,7 @@ def presence_clock(monkeypatch):
 
     now = {"t": time.time()}
     try:
-        presence = importlib.import_module("server.console_presence")
+        presence = importlib.import_module("server.console.console_presence")
     except ImportError:
         # בקרה שלילית: בלי המודול הבדיקות נופלות על ההתנהגות (404, אין
         # שורה), לא על ImportError בפיקסטורה.
@@ -147,7 +148,7 @@ def test_last_seen_is_written_at_most_once_a_minute(net, presence_clock):
 
 
 def test_logout_and_revocation_remove_the_session(net, presence_clock):
-    from server import users
+    from server.console import users
     net["admin"].get("/api/console/me")
     net["admin2"].get("/api/console/me")
     assert net["admin2"].post("/api/console/logout").status_code == 200
@@ -172,7 +173,7 @@ def test_logout_revokes_a_copied_cookie_and_only_that_one(net, presence_clock, m
     import time
     from types import SimpleNamespace
 
-    from server import auth
+    from server.console import auth
     stolen = net["admin2"].cookies.get(auth.COOKIE_NAME)
     assert stolen
     later = time.time() + 5

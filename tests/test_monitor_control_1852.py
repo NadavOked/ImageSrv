@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from server import auth, monitor, users
+from server.console import auth, monitor, users
 from test_monitor import (MAC, SERVER_INIT, FakeMachine, browser_handshake,
                           prepare_secret_machine)
 

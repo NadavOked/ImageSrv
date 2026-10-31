@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# ImageCtl — האתחול הראשון אחרי התקנה מה-ISO (#1139; R25 §2.4, R62, R60).
+# ImageSrv — האתחול הראשון אחרי התקנה מה-ISO (#1139; R25 §2.4, R62, R60).
 #
-# ‏late-command.sh מתקין אותו כ-/usr/local/sbin/imagectl-firstboot, ו-
-# ‏imagectl-firstboot.service מריץ אותו. מה שהמתקין (d-i) לא יכול לעשות
+# ‏late-command.sh מתקין אותו כ-/usr/local/sbin/imagesrv-firstboot, ו-
+# ‏imagesrv-firstboot.service מריץ אותו. מה שהמתקין (d-i) לא יכול לעשות
 # מתוך ה-chroot — לבנות initrd מול הקרנל המותקן ולהרים שירותים — קורה
 # כאן, על המערכת האמיתית.
 #
 # שני שלבים, בסדר הזה בכוונה:
-#   א. ‏initrd.img + initrd.img.gui + vmlinuz אל /srv/imagectl/boot —
-#      מתוך /opt/imagectl-src, דרך tools/boot-payload-build.sh (#1230), עם
+#   א. ‏initrd.img + initrd.img.gui + vmlinuz אל /srv/imagesrv/boot —
+#      מתוך /opt/imagesrv-src, דרך tools/boot-payload-build.sh (#1230), עם
 #      --skip-apt (החבילות כבר מותקנות מה-ISO; packages.txt הוא האיחוד,
 #      ו-tests/test_iso_build.py שומר). הבניות נרשמות ב-initrd.flags.
 #      גם שרת **משני** בונה בעצמו (R60): הסיבה לא לבנות — קרנל cloud —
@@ -19,7 +19,7 @@
 #      הוא מריץ את setup-boot-server.sh; רשת ההפצה נשארת לקונסולה (#1088).
 #
 # כרטיס השרתים — **לא heuristic** (R62 §12): ‏late-command.sh כתב
-# ל-/etc/imagectl/installer-nic את הכרטיס ש-d-i עצמו הגדיר (שם + MAC).
+# ל-/etc/imagesrv/installer-nic את הכרטיס ש-d-i עצמו הגדיר (שם + MAC).
 # כאן מאמתים שה-MAC עדיין יושב על כרטיס קיים. שלושה מצבים, ולא שניים:
 #   FOUND         → ‏--servers-if <הכרטיס שנושא את ה-MAC>
 #   UNDECIDABLE   → אין קובץ / d-i לא הגדיר רשת / ה-MAC אינו על אף כרטיס.
@@ -28,28 +28,28 @@
 # ‏network-nic-undecidable / check-error אינם עוד סיבה לעצור: האשף מציג
 # את הרשימה החיה ומחייב בחירה. הם נכתבים ביומן בשם, לא מתקפלים לבחירה.
 #
-# תפקיד (R60): ‏/etc/imagectl/installer-role — standalone או secondary.
+# תפקיד (R60): ‏/etc/imagesrv/installer-role — standalone או secondary.
 # secondary בלי כתובת ראשי הוא secondary-needs-primary באשף: השדה נשאר
 # ריק ונדרש למלאו; אין כתובת מומצאת ואין חסימה לפני שהמפעיל רואה מסך.
 #
-# הכישלון גלוי: ‏`systemctl status imagectl-firstboot` אדום, והיומן
+# הכישלון גלוי: ‏`systemctl status imagesrv-firstboot` אדום, והיומן
 # אומר באיזה שלב. אין Restart ואין `|| true`.
 
 set -euo pipefail
 
-STAMP_DIR=/var/lib/imagectl
+STAMP_DIR=/var/lib/imagesrv
 STAMP="$STAMP_DIR/.firstboot-done"
 STAGE_A_STAMP="$STAMP_DIR/.firstboot-payload-done"
-ETC=/etc/imagectl
+ETC=/etc/imagesrv
 STATUS="$ETC/firstboot.status"
-SRC=/opt/imagectl-src
-HTTP_ROOT=/srv/imagectl/boot
-BUILD_LOG=/var/log/imagectl-firstboot-build.log
+SRC=/opt/imagesrv-src
+HTTP_ROOT=/srv/imagesrv/boot
+BUILD_LOG=/var/log/imagesrv-firstboot-build.log
 FIRSTBOOT_TTY=/dev/tty1
 TTY_PROGRESS=1
 
 log() {
-    printf 'imagectl-firstboot: %s\n' "$*"
+    printf 'imagesrv-firstboot: %s\n' "$*"
     if [[ "$TTY_PROGRESS" == 1 ]]; then
         printf 'ImageSrv: %s\n' "$*" > "$FIRSTBOOT_TTY"
     fi
@@ -60,7 +60,7 @@ fail() {
     message="$*"
     install -d "$ETC"
     printf 'state=%s\ntimestamp=%s\nmessage=%s\n' "$state" "$(date -u +%FT%TZ)" "$message" > "$STATUS"
-    printf 'imagectl-firstboot: [%s] %s\n' "$state" "$message" >&2
+    printf 'imagesrv-firstboot: [%s] %s\n' "$state" "$message" >&2
     printf '\nImageSrv: first boot failed [%s]\n%s\nPress Alt+F2 to log in on tty2.\n' \
         "$state" "$message" > "$FIRSTBOOT_TTY"
     exit 1
@@ -80,7 +80,7 @@ touch "$BUILD_LOG"
 chmod 0600 "$BUILD_LOG"
 
 # ‏/tmp בדביאן 13 הוא tmpfs; עץ ה-initramfs לפני הדחיסה הוא מאות MB.
-export TMPDIR=/var/tmp/imagectl-firstboot
+export TMPDIR=/var/tmp/imagesrv-firstboot
 install -d "$TMPDIR"
 
 # ---------------------------------------------------------------------------
@@ -116,13 +116,13 @@ if [[ -f "$ETC/answers" ]]; then
     # shellcheck source=tools/iso/firstboot-answers.sh
     . "$SRC/tools/iso/firstboot-answers.sh"
     firstboot_from_answers
-    install -m 0644 "$SRC/install/imagectl-dcui.service" /etc/systemd/system/imagectl-dcui.service
-    rm -f /etc/systemd/system/imagectl-dcui.service.d/firstboot.conf
+    install -m 0644 "$SRC/deploy/imagesrv-dcui.service" /etc/systemd/system/imagesrv-dcui.service
+    rm -f /etc/systemd/system/imagesrv-dcui.service.d/firstboot.conf
     systemctl daemon-reload || fail check-error "systemctl daemon-reload failed before starting the DCUI"
     systemctl mask getty@tty1.service || fail check-error "Could not mask getty@tty1.service"
-    systemctl enable imagectl-dcui.service || fail check-error "Could not enable imagectl-dcui.service"
+    systemctl enable imagesrv-dcui.service || fail check-error "Could not enable imagesrv-dcui.service"
     TTY_PROGRESS=0
-    systemctl restart imagectl-dcui.service || fail check-error "Could not start imagectl-dcui.service"
+    systemctl restart imagesrv-dcui.service || fail check-error "Could not start imagesrv-dcui.service"
     rm -rf "$TMPDIR"
     log "Stage B complete from the installer's answers: the DCUI is on tty1, the console on 8081"
     exit 0
@@ -159,7 +159,7 @@ esac
 # UEFI; המתקין מתקין אותו מחדש — בלי אינטרנט זה עובד רק מכאן). ראיה
 # חיובית לפני שהמתקין רץ: apt רואה מועמד.
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq || fail apt-repo-missing "apt-get update failed; /var/lib/imagectl/apt-repo is missing or invalid"
+apt-get update -qq || fail apt-repo-missing "apt-get update failed; /var/lib/imagesrv/apt-repo is missing or invalid"
 cand=$(apt-cache policy grub-pc-bin | awk '/Candidate:/ {print $2}')
 [[ -n "$cand" && "$cand" != "(none)" ]] || fail apt-repo-missing \
     "apt cannot find grub-pc-bin; the ISO repository is missing and offline setup cannot continue"
@@ -211,19 +211,19 @@ for dhcp_pid in "${dhcp_pids[@]}"; do
     wait "$dhcp_pid" || fail check-error "A temporary DHCP worker failed"
 done
 
-install -m 0644 "$SRC/install/imagectl-wizard.service" /etc/systemd/system/imagectl-wizard.service
-install -m 0644 "$SRC/install/imagectl-wizard-rerun.service" /etc/systemd/system/imagectl-wizard-rerun.service
-install -m 0644 "$SRC/install/imagectl-dcui.service" /etc/systemd/system/imagectl-dcui.service
-install -m 0644 "$SRC/install/imagectl-installer-gui.service" /etc/systemd/system/imagectl-installer-gui.service
-install -d /etc/systemd/system/imagectl-dcui.service.d
-printf '[Service]\nWorkingDirectory=/opt/imagectl-src\n' \
-    > /etc/systemd/system/imagectl-dcui.service.d/firstboot.conf
+install -m 0644 "$SRC/deploy/imagesrv-wizard.service" /etc/systemd/system/imagesrv-wizard.service
+install -m 0644 "$SRC/deploy/imagesrv-wizard-rerun.service" /etc/systemd/system/imagesrv-wizard-rerun.service
+install -m 0644 "$SRC/deploy/imagesrv-dcui.service" /etc/systemd/system/imagesrv-dcui.service
+install -m 0644 "$SRC/deploy/imagesrv-installer-gui.service" /etc/systemd/system/imagesrv-installer-gui.service
+install -d /etc/systemd/system/imagesrv-dcui.service.d
+printf '[Service]\nWorkingDirectory=/opt/imagesrv-src\n' \
+    > /etc/systemd/system/imagesrv-dcui.service.d/firstboot.conf
 printf 'state=wizard-running\ntimestamp=%s\nrole_default=%s\n' "$(date -u +%FT%TZ)" "$ROLE" > "$STATUS"
 systemctl daemon-reload || fail check-error "systemctl daemon-reload failed before starting the installer UI"
 systemctl mask getty@tty1.service || fail check-error "Could not mask getty@tty1.service"
-systemctl enable imagectl-dcui.service || fail check-error "Could not enable imagectl-dcui.service"
-systemctl start imagectl-wizard || fail wizard-failed "imagectl-wizard did not start; see journalctl -u imagectl-wizard"
-systemctl is-active --quiet imagectl-wizard || fail wizard-failed "imagectl-wizard is not active after systemctl start"
+systemctl enable imagesrv-dcui.service || fail check-error "Could not enable imagesrv-dcui.service"
+systemctl start imagesrv-wizard || fail wizard-failed "imagesrv-wizard did not start; see journalctl -u imagesrv-wizard"
+systemctl is-active --quiet imagesrv-wizard || fail wizard-failed "imagesrv-wizard is not active after systemctl start"
 
 has_keyboard=0
 for event in /dev/input/event*; do
@@ -235,15 +235,15 @@ for event in /dev/input/event*; do
 done
 if [[ -e /dev/fb0 && "$has_keyboard" == 1 ]]; then
     TTY_PROGRESS=0
-    systemctl start imagectl-installer-gui.service \
-        || fail check-error "Could not start imagectl-installer-gui.service"
-    systemctl is-active --quiet imagectl-installer-gui.service \
-        || fail check-error "imagectl-installer-gui.service is not active after start"
+    systemctl start imagesrv-installer-gui.service \
+        || fail check-error "Could not start imagesrv-installer-gui.service"
+    systemctl is-active --quiet imagesrv-installer-gui.service \
+        || fail check-error "imagesrv-installer-gui.service is not active after start"
     log "installer gui: started on tty1"
 else
     TTY_PROGRESS=0
-    systemctl restart imagectl-dcui.service || fail check-error "Could not start imagectl-dcui.service"
-    systemctl is-active --quiet imagectl-dcui.service || fail check-error "imagectl-dcui.service is not active after restart"
+    systemctl restart imagesrv-dcui.service || fail check-error "Could not start imagesrv-dcui.service"
+    systemctl is-active --quiet imagesrv-dcui.service || fail check-error "imagesrv-dcui.service is not active after restart"
     log "installer gui: no framebuffer/keyboard, DCUI only"
 fi
 rm -rf "$TMPDIR"

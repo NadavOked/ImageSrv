@@ -16,7 +16,7 @@ from conftest import (
     MANIFEST_256, MANIFEST_LINUX, hello_body, setup_classroom, write_image,
 )
 
-from server.archive import tar_stream
+from server.library.archive import tar_stream
 
 
 # --- עריכת אימג'ים — נכתבת למניפסט עצמו --------------------------------------

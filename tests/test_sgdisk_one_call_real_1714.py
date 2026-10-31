@@ -75,7 +75,7 @@ def _reference_table(img: Path) -> None:
         _sg("-a", "1", "-n", f"{i}:{s}:{s + n - 1}", "-t", f"{i}:{t}", "-u", f"{i}:{u}",
             *(["-A", f"{i}:=:0x{a}"] if a else []), str(img))
     for i, *_rest in PARTS:   # #1798: the incomplete-write mark rides in the same table call
-        _sg("-c", f"{i}:imagectl-incomplete", str(img))
+        _sg("-c", f"{i}:imagesrv-incomplete", str(img))
     _sg("-U", DISK_GUID, str(img))
     _sg("-e", str(img))
 
@@ -90,7 +90,7 @@ def _reference_expand(img: Path) -> None:
     c, ct, _r, _fs, cs, _n, cu, _a = PARTS[2]
     _sg("-a", "1", "-d", str(c), "-n", f"{c}:{cs}:0", "-t", f"{c}:{ct}", "-u", f"{c}:{cu}", str(img))
     for k in (c, i):   # #1798: -d/-n rebuilt them unnamed -- the mark again, candidate then tail
-        _sg("-c", f"{k}:imagectl-incomplete", str(img))
+        _sg("-c", f"{k}:imagesrv-incomplete", str(img))
 
 
 def _agent(tmp_path: Path, call: str) -> str:

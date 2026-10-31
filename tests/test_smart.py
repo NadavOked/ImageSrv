@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
@@ -54,25 +55,25 @@ def sh(script: str) -> subprocess.CompletedProcess:
 
 # הרכיבים ש-smart.sh נשען עליהם, וחסימת ה-HTTP כך שהבדיקה אינה נוגעת ברשת.
 PRELUDE = (
-    f'. {posix(AGENT)}/lib/common.sh; '
-    f'. {posix(AGENT)}/lib/waits.sh; '   # #1367: capped_run, the smartctl ceiling
-    f'. {posix(AGENT)}/lib/sysinfo.sh; '
-    f'. {posix(AGENT)}/lib/jsonq.sh; '
-    f'. {posix(AGENT)}/lib/ui.sh; '
-    f'. {posix(AGENT)}/lib/progress.sh; '
-    f'. {posix(AGENT)}/lib/failmark.sh; '   # disk_failure_cause — זיכרון השרת בשער (#872/#874)
-    f'. {posix(AGENT)}/lib/smart.sh; '
-    f'. {posix(AGENT)}/lib/smartgate.sh; '   # #1211: השער (smart_preflight/smart_gate) פוצל מ-smart.sh
-    f'. {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; '   # gui_smart_choice — כמו בסוכן האמיתי
+    f'. {posix(AGENT)}/lib/core/common.sh; '
+    f'. {posix(AGENT)}/lib/core/waits.sh; '   # #1367: capped_run, the smartctl ceiling
+    f'. {posix(AGENT)}/lib/hw/sysinfo.sh; '
+    f'. {posix(AGENT)}/lib/core/jsonq.sh; '
+    f'. {posix(AGENT)}/lib/gui/ui.sh; '
+    f'. {posix(AGENT)}/lib/core/progress.sh; '
+    f'. {posix(AGENT)}/lib/restore/failmark.sh; '   # disk_failure_cause — זיכרון השרת בשער (#872/#874)
+    f'. {posix(AGENT)}/lib/smart/smart.sh; '
+    f'. {posix(AGENT)}/lib/smart/smartgate.sh; '   # #1211: השער (smart_preflight/smart_gate) פוצל מ-smart.sh
+    f'. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '   # gui_smart_choice — כמו בסוכן האמיתי
     # ‏#906: hello בזמן ההמתנה לאדם. **רק אם הקובץ קיים**: הבקרה השלילית
     # מחזירה את main, ושם הטסט חייב ליפול על ההתנהגות ולא על `.` של קובץ חסר.
-    + (f'. {posix(AGENT)}/lib/attended.sh; ' if (AGENT / "lib" / "attended.sh").exists() else "")
+    + (f'. {posix(AGENT)}/lib/core/attended.sh; ' if (AGENT / "lib" / "core" / "attended.sh").exists() else "")
     # ‏#1859: every attribute and the orange -- the same "only if it exists", for the same reason.
-    + (f'. {posix(AGENT)}/lib/smartattrs.sh; ' if (AGENT / "lib" / "smartattrs.sh").exists() else "")
+    + (f'. {posix(AGENT)}/lib/smart/smartattrs.sh; ' if (AGENT / "lib" / "smart" / "smartattrs.sh").exists() else "")
     # #1921: the knowledge tables -- the same "only if it exists": without them smart_probe judges
     # nothing and says so (unchecked no_table), which is the negative control's failure on behaviour.
-    + (f'export SMART_KB={posix(AGENT)}/lib/data; . {posix(AGENT)}/lib/smartjudge.sh; . {posix(AGENT)}/lib/hwissues.sh; '
-       if (AGENT / "lib" / "smartjudge.sh").exists() else "")
+    + (f'export SMART_KB={posix(flat_lib())}/data; . {posix(AGENT)}/lib/smart/smartjudge.sh; . {posix(AGENT)}/lib/smart/hwissues.sh; '
+       if (AGENT / "lib" / "smart" / "smartjudge.sh").exists() else "")
     + 'http_post_json() { return 0; }; '   # אין רשת בבדיקה
 )
 
@@ -80,7 +81,7 @@ PRELUDE = (
 def env(run: Path, dev: Path, sysroot: Path | None = None, smartctl: str = "") -> str:
     out = (
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} '
-        f'IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff SERVER=http://x; '
+        f'IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff SERVER=http://x; '
     )
     if sysroot is not None:
         out += f'export SYSROOT={posix(sysroot)!r}; '
@@ -616,7 +617,7 @@ def test_an_undelivered_disk_event_does_not_leak_into_the_write_list(tmp_path):
     ‏`smart_send_event` מדווח על disk_event שלא נמסר דרך `log` -- שכותב גם
     ל-stdout. עם curl כושל (שרת בעדכון, 5xx) הרשימה חייבת להיות **בדיוק**
     שמות הדיסקים, וההודעה בלוג. בקרה שלילית: על main הרשימה מכילה
-    `imagectl: disk_event for sda was not delivered`."""
+    `imagesrv: disk_event for sda was not delivered`."""
     run = tmp_path / "run"; run.mkdir()
     dev = tmp_path / "dev"; dev.mkdir()
     for d in ("sda", "sdb"):
@@ -626,7 +627,7 @@ def test_an_undelivered_disk_event_does_not_leak_into_the_write_list(tmp_path):
              + 'smart_gate sess1 sda sdb; echo "rc=$?"')
     assert out.returncode == 0, out.stderr
     assert out.stdout.splitlines()[:2] == ["sda sdb", "rc=0"], out.stdout
-    assert "imagectl:" not in out.stdout, out.stdout
+    assert "imagesrv:" not in out.stdout, out.stdout
     assert "disk_event for sda was not delivered" in (run / "agent.log").read_text()
 
 

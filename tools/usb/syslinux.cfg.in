@@ -5,4 +5,4 @@ TIMEOUT 0
 LABEL imagesrv
     KERNEL /imagesrv/vmlinuz
     INITRD /imagesrv/initrd.img
-    APPEND imagectl.mode=usbclone console=tty0 quiet loglevel=3
+    APPEND imagesrv.mode=usbclone console=tty0 quiet loglevel=3

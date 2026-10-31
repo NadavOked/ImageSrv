@@ -32,7 +32,7 @@ def _fs(tmp_path: Path, blkid: str, node_exists: bool = True) -> str:
     if node_exists:
         node.write_bytes(bytes(4096))
     out = sh(f'chmod 0755 {posix(stubs)}/blkid; export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
-             f'. {posix(AGENT)}/lib/manifest.sh; _fs_of {posix(node)!r}')
+             f'. {posix(AGENT)}/lib/capture/manifest.sh; _fs_of {posix(node)!r}')
     return out.strip().splitlines()[-1]
 
 
@@ -87,8 +87,8 @@ def test_the_local_clone_never_offers_a_source_whose_filesystem_did_not_read(tmp
     lc = tmp_path / "lc"
     out = sh(f'chmod 0755 {posix(box)}/stubs/blkid; export PATH="$(cd {posix(box)!r}/stubs && pwd):$PATH" '
              f'RUN_DIR={posix(box)!r} DEVROOT={posix(box)}/dev SYSROOT={posix(box)} LOG_FILE={posix(box)}/log '
-             f'LC={posix(lc)}; mkdir -p "$LC/inv"; log() {{ :; }}; . {posix(AGENT)}/lib/common.sh; '
-             f'. {posix(AGENT)}/lib/manifest.sh; . {posix(AGENT)}/lib/lcinv.sh; ' + LCINV
+             f'LC={posix(lc)}; mkdir -p "$LC/inv"; log() {{ :; }}; . {posix(AGENT)}/lib/core/common.sh; '
+             f'. {posix(AGENT)}/lib/capture/manifest.sh; . {posix(AGENT)}/lib/localclone/lcinv.sh; ' + LCINV
              + 'lc_inv_disk sda')
     fields = out.strip().splitlines()[-1].split("|")
     assert (fields[11], fields[12]) == (usable, why), fields

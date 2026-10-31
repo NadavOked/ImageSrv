@@ -37,6 +37,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_final_report import cut_function
+from agentlib import flat_lib, lib_path
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -119,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
             token = f"u|{self.server.role}|9999999999|deadbeef"
             self._send(200, {"username": "u", "role": self.server.role,
                              "idle_seconds": 300},
-                       cookie=f"imagectl_session={token}; Path=/; HttpOnly")
+                       cookie=f"imagesrv_session={token}; Path=/; HttpOnly")
         elif self.path == "/api/console/folders":
             self._send(200, {"ok": True})
         elif self.path == "/api/console/tasks/capture":
@@ -176,11 +177,11 @@ def run_shell(tmp_path: Path, server: str, body: str, stdin_text: str = "") -> d
         f"SERVER={shlex.quote(server)} "
         f'RESP={shlex.quote(posix(run / "resp.json"))} '
         f'LOG_FILE={shlex.quote(posix(run / "agent.log"))} '
-        "IMAGECTL_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=4; "
+        "IMAGESRV_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=4; "
         # The Windows shell would rewrite "/dev/sda" into a Windows path on
         # the way to jq.exe; a development-station artifact, not the agent's.
         "export MSYS2_ARG_CONV_EXCL='*'; "
-        + "".join(f". {posix(AGENT)}/lib/{n}; " for n in LIBS)
+        + "".join(f". {posix(flat_lib())}/{n}; " for n in LIBS)
         + 'sleep() { :; }; '
         + body
     )
@@ -208,10 +209,10 @@ def run_shell(tmp_path: Path, server: str, body: str, stdin_text: str = "") -> d
 
 @native_tools
 def test_the_build_screen_without_a_gui_boots_local_and_asks_nothing(tmp_path, console):
-    if Path("/usr/bin/imagectl-kiosk").exists():
-        pytest.fail("/usr/bin/imagectl-kiosk קיים על המכונה המריצה — הטסט מניח גואי חסר")
+    if Path("/usr/bin/imagesrv-kiosk").exists():
+        pytest.fail("/usr/bin/imagesrv-kiosk קיים על המכונה המריצה — הטסט מניח גואי חסר")
     screen = cut_function("build_console_screen")
-    assert screen is not None, "‏build_console_screen אינה מוגדרת ב-imagectl-agent"
+    assert screen is not None, "‏build_console_screen אינה מוגדרת ב-imagesrv-agent"
     result = run_shell(
         tmp_path, url_of(console),
         # 11/10: no efivars here -- BootNext "skipped", the host untouched.
@@ -290,7 +291,7 @@ def test_the_capture_request_carries_the_console_session_cookie(tmp_path, consol
     run_shell(tmp_path, url_of(console), gui_capture_call("Base", "Lab", "no"))
     sent = [r for r in console.requests
             if r["path"] == "/api/console/tasks/capture"]
-    assert sent and "imagectl_session=" in sent[0]["cookie"]
+    assert sent and "imagesrv_session=" in sent[0]["cookie"]
 
 
 @native_tools
@@ -319,7 +320,7 @@ def test_the_agent_libs_print_no_hebrew(name):
     הראשון נכתב רק לקובץ ה-error של הגואי הנייטיב (שהוא עברית RTL),
     והשני הוא מה שהולך ל-stderr/ללוג. בלי ארגומנט שני `gui_error` כותב
     ללוג את הראשון — ולכן שורה כזו אינה חריג והיא נופלת כאן."""
-    path = AGENT / "lib" / name
+    path = lib_path(name)
     assert path.exists(), f"‏{name} חסר"
     hebrew = [line for line in path.read_text(encoding="utf-8").splitlines()
               if any("֐" <= ch <= "ת" for ch in line)]
@@ -336,7 +337,7 @@ def test_gui_role_comes_from_the_login_answer_not_from_me(tmp_path):
     על פורט הסוכן. התשובה של login כבר נושאת את התפקיד; ממנה קוראים.
     בקרה שלילית: על הקוד הישן הטסט נופל — אין `console_get`/רשת כאן, ורק
     `console_login.json` קיים."""
-    lib = posix(REPO / "agent" / "lib" / "guibridge.sh")
+    lib = posix(REPO / "agent" / "lib" / "gui" / "guibridge.sh")
     run = tmp_path / "run"; run.mkdir()
     runp = posix(run)
     (run / "console_login.json").write_text('{"username":"nadav","role":"admin","idle_seconds":300}', encoding="utf-8")

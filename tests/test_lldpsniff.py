@@ -1,4 +1,4 @@
-"""imagectl-lldpsniff — פריים LLDP ל-JSON (#1048).
+"""imagesrv-lldpsniff — פריים LLDP ל-JSON (#1048).
 
 מקמפל את agent/lldpsniff.c ומריץ `--from-file` בלי סוקט. רץ במעבדה;
 מדולג בווינדוס (`requires_native`, gcc + POSIX).
@@ -49,7 +49,7 @@ def lldp_frame(*, chassis_mac=bytes.fromhex("aabbccddeeff"),
 
 @pytest.fixture(scope="module")
 def binary(tmp_path_factory):
-    out = tmp_path_factory.mktemp("build") / "imagectl-lldpsniff"
+    out = tmp_path_factory.mktemp("build") / "imagesrv-lldpsniff"
     build = subprocess.run(
         ["gcc", "-O2", "-Wall", "-Wextra", "-Werror", "-o", str(out), str(SOURCE)],
         capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
@@ -71,7 +71,7 @@ def test_lldpsniff_c_stays_under_200_lines():
 def test_builder_compiles_lldpsniff():
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
     assert "lldpsniff.c" in builder
-    assert 'imagectl-lldpsniff"' in builder or "imagectl-lldpsniff'" in builder
+    assert 'imagesrv-lldpsniff"' in builder or "imagesrv-lldpsniff'" in builder
 
 
 @needs_cc

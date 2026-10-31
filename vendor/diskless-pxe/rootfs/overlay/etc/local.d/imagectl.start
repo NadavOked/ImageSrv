@@ -1,7 +1,0 @@
-#!/bin/sh
-# OpenRC local service entry point. Never touches the target disk.
-. /usr/local/bin/imagectl-env.sh
-mkdir -p /run/user/0 /var/log/imagectl
-chmod 700 /run/user/0
-/usr/local/bin/imagectl-diagnostics.sh /var/log/imagectl/boot-diagnostics.txt >/dev/null 2>&1 || true
-/usr/local/bin/imagectl-kiosk-watchdog.sh >/var/log/imagectl/watchdog.log 2>&1 &

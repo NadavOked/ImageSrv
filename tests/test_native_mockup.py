@@ -10,7 +10,7 @@ Two kinds of test, as everywhere in native-gui:
   has no C compiler. They fail on the pre-mockup source.
 * ``--png`` renders -- ``requires_native``: built and run on the Linux
   Testrunner (cc + pango/cairo), a skip here and a failure there when the
-  tools are missing (``IMAGECTL_REQUIRE_NATIVE=1``).
+  tools are missing (``IMAGESRV_REQUIRE_NATIVE=1``).
 """
 
 from __future__ import annotations

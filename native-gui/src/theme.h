@@ -1,6 +1,6 @@
 /* Native mockup tokens: definitions and citations in theme.c. */
-#ifndef IMAGECTL_THEME_H
-#define IMAGECTL_THEME_H
+#ifndef IMAGESRV_THEME_H
+#define IMAGESRV_THEME_H
 typedef struct { double r, g, b; } Rgb;
 typedef struct {
  const char *id;

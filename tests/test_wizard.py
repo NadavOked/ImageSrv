@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from server.wizard.__main__ import main
-from server import ifaddr
+from server.net import ifaddr
 from server.wizard import bridge, core
 from server.wizard.core import WizardConfig, WizardPaths, WizardState, list_interfaces, validate_config
 from server.wizard.httpd import WizardHTTPServer
@@ -31,7 +31,7 @@ NICS = [{"name": "eth-test", "mac": "02:00:00:00:00:01", "link": "up",
 def valid(**changes) -> WizardConfig:
     base = WizardConfig(
         role="standalone", primary_url="", interface="eth-test", mode="dhcp",
-        address="", netmask="", gateway="", dns="", hostname="imagectl-haifa",
+        address="", netmask="", gateway="", dns="", hostname="imagesrv-haifa",
         password="Imag3ctl!haifa", password_confirm="Imag3ctl!haifa",
     )
     return replace(base, **changes)
@@ -74,11 +74,12 @@ def _write_fake(path: Path, body: str) -> None:
 def _rerun_over_http(tmp_path: Path, admin_name: str = "admin"):
     """אשף בהרצה חוזרת (‏--rerun) מול DB אמיתי עם admin, דרך ה-HTTP — כך
     שגם הכתובת שה-handler מוסר לבדיקה נבדקת. מחזיר (state, apply, close)."""
-    from server import db as server_db, users
+    from server import db as server_db
+    from server.console import users
 
     paths = _paths(tmp_path, tmp_path / "unused", tmp_path / "unused2")
     paths.data_dir.mkdir(parents=True)
-    conn = server_db.connect(paths.data_dir / "imagectl.db")
+    conn = server_db.connect(paths.data_dir / "imagesrv.db")
     users.create(conn, admin_name, "Curr3nt!admin", "admin", by="test",
                  check_policy=False, is_builtin=True)
     conn.close()
@@ -204,7 +205,7 @@ def test_no_answers_console_cert_uses_selected_nic_ip(tmp_path: Path, monkeypatc
     sans = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
     assert ip_address("10.44.10.37") in sans.get_values_for_type(x509.IPAddress)
     assert "eth-test" not in sans.get_values_for_type(x509.DNSName)
-    assert "imagectl-haifa" in sans.get_values_for_type(x509.DNSName)
+    assert "imagesrv-haifa" in sans.get_values_for_type(x509.DNSName)
     assert got["console_url"] == "https://10.44.10.37:8081"
     assert lookups == ([] if dev else [["ip", "-json", "-4", "addr", "show", "dev", "eth-test"]])
     assert state.paths.stamp_file.exists()
@@ -437,7 +438,7 @@ def test_native_bridge_interfaces_and_apply_are_line_oriented(monkeypatch, capsy
     monkeypatch.setattr(bridge, "_request", lambda path, body=None: {
         "state": {"ok": True, "rerun": False, "defaults": {
             "role": "standalone", "interface": "eth-test", "mode": "dhcp",
-            "hostname": "imagectl-server", "primary_url": "",
+            "hostname": "imagesrv-server", "primary_url": "",
         }, "interfaces": [{"name": "eth-test", "model": "Intel I350",
             "mac": "02:00:00:00:00:01", "link_label": "מחובר",
             "current_ip": "10.44.10.37/24", "source": "DHCP"}]},

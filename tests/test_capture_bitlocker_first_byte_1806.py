@@ -127,7 +127,7 @@ def _bitlocker_reason(tmp_path: Path, fs: str = "ntfs") -> str:
         make_stubs(tmp_path / "stubs",
                    {"dd": "#!/bin/sh\nprintf -- '\\353R\\220-FVE-FS-'\n"})
         + f'RUN_DIR={posix(run)!r}; LOG_FILE={posix(run / "agent.log")!r}; '
-        + f'. {posix(AGENT)}/lib/hibernation.sh; '
+        + f'. {posix(AGENT)}/lib/capture/hibernation.sh; '
         + f'_bitlocker_reason 3 {fs} /dev/fake'
     )
     return sh(script).strip()
@@ -151,9 +151,9 @@ def test_the_hibernation_header_promise_is_kept_in_capture():
     """‏`hibernation.sh:2-3` מבטיח "Both run before a byte moves". הטסט
     הזה קורא את capture.sh: הקריאה ל-`_bitlocker_reason` יושבת לפני
     ‏`capture_stage stream` ואינה בתוך לולאת הזרם."""
-    src = (AGENT / "lib" / "capture.sh").read_text(encoding="utf-8")
+    src = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     gate = src.index("_bitlocker_reason")
     assert gate < src.index("capture_stage shrink"), "השער אחרי הכיווץ"
     assert src.count("_bitlocker_reason") == 1, "השער נשאר גם בלולאת הזרם"
-    header = (AGENT / "lib" / "hibernation.sh").read_text(encoding="utf-8")
+    header = (AGENT / "lib" / "capture" / "hibernation.sh").read_text(encoding="utf-8")
     assert "Both run before a byte moves" in header

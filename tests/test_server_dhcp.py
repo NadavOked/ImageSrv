@@ -13,8 +13,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import dhcp
-from server.dhcp import InterfaceConfig, render, render_proxy, validate
+from server.net import dhcp
+from server.net.dhcp import InterfaceConfig, render, render_proxy, validate
 
 try:
     from fastapi.testclient import TestClient
@@ -150,7 +150,7 @@ def test_render_splits_the_boot_loader_by_client_arch():
 
 def test_dhcp_boot_requires_the_known_tag():
     """‏#141: מכונה שאינה ב-KNOWN_MACS_CONF לא מקבלת dhcp-boot בכלל —
-    לא רק ערך GRUB בלי ImageCtl. ‏tag:known חייב להופיע על **כל** שורת
+    לא רק ערך GRUB בלי ImageSrv. ‏tag:known חייב להופיע על **כל** שורת
     boot, לא רק חלק מהן (כשל חלקי כאן משאיר מסלול פתוח ל-arch אחד)."""
     text = render([InterfaceConfig("eth0", **GOOD)])
     boot_lines = [ln for ln in text.splitlines() if ln.startswith("dhcp-boot=")]
@@ -213,7 +213,7 @@ def test_installer_serves_tftp_reads_only_an_active_line():
     old = "port=0\ninterface=eth1\nbind-interfaces\n\nenable-tftp\ntftp-root=/srv/tftp\n"
     assert dhcp.installer_serves_tftp(old) is True
     assert dhcp.installer_serves_tftp("  enable-tftp   # kept\n") is True
-    new = "port=0\ninterface=eth1\n# enable-tftp moved to imagectl-dhcp.conf (#1013)\n"
+    new = "port=0\ninterface=eth1\n# enable-tftp moved to imagesrv-dhcp.conf (#1013)\n"
     assert dhcp.installer_serves_tftp(new) is False
     assert dhcp.installer_serves_tftp("enable-tftp-secure\n") is False
     assert dhcp.installer_serves_tftp("") is False
@@ -222,7 +222,7 @@ def test_installer_serves_tftp_reads_only_an_active_line():
 
 def test_read_installer_conf_has_three_states(tmp_path):
     """עיקרון 5: "אין קובץ" (ראיה חיובית) ≠ "לא נקרא" (לא הצלחנו לבדוק)."""
-    missing = tmp_path / "imagectl.conf"
+    missing = tmp_path / "imagesrv.conf"
     assert dhcp.read_installer_conf(missing) == ""
     missing.write_text("enable-tftp\n", encoding="utf-8")
     assert dhcp.read_installer_conf(missing) == "enable-tftp\n"
@@ -266,7 +266,7 @@ def test_a_probe_result_is_never_falsey():
 def test_a_probe_that_cannot_open_the_socket_says_so_instead_of_reporting_silence():
     """בלי root, בלי SO_BINDTODEVICE (ווינדוס) או על ממשק שאינו קיים —
     הסוקט לא נפתח. התשובה היא "לא נבדק", לא "שקט"."""
-    result = dhcp.probe_existing_dhcp("imagectl-no-such-nic0", timeout=0.1)
+    result = dhcp.probe_existing_dhcp("imagesrv-no-such-nic0", timeout=0.1)
     assert result.checked is False and result.servers == ()
 
 
@@ -282,7 +282,7 @@ def test_the_proxy_conf_lives_outside_the_directory_dnsmasq_reads():
 
 def test_known_macs_conf_is_not_auto_loaded_from_dnsmasq_d():
     """כמו PROXY_CONF (#36): הקובץ נטען במפורש דרך dhcp-hostsfile
-    ב-imagectl.conf, לא דרך הסריקה האוטומטית של /etc/dnsmasq.d."""
+    ב-imagesrv.conf, לא דרך הסריקה האוטומטית של /etc/dnsmasq.d."""
     assert "/etc/dnsmasq.d" not in dhcp.KNOWN_MACS_CONF
 
 
@@ -312,7 +312,7 @@ def test_render_known_macs_refuses_a_non_canonical_mac():
 def test_apply_known_macs_writes_then_reloads_not_restarts(tmp_path, monkeypatch):
     """‏#141: reload (SIGHUP) ולא restart — #36 הוא התקדים למה restart על
     הגדרה הזו אסור. הבדיקה מוודאת גם את הכתיבה בפועל וגם את שם הפעולה."""
-    from server import dhcp_host
+    from server.net import dhcp_host
 
     calls = []
     monkeypatch.setattr(
@@ -334,7 +334,7 @@ def dhcp_server(tmp_path: Path, images_root: Path, clock):
     """שרת עם שני כרטיסים מזויפים, גלאי DHCP מזויף, והחלה שרק רושמת."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     fake = {
@@ -575,12 +575,12 @@ def test_proxy_runs_in_its_own_instance_so_a_freeze_spares_the_main_dhcp(dhcp_se
 
 
 def test_a_proxy_failure_is_reported_next_to_the_main_one(dhcp_server, classrooms_on):
-    dhcp_server["fake"]["proxy_error"] = "imagectl-proxy לא הגיב ל-restart"
+    dhcp_server["fake"]["proxy_error"] = "imagesrv-proxy לא הגיב ל-restart"
     r = dhcp_server["admin"].put("/api/console/net/interfaces/eth1",
                                  json={"proxy": True, "server_ip": "10.44.1.10",
                                        "confirm": "eth1",
                                        "confirm_proxy_broken": True})
-    assert r.json()["ok"] is False and "imagectl-proxy" in r.json()["apply_error"]
+    assert r.json()["ok"] is False and "imagesrv-proxy" in r.json()["apply_error"]
 
 
 def test_bad_values_never_reach_dnsmasq(dhcp_server):

@@ -2,7 +2,7 @@
 16/10) **על עותק copy-on-write בזיכרון בלבד**: המקור אינו נכתב לעולם.
 
 דיסק בנייה של 512GB עם 100GB בשימוש ייצר עד כאן אימג' של 512GB, ובדיקה
-2.7 חסמה אותו בצדק על כל כונן 256. הכיווץ (‏agent/lib/shrink.sh) רץ
+2.7 חסמה אותו בצדק על כל כונן 256. הכיווץ (‏agent/lib/shrink/shrink.sh) רץ
 **על המקור**, אחרי שער המהובר (‏#651) ולפני שהזרם מתחיל, ורק אחרי
 שאדם ליד המכונה אמר כן. המניפסט רושם את הפריסה המצומצמת —
 ‏`size_bytes` קטן, ‏`shrunk_from_bytes` לתיעוד, וכל מחיצה שיושבת אחרי
@@ -225,7 +225,7 @@ def part(m: dict, idx: int) -> dict:
 
 def shrink_target(min_bytes: int, current: int) -> int:
     """הפונקציה עצמה, מהקובץ: המרווח והעיגול נבדקים על הקוד ולא על עותק."""
-    out = sh(f". {posix(AGENT)}/lib/shrinkplan.sh; _shrink_target {min_bytes} {current}")
+    out = sh(f". {posix(AGENT)}/lib/shrink/shrinkplan.sh; _shrink_target {min_bytes} {current}")
     return int(out.strip())
 
 
@@ -332,7 +332,7 @@ def test_the_shrunk_manifest_is_what_restore_and_the_server_require(tmp_path):
     box, run, out = capture_run(tmp_path, stubs=stubs(), shell_pre=FS_MAP + SAY_YES)
     assert out.strip().endswith("rc=0"), out
     m = manifest(run)
-    from server.images import required_bytes
+    from server.library.images import required_bytes
     assert required_bytes(m) == m["min_target_bytes"]
     assert required_bytes(m) < 256_060_514_304, "האימג' עדיין לא נכנס ל-SSD של 256"
 
@@ -380,7 +380,7 @@ def test_without_a_gui_no_key_shrinks_anything(tmp_path):
                     encoding="utf-8", newline="\n")
 
     def ask(keys: str) -> str:
-        return sh(f"export IMAGECTL_TEST=1; . {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/shrinkplan.sh; "
+        return sh(f"export IMAGESRV_TEST=1; . {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/shrink/shrinkplan.sh; "
                   f"printf '{keys}' | shrink_ask {posix(plan)!r} 2>/dev/null").strip()
     for keys in ("1\\n", "2\\n", "3\\n", ""):
         assert ask(keys) == "cancel", keys
@@ -732,7 +732,7 @@ def test_the_manifest_compacts_both_and_marks_the_system_expandable(tmp_path):
     end = data["start_sector"] * 512 + data["size_bytes"]
     assert m["min_target_bytes"] == end + 256 * 1024  # #1171
     assert m["min_target_bytes"] < 140 * 10**9
-    from server.images import required_bytes
+    from server.library.images import required_bytes
     assert required_bytes(m) == m["min_target_bytes"]
 
 
@@ -860,15 +860,15 @@ def test_the_shrink_runs_after_the_hibernation_gate_and_before_the_layout_math()
 
 
 def test_the_agent_loads_shrink_before_capture():
-    src = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    src = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert src.index('"$LIB_DIR/shrink.sh"') < src.index('"$LIB_DIR/capture.sh"')
 
 
 def test_every_shrink_step_checks_its_exit_code():
     """אין `|| true` ואין `2>/dev/null` על צעד הרסני (עיקרון 5) -- בהחזרה
     (shrink.sh, לדיסקים שכווצו לפני #1466) ובעותק (lcsnap.sh)."""
-    src = (AGENT / "lib" / "shrink.sh").read_text(encoding="utf-8")
-    snap = (AGENT / "lib" / "lcsnap.sh").read_text(encoding="utf-8")
+    src = (AGENT / "lib" / "shrink" / "shrink.sh").read_text(encoding="utf-8")
+    snap = (AGENT / "lib" / "localclone" / "lcsnap.sh").read_text(encoding="utf-8")
     assert "|| true" not in src and "|| true" not in snap
     assert "ntfsfix -b" not in src + snap, "‏-b מוחק את רשימת הקלאסטרים הפגומים"
     for text, tools in ((src, ("ntfsfix -d", "ntfsresize -f -f", "sgdisk -a 1 -d", "blockdev --rereadpt")),
@@ -883,10 +883,10 @@ def test_every_shrink_step_checks_its_exit_code():
 def test_the_capture_never_shrinks_the_source_in_place():
     """#1466: הכיווץ במקום הוסר מהקליטה -- אין `ntfsresize -s` ב-shrink.sh,
     ואין רשומת shrink-open בסוכן."""
-    src = (AGENT / "lib" / "shrink.sh").read_text(encoding="utf-8")
+    src = (AGENT / "lib" / "shrink" / "shrink.sh").read_text(encoding="utf-8")
     code = "\n".join(line.split("#")[0] for line in src.splitlines())
     assert "ntfsresize -s" not in code and "shrink_open_record" not in code
-    mem = (AGENT / "lib" / "shrinkmem.sh").read_text(encoding="utf-8")
+    mem = (AGENT / "lib" / "shrink" / "shrinkmem.sh").read_text(encoding="utf-8")
     assert "shrink_open_record" not in "\n".join(line.split("#")[0] for line in mem.splitlines())
 
 

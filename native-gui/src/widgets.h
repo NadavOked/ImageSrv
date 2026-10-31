@@ -2,8 +2,8 @@
  * select / .sheet / .error, station.css .tray / .big-bar / .cls-bars,
  * #toast -- drawn once here, used by the screens_*.c files. Every number
  * is a CSS value, cited where it is used. */
-#ifndef IMAGECTL_WIDGETS_H
-#define IMAGECTL_WIDGETS_H
+#ifndef IMAGESRV_WIDGETS_H
+#define IMAGESRV_WIDGETS_H
 
 #include "ui.h"
 #include "text.h"

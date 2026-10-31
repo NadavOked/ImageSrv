@@ -33,7 +33,7 @@ def _nic(sysroot: Path, speed: str, changes: str) -> None:
 def _live(sysroot: Path, run: Path, ethtool: Path, env: str = "") -> str:
     return sh(f"export SYSROOT={posix(sysroot)!r} RUN_DIR={posix(run)!r} ETHTOOL={posix(ethtool)!r} "
               f"LOG_FILE={posix(run / 'log')!r} IFACE=eth0 D_ROLE=cloner D_SESSION_STATE=none D_TASK=null {env}; "
-              f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/netprobe.sh; . {posix(AGENT)}/lib/cablelive.sh; "
+              f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/netprobe.sh; . {posix(AGENT)}/lib/hw/cablelive.sh; "
               "cable_live_check; echo ok")
 
 

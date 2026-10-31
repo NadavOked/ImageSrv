@@ -24,8 +24,8 @@ from fastapi.testclient import TestClient
 import server.app
 import server.main
 from conftest import hello_body, setup_classroom
-from server import identity
-from server.tasks import TOKEN_HEADER
+from server.agent import identity
+from server.core.tasks import TOKEN_HEADER
 from test_capture import make_task, setup_build_machine
 from tools.e2e import harness
 
@@ -65,7 +65,8 @@ def _health_hooks(tmp_path: Path) -> dict:
 def identity_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
     """כמו `server`, עם קובץ חכירות מוזרק: ‏MAC1 ו-BUILD חכורים ל-STATION_IP,
     ‏MAC2 בלי חכירה. שני לקוחות אנונימיים — מכתובת החכירה ומכתובת זרה."""
-    from server import sender as sender_module, users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from test_sender import Recorder
 
     monkeypatch.setattr(sender_module, "port_holders", lambda port: [])

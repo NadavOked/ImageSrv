@@ -1,5 +1,5 @@
 """#1859 -- the server side of the full SMART: the history per serial, what it learns,
-and the console's view in Hebrew (server/smart_history.py, server/smart_names.py).
+and the console's view in Hebrew (server/disks/smart_history.py, server/disks/smart_names.py).
 
 Nadav, 20/10 00:20: the server keeps every attribute per serial each round; a rise
 since the previous round in a critical attribute adds "replace the disk"; 183/188
@@ -14,7 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from server import db, disk_events, housekeeping, smart_history, smart_names
+from server import db
+from server.system import housekeeping
+from server.disks import disk_events, smart_history, smart_names
 
 pytest.importorskip("fastapi")
 
@@ -155,7 +157,7 @@ def test_hot_while_writing_last_round_is_learned(conn):
 
 def test_the_serial_of_a_reported_dev_is_found_for_the_temperature(server):
     """reports.py hands record_temp the serial of the target's dev, from the last hello."""
-    from server import registry
+    from server.agent import registry
     ids = setup_classroom(server)
     conn = server["ctx"].conn
     body = hello_body(ids["mac1"]); body["disks"][0]["smart_attrs"] = attrs()
@@ -202,7 +204,7 @@ def test_the_names_cover_nadavs_table():
 
 
 def test_the_learned_words_say_what_smart_sh_and_the_console_say():
-    sh = (Path(__file__).resolve().parent.parent / "agent" / "lib" / "smart.sh").read_text(encoding="utf-8")
+    sh = (Path(__file__).resolve().parent.parent / "agent" / "lib" / "smart" / "smart.sh").read_text(encoding="utf-8")
     for word, he in smart_history.LEARNED_HE.items():
         assert f"{word}) printf '{he}'" in sh, word
 
@@ -218,7 +220,7 @@ def test_the_endpoint_returns_every_disk_of_the_machine(server):
 
 
 def test_the_hello_answer_carries_what_was_learned(server):
-    from server import registry
+    from server.agent import registry
     ids = setup_classroom(server)
     first = hello_body(ids["mac1"]); first["disks"][0]["smart_attrs"] = attrs()   # round 1: the hello, then its disk_event
     assert server["anon"].post("/api/v1/agent/hello", json=first).json()["smart_learned"] == []

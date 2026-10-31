@@ -1,4 +1,4 @@
-"""ImageCtl — מחולל grub.cfg.
+"""ImageSrv — מחולל grub.cfg.
 
 הרכיב הזה הוא נתב, לא תפריט. הוא מקבל את תשובת השרת (ממשק 3) ומחזיר טקסט
 grub.cfg שעושה אחד משני דברים: מעלה את הסוכן, או עושה chain לדיסק המקומי.
@@ -50,9 +50,9 @@ MENU_NO_TIMEOUT = -1
 #: מצבי סבב שבהם יש למה להעלות את הסוכן.
 JOINABLE_SESSION_STATES = frozenset({"open", "running"})
 
-#: התפקידים שערך ה-ImageCtl היחיד שלהם הוא הסוכן במצב **רגיל** (#144).
+#: התפקידים שערך ה-ImageSrv היחיד שלהם הוא הסוכן במצב **רגיל** (#144).
 #: כל תפקיד אחר מקבל את הערך במצב `recovery`, וזה לא שרירותי — זו טבלת
-#: ההחלטה של הסוכן עצמו (`agent/lib/decide.sh`) קרואה מהצד השני:
+#: ההחלטה של הסוכן עצמו (`agent/lib/core/decide.sh`) קרואה מהצד השני:
 #:
 #:   build      → `build_console`  — מסך הקליטה/ההפצה, הדרך היחידה אליו
 #:                מאתחול קר (#29). ‏recovery היה מסתיר אותו.
@@ -147,7 +147,7 @@ class GrubConfig:
 
     @property
     def base(self) -> str:
-        """כתובת הבסיס בלי / בסוף — נמסרת לסוכן ב-imagectl.server."""
+        """כתובת הבסיס בלי / בסוף — נמסרת לסוכן ב-imagesrv.server."""
         return self.server_base.rstrip("/")
 
 
@@ -178,7 +178,7 @@ class Decision:
     #: האם הקובץ מכיל בכלל ערך "עלה מהדיסק המקומי" ואת הפונקציה
     #: ‏`chain_local` שמאחוריו. כבוי רק למחשב שיכפול (#320).
     offer_local: bool = True
-    #: האם ערך ה-ImageCtl טוען את ה-initramfs הגרפי (#32). נגזר מהתפקיד
+    #: האם ערך ה-ImageSrv טוען את ה-initramfs הגרפי (#32). נגזר מהתפקיד
     #: בלבד, ולכן אינו יכול להשתנות כשאותה מכונה עוברת מהמתנה לסבב.
     #: ברירת המחדל False: כל החלטה שנוצרת לפני שהתפקיד ידוע — ‏JSON פגום,
     #: schema לא נתמך, MAC לא רשום — היא ממילא מצב לא ברור.
@@ -221,9 +221,9 @@ def decide(answer: object) -> Decision:
         # מכונה לא רשומה **בווילן ההפצה** מקבלת פעם אחת את הסוכן, שמציג
         # "המחשב הזה לא רשום" עשר שניות ועולה מהדיסק. השרת מדליק את הדגל
         # רק על ראיה חיובית שהבקשה הגיעה לכתובת ההפצה, ורק פעם אחת בחלון
-        # (‏`server/unknown_screen.py`) — האתחול הבא של אותו MAC מגיע לכאן
+        # (‏`server/agent/unknown_screen.py`) — האתחול הבא של אותו MAC מגיע לכאן
         # בלי הדגל ועולה מהדיסק. ‏`is True` בכוונה: כל ערך אחר הוא כמו היום.
-        # שורת הקרנל נשארת נקייה (עיקרון 2): ערך רגיל, בלי `imagectl.mode`.
+        # שורת הקרנל נשארת נקייה (עיקרון 2): ערך רגיל, בלי `imagesrv.mode`.
         if answer.get("unregistered_screen") is True:
             return Decision(AGENT, "unregistered-screen",
                             "mac not registered, deploy vlan: the screen once (#1802)",
@@ -252,7 +252,7 @@ def decide(answer: object) -> Decision:
     diskless = role == "cloner"
 
     # ‏#32: אותה תבנית בדיוק, ומאותו טעם. ‏gui נגזר מהתפקיד פעם אחת, לפני
-    # ההסתעפות, ונמסר לכל החלטה שיכולה לייצר ערך ImageCtl — כדי שמכונה
+    # ההסתעפות, ונמסר לכל החלטה שיכולה לייצר ערך ImageSrv — כדי שמכונה
     # לא תחליף initramfs באמצע היום כשנפתח לה סבב.
     gui = role in ROLES_WITH_GUI
 
@@ -271,14 +271,14 @@ def decide(answer: object) -> Decision:
         # (טבלת ההחלטות: cloner בלי סבב = wait_poll). בלי זה, מכונה
         # שעולה קר כשהמגירות שלה לא "טריות" נשלחת לדיסק ריק וכבה (#17).
         # מאותה סיבה גם השומר של #75 אינו חל כאן: אין לאן להפיל אותו,
-        # ולכן השרת אינו סופר אותו מלכתחילה (ראו server/bootguard.py).
+        # ולכן השרת אינו סופר אותו מלכתחילה (ראו server/agent/bootguard.py).
         return Decision(AGENT, "cloner-wait", f"cloner waits on the agent (role={role})",
                         offer_local=False, gui_screen=gui)
 
     # task: null וגם session: null — ברירת המחדל של הממשק.
     #
     # ‏#140 (הכרעת נדב, 2026-08-30): כל מכונה רשומה שאין לה משימה מגיעה
-    # למסך בחירה **גלוי** בין הדיסק המקומי ל-ImageCtl — תחנת כיתה בדיוק
+    # למסך בחירה **גלוי** בין הדיסק המקומי ל-ImageSrv — תחנת כיתה בדיוק
     # כמו מחשב הבנייה, בלי ESC ובלי טיימר. עד כאן היה הבדל *הצגה* בין
     # התפקידים (‏ROLES_WITH_VISIBLE_MENU); הוא בוטל, והתפקיד אינו קובע
     # יותר **אם** יש תפריט. מ-#144 הוא קובע **מה** יש בו: אותם שני ערכים
@@ -291,8 +291,8 @@ def decide(answer: object) -> Decision:
     # מהדיסק בלי תפריט, וכיבוי השרת — שם PXE נכשל בקושחה והמכונה לא
     # מגיעה לקובץ הזה בכלל.
     #
-    # ‏#144: **ערך ImageCtl אחד** בנוסף לדיסק, ולא שניים. עד כאן הוצגו גם
-    # `imagectl` וגם `imagectl-recovery` זה לצד זה, בלי שום דבר על המסך
+    # ‏#144: **ערך ImageSrv אחד** בנוסף לדיסק, ולא שניים. עד כאן הוצגו גם
+    # `imagesrv` וגם `imagesrv-recovery` זה לצד זה, בלי שום דבר על המסך
     # שמסביר את ההבדל — ונדב בחר בלנובו (`role=classroom`) דווקא את זה
     # שמחזיר `local` ומאתחל. איזה מהשניים שימושי נקבע בידי התפקיד, וזה
     # ידוע לשרת; ראו ROLES_WITH_NORMAL_ENTRY. בדיוק אחד מהדגלים דלוק.
@@ -300,14 +300,14 @@ def decide(answer: object) -> Decision:
     code = "boot-loop-guard" if guarded else "no-task"
 
     # ‏#641 (הכרעת נדב, 2026-09-10): היפוך #140. מחשב build/classroom רשום
-    # שאין לו משימה עולה **ישר ל-ImageCtl, אוטומטי לגמרי** — בלי מסך בחירה,
-    # בלי ESC, בלי טיימר. בחירת הדיסק המקומי עברה אל תוך מסך ה-ImageCtl
+    # שאין לו משימה עולה **ישר ל-ImageSrv, אוטומטי לגמרי** — בלי מסך בחירה,
+    # בלי ESC, בלי טיימר. בחירת הדיסק המקומי עברה אל תוך מסך ה-ImageSrv
     # עצמו. זה בדיוק המסלול שבו משימה/סבב פעיל מעלים את הסוכן (AGENT,
-    # ‏timeout=0, hidden, default=imagectl); ההבדל היחיד הוא הערך המתאים
+    # ‏timeout=0, hidden, default=imagesrv); ההבדל היחיד הוא הערך המתאים
     # לתפקיד — ‏build מקבל את הערך הרגיל (build_console, #29), ו-classroom
     # את ה-recovery (מסך הכניסה/בחירה, כי "רגיל" ב-classroom מחזיר local
     # ומאתחל — #144). ‏offer_local נשאר דלוק כמו במסלול המשימה: הערך המקומי
-    # קיים בקובץ אך חבוי (timeout=0), והבחירה שאדם רואה היא של מסך ImageCtl.
+    # קיים בקובץ אך חבוי (timeout=0), והבחירה שאדם רואה היא של מסך ImageSrv.
     #
     # ‏`not guarded` בכוונה: כששומר לולאת האתחול (#75) ירה, המכונה **לא**
     # תעלה אוטומטית אל מה שכבר לולא אותה — היא מקבלת את התפריט הגלוי כדי
@@ -318,7 +318,7 @@ def decide(answer: object) -> Decision:
         return Decision(
             AGENT,
             code,
-            f"no task, auto-boot imagectl "
+            f"no task, auto-boot imagesrv "
             f"(role={role}, entry={'normal' if normal else 'recovery'})",
             offer_local=True,
             gui_screen=gui,
@@ -396,7 +396,7 @@ def _render_decision(decision: Decision, config: GrubConfig) -> str:
             code=decision.code,
             timeout=0,
             timeout_style="hidden",
-            default="imagectl",
+            default="imagesrv",
             entries=entries,
             chain_local=decision.offer_local,
             trace_host=config.grub_host,
@@ -404,7 +404,7 @@ def _render_decision(decision: Decision, config: GrubConfig) -> str:
 
     # ערך אחד בלבד בנוסף לדיסק (#144). הדגלים אינם נדלקים יחד ב-decide,
     # ו-`or` כאן אינו מציג שניים גם אם מישהו ידליק בטעות: המצב נקבע לפי
-    # offer_recovery, והערך תמיד נקרא `imagectl`.
+    # offer_recovery, והערך תמיד נקרא `imagesrv`.
     entries = [_entry_local()]
     if decision.offer_agent or decision.offer_recovery:
         entries.append(_entry_agent(config, recovery=decision.offer_recovery,
@@ -426,7 +426,7 @@ def _render_decision(decision: Decision, config: GrubConfig) -> str:
         timeout_style=("menu" if decision.show_menu else "hidden"),
         default="local",
         entries=entries,
-        # שביל הפירורים מוגדר רק כשיש בקובץ ערך ImageCtl שישתמש בו.
+        # שביל הפירורים מוגדר רק כשיש בקובץ ערך ImageSrv שישתמש בו.
         # קובץ שכולו דיסק מקומי אינו צריך אותו, ופונקציה שאיש אינו
         # קורא לה היא עוד קוד על מסך אתחול.
         trace_host=(config.grub_host if len(entries) > 1 else ""),
@@ -444,7 +444,7 @@ def _assemble(
     trace_host: str = "",
 ) -> str:
     head = [
-        "# Generated by ImageCtl. Do not edit - regenerated on every boot.",
+        "# Generated by ImageSrv. Do not edit - regenerated on every boot.",
         f"# decision: {_ascii(code)}",
         "",
         "set pager=0",
@@ -539,7 +539,7 @@ _STAY_POWERED_ON = """    echo "Contact IT. This computer will stay powered on."
 # את רשימת ההתקנים כדי שהטכנאי יקרא אותה ולא ינחש. שני המודולים חלק
 # מהתמונה החתומה של דביאן (build-efi-images), כמו search_fs_file.
 #
-# והענף הזה גם מדווח לשרת (`imagectl_trace local-*`, ‏boot/trace.py):
+# והענף הזה גם מדווח לשרת (`imagesrv_trace local-*`, ‏boot/trace.py):
 # עד #416 ערך הדיסק המקומי היה היחיד בלי פירורים — והוא זה שנכשל.
 # הפירורים נפלטים רק בקובץ שיש בו את הפונקציה (‏`traced`): בקובץ
 # הקבוע שעל ה-TFTP השרת ממילא שקט, ובקובץ של מכונה לא רשומה אין מה
@@ -547,7 +547,7 @@ _STAY_POWERED_ON = """    echo "Contact IT. This computer will stay powered on."
 
 
 def _trace_line(traced: bool, step: str, indent: int = 4) -> str:
-    """שורת פירור אחת, או כלום. עומדת לבדה בשורה — כמו בערך ImageCtl,
+    """שורת פירור אחת, או כלום. עומדת לבדה בשורה — כמו בערך ImageSrv,
     כישלון שלה אינו מפיל את המסלול."""
     return f"\n{' ' * indent}{grub_call(step)}" if traced else ""
 
@@ -624,7 +624,7 @@ _FUNC_CHAIN_LOCAL = _func_chain_local(traced=False)
 #: הקובץ הסטטי שעל ה-TFTP רץ לפני שהמכונה שאלה על ה-MAC שלה, וכשהשרת
 #: שקט אין ממי לשאול — ולכן הוא אינו יכול לדעת שמולו מחשב שיכפול. מה
 #: שכן זמין לו הוא `$grub_platform`: מי שעלה עם ליבת ה-i386-pc הוא
-#: מחשב Legacy BIOS, כי `server/dhcp.py` מוסר את `grub/i386-pc/core.0`
+#: מחשב Legacy BIOS, כי `server/net/dhcp.py` מוסר את `grub/i386-pc/core.0`
 #: אך ורק ל-`client-arch 0`, וברשת הזאת מחשבי השיכפול הם היחידים שאין
 #: להם UEFI (#38, אפיון סעיף 4). זו ראיה חיובית, לא ניחוש.
 #:
@@ -676,7 +676,7 @@ def _retry_load(command: str, label: str, *, fallback_local: bool) -> str:
         """        echo "This Legacy BIOS cloning machine has no local system to start."
         echo "Nothing will be started. Fix the server or network, then power-cycle it."
 """ + _STAY_POWERED_ON)
-    variable = f"imagectl_{label}_loaded"
+    variable = f"imagesrv_{label}_loaded"
     return f"""    unset {variable}
     for attempt in 1 2 3; do
         echo "Loading {label} over HTTP (attempt $attempt of 3)..."
@@ -696,14 +696,14 @@ def _retry_load(command: str, label: str, *, fallback_local: bool) -> str:
 
 def _entry_agent(config: GrubConfig, *, recovery: bool, gui: bool = False,
                  fallback_local: bool = True) -> str:
-    """ערך ה-ImageCtl. יש בדיוק אחד כזה בכל קובץ, ולכן שמו פשוט (#144).
+    """ערך ה-ImageSrv. יש בדיוק אחד כזה בכל קובץ, ולכן שמו פשוט (#144).
 
-    השם "ImageCtl - recovery / imaging" היה מובן רק כשהוא הופיע ליד
-    "ImageCtl": בלעדיו הוא רק שואל את המפעיל שאלה שהוא לא אמור לענות
+    השם "ImageSrv - recovery / imaging" היה מובן רק כשהוא הופיע ליד
+    "ImageSrv": בלעדיו הוא רק שואל את המפעיל שאלה שהוא לא אמור לענות
     עליה. ‏recovery משנה את שורת הפקודה, לא את מה שכתוב על המסך.
 
     ‏gui (#32) משנה **רק** את שורת ה-initrd. הוא לא נכנס לשורת הפקודה של
-    הקרנל: הסוכן מזהה את הקיוסק לפי מה שארוז בו (`/usr/bin/imagectl-kiosk`
+    הקרנל: הסוכן מזהה את הקיוסק לפי מה שארוז בו (`/usr/bin/imagesrv-kiosk`
     קיים או לא), ופרמטר קרנל היה ממציא ממשק שני שיכול לסתור את הראשון
     (עיקרון 2).
     """
@@ -734,7 +734,7 @@ def _entry_agent(config: GrubConfig, *, recovery: bool, gui: bool = False,
     # הצליחה. כשל סופי אינו ממשיך לפירור: הוא נכנס למסלול המילוט הבטוח,
     # שאינו חוזר. הפירור עצמו נשאר פקודה עצמאית, ולכן כשל של ‎/boot/step
     # אינו יכול למנוע את פקודת הטעינה שאחריו.
-    return f"""menuentry "ImageSrv" --id imagectl {{
+    return f"""menuentry "ImageSrv" --id imagesrv {{
     {grub_call("entry")}
     echo "Loading ImageSrv..."
     insmod http
@@ -759,13 +759,13 @@ def _kernel_cmdline(config: GrubConfig, *, recovery: bool) -> str:
     """
     parts = [
         "ip=dhcp",
-        f"imagectl.server={config.base}",
+        f"imagesrv.server={config.base}",
         "console=tty0",
         "quiet",
         "loglevel=3",
     ]
     if recovery:
-        parts.append("imagectl.mode=recovery")
+        parts.append("imagesrv.mode=recovery")
     parts.extend(config.extra_cmdline)
     return " ".join(_ascii(p) for p in parts)
 
@@ -798,7 +798,7 @@ def render_bootstrap(config: GrubConfig) -> str:
     """
     # ‏netloc בלי פורט = 80, כמו בכל URL של http.
     port = urlsplit(f"//{config.grub_host}").port or 80
-    return _strip_non_ascii(f"""# ImageCtl bootstrap - generated by boot/grub_menu.py:render_bootstrap().
+    return _strip_non_ascii(f"""# ImageSrv bootstrap - generated by boot/grub_menu.py:render_bootstrap().
 # Lives on the TFTP root as grub/grub.cfg. Regenerate, do not hand-edit.
 
 set pager=0
@@ -830,12 +830,12 @@ fi
 # (spec scenario 3) often cannot reach the deployment VLAN address at all. The
 # port is not in DHCP, so it comes from the configured address.
 # The explicit address stays as a fallback, for debugging and for the case
-# where next-server arrives empty or points at a machine without ImageCtl.
-set imagectl_fallback={config.grub_host}
+# where next-server arrives empty or points at a machine without ImageSrv.
+set imagesrv_fallback={config.grub_host}
 if [ -n "$net_default_server" ]; then
-    set imagectl_server=${{net_default_server}}:{port}
+    set imagesrv_server=${{net_default_server}}:{port}
 else
-    set imagectl_server=$imagectl_fallback
+    set imagesrv_server=$imagesrv_fallback
 fi
 
 # Three attempts: GRUB's EFI http stack sometimes fails its very first
@@ -843,9 +843,9 @@ fi
 # second later succeeds; only a server that is really down falls through.
 # Each attempt also tries the fallback, unless it is the same address.
 for attempt in 1 2 3; do
-    configfile (http,$imagectl_server){_menu_path()}?mac=$net_default_mac
-    if [ "$imagectl_server" != "$imagectl_fallback" ]; then
-        configfile (http,$imagectl_fallback){_menu_path()}?mac=$net_default_mac
+    configfile (http,$imagesrv_server){_menu_path()}?mac=$net_default_mac
+    if [ "$imagesrv_server" != "$imagesrv_fallback" ]; then
+        configfile (http,$imagesrv_fallback){_menu_path()}?mac=$net_default_mac
     fi
     sleep 1
 done
@@ -855,7 +855,7 @@ done
 # about its own MAC, so it cannot know it is a cloning machine -- and with
 # the server down there is nobody to ask. $grub_platform is the one thing
 # it does know (#323).
-echo "ImageSrv: server $imagectl_server unreachable."
+echo "ImageSrv: server $imagesrv_server unreachable."
 sleep --interruptible 3
 try_local
 """)

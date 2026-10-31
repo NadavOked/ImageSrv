@@ -12,7 +12,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from server import db, disk_reserve, housekeeping, registry, storage_history
+from server import db
+from server.agent import registry
+from server.system import housekeeping
+from server.storage import disk_reserve, storage_history
 
 GB = 10 ** 9
 Usage = namedtuple("Usage", "total used free")
@@ -21,7 +24,7 @@ MAC = "aa:bb:cc:dd:18:86"
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 class Library:
@@ -63,7 +66,7 @@ def test_an_unreadable_location_is_not_a_zero(conn):
 
 
 def test_only_connected_locations_are_sampled(conn, tmp_path):
-    from server import storage_locations
+    from server.storage import storage_locations
     storage_locations.ensure_local(conn, tmp_path)
     assert storage_history.sample_all(conn, "daily",
                                       usage=lambda p: Usage(100 * GB, 0, 40 * GB)) == 1
@@ -142,7 +145,7 @@ def test_an_image_used_lately_is_not_suggested(conn):
 
 def test_the_console_refuses_before_the_task_exists(server, monkeypatch):
     """‏`POST /api/console/tasks/capture` — 409 עם ההסבר, ואין משימה; הדגימה נשמרת."""
-    from server import capture
+    from server.library import capture
     ctx, admin = server["ctx"], server["admin"]
     registry.add_machine(ctx.conn, MAC, "build-1", "grp_BUILD", "test")
     monkeypatch.setattr(capture, "_free_bytes", lambda root: 5 * GB)

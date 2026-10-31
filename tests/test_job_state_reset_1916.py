@@ -192,13 +192,13 @@ def test_a_second_capture_after_a_held_failure_reports_only_itself(
         '[ "$_hb" -le 20 ] || { echo "BEAT-CEILING"; exit 99; }; '
         f'if [ "$_hb" -lt 2 ]; then cp {shlex.quote(posix(resp1))} "$RUN_DIR/attended.resp"; '
         f'else cp {shlex.quote(posix(resp2))} "$RUN_DIR/attended.resp"; fi; }}; '
-        # ‏IMAGECTL_TEST=0 בהמתנה בלבד: שום פקודה אמיתית לא יוצאת מכאן.
+        # ‏IMAGESRV_TEST=0 בהמתנה בלבד: שום פקודה אמיתית לא יוצאת מכאן.
         'reboot() { echo "REAL-REBOOT"; exit 98; }; '
         'poweroff() { echo "REAL-POWEROFF"; exit 98; }; '
     )
     result = run_jobs(
         tmp_path, url_of(reports),
-        'IMAGECTL_TEST=0; do_task; echo "HOLD-RC=$?"; IMAGECTL_TEST=1; '
+        'IMAGESRV_TEST=0; do_task; echo "HOLD-RC=$?"; IMAGESRV_TEST=1; '
         'cp "$RUN_DIR/attended.resp" "$RESP"; do_task',
         stubs=CAPTURE_FAILS + beat, first_answer=answer(TASK_1),
         env="HOLD_BEAT_S=0")
@@ -289,7 +289,7 @@ def test_a_direct_send_after_a_completed_one_does_not_report_done(
 
     result = run_jobs(
         tmp_path, url_of(reports), "do_task",
-        stubs=f". {posix(AGENT)}/lib/directsend.sh; "
+        stubs=f". {posix(AGENT)}/lib/capture/directsend.sh; "
               'direct_send_run() { _await_snap; target_init "$2" 1; '
               'target_set "$2" failed "stub"; echo failed > "$RUN_DIR/state"; return 1; }; ',
         first_answer=answer(TASK_2, kind="direct_send"))
@@ -340,7 +340,7 @@ def preflight(tmp_path: Path, server: str) -> str:
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))} SERVER={shlex.quote(server)} "
         f"HTTP_TIMEOUT=4 HTTP_RETRIES=0 TASK_TOKEN={TOKEN}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/capturesink.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/capturesink.sh; "
         f'json_get() {{ {shlex.quote(posix(Path(sys.executable)))} {shlex.quote(posix(jget))} "$1" "$2"; }}; '
         "partition_node() { echo /dev/sda1; }; _fs_of() { echo ntfs; }; "
         "_partition_role() { echo data; }; partclone_for_fs() { echo partclone.ntfs; }; "

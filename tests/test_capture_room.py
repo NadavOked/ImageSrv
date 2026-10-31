@@ -1,6 +1,6 @@
 """‏#411: קליטה בודקת מקום — סירוב לפני הבייט הראשון, וכשל גלוי אם הדיסק מתמלא.
 
-שני חורים אומתו בקוד ב-#411. זה הקובץ של הראשון: ‏`server/capture.py`
+שני חורים אומתו בקוד ב-#411. זה הקובץ של הראשון: ‏`server/library/capture.py`
 אינו בודק מקום פנוי לפני שהוא כותב מחיצה. בפועל (05/09) הקליטה רצה עד
 שהדיסק התמלא ב-13GB, והשרת החזיר `500` באמצע — עם קובץ מחיצה חלקי בתוך
 אזור ה-`.capture-<task>` ומשימה שנשארה `running`.
@@ -16,7 +16,7 @@
    ולא קריסת שרת.
 
 הסוכן מזרים ב-chunked (‏`curl -T` על fifo, כדי לא להיחנק ב-OOM — ראה
-`agent/lib/capture.sh`), ולכן אין תמיד גודל מוצהר; המסלול השני הוא מה
+`agent/lib/capture/capture.sh`), ולכן אין תמיד גודל מוצהר; המסלול השני הוא מה
 שמגן על הזרם עצמו.
 """
 
@@ -30,7 +30,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server.tasks import TOKEN_HEADER
+from server.core.tasks import TOKEN_HEADER
 from test_capture import (
     PART_A, make_task, setup_build_machine, task_token,
 )
@@ -48,7 +48,7 @@ def test_capture_is_refused_before_the_first_byte_when_there_is_no_room(
         server, images_root, monkeypatch):
     """הסירוב הראשון: העלאה שמצהירה על גודל גדול מהמקום הפנוי נדחית לפני
     שנכתב בייט, והסיבה נוקבת בשני המספרים — נדרש ופנוי (עיקרון 5ב)."""
-    import server.capture as capmod
+    import server.library.capture as capmod
 
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
@@ -122,8 +122,8 @@ def test_a_capture_that_would_eat_into_the_system_reserve_is_refused(
         server, images_root, monkeypatch):
     """‏#1737: לא "יש מקום לקובץ" אלא "יש מקום לקובץ **ועוד** הרזרבה". בית אחד
     פחות מזה — 507 לפני הבייט הראשון, ובהודעה מה נשמר למערכת."""
-    import server.capture as capmod
-    from server.disk_reserve import SYSTEM_RESERVE_BYTES
+    import server.library.capture as capmod
+    from server.storage.disk_reserve import SYSTEM_RESERVE_BYTES
 
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
@@ -142,8 +142,8 @@ def test_a_capture_that_would_eat_into_the_system_reserve_is_refused(
 
 @pytest.mark.system_reserve   # #1737: the real 10GiB (conftest _host_free_space)
 def test_a_capture_that_leaves_exactly_the_reserve_is_accepted(server, monkeypatch):
-    import server.capture as capmod
-    from server.disk_reserve import SYSTEM_RESERVE_BYTES
+    import server.library.capture as capmod
+    from server.storage.disk_reserve import SYSTEM_RESERVE_BYTES
 
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
@@ -159,8 +159,8 @@ def test_a_chunked_capture_stops_when_the_reserve_is_reached_mid_stream(
     """‏#1737: הסוכן מזרים ב-chunked, בלי אורך מוצהר — הבדיקה המוקדמת יודעת רק
     על מגה אחד. כשהדיסק מתמלא (קליטה אחרת במקביל) הזרם נעצר **ברזרבה**, לא
     באפס: 507, קובץ חלקי מוסר, ומשימה שנכשלה בשם."""
-    import server.capture as capmod
-    from server import disk_reserve
+    import server.library.capture as capmod
+    from server.storage import disk_reserve
 
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()

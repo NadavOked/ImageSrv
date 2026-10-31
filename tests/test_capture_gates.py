@@ -170,8 +170,8 @@ def _raid_json(tmp_path: Path, image: bytes, role: str, stubs: dict | None = Non
         make_stubs(box / "stubs", stubs)
         + f"export RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         f"SYSROOT={posix(box)!r} D_ROLE={role}; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; "
-        f". {posix(AGENT)}/lib/diskfit.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; "
+        f". {posix(AGENT)}/lib/restore/diskfit.sh; "
         'printf "[%s]" "$(raid_member_json sda)"').strip()
 
 
@@ -228,9 +228,9 @@ def test_a_4kn_source_is_refused_by_name_before_the_table_is_read(tmp_path):
 
 
 def test_the_agent_and_the_server_accept_the_same_filesystems():
-    """מקור אחד: הרשימה בסוכן היא התאום של `server/images.py:FILESYSTEMS`."""
-    from server.images import FILESYSTEMS
-    gate = AGENT / "lib/capturegate.sh"
+    """מקור אחד: הרשימה בסוכן היא התאום של `server/library/images.py:FILESYSTEMS`."""
+    from server.library.images import FILESYSTEMS
+    gate = AGENT / "lib/capture/capturegate.sh"
     text = gate.read_text(encoding="utf-8") if gate.exists() else ""
     found = re.search(r'^CAPTURE_FILESYSTEMS="([^"]*)"', text, re.M)
     agent = set(found.group(1).split()) if found else set()

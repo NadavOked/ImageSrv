@@ -2,7 +2,7 @@
 
 ‏`log()` (common.sh) כותב גם ליומן וגם ל-stdout. פונקציה שנלכדת ב-`$( )`
 וקוראת ל-`log` מכניסה את שורת היומן לתוך הערך שהקורא לוכד: ‏`hostname.json`
-קיבל `imagectl: writing hostname ...` **לפני** ה-JSON — בהצלחה, לא רק
+קיבל `imagesrv: writing hostname ...` **לפני** ה-JSON — בהצלחה, לא רק
 בכשל. התיקון מקומי (`log ... >&2` בפונקציה), לא ב-`log()` עצמו.
 
 הרשימה כאן **מפורשת** — כל פונקציה שנמצאה נלכדת ב-`$( )` בסריקת
@@ -21,11 +21,12 @@ from pathlib import Path
 
 from native import requires_native
 from test_smart import AGENT, BASH, posix
+from agentlib import lib_path
 
 pytestmark = requires_native(("bash", BASH))
 
 #: הפונקציות הנלכדות ב-`$( )` שקוראות ל-`log` (ישירות או דרך עוזרות) —
-#: (קובץ, שם). הסריקה: `grep -n '=\$(' agent/lib/*.sh agent/imagectl-agent`
+#: (קובץ, שם). הסריקה: `grep -n '=\$(' agent/lib/*.sh agent/imagesrv-agent`
 #: + קריאת כל פונקציה ומה שהיא קוראת. ‏smart_send_event (#875) אינה כאן —
 #: תוקנה ב-PR #879 ונבדקת ב-test_smart.
 CAPTURED_LOGGERS = [
@@ -77,8 +78,8 @@ def box(tmp_path: Path, stubs: dict[str, str], plan: str = WIN_PLAN) -> tuple[st
         f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "agent.log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
-        f'. {posix(AGENT)}/lib/hostname.sh; . {posix(AGENT)}/lib/unattend.sh; . {posix(AGENT)}/lib/hostname_linux.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
+        f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
         f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; }}; '
         f'partition_node() {{ echo /dev/fake; }}; '
     )
@@ -105,7 +106,7 @@ def linux_box(tmp_path: Path, **override: str) -> tuple[str, Path]:
 
 def only_json(out: subprocess.CompletedProcess) -> dict:
     """ה-stdout כולו הוא אובייקט JSON אחד — לא שורת יומן לפניו."""
-    assert not out.stdout.startswith("imagectl:"), out.stdout
+    assert not out.stdout.startswith("imagesrv:"), out.stdout
     lines = out.stdout.strip().splitlines()
     assert len(lines) == 1, out.stdout
     return json.loads(lines[0])
@@ -144,7 +145,7 @@ def test_hostname_json_is_valid_json_after_a_successful_name(tmp_path):
              'name_this_machine sda sess1')
     assert out.returncode == 0, out.stderr
     text = (run / "hostname.json").read_text(encoding="utf-8")
-    assert not text.startswith("imagectl:"), text
+    assert not text.startswith("imagesrv:"), text
     assert json.loads(text) == {"ok": True, "hostname": "LAB1-05", "method": "offline-registry"}
     # #1935: name_this_machine leaves 'naming'; done is the caller's, after the drivers and the mark
     assert (run / "state").read_text().strip() == "naming"
@@ -205,7 +206,7 @@ def test_manifest_plan_prints_nothing_on_a_partial_plan(tmp_path):
     out = sh(stub(stub_dir / "jq", jq)
              + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
              f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "agent.log")!r}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
              'manifest_plan /dev/null')
     assert out.returncode == 1, out.stderr
     assert out.stdout == "", out.stdout
@@ -219,7 +220,7 @@ def test_monitor_secret_prints_nothing_when_no_secret_can_be_drawn(tmp_path):
     out = sh(stub(stub_dir / "od", "exit 0")
              + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
              f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "agent.log")!r}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/monitor.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/monitor.sh; '
              'monitor_secret')
     assert out.returncode == 1, out.stderr
     assert out.stdout == "", out.stdout
@@ -228,7 +229,7 @@ def test_monitor_secret_prints_nothing_when_no_secret_can_be_drawn(tmp_path):
 # --- שומר סטטי על הרשימה: כל `log` בפונקציה נלכדת מופנה ל-stderr --------------
 
 def function_body(lib: str, name: str) -> str:
-    text = (AGENT / "lib" / lib).read_text(encoding="utf-8")
+    text = (lib_path(lib)).read_text(encoding="utf-8")
     m = re.search(rf"^{re.escape(name)}\(\) \{{\n(.*?)^\}}", text, re.S | re.M)
     assert m, f"{name} not found in {lib}"
     return m.group(1)

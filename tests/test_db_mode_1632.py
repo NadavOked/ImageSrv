@@ -1,4 +1,4 @@
-"""‏#1632 סעיף 2: ‏imagectl.db מחזיק את ``console_secret`` ואת גיבובי הסיסמאות,
+"""‏#1632 סעיף 2: ‏imagesrv.db מחזיק את ``console_secret`` ואת גיבובי הסיסמאות,
 ו-umask ברירת המחדל (022) יצר אותו 0644 — קריא לכל משתמש מקומי.
 
 הבדיקה רצה ב-umask 022 בכוונה: זה ה-umask של יחידת systemd בלי ``UMask=``,
@@ -31,12 +31,12 @@ def _mode(path) -> int:
 
 
 def test_a_new_database_is_0600_under_the_default_umask(tmp_path, umask_022):
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     conn = db.connect(path)
     conn.execute("SELECT 1").fetchone()
     assert _mode(path) == 0o600, oct(_mode(path))
     for suffix in ("-wal", "-shm"):
-        side = tmp_path / f"imagectl.db{suffix}"
+        side = tmp_path / f"imagesrv.db{suffix}"
         if side.exists():
             assert _mode(side) == 0o600, f"{side.name}: {oct(_mode(side))}"
     conn.close()
@@ -44,11 +44,11 @@ def test_a_new_database_is_0600_under_the_default_umask(tmp_path, umask_022):
 
 def test_an_existing_0644_database_and_its_wal_are_tightened(tmp_path, umask_022):
     """שרת ותיק: הקובץ כבר קיים 0644 מהגרסה הקודמת, וגם ה-WAL שנשאר ממנה."""
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     first = db.connect(path)
     first.execute("SELECT 1").fetchone()
     first.close()
-    wal = tmp_path / "imagectl.db-wal"
+    wal = tmp_path / "imagesrv.db-wal"
     wal.touch()
     for target in (path, wal):
         os.chmod(target, 0o644)

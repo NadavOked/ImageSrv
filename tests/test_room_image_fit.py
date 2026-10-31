@@ -50,7 +50,7 @@ def fit_server(tmp_path: Path):
         pytest.skip("fastapi is required")
     from test_sender import Recorder                       # noqa: PLC0415
 
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     images = tmp_path / "images"
@@ -166,7 +166,7 @@ def test_selected_slots_that_exclude_the_small_drawer_let_the_image_through(fit_
 
 
 def test_the_library_list_exposes_the_derived_requirement_and_used_bytes(tmp_path):
-    from server.images import ImageLibrary, required_bytes
+    from server.library.images import ImageLibrary, required_bytes
 
     write_image(tmp_path, IMAGE_300)
     unmeasured = {
@@ -192,8 +192,8 @@ def test_an_image_that_fits_no_disk_size_is_refused_not_waved_through(floor_byte
     מערכת שאינה הניתנת להרחבה, עם 5GB פנויים מול מינימום 20 — **אינה "נכנס"**.
     עד #1863 ‏`fit_refusal` החזיר כאן None, הסבב נפתח, והסוכן סירב בכל מגירה;
     והרשימה של המכונה (`allowed_for_disks`) כבר הסתירה אותו — שתי הכרעות."""
-    from server.minfree import min_disk_bytes
-    from server.room import fit_refusal
+    from server.library.minfree import min_disk_bytes
+    from server.rounds.room import fit_refusal
 
     esp, win = IMAGE_230["partitions"]
     # exactly one marked partition is the one the restore grows (expandable_candidate) -- not C:

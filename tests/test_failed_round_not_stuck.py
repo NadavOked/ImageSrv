@@ -69,7 +69,7 @@ def gui_state_lines(tmp_path: Path, room: dict, mode: str = "room") -> list[str]
     (run / "room.json").write_text(json.dumps(room), newline="\n")
     (gui / "mode").write_text(mode + "\n", newline="\n")
     out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
+             f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
              + PRELUDE
              + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '
              + f'gui_get() {{ case "$1" in room) cp {posix(run / "room.json")!r} "$2" ;; '
@@ -368,7 +368,7 @@ def test_a_room_wave_admits_a_cloner_of_another_cloner_group_in_its_roster(room_
     """מנהל השחרור (עץ משולב עם #1555): ה-`roster` של גל החדר נבדק מול `grp_CLONERS`
     בלבד, ולכן סבב שבחר משכפל מקבוצת שיכפול אחרת נכשל ב-409 "מחשב שאינו רשום בקבוצה".
     הבדיקה לפי תפקיד: כל משכפל — כן; מחשב כיתה — לא."""
-    from server.sessions import SessionError        # noqa: PLC0415
+    from server.rounds.sessions import SessionError        # noqa: PLC0415
     ctx = room_server["ctx"]
     other = "aa:bb:cc:00:00:31"
     ctx.conn.execute("INSERT INTO groups (id, label, role, sort) VALUES ('grp_HAIFA', 'חיפה', 'cloner', 9)")

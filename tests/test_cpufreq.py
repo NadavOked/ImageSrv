@@ -9,7 +9,7 @@ from pathlib import Path
 from native import requires_native
 
 
-LIB = Path(__file__).resolve().parent.parent / "agent" / "lib" / "cpufreq.sh"
+LIB = Path(__file__).resolve().parent.parent / "agent" / "lib" / "core" / "cpufreq.sh"
 pytestmark = requires_native("sh", why="the production helper is POSIX sh")
 
 

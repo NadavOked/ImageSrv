@@ -24,6 +24,7 @@ import pytest
 from native import requires_native
 from test_cloner_gui import BASH, GUI, _build_gui, _count_color, _pkgconfig, _png_rgb, _token, posix, sh
 from test_cloner_pull_agent import DRAWERS, TRY, run
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
@@ -39,13 +40,13 @@ needs_jq = requires_native(("bash", BASH), ("jq", shutil.which("jq")))
 @needs_jq
 def test_the_records_carry_the_unchecked_image_and_its_candidates(tmp_path):
     (tmp_path / "state.json").write_text(json.dumps(STATE), encoding="utf-8")
-    out = sh(f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/syspartgui.sh; "
+    out = sh(f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/gui/syspartgui.sh; "
              f"syspart_records {posix(tmp_path / 'state.json')!r}")
     assert out.stdout.splitlines() == ["image_unchecked=img_5790e4|Vm   old|ישן",
                                        "image_cand=img_5790e4|1|223392075264|880222208",
                                        "image_cand=img_5790e4|2|223392075264|"], out.stdout + out.stderr
     (tmp_path / "old.json").write_text(json.dumps({"allowed_images": []}), encoding="utf-8")
-    old = sh(f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/syspartgui.sh; "
+    old = sh(f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/gui/syspartgui.sh; "
              f"syspart_records {posix(tmp_path / 'old.json')!r}; echo rc=$?")
     assert old.stdout.strip() == "rc=0"   # an older server: none, not a failure
 
@@ -57,8 +58,8 @@ def _build(tmp_path, code: str, answer: dict) -> tuple[str, Path]:
     run_dir = tmp_path / "run"; gui = run_dir / "gui"; gui.mkdir(parents=True)
     (tmp_path / "answer.json").write_text(json.dumps(answer), encoding="utf-8")
     out = sh(f"export RUN_DIR={posix(run_dir)!r} GUI_DIR={posix(gui)!r} LOG_FILE={posix(run_dir)!r}/log; "
-             f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; . {posix(AGENT)}/lib/guibridge.sh; "
-             f". {posix(AGENT)}/lib/syspartgui.sh; "
+             f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "
+             f". {posix(AGENT)}/lib/gui/syspartgui.sh; "
              f'console_post() {{ echo "$1 $(cat "$2")" > "$RUN_DIR/posted"; cp {posix(tmp_path / "answer.json")!r} "$3"; echo {code}; }}; '
              'gui_syspart "syspart|img_5790e4|2"; echo "rc=$?"; '
              'gui_syspart "syspart|../x|2"; echo "rc=$?"')
@@ -102,7 +103,7 @@ def _agent_mark(tmp_path, code: str, answer: dict, nonce: bool = True):
 @needs_jq
 def test_the_agent_posts_with_the_screen_nonce_and_reads_the_images_again(tmp_path):
     out = _agent_mark(tmp_path / "ok", "200", {"ok": True, "index": 2})
-    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagectl:")]   # log() also writes to stdout
+    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagesrv:")]   # log() also writes to stdout
     assert lines[0] == "rc=0" and "REREAD" in lines and lines[-1] == "TAKEN", out.stdout + out.stderr
     path, body = lines[1].split(" ", 1)
     assert path == "cloner-round/system-partition"
@@ -245,7 +246,7 @@ def test_the_build_restore_state_carries_the_unchecked_image(tmp_path):
     run_dir = tmp_path / "run"; gui = run_dir / "gui"; gui.mkdir(parents=True)
     (gui / "mode").write_text("restore\n", newline="\n")
     out = sh(f"export RUN_DIR={posix(run_dir)!r} GUI_DIR={posix(gui)!r} LOG_FILE={posix(run_dir)!r}/log; "
-             + "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in ("common", "jsonq", "guistate", "askgui", "syspartgui"))
+             + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "jsonq", "guistate", "askgui", "syspartgui"))
              + f'http_get() {{ cat {posix(tmp_path / "state.json")!r}; }}; '
              'disk_slot_records() { :; }; class_deploy_on() { return 1; }; tools_on() { return 1; }; '
              'gui_disk_smart() { :; }; '

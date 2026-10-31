@@ -27,6 +27,7 @@ from test_cloner_gui import (AGENT, BASH, GUI, PRELUDE, _build_gui, _pkgconfig, 
                              _png_rgb, env, posix, target)
 from test_server_room import CLONER1, room_server  # noqa: F401
 from test_slot_names_704_gui import sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 JQ = requires_native(("bash", BASH), "jq", why="the GUI state writers read the hello/room JSON with jq")
@@ -44,7 +45,7 @@ READLINK = ('readlink() { case "$2" in '
             '*/nvme1n1/*) echo /sys/devices/pci0000:00/0000:00:1c.0/0000:04:00.0/nvme/nvme1 ;; '
             '*/sr0/*) echo /sys/devices/pci0000:00/0000:00:17.0/ata5/host4/target4/4:0:0:0 ;; '
             '*) echo /sys/devices/virtual/block/x ;; esac; }; ')
-LIBS = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in ("common", "sysinfo", "disklink", "slotnames"))
+LIBS = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "sysinfo", "disklink", "slotnames"))
 # drawer 1 = SATA 2 (ata3), drawer 2 = SATA 0 (ata1), drawer 3 = an NVMe controller
 MAPPING = "ok\n1|sata:3\n2|sata:1\n3|nvme:0000:03:00.0\n"
 
@@ -213,7 +214,7 @@ def test_the_room_records_carry_the_drawer_and_every_mapped_slot(tmp_path):
              "fresh": True, "selected": False}]}]}
     gui = tmp_path / "gui"; gui.mkdir()
     (gui / "room.json").write_text(json.dumps(room, ensure_ascii=False), encoding="utf-8")
-    jq_prog = (AGENT / "lib/guistate.sh").read_text(encoding="utf-8")
+    jq_prog = (AGENT / "lib/gui/guistate.sh").read_text(encoding="utf-8")
     start = jq_prog.index("            jq -r '\n              def clean:")
     end = jq_prog.index("\"$GUI_DIR/room.json\"", start)
     out = sh(f'export GUI_DIR={posix(gui)!r}; ' + jq_prog[start:end] + '"$GUI_DIR/room.json"')
@@ -251,7 +252,7 @@ def test_the_local_clone_disks_carry_the_drawer_and_sort_by_it(tmp_path):
         (lc / "inv" / f"{dev}.line").write_text(
             f"{port}|{dev}|M|S{port}|1000|ok|ok|Windows|1|1|1000|1|\n", encoding="utf-8", newline="\n")
     out = sh(env(run, gui) + f"export LC={posix(lc)!r}; " + PRELUDE
-             + f". {posix(AGENT)}/lib/lcgui.sh; lc_gui_state")
+             + f". {posix(AGENT)}/lib/localclone/lcgui.sh; lc_gui_state")
     assert out.returncode == 0, out.stderr
     disks = [l for l in (gui / "state").read_text(encoding="utf-8").splitlines() if l.startswith("lc_disk=")]
     assert [(d.split("|")[1], d.split("|")[13], d.split("|")[14]) for d in disks] == [

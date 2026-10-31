@@ -21,13 +21,13 @@ from pathlib import Path
 from test_installer_packages import installer_pkgs
 
 REPO = Path(__file__).resolve().parent.parent
-SCAN_ROOTS = ("install", "installer", "tools", "agent", "boot")
+SCAN_ROOTS = ("deploy", "installer", "tools", "agent", "boot")
 
 #: אתרי ההתקנה של השרת שחייבים להימצא בסריקה — קובץ → מינימום הפעלות.
 KNOWN_SITES = {
-    "install/setup-boot-server.sh": 2,     # PKGS + nftables
-    "install/vmupdate-host.sh": 1,         # חבילות עדכון ה-VM (גם מכפתור העדכון)
-    "install/security-upgrade.sh": 1,      # כפתור העדכון: המפגרות + החדשות (#1803)
+    "deploy/setup-boot-server.sh": 2,     # PKGS + nftables
+    "deploy/vmupdate-host.sh": 1,         # חבילות עדכון ה-VM (גם מכפתור העדכון)
+    "deploy/security-upgrade.sh": 1,      # כפתור העדכון: המפגרות + החדשות (#1803)
     "installer/lib/bootstrap.sh": 1,       # המתקין החי של ה-ISO
     "tools/build_initramfs.sh": 5,         # בסיס, ארגז כלים, GUI, ‏firmware-amd, כלי בנייה
 }
@@ -206,4 +206,4 @@ def test_what_only_recommends_brought_and_the_server_uses_is_explicit() -> None:
     ‏dbus (‏hostnamectl/timedatectl) ו-linux-image-amd64 (‏#904 ומכשיר ה-guestfs)."""
     pkgs = set(installer_pkgs())
     missing = {"dbus", "linux-image-amd64"} - pkgs
-    assert not missing, f"חסר ב-PKGS של install/setup-boot-server.sh: {sorted(missing)}"
+    assert not missing, f"חסר ב-PKGS של deploy/setup-boot-server.sh: {sorted(missing)}"

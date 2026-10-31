@@ -139,7 +139,7 @@ def test_the_table_check_takes_the_aligned_start_and_nothing_else(tmp_path):
     start with the start expand_last writes -- not with the source's, which is no
     longer on the disk, and not with any start: one sector off still fails."""
     moved = (f'sgdisk -d 1 -n 1:{58654720 + 2048}:0 -t 1:{BASIC} '
-             f'-u 1:11111111-1111-1111-1111-111111111111 -c 1:imagectl-incomplete "$DEVROOT/sda" >> "$LOG_FILE" 2>&1 '
+             f'-u 1:11111111-1111-1111-1111-111111111111 -c 1:imagesrv-incomplete "$DEVROOT/sda" >> "$LOG_FILE" 2>&1 '
              '&& lc_table_check sda manifest.json')
     out = _run(tmp_path, FIELD_START, check=moved)
     assert out.startswith("FAIL check: ") and "58656768" in out, out

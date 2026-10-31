@@ -32,7 +32,7 @@ from fastapi.responses import JSONResponse
 
 from .db import get_setting, journal, now_iso, set_setting
 
-log = logging.getLogger("imagectl.update")
+log = logging.getLogger("imagesrv.update")
 
 Hooks = dict[str, Callable]
 _DISPLAY_VERSION_CACHE: dict[tuple[str, str], "DisplayVersion"] = {}
@@ -182,7 +182,7 @@ def _tags_at_head(repo_dir: str | Path) -> list[str]:
 
 def _verify_installed_tag(repo_dir: str | Path, tag: str) -> bool:
     tool = Path(repo_dir) / "tools" / "verify-release-tag.py"
-    signers = Path(repo_dir) / "install" / "release-signers"
+    signers = Path(repo_dir) / "deploy" / "release-signers"
     try:
         done = subprocess.run(
             [sys.executable, "-I", str(tool), str(repo_dir), tag, str(signers)],
@@ -200,7 +200,7 @@ def _ls_remote_tags(url: str) -> tuple[bool, str, str]:
 
 
 #: היחידה המנותקת שמריצה את השדרוג; ‏systemd-run שני נכשל עליה כל עוד היא חיה.
-UPGRADE_UNIT = "imagectl-upgrade"
+UPGRADE_UNIT = "imagesrv-upgrade"
 
 
 def unit_already_exists(err: str) -> bool:
@@ -213,7 +213,7 @@ def unit_already_exists(err: str) -> bool:
 def _run_upgrade_script(repo_dir: str | Path, tag: str) -> tuple[bool, str]:
     """מפעיל את `tools/server-upgrade.sh` **מנותק** מתהליך השרת, דרך
     `systemd-run` — כי השלב האחרון שלו הוא `systemctl restart
-    imagectl-server`, שמנהל התהליך הזה. תהליך-ילד היה נהרג יחד איתו."""
+    imagesrv-server`, שמנהל התהליך הזה. תהליך-ילד היה נהרג יחד איתו."""
     script = Path(repo_dir) / "tools" / "server-upgrade.sh"
     ok, _out, err = _run(
         ["systemd-run", f"--unit={UPGRADE_UNIT}", "--collect",
@@ -232,12 +232,12 @@ SIGNATURE_STATES = ("signed", "unsigned", "unchecked")
 def _verify_remote_tag(url: str, tag: str, repo_dir: str | Path) -> dict:
     """‏#1277: מוריד את התג בלבד (clone חלקי ורדוד לתיקייה זמנית — לא לעץ
     הקוד, שתהליך ה-web אינו כותב אליו, #1193) ומריץ עליו את אותו מאמת
-    ש-``server-upgrade.sh`` מריץ, מול ``install/release-signers`` של העץ
+    ש-``server-upgrade.sh`` מריץ, מול ``deploy/release-signers`` של העץ
     המותקן. קוד יציאה 0 **וגם** שורת ``signed:`` = חתום; 1 = לא חתום; כל
     השאר = לא נבדק."""
     tool = Path(repo_dir) / "tools" / "verify-release-tag.py"
-    signers = Path(repo_dir) / "install" / "release-signers"
-    with tempfile.TemporaryDirectory(prefix="imagectl-tagcheck-") as tmp:
+    signers = Path(repo_dir) / "deploy" / "release-signers"
+    with tempfile.TemporaryDirectory(prefix="imagesrv-tagcheck-") as tmp:
         git_dir = str(Path(tmp) / "tag.git")
         ok, _out, err = _run(["git", "clone", "--quiet", "--bare", "--depth=1",
                               "--filter=blob:none", "--single-branch", "--branch", tag,
@@ -577,7 +577,7 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
                          busy_source=None) -> APIRouter:
     """‏``busy_source`` (‏#1891): מה ש-`restart_blocker` שואל — בשרת, ה-runtime
     (שנושא גם את ``vmupdate``); ‏None = ``ctx``."""
-    from . import auth
+    from server.console import auth
 
     router = APIRouter(prefix="/api/console/update")
     current_user, admin_only = auth.dependencies(ctx.conn)
@@ -594,7 +594,7 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
         ה-DB (backup API, לא cp), ‏MANIFEST.txt ו-SHA256SUMS; **בלי אימג'ים**.
         הארכיון מכיל סודות — הקונסולה מזהירה לפני ההורדה."""
         from fastapi.responses import Response  # noqa: PLC0415
-        from . import backup  # noqa: PLC0415
+        from server.system import backup  # noqa: PLC0415
         if ctx.data_dir is None:
             raise HTTPException(503, "תיקיית הנתונים אינה ידועה לשרת הזה — אין מה לגבות")
         payload, name = backup.build_archive(ctx.conn, Path(ctx.data_dir),

@@ -15,7 +15,7 @@ import pytest
 pytest.importorskip("fastapi")
 uvicorn = pytest.importorskip("uvicorn")
 
-from server import ports  # noqa: E402
+from server.net import ports  # noqa: E402
 
 from test_port_listeners import _app, _wait, free_port  # noqa: E402
 

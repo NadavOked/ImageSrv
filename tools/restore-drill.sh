@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# ImageCtl — תרגיל שחזור (‏#1128, R41 §7): גיבוי שלא שוחזר פעם אינו גיבוי.
+# ImageSrv — תרגיל שחזור (‏#1128, R41 §7): גיבוי שלא שוחזר פעם אינו גיבוי.
 #
-#   sudo bash /opt/imagectl/tools/restore-drill.sh                 # מגבה ומשחזר
-#   sudo bash /opt/imagectl/tools/restore-drill.sh --backup /backup/imagectl
+#   sudo bash /opt/imagesrv/tools/restore-drill.sh                 # מגבה ומשחזר
+#   sudo bash /opt/imagesrv/tools/restore-drill.sh --backup /backup/imagesrv
 #
 # מה קורה: (1) גיבוי טרי ל-`mktemp -d` — או `--backup DIR` קיים מהריצה
 # הלילית; (2) שחזור לתיקייה זמנית: ה-DB האחרון מ-`db/`, ‏`data/`, והאימג'ים
@@ -21,8 +21,8 @@
 set -euo pipefail
 
 BACKUP=""
-DATA_DIR="/var/lib/imagectl"
-IMAGES_DIR="/srv/imagectl/images"
+DATA_DIR="/var/lib/imagesrv"
+IMAGES_DIR="/srv/imagesrv/images"
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT=18080
 KEEP=0
@@ -32,13 +32,13 @@ SYS_ROOT="/"
 
 usage() {
     cat <<'EOF'
-ImageCtl — תרגיל שחזור: גיבוי → שחזור לתיקייה זמנית → שרת שני → ראיה.
+ImageSrv — תרגיל שחזור: גיבוי → שחזור לתיקייה זמנית → שרת שני → ראיה.
 
   sudo bash tools/restore-drill.sh [אפשרויות]
 
   --backup DIR         גיבוי קיים (מ-backup-server.sh) במקום גיבוי טרי
-  --data-dir DIR       תיקיית הנתונים של הייצור (ברירת מחדל /var/lib/imagectl)
-  --images DIR         תיקיית האימג'ים של הייצור (ברירת מחדל /srv/imagectl/images)
+  --data-dir DIR       תיקיית הנתונים של הייצור (ברירת מחדל /var/lib/imagesrv)
+  --images DIR         תיקיית האימג'ים של הייצור (ברירת מחדל /srv/imagesrv/images)
   --app-dir DIR        שורש הקוד (ברירת מחדל: התיקייה שמעל הסקריפט)
   --port N             פורט הסוכן של השרת השני; הקונסולה על N+1, הקיוסק N+2 (ברירת מחדל 18080)
   --wait SECONDS       כמה להמתין לשרת השני (ברירת מחדל 60)
@@ -74,7 +74,7 @@ command -v curl >/dev/null 2>&1 || fail "curl אינו מותקן"
 [[ -f "$APP_DIR/server/main.py" ]] || fail "אין server/main.py תחת $APP_DIR — --app-dir?"
 
 umask 077
-DRILL="$(mktemp -d /tmp/imagectl-drill.XXXXXX)"
+DRILL="$(mktemp -d /tmp/imagesrv-drill.XXXXXX)"
 SERVER_PID=""
 cleanup() {
     if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -94,15 +94,15 @@ if [[ -z "$BACKUP" ]]; then
         --images "$IMAGES_DIR" --app-dir "$APP_DIR" --system-root "$SYS_ROOT" "${NOIMG[@]}"
 fi
 [[ -d "$BACKUP/db" && -d "$BACKUP/data" ]] || fail "$BACKUP אינו גיבוי של backup-server.sh (אין db/ ו-data/)"
-LATEST_DB="$(find "$BACKUP/db" -maxdepth 1 -name 'imagectl-*.db' -print0 | sort -z | tail -z -n 1 | tr -d '\0')"
-[[ -n "$LATEST_DB" ]] || fail "אין imagectl-*.db תחת $BACKUP/db"
+LATEST_DB="$(find "$BACKUP/db" -maxdepth 1 -name 'imagesrv-*.db' -print0 | sort -z | tail -z -n 1 | tr -d '\0')"
+[[ -n "$LATEST_DB" ]] || fail "אין imagesrv-*.db תחת $BACKUP/db"
 
 # --- 2. שחזור לתיקייה זמנית ---------------------------------------------------
 RESTORE="$DRILL/restore"
 mkdir -p "$RESTORE/data" "$RESTORE/images" "$RESTORE/tftp"
-say "שחזור: $LATEST_DB → $RESTORE/data/imagectl.db"
+say "שחזור: $LATEST_DB → $RESTORE/data/imagesrv.db"
 cp -a "$BACKUP/data/." "$RESTORE/data/"
-cp "$LATEST_DB" "$RESTORE/data/imagectl.db"
+cp "$LATEST_DB" "$RESTORE/data/imagesrv.db"
 WITH_IMAGES=0
 if [[ "$SKIP_IMAGES" -eq 0 && -d "$BACKUP/images" ]]; then
     # העתקה מלאה, לא קישורים קשיחים: העותק עובר chown ל-nobody, וקישור
@@ -160,5 +160,5 @@ if [[ "$WITH_IMAGES" -eq 1 ]]; then
 else
     say "אימג'ים לא שוחזרו (--skip-images / גיבוי בלי אימג'ים) — נבדקו DB ותיקיית הנתונים בלבד"
 fi
-DB_MACHINES="$(python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('select count(*) from machines').fetchone()[0])" "$RESTORE/data/imagectl.db")"
+DB_MACHINES="$(python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('select count(*) from machines').fetchone()[0])" "$RESTORE/data/imagesrv.db")"
 say "PASS — ‏$DB_MACHINES מכונות ב-DB המשוחזר; גיבוי: $BACKUP"

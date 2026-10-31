@@ -3,9 +3,9 @@
 ב-15/09 שלוש-עשרה קריאות ‏`DEVROOT=/dev` בטסטים הריצו את ‏`run_restore`/
 ‏`run_restore_drawers` **האמיתיים** על יעד בשם ‏`sda` והכשילו אותו בכוונה.
 עד #845 הכישלון רק כתב ‏`state=failed`; מאז #845 הוא קורא ל-‏`mark_failed_disk`
-→ ‏`sgdisk -c 1:IMAGECTL-FAILED /dev/sda`. בווינדוס אין ‏sgdisk ואין ‏`/dev/sda`,
+→ ‏`sgdisk -c 1:IMAGESRV-FAILED /dev/sda`. בווינדוס אין ‏sgdisk ואין ‏`/dev/sda`,
 ובמעבדה הטסטים רצים כ-root עם ‏sgdisk אמיתי — **דיסק המערכת של שרת
-המעבדה** יצא מכל ריצת שער עם שלוש מחיצות בשם ‏IMAGECTL-FAILED וה-ESP
+המעבדה** יצא מכל ריצת שער עם שלוש מחיצות בשם ‏IMAGESRV-FAILED וה-ESP
 מומר ל-8300. ‏`apply_gpt` באותו נתיב מוחק את הטבלה כולה על ‏`"$DEVROOT/$1"`.
 
 הכלל: ‏`DEVROOT` בטסט הוא תמיד תיקייה של הטסט. מי שצריך "אין דיסק כזה"

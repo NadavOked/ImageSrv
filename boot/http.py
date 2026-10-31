@@ -1,4 +1,4 @@
-"""ImageCtl — הקצה שמגיש ל-GRUB את התפריט ואת קבצי האתחול.
+"""ImageSrv — הקצה שמגיש ל-GRUB את התפריט ואת קבצי האתחול.
 
 זה הקצה הדק בלבד. כל ההיגיון יושב ב-grub_menu.py, וה-lookup עצמו שייך
 לשרת — הוא מוזרק פנימה כפונקציה. ככה המחולל לא נוגע ב-DB ולא ממציא ממשק.
@@ -15,7 +15,7 @@ uvicorn עצמו משמר את האותיות כפי שנשלחו, ולכן הנ
     app.mount("/boot", create_boot_asgi(
         resolve=my_lookup,                       # ראו חתימת Resolver למטה
         config=GrubConfig(server_base="http://10.44.0.10:8080"),
-        boot_dir="/srv/imagectl/boot",           # vmlinuz + initrd.img
+        boot_dir="/srv/imagesrv/boot",           # vmlinuz + initrd.img
     ))
 """
 
@@ -28,7 +28,7 @@ from urllib.parse import parse_qs
 from . import trace
 from .grub_menu import GrubConfig, normalize_mac, render, render_local_only
 
-log = logging.getLogger("imagectl.boot")
+log = logging.getLogger("imagesrv.boot")
 
 #: כותרות שחייבות ללוות כל תשובה — באותיות גדולות, בשביל GRUB.
 #: בלי no-store, proxy ברשת המכללה יכול להגיש למחשב את ההחלטה של מחשב
@@ -39,7 +39,7 @@ log = logging.getLogger("imagectl.boot")
 #: עם `close` השרת סגר ראשון ונשאר ב-TIME_WAIT לשישים שניות. ‏GRUB יוצא
 #: מאותם פורטי מקור בכל אתחול (21550 ואילך) ואינו עונה ב-RST, ולכן אתחול
 #: חוזר מהיר נתקע על כל פורט כזה כ-15.6 שניות של SYN חוזרים. החצי השני
-#: של התיקון — RST כש-GRUB סוגר, במקום LAST-ACK — ב-`server/grub_close.py`.
+#: של התיקון — RST כש-GRUB סוגר, במקום LAST-ACK — ב-`server/net/grub_close.py`.
 BASE_HEADERS = [
     (b"Cache-Control", b"no-store, no-cache, must-revalidate, max-age=0"),
     (b"Pragma", b"no-cache"),

@@ -28,6 +28,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
@@ -62,21 +63,21 @@ def sh(script: str, timeout: int = 60) -> subprocess.CompletedProcess:
 
 
 PRELUDE = (
-    f'. {posix(AGENT)}/lib/common.sh; '
-    f'. {posix(AGENT)}/lib/jsonq.sh; '
-    f'. {posix(AGENT)}/lib/sysinfo.sh; '
-    f'. {posix(AGENT)}/lib/disklink.sh; '   # #432: disk_link -- gui_libs loads it too
-    f'. {posix(AGENT)}/lib/progress.sh; '
-    f'. {posix(AGENT)}/lib/guistate.sh; '   # #1252: gui_server_addr -- gui_libs loads it first too
-    f'. {posix(AGENT)}/lib/askgui.sh; '   # 11/10: gui_ask_state, as gui_libs loads it
-    f'. {posix(AGENT)}/lib/slotnames.sh; '   # #704: slot names -- gui_libs loads it too
-    f'. {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; '
+    f'. {posix(AGENT)}/lib/core/common.sh; '
+    f'. {posix(AGENT)}/lib/core/jsonq.sh; '
+    f'. {posix(AGENT)}/lib/hw/sysinfo.sh; '
+    f'. {posix(AGENT)}/lib/hw/disklink.sh; '   # #432: disk_link -- gui_libs loads it too
+    f'. {posix(AGENT)}/lib/core/progress.sh; '
+    f'. {posix(AGENT)}/lib/gui/guistate.sh; '   # #1252: gui_server_addr -- gui_libs loads it first too
+    f'. {posix(AGENT)}/lib/gui/askgui.sh; '   # 11/10: gui_ask_state, as gui_libs loads it
+    f'. {posix(AGENT)}/lib/hw/slotnames.sh; '   # #704: slot names -- gui_libs loads it too
+    f'. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
 )
 
 
 def env(run: Path, gui: Path) -> str:
     return (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-            f'IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff; ')
+            f'IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff; ')
 
 
 def target(run: Path, dev: str, state: str, total: int, base: int, cur: str) -> None:
@@ -144,11 +145,11 @@ def test_state_carries_drawer_count_from_the_hello_reply(tmp_path):
 def test_state_carries_the_registered_and_version_header(tmp_path):
     lines = state_lines(
         tmp_path,
-        hello='{"name":"CLONER-02","server_name":"imagectl-ta","server_version":"v1.2.3"}',
+        hello='{"name":"CLONER-02","server_name":"imagesrv-ta","server_version":"v1.2.3"}',
         agent_version="v1.2.2",
     )
     assert "machine_name=CLONER-02" in lines
-    assert "server_name=imagectl-ta" in lines
+    assert "server_name=imagesrv-ta" in lines
     assert "server_version=v1.2.3" in lines
     assert "agent_version=v1.2.2" in lines
 
@@ -274,8 +275,8 @@ def test_the_kiosk_load_chain_carries_the_cached_smart_verdict(tmp_path):
     (sysroot / "sys" / "block" / "sda" / "device" / "model").write_text("FakeDisk\n", newline="\n")
     (run / "smart").mkdir()
     (run / "smart" / "sda.v").write_text("ok ok 0 0 0 0\n", newline="\n")
-    out = sh(env(run, gui) + f'export SYSROOT={posix(sysroot)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-             f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; cloner_gui_state')
+    out = sh(env(run, gui) + f'export SYSROOT={posix(sysroot)!r} LIB_DIR={posix(flat_lib())!r}; '
+             f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; cloner_gui_state')
     assert out.returncode == 0, out.stderr
     assert "not found" not in out.stderr, out.stderr
     lines = (gui / "state").read_text().splitlines()
@@ -325,8 +326,8 @@ def idle_state(tmp_path: Path, ports: dict[str, str], failed: dict[str, str] | N
         f"chmod 0755 {posix(box)}/bin/sgdisk\n"
         f'export PATH="$(cd {posix(box)}/bin && pwd):$PATH"\n'   # ‏C: בתוך PATH נשבר ב-MSYS
         + env(run, gui)
-        + f'export SYSROOT={posix(sysroot)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-        f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; ' + port_fn
+        + f'export SYSROOT={posix(sysroot)!r} LIB_DIR={posix(flat_lib())!r}; '
+        f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; ' + port_fn
         + 'disk_serial() { printf "S-%s" "$1"; }; '
         + 'json_get_join() { [ -s "$1" ] || return 1; echo ok; ' + memory + ' }; '
         + " && ".join(["cloner_gui_state"] * runs)
@@ -578,14 +579,14 @@ def bridge_setup(tmp_path: Path, screen: str) -> tuple[str, Path]:
     run = tmp_path / "run"; run.mkdir()
     setup = (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
              f'GUI_SCREEN={screen} MAC=aa:bb:cc:dd:ee:ff SERVER=http://x; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-             f'. {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/buildmenuitems.sh; '
-             f'. {posix(AGENT)}/lib/buildmenu.sh; '
-             f'. {posix(AGENT)}/lib/buildcapture.sh; '
-             f'. {posix(AGENT)}/lib/roomflow.sh; '
-             f'. {posix(AGENT)}/lib/guistate.sh; . {posix(AGENT)}/lib/askgui.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
-             f'. {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/clonergui.sh; . {posix(AGENT)}/lib/writemark.sh; '
-             f'. {posix(AGENT)}/lib/guibridge.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+             f'. {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/gui/buildmenuitems.sh; '
+             f'. {posix(AGENT)}/lib/gui/buildmenu.sh; '
+             f'. {posix(AGENT)}/lib/capture/buildcapture.sh; '
+             f'. {posix(AGENT)}/lib/gui/roomflow.sh; '
+             f'. {posix(AGENT)}/lib/gui/guistate.sh; . {posix(AGENT)}/lib/gui/askgui.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+             f'. {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
+             f'. {posix(AGENT)}/lib/gui/guibridge.sh; '
              'gui_role() { echo GUI_ROLE_CALLED >&2; return 1; }; '
              'disk_slot_records() { :; }; ')   # #1495: disk numbering is test_drawer_map_gui_1495's
     return setup, gui

@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from server import housekeeping, room_precheck
+from server.system import housekeeping
+from server.rounds import room_precheck
 from server.db import connect
 
 NOW = datetime(2026, 10, 24, 12, 0, 0, tzinfo=timezone.utc)
@@ -34,7 +35,7 @@ def ago(days: float) -> str:
 
 @pytest.fixture()
 def conn(tmp_path: Path):
-    return connect(tmp_path / "imagectl.db")
+    return connect(tmp_path / "imagesrv.db")
 
 
 @pytest.mark.parametrize("reason", ["health_unread", "readonly"])

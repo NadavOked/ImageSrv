@@ -1,4 +1,4 @@
-"""‏#737: ה-uploader של phase_capture שולח X-Imagectl-Task-Token.
+"""‏#737: ה-uploader של phase_capture שולח X-Imagesrv-Task-Token.
 
 בלי הכותרת `PUT /api/v1/capture/.../files` מחזיר 401, וה-e2e נעצר
 לפני שמסלול הקליטה באמת נבדק. הסוכן האמיתי שולח אותה מ-hello;
@@ -34,11 +34,11 @@ class _Resp:
 
 
 def _token_from(req) -> str | None:
-    value = req.get_header("X-imagectl-task-token")
+    value = req.get_header("X-imagesrv-task-token")
     if value is not None:
         return value
     for key, val in req.header_items():
-        if key.lower() == "x-imagectl-task-token":
+        if key.lower() == "x-imagesrv-task-token":
             return val
     return None
 

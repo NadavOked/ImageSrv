@@ -27,7 +27,8 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login, hello_body
-from server import timezone, users
+from server.system import timezone
+from server.console import users
 from server.db import connect, get_setting, set_setting
 
 ZONE_TAB = ("# tzdata zone.tab (excerpt)\n"

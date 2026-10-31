@@ -12,7 +12,7 @@ from .app import render_demo, run
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ImageSrv physical server console")
-    parser.add_argument("--data-dir", type=Path, default=Path("/var/lib/imagectl"))
+    parser.add_argument("--data-dir", type=Path, default=Path("/var/lib/imagesrv"))
     parser.add_argument("--render-demo", action="store_true",
                         help="print the five approved 80x25 screens")
     parser.add_argument("--gui-frames", type=Path, metavar="DIR",
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     geteuid = getattr(os, "geteuid", None)
     if geteuid is None or geteuid() != 0:
-        print("imagectl-dcui: root privileges are required", file=sys.stderr)
+        print("imagesrv-dcui: root privileges are required", file=sys.stderr)
         return 3
     run(args.data_dir, text_only=args.text)
     return 0

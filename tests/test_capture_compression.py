@@ -34,7 +34,7 @@ from pathlib import Path
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
 
-CAPTURE = AGENT / "lib" / "capture.sh"
+CAPTURE = AGENT / "lib" / "capture" / "capture.sh"
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -123,7 +123,7 @@ def test_real_zstd_accepts_exactly_what_the_agent_will_hand_it(tmp_path):
     בדיקת מקור ונופל רק מול מחיצה אמיתית במעבדה. גם הלוך-חזור, כי דחיסה
     שאי אפשר לפרוח היא אימג' שאבד."""
     values = defaults()
-    payload = b"imagectl" * 4096
+    payload = b"imagesrv" * 4096
     source = tmp_path / "part.raw"
     source.write_bytes(payload)
 

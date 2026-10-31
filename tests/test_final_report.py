@@ -42,6 +42,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import flat_lib, lib_path
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -132,7 +133,7 @@ def url_of(httpd: HTTPServer) -> str:
 
 # --- הרצת הפונקציות של הסוכן הראשי ------------------------------------------
 #
-# ‏`imagectl-agent` הוא סקריפט ולא ספרייה: ה-source שלו מריץ את הלולאה
+# ‏`imagesrv-agent` הוא סקריפט ולא ספרייה: ה-source שלו מריץ את הלולאה
 # הראשית. הפונקציות נחתכות ממנו לפי הגבול שהקובץ עצמו מגדיר — הגדרה
 # בעמודה 0 ו-`}` בעמודה 0 — ונטענות לבד. החיתוך נכשל בקול אם השם השתנה:
 # בדיקה שלא מצאה את מה שהיא בודקת אינה בדיקה שעברה.
@@ -141,8 +142,8 @@ def url_of(httpd: HTTPServer) -> str:
 def cut_function(name: str) -> str | None:
     # ‏#1217: ‏`do_task` עבר ל-`lib/task.sh` (קיר 300). נחתך משם באותו גבול;
     # שהקובץ נטען בסוכן — ‏test_every_lib_file_is_loaded_and_packed.
-    task = AGENT / "lib" / "task.sh"
-    source = (AGENT / "imagectl-agent").read_text(encoding="utf-8") \
+    task = AGENT / "lib" / "core" / "task.sh"
+    source = (AGENT / "imagesrv-agent").read_text(encoding="utf-8") \
         + (task.read_text(encoding="utf-8") if task.exists() else "")
     marker = f"\n{name}() {{\n"
     start = source.find(marker)
@@ -158,7 +159,7 @@ def agent_functions(*names: str) -> str:
     chunks = []
     for name in names:
         body = cut_function(name)
-        assert body is not None, f"‏{name} אינה מוגדרת בעמודה 0 ב-imagectl-agent"
+        assert body is not None, f"‏{name} אינה מוגדרת בעמודה 0 ב-imagesrv-agent"
         chunks.append(body)
     return "\n".join(chunks)
 
@@ -169,8 +170,8 @@ def loadable_functions() -> str:
     מריצה את **המסלול האמיתי** שלו ונופלת על ההתנהגות (המכונה אתחלה
     בלי אישור), ולא על קובץ שלא נחתך.
 
-    מ-#109 ואילך `hold_unheard` ו-`hold_beat` יושבות ב-`agent/lib/hold.sh`,
-    ולכן החיתוך מ-`imagectl-agent` מחזיר `None` — ‏`sourced_libs` מביאה
+    מ-#109 ואילך `hold_unheard` ו-`hold_beat` יושבות ב-`agent/lib/core/hold.sh`,
+    ולכן החיתוך מ-`imagesrv-agent` מחזיר `None` — ‏`sourced_libs` מביאה
     אותן משם. שתי הדרכים חיות זו לצד זו בכוונה: זה מה שמאפשר להריץ את
     אותו טסט בדיוק מול הקוד שלפני התיקון ומול זה שאחריו."""
     # capture_end_ask (#409) was removed on 11/10 -- GUI only.
@@ -194,8 +195,8 @@ def sourced_libs() -> str:
     names += ["captureview.sh", "hibernation.sh"]   # #2213: direct-send completion preserves the warning
     names += ["idle.sh"]   # #1560: end_countdown / end_failed_round -- the end of a cloner round
     names += ["verdict.sh"]   # #1935: _machine_state -- do_restore_drawers writes the final word itself
-    return "".join(f". {posix(AGENT)}/lib/{n}; "
-                   for n in names if (AGENT / "lib" / n).exists())
+    return "".join(f". {posix(flat_lib())}/{n}; "
+                   for n in names if (lib_path(n)).exists())
 
 
 def journal(run: Path) -> str:
@@ -212,14 +213,14 @@ def journal(run: Path) -> str:
 LOOP_STUB = 'progress_loop() { echo "LOOP $1$4" >> "$RUN_DIR/trace"; }; '
 
 #: #2077: סוף משימה עם D_ROLE=classroom (`finish_and_stop` אחרי 'כבה')
-#: קורא ל-`reboot -f` בלי שומר IMAGECTL_TEST. זיוף ב-PATH נכשל ורושם;
+#: קורא ל-`reboot -f` בלי שומר IMAGESRV_TEST. זיוף ב-PATH נכשל ורושם;
 #: פקודה אמיתית אינה נמצאת לפניו. בלי קובץ היומן הזיוף נכשל גם הוא.
 _POWER_STUB = r"""#!/bin/sh
-if [ -z "${IMAGECTL_POWER_LOG:-}" ]; then
-    echo "IMAGECTL_POWER_LOG is unset" >&2
+if [ -z "${IMAGESRV_POWER_LOG:-}" ]; then
+    echo "IMAGESRV_POWER_LOG is unset" >&2
     exit 126
 fi
-printf 'STUB %s %s\n' "$(basename "$0")" "$*" >> "$IMAGECTL_POWER_LOG" || exit 126
+printf 'STUB %s %s\n' "$(basename "$0")" "$*" >> "$IMAGESRV_POWER_LOG" || exit 126
 exit 127
 """
 
@@ -244,12 +245,12 @@ def _power_stub_prefix(tmp_path: Path) -> str:
         '{ echo "POWER-LOG-DIR-UNREADABLE"; exit 96; }; '
         'chmod 0755 "$_ps"/reboot "$_ps"/poweroff "$_ps"/safe_poweroff || '
         '{ echo "POWER-STUB-CHMOD-FAILED"; exit 96; }; '
-        'export IMAGECTL_POWER_STUB_DIR="$_ps" IMAGECTL_POWER_LOG="$_pl/power.calls" '
+        'export IMAGESRV_POWER_STUB_DIR="$_ps" IMAGESRV_POWER_LOG="$_pl/power.calls" '
         'PATH="$_ps:/usr/bin:$PATH"; '
     )
 
 STUBS = (
-    # ‏#652: הסוכן האמיתי טוען את smartgate.sh (imagectl-agent), ולכן `smart_gate`
+    # ‏#652: הסוכן האמיתי טוען את smartgate.sh (imagesrv-agent), ולכן `smart_gate`
     # מוגדר שם. כאן, כמו `run_restore` ו-`progress_loop`, הוא מזויף כדי
     # לבודד את מסלול הדיווח מבדיקת ה-SMART: מעביר את כל הדיסקים הלאה
     # (בריאים) ומחזיר 0. ה-SMART עצמו נבדק ב-test_smart.py.
@@ -309,7 +310,7 @@ def run_path(tmp_path: Path, server: str, call: str, *, tries: int = 2,
         f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC!r} "
         f"SERVER={shlex.quote(server)} "
         f'RESP={shlex.quote(posix(run / "resp.json"))} '
-        f"IMAGECTL_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=4 PROGRESS_INTERVAL_S=0.2 "
+        f"IMAGESRV_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=4 PROGRESS_INTERVAL_S=0.2 "
         f"FINAL_REPORT_TRIES={tries} FINAL_REPORT_GAP_S=0 D_ROLE=classroom "
         f"RESTORE_RC={restore_rc} {env}; "
         + sourced_libs()
@@ -455,10 +456,10 @@ def report_final_probe(tmp_path: Path, sender: str, *, tries: int = 2) -> dict:
     run.mkdir(parents=True, exist_ok=True)
     out_file = tmp_path / "probe.txt"
     script = (
-        f"export RUN_DIR={shlex.quote(posix(run))} IMAGECTL_TEST=1 "
+        f"export RUN_DIR={shlex.quote(posix(run))} IMAGESRV_TEST=1 "
         f"FINAL_REPORT_TRIES={tries} FINAL_REPORT_GAP_S=0; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; "
         + sender
         + 'sleep 45 > /dev/null 2>&1 & _pid=$!; '
         f'if report_final "$_pid" {SESSION} {MAC} "http://x"; '
@@ -554,7 +555,7 @@ def test_the_answer_is_read_before_the_machine_leaves():
 def test_all_three_closing_reports_go_through_one_mechanism():
     """הכלל הנכון היה מיושם במקום אחד מתוך שלושה, וכך הוא נשחק.
     ‏`pull_close` עובר עכשיו דרך אותה פונקציה בדיוק."""
-    pull = (AGENT / "lib" / "pull.sh").read_text(encoding="utf-8")
+    pull = (AGENT / "lib" / "restore" / "pull.sh").read_text(encoding="utf-8")
     close = pull[pull.index("pull_close() {"):]
     assert "report_final" in close
     agent = agent_functions("do_restore", "do_restore_drawers")
@@ -566,7 +567,7 @@ def test_the_periodic_loop_keeps_its_forgiveness():
     """מה שאסור לתקן: ‏`|| true` בלולאה התקופתית נכון ומתועד — דיווח
     שייחזור בעוד שתי שניות אינו חייב תשובה. הבעיה מעולם לא הייתה
     הלולאה אלא שהדיווח *האחרון* עבר דרכה."""
-    progress = (AGENT / "lib" / "progress.sh").read_text(encoding="utf-8")
+    progress = (AGENT / "lib" / "core" / "progress.sh").read_text(encoding="utf-8")
     loop = progress[progress.index("progress_loop() {"):]
     loop = loop[:loop.index("\n}\n")]
     assert "|| true" in loop

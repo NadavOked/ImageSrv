@@ -100,7 +100,7 @@ def test_the_upgrade_script_refuses_between_two_waves_too(tmp_path):
     bindir.mkdir()
     data = tmp_path / "data"
     _seed_db(data)
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     _room_between_waves(conn)
     conn.close()
     repo = _fake_repo(tmp_path, live_ok=True)
@@ -181,7 +181,7 @@ def test_the_upgrade_script_honours_the_admin_override(tmp_path):
     bindir.mkdir()
     data = tmp_path / "data"
     _seed_db(data)
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     _room_between_waves(conn)
     update._set_status(conn, {"state": "running", "tag": "v0.49.0", "by": "noc",
                               "forced": "יש סבב חדר פתוח או רץ"})

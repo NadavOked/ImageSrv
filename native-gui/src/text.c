@@ -37,11 +37,11 @@ static Text layout_new(cairo_t *cr, Font font, double px, int weight, Dir dir) {
     return t;
 }
 
-/* IMAGECTL_GUI_TEXTLOG=<file>: every string laid out is appended, one per line -- what a test
+/* IMAGESRV_GUI_TEXTLOG=<file>: every string laid out is appended, one per line -- what a test
  * asserts on ("what the screen SAYS"), since a PNG cannot be read back. Off unless set. */
 static void textlog_line(const char *line) {
     static const char *path; static int init;
-    if (!init) { path = getenv("IMAGECTL_GUI_TEXTLOG"); init = 1; }
+    if (!init) { path = getenv("IMAGESRV_GUI_TEXTLOG"); init = 1; }
     if (!path || !path[0]) return;
     FILE *f = fopen(path, "a");
     if (!f) return;

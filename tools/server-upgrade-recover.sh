@@ -20,13 +20,13 @@
 # "could not roll back" is not "rolled back" (principle 5).
 set -euo pipefail
 
-DATA_DIR="${IMAGECTL_DATA_DIR:-/var/lib/imagectl}"
-STATE="${IMAGECTL_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
-UNIT_DIR="${IMAGECTL_UNIT_DIR:-/etc/systemd/system}"
-DB="$DATA_DIR/imagectl.db"
+DATA_DIR="${IMAGESRV_DATA_DIR:-/var/lib/imagesrv}"
+STATE="${IMAGESRV_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
+UNIT_DIR="${IMAGESRV_UNIT_DIR:-/etc/systemd/system}"
+DB="$DATA_DIR/imagesrv.db"
 [[ -f "$STATE" ]] || exit 0
 
-say() { logger -t imagectl-upgrade-recover "$*" 2>/dev/null || :; echo "upgrade-recover: $*"; }
+say() { logger -t imagesrv-upgrade-recover "$*" 2>/dev/null || :; echo "upgrade-recover: $*"; }
 
 IFS=$'\t' read -r REPO PREV TAG STAGE HTTP_ROOT DB_SNAP_VER PAYLOAD_SAVED < <(python3 - "$STATE" <<'PYEOF'
 import json, sys
@@ -65,22 +65,22 @@ note=""
 say "upgrade to $TAG was cut at '$STAGE' -- rolling back to $PREV"
 cd "$REPO"
 
-# #2026: the units the interrupted version brings (install/*.service and
+# #2026: the units the interrupted version brings (deploy/*.service and
 # *.timer of $TAG -- #1957 added timers). Read from git, not from the marker: a
 # marker written by an older server-upgrade.sh has no list, and this is the
 # script that recovers from it. "Could not read" is not "nothing was added".
 tag_units() {
     local listed
-    listed="$(git ls-tree --name-only "$TAG" -- install/)" || return 1
+    listed="$(git ls-tree --name-only "$TAG" -- deploy/)" || return 1
     [[ -n "$listed" ]] || return 1
-    sed -n 's#^install/\([^/]*\.\(service\|timer\)\)$#\1#p' <<<"$listed"
+    sed -n 's#^deploy/\([^/]*\.\(service\|timer\)\)$#\1#p' <<<"$listed"
 }
 # The units of the tree on disk now ($PREV) -- *.service and *.timer, so a timer
 # the interrupted version changed goes back too. No timers = none, not an error.
 install_prev_units() {
     local prev_units
     shopt -s nullglob
-    prev_units=(install/*.service install/*.timer)
+    prev_units=(deploy/*.service deploy/*.timer)
     shopt -u nullglob
     install -m 0644 "${prev_units[@]}" "$UNIT_DIR/"
 }
@@ -97,7 +97,7 @@ case "$STAGE" in
         # removed -- left on, it runs against a tree without its module. Same rule
         # as server-upgrade.sh drop_new_timers, from git instead of process memory.
         while IFS= read -r unit; do
-            [[ -n "$unit" && ! -f "install/$unit" && -e "$UNIT_DIR/$unit" ]] || continue
+            [[ -n "$unit" && ! -f "deploy/$unit" && -e "$UNIT_DIR/$unit" ]] || continue
             systemctl disable --now "$unit" \
                 || failed "כיבוי $unit, שהעדכון הוסיף ואין ב-$PREV, נכשל -- הוא עדיין מופעל"
             rm -f "$UNIT_DIR/$unit"

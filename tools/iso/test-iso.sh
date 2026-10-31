@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# ImageCtl — בדיקת ISO ההתקנה ב-QEMU + OVMF, בלי מסך (#1139; R25 §4, R57 §5).
+# ImageSrv — בדיקת ISO ההתקנה ב-QEMU + OVMF, בלי מסך (#1139; R25 §4, R57 §5).
 #
-#   sudo tools/iso/test-iso.sh --iso imagectl-v0.48.0-amd64.iso [--disk-gb 40] [--timeout 5400]
+#   sudo tools/iso/test-iso.sh --iso imagesrv-v0.48.0-amd64.iso [--disk-gb 40] [--timeout 5400]
 #
 # ⚠️ **טרם הורץ** (19/09): על שרת המעבדה אין qemu-system-x86/ovmf, והוא
 # עצמו VM בלי KVM מקונן — התקנה מלאה תחת TCG היא שעות. הסקריפט קיים כדי
@@ -18,7 +18,7 @@
 #        GET :8080/boot/vmlinuz   → 200, ‏Content-Length > 1MB
 #        GET :8080/boot/initrd.img → 200, ‏Content-Length > 1MB
 #        GET :8081/               → 200 (הקונסולה, HTTPS עצמי)
-#      ‏`systemctl is-active imagectl-server` ו-`is-enabled dnsmasq` =
+#      ‏`systemctl is-active imagesrv-server` ו-`is-enabled dnsmasq` =
 #      ‏disabled **אינם** נבדקים כאן — אין דרך אל תוך ה-VM (בלי sshd
 #      בכוונה, הכרעת נדב 19/09). זה נשאר לבדיקה במסך — נאמר בשמו.
 #
@@ -77,7 +77,7 @@ fi
 [[ -f "$OVMF_CODE" && -f "$OVMF_VARS_TEMPLATE" ]] || die "אין OVMF עם מפתחות Microsoft (apt-get install ovmf)"
 [[ -c /dev/kvm ]] || die "אין /dev/kvm — התקנה מלאה תחת TCG היא שעות; הרץ על מארח עם KVM"
 
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/imagectl-test-iso.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/imagesrv-test-iso.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 DISK="$TMP/disk.qcow2"
 VARS="$TMP/OVMF_VARS.fd"
@@ -99,7 +99,7 @@ qemu_common=(
 
 # --- שלב 1: התקנה מה-ISO ---------------------------------------------------------
 # תפריט האתחול ממתין לאדם (בכוונה, ראה preseed.cfg). ב-QEMU בלי מקלדת
-# בוחרים את הערך הראשון (ImageCtl) בלחיצת Enter דרך sendkey — ולכן כאן
+# בוחרים את הערך הראשון (ImageSrv) בלחיצת Enter דרך sendkey — ולכן כאן
 # ‏monitor על unix socket (socat), ובשלב 2 בלי monitor.
 say "שלב 1: התקנה מה-ISO (Secure Boot דלוק, דיסק ריק ${DISK_GB}GB), עד $TIMEOUT שניות"
 qemu-system-x86_64 "${qemu_common[@]}" -monitor "unix:$TMP/mon,server,nowait" \
@@ -143,4 +143,4 @@ done
 kill "$qpid" 2>/dev/null || true
 wait "$qpid" 2>/dev/null || true
 (( ok )) || die "שלב 2: לא התקבלו 200 (>1MB) על /boot/vmlinuz ו-/boot/initrd.img ו-200 על הקונסולה תוך $TIMEOUT שניות (serial: $TMP/serial.log)"
-say "עבר: vmlinuz ו-initrd.img מוגשים (>1MB), הקונסולה עונה. לא נבדק כאן: is-enabled dnsmasq=disabled, is-active imagectl-server — במסך."
+say "עבר: vmlinuz ו-initrd.img מוגשים (>1MB), הקונסולה עונה. לא נבדק כאן: is-enabled dnsmasq=disabled, is-active imagesrv-server — במסך."

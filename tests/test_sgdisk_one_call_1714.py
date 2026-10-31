@@ -104,7 +104,7 @@ def _names(tmp_path, entries, fail=False, marked=(1, 2, 3, 4)):
     stubs = tmp_path / "stubs"
     stubs.mkdir()
     calls, done = tmp_path / "calls", tmp_path / "written"
-    rows = "".join(f"echo '   {i}   2048   4095   1.0 MiB   0700  imagectl-incomplete'\n" for i in marked)
+    rows = "".join(f"echo '   {i}   2048   4095   1.0 MiB   0700  imagesrv-incomplete'\n" for i in marked)
     (stubs / "sgdisk").write_text(
         "#!/bin/sh\n"
         f"if [ \"$1\" = -p ]; then [ -f {posix(done)} ] || {{\n{rows}:\n}}; exit 0; fi\n"
@@ -116,7 +116,7 @@ def _names(tmp_path, entries, fail=False, marked=(1, 2, 3, 4)):
         f"exit {1 if fail else 0}\n", encoding="utf-8", newline="\n")
     out = sh(f'chmod 0755 {posix(stubs)}/sgdisk; export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
              f'LC={posix(lc)!r} DEVROOT=/nodev LOG_FILE={posix(tmp_path / "log")!r}; log() {{ :; }}; '
-             f'. {posix(AGENT)}/lib/writemark.sh; writemark_clear sdb "$LC/run/entries"; echo "rc=$?"')
+             f'. {posix(AGENT)}/lib/restore/writemark.sh; writemark_clear sdb "$LC/run/entries"; echo "rc=$?"')
     lines = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
     return rc_of(out), lines
 

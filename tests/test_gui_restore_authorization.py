@@ -43,15 +43,15 @@ def run(tmp_path: Path, body: str, require_login: str = "true",
         resp.write_text('{"ui":{"require_login":%s}}' % require_login, encoding="utf-8")
     if jar:
         (rd / "gui" / "handoff.jar").write_text(
-            "localhost\tFALSE\t/\tFALSE\t0\timagectl_session\tticket\n", encoding="utf-8")
+            "localhost\tFALSE\t/\tFALSE\t0\timagesrv_session\tticket\n", encoding="utf-8")
     script = (
         f"export RUN_DIR={shlex.quote(posix(rd))} RESP={shlex.quote(posix(resp))} "
         f"LOG_FILE={shlex.quote(posix(rd / 'agent.log'))} SERVER=http://x MAC=aa:bb "
-        "IMAGECTL_TEST=1 HTTP_TIMEOUT=1 HTTP_RETRIES=0 SR_GUI_TICK_S=0.1 "
+        "IMAGESRV_TEST=1 HTTP_TIMEOUT=1 HTTP_RETRIES=0 SR_GUI_TICK_S=0.1 "
         "AFTER_TASK_FILE=/nonexistent/after-task D_ROLE=build; "   # #1561: the power-off after a success
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/ui.sh; "
-        f". {posix(AGENT)}/lib/guiparent.sh; . {posix(AGENT)}/lib/srgui.sh; "   # #1561: sr_refused
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/gui/ui.sh; "
+        f". {posix(AGENT)}/lib/gui/guiparent.sh; . {posix(AGENT)}/lib/gui/srgui.sh; "   # #1561: sr_refused
         f"SR_GUI_BIN={shlex.quote(posix(rd / 'no-gui'))}; "   # no GUI here: the refusal ends at die_local
         'sleep() { case "$1" in 0.*) command sleep "$1" ;; esac; }; '   # whole seconds are skipped; the GUI's tick is not
         f'curl() {{ echo "CURL $*" >> "$RUN_DIR/curl.log"; printf {code}; }}; '
@@ -70,7 +70,7 @@ AUTH = 'gui_restore_authorized; echo "AUTH rc=$?"'
 def test_a_live_session_is_authorized(tmp_path, require_login):
     out, _, rd = run(tmp_path, AUTH, require_login=require_login)
     assert "AUTH rc=0" in out, out
-    assert "imagectl_session" not in out
+    assert "imagesrv_session" not in out
     # The check went to the server with the GUI's jar; an accepted jar is
     # kept for the pull (11/10: the restore is linked to this session).
     assert "-b" in (rd / "curl.log").read_text() and "/api/console/folders" in (rd / "curl.log").read_text()
@@ -161,7 +161,7 @@ def test_a_refused_handoff_says_why_in_hebrew_on_the_gui(tmp_path):
     no GUI starts."""
     rd = tmp_path / "run"
     live_gui(rd)
-    out, rc, _ = run(tmp_path, f'. {posix(AGENT)}/lib/guibridge.sh; ' + HANDOFF, code="401")
+    out, rc, _ = run(tmp_path, f'. {posix(AGENT)}/lib/gui/guibridge.sh; ' + HANDOFF, code="401")
     assert "ERASED" not in out and rc == 86, out
     assert "TEST-REBOOT: restore: not authorized -- nothing was written" in out
     calls = (rd / "gui.calls").read_text(encoding="utf-8").splitlines() if (rd / "gui.calls").exists() else []
@@ -179,7 +179,7 @@ def test_an_image_no_longer_allowed_is_refused_on_the_same_gui(tmp_path):
     rd = tmp_path / "run"
     live_gui(rd)
     body = HANDOFF.replace('{"allowed_images":[{"id":"img_1"}]}', '{"allowed_images":[]}')
-    out, rc, _ = run(tmp_path, f'. {posix(AGENT)}/lib/guibridge.sh; ' + body)
+    out, rc, _ = run(tmp_path, f'. {posix(AGENT)}/lib/gui/guibridge.sh; ' + body)
     assert "ERASED" not in out and rc == 86, out
     seen = cards(rd)
     assert seen and seen[-1] == ("message=השחזור לא התחיל — לא נכתב דבר|\u200f"
@@ -215,8 +215,8 @@ def bridge(tmp_path: Path, body: str) -> tuple[str, Path]:
         f"export RUN_DIR={shlex.quote(posix(rd))} GUI_DIR={shlex.quote(posix(gui))} "
         f"LOG_FILE={shlex.quote(posix(rd / 'agent.log'))} SERVER=http://x MAC=aa:bb "
         "HTTP_TIMEOUT=1 HTTP_RETRIES=0; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; "
-        f". {posix(AGENT)}/lib/buildmenu.sh; . {posix(AGENT)}/lib/guibridge.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/gui/buildmenu.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "
         'CONSOLE_JAR="$GUI_DIR/console.jar"; '
         + body
     )
@@ -246,7 +246,7 @@ def test_the_handoff_clears_the_tty_before_the_gui_lets_go(tmp_path):
     cursor off) -- so nothing English flashes before the restore's GUI.
     Negative control: on main the tty is not written."""
     tty = tmp_path / "tty0"
-    out, rd = bridge(tmp_path, f'IMAGECTL_TTY={shlex.quote(posix(tty))}; '
+    out, rd = bridge(tmp_path, f'IMAGESRV_TTY={shlex.quote(posix(tty))}; '
                      'printf "jar\\n" > "$CONSOLE_JAR"; ' + RESTORE_RECORD)
     assert (rd / "gui" / "handoff").exists(), out
     assert tty.exists() and tty.read_bytes() == b"\x1bc\x1b[?25l", out
@@ -287,7 +287,7 @@ def test_a_refused_sign_in_leaves_no_role_behind(tmp_path, code):
 
 def test_the_pull_carries_the_gui_session_as_its_cookie(tmp_path):
     out, _, rd = run(tmp_path,
-                     f'. {posix(AGENT)}/lib/pull.sh; '
+                     f'. {posix(AGENT)}/lib/restore/pull.sh; '
                      'PULL_JAR="$RUN_DIR/gui/handoff.jar"; echo "{}" > "$RUN_DIR/body"; '
                      'pull_post http://x "$RUN_DIR/body" "$RUN_DIR/resp"; echo')
     log = (rd / "curl.log").read_text()
@@ -297,14 +297,14 @@ def test_the_pull_carries_the_gui_session_as_its_cookie(tmp_path):
 
 def test_without_a_session_the_pull_carries_no_cookie(tmp_path):
     out, _, rd = run(tmp_path,
-                     f'. {posix(AGENT)}/lib/pull.sh; PULL_JAR=; echo "{{}}" > "$RUN_DIR/body"; '
+                     f'. {posix(AGENT)}/lib/restore/pull.sh; PULL_JAR=; echo "{{}}" > "$RUN_DIR/body"; '
                      'pull_post http://x "$RUN_DIR/body" "$RUN_DIR/resp"; echo', jar=False)
     assert " -b " not in (rd / "curl.log").read_text()
 
 
 def test_the_restore_uses_the_session_once_and_deletes_it(tmp_path):
     out, _, rd = run(tmp_path,
-                     f'. {posix(AGENT)}/lib/single_restore.sh; '
+                     f'. {posix(AGENT)}/lib/restore/single_restore.sh; '
                      'PULL_JAR="$RUN_DIR/gui/handoff.jar"; '
                      'http_get() { echo "{}"; }; pick_internal_disk() { echo sda; }; target_init() { :; }; '
                      'sr_share_gate() { return 0; }; '   # #1898: the split question -- its own tests

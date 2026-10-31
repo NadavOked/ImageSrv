@@ -41,7 +41,7 @@ def macs_of(packets: list[bytes]) -> list[str]:
 @pytest.fixture()
 def server(tmp_path: Path, images_root):
     """שרת עם WoL נתפס; שני מחשבי בנייה, משכפל אחד ותחנת כיתה אחת."""
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     woken: list[bytes] = []
@@ -174,7 +174,7 @@ def test_a_viewer_role_is_refused_like_the_room(server):
 @pytest.fixture()
 def broken_server(tmp_path: Path, images_root):
     """שולח שנכשל תמיד — כבל שלוף בשרת, לא BIOS במכונה."""
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     def dead(packet: bytes) -> None:

@@ -19,7 +19,7 @@ pytestmark = requires_native(("bash", BASH), why="execute dnsmasq installer sect
 
 def install_dnsmasq(tmp_path, *, iface="deploy0", console_iface="", reload_rc=0,
                     dry_run=0):
-    text = (REPO / "install/setup-boot-server.sh").read_text(encoding="utf-8")
+    text = (REPO / "deploy/setup-boot-server.sh").read_text(encoding="utf-8")
     start = text.index('say "מגדיר dnsmasq')
     end = text.index("\n# חומת אש nftables", start)
     # Capture actual expanded heredocs, with every absolute path inside tmp_path.
@@ -50,19 +50,19 @@ systemctl() {
 def test_installer_installs_unlimited_delayed_retries(tmp_path, iface, console_iface):
     result, calls, out = install_dnsmasq(tmp_path, iface=iface, console_iface=console_iface)
     assert result.returncode == 0, result.stderr
-    policy_path = out / "etc/systemd/system/dnsmasq.service.d/imagectl-restart.conf"
+    policy_path = out / "etc/systemd/system/dnsmasq.service.d/imagesrv-restart.conf"
     assert policy_path.is_file(), "installer did not write a dnsmasq retry policy"
     policy = ConfigParser()
     policy.read(policy_path)
     assert policy["Unit"]["StartLimitIntervalSec"] == "0"
     assert policy["Service"]["Restart"] == "on-failure"
     assert policy["Service"]["RestartSec"] == "5s"
-    written = calls.index("write /etc/systemd/system/dnsmasq.service.d/imagectl-restart.conf")
+    written = calls.index("write /etc/systemd/system/dnsmasq.service.d/imagesrv-restart.conf")
     reloaded = calls.index("systemctl daemon-reload")
     assert written < reloaded
     if iface:
         assert reloaded < calls.index("systemctl restart dnsmasq")
-        config = (out / "etc/dnsmasq.d/imagectl.conf").read_text(encoding="utf-8")
+        config = (out / "etc/dnsmasq.d/imagesrv.conf").read_text(encoding="utf-8")
         assert "interface=deploy0" in config.splitlines()
         assert "bind-interfaces" in config.splitlines()
         assert "bind-dynamic" not in config.splitlines()
@@ -90,7 +90,7 @@ def test_retry_policy_dry_run_does_not_write_or_reload(tmp_path):
 
 
 def test_server_render_still_pins_tftp_to_deploy_nic():
-    from server import dhcp
+    from server.net import dhcp
 
     config = dhcp.render([], tftp_root="/srv/tftp", deploy_interface="deploy0",
                          pin_tftp=True).splitlines()

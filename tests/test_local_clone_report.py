@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import setup_classroom
-from server import local_clone_report
+from server.agent import local_clone_report
 from test_machine_identity import MAC1, identity_server, journal_details  # noqa: F401
 
 
@@ -170,7 +170,7 @@ def test_a_report_with_an_ntfs_note_is_an_orange_journal_row(identity_server):
     """#2049: "כתום בקונסולה" -- the row's colour is the event's severity (journal_he), so a
     report with a done drawer that carries a note is `local_clone_note` (warn), not
     `local_clone` (info). A report without one stays `local_clone`."""
-    from server import journal_he
+    from server.console import journal_he
     setup_classroom(identity_server)
     noted = _report(targets=[{"dev": "sda", "port": 1, "state": "done", "ntfs_note": "Windows במקור לא כובה עד הסוף"}])
     assert identity_server["station"].post("/api/v1/agent/local-clone", json=noted).status_code == 200

@@ -46,21 +46,21 @@ def netprobe_of(sysroot: Path, extra: str = "", ethtool: Path | None = None,
     fn = "_netprobe_fresh" if fresh else "netprobe_json"
     out = sh(
         env + extra
-        + f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/netprobe.sh; "
+        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/netprobe.sh; "
         + r'printf "{\"x\":0%s}" "$(' + fn + ')"'
     )
     return json.loads(out)["netprobe"]
 
 
 def test_netprobe_sh_stays_under_120_and_agent_stays_300():
-    n = sizelimit.assert_within_limit(AGENT / "lib" / "netprobe.sh")
+    n = sizelimit.assert_within_limit(AGENT / "lib" / "hw" / "netprobe.sh")
     assert n <= 120, n
-    assert sizelimit.count_lines(AGENT / "imagectl-agent") <= 300
-    assert sizelimit.count_lines(AGENT / "lib" / "probe.sh") == 280
+    assert sizelimit.count_lines(AGENT / "imagesrv-agent") <= 300
+    assert sizelimit.count_lines(AGENT / "lib" / "hw" / "probe.sh") == 280
 
 
 def test_the_agent_loads_netprobe_sh():
-    text = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    text = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/netprobe.sh"' in text
 
 
@@ -176,8 +176,8 @@ def test_hello_schema_2_carries_netprobe(fake_machine, tmp_path):
         f'export SYSROOT={posix(sysroot)!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR=/nonexistent/dir IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
-        f'. {posix(AGENT)}/lib/netprobe.sh; build_hello'
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/hw/netprobe.sh; build_hello'
     ))
     assert hello["schema"] == 2
     assert "netprobe" in hello

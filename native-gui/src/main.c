@@ -1,4 +1,4 @@
-/* imagectl-station-gui -- the build machine's screens, drawn natively
+/* imagesrv-station-gui -- the build machine's screens, drawn natively
  * (Pango/Cairo -> KMS), replacing cage+chromium for the cards of
  * the former server/static/station/index.html (removed in #1247).
  *
@@ -51,8 +51,8 @@
  * of the event loop (which wakes at least every 2 s). A stopped or wedged GUI
  * still answers kill -0; it does not move this. */
 static void gui_heartbeat(void) {
-    const char *path = getenv("IMAGECTL_GUI_BEAT");
-    if (!path || !*path) path = "/run/imagectl/gui/beat";
+    const char *path = getenv("IMAGESRV_GUI_BEAT");
+    if (!path || !*path) path = "/run/imagesrv/gui/beat";
     int fd = open(path, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
     if (fd >= 0) { futimens(fd, NULL); close(fd); }
 }
@@ -74,22 +74,22 @@ static volatile sig_atomic_t stop_now = 0;
 static void on_signal(int sig) { (void)sig; stop_now = 1; }
 
 static const char *USAGE =
-"usage: imagectl-station-gui [--mac AA:BB:CC:DD:EE:FF] [--ip 10.0.0.5] [--title T]\n"
+"usage: imagesrv-station-gui [--mac AA:BB:CC:DD:EE:FF] [--ip 10.0.0.5] [--title T]\n"
 "                            [--theme light|dark] [--backend auto|drm|fbdev|mem] [--fb-file PATH]\n"
 "                            [--auth-cmd CMD | --demo] [--state FILE] [--no-input]\n"
 "                            [--screen progress|class|cloner|standby|install|dcui] [--signed-in USER [--role admin|deploy]]\n"
 "                            [--install-cmd CMD] [--install-cwd DIR] (legacy: --wizard-cmd/--wizard-cwd)\n"
-"       imagectl-station-gui --png PREFIX [--size WxH] [--state FILE] [--mac ..] [--ip ..] [--user NAME]\n"
+"       imagesrv-station-gui --png PREFIX [--size WxH] [--state FILE] [--mac ..] [--ip ..] [--user NAME]\n"
 "  --png renders every card, both themes, to PREFIX-<card>-{light,dark}.png and exits\n"
 "  (no display needed). Without --state it uses built-in sample data.\n"
 "  --screen dcui is the server's own screen (#1203): frames on stdin, keys on stdout\n"
 "  (dcui.h); with --png it renders the --state frame file in both themes.\n"
-"  --backend mem draws into --fb-file (default /run/imagectl/fb.mem) for the remote\n"
+"  --backend mem draws into --fb-file (default /run/imagesrv/fb.mem) for the remote\n"
 "  monitor when the machine has no display (#835); auto falls back to it last.\n"
 "  --fb-mirror PATH also writes every frame shown on a display into PATH in the\n"
 "  same format, so the monitor reads RAM instead of /dev/fb0 (#1475).\n"
-"       imagectl-station-gui --splash-raw PATH --size WxH\n"
-"  writes the last-resort screen as raw XRGB8888 rows (build time; agent/lib/splash.sh).\n";
+"       imagesrv-station-gui --splash-raw PATH --size WxH\n"
+"  writes the last-resort screen as raw XRGB8888 rows (build time; agent/lib/gui/splash.sh).\n";
 
 /* ---- login through the agent's command ------------------------------------- */
 
@@ -1883,7 +1883,7 @@ int main(int argc, char **argv) {
     a.st.hello_rc = -1;
     snprintf(a.title, sizeof a.title, "מחשב בניית אימג'ים");
     const char *auth_cmd = NULL, *png = NULL, *splash = NULL, *backend = "auto", *fb_file = NULL, *fb_mirror = NULL, *screen = NULL, *role = "deploy";
-    InstallBridge wizard = { "python3 -m server.wizard.bridge", "/opt/imagectl-src", 0 };
+    InstallBridge wizard = { "python3 -m server.wizard.bridge", "/opt/imagesrv-src", 0 };
     int install_screen = 0, dcui_screen = 0;
     StateFile sf_state; memset(&sf_state, 0, sizeof sf_state);
     int demo = 0, no_input = 0, pw = 1280, ph = 800;

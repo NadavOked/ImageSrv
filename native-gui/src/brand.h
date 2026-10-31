@@ -2,8 +2,8 @@
  * pixel pattern and an identical copy of it, then the word ImageSrv. Drawn
  * with Cairo from the approved SVGs (C:\ImageCtl-Lab\brand-final), not from
  * a bitmap, so it is sharp at every size and on every background. */
-#ifndef IMAGECTL_BRAND_H
-#define IMAGECTL_BRAND_H
+#ifndef IMAGESRV_BRAND_H
+#define IMAGESRV_BRAND_H
 
 #include <cairo.h>
 #include "draw.h"

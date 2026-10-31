@@ -21,8 +21,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import dhcp
-from server.dhcp import InterfaceConfig, render, render_proxy, validate
+from server.net import dhcp
+from server.net.dhcp import InterfaceConfig, render, render_proxy, validate
 
 from test_server_dhcp import (              # noqa: F401 — הפיקסטורה מיובאת בשמה
     GOOD, dhcp_server,

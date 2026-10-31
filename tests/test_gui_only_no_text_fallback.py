@@ -1,6 +1,6 @@
 """GUI בלבד — אין מסך טקסט חלופי במכונות (הכרעת נדב, 11/10).
 
-עד כאן, כשהממשק הגרפי (‏imagectl-kiosk / imagectl-station-gui) לא עלה,
+עד כאן, כשהממשק הגרפי (‏imagesrv-kiosk / imagesrv-station-gui) לא עלה,
 הסוכן נפל לזרימת טקסט על הקונסולה: אשף השחזור עם "Type ERASE", "Type this
 computer's name", תפריט הבנייה הממוספר, מסך החדר, פתיחת סבב כיתה, השאלה
 בסוף הקליטה ותפריט ה-SMART. נדב: "שלא יהיה כמו אתמול עם הפורט שגילינו
@@ -32,6 +32,7 @@ from test_agent import AGENT, BASH, REPO, posix
 from test_final_report import cut_function
 
 import sizelimit
+from agentlib import flat_lib
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="needs bash")
 
@@ -143,13 +144,14 @@ def _stdin_reads(path: Path) -> list[tuple[int, str, str]]:
 
 
 def test_the_text_only_libs_are_gone_and_not_packed():
-    present = [n for n in DELETED_LIBS if (AGENT / "lib" / n).exists()]
+    # #2239: agent/lib gets topic subfolders -- look for the names anywhere under it.
+    present = [n for n in DELETED_LIBS if any((AGENT / "lib").rglob(n))]
     assert present == [], f"קבצי זרימת טקסט חזרו ל-agent/lib: {present}"
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
     named = [n for n in DELETED_LIBS if n in builder]
     assert named == [], f"build_initramfs.sh מזכיר קובץ שנמחק: {named}"
-    # הבנאי אורז בגלוב — מה שאינו ב-agent/lib אינו נארז.
-    assert '"$AGENT_DIR"/lib/*.sh' in builder
+    # הבנאי אורז את agent/lib כולו דרך agent-lib-flatten.sh — מה שאינו שם אינו נארז.
+    assert 'agent-lib-flatten.sh" "$AGENT_DIR/lib"' in builder
 
 
 def test_no_removed_text_flow_function_is_defined_or_called():
@@ -220,10 +222,10 @@ def _run(tmp_path: Path, body: str, stdin_text: str = "1\n1\n1\nERASE\n") -> tup
     feed.write_text(stdin_text, encoding="utf-8", newline="\n")
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))} LOG_FILE={shlex.quote(posix(run / 'agent.log'))} "
-        "IMAGECTL_TEST=1 LIB_DIR=" + shlex.quote(posix(AGENT / "lib")) + "; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/ui.sh; . {posix(AGENT)}/lib/localboot.sh; "
-        f". {posix(AGENT)}/lib/guiparent.sh; "
+        "IMAGESRV_TEST=1 LIB_DIR=" + shlex.quote(posix(flat_lib())) + "; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/gui/localboot.sh; "
+        f". {posix(AGENT)}/lib/gui/guiparent.sh; "
         # 11/10: no efivars under SYSROOT -- BootNext is "skipped" and the
         # machine running the test is never touched; the report hello is
         # recorded, not sent.
@@ -243,8 +245,8 @@ def _run(tmp_path: Path, body: str, stdin_text: str = "1\n1\n1\nERASE\n") -> tup
 
 def _kiosk_absent():
     # gui_parent בודק את הנתיבים האלה בדיוק; בעמדת פיתוח/מכונת טסטים אינם קיימים.
-    if Path("/usr/bin/imagectl-kiosk").exists():
-        pytest.fail("/usr/bin/imagectl-kiosk קיים על המכונה המריצה — הטסט מניח גואי חסר")
+    if Path("/usr/bin/imagesrv-kiosk").exists():
+        pytest.fail("/usr/bin/imagesrv-kiosk קיים על המכונה המריצה — הטסט מניח גואי חסר")
 
 
 @pytest.mark.parametrize("dead_gui", [False, True], ids=["never-started", "crashed"])
@@ -273,7 +275,7 @@ def test_the_build_screen_without_a_gui_boots_the_local_disk(tmp_path, dead_gui)
 def test_the_recovery_branch_without_a_gui_boots_the_local_disk():
     """הענף של מצב recovery בלולאה הראשית: בלי גואי — gui_unavailable_local,
     לא אשף טקסט."""
-    src = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    src = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     branch = src[src.index("        recovery)"):src.index("        wait_open)")]
     assert "gui_unavailable_local recovery" in branch
     assert "recovery_flow" not in branch
@@ -291,7 +293,7 @@ def test_smart_without_a_gui_takes_the_no_answer_default(tmp_path):
     """תפריט ה-SMART בטקסט הוסר. בלי גואי — "המשך" של הצבע (נדב 16/09):
     כתום כותב (rescue), אדום מדלג (skip). ה-"1" שמחכה ב-stdin היה בוחר
     "החלף" בתפריט הישן."""
-    lib = posix(AGENT / "lib")
+    lib = posix(flat_lib())
     out, rc, _log = _run(
         tmp_path,
         f". {lib}/smartgate.sh; D_ROLE=cloner; "
@@ -308,7 +310,7 @@ def test_smart_without_a_gui_takes_the_no_answer_default(tmp_path):
 def test_the_shrink_question_without_a_gui_cancels(tmp_path):
     """שאלת הכיווץ בטקסט הוסרה (#928 היא דיאלוג). בלי גואי — cancel: שום
     דבר לא מכווץ בלי אדם שאמר כן. ה-"1" ב-stdin היה "כווץ וקלוט" בישן."""
-    lib = posix(AGENT / "lib")
+    lib = posix(flat_lib())
     plan = tmp_path / "plan"
     plan.write_text("3|g|u|2048|1000|60000000000|40000000000\n", encoding="utf-8")
     out, rc, _log = _run(

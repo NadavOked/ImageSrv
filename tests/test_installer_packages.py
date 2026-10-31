@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 REQUIREMENTS = REPO / "server" / "requirements.txt"
 
 #: חבילת apt → שם ההפצה ב-pip (מה ש-requirements.txt מצמיד).

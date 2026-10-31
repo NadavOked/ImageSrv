@@ -11,7 +11,7 @@ iso_source_device() {
         done < "$PROC_MOUNTS"
     fi
     for _id_file in "${SYSROOT:-}/var/lib/iso-scan/device" \
-        "${SYSROOT:-}/run/imagectl/iso-device"; do
+        "${SYSROOT:-}/run/imagesrv/iso-device"; do
         if [ -r "$_id_file" ]; then IFS= read -r _id_dev < "$_id_file"; printf '%s\n' "$_id_dev"; return; fi
     done
 }

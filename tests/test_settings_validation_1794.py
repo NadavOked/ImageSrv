@@ -2,7 +2,7 @@
 
 import pytest
 
-from server.console_api import WRITE_SETTINGS
+from server.console.console_api import WRITE_SETTINGS
 
 
 CASES = [

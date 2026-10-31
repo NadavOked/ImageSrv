@@ -8,7 +8,7 @@
 1/9`, יצרה התקן "לא רשום" `00:00:00:00:00:00` — **וגם ספרה אתחול**
 בתקציב לולאת האתחול (‏#75) של המכונה שנבדקה.
 
-התיקון: הבדיקה מסמנת את עצמה בכותרת `X-ImageCtl-Probe: 1`, והשרת מכבד
+התיקון: הבדיקה מסמנת את עצמה בכותרת `X-ImageSrv-Probe: 1`, והשרת מכבד
 את הסימון **רק** כשהפונה הוא השרת עצמו — ‏loopback, או הכתובת המקומית
 שעליה החיבור התקבל (חיבור של השרת לכתובת ההפצה של עצמו יוצא ממנה,
 לא מ-`127.0.0.1`). ‏GRUB אמיתי לעולם אינו מגיע משם, ומבחוץ הכותרת
@@ -30,7 +30,7 @@ pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom            # noqa: E402
 
-from server.bootguard import ATTEMPT_LIMIT                   # noqa: E402
+from server.agent.bootguard import ATTEMPT_LIMIT                   # noqa: E402
 
 try:
     from fastapi.testclient import TestClient
@@ -40,7 +40,7 @@ except ImportError:                                          # pragma: no cover
 BASE = "http://10.44.12.10:8080"
 ZERO_MAC = "00:00:00:00:00:00"
 STATION_IP = "10.44.12.59"
-PROBE = {"X-ImageCtl-Probe": "1"}
+PROBE = {"X-ImageSrv-Probe": "1"}
 
 
 @pytest.fixture()
@@ -51,7 +51,7 @@ def probing_server(tmp_path: Path, images_root: Path, clock):
         pytest.skip("fastapi is required")
     from test_sender import Recorder                           # noqa: PLC0415
 
-    from server import users                                   # noqa: PLC0415
+    from server.console import users                                   # noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
 
     tftp = tmp_path / "tftp"
@@ -172,7 +172,7 @@ def test_a_real_unicast_mac_is_still_recorded(probing_server):
 
 def test_startup_removes_the_existing_all_zero_device(tmp_path):
     from server.db import connect, net_seen
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     conn = connect(path)
     net_seen(conn, ZERO_MAC, "10.44.0.1")
     conn.close()
@@ -220,7 +220,7 @@ def test_health_probes_do_not_spend_the_boot_budget(probing_server):
     for _ in range(ATTEMPT_LIMIT + 1):
         assert probing_server["admin"].get("/api/console/health").status_code == 200
     text = probing_server["station"].get(f"{BASE}/boot/menu?mac={ids['mac1']}").text
-    assert "set default=imagectl" in text
+    assert "set default=imagesrv" in text
     assert "boot-loop-guard" not in text
 
 
@@ -267,7 +267,7 @@ def test_loopback_without_the_mark_is_not_a_boot(probing_server):
 def test_the_default_probes_carry_the_mark(monkeypatch, hook):
     """‏`default_hooks()` הם מה שרץ בייצור — ואם הם לא שולחים את
     הכותרת, כל מה שלמעלה מגן על שום דבר."""
-    from server import health                                  # noqa: PLC0415
+    from server.system import health                                  # noqa: PLC0415
 
     captured = {}
 
@@ -279,4 +279,4 @@ def test_the_default_probes_carry_the_mark(monkeypatch, hook):
     health.default_hooks()[hook](BASE + "/boot/menu?mac=" + ZERO_MAC)
     request = captured["request"]
     assert isinstance(request, urllib.request.Request)
-    assert request.get_header("X-imagectl-probe") == "1"
+    assert request.get_header("X-imagesrv-probe") == "1"

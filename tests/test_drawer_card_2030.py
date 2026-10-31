@@ -15,7 +15,7 @@ Two halves:
   can fail to measure saying -1, never 0; nothing mounted while a round owns the disks;
   a disk a round wrote is stale; the bridge loads the library.
 * **the screens** (C, the Testrunner only): the real GUI renders the round, the local
-  clone and the stick; IMAGECTL_GUI_TEXTLOG records every string the screen lays out,
+  clone and the stick; IMAGESRV_GUI_TEXTLOG records every string the screen lays out,
   and the assertions are on those words -- not on pixels.
 
 **Negative control:** with the production files of the fix put back as they were on
@@ -35,6 +35,7 @@ import pytest
 
 from native import requires_native
 from test_cloner_gui import AGENT, BASH, GUI, _build_gui, _pkgconfig, posix
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 pytestmark = requires_native(("bash", BASH))
@@ -87,10 +88,10 @@ class Box:
         self.mounts.write_text("")
 
     def sh(self, script: str) -> subprocess.CompletedProcess:
-        libs = "".join(f". {posix(AGENT)}/lib/{n}.sh; " for n in ("common", "sysinfo", "manifest", "restore", "diskused"))
+        libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "sysinfo", "manifest", "restore", "diskused"))
         pre = (f'export PATH="/usr/bin:$PATH" RUN_DIR={posix(self.run)} GUI_DIR={posix(self.gui)} SYSROOT={posix(self.root)} '
                f'DEVROOT={posix(self.dev)} LOG_FILE={posix(self.log)} MOUNTS={posix(self.mounts)} CUR={posix(self.cur)} '
-               f'MNT={posix(self.gui)}/used/mnt IMAGECTL_TEST=1; {libs}{STUBS}')
+               f'MNT={posix(self.gui)}/used/mnt IMAGESRV_TEST=1; {libs}{STUBS}')
         out = subprocess.run([BASH, "-c", pre + script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
         assert out.returncode == 0, out.stderr
         return out
@@ -207,8 +208,8 @@ def test_the_scan_is_started_only_for_an_unmeasured_disk_with_no_round_and_no_sc
 
 
 def test_the_bridge_loads_the_library_and_the_state_writer_asks_it():
-    assert "diskused.sh" in (AGENT / "lib/guibridge.sh").read_text(encoding="utf-8")
-    assert 'disk_used_records "$(list_disks)"' in (AGENT / "lib/clonergui.sh").read_text(encoding="utf-8")
+    assert "diskused.sh" in (AGENT / "lib/gui/guibridge.sh").read_text(encoding="utf-8")
+    assert 'disk_used_records "$(list_disks)"' in (AGENT / "lib/gui/clonergui.sh").read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------- the screens
@@ -241,7 +242,7 @@ def words(binary: Path, tmp: Path, state: str | None, card: str, theme: str = "l
     cmd = [str(binary), "--png", posix(tmp / "p"), "--size", "1280x800", "--mac", "3C:52:82:A1:00:1F", "--ip", "10.10.10.31"]
     if state is not None:
         sf = tmp / "state.txt"; sf.write_text(state, encoding="utf-8", newline="\n"); cmd += ["--state", posix(sf)]
-    env = dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf"), IMAGECTL_GUI_TEXTLOG=posix(log))
+    env = dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf"), IMAGESRV_GUI_TEXTLOG=posix(log))
     run = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env, stdin=subprocess.DEVNULL)
     assert run.returncode == 0, run.stderr
     out, on = [], False

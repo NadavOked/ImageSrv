@@ -27,7 +27,7 @@ import pytest
 from boot import trace
 from boot.grub_menu import GrubConfig, render, render_local_only
 from boot.http import create_boot_asgi
-from server import boottrace
+from server.agent import boottrace
 from server.db import connect
 
 REPO = Path(__file__).resolve().parent.parent
@@ -131,10 +131,10 @@ def test_the_menu_is_served_even_with_no_recorder_wired_in():
 
 
 def agent_entry(text: str) -> list[str]:
-    """שורות ערך ה-ImageCtl, בלי השורות העוטפות."""
-    body = re.search(r'menuentry "ImageSrv" --id imagectl \{\n(.*?)\n\}',
+    """שורות ערך ה-ImageSrv, בלי השורות העוטפות."""
+    body = re.search(r'menuentry "ImageSrv" --id imagesrv \{\n(.*?)\n\}',
                      text, re.S)
-    assert body, f"no ImageCtl entry in:\n{text}"
+    assert body, f"no ImageSrv entry in:\n{text}"
     return [line.strip() for line in body.group(1).splitlines()]
 
 
@@ -161,10 +161,10 @@ def test_each_breadcrumb_sits_between_the_commands_it_dates():
 
 def play_entry(lines: list[str], *, fail: frozenset[str] = frozenset()
                ) -> tuple[list[str], list[str]]:
-    """הרצה מדומה של ערך ImageCtl לפי סמנטיקת menuentry של GRUB.
+    """הרצה מדומה של ערך ImageSrv לפי סמנטיקת menuentry של GRUB.
 
     פקודה שנכשלה מדפיסה שגיאה וההרצה ממשיכה — אלא אם היא תנאי של `if`.
-    מחזיר (פקודות שרצו, צעדי imagectl_trace שנשלחו).
+    מחזיר (פקודות שרצו, צעדי imagesrv_trace שנשלחו).
     """
     ran: list[str] = []
     steps: list[str] = []
@@ -233,8 +233,8 @@ def test_a_failed_linux_does_not_claim_the_kernel_loaded():
     """
     lines = agent_entry(render(CLONER, CONFIG))
     linux = next(i for i, line in enumerate(lines) if line.startswith("if linux "))
-    loaded = lines.index("set imagectl_kernel_loaded=y")
-    failure = lines.index('if [ -z "$imagectl_kernel_loaded" ]; then')
+    loaded = lines.index("set imagesrv_kernel_loaded=y")
+    failure = lines.index('if [ -z "$imagesrv_kernel_loaded" ]; then')
     pre_initrd = lines.index(f"{trace.GRUB_FUNCTION_NAME} pre-initrd")
     assert linux < loaded < failure < pre_initrd
     assert lines[linux + 1] == "then"         # `then` בשורה משלו מאז 54223f94
@@ -244,8 +244,8 @@ def test_a_failed_initrd_does_not_claim_the_initramfs_loaded():
     """אותו מסלול ל-pre-boot אחרי initrd שנכשל."""
     lines = agent_entry(render(CLONER, CONFIG))
     initrd = next(i for i, line in enumerate(lines) if line.startswith("if initrd "))
-    loaded = lines.index("set imagectl_initrd_loaded=y")
-    failure = lines.index('if [ -z "$imagectl_initrd_loaded" ]; then')
+    loaded = lines.index("set imagesrv_initrd_loaded=y")
+    failure = lines.index('if [ -z "$imagesrv_initrd_loaded" ]; then')
     pre_boot = lines.index(f"{trace.GRUB_FUNCTION_NAME} pre-boot")
     assert initrd < loaded < failure < pre_boot
     assert lines[initrd + 1] == "then"         # `then` בשורה משלו מאז 54223f94
@@ -395,7 +395,7 @@ def test_the_two_no_os_states_have_two_different_labels():
     assert all(step in boottrace.STEP_LABELS for step in trace.LOCAL_STEPS)
 
 
-def test_the_local_steps_do_not_change_the_imagectl_chain():
+def test_the_local_steps_do_not_change_the_imagesrv_chain():
     assert len(trace.STEPS) == 9 and not any(s.startswith("local-") for s in trace.STEPS)
     assert trace.GRUB_STEPS == trace.STEPS[1:6]
 
@@ -608,7 +608,7 @@ def test_a_dead_step_endpoint_does_not_stop_the_agent():
     """
     result = sh(
         f'set -e; RUN_DIR=$(mktemp -d); export RUN_DIR; '
-        f'. {posix(AGENT)}/lib/common.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; '
         f'SERVER="http://127.0.0.1:9"; MAC="{MAC}"; TRACE_TIMEOUT=2; '
         f'trace_step entry; echo "STILL-BOOTING"'
     )
@@ -621,7 +621,7 @@ def test_a_dead_step_endpoint_does_not_stop_the_agent():
 def test_trace_step_is_a_no_op_without_a_server_or_a_mac():
     result = sh(
         f'set -e; RUN_DIR=$(mktemp -d); export RUN_DIR; '
-        f'. {posix(AGENT)}/lib/common.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; '
         f'SERVER=""; MAC=""; trace_step entry; echo "STILL-BOOTING"'
     )
     assert result.returncode == 0 and "STILL-BOOTING" in result.stdout
@@ -633,13 +633,13 @@ def test_every_agent_step_is_actually_reported_by_the_agent(step):
     אינו מדווח הופך "לא הגיע" לרעש קבוע."""
     sources = "\n".join(
         (AGENT / name).read_text(encoding="utf-8")
-        for name in ("init", "imagectl-agent")
+        for name in ("init", "imagesrv-agent")
     )
     assert step in sources
 
 
 def test_the_agent_sends_its_steps_to_the_declared_path():
-    for name in ("init", "imagectl-agent", "lib/common.sh"):
+    for name in ("init", "imagesrv-agent", "lib/core/common.sh"):
         text = (AGENT / name).read_text(encoding="utf-8")
         for hit in re.findall(r"/boot/step\?[^\"' ]*", text):
             assert hit.startswith("/boot/step?mac=") and "&s=" in hit
@@ -662,7 +662,7 @@ def test_parse_marks_refuses_garbage(raw):
 
 def test_init_marks_ride_on_agent_net_and_are_logged(caplog):
     spy = Spy()
-    with caplog.at_level("INFO", logger="imagectl.boot"):
+    with caplog.at_level("INFO", logger="imagesrv.boot"):
         status, body = call(
             "/step",
             f"mac={MAC}&s=agent-net&up=init:1.50,modules:9.02,dhcp:12.30",
@@ -676,7 +676,7 @@ def test_init_marks_ride_on_agent_net_and_are_logged(caplog):
 
 def test_malformed_marks_do_not_cost_the_step(caplog):
     spy = Spy()
-    with caplog.at_level("WARNING", logger="imagectl.boot"):
+    with caplog.at_level("WARNING", logger="imagesrv.boot"):
         call("/step", f"mac={MAC}&s=agent-net&up=init:abc", spy)
     assert spy.steps == [(MAC, "agent-net")]
     assert any("malformed" in record.message for record in caplog.records
@@ -684,7 +684,7 @@ def test_malformed_marks_do_not_cost_the_step(caplog):
 
 
 def test_marks_of_a_step_that_was_not_recorded_are_not_logged(caplog):
-    with caplog.at_level("INFO", logger="imagectl.boot"):
+    with caplog.at_level("INFO", logger="imagesrv.boot"):
         call("/step", f"mac={MAC}&s=agent-net&up=init:1.50",
              lambda mac, step: False)
     assert not any("boot marks" in record.message for record in caplog.records
@@ -692,7 +692,7 @@ def test_marks_of_a_step_that_was_not_recorded_are_not_logged(caplog):
 
 
 def test_a_step_without_marks_logs_no_marks(caplog):
-    with caplog.at_level("INFO", logger="imagectl.boot"):
+    with caplog.at_level("INFO", logger="imagesrv.boot"):
         call("/step", f"mac={MAC}&s=agent-net", Spy())
     assert not any("boot marks" in record.message for record in caplog.records)
 
@@ -701,7 +701,7 @@ def test_a_step_without_marks_logs_no_marks(caplog):
 def test_trace_step_carries_the_marks_in_the_url():
     result = sh(
         f'set -e; RUN_DIR=$(mktemp -d); export RUN_DIR; '
-        f'. {posix(AGENT)}/lib/common.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; '
         'curl() { for a in "$@"; do echo "$a"; done > "$RUN_DIR/url"; return 0; }; '
         f'SERVER=http://s; MAC={MAC}; '
         'trace_step agent-net "up=init:1.50,dhcp:3.20"; cat "$RUN_DIR/url"; '

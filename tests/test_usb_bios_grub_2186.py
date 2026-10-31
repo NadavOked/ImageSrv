@@ -50,7 +50,7 @@ def build(tmp: Path, **env: str) -> tuple[subprocess.CompletedProcess, Path | No
     subprocess.run([BASH, "-c", f"cd {posix(tree)!r} && find lib | cpio -o -H newc --quiet > {posix(initrd)!r}"],
                    check=True, timeout=60, stdin=subprocess.DEVNULL)
     run_env = {k: v for k, v in os.environ.items() if not k.startswith("USB_")}
-    run_env.update(IMAGECTL_MODULES_DIR=posix(host / "modules"), IMAGECTL_KERNEL_DIR=posix(host / "boot"),
+    run_env.update(IMAGESRV_MODULES_DIR=posix(host / "modules"), IMAGESRV_KERNEL_DIR=posix(host / "boot"),
                    USB_SHIM=posix(host / "shim"), USB_GRUB=posix(host / "grub"), USB_MOKMGR=posix(host / "mok"), **env)
     out = tmp / "out"
     result = subprocess.run([BASH, posix(SCRIPT), "--out", posix(out), "--initrd", posix(initrd)], env=run_env,

@@ -1,8 +1,8 @@
 """Metal, cloner 2, 17/10 (main 9eba8e7d): during the whole local clone the agent
 log filled once a second with
 
-    /usr/bin/imagectl-kiosk: line 249: manifest_plan: not found
-    /usr/bin/imagectl-kiosk: line 260: manifest_plan: not found
+    /usr/bin/imagesrv-kiosk: line 249: manifest_plan: not found
+    /usr/bin/imagesrv-kiosk: line 260: manifest_plan: not found
 
 Same family as #1484, the next function down the same call chain: the kiosk is
 its own process, ``gui_libs`` is its whole load chain, and #1484 added diskfit.sh
@@ -31,6 +31,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_cloner_gui import AGENT, BASH, posix, sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH), "jq")
 
@@ -56,17 +57,17 @@ def _kiosk_min_free(tmp_path: Path, system_size: int, system_used: int, disk: in
     (run / "plan.txt").write_text("the agent's scratch\n", newline="\n")      # not the kiosk's to touch
     m = tmp_path / "m.json"; _manifest(m, system_size, system_used)
     sysroot = tmp_path / "sys"; sysroot.mkdir()
-    out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(tmp_path / "gui")!r} IMAGECTL_TEST=1 '
-             f'SYSROOT={posix(sysroot)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-             f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; '
+    out = sh(f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(tmp_path / "gui")!r} IMAGESRV_TEST=1 '
+             f'SYSROOT={posix(sysroot)!r} LIB_DIR={posix(flat_lib())!r}; '
+             f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; '
              f'min_free_check {posix(m)!r} {disk} {need}')
     assert out.returncode == 0, out.stderr
     return out.stdout.strip(), out.stderr, run
 
 
 def test_the_kiosk_chain_knows_where_manifest_plan_is(tmp_path):
-    out = sh(f'export RUN_DIR={posix(tmp_path)!r} LIB_DIR={posix(AGENT / "lib")!r}; '
-             f'. {posix(AGENT)}/lib/guibridge.sh; gui_libs; type manifest_plan')
+    out = sh(f'export RUN_DIR={posix(tmp_path)!r} LIB_DIR={posix(flat_lib())!r}; '
+             f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; type manifest_plan')
     assert out.returncode == 0, out.stdout + out.stderr
 
 

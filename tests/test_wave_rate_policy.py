@@ -24,7 +24,9 @@ from pathlib import Path
 
 import pytest
 
-from server import db, drive_rates, reports
+from server import db
+from server.rounds import drive_rates
+from server.agent import reports
 
 SENT = 10 ** 10                       # ‏10GB בגל
 BLOCKS = -(-SENT // drive_rates.UDPCAST_BLOCK)
@@ -36,7 +38,7 @@ UNREAD = object()                     # המקלט לא דיווח `udp_drops`
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 def _drives(session: str, drawers: dict[str, int]) -> list[dict]:
@@ -410,8 +412,8 @@ needs_bash = requires_native(("bash", BASH))
 
 def _agent(run: Path, body: str) -> str:
     run.mkdir(parents=True, exist_ok=True)
-    return sh(f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/common.sh 2>/dev/null; "
-              f". {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/progress.sh; {body}")
+    return sh(f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh 2>/dev/null; "
+              f". {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/core/progress.sh; {body}")
 
 
 @needs_bash

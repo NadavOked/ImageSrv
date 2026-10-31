@@ -101,8 +101,8 @@ def test_known_must_be_exactly_true():
         assert decide(answer(known=value)).action == LOCAL
 
 
-def test_no_task_and_no_session_auto_boots_imagectl_for_a_gui_role():
-    """‏#641 (היפוך #140): תחנת כיתה רשומה בלי משימה עולה ישר ל-ImageCtl,
+def test_no_task_and_no_session_auto_boots_imagesrv_for_a_gui_role():
+    """‏#641 (היפוך #140): תחנת כיתה רשומה בלי משימה עולה ישר ל-ImageSrv,
     אוטומטי — במקום התפריט הגלוי שהמתין לאדם."""
     d = decide(answer(task=None, session=None))
     assert d.action == AGENT
@@ -111,34 +111,34 @@ def test_no_task_and_no_session_auto_boots_imagectl_for_a_gui_role():
 
 def test_no_task_still_reaches_recovery_on_a_classroom_station():
     """הצוהר לשחזור נשאר — אבל עכשיו הוא אוטומטי: תחנת כיתה בלי משימה
-    עולה ישר ל-ImageCtl במצב recovery (#144, #641), בלי לעבור בקונסולה
+    עולה ישר ל-ImageSrv במצב recovery (#144, #641), בלי לעבור בקונסולה
     ובלי תפריט."""
     d = decide(answer(task=None, session=None))
     assert d.action == AGENT
     assert d.recovery_mode is True
-    assert "imagectl.mode=recovery" in render(answer(), CFG)
+    assert "imagesrv.mode=recovery" in render(answer(), CFG)
 
 
 def test_build_machine_with_no_task_auto_boots_the_build_console():
-    """‏#641: מחשב הבנייה בלי משימה עולה ישר ל-ImageCtl (הערך הרגיל —
+    """‏#641: מחשב הבנייה בלי משימה עולה ישר ל-ImageSrv (הערך הרגיל —
     build_console, #29), אוטומטי, בלי תפריט שממתין לאדם."""
     d = decide(answer(role="build"))
     assert d.action == AGENT
     assert d.show_menu is False
     assert d.recovery_mode is False           # הערך הרגיל, לא recovery
     text = render(answer(role="build"), CFG)
-    assert "set default=imagectl" in text
+    assert "set default=imagesrv" in text
     assert "set timeout_style=hidden" in text
 
 
 def test_build_menu_reaches_the_build_console_not_only_recovery():
     """הדרך היחידה למסך הקליטה/הפצה מאתחול קר היא ערך סוכן בלי recovery —
-    בלעדיו ערך ה-ImageCtl בתפריט היה רק צוהר השחזור (#29). מ-#144 זהו
+    בלעדיו ערך ה-ImageSrv בתפריט היה רק צוהר השחזור (#29). מ-#144 זהו
     גם הערך היחיד שמחשב הבנייה מקבל."""
     text = render(answer(role="build"), CFG)
-    assert "--id imagectl {" in text                       # סוכן רגיל
-    plain = text.split("--id imagectl {")[1].split("}")[0]
-    assert "imagectl.mode=recovery" not in plain
+    assert "--id imagesrv {" in text                       # סוכן רגיל
+    plain = text.split("--id imagesrv {")[1].split("}")[0]
+    assert "imagesrv.mode=recovery" not in plain
 
 
 def test_cloner_with_no_task_waits_on_the_agent():
@@ -156,7 +156,7 @@ def test_a_task_loads_the_agent():
 
 def test_an_empty_task_object_is_not_a_task():
     """‏`{}` אינו משימה — ההחלטה נופלת למסלול no-task ולא ל-task-assigned.
-    (בתחנת כיתה המסלול הזה עולה אוטומטית ל-ImageCtl מ-#641, ולכן נבדק
+    (בתחנת כיתה המסלול הזה עולה אוטומטית ל-ImageSrv מ-#641, ולכן נבדק
     ה-`code` ולא ה-action.)"""
     assert decide(answer(task={})).code == "no-task"
 
@@ -169,7 +169,7 @@ def test_a_joinable_session_loads_the_agent(state):
 
 def test_a_closed_session_is_not_joinable():
     """סבב סגור אינו מצורף — ההחלטה נופלת ל-no-task, לא ל-session-joinable.
-    (בתחנת כיתה המסלול הזה עולה אוטומטית ל-ImageCtl מ-#641.)"""
+    (בתחנת כיתה המסלול הזה עולה אוטומטית ל-ImageSrv מ-#641.)"""
     session = dict(OPEN_SESSION, state="closed")
     assert decide(answer(session=session)).code == "no-task"
 
@@ -202,11 +202,11 @@ def test_a_non_object_answer_boots_locally(junk):
 # --- רינדור -----------------------------------------------------------------
 
 
-def test_a_machine_with_no_task_auto_boots_imagectl_but_keeps_a_local_entry():
-    """‏#641: ברירת המחדל עברה ל-ImageCtl, אבל הערך המקומי נשאר בקובץ
-    (חבוי) — הבחירה בדיסק עוברת אל תוך מסך ה-ImageCtl, לא נעלמת."""
+def test_a_machine_with_no_task_auto_boots_imagesrv_but_keeps_a_local_entry():
+    """‏#641: ברירת המחדל עברה ל-ImageSrv, אבל הערך המקומי נשאר בקובץ
+    (חבוי) — הבחירה בדיסק עוברת אל תוך מסך ה-ImageSrv, לא נעלמת."""
     text = render(answer(), CFG)
-    assert "set default=imagectl" in text
+    assert "set default=imagesrv" in text
     assert "--id local {" in text
     assert "chain_local" in text
     assert "bootmgfw.efi" in text
@@ -216,7 +216,7 @@ def test_agent_config_loads_kernel_and_initrd_from_the_server():
     text = render(answer(task={"id": "tsk_1"}), CFG)
     assert "linux (http,10.44.12.10:8080)/boot/vmlinuz" in text
     assert "initrd (http,10.44.12.10:8080)/boot/initrd.img" in text
-    assert "imagectl.server=http://10.44.12.10:8080" in text
+    assert "imagesrv.server=http://10.44.12.10:8080" in text
 
 
 @pytest.mark.parametrize(
@@ -231,7 +231,7 @@ def test_agent_config_loads_kernel_and_initrd_from_the_server():
 )
 def test_every_network_entry_retries_kernel_and_initrd_three_times(a):
     text = render(a, CFG)
-    entry = text.split('menuentry "ImageSrv" --id imagectl {', 1)[1].split("\n}", 1)[0]
+    entry = text.split('menuentry "ImageSrv" --id imagesrv {', 1)[1].split("\n}", 1)[0]
     assert entry.count("for attempt in 1 2 3; do") == 2
     assert 'if linux (http,10.44.12.10:8080)/boot/vmlinuz ' in entry
     # ‏`then` בשורה משלו מאז 54223f94 ("Fix GRUB retry command boundaries")
@@ -255,17 +255,17 @@ def test_network_load_failure_reaches_the_existing_safe_fallback():
 def test_retry_keeps_the_kernel_command_line_clean_and_the_menu_ascii():
     text = render(answer(task={"id": "tsk_1"}), CFG)
     linux = next(line for line in text.splitlines() if line.strip().startswith("if linux "))
-    imagectl_args = [word for word in linux.split() if word.startswith("imagectl.")]
-    assert imagectl_args == ["imagectl.server=http://10.44.12.10:8080"]
-    assert "imagectl.mode=recovery" not in linux
+    imagesrv_args = [word for word in linux.split() if word.startswith("imagesrv.")]
+    assert imagesrv_args == ["imagesrv.server=http://10.44.12.10:8080"]
+    assert "imagesrv.mode=recovery" not in linux
     text.encode("ascii")
 
     recovery = render(answer(), CFG)
     recovery_linux = next(line for line in recovery.splitlines()
                           if line.strip().startswith("if linux "))
-    recovery_args = [word for word in recovery_linux.split() if word.startswith("imagectl.")]
-    assert recovery_args == ["imagectl.server=http://10.44.12.10:8080",
-                             "imagectl.mode=recovery"]
+    recovery_args = [word for word in recovery_linux.split() if word.startswith("imagesrv.")]
+    assert recovery_args == ["imagesrv.server=http://10.44.12.10:8080",
+                             "imagesrv.mode=recovery"]
 
 
 def test_agent_config_leaks_nothing_from_the_answer():
@@ -313,17 +313,17 @@ def test_the_local_entry_is_always_present_as_a_fallback():
 
 def test_recovery_entry_carries_the_mode_flag():
     text = render(answer(), CFG)
-    assert "imagectl.mode=recovery" in text
+    assert "imagesrv.mode=recovery" in text
 
 
 def test_a_real_task_is_not_a_recovery_boot():
     text = render(answer(task={"id": "tsk_1"}), CFG)
-    assert "imagectl.mode=recovery" not in text
+    assert "imagesrv.mode=recovery" not in text
 
 
 def test_unknown_mac_gets_no_agent_entry_at_all():
     text = render(answer(known=False), CFG)
-    assert "--id imagectl" not in text
+    assert "--id imagesrv" not in text
     assert "vmlinuz" not in text
     assert "linux (http," not in text
     assert "set default=local" in text
@@ -428,7 +428,7 @@ def test_no_screen_still_tells_anyone_to_press_esc():
 def test_the_escape_hatch_file_stays_silent():
     """render_local_only הוא מסלול הכשל — אין בו סוכן ואין תפריט."""
     text = render_local_only("generator-error")
-    assert "--id imagectl" not in text
+    assert "--id imagesrv" not in text
     assert "set timeout_style=hidden" in text
 
 
@@ -439,10 +439,10 @@ def test_the_boot_loop_guard_screen_also_points_at_recovery():
     decision = decide(a)
     assert decision.show_menu is True and decision.offer_recovery is True
     text = render(a, CFG)
-    # מ-#144 זהו הערך היחיד בתחנת כיתה, ולכן `--id imagectl` — והוא
+    # מ-#144 זהו הערך היחיד בתחנת כיתה, ולכן `--id imagesrv` — והוא
     # עדיין נושא את דגל השחזור.
-    assert "--id imagectl {" in text
-    assert "imagectl.mode=recovery" in text
+    assert "--id imagesrv {" in text
+    assert "imagesrv.mode=recovery" in text
     assert "set timeout_style=menu" in text
 
 
@@ -464,7 +464,7 @@ def test_a_server_base_with_no_host_is_rejected():
 
 def test_bootstrap_fetches_the_dynamic_menu_with_the_mac():
     text = render_bootstrap(CFG)
-    assert "configfile (http,$imagectl_server)/boot/menu?mac=$net_default_mac" in text
+    assert "configfile (http,$imagesrv_server)/boot/menu?mac=$net_default_mac" in text
 
 
 def test_bootstrap_prefers_the_address_that_answered_dhcp():
@@ -473,26 +473,26 @@ def test_bootstrap_prefers_the_address_that_answered_dhcp():
     בפועל, ולכן היא הראשית; הפורט נלקח מהתצורה."""
     text = render_bootstrap(CFG)
     assert 'if [ -n "$net_default_server" ]; then' in text
-    assert "set imagectl_server=${net_default_server}:8080" in text
+    assert "set imagesrv_server=${net_default_server}:8080" in text
 
 
 def test_bootstrap_keeps_the_configured_address_as_a_fallback():
     """next-server חסר או שגוי לא משאיר את התחנה בלי תפריט: הכתובת
     המפורשת מהתצורה נשארת, גם כברירת מחדל וגם כניסיון שני בכל סבב."""
     text = render_bootstrap(CFG)
-    assert "set imagectl_fallback=10.44.12.10:8080" in text
-    assert "set imagectl_server=$imagectl_fallback" in text
+    assert "set imagesrv_fallback=10.44.12.10:8080" in text
+    assert "set imagesrv_server=$imagesrv_fallback" in text
     loop = text.split("for attempt in 1 2 3; do", 1)[1].split("done", 1)[0]
-    assert "configfile (http,$imagectl_server)/boot/menu?mac=$net_default_mac" in loop
-    assert "configfile (http,$imagectl_fallback)/boot/menu?mac=$net_default_mac" in loop
+    assert "configfile (http,$imagesrv_server)/boot/menu?mac=$net_default_mac" in loop
+    assert "configfile (http,$imagesrv_fallback)/boot/menu?mac=$net_default_mac" in loop
     # לא לפנות פעמיים לאותה כתובת כששתיהן זהות.
-    assert '[ "$imagectl_server" != "$imagectl_fallback" ]' in loop
+    assert '[ "$imagesrv_server" != "$imagesrv_fallback" ]' in loop
 
 
 def test_bootstrap_defaults_to_port_80_when_the_address_has_none():
     text = render_bootstrap(GrubConfig(server_base="http://10.44.12.10"))
-    assert "set imagectl_server=${net_default_server}:80" in text
-    assert "set imagectl_fallback=10.44.12.10" in text
+    assert "set imagesrv_server=${net_default_server}:80" in text
+    assert "set imagesrv_fallback=10.44.12.10" in text
 
 
 def test_bootstrap_falls_back_to_local_disk_when_the_server_is_down():

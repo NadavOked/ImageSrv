@@ -1,0 +1,21 @@
+# deploy/vmupdate-packages.txt — החבילות של "עדכון אימג' ב-VM" (#1334).
+#
+# **המקור היחיד** לרשימה: deploy/vmupdate-host.sh מתקין ממנה — גם בהתקנה
+# (setup-boot-server.sh) וגם בעדכון מהכפתור (tools/server-upgrade.sh) — ו-
+# tests/test_iso_build.py מוודא שכל שורה כאן נמצאת ב-tools/iso/packages.txt
+# (ההתקנה offline מה-ISO). שורה = חבילה; `#` פותח הערה.
+#
+# מדידה (דביאן 13, 13/10): QEMU ≈15MB הורדה / 91MB מותקן; OVMF 5.8/16MB;
+# python3-guestfs + libguestfs0t64 + supermin ≈4MB, ועם תלויות ה-appliance
+# ≈23MB בלי recommends (44MB עם).
+
+qemu-system-x86     # ה-VM עצמו (KVM)
+ovmf                # UEFI ל-VM, עם ובלי Secure Boot (OVMF_*_4M*.fd)
+python3-guestfs     # קריאת הדיסק שהאורח שינה ב-appliance — לא כ-root במארח
+nftables            # בידוד הרשת של ה-VM (server/vm/vmnet.py)
+gdisk               # sgdisk — apply_gpt/expand_last של הסוכן רצים על השרת
+partclone           # הזרם, לשני הכיוונים
+zstd
+jq                  # json_get של הסוכן
+ntfs-3g             # ntfsresize/ntfsfix (grow בפתיחה, ‏dirty flag בשמירה)
+dmsetup             # #1491: הכיווץ בשמירה — על עותק copy-on-write, לא על דיסק ה-VM

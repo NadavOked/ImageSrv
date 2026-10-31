@@ -16,7 +16,7 @@ function inlineScript() {
 
 function setup({cache = null, systemDark = false} = {}) {
   const store = {};
-  if (cache != null) store['imagectl-theme'] = cache;
+  if (cache != null) store['imagesrv-theme'] = cache;
   const attrs = {};
   const requests = [];
   const mediaListeners = [];
@@ -96,7 +96,7 @@ function setup({cache = null, systemDark = false} = {}) {
 test('inline script applies cached dark before /me (no flash)', () => {
   const attrs = {};
   const ctx = vm.createContext({
-    localStorage: {getItem: (k) => k === 'imagectl-theme' ? 'dark' : null},
+    localStorage: {getItem: (k) => k === 'imagesrv-theme' ? 'dark' : null},
     document: {documentElement: {setAttribute(name, value) { attrs[name] = value; }}},
     window: {matchMedia: () => ({matches: false})},
   });
@@ -123,7 +123,7 @@ test('auto is light on a dark system, uncached, and does not follow it', () => {
   const s = setup({systemDark: true});
   s.run('applyServerTheme({theme:"auto"})');
   assert.equal(s.attrs['data-theme'], 'light');
-  assert.equal(s.store['imagectl-theme'], undefined);
+  assert.equal(s.store['imagesrv-theme'], undefined);
   assert.equal(s.mediaListeners.length, 0, 'nothing listens to prefers-color-scheme');
   s.setSystem(false); s.setSystem(true);
   assert.equal(s.attrs['data-theme'], 'light');
@@ -133,7 +133,7 @@ test('a user who saved dark gets dark, cached', () => {
   const s = setup({systemDark: false});
   s.run('applyServerTheme({theme:"dark"})');
   assert.equal(s.attrs['data-theme'], 'dark');
-  assert.equal(s.store['imagectl-theme'], 'dark');
+  assert.equal(s.store['imagesrv-theme'], 'dark');
 });
 
 test('a theme the server does not define is light', () => {
@@ -147,9 +147,9 @@ test('a theme the server does not define is light', () => {
 test('logout clears the cache and returns to light', () => {
   const s = setup({systemDark: true});
   s.run('applyServerTheme({theme:"dark"})');
-  assert.equal(s.store['imagectl-theme'], 'dark');
+  assert.equal(s.store['imagesrv-theme'], 'dark');
   s.run('showLogin()');
-  assert.equal(s.store['imagectl-theme'], undefined);
+  assert.equal(s.store['imagesrv-theme'], undefined);
   assert.equal(s.attrs['data-theme'], 'light');
 });
 

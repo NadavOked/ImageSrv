@@ -138,10 +138,10 @@ def _gui_state(tmp_path: Path, mode: str, runs: int = 1) -> list[str]:
     (gui / "mode").write_text(mode + "\n", newline="\n")
     script = (
         f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
-        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGECTL_TEST=1; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/jsonq.sh; '
-        f'. {posix(AGENT)}/lib/buildmenuitems.sh; . {posix(AGENT)}/lib/buildmenu.sh; '
-        f'. {posix(AGENT)}/lib/guistate.sh; . {posix(AGENT)}/lib/askgui.sh; . {posix(AGENT)}/lib/syspartgui.sh; '   # #1896: syspart_records
+        f'SERVER=http://127.0.0.1:9 MAC=aa:bb:cc:dd:ee:ff IMAGESRV_TEST=1; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
+        f'. {posix(AGENT)}/lib/gui/buildmenuitems.sh; . {posix(AGENT)}/lib/gui/buildmenu.sh; '
+        f'. {posix(AGENT)}/lib/gui/guistate.sh; . {posix(AGENT)}/lib/gui/askgui.sh; . {posix(AGENT)}/lib/gui/syspartgui.sh; '   # #1896: syspart_records
         + SMART_STUBS
         + 'disk_slot_records() { :; }; '   # #1495's drawer numbering, tested in test_drawer_map_gui_1495
         + f'http_get() {{ cat {posix(run / "station.json")!r}; }}; '
@@ -180,7 +180,7 @@ DRIVER = r'''
 #undef main
 /* The same driver compiles against the code before the window (the negative
  * control reverts every production file): there is no window to report. */
-#ifdef IMAGECTL_SMARTDLG_H
+#ifdef IMAGESRV_SMARTDLG_H
 #define DRV_SDLG_KIND(a) ((a).sdlg.kind)
 #define DRV_SDLG_GO(a) ((a).sdlg.go)
 #else
@@ -198,7 +198,7 @@ static void drv_load(App *a, const char *path) {
 static int drv_hit(const char *n) {
     static const struct { const char *n; int id; } T[] = {
         {"SMART_RESCUE", HIT_SMART_RESCUE}, {"SMART_SKIP", HIT_SMART_SKIP},
-#ifdef IMAGECTL_SMARTDLG_H
+#ifdef IMAGESRV_SMARTDLG_H
         {"SDLG_SKIP", HIT_SDLG_SKIP}, {"SDLG_GO", HIT_SDLG_GO},
 #endif
         {"ROOM_WAKE", HIT_ROOM_WAKE}, {"ROOM_START", HIT_ROOM_START},

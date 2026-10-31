@@ -19,7 +19,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from server import agent_logs, db, deploy_net, netcfg, netcfg_host, netcfg_rollback, registry
+from server.agent import agent_logs, registry
+from server import db
+from server.net import deploy_net, netcfg, netcfg_host, netcfg_rollback
 
 posix_modes = pytest.mark.skipif(os.name != "posix", reason="הרשאות POSIX — נבדק על ה-testrunner")
 
@@ -36,11 +38,11 @@ def test_the_backup_of_a_locked_interfaces_file_is_not_world_readable(tmp_path):
     main = tmp_path / "interfaces"
     main.write_text("auto eth0\niface eth0 inet dhcp\n    wpa-psk secret\n", encoding="utf-8")
     os.chmod(main, 0o600)
-    text = netcfg.render(netcfg.NetConfig("eth0", mode="dhcp"), hostname="imagectl")
+    text = netcfg.render(netcfg.NetConfig("eth0", mode="dhcp"), hostname="imagesrv")
     _notes, error = netcfg_host.adopt_interface("eth0", text, main=main,
                                                 root=tmp_path / "interfaces.d", backup_suffix="t")
     assert error is None
-    backup = tmp_path / "interfaces.pre-imagectl.t"
+    backup = tmp_path / "interfaces.pre-imagesrv.t"
     assert "wpa-psk secret" in backup.read_text(encoding="utf-8")
     assert oct(backup.stat().st_mode & 0o777) == oct(0o600)
 
@@ -61,13 +63,13 @@ def test_the_rollback_marker_copy_of_the_network_config_is_0600(tmp_path):
 
 @pytest.fixture()
 def conn(tmp_path):
-    c = db.connect(tmp_path / "imagectl.db")
+    c = db.connect(tmp_path / "imagesrv.db")
     registry.add_machine(c, MAC, "cloner-21", "grp_CLONERS", "test")
     return c
 
 
 def test_a_non_gzip_agent_log_gets_a_fixed_refusal_and_the_detail_goes_to_the_log(conn, caplog):
-    with caplog.at_level(logging.WARNING, logger="imagectl.agent_logs"):
+    with caplog.at_level(logging.WARNING, logger="imagesrv.agent_logs"):
         got = agent_logs.receive(conn, MAC, None, "failed", b"not gzip at all", known=True)
     assert got == {"ok": False, "code": "bad_log", "error": "not gzip"}
     assert any("not gzip" in r.getMessage() and "header" in r.getMessage() for r in caplog.records)
@@ -153,7 +155,7 @@ def test_per_nic_firewall_regeneration_refuses_too(tmp_path):
     from server.app import _nic_services
 
     calls: list = []
-    ctx_db = SimpleNamespace(conn=db.connect(tmp_path / "imagectl.db"))
+    ctx_db = SimpleNamespace(conn=db.connect(tmp_path / "imagesrv.db"))
     deploy = _unresolved_ctx(tmp_path, {"firewall": lambda *a, **k: calls.append(k) or None})
     nic = _nic_services(ctx_db, "eth1", deploy, None, False, {"interfaces": lambda: []})
     error = nic.hooks["firewall"](nic)

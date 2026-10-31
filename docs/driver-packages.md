@@ -60,7 +60,7 @@ python tools/drivers/build-package.py drivers.cab --vendor LENOVO --model "Think
   ו-`pci_any` (המכונה מחזיקה **אחד** מהבקרים). בלי `--vendor` אין כלל
   דגם — הסיכום אומר זאת, וההתאמה היא לפי בקרים בלבד.
 - **‏sha256 לכל קובץ**, ו-tar בשם החבילה (`--name`, או נגזר מ-vendor+model,
-  ‏ASCII בלבד — זה שם התיקייה שתיכתב ל-`\ImageCtl\Drivers\` על הדיסק).
+  ‏ASCII בלבד — זה שם התיקייה שתיכתב ל-`\ImageSrv\Drivers\` על הדיסק).
 - **מסרב** על: יותר מ-2,000 קבצים או 512 מזהים (לפצל — רשת ואחסון בנפרד),
   נתיב לא-ASCII, ‏`manifest.json` שכבר קיים בתיקייה, ואין על מה להתאים.
 

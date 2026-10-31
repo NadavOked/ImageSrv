@@ -300,7 +300,7 @@ CREATE TABLE IF NOT EXISTS boot_attempts (
 -- כשעברו LOOP_SILENCE_SECONDS בלי hello. טבלה נפרדת ולא עמודה
 -- ב-net_devices, מפני ש-net_devices היא מלאי קבוע (first_seen שלא
 -- מתאפס אף פעם) ואילו כאן כל שדה הוא בן-חלוף לפי הגדרה. הארכיון הוא
--- היומן, שאינו נמחק — ראו server/hello.py.
+-- היומן, שאינו נמחק — ראו server/agent/hello.py.
 CREATE TABLE IF NOT EXISTS agent_loops (
     mac      TEXT PRIMARY KEY,       -- קנוני: lowercase עם נקודתיים
     hits     INTEGER NOT NULL DEFAULT 0,
@@ -373,7 +373,7 @@ CREATE TABLE IF NOT EXISTS disk_events (
 -- ‏#704: השם שהמפעיל נתן לכל חיבור של כונן במכונה ("דיסק 1", "דיסק מיוחד").
 -- ‏`slot` הוא החיבור ולא הדיסק: ‏`sata:<port>` (ה-ataN מ-hello), או
 -- ‏`serial:<serial>` לכונן בלי port (‏NVMe/USB — אין מזהה חיבור ב-hello).
--- תווית בלבד: הבחירה ו-target_slots נשארים לפי port (`server/slot_names.py`).
+-- תווית בלבד: הבחירה ו-target_slots נשארים לפי port (`server/disks/slot_names.py`).
 -- ‏CASCADE: עריכת MAC (#977 §5) מעבירה את השמות, הסרת המכונה מוחקת אותם.
 CREATE TABLE IF NOT EXISTS machine_slot_names (
     mac    TEXT NOT NULL REFERENCES machines(mac) ON UPDATE CASCADE ON DELETE CASCADE,
@@ -446,7 +446,7 @@ CREATE TABLE IF NOT EXISTS fw_baseline (
 -- ‏#2001: מיפוי חיבורים לפי דגם (‏DMI ``product_name`` מה-hello) — "כל מחשבי הדגם".
 -- ‏`slots_json` = החיבורים הפעילים בסדר החיבורים (‏sata:<port> / nvme:<PCI> /
 -- ‏nvme#<n> שעוד לא נראה כונן בו); ‏`names_json` = ‏{חיבור: שם}. עדיפות: מכונה
--- (‏machines.drawer_slots) ← דגם (כאן) ← ברירת מחדל (`server/model_slots.py`).
+-- (‏machines.drawer_slots) ← דגם (כאן) ← ברירת מחדל (`server/disks/model_slots.py`).
 CREATE TABLE IF NOT EXISTS model_slot_maps (
     model      TEXT PRIMARY KEY,
     slots_json TEXT NOT NULL,
@@ -478,7 +478,7 @@ CREATE TABLE IF NOT EXISTS disk_failures (
 );
 
 -- ‏#1859 (נדב 20/10): כל מאפייני ה-SMART של דיסק בכל סבב, לפי סידורי — ממנו השרת
--- "לומד" מה עלה מאז הסבב הקודם (server/smart_history.py). שורה לכל (סידורי, סבב):
+-- "לומד" מה עלה מאז הסבב הקודם (server/disks/smart_history.py). שורה לכל (סידורי, סבב):
 -- ה-disk_event של הסבב דורס אותה; `temp_after` = מעלות מיד אחרי הכתיבה (דוח הסיום).
 CREATE TABLE IF NOT EXISTS smart_history (
     serial      TEXT NOT NULL,
@@ -522,9 +522,9 @@ CREATE TABLE IF NOT EXISTS shrink_records (
 CREATE INDEX IF NOT EXISTS shrink_records_serial ON shrink_records (serial, closed_at);
 
 -- המלאי החומרתי מה-hello (#720, schema 2): DMI, PCI של רשת+אחסון, TPM.
--- **מגורסת**: שורה חדשה רק כשה-JSON הקנוני השתנה (server/inventory.py);
+-- **מגורסת**: שורה חדשה רק כשה-JSON הקנוני השתנה (server/agent/inventory.py);
 -- seen_at = מתי הגרסה הזו נראתה לראשונה. השורה האחרונה לכל MAC היא
--- המלאי הנוכחי, ולפיו מותאמות חבילות הדרייברים (server/drivers.py).
+-- המלאי הנוכחי, ולפיו מותאמות חבילות הדרייברים (server/library/drivers.py).
 CREATE TABLE IF NOT EXISTS machine_inventory (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     mac            TEXT NOT NULL,        -- קנוני: lowercase עם נקודתיים
@@ -535,7 +535,7 @@ CREATE INDEX IF NOT EXISTS machine_inventory_mac ON machine_inventory (mac, id);
 
 -- בדיקת המכונה מה-hello (#1049 שלב ב'): חשמל, שעון, מעבד, זיכרון, רשת,
 -- NVMe, pstore, מפתח OEM… **מגורסת** כמו machine_inventory: שורה חדשה רק
--- כשהתוכן היציב השתנה (server/probe.py); שדות נדיפים (rtc, temp_c, מוני
+-- כשהתוכן היציב השתנה (server/agent/probe.py); שדות נדיפים (rtc, temp_c, מוני
 -- רשת, probe_seconds) מרעננים את השורה האחרונה במקום — sampled_at זז,
 -- seen_at (הגרסה נראתה לראשונה) נשאר. השורה האחרונה לכל MAC היא הדגימה
 -- הנוכחית, ולפיה מחושבים השערים (verdicts).
@@ -664,7 +664,7 @@ CREATE TABLE IF NOT EXISTS storage_locations (
     last_df_json     TEXT
 );
 
--- ‏#447: הקצב שכל כונן באמת כתב בגל שהסתיים (`server/drive_rates.py`).
+-- ‏#447: הקצב שכל כונן באמת כתב בגל שהסתיים (`server/rounds/drive_rates.py`).
 -- זהות = דגם + סידורי (הכונן נודד בין מגירות). ‏`cap_bps` הוא תקרת הגל
 -- שבו נמדד — בלעדיה אי-אפשר לדעת אם הכונן הגביל את הזרם או רק עמד בו.
 -- שורה אחת לכל (גל, סידורי); בייטים לשנייה, כמו `rate_bps` במסך החדר.
@@ -703,7 +703,7 @@ CREATE TABLE IF NOT EXISTS wave_rates (
 -- מקלט, או מגירה אבדה עם שידורים חוזרים) — נזכר גם אחרי שהגל יוצא מחלון
 -- ה-goodput, ומעליו לא מחפשים. שורה לכל (מכונה, מגירות, קצב): חסומה במספר
 -- הקצבים, ואינה נמחקת (`housekeeping` אינו נוגע בה) — לשכוח היא הבאג.
--- ‏#1844: מה שנמדד בכל חיבור SATA של מחשב שיכפול בכל גל (`server/learn_ports.py`) —
+-- ‏#1844: מה שנמדד בכל חיבור SATA של מחשב שיכפול בכל גל (`server/learn/learn_ports.py`) —
 -- ממנו השרת מבחין "כנראה כבל" (אותו חיבור, דיסקים שונים) מ"הדיסק" (אותו דיסק, חיבורים
 -- שונים). ‏NULL = לא נמדד/לא נקרא, לא 0. חומרה ומדידות בלבד (#1924).
 CREATE TABLE IF NOT EXISTS port_history (
@@ -722,7 +722,7 @@ CREATE INDEX IF NOT EXISTS port_history_port ON port_history (mac, port, at);
 CREATE INDEX IF NOT EXISTS port_history_serial ON port_history (serial, at);
 
 -- ‏#1845: ה-MB/s של בדיקת הכתיבה שלפני הזרם (`write_preflight`) לכל דיסק בכל גל, עם הדגם
--- מה-hello (`server/learn_models.py`) — הבסיס של "איטי מהרגיל לדגם". חומרה ומספרים בלבד (#1924).
+-- מה-hello (`server/learn/learn_models.py`) — הבסיס של "איטי מהרגיל לדגם". חומרה ומספרים בלבד (#1924).
 CREATE TABLE IF NOT EXISTS model_speeds (
     session_id TEXT NOT NULL,
     serial     TEXT NOT NULL,
@@ -735,7 +735,7 @@ CREATE TABLE IF NOT EXISTS model_speeds (
 CREATE INDEX IF NOT EXISTS model_speeds_model ON model_speeds (model, at);
 CREATE INDEX IF NOT EXISTS model_speeds_serial ON model_speeds (serial, at);
 
--- ‏#1847: כל הערת WoL למכונה שלא נראתה (`server/learn_wol.py`), ומתי היא ענתה — הפירור
+-- ‏#1847: כל הערת WoL למכונה שלא נראתה (`server/learn/learn_wol.py`), ומתי היא ענתה — הפירור
 -- הראשון של האתחול או hello. ‏`answered_at` NULL = עוד לא ענתה (או לא התעוררה, אחרי
 -- ‏`ANSWER_S`). ‏`early` — נשלחה שליחה חוזרת מוקדמת; ‏`alerted` — ההתראה על הרצף נרשמה.
 CREATE TABLE IF NOT EXISTS wol_wakes (
@@ -751,7 +751,7 @@ CREATE TABLE IF NOT EXISTS wol_wakes (
 );
 CREATE INDEX IF NOT EXISTS wol_wakes_mac ON wol_wakes (mac, sent_epoch);
 
--- ‏#1848: כמה זמן ארך כל מעבר בשרשרת האתחול, לכל מכונה (`server/learn_boot.py`) — הבסיס
+-- ‏#1848: כמה זמן ארך כל מעבר בשרשרת האתחול, לכל מכונה (`server/learn/learn_boot.py`) — הבסיס
 -- לזיהוי שלב שהתארך, ולהשוואה לפני/אחרי עדכון (`version` = גרסת השרת בזמן המדידה; NULL = לא נקראה).
 CREATE TABLE IF NOT EXISTS boot_step_times (
     mac     TEXT NOT NULL,
@@ -763,7 +763,7 @@ CREATE TABLE IF NOT EXISTS boot_step_times (
 CREATE INDEX IF NOT EXISTS boot_step_times_mac ON boot_step_times (mac, step);
 CREATE INDEX IF NOT EXISTS boot_step_times_version ON boot_step_times (version, step);
 
--- ‏#1882: הקטע האחרון של לוג הסוכן, פעם אחת בסוף כל סבב (`server/agent_logs.py`). הטקסט
+-- ‏#1882: הקטע האחרון של לוג הסוכן, פעם אחת בסוף כל סבב (`server/agent/agent_logs.py`). הטקסט
 -- **אחרי** סינון סודות ומידע מהדיסק (#1924), דחוס. תקרה בכל הכנסה (מכונה/סך הכול) + 90 יום.
 CREATE TABLE IF NOT EXISTS agent_logs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -779,7 +779,7 @@ CREATE TABLE IF NOT EXISTS agent_logs (
 );
 CREATE INDEX IF NOT EXISTS agent_logs_mac ON agent_logs (mac, id);
 
--- ‏#1883: כמה זמן ארך כל שלב בשחזור, לכל (גל, מכונה, מגירה) — `server/restore_stages.py`. משכים לפי
+-- ‏#1883: כמה זמן ארך כל שלב בשחזור, לכל (גל, מכונה, מגירה) — `server/agent/restore_stages.py`. משכים לפי
 -- שעון המכונה; ‏`serial` NULL = לא דווח. 90 יום (`housekeeping`).
 CREATE TABLE IF NOT EXISTS restore_stages (
     session_id TEXT NOT NULL,
@@ -793,7 +793,7 @@ CREATE TABLE IF NOT EXISTS restore_stages (
 );
 CREATE INDEX IF NOT EXISTS restore_stages_mac ON restore_stages (mac, session_id);
 
--- ‏#1884: דיסק הספרייה ולחץ ה-I/O של השרת לכל גל/קליטה (`server/server_io.py`) — צילום בהתחלה,
+-- ‏#1884: דיסק הספרייה ולחץ ה-I/O של השרת לכל גל/קליטה (`server/learn/server_io.py`) — צילום בהתחלה,
 -- תוצאה בסוף. ‏`basis` ‏server_disk/ok/NULL (לא נבדק). 90 יום (`housekeeping`).
 CREATE TABLE IF NOT EXISTS server_io (
     kind        TEXT NOT NULL,
@@ -806,7 +806,7 @@ CREATE TABLE IF NOT EXISTS server_io (
     PRIMARY KEY (kind, ref)
 );
 
--- ‏#1886: מקום פנוי לכל מיקום אחסון לאורך זמן (`server/storage_history.py`) — יומי, ובכל קליטה/סבב.
+-- ‏#1886: מקום פנוי לכל מיקום אחסון לאורך זמן (`server/storage/storage_history.py`) — יומי, ובכל קליטה/סבב.
 CREATE TABLE IF NOT EXISTS storage_usage (
     location_id TEXT NOT NULL,
     at          TEXT NOT NULL,
@@ -816,7 +816,7 @@ CREATE TABLE IF NOT EXISTS storage_usage (
 );
 CREATE INDEX IF NOT EXISTS storage_usage_loc ON storage_usage (location_id, at);
 
--- ‏#1887: מה ש-dnsmasq רשם ל-journal לכל MAC (`server/pxe_log.py`) — קריאה בלבד. 14 יום + תקרת שורות.
+-- ‏#1887: מה ש-dnsmasq רשם ל-journal לכל MAC (`server/net/pxe_log.py`) — קריאה בלבד. 14 יום + תקרת שורות.
 CREATE TABLE IF NOT EXISTS pxe_events (
     mac    TEXT NOT NULL,
     kind   TEXT NOT NULL,
@@ -828,7 +828,7 @@ CREATE INDEX IF NOT EXISTS pxe_events_mac ON pxe_events (mac, at);
 CREATE INDEX IF NOT EXISTS pxe_events_ip ON pxe_events (ip, at);
 
 -- ‏#1888: היסטוריית IP לכל MAC (שורה כשהשתנה; `db.net_seen`) ודגימות מוני כרטיס הרשת מבדיקת המכונה
--- (`server/net_history.py`). ערך שלא נמדד — NULL. תקרה בשורות בכל הכנסה + `housekeeping`.
+-- (`server/learn/net_history.py`). ערך שלא נמדד — NULL. תקרה בשורות בכל הכנסה + `housekeeping`.
 CREATE TABLE IF NOT EXISTS ip_history (
     mac      TEXT NOT NULL,
     ip       TEXT NOT NULL,
@@ -877,7 +877,7 @@ DEFAULT_SETTINGS = {
     # #1967: audible result on cloning machines; an explicit false disables it.
     "cloner_beep": "true",
     # ‏#447 + הכרעת נדב 11/10: קצב אוטומטי לכל גל — עולה על גל נקי, יורד על
-    # שידורים חוזרים וכוננים איטיים, לעולם לא מעל `IMAGECTL_MAX_BITRATE`
+    # שידורים חוזרים וכוננים איטיים, לעולם לא מעל `IMAGESRV_MAX_BITRATE`
     # (בלעדיו 900m). ‏"false" = קצב הפתיחה (600m), קבוע.
     "learned_rate_enabled": "true",
     # נדב 18/10: "תכלס לא צריך לזה MFA" — אין חיוב MFA למנהלים, גם בשדרוג של שרת שבו
@@ -902,7 +902,7 @@ ADDED_COLUMNS = [
     ("groups", "sort", "INTEGER NOT NULL DEFAULT 0"),
     ("net_devices", "disks_json", "TEXT"),
     # ‏#839: סוד המוניטור שהמכונה הגרילה באתחול ודיווחה ב-hello. הפרוקסי
-    # (server/monitor.py) מזדהה איתו מול 5900 של אותה מכונה, ושום תשובת
+    # (server/console/monitor.py) מזדהה איתו מול 5900 של אותה מכונה, ושום תשובת
     # קונסולה אינה מחזירה אותו.
     ("net_devices", "monitor_secret", "TEXT"),
     # ‏#500: הקושחה ומצב ה-Secure Boot שהסוכן מודד ושולח בכל hello — נמדדו
@@ -926,7 +926,7 @@ ADDED_COLUMNS = [
     # עם `local_clone`). NULL = לא; נכתב תמיד, כמו prompt — hello בלי השדה מנקה.
     ("net_devices", "local_clone", "TEXT"),
     # ‏#2031: משכפל שמחזיק את התוצאות עד "כבה" (#2024) — הדיווח held האחרון
-    # (‏server/held.py). NULL = לא מוחזק; hello מצטרף ומסירת כיבוי מנקים.
+    # (‏server/agent/held.py). NULL = לא מוחזק; hello מצטרף ומסירת כיבוי מנקים.
     ("net_devices", "held_at", "TEXT"),
     ("net_devices", "held_json", "TEXT"),
     # ‏#1367: בקשת כוח שהמפעיל אישר מעל אזהרת "באמצע שיכפול מקומי". רק היא
@@ -948,7 +948,7 @@ ADDED_COLUMNS = [
     # בחירת דיסקי היעד לסבב, לכל מכונה. NULL = סבב ישן (התנהגות "כל הדיסקים").
     # '[]' הוא בחירה ריקה מפורשת ואינו חוקי לסבב חדש (#695).
     ("room_rounds", "target_slots_json", "TEXT"),
-    # ‏#1269: דגם הדרייברים שנבחר לכל דיסק יעד (`server/room_drivers.py`).
+    # ‏#1269: דגם הדרייברים שנבחר לכל דיסק יעד (`server/rounds/room_drivers.py`).
     # NULL = הסבב בלי דרייברים — בדיוק ההתנהגות מלפני ה-Issue.
     ("room_rounds", "driver_models_json", "TEXT"),
     # הדיווח האחרון כפי שהגיע, יעד-יעד. סבב החדר סופר ממנו אילו
@@ -1383,7 +1383,7 @@ def _initialize(conn: sqlite3.Connection) -> None:
             f"ה-DB מגרסת סכמה {found}, והקוד הזה מכיר עד {SCHEMA_VERSION} — ה-DB נוצר או "
             "עודכן בגרסה חדשה יותר (חזרה לגרסה קודמת אחרי מיגרציה?). השרת אינו עולה על "
             "DB שהוא אינו מכיר: שחזרו את העותק שלפני העדכון "
-            "(imagectl.db.pre-upgrade) או חזרו לגרסה החדשה (#1894)")
+            "(imagesrv.db.pre-upgrade) או חזרו לגרסה החדשה (#1894)")
     conn.executescript(SCHEMA)
     # #1178: בדיקת boot מקומית ישנה נרשמה כתחנה. הניקוי אידמפוטנטי
     # ורץ לפני שהקונסולה יכולה לקרוא את net_devices.
@@ -1761,7 +1761,7 @@ def net_seen(
         # ‏#1888: היסטוריית IP — שורה רק כשה-IP השתנה (או ראשון), באותה טרנזאקציה.
         moved = ip is not None and (row is None or ip != row["ip"])
         if moved:
-            from .net_history import KEEP_IPS   # noqa: PLC0415 — net_history מייבא את db
+            from server.learn.net_history import KEEP_IPS   # noqa: PLC0415 — net_history מייבא את db
             conn.execute("INSERT INTO ip_history (mac, ip, previous, at) VALUES (?, ?, ?, ?)",
                          (mac, ip, row["ip"] if row is not None else None, ts))
             conn.execute("DELETE FROM ip_history WHERE mac = ? AND rowid NOT IN (SELECT rowid"
@@ -1864,7 +1864,7 @@ def set_settings(conn: sqlite3.Connection, pairs: dict[str, str],
             )
 
 
-log = logging.getLogger("imagectl.db")
+log = logging.getLogger("imagesrv.db")
 
 #: ‏#1892: הכתיבה האחרונה שנכשלה ב-SQLITE_FULL — ‏{"at", "what"}, או ריק.
 #: מתנקה בשורת יומן מוצלחת: זו הראיה החיובית שהמחיצה התפנתה.

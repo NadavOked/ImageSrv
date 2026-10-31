@@ -1,6 +1,6 @@
 /* ImageSrv -- דף "דיסקים" תחת מלאי + לשונית "סטים" (#1857, מוקאפ 04 מאושר, נדב 24/10).
    סט = שם + קידומת ("קוריאים" / xx): מדבקות xx-INS, xx-1 … xx-29. השם הולך עם הדיסק לפי הסידורי, לא עם
-   המגירה, ותצוגה בלבד. ה-API: server/console_disk_sets.py (interfaces.md). "לא נקרא" אינו "אין" (עיקרון 5):
+   המגירה, ותצוגה בלבד. ה-API: server/console/console_disk_sets.py (interfaces.md). "לא נקרא" אינו "אין" (עיקרון 5):
    כשל בקריאה מוצג כהודעה, לא כרשימה ריקה. משתמש ב-UI/api/post/sheet/toast/esc/fmtWhenShort/smartReasonHe
    מ-console.js (נטען אחריו). */
 "use strict";

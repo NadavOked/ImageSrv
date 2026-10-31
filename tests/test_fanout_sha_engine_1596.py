@@ -120,7 +120,7 @@ def test_the_sha_modules_are_loaded_at_boot_and_not_required():
     """Loaded by name at boot (the kernel will not ask for sha256-ssse3 itself),
     and not in modules.required: a CPU without SSSE3 is not a broken initramfs."""
     text = BUILDER.read_text(encoding="utf-8")
-    boot = text[text.index("printf '%s\\n' usbcore"):text.index('> "$ROOT/etc/imagectl/modules"')]
+    boot = text[text.index("printf '%s\\n' usbcore"):text.index('> "$ROOT/etc/imagesrv/modules"')]
     assert "printf '%s\\n' af_alg algif_hash sha256-ssse3" in boot
     required = text.split("REQUIRED_FS_MODULES=(", 1)[1].split(")", 1)[0]
     for mod in SHA_LAYOUT:

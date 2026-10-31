@@ -68,7 +68,7 @@ def test_each_drawer_reports_the_bytes_that_were_written_to_it(tmp_path):
     run = box / "run"
     payload = box / "part.bin"
     box.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 8192)          # 64KB
+    payload.write_bytes(b"imagesrv" * 8192)          # 64KB
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     for dev in ("sda", "sdb"):
         (run / "targets" / dev).mkdir(parents=True)
@@ -78,9 +78,9 @@ def test_each_drawer_reports_the_bytes_that_were_written_to_it(tmp_path):
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         "target_init sda 131072; target_init sdb 131072; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
@@ -108,7 +108,7 @@ def test_the_compiled_fanout_writes_the_counter_the_agent_reads(tmp_path):
     run = box / "run"
     payload = box / "part.bin"
     stubs.mkdir(parents=True)
-    payload.write_bytes(b"imagectl" * 8192)          # 64KB
+    payload.write_bytes(b"imagesrv" * 8192)          # 64KB
     sha = hashlib.sha256(payload.read_bytes()).hexdigest()
     subprocess.run(["gcc", "-O2", "-o", str(stubs / "fanout"),
                     str(AGENT / "fanout.c")], check=True, stdin=subprocess.DEVNULL)
@@ -121,9 +121,9 @@ def test_the_compiled_fanout_writes_the_counter_the_agent_reads(tmp_path):
         # מאגר קטן: המכונה הזו לא צריכה 256MB למגירה כדי להעביר 64KB.
         "FANOUT_BUFFER=1048576 WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         "target_init sda 131072; target_init sdb 131072; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
@@ -147,10 +147,10 @@ def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, 
     run.mkdir()
     prelude = (
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/expand.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
-        f". {posix(AGENT)}/lib/writecheck.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/restore/writecheck.sh; "
         "log() { :; }; disk_fits() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "expand_last() { return 0; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark

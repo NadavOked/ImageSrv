@@ -19,15 +19,15 @@ pytest.importorskip("fastapi")
 from conftest import MANIFEST_256, write_image
 
 from server.db import connect
-from server.tasks import staging_dir
-from server.work_areas import CAPTURE_AREA, human_bytes, plan, sweep
+from server.core.tasks import staging_dir
+from server.library.work_areas import CAPTURE_AREA, human_bytes, plan, sweep
 
 NOW = "2026-08-27T00:27:28+00:00"
 
 
 @pytest.fixture()
 def conn(tmp_path: Path):
-    return connect(tmp_path / "imagectl.db")
+    return connect(tmp_path / "imagesrv.db")
 
 
 def add_task(conn, task_id: str, state: str) -> None:
@@ -94,8 +94,8 @@ def test_the_journal_says_how_many_and_how_much_room(conn, tmp_path):
 
 
 def test_the_hebrew_journal_reads_it_out(conn, tmp_path):
-    from server.images import ImageLibrary
-    from server.journal_he import JournalTranslator
+    from server.library.images import ImageLibrary
+    from server.console.journal_he import JournalTranslator
 
     root = tmp_path / "images"
     add_task(conn, "tsk_db79", "failed")
@@ -228,7 +228,7 @@ def test_a_delete_that_did_not_finish_is_not_counted_as_freed(conn, tmp_path,
     root = tmp_path / "images"
     add_task(conn, "tsk_stuck", "failed")
     make_area(root, ".capture-tsk_stuck")
-    monkeypatch.setattr("server.work_areas.shutil.rmtree",
+    monkeypatch.setattr("server.library.work_areas.shutil.rmtree",
                         lambda path: None)          # "הצליח", ולא מחק כלום
 
     result = sweep(conn, root)
@@ -270,7 +270,7 @@ def test_the_server_sweeps_when_it_comes_up(tmp_path, images_root):
 
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    before = connect(data_dir / "imagectl.db")
+    before = connect(data_dir / "imagesrv.db")
     add_task(before, "tsk_0930", "failed")
     add_task(before, "tsk_live", "running")
     make_area(images_root, ".capture-tsk_0930", size=7168)

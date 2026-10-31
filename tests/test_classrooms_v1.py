@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from server import capabilities
+from server.core import capabilities
 
 REPO = Path(__file__).resolve().parent.parent
 STATIC = REPO / "server" / "static"

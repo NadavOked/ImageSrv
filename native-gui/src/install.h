@@ -1,5 +1,5 @@
-#ifndef IMAGECTL_INSTALL_H
-#define IMAGECTL_INSTALL_H
+#ifndef IMAGESRV_INSTALL_H
+#define IMAGESRV_INSTALL_H
 
 #include "ui.h"
 #include "input.h"

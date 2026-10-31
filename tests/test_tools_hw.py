@@ -16,7 +16,7 @@ import pytest
 from sizelimit import assert_within_limit
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "agent/lib/tools_hw.sh"
+SCRIPT = ROOT / "agent/lib/tools/tools_hw.sh"
 SH = shutil.which("sh")
 pytestmark = pytest.mark.skipif(not SH, reason="POSIX sh is unavailable")
 

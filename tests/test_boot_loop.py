@@ -1,7 +1,7 @@
 """לולאת האתחול של סבב פתוח (‏#75) — עיקרון 1 כשהסוכן נכשל.
 
 מכונה שהסוכן שלה מת לפני `hello` קוראת ל-`die_local`, ש-`reboot -f`
-מסיים אותו. עם סבב פתוח התפריט הבא מחזיר `default=imagectl` עם
+מסיים אותו. עם סבב פתוח התפריט הבא מחזיר `default=imagesrv` עם
 `timeout=0`, והמכונה נוחתת שוב באותו כישלון — לולאה אינסופית, מחזור
 כל ~2 דקות, ששוחזרה על חומרה. ‏`hello` לא הגיע מעולם, ולכן בקשת
 התפריט היא העדות היחידה שיש לשרת על המכונה הזו.
@@ -19,7 +19,7 @@ pytest.importorskip("fastapi")
 from conftest import hello_body, setup_classroom          # noqa: E402
 
 from boot.grub_menu import AGENT, GrubConfig, LOCAL, decide, render  # noqa: E402
-from server.bootguard import ATTEMPT_LIMIT                # noqa: E402
+from server.agent.bootguard import ATTEMPT_LIMIT                # noqa: E402
 
 CONFIG = GrubConfig(server_base="http://10.44.12.10:8080")
 
@@ -41,7 +41,7 @@ def test_an_open_session_boots_the_agent_without_the_guard():
     """הבקרה: זו ההתנהגות הרגילה, וזו גם הלולאה כשהסוכן נכשל."""
     assert decide(OPEN_SESSION).action == AGENT
     text = render(OPEN_SESSION, CONFIG)
-    assert "set default=imagectl" in text and "set timeout=0" in text
+    assert "set default=imagesrv" in text and "set timeout=0" in text
 
 
 def test_the_guard_sends_an_open_session_machine_to_the_local_disk():
@@ -131,7 +131,7 @@ def test_the_budget_is_per_machine(server):
     """מכונה אחת שנתקעה לא מורידה את הכיתה לדיסק."""
     ids = open_session(server)
     boot_until_local(server, ids["mac1"])
-    assert "set default=imagectl" in menu(server, ids["mac2"])
+    assert "set default=imagesrv" in menu(server, ids["mac2"])
 
 
 def test_the_loop_reaches_the_console(server):
@@ -175,7 +175,7 @@ def test_a_new_session_is_a_new_budget(server):
         json={"group_id": ids["group"], "image_id": "img_7f3a91",
               "prefix": "LAB1", "expected_clients": 2},
     ).status_code == 200
-    assert "set default=imagectl" in menu(server, ids["mac1"])
+    assert "set default=imagesrv" in menu(server, ids["mac1"])
 
 
 def test_a_cloner_is_never_sent_to_a_disk_it_does_not_have(server):
@@ -247,8 +247,8 @@ def test_a_machine_that_finished_is_not_counted_and_not_offered_the_session(serv
     """‏done לא מקבל את הסבב שוב (session:null), ואינו נספר בשומר הלולאה:
     אין לו הקשר תחום בזמן (task/session), בדיוק כמו cloner-wait.
 
-    ⚠️ מ-#641 (היפוך #140) תחנת כיתה בלי משימה עולה ישר ל-ImageCtl,
-    ולכן גם מכונה שסיימה שחזור מקבלת `default=imagectl` ולא
+    ⚠️ מ-#641 (היפוך #140) תחנת כיתה בלי משימה עולה ישר ל-ImageSrv,
+    ולכן גם מכונה שסיימה שחזור מקבלת `default=imagesrv` ולא
     `default=local` — השרת אינו מבדיל "סיימה" מ"מעולם לא קיבלה משימה"
     (שתיהן session:null). מה שנשמר כאן הוא **השומר**: הלולאה אינה סופרת
     אותה (`context is None`), ולכן `stuck` ריק ואין `boot_loop_local`.
@@ -262,7 +262,7 @@ def test_a_machine_that_finished_is_not_counted_and_not_offered_the_session(serv
     }).json()["ok"]
 
     for _ in range(ATTEMPT_LIMIT + 3):
-        assert "set default=imagectl" in menu(server, ids["mac1"])
+        assert "set default=imagesrv" in menu(server, ids["mac1"])
     view = server["admin"].get("/api/console/overview").json()["session"]
     assert view["stuck"] == {}
     events = [row["event"] for row in
@@ -317,7 +317,7 @@ def test_menu_requests_from_another_network_are_not_counted_as_boots(server):
     assert counted(server, ids["mac1"]) == 0
     # והתשובה עצמה לא השתנתה: זו התראה ולא שער (#137), והתחנה שבאמת
     # מושכת תפריט מרשת אחרת (תרחיש 3, ‏#39) ממשיכה לקבל את הסבב שלה.
-    assert all("set default=imagectl" in body for body in bodies)
+    assert all("set default=imagesrv" in body for body in bodies)
     events = [row["event"] for row in
               server["admin"].get("/api/console/journal").json()]
     assert "boot_loop_local" not in events
@@ -331,7 +331,7 @@ def test_the_station_keeps_its_whole_budget_after_the_forged_requests(server):
         menu_at(server, OFF_VLAN, ids["mac1"])
 
     for attempt in range(1, ATTEMPT_LIMIT + 1):
-        assert "set default=imagectl" in menu_at(server, VLAN, ids["mac1"])
+        assert "set default=imagesrv" in menu_at(server, VLAN, ids["mac1"])
         assert counted(server, ids["mac1"]) == attempt
     assert "set default=local" in menu_at(server, VLAN, ids["mac1"])
 
@@ -342,7 +342,7 @@ def test_the_deployment_vlan_is_still_counted(server):
     ids = open_session(server)
 
     for _ in range(ATTEMPT_LIMIT):
-        assert "set default=imagectl" in menu_at(server, VLAN, ids["mac1"])
+        assert "set default=imagesrv" in menu_at(server, VLAN, ids["mac1"])
     assert "set default=local" in menu_at(server, VLAN, ids["mac1"])
     assert counted(server, ids["mac1"]) == ATTEMPT_LIMIT + 1
 
@@ -375,7 +375,7 @@ def test_a_menu_from_another_network_does_not_record_the_machine(server):
     assert net_row(server, ids["mac1"]) is None
     # והתשובה עצמה לא השתנתה — התחנה שמושכת תפריט מרשת אחרת (תרחיש 3,
     # ‏#39) ממשיכה לקבל את הסבב שלה (עיקרון 1, התראה ולא שער).
-    assert all("set default=imagectl" in body for body in bodies)
+    assert all("set default=imagesrv" in body for body in bodies)
 
 
 def test_a_menu_on_the_deployment_vlan_still_records(server):

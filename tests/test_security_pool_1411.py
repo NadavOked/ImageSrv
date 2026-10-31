@@ -5,7 +5,7 @@
 * ``tools/iso/make-pool.sh`` נכשל בלי trixie-security במקורות של המארח הבונה,
   וב-``--security`` אורז רק את חבילות trixie-security של הסגירה, עם
   ``security-pool.json`` (גיבוב, גודל, תאריך).
-* ``install/security-upgrade.sh`` (מכפתור העדכון) מוריד את ה-tar, דוחה tar שאינו
+* ``deploy/security-upgrade.sh`` (מכפתור העדכון) מוריד את ה-tar, דוחה tar שאינו
   תואם לגיבוב שבעץ התג החתום, ומריץ ``apt-get upgrade`` שרואה **רק** את המאגר
   הזה — בתקרת זמן, עם ראיה חיובית שהגרסאות עלו.
 * ``tools/server-upgrade.sh``: שלב ``packages`` אחרי היחידות ולפני ה-initrd;
@@ -42,11 +42,11 @@ from test_server_upgrade_1193 import _run as _run_upgrade
 from test_server_upgrade_1193 import _success_tools
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCK_PY = ROOT / "install" / "security-pool-lock.py"
-SEC_UP = ROOT / "install" / "security-upgrade.sh"
+LOCK_PY = ROOT / "deploy" / "security-pool-lock.py"
+SEC_UP = ROOT / "deploy" / "security-upgrade.sh"
 MAKE_POOL = ROOT / "tools" / "iso" / "make-pool.sh"
 DAY = "2026-10-15"
-ASSET = f"imagectl-security-pool-{DAY}.tar"
+ASSET = f"imagesrv-security-pool-{DAY}.tar"
 
 POSIX = requires_native(("bash", BASH), "tar", "sha256sum", "timeout", "zcat", "gzip",
                         posix=True, why="the upgrade path is bash with GNU tools")
@@ -73,7 +73,7 @@ def test_a_valid_lock_prints_asset_hash_size_and_date(tmp_path):
 
 @pytest.mark.parametrize("change", [
     {"sha256": "a" * 63}, {"sha256": "A" * 64}, {"size": 0}, {"size": True}, {"size": "1234"},
-    {"asset": "../../etc/passwd"}, {"asset": "imagectl-security-pool-2026-10-15.tar.gz"},
+    {"asset": "../../etc/passwd"}, {"asset": "imagesrv-security-pool-2026-10-15.tar.gz"},
     {"date": "2026-10-16"}, {"date": "15/10/2026"}, {"asset": None},
 ])
 def test_an_invalid_lock_is_refused_by_name(tmp_path, change):
@@ -87,17 +87,17 @@ def test_an_unreadable_lock_is_a_failure_not_no_pool(tmp_path, text):
     assert _lock_cli(tmp_path, text).returncode == 2
 
 
-# ---- install/security-upgrade.sh -------------------------------------------------------
+# ---- deploy/security-upgrade.sh -------------------------------------------------------
 
 def _packages_index(packages: dict[str, str]) -> bytes:
     text = "".join(f"Package: {name}\nVersion: {ver}\nArchitecture: amd64\n"
-                   f"Filename: pool/main/imagectl/{name}_{ver}_amd64.deb\n\n"
+                   f"Filename: pool/main/imagesrv/{name}_{ver}_amd64.deb\n\n"
                    for name, ver in packages.items())
     return gzip.compress(text.encode("utf-8"), mtime=0)
 
 
 def _tar(packages: dict[str, str]) -> bytes:
-    members = {f"pool/main/imagectl/{n}_{v}_amd64.deb": b"deb" for n, v in packages.items()}
+    members = {f"pool/main/imagesrv/{n}_{v}_amd64.deb": b"deb" for n, v in packages.items()}
     members["dists/trixie/main/binary-amd64/Packages.gz"] = _packages_index(packages)
     members["dists/trixie/Release"] = b"Codename: trixie\n"
     members["pool-date"] = f"{DAY}\n".encode()
@@ -111,7 +111,7 @@ def _tar(packages: dict[str, str]) -> bytes:
 
 
 class World:
-    """A repo checked out at the tag (install/ + the lock), a release dir with the
+    """A repo checked out at the tag (deploy/ + the lock), a release dir with the
     tar, and fake apt/dpkg/curl whose "installed" versions live in a file."""
 
     def __init__(self, tmp_path: Path, bindir: Path, *, pool: dict[str, str] | None,
@@ -119,9 +119,9 @@ class World:
                  wanted: list[str] | None = None):
         self.tmp, self.bindir = tmp_path, bindir
         self.repo = tmp_path / "repo"
-        (self.repo / "install").mkdir(parents=True, exist_ok=True)
-        shutil.copy(SEC_UP, self.repo / "install" / "security-upgrade.sh")
-        shutil.copy(LOCK_PY, self.repo / "install" / "security-pool-lock.py")
+        (self.repo / "deploy").mkdir(parents=True, exist_ok=True)
+        shutil.copy(SEC_UP, self.repo / "deploy" / "security-upgrade.sh")
+        shutil.copy(LOCK_PY, self.repo / "deploy" / "security-pool-lock.py")
         # #1803: the tag's tools/iso/packages.txt -- by default exactly what is installed.
         self.packages_txt = self.repo / "tools" / "iso" / "packages.txt"
         self.packages_txt.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +138,7 @@ class World:
             self.lock = lock or {"asset": ASSET, "date": DAY, "sha256": hashlib.sha256(raw).hexdigest(),
                                  "size": len(raw), "packages": len(pool), "suite": "trixie-security"}
             (self.release / ASSET).write_bytes(raw + (b"x" if tamper else b""))
-            (self.repo / "install" / "security-pool.json").write_text(json.dumps(self.lock),
+            (self.repo / "deploy" / "security-pool.json").write_text(json.dumps(self.lock),
                                                                        encoding="utf-8")
             self.after = {**installed, **{n: v for n, v in pool.items() if n in installed}}
         else:
@@ -210,9 +210,9 @@ cp "$src" "$out" 2>/dev/null || { echo "curl: (22) The requested URL returned er
         fake_tool(self.bindir, "git", 'echo "${FAKE_ORIGIN:-https://github.com/NadavOked/ImageSrv.git}"')
 
     def run(self, **env: str) -> subprocess.CompletedProcess:
-        full = {"IMAGECTL_DATA_DIR": posix(self.data), "IMAGECTL_PYTHON": sys.executable,
-                "IMAGECTL_SECURITY_POOL_URL": "file://" + posix(self.release), **env}
-        return run_bash(f'bash "{posix(self.repo / "install" / "security-upgrade.sh")}" v0.80.0 '
+        full = {"IMAGESRV_DATA_DIR": posix(self.data), "IMAGESRV_PYTHON": sys.executable,
+                "IMAGESRV_SECURITY_POOL_URL": "file://" + posix(self.release), **env}
+        return run_bash(f'bash "{posix(self.repo / "deploy" / "security-upgrade.sh")}" v0.80.0 '
                         f'"{posix(self.repo)}"', self.tmp, self.bindir, env=full)
 
     def installed(self) -> dict[str, str]:
@@ -336,7 +336,7 @@ def test_a_failed_upgrade_repairs_dpkg_and_fails_in_name(tmp_path, bindir):
 @POSIX
 def test_an_upgrade_past_its_ceiling_is_stopped_and_named(tmp_path, bindir):
     world = World(tmp_path, bindir, pool=POOL, installed=OLD)
-    done = world.run(IMAGECTL_SECURITY_TIMEOUT="1", FAKE_APT_SLEEP="20")
+    done = world.run(IMAGESRV_SECURITY_TIMEOUT="1", FAKE_APT_SLEEP="20")
     assert done.returncode == 5, done.stdout + done.stderr
     assert "לא הסתיים תוך 1 ש'" in done.stdout.splitlines()[-1]
     assert "dpkg --configure -a" in calls(tmp_path) and world.state() is None
@@ -362,7 +362,7 @@ def test_a_version_check_that_could_not_run_installs_nothing(tmp_path, bindir):
 @POSIX
 def test_the_pool_is_downloaded_from_the_release_of_the_tag_over_https(tmp_path, bindir):
     world = World(tmp_path, bindir, pool=POOL, installed=OLD)
-    done = world.run(IMAGECTL_SECURITY_POOL_URL="", FAKE_CURL_SRC=posix(world.release / ASSET))
+    done = world.run(IMAGESRV_SECURITY_POOL_URL="", FAKE_CURL_SRC=posix(world.release / ASSET))
     assert done.returncode == 0, done.stdout + done.stderr
     curl = world.calls("curl")
     assert curl and curl[0].endswith(
@@ -373,7 +373,7 @@ def test_the_pool_is_downloaded_from_the_release_of_the_tag_over_https(tmp_path,
 @POSIX
 def test_an_origin_that_is_not_github_is_not_guessed(tmp_path, bindir):
     world = World(tmp_path, bindir, pool=POOL, installed=OLD)
-    done = world.run(IMAGECTL_SECURITY_POOL_URL="", FAKE_ORIGIN="/srv/mirror/ImageCtl.git")
+    done = world.run(IMAGESRV_SECURITY_POOL_URL="", FAKE_ORIGIN="/srv/mirror/ImageSrv.git")
     assert done.returncode == 3 and "אינו ריפו ב-github" in done.stdout, done.stdout
     assert not world.calls("curl")
 
@@ -419,7 +419,7 @@ def test_an_upgrade_that_would_remove_a_package_installs_nothing_and_fails_in_na
 # ---- tools/server-upgrade.sh: the `packages` stage ---------------------------------------
 
 def _stub(repo: Path, body: str) -> None:
-    (repo / "install" / "security-upgrade.sh").write_text(
+    (repo / "deploy" / "security-upgrade.sh").write_text(
         '#!/usr/bin/env bash\nprintf "security-upgrade %s\\n" "$*" >> "$FAKE_LOG"\n' + body + "\n",
         encoding="utf-8", newline="\n")
 
@@ -479,7 +479,7 @@ def test_the_real_script_in_a_release_without_a_pool_lets_the_upgrade_finish(tmp
     data = tmp_path / "data"
     _seed_db(data)
     repo = _fake_repo(tmp_path, live_ok=True)
-    shutil.copy(SEC_UP, repo / "install" / "security-upgrade.sh")
+    shutil.copy(SEC_UP, repo / "deploy" / "security-upgrade.sh")
     # #1803: the tag's package list, everything on it installed
     (repo / "tools" / "iso").mkdir(parents=True)
     (repo / "tools" / "iso" / "packages.txt").write_text("dpkg\n", encoding="utf-8", newline="\n")
@@ -561,16 +561,16 @@ def test_make_pool_security_packs_the_closure_with_a_valid_lock(tmp_path, bindir
     raw = tar_path.read_bytes()
     assert lock["sha256"] == hashlib.sha256(raw).hexdigest() and lock["size"] == len(raw)
     assert lock["packages"] == 6 and lock["security"] == 3, lock
-    assert lock["asset"] == f"imagectl-security-pool-{lock['date']}.tar"
+    assert lock["asset"] == f"imagesrv-security-pool-{lock['date']}.tar"
     with tarfile.open(tar_path) as tar:
         names = sorted(tar.getnames())
     debs = [n for n in names if n.endswith(".deb")]
-    assert debs == ["pool/main/imagectl/dnsmasq-base_2.90-4+deb13u1_amd64.deb",
-                    "pool/main/imagectl/dnsmasq_2.90-4+deb13u1_amd64.deb",
-                    "pool/main/imagectl/libc6_2.41-12_amd64.deb",
-                    "pool/main/imagectl/libssl3t64_3.5.1-1+deb13u1_amd64.deb",
-                    "pool/main/imagectl/openssh-client_1%3a10.0p1-7+deb13u1_amd64.deb",
-                    "pool/main/imagectl/python3-security_1.0-1_amd64.deb"], names
+    assert debs == ["pool/main/imagesrv/dnsmasq-base_2.90-4+deb13u1_amd64.deb",
+                    "pool/main/imagesrv/dnsmasq_2.90-4+deb13u1_amd64.deb",
+                    "pool/main/imagesrv/libc6_2.41-12_amd64.deb",
+                    "pool/main/imagesrv/libssl3t64_3.5.1-1+deb13u1_amd64.deb",
+                    "pool/main/imagesrv/openssh-client_1%3a10.0p1-7+deb13u1_amd64.deb",
+                    "pool/main/imagesrv/python3-security_1.0-1_amd64.deb"], names
     assert "dists/trixie/main/binary-amd64/Packages.gz" in names and "pool-date" in names
     assert _lock_cli(tmp_path, (out / "security-pool.json").read_text(encoding="utf-8")).returncode == 0
 
@@ -627,7 +627,7 @@ def test_the_text_screen_shows_it_too():
 
 def test_the_date_is_the_last_installed_pool_else_the_isos(tmp_path):
     manifest = tmp_path / "iso-release.json"
-    manifest.write_text(json.dumps({"imagectl_tag": "v0.70.0", "pool_date": "2026-09-30"}),
+    manifest.write_text(json.dumps({"imagesrv_tag": "v0.70.0", "pool_date": "2026-09-30"}),
                         encoding="utf-8")
     assert dcui_data.system_updates_date(tmp_path, manifest) == "2026-09-30"
     (tmp_path / "security-pool.json").write_text(json.dumps({"date": DAY}), encoding="utf-8")
@@ -640,7 +640,7 @@ def test_an_unreadable_installed_pool_is_unknown_not_the_older_iso_date(tmp_path
     (tmp_path / "security-pool.json").write_text("{", encoding="utf-8")
     assert dcui_data.system_updates_date(tmp_path, manifest) == ""
     (tmp_path / "security-pool.json").unlink()
-    manifest.write_text(json.dumps({"imagectl_tag": "v0.60.0"}), encoding="utf-8")
+    manifest.write_text(json.dumps({"imagesrv_tag": "v0.60.0"}), encoding="utf-8")
     assert dcui_data.system_updates_date(tmp_path, manifest) == "", "an old ISO has no date"
     assert dcui_data.system_updates_date(tmp_path, tmp_path / "missing.json") == ""
 

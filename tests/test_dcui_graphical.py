@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server import users
+from server.console import users
 from server.db import connect
 from server.dcui import actions, app, gui, samples, view
 from server.dcui.data import CommandResult, DeployRound, NicInfo, ServiceState
@@ -218,7 +218,7 @@ def test_backend_messages_are_translated_and_unknown_ones_kept():
 # ---- the password dialog --------------------------------------------------------
 
 def _db(tmp_path):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     users.create(conn, "admin", "before", "admin", by="test",
                  is_builtin=True, check_policy=False)
     return conn
@@ -587,11 +587,11 @@ def test_dcui_png_needs_a_frame_file(built, tmp_path):
 # ---- #1363: a tile is never cut through a row --------------------------------------
 
 def _three_problems() -> str:
-    """The sample with two problems plus imagectl-server failed: three cards
+    """The sample with two problems plus imagesrv-server failed: three cards
     in the hero, the case that left the tiles a sliver at 1280x768."""
     two = samples.runtimes()["2-primary-problem"]
     snapshot = replace(two.snapshot, services=dict(two.snapshot.services)
-                       | {"imagectl-server": ServiceState("failed", "enabled")})
+                       | {"imagesrv-server": ServiceState("failed", "enabled")})
     runtime = samples._runtime(snapshot, samples.PRIMARY_EXTRAS)
     return view.render(runtime, samples.NOW, samples.NOW, samples.CLOCK, TODAY, 47)
 

@@ -22,6 +22,8 @@ from __future__ import annotations
 import warnings
 from pathlib import Path
 
+from agentlib import MIN_INSTALLER_LIB_FILES, checked_files, lib_files
+
 #: הקיר — מעבר לו הטסט נופל.
 MAX_LINES = 300
 
@@ -35,10 +37,10 @@ def guarded_shell_files(root: Path | str) -> list[Path]:
     agent = root / "agent"
     installer = root / "installer"
     return sorted([
-        agent / "init", agent / "imagectl-agent",
-        *(agent / "lib").glob("*.sh"),
-        installer / "imagectl-install",
-        *(installer / "lib").glob("*.sh"),
+        agent / "init", agent / "imagesrv-agent",
+        *lib_files(agent / "lib"),
+        installer / "imagesrv-install",
+        *checked_files(installer / "lib", "*.sh", MIN_INSTALLER_LIB_FILES),
     ])
 
 

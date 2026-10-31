@@ -43,12 +43,12 @@ def _fingerprint(conn) -> str:
 
 
 def test_a_fresh_database_carries_the_schema_version(tmp_path):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION
 
 
 def test_a_database_from_before_versions_is_stamped(tmp_path):
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     raw = sqlite3.connect(path)
     raw.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     raw.commit()
@@ -62,7 +62,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     """lab/int-1022: #1901 (tasks.disk_serial) is 4 and #2001 (model_slot_maps) is 5 --
     both PRs said 4. A server on 3 (before both) or on 4 (#1901 only) reaches 5 with
     both in place, stamped 5."""
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     connect(path).close()
     raw = sqlite3.connect(path)
     raw.execute("DROP TABLE model_slot_maps")
@@ -80,7 +80,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
 def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     """#2031 (PR #2036) added net_devices.held_at/held_json without a bump. A server
     already on 5 runs ADDED_COLUMNS, gains both, and is stamped 6."""
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     connect(path).close()
     raw = sqlite3.connect(path)
     raw.execute("ALTER TABLE net_devices DROP COLUMN held_json")
@@ -95,7 +95,7 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
 
 
 def test_a_database_newer_than_the_code_is_refused_and_left_untouched(tmp_path):
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     raw = sqlite3.connect(path)
     raw.execute("CREATE TABLE future_only (x)")
     raw.execute(f"PRAGMA user_version = {VERSION + 1}")
@@ -110,7 +110,7 @@ def test_a_database_newer_than_the_code_is_refused_and_left_untouched(tmp_path):
 
 
 def test_a_schema_change_must_bump_the_version(tmp_path):
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     assert VERSION in FINGERPRINTS, "העלית את SCHEMA_VERSION — רשום כאן את הטביעה"
     assert _fingerprint(conn) == FINGERPRINTS[VERSION], (
         "הסכמה השתנתה ו-db.SCHEMA_VERSION לא עלה (#1894)")
@@ -129,17 +129,17 @@ def _upgrade_with_live(tmp_path, live_script: str):
     _seed_db(data)
     repo = _fake_repo(tmp_path, live_ok=False)
     # ‏"השרת החדש" — כותב ל-DB (ואולי מיגר) ואינו עונה ב-/health/live.
-    (repo / "install" / "console-live.sh").write_text(
+    (repo / "deploy" / "console-live.sh").write_text(
         "#!/usr/bin/env bash\n" + live_script + "\nexit 1\n", encoding="utf-8", newline="\n")
     _upgrade_fakes(bindir)
     proc = _run_upgrade(tmp_path, bindir, repo, data)
-    raw = sqlite3.connect(data / "imagectl.db")
+    raw = sqlite3.connect(data / "imagesrv.db")
     return proc, raw, _status(data), calls(tmp_path), data
 
 
 WRITE = ('python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); '
          "c.execute(\\\"INSERT INTO journal (ts,user,event,detail) VALUES ('t','','after_update','')\\\")"
-         '{bump}; c.commit()" "$IMAGECTL_DATA_DIR/imagectl.db"')
+         '{bump}; c.commit()" "$IMAGESRV_DATA_DIR/imagesrv.db"')
 
 
 def test_rollback_after_a_migration_restores_the_database_and_says_so(tmp_path):
@@ -148,14 +148,14 @@ def test_rollback_after_a_migration_restores_the_database_and_says_so(tmp_path):
     assert proc.returncode != 0
     assert raw.execute("PRAGMA user_version").fetchone()[0] == VERSION
     assert raw.execute("SELECT 1 FROM journal WHERE event = 'after_update'").fetchone() is None
-    assert "systemctl stop imagectl-server" in seen
+    assert "systemctl stop imagesrv-server" in seen
     assert status["state"] == "failed" and "הוחזר לעותק שלפני העדכון" in status["error"], status
-    assert (data / "imagectl.db.pre-upgrade").is_file()
+    assert (data / "imagesrv.db.pre-upgrade").is_file()
 
 
 def test_rollback_without_a_migration_keeps_what_was_written(tmp_path):
     proc, raw, status, seen, _ = _upgrade_with_live(tmp_path, WRITE.format(bump=""))
     assert proc.returncode != 0
     assert raw.execute("SELECT 1 FROM journal WHERE event = 'after_update'").fetchone()
-    assert "systemctl stop imagectl-server" not in seen
+    assert "systemctl stop imagesrv-server" not in seen
     assert "הוחזר לעותק" not in status["error"]

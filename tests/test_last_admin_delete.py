@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import pytest
 
-from server import users
+from server.console import users
 
 
 def _reduce_to_one_active_admin(conn, keep: str) -> None:

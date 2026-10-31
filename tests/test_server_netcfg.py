@@ -21,8 +21,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import dhcp, netcfg, netcfg_host
-from server.netcfg import MODE_DHCP, MODE_MANUAL, MODE_STATIC, NetConfig, StaticRoute
+from server.net import dhcp, netcfg, netcfg_host
+from server.net.netcfg import MODE_DHCP, MODE_MANUAL, MODE_STATIC, NetConfig, StaticRoute
 
 
 def test_apply_brings_an_admin_down_interface_up_before_ifup(monkeypatch):
@@ -349,7 +349,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
     """
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     fake = {
@@ -473,7 +473,7 @@ def test_a_static_address_goes_from_the_console_to_a_file(net_server):
     assert "    address 10.44.9.11" in fake["confs"]["eth1"]
     assert fake["applied"] == ["eth1"]
     # הקובץ הוא ב-interfaces.d, ולכן הוא נטען שוב בכל אתחול.
-    assert netcfg_host.conf_path("eth1").name == "imagectl-eth1"
+    assert netcfg_host.conf_path("eth1").name == "imagesrv-eth1"
     # as_posix: בווינדוס str(Path("/etc/...")) הוא \etc\... וההשוואה
     # ל-"/etc/..." נכשלת על רינדור הנתיב, לא על המיקום (#312).
     assert netcfg_host.conf_path("eth1").as_posix().startswith(
@@ -592,7 +592,7 @@ def test_the_preview_shows_the_file_before_and_after(net_server):
     assert "    address 10.44.9.12" in preview["after"]
     assert preview["problems"] == []
     assert preview["changed"] == ["address"]
-    assert preview["path"].endswith("imagectl-eth1")
+    assert preview["path"].endswith("imagesrv-eth1")
 
 
 def test_the_preview_names_the_problems_without_writing(net_server):
@@ -888,7 +888,7 @@ def test_the_read_names_the_card_the_console_came_through(net_server):
 
 
 def test_installed_management_reads_servers_if_from_the_firstboot_status(tmp_path):
-    from server.console_netcfg import installed_management
+    from server.console.console_netcfg import installed_management
     status = tmp_path / "firstboot.status"
     status.write_text("state=done\nservers_if=ens18\nrole=primary\n", encoding="utf-8")
     assert installed_management(status) == "ens18"
@@ -911,7 +911,7 @@ def test_the_server_unit_may_write_where_the_code_writes():
     """‏`ReadWritePaths` שאינו כולל את היעד = כתיבה שנכשלת על שרת אמיתי
     ועוברת בכל בדיקה. הדרישה נבדקת מול הקבוע שבקוד, ולא מול מחרוזת
     שהועתקה לכאן."""
-    unit = (REPO / "install" / "imagectl-server.service").read_text(encoding="utf-8")
+    unit = (REPO / "deploy" / "imagesrv-server.service").read_text(encoding="utf-8")
     paths = next(line for line in unit.splitlines()
                  if line.startswith("ReadWritePaths="))
     assert netcfg_host.INTERFACES_DIR in paths
@@ -919,13 +919,13 @@ def test_the_server_unit_may_write_where_the_code_writes():
     assert " /etc" in paths and netcfg_host.RESOLV_CONF.startswith("/etc/")
 
 
-@pytest.mark.parametrize("unit_name", ["imagectl-server.service", "imagectl-dcui.service",
-                                       "imagectl-netrollback.service"])
+@pytest.mark.parametrize("unit_name", ["imagesrv-server.service", "imagesrv-dcui.service",
+                                       "imagesrv-netrollback.service"])
 def test_units_that_run_ifup_may_write_its_runtime_state(unit_name):
     """‏#1241: ‏ProtectSystem=strict הופך את /run ל-read-only. ‏ifup/ifdown
     נועלים את /run/network/ifstate.<כרטיס>, ו-dhcpcd כותב ל-/run/dhcpcd
     ול-/var/lib/dhcpcd — בלעדיהם כל החלת כתובת נכשלה על שרת מה-ISO."""
-    unit = (REPO / "install" / unit_name).read_text(encoding="utf-8")
+    unit = (REPO / "deploy" / unit_name).read_text(encoding="utf-8")
     assert "ProtectSystem=strict" in unit
     paths = next(line for line in unit.splitlines()
                  if line.startswith("ReadWritePaths=")).split("=", 1)[1].split()

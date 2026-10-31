@@ -1,7 +1,7 @@
-"""#1914 -- the clone stick: imagectl.mode=usbclone, no server, the stick never a disk.
+"""#1914 -- the clone stick: imagesrv.mode=usbclone, no server, the stick never a disk.
 
-* the kernel line of the stick (tools/usb/*.cfg.in) carries exactly one imagectl.*
-  word, imagectl.mode=usbclone -- principle 2 -- and parse_cmdline reads it;
+* the kernel line of the stick (tools/usb/*.cfg.in) carries exactly one imagesrv.*
+  word, imagesrv.mode=usbclone -- principle 2 -- and parse_cmdline reads it;
 * the stick is found by its partition labels, not by a device name, and is never in
   the local clone's inventory; in usbclone mode a list that was not written is every
   disk (fail closed);
@@ -23,11 +23,13 @@ from pathlib import Path
 import pytest
 
 import hygiene
+from shell_steps import run_steps
 from native import requires_native
 from test_cloner_gui import BASH, posix
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-LIB = REPO / "agent" / "lib"
+LIB = flat_lib()
 USB = REPO / "tools" / "usb"
 
 pytestmark = requires_native(("bash", BASH))
@@ -40,11 +42,18 @@ LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit",
         "disklink", "slotnames", "usbmap", "usbmapwin")   # #1962: the drawer mapping by model; #2001 its window
 
 
-def run(tmp_path: Path, script: str, timeout: int = 60, **env) -> subprocess.CompletedProcess:
+def run(tmp_path: Path, script: str, timeout: int = 60, *, steps: list[str] | None = None,
+        **env) -> subprocess.CompletedProcess:
     run_dir = tmp_path / "run"; run_dir.mkdir(exist_ok=True)
-    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGECTL_TEST=1 SMART_KB={posix(LIB)!r}/data; '
+    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGESRV_TEST=1 SMART_KB={posix(LIB)!r}/data; '
     pre += "".join(f'export {k}={v!r}; ' for k, v in env.items())
     pre += "".join(f'. {posix(LIB)}/{name}.sh; ' for name in LIBS)
+    # The stick and its writes are files in tmp_path. Flushing every dirty
+    # filesystem on the CI host is not evidence about these test files.
+    pre += 'sync() { echo sync >> "$RUN_DIR/test-sync.calls"; }; '
+    if steps is not None:
+        return run_steps([BASH], ['export PATH="/usr/bin:$PATH"; ' + pre + script, *steps],
+                         tmp_path, timeout=timeout, cwd=str(REPO))
     return hygiene.run_group([BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + pre + script],
                              capture_output=True, text=True, encoding="utf-8", errors="replace",
                              timeout=timeout, stdin=subprocess.DEVNULL, cwd=str(REPO))
@@ -77,28 +86,28 @@ def kernel_args(text: str) -> list[list[str]]:
 
 
 @pytest.mark.parametrize("name", ["grub.cfg.in", "syslinux.cfg.in"])
-def test_the_sticks_kernel_line_is_one_imagectl_word(name):
+def test_the_sticks_kernel_line_is_one_imagesrv_word(name):
     args = kernel_args((USB / name).read_text(encoding="utf-8"))
     assert len(args) == 1, args
-    ours = [a for a in args[0] if a.startswith("imagectl.")]
-    assert ours == ["imagectl.mode=usbclone"], ours
+    ours = [a for a in args[0] if a.startswith("imagesrv.")]
+    assert ours == ["imagesrv.mode=usbclone"], ours
     assert not any(a.startswith("ip=") for a in args[0]), args   # no DHCP asked of the kernel either
 
 
 def test_parse_cmdline_reads_usbclone_and_no_server(tmp_path):
     line = " ".join(kernel_args((USB / "grub.cfg.in").read_text(encoding="utf-8"))[0])
     (tmp_path / "cmdline").write_text(line + "\n")
-    out = run(tmp_path, 'parse_cmdline; printf "%s|%s\\n" "$IMAGECTL_MODE" "$IMAGECTL_SERVER"',
+    out = run(tmp_path, 'parse_cmdline; printf "%s|%s\\n" "$IMAGESRV_MODE" "$IMAGESRV_SERVER"',
               CMDLINE_FILE=posix(tmp_path / "cmdline"))
     assert out.stdout.strip().splitlines()[-1] == "usbclone|", out.stdout + out.stderr
 
 
 def test_init_hands_over_before_the_dhcp_loop():
     init = (REPO / "agent" / "init").read_text(encoding="utf-8")
-    hand = init.index('if [ "$IMAGECTL_MODE" = usbclone ]')
+    hand = init.index('if [ "$IMAGESRV_MODE" = usbclone ]')
     assert hand < init.index("udhcpc -i"), "usbclone must exec the agent before any DHCP"
-    assert "exec /usr/bin/imagectl-agent" in init[hand:hand + 300]
-    agent = (REPO / "agent" / "imagectl-agent").read_text(encoding="utf-8")
+    assert "exec /usr/bin/imagesrv-agent" in init[hand:hand + 300]
+    agent = (REPO / "agent" / "imagesrv-agent").read_text(encoding="utf-8")
     assert agent.index("usbclone_main") < agent.index("send_hello()")   # before the first hello can exist
 
 
@@ -129,7 +138,7 @@ INV = ('list_drawers() { echo sda; echo sdb; echo sdc; }; '
 def test_the_boot_stick_is_never_in_the_inventory(tmp_path):
     (tmp_path / "run").mkdir()
     (tmp_path / "run" / "usb-media.disks").write_text("sdb\n")
-    out = run(tmp_path, INV, IMAGECTL_MODE="usbclone")
+    out = run(tmp_path, INV, IMAGESRV_MODE="usbclone")
     assert out.stdout.split() == ["sda.line", "sdc.line"], out.stdout + out.stderr
 
 
@@ -140,7 +149,7 @@ def test_no_screen_is_said_in_words_on_the_text_console(tmp_path):
     root = sysroot(tmp_path, {"sdb": ["sdb1"]})
     out = run(tmp_path, blkid_stub({"sdb1": "IMGSRV_USB"}) + 'mount() { return 32; }; gui_cloner_parent() { :; }; '
               'fail_fatal() { echo FAILSCREEN; }; usbclone_main',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone", USB_FIND_S="0", USB_FB_WAIT_S="0")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone", USB_FIND_S="0", USB_FB_WAIT_S="0")
     assert out.returncode == 87, out.stdout + out.stderr
     assert "The clone screen could not start" in out.stdout and "no /dev/fb0" in out.stdout, out.stdout
     assert "FAILSCREEN" not in out.stdout   # the GUI is what failed: no second try at drawing it
@@ -156,25 +165,25 @@ def test_without_a_framebuffer_the_words_come_instead_of_a_gui_drawn_into_ram(tm
            'usb_survey_detect() { :; }; usb_survey() { :; }; usb_settings_load() { :; }; usb_answer() { :; }; '
            'min_free_take() { :; }; gui_cloner_parent() { echo GUI-STARTED; }; lc_gui_alive() { return 0; }; '
            'power_watch_start() { :; }; lc_session() { echo SESSION; LC_END=back; }; fail_fatal() { echo FAILSCREEN; }; ')
-    out = run(tmp_path, pre + 'usbclone_main', SYSROOT=posix(root), IMAGECTL_MODE="usbclone",
-              IMAGECTL_TEST_ONCE="1", USB_FB_WAIT_S="0")
+    out = run(tmp_path, pre + 'usbclone_main', SYSROOT=posix(root), IMAGESRV_MODE="usbclone",
+              IMAGESRV_TEST_ONCE="1", USB_FB_WAIT_S="0")
     assert out.returncode == 87, out.stdout + out.stderr   # usb_stop
     assert "no /dev/fb0" in out.stdout and "GUI-STARTED" not in out.stdout and "SESSION" not in out.stdout, out.stdout
     late = root / "sys" / "class" / "graphics" / "fb0"   # a driver that comes a little late is waited for
     out = run(tmp_path, pre + f'( sleep 1; mkdir -p {posix(late)!r} ) & usbclone_main', SYSROOT=posix(root),
-              IMAGECTL_MODE="usbclone", IMAGECTL_TEST_ONCE="1", USB_FB_WAIT_S="5")
+              IMAGESRV_MODE="usbclone", IMAGESRV_TEST_ONCE="1", USB_FB_WAIT_S="5")
     assert out.returncode == 0 and "GUI-STARTED" in out.stdout and "SESSION" in out.stdout, out.stdout + out.stderr
 
 
 def test_usbclone_without_the_list_offers_no_disk(tmp_path):
-    out = run(tmp_path, INV, IMAGECTL_MODE="usbclone")
+    out = run(tmp_path, INV, IMAGESRV_MODE="usbclone")
     assert out.stdout.split() == [], out.stdout + out.stderr
 
 
 def test_other_modes_ignore_the_list(tmp_path):
     (tmp_path / "run").mkdir()
     (tmp_path / "run" / "usb-media.disks").write_text("sdb\n")
-    out = run(tmp_path, INV, IMAGECTL_MODE="normal")
+    out = run(tmp_path, INV, IMAGESRV_MODE="normal")
     assert out.stdout.split() == ["sda.line", "sdb.line", "sdc.line"], out.stdout + out.stderr
 
 
@@ -219,7 +228,7 @@ def test_the_local_report_stays_local_and_keeps_no_serial(tmp_path):
     out = run(tmp_path, bin_dir + 'LC="$RUN_DIR/lc"; _lr_src=sda; MAC=aa:bb; '
                         'disk_port() { echo 1; }; disk_serial() { echo S1XYZ987; }; list_disks() { echo sda; echo sdc; }; '
                         f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; lc_report; cat "$LC/run/report"',
-              IMAGECTL_MODE="usbclone")
+              IMAGESRV_MODE="usbclone")
     assert out.stdout.strip().splitlines()[-1] == "usb", out.stdout + out.stderr
     assert not log.exists(), log.read_text()
     kept = list((data / "reports").glob("clone-*.json"))
@@ -240,10 +249,10 @@ def test_usbclone_main_sends_nothing_and_reaches_the_local_screen(tmp_path):
     script = (bin_dir
               + blkid_stub({"sdb1": "IMGSRV_USB", "sdb2": "IMGSRV_DATA", "sda1": "Windows"})
               + 'mount() { return 32; }; '
-              'gui_cloner_parent() { sleep 30 & _gui_pid=$!; }; '
+              + GUI_UNTIL_EXIT +
               'lc_session() { echo "SESSION drawers=$(cat "$RUN_DIR/usb-media.disks")"; LC_END=back; }; '
               'usbclone_main')
-    out = run(tmp_path, script, SYSROOT=posix(root), IMAGECTL_MODE="usbclone", IMAGECTL_TEST_ONCE="1",
+    out = run(tmp_path, script, SYSROOT=posix(root), IMAGESRV_MODE="usbclone", IMAGESRV_TEST_ONCE="1",
               USB_FIND_S="0")
     assert "SESSION drawers=sdb" in out.stdout, out.stdout + out.stderr
     assert out.returncode == 0, out.stdout + out.stderr
@@ -305,6 +314,14 @@ def test_the_defaults_are_nadavs():
 FRAMES = REPO / "tests" / "fixtures" / "usb-clone-frames"   # #2158: with the test, so the public tree has them
 KIOSK = 'LC="$RUN_DIR/lc"; GUI_DIR="$RUN_DIR/gui"; mkdir -p "$LC" "$GUI_DIR"; AGENT_VERSION=v0.77.3; '
 
+# A live fake GUI until the owning shell exits. It neither expires while
+# usb_diag is running nor keeps capture_output's pipes open after that shell.
+GUI_UNTIL_EXIT = (
+    'gui_cloner_parent() { mkfifo "$RUN_DIR/test-gui-life"; '
+    '( read -r stop < "$RUN_DIR/test-gui-life" ) >/dev/null 2>&1 & _gui_pid=$!; '
+    'trap \'kill "$_gui_pid" 2>/dev/null; wait "$_gui_pid" 2>/dev/null\' EXIT; }; '
+)
+
 
 def frame_records(text: str) -> list[list[str]]:
     """The records, the clock (hdr field 6) left out: it is the minute it was drawn."""
@@ -323,9 +340,9 @@ def frame_records(text: str) -> list[list[str]]:
 
 def kiosk(tmp_path: Path, keys: list[str], data: str = "mounted") -> tuple[subprocess.CompletedProcess, Path]:
     usb = tmp_path / "usbdata"; usb.mkdir(exist_ok=True)
-    script = (KIOSK + f'echo {data} > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; usbset_open; '
-              + "".join(f'usbset_key {k!r}; ' for k in keys) + 'cat "$GUI_DIR/usbset.frame"')
-    return run(tmp_path, script, IMAGECTL_MODE="usbclone"), usb
+    script = KIOSK + f'echo {data} > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; usbset_open; '
+    steps = [*(f'usbset_key {k!r};' for k in keys), 'cat "$GUI_DIR/usbset.frame"']
+    return run(tmp_path, script, steps=steps, IMAGESRV_MODE="usbclone"), usb
 
 
 @pytest.mark.parametrize("name,keys", [
@@ -380,7 +397,7 @@ def test_a_valid_value_is_saved_on_the_stick_and_in_force(tmp_path):
 
 def test_esc_goes_back_to_the_clone_screen(tmp_path):
     out = run(tmp_path, KIOSK + 'usbset_open; cat "$LC/screen"; usbset_key "KEY ESC"; cat "$LC/screen"',
-              IMAGECTL_MODE="usbclone")
+              IMAGESRV_MODE="usbclone")
     assert out.stdout.split() == ["usbset", "local"], out.stdout + out.stderr
 
 
@@ -388,7 +405,7 @@ def test_esc_goes_back_to_the_clone_screen(tmp_path):
                                              ("usbclone", "copying", "local")])
 def test_the_settings_open_only_on_the_stick_and_not_during_a_copy(tmp_path, mode, phase, want):
     out = run(tmp_path, KIOSK + f'echo local > "$LC/screen"; echo {phase} > "$LC/phase"; '
-                                'token=lc-usbset; lc_gui_dispatch; cat "$LC/screen"', IMAGECTL_MODE=mode)
+                                'token=lc-usbset; lc_gui_dispatch; cat "$LC/screen"', IMAGESRV_MODE=mode)
     assert out.stdout.split()[-1] == want, out.stdout + out.stderr
 
 
@@ -429,7 +446,7 @@ def test_a_smaller_target_is_offered_the_shrink_on_the_stick_with_no_server_call
               'echo "1|sda|A|s1|250000000000|ok|ok||0|0|-1|0|" > "$LC/inv/sda.line"; '
               'echo "3|sdc|C|s3|480000000000|ok|ok|Windows|4|1|480000000000|1|" > "$LC/inv/sdc.line"; '
               'echo sdc > "$LC/source"; echo "done|200000000000|" > "$LC/measure/sdc"; '
-              'lc_gui_state; cat "$GUI_DIR/state"', IMAGECTL_MODE="usbclone")
+              'lc_gui_state; cat "$GUI_DIR/state"', IMAGESRV_MODE="usbclone")
     lines = out.stdout.splitlines()
     assert "lc_fit=sda|shrink|200000000000|" in lines and "lc_usb=1" in lines, out.stdout + out.stderr
     assert not log.exists(), log.read_text()
@@ -451,7 +468,7 @@ def test_every_boot_keeps_a_diagnostic_report_on_the_stick(tmp_path):
     (tmp_path / "run" / "usb-media.disks").write_text("sdb\n")
     out = run(tmp_path, f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag no-disks; echo "rc=$?"; '
                         'LC="$RUN_DIR/lc"; GUI_DIR="$RUN_DIR/gui"; mkdir -p "$LC" "$GUI_DIR"; echo local > "$LC/screen"; '
-                        'lc_gui_state; cat "$GUI_DIR/state"', SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+                        'lc_gui_state; cat "$GUI_DIR/state"', SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=0" in out.stdout, out.stdout + out.stderr
     kept = list(data.glob("diag-*.txt"))
     assert len(kept) == 1, kept
@@ -482,7 +499,7 @@ def wwid_disk(tmp_path: Path, vpd: bool, pad: bool = False) -> tuple[subprocess.
     out = run(tmp_path, 'dmesg() { echo "ata1.00: ATA-9: ST500DM002, KC45, max UDMA/133 sn ZA1B2C3D"; '
                         'echo "sd 0:0:0:0: [sda] 976773168 512-byte logical blocks"; }; '
                         f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag boot; echo "rc=$?"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     return out, data
 
 
@@ -519,7 +536,7 @@ def test_an_unknown_serial_keeps_the_reports_free_text_off_the_stick(tmp_path):
     data = tmp_path / "usbdata"; data.mkdir()
     out = run(tmp_path, rec + 'LC="$RUN_DIR/lc"; _lr_src=sda; MAC=aa:bb; disk_port() { echo 1; }; '
               'disk_serial() { echo naa.5000c500a1b2c3d4; }; list_disks() { echo sda; echo sdc; }; '
-              f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; lc_report', IMAGECTL_MODE="usbclone")
+              f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; lc_report', IMAGESRV_MODE="usbclone")
     kept = list((data / "reports").glob("clone-*.json"))
     assert len(kept) == 1, out.stdout + out.stderr
     report = json.loads(kept[0].read_text(encoding="utf-8"))
@@ -545,7 +562,7 @@ def test_a_target_gone_since_the_clone_keeps_the_reports_free_text_off_the_stick
     data = tmp_path / "usbdata"; data.mkdir()
     out = run(tmp_path, rec + 'LC="$RUN_DIR/lc"; _lr_src=sda; MAC=aa:bb; disk_port() { echo 1; }; '
               f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; lc_report',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     kept = list((data / "reports").glob("clone-*.json"))
     assert len(kept) == 1, out.stdout + out.stderr
     report = json.loads(kept[0].read_text(encoding="utf-8"))
@@ -565,7 +582,7 @@ def test_a_drawer_swapped_under_the_same_name_does_not_leak_the_first_serial(tmp
     data = tmp_path / "usbdata"; data.mkdir()
     out = run(tmp_path, f'usb_serials_snap sdc; echo NEWSER002 > {posix(dev / "serial")!r}; dmesg() {{ :; }}; '
                         f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag clone; echo "rc=$?"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=0" in out.stdout, out.stdout + out.stderr
     text = stick_files(data)
     assert "ORIGSER01" not in text and "NEWSER002" not in text, text
@@ -607,7 +624,7 @@ def stick_only(tmp_path: Path, serial: str | None) -> tuple[subprocess.Completed
               'sdb) echo /sys/devices/pci0000:00/0000:00:1d.7/usb2/2-1/2-1:1.0/host6/target6:0:0/6:0:0:0/block/sdb ;; esac; }; '
               f'dmesg() {{ echo "sd 6:0:0:0: [sdb] 123699200 512-byte logical blocks"; echo "scsi 6:0:0:0: Direct-Access SanDisk {serial or ""}"; }}; '
               f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag boot; echo "rc=$?"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     return out, stick_files(data)
 
 
@@ -634,7 +651,7 @@ def test_the_diag_says_the_controller_mode_without_drawers_and_has_no_lspci(tmp_
     data = tmp_path / "usbdata"; data.mkdir()
     (tmp_path / "run").mkdir(exist_ok=True); (tmp_path / "run" / "usb-media.disks").write_text("sdb\n")
     out = run(tmp_path, f'dmesg() {{ :; }}; usb_ctrl_mode; USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag boot; echo "rc=$?"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=0" in out.stdout, out.stdout + out.stderr
     text = stick_files(data)
     line = next(ln for ln in text.splitlines() if ln.startswith("controller mode (drawers): "))
@@ -666,7 +683,7 @@ def test_the_diag_surveys_the_machine_and_says_what_it_could_not_read(tmp_path):
               'sdb) echo /sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1:1.0/host6/target6:0:0/6:0:0:0/block/sdb ;; esac; }; '
               'usb_pci_driver() { case "$1" in 0000:00:1d.0) printf ehci-pci ;; esac; }; dmesg() { :; }; '
               f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag boot; echo "rc=$?"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=0" in out.stdout, out.stdout + out.stderr
     text = stick_files(data)
     for want in ("machine: Hewlett-Packard HP Compaq 8100 Elite SFF PC", "BIOS: 786H1 v01.05, לא נקרא",
@@ -699,7 +716,7 @@ def ctrl(tmp_path: Path, drivers: dict[str, str]) -> tuple[str, str]:
               f'usb_disk_syspath() {{ case "$1" in {path_case} esac; }}; '
               f'usb_pci_driver() {{ case "$1" in {drv_case} esac; }}; '
               'usb_ctrl_mode; cat "$RUN_DIR/usb.ctrl"; LC="$RUN_DIR/lc"; GUI_DIR="$RUN_DIR/gui"; mkdir -p "$LC" "$GUI_DIR"; '
-              'echo local > "$LC/screen"; lc_gui_state; grep "^lc_ide=" "$GUI_DIR/state"', IMAGECTL_MODE="usbclone")
+              'echo local > "$LC/screen"; lc_gui_state; grep "^lc_ide=" "$GUI_DIR/state"', IMAGESRV_MODE="usbclone")
     lines = out.stdout.splitlines()
     return lines[0], lines[-1]
 
@@ -749,7 +766,7 @@ def test_the_diag_keeps_no_identifier_from_the_disks(tmp_path):
     out = run(tmp_path, f'dmesg() {{ echo "EXT4-fs (sda2): mounted filesystem {PART_GUID} ro"; '
                         'echo "sd 0:0:0:0: [sda] 976773168 512-byte logical blocks"; }; '
                         f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag boot; echo "rc=$?"',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=0" in out.stdout, out.stdout + out.stderr
     text = stick_files(data)
     for leak in (DISK_GUID, PART_GUID, SWAP_UUID, "OferSwap", "Ofer PC", "1234-ABCD", "Ofer Home Disk",
@@ -779,7 +796,7 @@ def test_the_report_keeps_no_identifier_and_stays_json(tmp_path):
     out = run(tmp_path, rec + 'LC="$RUN_DIR/lc"; _lr_src=sda; MAC=aa:bb; disk_port() { echo 1; }; '
               'usb_serials_snap sda sdc; '
               f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; lc_report',
-              SYSROOT=posix(root), IMAGECTL_MODE="usbclone")
+              SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     kept = list((data / "reports").glob("clone-*.json"))
     assert len(kept) == 1, out.stdout + out.stderr
     text = kept[0].read_text(encoding="utf-8")

@@ -37,7 +37,7 @@ def _old_install(path: Path) -> None:
 
 
 def test_an_old_install_starts_and_its_ssh_leftovers_are_gone(tmp_path):
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     _old_install(path)
 
     conn = db.connect(path)                      # העלייה עצמה לא נופלת
@@ -57,7 +57,7 @@ def test_an_old_install_starts_and_its_ssh_leftovers_are_gone(tmp_path):
 # שגילינו שקיים". השומר סורק את קוד המוצר כולו ונכשל על כל אזכור של
 # dropbear/sshd או של פורט 22, גם בהערה: הערה שמתארת שירות SSH היא
 # הצעד הראשון בחזרתו. גישת הטכנאי של המעבדה חיה ב-overlay שמחוץ לריפו
-# (‏IMAGECTL_EXTRA_OVERLAY ב-build_initramfs.sh) — המנגנון עצמו גנרי ואינו
+# (‏IMAGESRV_EXTRA_OVERLAY ב-build_initramfs.sh) — המנגנון עצמו גנרי ואינו
 # נוקב ב-SSH, ולכן אין לו פטור כאן. ‏tools/lab (כלי מעבדה) ו-docs (תיעוד
 # והיסטוריה) אינם מוצר ואינם נסרקים.
 
@@ -65,7 +65,7 @@ def test_an_old_install_starts_and_its_ssh_leftovers_are_gone(tmp_path):
 REPO = Path(__file__).resolve().parents[1]
 
 #: מה שנסרק. תיקייה = כל קובץ קוד בתוכה; קובץ = הוא עצמו.
-PRODUCT = ("agent", "server", "install", "tools/build_initramfs.sh",
+PRODUCT = ("agent", "server", "deploy", "tools/build_initramfs.sh",
            "tools/iso/build-iso.sh", "tools/iso/packages.txt")
 #: סיומות שאינן קוד ואינן נארזות כהתנהגות: תיעוד ותמונות.
 NOT_CODE = {".md", ".svg", ".png", ".ico", ".jpg", ".gif", ".woff", ".woff2"}
@@ -75,7 +75,7 @@ SSH_TERMS = _re.compile(
     r"|(?<![a-z_])sshd\b"                       # שרת ה-SSH של השרת (#83)
     r"|(?<![a-z_])openssh"
     r"|(?<![a-z_])authorized_keys"
-    r"|imagectl_deploy"                         # מפתח הטכנאי
+    r"|imagesrv_deploy"                         # מפתח הטכנאי
     r"|\bssh_(?:switch|hostkey|start|stations|server|nic)\b"
     r"|\bconsole_ssh\b|\bsshd_json\b|--ssh-(?:key|if)\b|--debug-ssh\b"
     r"|/api/console/ssh\b|[\"']/ssh[\"'/]",
@@ -122,7 +122,7 @@ _CLEANUP = ("server/db.py", ("ssh:stations", "ssh:iface:", "machine_ssh_hostkey"
 #: ‏#1979: שחזור לינוקס מוחק את מפתחות ה-SSH **של מערכת ההפעלה המשוחזרת** ומתקין בה
 #: יחידה חד-פעמית של `ssh-keygen -A` — כדי שמשוכפלים לא יחלקו מפתחות. זה אינו שרת SSH
 #: של ImageSrv ואינו מתג; המילים מותרות רק בפונקציה הזו (`_linux_id_files`, grow.sh).
-_TARGET_KEYS = ("agent/lib/grow.sh", ("ssh_host_", "ssh-keygen", "sshd refuses", "ssh.service"))
+_TARGET_KEYS = ("agent/lib/restore/grow.sh", ("ssh_host_", "ssh-keygen", "sshd refuses", "ssh.service"))
 
 
 def _not_the_cleanup(rel: str, line: str) -> bool:

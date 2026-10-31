@@ -9,7 +9,7 @@ Nadav, 20/10 (#1864, a full sha256 cost ~8 minutes a round of 4 drawers): the
 data stream -- the used blocks in order -- is cut into 4MiB chunks, an XXH64
 each, and the list is taken twice, independently:
 
-* the server's, from the image in the library (server/readbackhash.py), kept
+* the server's, from the image in the library (server/agent/readbackhash.py), kept
   beside the partition file and named in the manifest (`readback_xxh64` is the
   XXH64 of the list itself);
 * the agent's, from the written partition (`fanout --readback -x`, fanout.c):
@@ -30,13 +30,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+from agentlib import lib_files
+
 import pytest
 from conftest import MANIFEST_256, write_image
 
 import pcl_image as P
 from native import requires_native
-from server import readbackhash as RB
-from server.images import ImageLibrary
+from server.agent import readbackhash as RB
+from server.library.images import ImageLibrary
 from test_fanout import xxh64_reference
 
 REPO = Path(__file__).resolve().parent.parent
@@ -436,7 +438,8 @@ def test_zstd_runs_at_idle_cpu_and_disk_priority_when_it_can(found, want_cmd):
 
 def test_a_round_kicks_its_image_and_the_thread_is_given_the_busy_and_rank():
     import inspect
-    from server import app, room, sessions
+    from server import app
+    from server.rounds import room, sessions
     assert "readbackhash.kick(image_id)" in inspect.getsource(room.open_round)
     assert "readbackhash.kick(image_id)" in inspect.getsource(sessions.SessionStore.open)
     src = inspect.getsource(app.create_runtime)
@@ -446,7 +449,8 @@ def test_a_round_kicks_its_image_and_the_thread_is_given_the_busy_and_rank():
 
 def test_the_capture_kicks_the_pass_and_main_starts_it():
     import inspect
-    from server import app, capture, main
+    from server import app, main
+    from server.library import capture
     assert "readbackhash.kick()" in inspect.getsource(capture._verify)
     assert inspect.signature(app.create_runtime).parameters["backfill_readback"].default is False
     assert "backfill_readback=True" in inspect.getsource(main)
@@ -454,7 +458,7 @@ def test_the_capture_kicks_the_pass_and_main_starts_it():
 
 def test_the_room_passes_only_the_three_known_values():
     import inspect
-    from server import room
+    from server.rounds import room
     assert 'in ("verified", "sampled", "unverified") else None' in inspect.getsource(room)
 
 
@@ -494,7 +498,7 @@ def test_the_list_is_served_only_when_it_is_whole(server):
 
 def test_the_hello_carries_the_mode_for_the_local_clone():
     import inspect
-    from server import hello
+    from server.agent import hello
     assert '"readback_mode": readbackhash.mode(conn)' in inspect.getsource(hello)
 
 
@@ -669,7 +673,7 @@ def test_the_old_sha256_form_still_reads_for_manifests_from_before_1864(fanout, 
 
 
 def test_the_agent_never_reads_through_the_cache():
-    for f in [*(REPO / "agent" / "lib").glob("*.sh"), REPO / "agent" / "imagectl-agent", REPO / "agent" / "init"]:
+    for f in [*lib_files(REPO / "agent" / "lib"), REPO / "agent" / "imagesrv-agent", REPO / "agent" / "init"]:
         assert "FANOUT_READBACK_CACHED" not in f.read_text(encoding="utf-8"), f
 
 

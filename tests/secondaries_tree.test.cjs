@@ -59,7 +59,7 @@ function setup(fixtures, me = {}, slow = null) {
   vm.runInContext(fs.readFileSync(path.join(root, 'branches.js'), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   ctx.__toasts = toasts;
-  const meJson = JSON.stringify({username: 'admin', role: 'admin', idle_seconds: 300, server_name: 'imagectl-main',
+  const meJson = JSON.stringify({username: 'admin', role: 'admin', idle_seconds: 300, server_name: 'imagesrv-main',
     capabilities: {interbranch_transfer: true, enroll_secondary: true}, ...me});
   run(`ME=${meJson}; toast=(m)=>__toasts.push(m); current="home"; currentTab=0;`);
   return {run, calls, toasts, node};
@@ -136,7 +136,7 @@ test('the status dot is measured against the secondary: green only when it answe
 });
 
 // TA 18/10 (d8763e5b): Haifa (v0.75.0) stayed grey "לא נבדק" while TA's log had the relay's /health 200.
-// /health as v0.75.0 answers it (server/health.py at the tag: check() = {id,label,state,detail}).
+// /health as v0.75.0 answers it (server/system/health.py at the tag: check() = {id,label,state,detail}).
 const HEALTH_V075 = [
   {id: 'time_sync', label: 'סנכרון שעון', state: 'ok', detail: 'NTP פעיל והשעון מסונכרן'},
   {id: 'deploy_net', label: 'הגדר את רשת ההפצה', state: 'warn', detail: 'רשת ההפצה לא הוגדרה — בחר כרטיס בלשונית רשת הפצה והגדר את הרשת שלו; כתובת השרת נגזרת ממנה (#1263)'},
@@ -174,7 +174,7 @@ test('without the capability (deploy, or a secondary server) no node is built an
 test('the primary server node takes its name from /me (server_name); a double click opens the one rename window (POST /hostname)', async () => {
   const {run, node, calls} = setup(base);
   run('applyServerName()');
-  assert.equal(node('#primaryServerName').textContent, 'imagectl-main');
+  assert.equal(node('#primaryServerName').textContent, 'imagesrv-main');
   // נדב 17/10: שם אחד = שם המארח, ומקום אחד לשנות אותו — אותו חלון כמו "שינוי שם…" בהגדרות.
   run('globalThis.__sheets=[]; sheet=(o)=>__sheets.push(o); renameServer(document.getElementById("primaryServerName"))');
   const s = run('__sheets.at(-1)');
@@ -185,7 +185,7 @@ test('the primary server node takes its name from /me (server_name); a double cl
   assert.ok(save, 'the name is the host name — POST /hostname, not a separate display setting');
   assert.ok(!calls.some((c) => c.method === 'POST' && c.url.endsWith('/settings')), 'no POST /settings server_name any more');
   assert.equal(JSON.stringify(save.body), JSON.stringify({hostname: 'imagesrv-ta'}));
-  assert.doesNotMatch(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), /imagectl-server-names/, 'no localStorage-only rename');
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), /imagesrv-server-names/, 'no localStorage-only rename');
 });
 
 test('"העברות" is a primary page about the secondary: openBranchView leaves the secondary context and opens the branch page', async () => {

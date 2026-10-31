@@ -15,6 +15,7 @@ from pathlib import Path
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_initramfs_modules import KVER, modules_region_snippet
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -29,7 +30,7 @@ CRC = ["crc32c_generic", "crc32c-intel"]   # build_initramfs.sh: both in modules
 
 
 def _fixture(tmp: Path, *, files: bool = True, gui: bool = False, crc: bool = False) -> Path:
-    mod = tmp / "etc" / "imagectl"
+    mod = tmp / "etc" / "imagesrv"
     mod.mkdir(parents=True)
     write = lambda n, items: (mod / n).write_text(  # noqa: E731
         "\n".join(items) + "\n", encoding="utf-8", newline="\n")
@@ -65,15 +66,15 @@ def run(tmp: Path, *, pci=(), gui=False, files=True, dmi="", hyp=False,
     run_dir.mkdir()
     log = tmp / "log"
     lines = (AGENT / "init").read_text(encoding="utf-8").splitlines()
-    start = next(i for i, l in enumerate(lines) if l.strip() == "mkdir -p /run/imagectl")
+    start = next(i for i, l in enumerate(lines) if l.strip() == "mkdir -p /run/imagesrv")
     end = next(i for i, l in enumerate(lines) if l.startswith("# efivars"))
-    block = "\n".join(lines[start + 1:end]).replace("/etc/imagectl", posix(mod))
+    block = "\n".join(lines[start + 1:end]).replace("/etc/imagesrv", posix(mod))
     block = block.replace(
         'cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name 2>/dev/null',
         f"printf %s {dmi!r}").replace(
         "grep -q '[[:space:]]hypervisor\\([[:space:]]\\|$\\)' /proc/cpuinfo 2>/dev/null",
         "true" if hyp else "false")
-    block = block.replace("/usr/lib/imagectl", posix(AGENT / "lib"))
+    block = block.replace("/usr/lib/imagesrv", posix(flat_lib()))
     S = posix(sysd)
     stubs = f"""
 LOG={posix(log)!r}; SYS_DIR={S!r}; PROC_DIR={posix(proc)!r}; RUN_DIR={posix(run_dir)!r}; FAIL="{' '.join(fail)}"
@@ -222,13 +223,13 @@ def _build_lists(tmp: Path, gui: int):
         (base / sub).mkdir(parents=True, exist_ok=True)
         for n in names:
             (base / sub / f"{n}.ko.xz").write_bytes(b"")
-    (root / "etc" / "imagectl").mkdir(parents=True)
+    (root / "etc" / "imagesrv").mkdir(parents=True)
     script = (f"ROOT={posix(root)!r}\nKVER={KVER!r}\nWITH_GUI={gui}\n"
               "REQUIRED_FS_MODULES=(ext4)\n" + modules_region_snippet())
     subprocess.run([BASH, "-c", script], check=True, stdin=subprocess.DEVNULL,
                    capture_output=True, timeout=90)
-    rd = lambda n: (root / "etc" / "imagectl" / n).read_text().split()  # noqa: E731
-    return rd, root / "etc" / "imagectl"
+    rd = lambda n: (root / "etc" / "imagesrv" / n).read_text().split()  # noqa: E731
+    return rd, root / "etc" / "imagesrv"
 
 
 def test_the_builder_splits_phy_nic_and_leaves_modules_complete(tmp_path):

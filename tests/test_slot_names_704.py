@@ -230,7 +230,7 @@ def test_mac_edit_moves_the_names_and_removal_drops_them(room_server):
 
 def test_migration_keeps_names_and_adds_the_table_to_an_old_db(tmp_path: Path):
     from server import db                                   # noqa: PLC0415
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     database = db.connect(path)
     conn = database.connection
     conn.execute("INSERT INTO groups (id, label, role) VALUES ('g', 'G', 'cloner')")
@@ -261,7 +261,7 @@ def test_migration_keeps_names_and_adds_the_table_to_an_old_db(tmp_path: Path):
 # --- היומן והדוחות -----------------------------------------------------------
 
 def test_disk_failure_journal_names_the_slot(room_server):
-    from server import disk_failures                         # noqa: PLC0415
+    from server.disks import disk_failures                         # noqa: PLC0415
     admin, ctx = room_server["admin"], room_server["ctx"]
     _put(admin, CLONER1, "sata:2", "האמצעית")
     _hello(admin, CLONER1, [_disk("sdb", "S-2", 2)])
@@ -271,7 +271,7 @@ def test_disk_failure_journal_names_the_slot(room_server):
 
 
 def test_disk_failure_journal_without_a_name_is_as_before(room_server):
-    from server import disk_failures                         # noqa: PLC0415
+    from server.disks import disk_failures                         # noqa: PLC0415
     ctx = room_server["ctx"]
     disk_failures.record(ctx.conn, "ses_1", CLONER1,
                          {"dev": "sdb", "serial": "S-2", "port": 2, "ata_log": []})
@@ -280,7 +280,7 @@ def test_disk_failure_journal_without_a_name_is_as_before(room_server):
 
 
 def test_disk_decision_journal_and_session_view_name_the_slot(room_server):
-    from server import disk_events                           # noqa: PLC0415
+    from server.disks import disk_events                           # noqa: PLC0415
     admin, ctx = room_server["admin"], room_server["ctx"]
     _put(admin, CLONER1, "serial:NV-1", "דיסק מיוחד")
     assert disk_events.ingest(ctx.conn, {
@@ -294,7 +294,7 @@ def test_disk_decision_journal_and_session_view_name_the_slot(room_server):
 def test_per_drawer_drivers_journal_names_the_slot_from_the_reported_disks(room_server):
     """דיווח ההתקדמות של מגירה נושא רק `dev` — החריץ נגזר מהדיסקים שהמכונה
     דיווחה ב-hello (sdb הוא חריץ 2 כאן, לא "דיסק 2" לפי האות)."""
-    from server import slot_names                            # noqa: PLC0415
+    from server.disks import slot_names                            # noqa: PLC0415
     admin, ctx = room_server["admin"], room_server["ctx"]
     _put(admin, CLONER1, "sata:3", "תחתונה")
     _hello(admin, CLONER1, [_disk("sda", "S-1", 1), _disk("sdb", "S-3", 3)])

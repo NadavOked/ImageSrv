@@ -57,7 +57,7 @@ function setup(fixtures) {
   }
   const run = (s) => vm.runInContext(s, ctx);
   ctx.__toasts = toasts;
-  run(`ME=${JSON.stringify({username: 'noc', role: 'admin', idle_seconds: 300, server_name: 'imagectl-main', version: 'v0.67.0',
+  run(`ME=${JSON.stringify({username: 'noc', role: 'admin', idle_seconds: 300, server_name: 'imagesrv-main', version: 'v0.67.0',
     tls: {fingerprint_sha256: 'AA'}, uptime_seconds: 99, deploy_ip: '10.44.0.1',
     capabilities: {interbranch_transfer: true, enroll_secondary: true}})}; PRIMARY_ME=ME;
     toast=(m)=>__toasts.push(m); current="home"; currentTab=0; closeSidebar=()=>{}; renderCurrent=()=>{};
@@ -206,14 +206,14 @@ test('ME in the secondary\'s context: same user and role, the secondary\'s name,
   assert.equal(t.run('ME.capabilities.enroll_secondary'), false);
   assert.equal(t.run('serverRootName("x")'), 'חיפה', 'the page header names the secondary');
   t.run('setServerContext(null)');
-  assert.equal(t.run('ME === PRIMARY_ME && ME.server_name'), 'imagectl-main');
+  assert.equal(t.run('ME === PRIMARY_ME && ME.server_name'), 'imagesrv-main');
 });
 
 test('a page header in the secondary\'s context names the secondary in its crumbs', async () => {
   const t = setup(both());
   const html = await draw(t, 'health', 0, true);
   assert.match(html, /<div class="crumbs"><a[^>]*>חיפה<\/a>/);
-  assert.doesNotMatch(html, /imagectl-main/);
+  assert.doesNotMatch(html, /imagesrv-main/);
 });
 
 test('a click on a primary tree node leaves the secondary\'s context before its own onclick; an expand arrow does not', () => {

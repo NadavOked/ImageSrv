@@ -77,7 +77,7 @@ def test_state_reads_server_version_once_even_if_unavailable(request, monkeypatc
     from server import update
     # No import of the new module: reverting all production files must reach
     # the endpoint and fail on its response, not during test collection.
-    cached = sys.modules.get("server.agent_version")
+    cached = sys.modules.get("server.core.agent_version")
     if cached:
         cached.server_version.cache_clear()
     calls = []
@@ -113,7 +113,7 @@ def test_state_reads_server_version_once_even_if_unavailable(request, monkeypatc
         assert len(set(reads)) == 1, reads
         assert reads[-1] <= 2, reads
     finally:
-        cached = sys.modules.get("server.agent_version")
+        cached = sys.modules.get("server.core.agent_version")
         if cached:
             cached.server_version.cache_clear()
 
@@ -164,8 +164,8 @@ def test_running_hello_uses_stamp_or_unknown(tmp_path, stamp, expected):
 AGENT_VERSION_FILE={posix(version_file)!r}
 RUN_DIR={posix(tmp_path)!r}
 SYSROOT=$RUN_DIR; IFACE=eth0
-. {posix(AGENT / 'lib/common.sh')!r}
-. {posix(AGENT / 'lib/sysinfo.sh')!r}
+. {posix(AGENT / 'lib/core/common.sh')!r}
+. {posix(AGENT / 'lib/hw/sysinfo.sh')!r}
 list_macs() {{ echo aa:bb:cc:00:00:10; }}
 detect_uuid() {{ :; }}
 detect_firmware() {{ echo bios; }}
@@ -204,12 +204,12 @@ set -e
 SCRIPT_DIR={posix(tools_dir)!r}
 ROOT={posix(root)!r}
 SOURCE_VERSION={explicit!r}
-IMAGECTL_ISO_MANIFEST={posix(tmp_path / 'missing.json')!r}
+IMAGESRV_ISO_MANIFEST={posix(tmp_path / 'missing.json')!r}
 git() {{ printf '%s\\n' {git_version or ''!r}; }}
 {stanza}
 ''')
     assert result.returncode == 0, result.stderr
-    stamp = root / "etc/imagectl/agent-version"
+    stamp = root / "etc/imagesrv/agent-version"
     assert stamp.exists(), "builder produced an initrd without source provenance"
     assert stamp.read_text().strip() == expected
 
@@ -219,7 +219,7 @@ def test_iso_manifest_supplies_version_without_git(tmp_path):
     source = tmp_path / "source"
     source.mkdir()
     manifest = tmp_path / "iso-release.json"
-    manifest.write_text(json.dumps({"imagectl_tag": "v0.59.0"}))
+    manifest.write_text(json.dumps({"imagesrv_tag": "v0.59.0"}))
     # Use the same real builder stanza, with its helper resolved in the source tree.
     tools_dir = source / "tools"
     tools_dir.mkdir()
@@ -229,9 +229,9 @@ def test_iso_manifest_supplies_version_without_git(tmp_path):
     builder = (REPO / "tools/build_initramfs.sh").read_text(encoding="utf-8")
     stanza = 'mkdir -p "$ROOT"/{bin,' + builder.split('mkdir -p "$ROOT"/{bin,', 1)[1].split("# --- busybox", 1)[0]
     root = tmp_path / "initrd"
-    result = shell(tmp_path, f'SCRIPT_DIR={posix(tools_dir)!r}\nROOT={posix(root)!r}\nSOURCE_VERSION=""\nIMAGECTL_ISO_MANIFEST={posix(manifest)!r}\n' + stanza)
+    result = shell(tmp_path, f'SCRIPT_DIR={posix(tools_dir)!r}\nROOT={posix(root)!r}\nSOURCE_VERSION=""\nIMAGESRV_ISO_MANIFEST={posix(manifest)!r}\n' + stanza)
     assert result.returncode == 0, result.stderr
-    stamp = root / "etc/imagectl/agent-version"
+    stamp = root / "etc/imagesrv/agent-version"
     assert stamp.exists(), "ISO build omitted the agent version"
     assert stamp.read_text().strip() == "v0.59.0"
 
@@ -243,8 +243,8 @@ def test_gui_snapshot_carries_local_and_server_versions(tmp_path):
     (tmp_path / "mode").write_text("build\n")
     result = shell(tmp_path, f'''
 RUN_DIR={posix(tmp_path)!r}; GUI_DIR=$RUN_DIR
-. {posix(AGENT / 'lib/guistate.sh')!r}
-. {posix(AGENT / 'lib/askgui.sh')!r}
+. {posix(AGENT / 'lib/gui/guistate.sh')!r}
+. {posix(AGENT / 'lib/gui/askgui.sh')!r}
 AGENT_VERSION=v0.58.0
 http_get() {{ cat {posix(state)!r}; }}
 class_deploy_on() {{ return 1; }}

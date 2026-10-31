@@ -1,9 +1,9 @@
 """‏#1997 (נדב, 22/10): שם מחשב או שרת = hostname באנגלית, עד 15 תווים.
 
-הכלל אחד (`server/hostname_rule.py`) והוא נאכף בכל מקום שמגדירים בו שם:
+הכלל אחד (`server/core/hostname_rule.py`) והוא נאכף בכל מקום שמגדירים בו שם:
 מכונה (בנייה, שיכפול) בהוספה, בהדבקה ובעריכה; שם השרת (``POST /hostname``,
 האשף, המתקין); ושם של שרת משנה ברישום ובעריכה. אותו כלל יושב בסוכן
-(`agent/lib/hostname.sh`) ובמתקין (`installer/lib/answers.sh`), והטסטים כאן
+(`agent/lib/postdeploy/hostname.sh`) ובמתקין (`installer/lib/answers.sh`), והטסטים כאן
 משווים את שניהם לגרסת ה-Python על אותה רשימת שמות.
 
 שם קיים שאינו חוקי (חיפה רשום "חיפה") **אינו נשבר**: השרת עולה, הרשומה
@@ -22,8 +22,9 @@ import os
 import pytest
 
 from native import requires_native
-from server import hostname_rule, storage_nodes
-from server.images import validate_display_name
+from server.core import hostname_rule
+from server.interserver import storage_nodes
+from server.library.images import validate_display_name
 from test_agent import AGENT, BASH, posix, sh
 from test_installer_engine import SH, _answers, _command_shims, _machine, _run
 
@@ -155,7 +156,7 @@ def test_hebrew_is_still_allowed_in_a_folder_and_a_disk_name(server):
 # --- שם השרת ------------------------------------------------------------------------
 
 def test_me_flags_a_server_name_that_is_not_a_hostname(server, monkeypatch):
-    from server import ports
+    from server.net import ports
     monkeypatch.setattr(ports.socket, "gethostname", lambda: "שרת-ראשי")
     me = server["admin"].get("/api/console/me").json()
     assert me["server_name"] == "שרת-ראשי"
@@ -202,7 +203,7 @@ def test_a_secondary_label_that_is_a_hostname_is_enrolled_and_cannot_be_renamed_
 
 def test_the_enroll_route_refuses_a_hebrew_label_before_pairing(server, monkeypatch):
     """הסירוב לפני ה-pairing: אחרת המשני כבר קשור והרשומה נופלת אחריו."""
-    from server import storage_client
+    from server.interserver import storage_client
     calls = []
     monkeypatch.setattr(storage_client, "pair_secondary", lambda *a, **k: calls.append(1))
     monkeypatch.setattr(storage_client, "fetch_server_spki", lambda *a, **k: calls.append(2))
@@ -233,7 +234,7 @@ def _agent_refuses(tmp_path, name: str) -> bool:
     run = tmp_path / f"run{abs(hash(name))}"
     run.mkdir()
     out = sh(f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/hostname.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; '
              f'write_hostname sda /nonexistent.json {name!r} || true')
     result = json.loads(out.strip().splitlines()[-1])
     assert result["ok"] is False, result      # חוקי נופל אחר כך על המניפסט שאינו קיים

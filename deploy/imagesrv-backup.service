@@ -1,0 +1,30 @@
+# ImageSrv -- the hourly database backup (issue #1895, Nadav 22/10).
+#
+# Driven by imagesrv-backup.timer. Reads the destination from the console
+# setting backup_dest (Settings -> "יעד גיבוי המסד"); none chosen = exits 0
+# and does nothing, and the health page says so in orange. Otherwise: a
+# consistent copy through sqlite3's backup API, written atomically to
+# <dest>/db/imagesrv-<ts>.db, read back (sha256 + integrity_check), copies
+# older than 30 days pruned, and /var/lib/imagesrv/last-backup.json written --
+# the health page reads it: "ישן" after two hours, red on a failure.
+#
+# Not ProtectSystem=strict like imagesrv-server: the destination is another
+# disk or a mounted NAS, anywhere under /mnt, /media or /srv.
+#
+# An SMB/NFS destination (#1956) is the fstab line the console wrote; the job
+# runs `mount <point>` when it is not mounted and fails by name when it still
+# is not -- it never backs up into the empty folder a missing NAS leaves.
+
+[Unit]
+Description=ImageSrv: back up the database to the chosen destination
+Documentation=https://github.com/NadavOked/ImageSrv-dev/blob/main/docs/server.md
+After=local-fs.target remote-fs.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/imagesrv
+ExecStart=/usr/bin/python3 -m server.system.backup_job --data-dir /var/lib/imagesrv
+ProtectSystem=full
+NoNewPrivileges=yes
+Nice=10
+IOSchedulingClass=idle

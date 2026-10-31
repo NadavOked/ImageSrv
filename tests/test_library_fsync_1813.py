@@ -19,8 +19,9 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import MANIFEST_256, write_image
-from server import archive, capture, storage_transfer
-from server.archive import import_tar, tar_stream
+from server.library import archive, capture
+from server.interserver import storage_transfer
+from server.library.archive import import_tar, tar_stream
 
 
 @pytest.fixture()
@@ -90,7 +91,7 @@ def test_an_imported_archive_is_on_disk_before_its_manifest_is_named(tmp_path, e
 def test_a_capture_is_on_disk_before_it_enters_the_library(server, images_root, events):
     from test_capture import do_capture, make_task, setup_build_machine
 
-    from server.tasks import staging_dir
+    from server.core.tasks import staging_dir
 
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
@@ -111,7 +112,7 @@ def test_a_capture_is_on_disk_before_it_enters_the_library(server, images_root, 
 
 def test_a_pulled_image_is_on_disk_before_it_enters_the_library(server, events, request):
     pytest.importorskip("OpenSSL")
-    from server import interserver_auth
+    from server.interserver import interserver_auth
     if not interserver_auth.can_export_keying_material():
         pytest.skip("אין tls-exporter (pyOpenSSL) — המשיכה אינה ניתנת להרצה כאן")
     from test_storage_pull import PULL, PULL_ID, _incoming, _wait

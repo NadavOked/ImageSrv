@@ -197,7 +197,7 @@ def test_the_question_carries_the_disk_the_partition_and_a_minute(tmp_path):
 def _stream(tmp_path: Path, fs: str, extra: dict[str, str], rescue: bool = False, **envs) -> str:
     box = tmp_path / "box"; stubs = box / "stubs"; dev = box / "dev"
     dev.mkdir(parents=True)
-    (dev / "sdc1").write_bytes(b"imagectl" * 4096)
+    (dev / "sdc1").write_bytes(b"imagesrv" * 4096)
     make = [f"mkdir -p {posix(stubs)!r}"]
     for name, body in {**STREAM_STUBS, **extra}.items():
         make += [f"cat > {posix(stubs)}/{name} <<'STUB'\n{body}STUB", f"chmod 0755 {posix(stubs)}/{name}"]
@@ -297,7 +297,7 @@ def test_a_raw_partition_that_the_table_grew_keeps_its_filesystem(tmp_path):
 
 
 def test_an_mbr_disk_is_refused_by_its_v11_name():
-    text = (AGENT / "lib" / "lcinv.sh").read_text(encoding="utf-8")
+    text = (AGENT / "lib" / "localclone" / "lcinv.sh").read_text(encoding="utf-8")
     assert 'mbr) _li_why="טבלת MBR — שיכפול מקומי של MBR יגיע ב-v1.1"' in text
     assert "מעתיק GPT בלבד" not in text
 
@@ -307,7 +307,7 @@ def test_an_mbr_disk_is_refused_by_its_v11_name():
 def _dispatch(tmp_path, request: str, token: str, screen: str) -> bool:
     gui = tmp_path / "gui"; gui.mkdir(parents=True)
     (gui / "ask-request").write_text(request, newline="\n")
-    sh(f"export GUI_DIR={posix(gui)!r}; . {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/askgui.sh; "
+    sh(f"export GUI_DIR={posix(gui)!r}; . {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/gui/askgui.sh; "
        f"GUI_SCREEN={screen}; token='{token}'; gui_ask_dispatch")
     return (gui / "ask-decision").exists()
 
@@ -329,7 +329,7 @@ def _ask(tmp_path: Path, rows: str, reply: str | None) -> tuple[subprocess.Compl
               "N=$(IFS='|' read -r n _ < \"$GUI_DIR/ask-request\"; echo \"$n\"); "
               f"printf '%s|{reply}\\n' \"$N\" > \"$GUI_DIR/ask-decision\" ) & ") if reply else ""
     out = sh(f"export GUI_DIR={posix(gui)!r} RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path / 'log')!r}; "
-             f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/askgui.sh; attended_power_check() {{ :; }}; "
+             f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/gui/askgui.sh; attended_power_check() {{ :; }}; "
              f"sleep 20 & _gui_pid=$!; {answer}gui_ask_choice badsect sdc {posix(tmp_path / 'rows')!r} 3; echo \"rc=$?\"; "
              "kill $_gui_pid 2>/dev/null; wait", timeout=60)
     return out, tmp_path
@@ -357,7 +357,7 @@ def test_a_malformed_bad_sector_question_is_never_published(tmp_path, rows):
 
 @requires_native("jq", why="lc_gui_state reads the run's manifest with jq")
 def test_the_local_screen_state_carries_the_question_and_the_raw_flags(tmp_path):
-    out = run(tmp_path, f'. {posix(AGENT)}/lib/askgui.sh; '   # the kiosk loads it (gui_libs)
+    out = run(tmp_path, f'. {posix(AGENT)}/lib/gui/askgui.sh; '   # the kiosk loads it (gui_libs)
               'export GUI_DIR=$RUN_DIR/gui; mkdir -p "$GUI_DIR" "$LC/inv" "$LC/run" "$RUN_DIR/targets/sda"; '
               'echo 0 > "$RUN_DIR/min_free_gb"; echo \'{"schema":1}\' > "$RUN_DIR/response.json"; '
               'echo local > "$LC/screen"; echo done > "$LC/inv.state"; echo copying > "$LC/phase"; '
@@ -375,11 +375,11 @@ def test_the_local_screen_state_carries_the_question_and_the_raw_flags(tmp_path)
 def test_the_kiosk_loads_what_the_local_screen_state_calls():
     """lcgui.sh asks for the question and the raw flags only when they are loaded: the kiosk
     (gui_libs) must load both, or the question would never be drawn."""
-    text = (AGENT / "lib" / "guibridge.sh").read_text(encoding="utf-8")
+    text = (AGENT / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
     libs = text[text.index("gui_libs() {"):text.index("gui_main() {")]
     assert '. "$LIB_DIR/askgui.sh"' in libs and '. "$LIB_DIR/lcraw.sh"' in libs
     assert libs.index('"$LIB_DIR/lcraw.sh"') < libs.index('"$LIB_DIR/lcgui.sh"')
-    agent = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/lccopy.sh"; . "$LIB_DIR/lcraw.sh"' in agent and '. "$LIB_DIR/askgui.sh"' in agent
 
 
@@ -409,7 +409,7 @@ def test_the_bad_sector_question_is_drawn_with_continue_as_the_default(tmp_path)
 #: ask_modal and the countdown are main.c's own (static): the driver includes main.c whole,
 #: under another name for its main, and feeds the real handler one event at a time.
 ASK_DRIVER = r'''
-#define main imagectl_gui_main
+#define main imagesrv_gui_main
 #include "main.c"
 #undef main
 int main(int argc, char **argv) {

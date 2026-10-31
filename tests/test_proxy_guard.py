@@ -2,7 +2,7 @@
 
 מצב proxy נשען על תכונה שבורה ב-dnsmasq המותקן: בקשת PXE לפורט 4011
 מקפיאה את התהליך (‏100% מעבד, מפסיק לענות לכל הסוקטים). הבידוד לאינסטנס
-נפרד (‏imagectl-proxy) כבר שם, והוא מציל את ה-DHCP של וילן ההפצה — אבל
+נפרד (‏imagesrv-proxy) כבר שם, והוא מציל את ה-DHCP של וילן ההפצה — אבל
 הוא לא הופך את ההדלקה לפעולה שאפשר לעשות בהיסח הדעת.
 
 הבדיקות כאן על ההגנה עצמה, לא על התכונה:
@@ -32,8 +32,8 @@ pytest.importorskip("fastapi")
 #: נבדק כאן על v1.2 — ולכן היכולת דלוקה (`classrooms_on`).
 pytestmark = pytest.mark.usefixtures("classrooms_on")
 
-from server import dhcp, dhcp_host
-from server.journal_he import EVENTS_HE
+from server.net import dhcp, dhcp_host
+from server.console.journal_he import EVENTS_HE
 
 try:
     from fastapi.testclient import TestClient
@@ -103,7 +103,7 @@ def test_the_explanation_names_the_real_failure_and_the_real_version():
     בפועל, ועל איזו גרסה הוא מבוסס."""
     broken = dhcp.proxy_support(REAL_291).reason()
     assert "2.91" in broken and "4011" in broken
-    assert "imagectl-proxy" in broken          # למה זה לא מפיל את ההפצה
+    assert "imagesrv-proxy" in broken          # למה זה לא מפיל את ההפצה
     assert "confirm_proxy_broken" in broken    # ואיך בכל זאת מדליקים לבדיקה
 
     unknown = dhcp.proxy_support(None).reason()
@@ -156,7 +156,7 @@ def guarded(tmp_path: Path, images_root: Path, clock):
     """שרת עם גרסת dnsmasq מוזרקת. אין subprocess, אין systemctl."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     fake = {
@@ -291,7 +291,7 @@ def test_the_console_reads_the_same_verdict_the_api_enforces(guarded):
 
 def test_proxy_support_is_admin_only(guarded, tmp_path):
     """מצב ה-proxy הוא מידע על תשתית — משתמש deploy לא רואה אותו."""
-    from server import users
+    from server.console import users
     ctx = guarded["ctx"]
     users.create(ctx.conn, "labtech", "deploy-pass-1", "deploy", by="test", check_policy=False)
     deploy = TestClient(guarded["app"])

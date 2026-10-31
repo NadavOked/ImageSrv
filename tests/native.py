@@ -7,7 +7,7 @@
 כל סוכן ה-POSIX, ‏`fanout`, ו-‏`hivewrite` — יכלו לא לרוץ בלי שאיש
 יבחין, ו-`pytest` יצא 0 (#52).
 
-ההבחנה נשענת על דגל מפורש ולא על ניחוש: כש-`IMAGECTL_REQUIRE_NATIVE=1`
+ההבחנה נשענת על דגל מפורש ולא על ניחוש: כש-`IMAGESRV_REQUIRE_NATIVE=1`
 דלוק, כלי חסר הוא **כישלון**. הדגל כבוי כברירת מחדל, כדי שהעמדה
 בווינדוס תמשיך לדלג כרגיל — שם הדילוג לגיטימי.
 
@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-ENV_FLAG = "IMAGECTL_REQUIRE_NATIVE"
+ENV_FLAG = "IMAGESRV_REQUIRE_NATIVE"
 MISSING_MARK = "missing_native"
 
 #: תחילית קבועה בסיבת הדילוג — ‏`SkipAudit` מזהה לפיה דילוג **מוצהר**

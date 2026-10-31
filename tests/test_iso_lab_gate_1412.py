@@ -33,8 +33,8 @@ LAB_GATE = ISO_DIR / "initrd-lab-gate.sh"
 
 LAB_FILES = {
     "dropbear": ("usr/sbin/dropbear",),
-    "authorized_keys": ("etc/imagectl/authorized_keys",),
-    "both": ("usr/sbin/dropbear", "etc/imagectl/authorized_keys"),
+    "authorized_keys": ("etc/imagesrv/authorized_keys",),
+    "both": ("usr/sbin/dropbear", "etc/imagesrv/authorized_keys"),
 }
 
 

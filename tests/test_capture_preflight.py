@@ -3,9 +3,9 @@ import json
 
 import pytest
 
-from server import capture
-from server.disk_reserve import SYSTEM_RESERVE_BYTES
-from server.tasks import TOKEN_HEADER
+from server.library import capture
+from server.storage.disk_reserve import SYSTEM_RESERVE_BYTES
+from server.core.tasks import TOKEN_HEADER
 from test_capture import make_task, setup_build_machine, task_token
 from test_capture_refusals import (
     CURL_SINK, ONE_PARTITION, capture_run, refusal_reason,
@@ -129,7 +129,7 @@ def test_warning_allows_shrink_and_reports_all_partition_bytes(tmp_path):
 def test_used_byte_probe_requires_success_and_never_replays_journal(tmp_path, df_rc, expected):
     out = run_sh(f'''
 RUN_DIR={posix(tmp_path)!r}; LOG_FILE="$RUN_DIR/probe.log"
-. {posix(AGENT / 'lib/manifest.sh')!r}
+. {posix(AGENT / 'lib/capture/manifest.sh')!r}
 mount() {{ printf '%s\\n' "$*" > "$RUN_DIR/mount-args"; }}
 umount() {{ return 0; }}
 log() {{ :; }}

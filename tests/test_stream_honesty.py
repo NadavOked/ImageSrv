@@ -26,6 +26,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_timeouts import log_of, make_stubs, run_sh
+from agentlib import lib_path
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -33,7 +34,7 @@ pytestmark = requires_native(("bash", BASH))
 #: קטן מהם שלם *עובר* דרך ה-tee אל ה-sha גם כשהקורא שבקצה כבר מת. אז
 #: ה-sha היה תואם, הכשל היה נראה אחרת לגמרי, והבדיקה הייתה בודקת מצב
 #: שאינו המצב של #73. מטען גדול מהחוצצים נקטע באמת.
-PAYLOAD = b"imagectl" * (1024 * 1024)
+PAYLOAD = b"imagesrv" * (1024 * 1024)
 
 #: ‏fanout מזויף שנהרג באמצע הזרם, בדיוק כמו ה-OOM killer ב-#21: הוא
 #: בולע חלק מהבייטים, לא כותב שורת דוח לאף מגירה, ולא פותח אף fifo,
@@ -82,9 +83,9 @@ def drawer_run(tmp_path, script_tail: str, stubs: dict, disks=("sda", "sdb"),
         + f"export TMPDIR={posix(tmp_path)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(box)}/dev "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=3 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; "
-        f". {posix(AGENT)}/lib/drawers.sh; . {posix(AGENT)}/lib/drawerfeed.sh; . {posix(AGENT)}/lib/verdict.sh; . {posix(AGENT)}/lib/failmark.sh; . {posix(AGENT)}/lib/ntfsboot.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
         + "".join(f"target_init {d} {len(PAYLOAD)}; " for d in disks)
         + source + script_tail
     )
@@ -223,8 +224,8 @@ def station_run(tmp_path, sha: str, stubs: dict) -> tuple[Path, str]:
         + f"export TMPDIR={posix(tmp_path)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; "
-        f". {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/ntfsboot.sh; . {posix(AGENT)}/lib/drawers.sh; "   # #1906: restore_pipe
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; . {posix(AGENT)}/lib/restore/drawers.sh; "   # #1906: restore_pipe
         f"target_init sda {len(PAYLOAD)}; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "node_is_block() { true; }; "
@@ -259,7 +260,7 @@ def test_no_sha_is_compared_before_it_is_known_to_be_a_digest(name):
     """הדפוס עצמו, ולא רק המופע: כל השוואת sha בסוכן עוברת קודם דרך
     ‏`is_sha256`. בלעדיה `_got` ריק שווה ל"לא תאם", וזה בדיוק הבאג —
     טסט שבודק רק את ההודעה היה עובר גם אם מישהו יוסיף השוואה שלישית."""
-    source = (AGENT / "lib" / name).read_text(encoding="utf-8")
+    source = (lib_path(name)).read_text(encoding="utf-8")
     assert "is_sha256" in source, f"{name} משווה sha בלי לוודא שהוא נקרא"
 
 
@@ -267,6 +268,6 @@ def test_the_drawers_ask_the_source_for_its_own_exit_code():
     """‏`$?` של צינור הוא של האחרון בלבד. בלי לכידה מפורשת של קוד היציאה
     של המקור, "הזרם נקטע" אינו מצב שאפשר בכלל לזהות — והוא נבלע בענף
     ה-sha, שהוא כל #73."""
-    source = (AGENT / "lib" / "drawers.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "restore" / "drawers.sh").read_text(encoding="utf-8")
     assert "source.rc" in source
     assert 'echo "$?" > "$RUN_DIR/source.rc"' in source

@@ -84,9 +84,9 @@ def box(tmp_path: Path, part: bytes, *, start: int | None = START, fs: str = "nt
         + make_stubs(b / "stubs", {"blockdev": BLOCKDEV, **({"dd": DD} if dd_mode else {})})
         + f"export TMPDIR={posix(b)!r} RUN_DIR={posix(b / 'run')!r} DEVROOT={posix(b / 'dev')!r} "
         f"SYSROOT={posix(b / 'sys')!r} LOG_FILE={posix(b / 'run' / 'agent.log')!r}\n"
-        f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/restore.sh\n"
-        f". {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/writemark.sh; . {posix(AGENT)}/lib/failmark.sh\n"
-        f". {posix(AGENT)}/lib/ntfsboot.sh\n"
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh\n"
+        f". {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/failmark.sh\n"
+        f". {posix(AGENT)}/lib/restore/ntfsboot.sh\n"
         "ata_capture() { :; }\n"
         f"manifest_plan() {{ echo '3|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|windows|{fs}|{OLD}|32768|p3|y|false|u'; }}\n"
     )

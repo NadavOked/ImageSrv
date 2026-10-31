@@ -1,8 +1,8 @@
 """Every command the kiosk can reach must exist in the kiosk's own process.
 
-``imagectl-kiosk`` is a separate process (tools/build_initramfs.sh writes it:
-``. guibridge.sh; gui_main``). Nothing ``imagectl-agent`` sourced is there
-unless ``gui_libs`` (agent/lib/guibridge.sh) loads it. A function the kiosk
+``imagesrv-kiosk`` is a separate process (tools/build_initramfs.sh writes it:
+``. guibridge.sh; gui_main``). Nothing ``imagesrv-agent`` sourced is there
+unless ``gui_libs`` (agent/lib/gui/guibridge.sh) loads it. A function the kiosk
 reaches that lives in a file ``gui_libs`` does not load fails with
 ``<fn>: not found`` -- at run time, on the metal, and (a function call that
 does not exist is just a failed command) quietly: the caller sees an empty
@@ -42,12 +42,13 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
 
+from agentlib import flat_lib, lib_files
+
 from native import requires_native
 from shcalls import Call, scan_sh
 from test_cloner_gui import AGENT, BASH, REPO, posix, sh
 
-LIB = AGENT / "lib"
-
+LIB = flat_lib()
 #: The bugs this test knows about and has not seen fixed yet: name -> where it
 #: is tracked. ``test_the_known_broken_set_is_exactly_what_is_tracked`` pins the
 #: reachable-missing set to exactly this, so a NEW missing function fails even
@@ -98,8 +99,8 @@ APPLETS = frozenset("""
 
 #: Packed by the builder outside BINARIES: compiled from agent/*.c, or the
 #: native GUI image's own binaries (``--with-gui``).
-COMPILED = frozenset({"fanout", "hivewrite", "lldpsniff", "imagectl-monitor",
-                      "imagectl-station-gui", "imagectl-kiosk"})
+COMPILED = frozenset({"fanout", "hivewrite", "lldpsniff", "imagesrv-monitor",
+                      "imagesrv-station-gui", "imagesrv-kiosk"})
 
 
 def packed_binaries() -> frozenset[str]:
@@ -167,7 +168,7 @@ def kiosk_files(lib: Path = LIB) -> list[str]:
         text = tools.read_text(encoding="utf-8")
         assert "toolbins.sh" in text and "/tools_*.sh" in text, \
             "tools_load no longer pulls toolbins.sh + tools_*.sh -- update kiosk_files()"
-        files += ["toolbins.sh", *sorted(p.name for p in lib.glob("tools_*.sh"))]
+        files += ["toolbins.sh", *sorted(p.name for p in lib_files(lib) if p.match("tools_*.sh"))]
     return list(dict.fromkeys(files))
 
 
@@ -246,7 +247,7 @@ def test_the_scanner_finds_exactly_the_functions_bash_defines(tmp_path):
     real chain (``gui_libs`` + ``tools_load``) and list what bash knows."""
     run = tmp_path / "run"
     run.mkdir()
-    out = sh(f'export RUN_DIR={posix(run)!r} LIB_DIR={posix(LIB)!r} IMAGECTL_TEST=1; '
+    out = sh(f'export RUN_DIR={posix(run)!r} LIB_DIR={posix(LIB)!r} IMAGESRV_TEST=1; '
              f'. {posix(LIB)}/guibridge.sh; gui_libs; tools_load 2>/dev/null; '
              # usb_offline (usbclone.sh, #1914) only defines this boot's no-server stubs: the
              # scanner counts them, and bash knows them once it has run

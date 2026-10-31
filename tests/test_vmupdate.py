@@ -20,9 +20,9 @@ from pathlib import Path
 import pytest
 
 from conftest import MANIFEST_256, write_image
-from server import vmdisk, vmupdate
+from server.vm import vmdisk, vmupdate
 from server.db import connect, set_setting
-from server.images import ImageLibrary
+from server.library.images import ImageLibrary
 
 DISK_GUID = "0E239172-A515-D8B4-92A1-AD790E239172"
 SOURCE = {**copy.deepcopy(MANIFEST_256), "disk_guid": DISK_GUID,
@@ -217,7 +217,7 @@ def lab(tmp_path, monkeypatch):
         (ovmf / name).write_bytes(name.encode())
     monkeypatch.setattr(vmdisk, "build_disk", fake_build)
     monkeypatch.setattr(vmdisk, "capture_disk", fake_capture())
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     set_setting(conn, vmupdate.NIC_KEY, "eth0")   # ‏#1468: "כרטיס לעדכוני VM"
     library = ImageLibrary(root)
     qemu = FakeQemu()
@@ -336,7 +336,7 @@ def test_start_builds_boots_and_the_argv_never_bridges(lab):
     assert "user,id=" not in joined and "bridge" not in joined
     assert f"unix:{engine.workdir / 'vnc.sock'},share=force-shared" in argv
     # הבידוד: QEMU רץ כמשתמש ה-VM, ואין שום פתח נכנס או שיתוף
-    assert argv[argv.index("-run-with") + 1] == "user=imagectl-vm"
+    assert argv[argv.index("-run-with") + 1] == "user=imagesrv-vm"
     for forbidden in ("hostfwd", "guestfwd", "smb=", "bridge", "-vnc :", "tcp:", "ifname=",
                       "script="):
         assert forbidden not in joined, forbidden
@@ -611,7 +611,7 @@ def test_a_firewall_that_did_not_load_keeps_the_vm_off(lab):
 
 def test_without_the_vm_user_nothing_starts(lab):
     exc = refusal(lab["make"](FakeMachine(user=False)))
-    assert exc.reason == "vm_user" and "imagectl-vm" in exc.message
+    assert exc.reason == "vm_user" and "imagesrv-vm" in exc.message
 
 
 def test_missing_guestfs_is_named(lab):
@@ -810,19 +810,28 @@ def test_cancel_while_preparing_stops_the_build_and_leaves_nothing(lab, monkeypa
     נמחק, והמצב חוזר ל-idle — בלי VM ובלי שינוי באימג'."""
     monkeypatch.setattr(vmdisk, "detach_all", lambda host, disk: None)
     gate = threading.Event()
+    entered = threading.Event()
 
     def slow_build(host, manifest, image_dir, workdir, progress):
         (workdir / "disk.raw").write_bytes(b"partial")
-        gate.wait(10)
+        entered.set()
+        assert gate.wait(10), "test did not release the build after cancellation"
         progress(1)                     # כאן הביטול נתפס
         raise AssertionError("the build went on after the cancel")
 
     monkeypatch.setattr(vmdisk, "build_disk", slow_build)
     engine = lab["make"]()
     engine.start("img_7f3a91", "noc")
-    assert engine.discard("noc")["state"] == "preparing"
-    gate.set()
+    try:
+        assert entered.wait(10), "build did not reach the cancellation barrier"
+        assert engine.discard("noc")["state"] == "preparing"
+    finally:
+        gate.set()
     wait_for(engine, "idle")
+    # idle is published before the journal write. Join the actual preparation
+    # worker before checking the journal, and fail if it has not completed.
+    engine.join()
+    assert not any(t.is_alive() for t in engine._threads)
     assert not engine.workdir.exists() and lab["qemu"].procs == []
     assert events(lab["conn"])[-1] == "vmupdate_discard"
 

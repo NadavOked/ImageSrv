@@ -11,9 +11,10 @@ from pathlib import Path
 import pytest
 
 import sizelimit
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-ENGINE = REPO / "installer" / "imagectl-install"
+ENGINE = REPO / "installer" / "imagesrv-install"
 INSTALLER = REPO / "installer"
 SH = shutil.which("sh")
 pytestmark = pytest.mark.skipif(SH is None, reason="a POSIX sh is required")
@@ -48,16 +49,16 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     for name in ("sda", "sda1", "sda2"):
         (dev / name).touch()
     cdrom = tmp_path / "cdrom"
-    (cdrom / "imagectl-src" / ".git").mkdir(parents=True)
-    (cdrom / "imagectl-src" / "tools" / "iso").mkdir(parents=True)
-    (cdrom / "imagectl-src" / "tools" / "iso" / "packages.txt").write_text(
+    (cdrom / "imagesrv-src" / ".git").mkdir(parents=True)
+    (cdrom / "imagesrv-src" / "tools" / "iso").mkdir(parents=True)
+    (cdrom / "imagesrv-src" / "tools" / "iso" / "packages.txt").write_text(
         "busybox-static\n", newline="\n")
-    (cdrom / "imagectl").mkdir()
-    (cdrom / "imagectl" / "firstboot.sh").write_text("#!/bin/bash\n", newline="\n")
-    (cdrom / "imagectl" / "imagectl-firstboot.service").write_text("[Service]\n", newline="\n")
-    (cdrom / "imagectl-iso.json").write_text('{"tag":"test"}\n', newline="\n")
-    (cdrom / "pool" / "main" / "imagectl").mkdir(parents=True)
-    (cdrom / "pool" / "main" / "imagectl" / "x.deb").touch()
+    (cdrom / "imagesrv").mkdir()
+    (cdrom / "imagesrv" / "firstboot.sh").write_text("#!/bin/bash\n", newline="\n")
+    (cdrom / "imagesrv" / "imagesrv-firstboot.service").write_text("[Service]\n", newline="\n")
+    (cdrom / "imagesrv-iso.json").write_text('{"tag":"test"}\n', newline="\n")
+    (cdrom / "pool" / "main" / "imagesrv").mkdir(parents=True)
+    (cdrom / "pool" / "main" / "imagesrv" / "x.deb").touch()
     (cdrom / "dists" / "trixie").mkdir(parents=True)
     target = tmp_path / "target"
     target.mkdir()
@@ -66,7 +67,7 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     env.update({
         "SYSROOT": str(root), "DEVROOT": str(dev), "PROC_MOUNTS": str(mounts),
         "CDROM": str(cdrom), "TARGET": str(target), "STATE_FILE": str(state),
-        "BOOTSTRAP_LOG": str(tmp_path / "debootstrap.log"), "IMAGECTL_TEST": "1",
+        "BOOTSTRAP_LOG": str(tmp_path / "debootstrap.log"), "IMAGESRV_TEST": "1",
     })
     return {"root": root, "dev": dev, "cdrom": cdrom, "target": target,
             "state": state, "mounts": mounts, "env": env}
@@ -77,7 +78,7 @@ def _answers(path: Path, **changes: str) -> Path:
         "disk": "/dev/sda", "role": "standalone", "primary_url": "", "primary_fingerprint": "",
         "servers_if": "ens33", "servers_mac": "00:50:56:01:02:01",
         "servers_mode": "dhcp", "servers_addr": "", "servers_mask": "",
-        "servers_gw": "", "servers_dns": "", "hostname": "imagectl-ta", "timezone": "Asia/Jerusalem",
+        "servers_gw": "", "servers_dns": "", "hostname": "imagesrv-ta", "timezone": "Asia/Jerusalem",
         "admin_user": "admin", "admin_pass": "correct horse battery staple", "root_pass": ROOT_PW,
     }
     data.update(changes)
@@ -103,7 +104,7 @@ def _shim(path: Path, body: str) -> None:
 # update-grub writes root= the way Debian's /etc/grub.d/10_linux decides it
 # (grub-common 2.12, trixie) -- UUID= only when /dev/disk/by-uuid/<uuid>
 # exists in the target, else the device name. The recovery entry is ours
-# (41_imagectl_recovery) and always UUID. GRUB_IGNORES_UUID stands for an
+# (41_imagesrv_recovery) and always UUID. GRUB_IGNORES_UUID stands for an
 # update-grub that writes the device anyway.
 _FAKE_GRUB = r"""
 fake_grub() {
@@ -204,7 +205,7 @@ def test_bad_answers_are_named_before_any_disk_command(tmp_path, changes, code):
     assert not calls.exists(), calls.read_text(encoding="utf-8") if calls.exists() else ""
 
 
-@pytest.mark.parametrize("typed", ["192.168.68.250", "https://192.168.68.250:8443", "imagectl-ta:8443"])
+@pytest.mark.parametrize("typed", ["192.168.68.250", "https://192.168.68.250:8443", "imagesrv-ta:8443"])
 @LINUX_ONLY
 def test_a_secondary_with_a_verified_primary_passes_in_any_typed_form(tmp_path, typed):
     """#1310: the IP alone is enough -- and the fingerprint of a green check
@@ -221,7 +222,7 @@ def test_a_secondary_with_a_verified_primary_passes_in_any_typed_form(tmp_path, 
     ("  192.168.68.250 ", "https://192.168.68.250:8443"),
     ("192.168.68.250:8443", "https://192.168.68.250:8443"),
     ("https://192.168.68.250:8443/", "https://192.168.68.250:8443"),
-    ("imagectl-ta.college.ac.il", "https://imagectl-ta.college.ac.il:8443"),
+    ("imagesrv-ta.college.ac.il", "https://imagesrv-ta.college.ac.il:8443"),
     ("http://192.168.68.250", None), ("192.168.68.250:9443", None), ("", None),
     ("https://x:8443/api", None), ("a b", None), ("-x", None),
 ])
@@ -306,10 +307,10 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
     assert "--removable --force-extra-removable" not in got.stdout
     assert "+ chroot <target> grub-install --target=i386-pc /dev/sda" in lines
     time_sync = "+ chroot <target> systemctl enable chrony.service"
-    answers = "+ write-target mode=0600 <target>/etc/imagectl/answers"
+    answers = "+ write-target mode=0600 <target>/etc/imagesrv/answers"
     assert lines.index(time_sync) + 1 == lines.index(answers)
-    grub_cfg = "+ write-target mode=0644 <target>/etc/default/grub.d/imagectl.cfg"
-    recovery = "+ write-target mode=0755 <target>/etc/grub.d/41_imagectl_recovery"
+    grub_cfg = "+ write-target mode=0644 <target>/etc/default/grub.d/imagesrv.cfg"
+    recovery = "+ write-target mode=0755 <target>/etc/grub.d/41_imagesrv_recovery"
     assert lines.index(grub_cfg) < lines.index(recovery) < lines.index("+ chroot <target> update-grub")
     # #2137: the by-uuid link update-grub reads is there before it runs
     link = "+ ln -sf '<root-device>' '<target>/dev/disk/by-uuid/<root-uuid>'"
@@ -357,20 +358,20 @@ install_bootloader
                          stdin=subprocess.DEVNULL)
     assert got.returncode == 0, got.stderr
     log = calls.read_text(encoding="utf-8").splitlines()
-    write = "write-target 0644 /etc/default/grub.d/imagectl.cfg"
+    write = "write-target 0644 /etc/default/grub.d/imagesrv.cfg"
     assert write in log, log
     assert log.index(write) < log.index(f"chroot {target.as_posix()} update-grub"), log
-    cfg = (target / "etc" / "default" / "grub.d" / "imagectl.cfg").read_text(encoding="utf-8")
+    cfg = (target / "etc" / "default" / "grub.d" / "imagesrv.cfg").read_text(encoding="utf-8")
     settings = [line for line in cfg.splitlines() if line and not line.startswith("#")]
     # hidden with 0 would leave no window in which to press Esc
     assert settings == ["GRUB_TIMEOUT_STYLE=hidden", "GRUB_TIMEOUT=3"]
 
-    recovery = target / "etc" / "grub.d" / "41_imagectl_recovery"
+    recovery = target / "etc" / "grub.d" / "41_imagesrv_recovery"
     text = recovery.read_text(encoding="utf-8")
     assert 'menuentry "ImageSrv recovery (text console)"' in text
     assert "root_uuid=$(grub-probe --target=fs_uuid /)" in text
     assert "root=UUID=$root_uuid ro nomodeset systemd.unit=multi-user.target" in text
-    assert log.index("write-target 0755 /etc/grub.d/41_imagectl_recovery") < log.index(
+    assert log.index("write-target 0755 /etc/grub.d/41_imagesrv_recovery") < log.index(
         f"chroot {target.as_posix()} update-grub"
     )
 
@@ -492,12 +493,12 @@ def test_a_source_tree_without_git_fails_unless_the_manifest_says_lab_iso(tmp_pa
     _command_shims(tmp_path, box["env"])
     for name in ("chown", "sync", "chmod"):  # the real run past debootstrap, without root
         _shim(tmp_path / "bin" / name, "exit 0\n")
-    shutil.rmtree(Path(box["env"]["CDROM"]) / "imagectl-src" / ".git")
+    shutil.rmtree(Path(box["env"]["CDROM"]) / "imagesrv-src" / ".git")
     (box["target"] / "opt").mkdir()  # debootstrap (shimmed here) would have made it
     got = _run(box, _answers(tmp_path / "answers"))
     assert got.returncode == 2 and "[source-git-missing]" in got.stderr
     shutil.rmtree(box["target"] / "opt"); (box["target"] / "opt").mkdir()
-    (Path(box["env"]["CDROM"]) / "imagectl-iso.json").write_text(
+    (Path(box["env"]["CDROM"]) / "imagesrv-iso.json").write_text(
         '{"tag":"test","source_git":false}\n', newline="\n")
     got = _run(box, _answers(tmp_path / "answers"))
     # past the check: the run goes on to the firstboot copy (which needs a
@@ -510,7 +511,7 @@ def test_a_source_tree_without_git_fails_unless_the_manifest_says_lab_iso(tmp_pa
 @LINUX_ONLY
 def test_the_target_tree_is_world_readable_whatever_umask_the_engine_inherits(tmp_path):
     """The console process runs under umask 077 and the engine inherited it:
-    apt's sandbox user could not read /var/lib/imagectl/apt-repo on the
+    apt's sandbox user could not read /var/lib/imagesrv/apt-repo on the
     installed server (ESXi, 21/09). Secrets keep their explicit 0600."""
     box = _machine(tmp_path)
     _command_shims(tmp_path, box["env"])
@@ -526,7 +527,7 @@ def test_the_target_tree_is_world_readable_whatever_umask_the_engine_inherits(tm
     for path in (box["target"] / "cdrom", box["target"] / "boot" / "efi", box["target"] / "sys"):
         assert path.is_dir(), path
         assert path.stat().st_mode & 0o055 == 0o055, f"{path} is not world-readable"
-    answers = box["target"] / "etc" / "imagectl" / "answers"
+    answers = box["target"] / "etc" / "imagesrv" / "answers"
     assert not answers.exists() or answers.stat().st_mode & 0o077 == 0
 
 
@@ -605,7 +606,7 @@ def _full_install_box(tmp_path):
         (target / rel).mkdir(parents=True)
     index = Path(box["env"]["CDROM"]) / "dists" / "trixie" / "main" / "binary-amd64" / "Packages.gz"
     index.parent.mkdir(parents=True)
-    index.write_bytes(gzip.compress(b"Package: x\nFilename: pool/main/imagectl/x.deb\n\n"))
+    index.write_bytes(gzip.compress(b"Package: x\nFilename: pool/main/imagesrv/x.deb\n\n"))
     return box, calls
 
 
@@ -718,15 +719,15 @@ def test_removing_the_iso_guard_makes_the_destructive_dry_run_reachable(tmp_path
     guard = '    disk_is_iso "$DISK_NAME" && fail iso-target "refusing the disk that contains /cdrom: $ANSWER_DISK"\n'
     assert source.count(guard) == 1
     answers_sh.write_text(source.replace(guard, ""), newline="\n")
-    box["env"]["AGENT_LIB_DIR"] = str(REPO / "agent" / "lib")
-    got = _run(box, _answers(tmp_path / "answers"), "--dry-run", engine=mutated / "imagectl-install")
+    box["env"]["AGENT_LIB_DIR"] = str(flat_lib())
+    got = _run(box, _answers(tmp_path / "answers"), "--dry-run", engine=mutated / "imagesrv-install")
     assert got.returncode == 0, got.stderr
     assert "+ sgdisk --zap-all" in got.stdout
 
 
 def _copy_repo(tmp_path: Path, packages: dict[str, str], on_cd: tuple[str, ...]):
     """‏copy_local_repo עצמו (לא dry-run) מול ‏/cdrom מדומה: ‏pool של ה-netinst
-    (‏pool/main/o/...) לצד pool/main/imagectl, ו-dists/ שמאנדקס את שניהם — כמו
+    (‏pool/main/o/...) לצד pool/main/imagesrv, ו-dists/ שמאנדקס את שניהם — כמו
     ה-ISO אחרי `make-pool.sh --index-only` (‏#1371)."""
     import gzip
     cdrom, target = tmp_path / "cdrom", tmp_path / "target"
@@ -749,12 +750,12 @@ def _copy_repo(tmp_path: Path, packages: dict[str, str], on_cd: tuple[str, ...])
            "BOOTSTRAP_LOG": (tmp_path / "debootstrap.log").as_posix()}
     got = subprocess.run([SH, str(harness)], text=True, capture_output=True, env=env,
                          cwd=tmp_path, stdin=subprocess.DEVNULL)
-    return got, target / "var" / "lib" / "imagectl" / "apt-repo"
+    return got, target / "var" / "lib" / "imagesrv" / "apt-repo"
 
 
 NETINST_AND_OURS = {
-    "qemu-system-x86": "pool/main/imagectl/qemu-system-x86_1_amd64.deb",
-    "fonts-ibm-plex": "pool/contrib/imagectl/fonts-ibm-plex_1_all.deb",
+    "qemu-system-x86": "pool/main/imagesrv/qemu-system-x86_1_amd64.deb",
+    "fonts-ibm-plex": "pool/contrib/imagesrv/fonts-ibm-plex_1_all.deb",
     "openssh-server": "pool/main/o/openssh/openssh-server_10.0p1-7+deb13u4_amd64.deb",
     "dbus-user-session": "pool/main/d/dbus/dbus-user-session_1.16.2-2_amd64.deb",
 }
@@ -762,7 +763,7 @@ NETINST_AND_OURS = {
 
 def test_the_local_repo_has_every_package_its_index_lists(tmp_path):
     """שרת ת"א 13/10: ‏495 מתוך 1134 החבילות באינדקס היו בלי קובץ (openssh-server,
-    ‏dbus-user-session) — רק pool/*/imagectl הועתק, ו-dists/ כולו."""
+    ‏dbus-user-session) — רק pool/*/imagesrv הועתק, ו-dists/ כולו."""
     import gzip
     got, repo = _copy_repo(tmp_path, NETINST_AND_OURS, tuple(NETINST_AND_OURS.values()))
     assert got.returncode == 0, got.stdout + got.stderr
@@ -786,7 +787,7 @@ def test_an_index_entry_without_a_file_fails_the_install_by_name(tmp_path):
 def test_installed_system_reserves_tty1_before_enabling_firstboot():
     bootstrap = (INSTALLER / "lib" / "bootstrap.sh").read_text(encoding="utf-8")
     mask = 'systemctl mask getty@tty1.service'
-    enable = 'systemctl enable imagectl-firstboot.service'
+    enable = 'systemctl enable imagesrv-firstboot.service'
     assert bootstrap.count(mask) == 1, "the installed target does not reserve tty1 before first boot"
     assert bootstrap.index(mask) < bootstrap.index(enable)
     assert 'must_run firstboot-tty1 "could not reserve tty1 for firstboot progress"' in bootstrap
@@ -823,7 +824,7 @@ def test_installer_packages_and_binaries_are_conditional_and_on_the_iso():
 # --- #1632 (Nadav 24/10): "root's password -- I set it, as part of the install" --------
 
 OPENSSL = shutil.which("openssl")
-DECOY_PW = "Build-time-1!"   # what an old ISO carried in imagectl/root-password.hash
+DECOY_PW = "Build-time-1!"   # what an old ISO carried in imagesrv/root-password.hash
 
 
 def _root_harness(tmp_path: Path, root_pass: str) -> tuple[subprocess.CompletedProcess, dict[str, Path]]:
@@ -835,10 +836,10 @@ def _root_harness(tmp_path: Path, root_pass: str) -> tuple[subprocess.CompletedP
     target = tmp_path / "target"
     target.mkdir()
     cdrom = tmp_path / "cdrom"
-    (cdrom / "imagectl").mkdir(parents=True)
+    (cdrom / "imagesrv").mkdir(parents=True)
     decoy = subprocess.run([OPENSSL, "passwd", "-6", "-stdin"], input=DECOY_PW + "\n",
                            capture_output=True, text=True, check=True).stdout.strip()
-    (cdrom / "imagectl" / "root-password.hash").write_text(decoy + "\n", newline="\n")
+    (cdrom / "imagesrv" / "root-password.hash").write_text(decoy + "\n", newline="\n")
     files = {name: tmp_path / name for name in ("calls", "shadow", "openssl-argv", "openssl-env")}
     bindir = tmp_path / "bin"
     bindir.mkdir()

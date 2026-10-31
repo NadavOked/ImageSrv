@@ -1,5 +1,5 @@
 #!/bin/sh
-# init -- PID 1 of the ImageCtl initramfs. Mounts the pseudo-filesystems,
+# init -- PID 1 of the ImageSrv initramfs. Mounts the pseudo-filesystems,
 # loads drivers, brings the network up with DHCP, then hands over to the
 # agent. If anything here fails, the machine reboots -- which lands back
 # in GRUB, whose default is the local disk.
@@ -23,21 +23,21 @@ mount -t devtmpfs devtmpfs /dev   2>/dev/null
 mkdir -p /dev/pts /run
 mount -t devpts   devpts   /dev/pts 2>/dev/null
 mount -t tmpfs    tmpfs    /run   2>/dev/null
-mkdir -p /run/imagectl
+mkdir -p /run/imagesrv
 # Boot markers (#1452): /proc/uptime at init, modules, nic, link and dhcp.
 # No network before DHCP, so they ride on the agent-net breadcrumb below.
 _up=""
 boot_mark() { _up="$_up${_up:+,}$1:$(cut -d' ' -f1 /proc/uptime 2>/dev/null)"; }
 boot_mark init
-RUN_DIR="${RUN_DIR:-/run/imagectl}"
-LIB_DIR="${LIB_DIR:-/usr/lib/imagectl}"
+RUN_DIR="${RUN_DIR:-/run/imagesrv}"
+LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 
 # Storage and NIC drivers. The list is generated at build time. A module that
 # does not load has two opposite meanings, and folding them into one line taught
 # the operator to ignore the message (#407, principle 5): a *platform* driver
 # not loading is the expected case -- 8 virtualization drivers on bare metal,
 # plus whatever NIC/disk hardware this machine simply does not have -- while a
-# *required* module (the filesystem set in /etc/imagectl/modules.required) not
+# *required* module (the filesystem set in /etc/imagesrv/modules.required) not
 # loading is a broken initramfs that will let restore corrupt data silently
 # (#84, #107, #121). Both are reported BY NAME, never as a bare count: `9
 # modules did not load` is the same digit whether all nine were superfluous or
@@ -46,7 +46,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagectl}"
 # ‏`2>/dev/null` לבדו הפך כל כישלון טעינה לבלתי-נראה, ומודול שלא נטען
 # נראה בדיוק כמו מודול שנטען. ‏`sungem: Unknown symbol` נמצא ככה רק
 # כשהודפס dmesg ידנית במעבדה. סופרים, מסווגים ומדווחים בשם (#76, #407).
-MOD_DIR="${MOD_DIR:-/etc/imagectl}"
+MOD_DIR="${MOD_DIR:-/etc/imagesrv}"
 _required=" $(tr '\n' ' ' < "$MOD_DIR/modules.required" 2>/dev/null) "
 _req_fail=""
 _opt_fail=""
@@ -117,15 +117,15 @@ done
 [ "$_nic_found" = 1 ] && boot_mark nic
 
 # --- the install ISO (#1190) --------------------------------------------------
-# imagectl.mode=installer on the kernel line: this image was booted from the
-# ImageCtl install ISO, not by PXE. The live installer needs no lease (the
+# imagesrv.mode=installer on the kernel line: this image was booted from the
+# ImageSrv install ISO, not by PXE. The live installer needs no lease (the
 # install is offline) and must never reboot-loop on a network that is not
 # there yet, so it takes over before the DHCP loop below. Only parse_cmdline
 # reads the kernel line (principle 2); the mode is one of its two words.
 if [ -f "$LIB_DIR/common.sh" ]; then
     . "$LIB_DIR/common.sh"
     parse_cmdline
-    if [ "$IMAGECTL_MODE" = installer ]; then
+    if [ "$IMAGESRV_MODE" = installer ]; then
         [ -f "$LIB_DIR/installer_boot.sh" ] || fail "installer image without installer_boot.sh"
         . "$LIB_DIR/installer_boot.sh"
         installer_boot
@@ -133,15 +133,15 @@ if [ -f "$LIB_DIR/common.sh" ]; then
     fi
     # #1914: the clone stick -- no server and no lease to wait for; the agent
     # goes straight to the local clone screen (usbclone.sh). No NIC is brought up.
-    if [ "$IMAGECTL_MODE" = usbclone ]; then
-        exec /usr/bin/imagectl-agent
+    if [ "$IMAGESRV_MODE" = usbclone ]; then
+        exec /usr/bin/imagesrv-agent
     fi
 fi
 
 # --- network -----------------------------------------------------------------
 # #2040: a build machine has two cabled NICs, deploy and classroom, in either
 # order. Ours is the NIC whose lease came from OUR server (DHCP server-id ==
-# the imagectl.server host) -- never the first lease in name order. Each
+# the imagesrv.server host) -- never the first lease in name order. Each
 # carrier NIC gets a one-shot probe (-q; the hook only records the lease), and
 # the one that is ours gets the resident udhcpc that renews (#1949). None ours
 # = no guess: the deadline reboots, and GRUB's default is the local disk
@@ -152,7 +152,7 @@ ip link set lo up 2>/dev/null
 
 IFACE=""
 _foreign=""
-_srv=${IMAGECTL_SERVER#*://}; _srv=${_srv%%[:/]*}
+_srv=${IMAGESRV_SERVER#*://}; _srv=${_srv%%[:/]*}
 _link_marked=0
 _deadline=$(( $(date +%s) + 90 ))
 while [ -z "$IFACE" ]; do
@@ -187,10 +187,10 @@ while [ -z "$IFACE" ]; do
         case " $_foreign " in *" $_n "*) continue ;; esac   # its network does not move
         [ "$_link_marked" = 1 ] || { boot_mark link; _link_marked=1; }
         _tried=1
-        rm -f "/run/imagectl/dhcp-probe.$_n"
+        rm -f "/run/imagesrv/dhcp-probe.$_n"
         udhcpc -i "$_n" -n -q -t 4 -T 3 -V ImageSrv-agent \
-            -s /etc/imagectl/udhcpc.probe >/dev/null 2>&1 || continue
-        _sid=$(sed -n 's/^serverid=//p' "/run/imagectl/dhcp-probe.$_n" 2>/dev/null)
+            -s /etc/imagesrv/udhcpc.probe >/dev/null 2>&1 || continue
+        _sid=$(sed -n 's/^serverid=//p' "/run/imagesrv/dhcp-probe.$_n" 2>/dev/null)
         if [ -z "$_srv" ] || [ "$_sid" != "$_srv" ]; then
             echo "ImageSrv: $_n has a lease from '${_sid:-?}', not from the server '${_srv:-?}' -- not used (#2040)"
             _foreign="$_foreign $_n"
@@ -200,7 +200,7 @@ while [ -z "$IFACE" ]; do
         # at T1. With -q it exited, the 12h lease lapsed under a long run,
         # dnsmasq dropped it, and the identity check refused every report.
         if udhcpc -i "$_n" -n -t 4 -T 3 -V ImageSrv-agent \
-            -s /etc/imagectl/udhcpc.script >/dev/null 2>&1; then
+            -s /etc/imagesrv/udhcpc.script >/dev/null 2>&1; then
             IFACE="$_n"
             break
         fi
@@ -231,7 +231,7 @@ IP=$(ip -4 addr show "$IFACE" 2>/dev/null \
      | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -n 1)
 [ -n "$IP" ] || fail "DHCP succeeded but no address on $IFACE"
 
-printf 'IFACE=%s\nIP=%s\nNICS_DOWN="%s"\n' "$IFACE" "$IP" "$NICS_DOWN" > /run/imagectl/net.conf
+printf 'IFACE=%s\nIP=%s\nNICS_DOWN="%s"\n' "$IFACE" "$IP" "$NICS_DOWN" > /run/imagesrv/net.conf
 echo "ImageSrv: network up on $IFACE ($IP)"
 
 # --- boot trace (#400) --------------------------------------------------------
@@ -251,12 +251,12 @@ echo "ImageSrv: network up on $IFACE ($IP)"
 # Never fatal, and never silent: trace_step always returns 0 and logs a
 # failed delivery. A diagnostic that stops a machine booting is damage.
 if [ -f "$LIB_DIR/common.sh" ]; then
-    SERVER="$IMAGECTL_SERVER"
+    SERVER="$IMAGESRV_SERVER"
     MAC=$(cat "/sys/class/net/$IFACE/address" 2>/dev/null)
     trace_step agent-net "up=$_up"
 fi
 
 # --- hand over ---------------------------------------------------------------
 
-/usr/bin/imagectl-agent
+/usr/bin/imagesrv-agent
 fail "agent exited"

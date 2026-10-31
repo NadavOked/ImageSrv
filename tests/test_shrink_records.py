@@ -26,7 +26,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, shrink_records
+from server import db
+from server.disks import shrink_records
 from test_server_api import hello, open_session
 
 pytest.importorskip("fastapi")

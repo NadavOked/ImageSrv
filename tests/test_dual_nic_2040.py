@@ -4,7 +4,7 @@
 1. ‏Windows שעלה מהדיסק לא מקבל כתובת ברשת ההפצה — ה-dnsmasq של כרטיס ההפצה
    עונה רק לאתחול רשת (‏`PXEClient`) ולסוכן (‏vendor class `ImageSrv-agent`).
 2. כשעולים מהרשת, הסוכן עובד רק על הכרטיס שה-DHCP של השרת שלנו ענה עליו
-   (‏server-id == ה-host של `imagectl.server`) ומוריד את השני לכל הריצה.
+   (‏server-id == ה-host של `imagesrv.server`) ומוריד את השני לכל הריצה.
 3. לא לפי סדר אלפביתי — זה היה הבאג: הראשון שקיבל חכירה כלשהי נבחר.
 
 צד הסוכן: הלולאה האמיתית של `agent/init` עם `udhcpc`/`ip` מזויפים
@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from server import dhcp
+from server.net import dhcp
 from test_agent import AGENT, BASH, posix
 from test_init_network import FOREIGN_SID, SERVER_IP, _make_net, _run
 
@@ -106,10 +106,10 @@ def test_no_nic_with_our_server_is_server_not_found_not_a_guess(tmp_path):
 
 
 @bash
-def test_without_imagectl_server_no_lease_counts_as_ours(tmp_path):
+def test_without_imagesrv_server_no_lease_counts_as_ours(tmp_path):
     net = tmp_path / "net"
     _make_net(net, {"lo": 1, "eth0": 1})
-    proc, _, log = _run(net, "eth0", extra="IMAGECTL_SERVER=", short_deadline=True)
+    proc, _, log = _run(net, "eth0", extra="IMAGESRV_SERVER=", short_deadline=True)
     assert proc.returncode == 3, proc.stdout
     assert "FAIL: no DHCP lease from the ImageSrv server" in proc.stdout, proc.stdout
     assert "udhcpc eth0 lease" not in _lines(log)
@@ -130,7 +130,7 @@ def test_every_udhcpc_in_init_names_the_agent_to_dnsmasq():
 
 def _probe_hook() -> str:
     text = BUILD.read_text(encoding="utf-8")
-    m = re.search(r"cat > \"\$ROOT/etc/imagectl/udhcpc\.probe\" << 'EOF'\n(.*?)\nEOF\n",
+    m = re.search(r"cat > \"\$ROOT/etc/imagesrv/udhcpc\.probe\" << 'EOF'\n(.*?)\nEOF\n",
                   text, re.S)
     assert m, "the udhcpc probe hook heredoc moved -- update the extractor"
     return m.group(1)
@@ -143,7 +143,7 @@ def test_the_probe_hook_records_the_server_and_configures_nothing(tmp_path, even
     run = tmp_path / "run"
     run.mkdir()
     hook = tmp_path / "udhcpc.probe"
-    hook.write_text(_probe_hook().replace("/run/imagectl", posix(run)) + "\n",
+    hook.write_text(_probe_hook().replace("/run/imagesrv", posix(run)) + "\n",
                     encoding="utf-8", newline="\n")
     calls = tmp_path / "calls"
     script = (f'ip() {{ echo "ip $*" >> {posix(calls)!r}; }}; '

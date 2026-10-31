@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from server import db, interserver_auth, storage_nodes
+from server import db
+from server.interserver import interserver_auth, storage_nodes
 
 try:
     from fastapi.testclient import TestClient
@@ -491,7 +492,7 @@ def test_local_pairing_capability_only_on_secondary_admin(server):
 # ‏peer מזויף (TlsPeer) + conn של משני עם זהות — כדי לבדוק כל שומר בלי
 # להרים TLS חי. ה-handshake האמיתי נבדק ב-test_interserver_tls.py.
 
-from server import interserver_api                           # noqa: E402
+from server.interserver import interserver_api                           # noqa: E402
 
 
 def _secondary(tmp_path):
@@ -859,7 +860,7 @@ def test_app_pair_and_ping_over_routes(tmp_path):
     assert comp.status_code == 200
     token = comp.json()["token"]
     ok = client.get("/api/interserver/v1/ping", headers={
-        "Authorization": f"Bearer {token}", "ImageCtl-Protocol-Version": "2.1"})
+        "Authorization": f"Bearer {token}", "ImageSrv-Protocol-Version": "2.1"})
     assert ok.status_code == 200 and ok.json()["ok"] is True
 
 
@@ -872,9 +873,9 @@ def test_app_ping_rejects_console_cookie(tmp_path):
     app = _interserver_app(conn, ident, holder)
     _begin, comp, _ = _do_pair(conn, ident, primary)
     client = TestClient(app)
-    client.cookies.set("imagectl_session", "whatever")
+    client.cookies.set("imagesrv_session", "whatever")
     resp = client.get("/api/interserver/v1/ping", headers={
-        "Authorization": f"Bearer {comp['token']}", "ImageCtl-Protocol-Version": "2.1"})
+        "Authorization": f"Bearer {comp['token']}", "ImageSrv-Protocol-Version": "2.1"})
     assert resp.status_code == 401
 
 
@@ -894,7 +895,7 @@ def test_enroll_node_inserts_trust_material(server):
 
 def test_enroll_route_writes_0600_token_and_row(server, monkeypatch, tmp_path):
     """מסלול הקונסולה: pairing (מדומה) → קובץ טוקן → רשומה. הטוקן אינו חוזר."""
-    from server import storage_client
+    from server.interserver import storage_client
     admin = _local_client(server)                           # הראשי standalone; admin
     # מזייפים את השיחה הבין-שרתית — הצד הזה נבדק אמיתי ב-test_interserver_tls.
     fake_token = interserver_auth.generate_token()
@@ -947,7 +948,7 @@ def test_enroll_route_wrong_protocol_version_rejected(server):
 def _fake_pair_begin(monkeypatch, *, secondary_id, spki, token=None):
     """מזייף רק את שיחת ה-TLS (begin+complete) של ``PinnedMTLSClient`` —
     כדי שהשוואת הזהות ב-``pair()`` עצמו תרוץ אמיתית."""
-    from server import storage_client
+    from server.interserver import storage_client
     token = token or interserver_auth.generate_token()
     calls = []
 
@@ -1038,7 +1039,7 @@ def test_enroll_node_rejects_malformed_node_id(server, bad):
 def test_a_primary_with_secondaries_can_enroll_another_one(conn):
     """נדב 18/10 (לשונית "שרתי משנה" בהגדרות): `enroll_secondary` תלוי בתפקיד ולא במספר המשניים —
     ראשי שכבר יש לו משני (פעיל או מושבת) ממשיך להוסיף עוד; משני וממשתמש deploy — לא."""
-    from server import storage_nodes
+    from server.interserver import storage_nodes
     admin = ("noc", "admin")
     assert storage_nodes.can_enroll_secondary(conn, "admin") is True        # הראשון: אין משני עדיין
     for i in range(2):

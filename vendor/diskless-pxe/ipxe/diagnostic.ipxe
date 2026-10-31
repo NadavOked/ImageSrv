@@ -1,7 +1,0 @@
-#!ipxe
-echo === ImageCtl iPXE diagnostics ===
-ifstat
-route
-config
-prompt --key 0x02 --timeout 5000 Press Ctrl-B for iPXE shell... || exit
-shell

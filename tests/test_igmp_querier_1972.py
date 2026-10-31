@@ -9,7 +9,7 @@ import threading
 
 import pytest
 
-from server import igmp_querier as q
+from server.net import igmp_querier as q
 from server.db import connect, set_setting
 
 
@@ -66,7 +66,7 @@ REPORT = struct.pack("!BBH4s", 0x16, 0, 0, socket.inet_aton("239.1.1.1"))
 
 @pytest.fixture()
 def conn(tmp_path):
-    return connect(tmp_path / "imagectl.db")
+    return connect(tmp_path / "imagesrv.db")
 
 
 def run(querier: q.Querier, clock: Clock, script: list, **kw) -> FakeSocket:
@@ -204,8 +204,8 @@ def test_before_the_first_query_the_state_is_unknown_not_ok(conn):
 
 # --- חומת האש: "לא נשמע" אינו "אין" ---------------------------------------------------
 
-RULES_WITH = 'table inet imagectl {\n\tchain input {\n\t\tiifname "eth-deploy" ip protocol igmp accept\n\t}\n}\n'
-RULES_WITHOUT = 'table inet imagectl {\n\tchain input {\n\t\tiifname "eth-deploy" udp dport 9000-9001 accept\n\t}\n}\n'  # פורט-הפצה-מכוון: טקסט חומת אש
+RULES_WITH = 'table inet imagesrv {\n\tchain input {\n\t\tiifname "eth-deploy" ip protocol igmp accept\n\t}\n}\n'
+RULES_WITHOUT = 'table inet imagesrv {\n\tchain input {\n\t\tiifname "eth-deploy" udp dport 9000-9001 accept\n\t}\n}\n'  # פורט-הפצה-מכוון: טקסט חומת אש
 
 
 def test_firewall_hearing_has_three_states():
@@ -236,7 +236,7 @@ def test_the_setting_is_a_switch(server):
 def test_the_health_screen_carries_the_querier_row(tmp_path, images_root):
     from fastapi.testclient import TestClient
 
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     hooks = {"ss": lambda: "", "nft_ruleset": lambda: "", "unit_active": lambda name: "",
@@ -260,7 +260,8 @@ def test_the_health_screen_carries_the_querier_row(tmp_path, images_root):
 def test_main_states_not_applicable_without_a_deploy_network():
     from types import SimpleNamespace
 
-    from server import deploy_net, main
+    from server.net import deploy_net
+    from server import main
 
     runtime = SimpleNamespace(health_hooks={})
     main._start_igmp_querier(runtime, deploy_net.DeployState("none", None, None), None)
@@ -270,7 +271,8 @@ def test_main_states_not_applicable_without_a_deploy_network():
 def test_main_starts_the_querier_on_the_deploy_nic(monkeypatch):
     from types import SimpleNamespace
 
-    from server import deploy_net, main
+    from server.net import deploy_net
+    from server import main
 
     started = []
     monkeypatch.setattr(q.Querier, "run_forever", lambda self, stop=None: started.append(self))

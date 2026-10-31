@@ -6,7 +6,7 @@
 שמחזיר `idle_seconds` (‏/login, ‏/login/mfa, ‏/me) מעביר את ה-0 כמו שהוא, והטיימר של
 הקונסולה אינו רץ עליו (console_idle.test.cjs). ערך שמור (300 ב-TA) אינו משתנה בעדכון.
 
-בקרה שלילית: ‏server/console_api.py ו-server/journal_he.py מוחזרים יחד — הסירובים
+בקרה שלילית: ‏server/console/console_api.py ו-server/console/journal_he.py מוחזרים יחד — הסירובים
 ו"אחרי 5 דקות" ביומן נופלים.
 """
 
@@ -18,9 +18,10 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from server import console_api, db
+from server.console import console_api
+from server import db
 from server.app import create_console_app
-from server.journal_he import JournalTranslator
+from server.console.journal_he import JournalTranslator
 
 
 def _post(server, value):
@@ -60,7 +61,7 @@ def test_anything_else_is_refused_in_hebrew_and_nothing_is_written(server, bad):
 
 def test_a_kept_value_is_not_changed_by_an_update(tmp_path):
     """TA שומר 300 — "מופעל, 5 דקות". עלייה מחדש של ה-DB לא נוגעת בו."""
-    path = tmp_path / "imagectl.db"
+    path = tmp_path / "imagesrv.db"
     conn = db.connect(path)
     db.set_setting(conn, "console_idle_seconds", "300")
     conn.close()

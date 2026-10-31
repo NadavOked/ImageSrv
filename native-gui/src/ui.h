@@ -7,8 +7,8 @@
  * opened) and what the agent said through the --state file (disks,
  * machines, the running task). The second kind is the State struct and is
  * replaced wholesale on every re-read; the first survives it. */
-#ifndef IMAGECTL_UI_H
-#define IMAGECTL_UI_H
+#ifndef IMAGESRV_UI_H
+#define IMAGESRV_UI_H
 
 #include <stddef.h>
 #include <cairo.h>
@@ -54,7 +54,7 @@ enum { END_NONE, END_DRAWERS, END_PARTIAL, END_LOCALCLONE, END_FAILED };
  * lines on the live room screen; more than this are said, not cut silently. */
 #define MAX_ROOM_NOTES 32
 /* #704: the operator's name of a slot -- the server allows 24 characters
- * (server/slot_names.py NAME_MAX); 4 UTF-8 bytes each at most, + NUL. */
+ * (server/disks/slot_names.py NAME_MAX); 4 UTF-8 bytes each at most, + NUL. */
 #define SLOT_NAME_MAX 100
 
 enum {
@@ -429,7 +429,7 @@ typedef struct State {
     char machine_name[64];
     /* #1252: the server this machine talks to, for the header, the login foot
      * and the standby line -- server_name=/server_version= from GET
-     * /api/v1/agent/state, server_addr= from imagectl.server. Empty = not
+     * /api/v1/agent/state, server_addr= from imagesrv.server. Empty = not
      * known, drawn as "לא ידוע" -- never the mockup's numbers. */
     char server_name[64], server_addr[64], server_version[129];
     char tz[65]; /* #1447: POSIX TZ from the server; empty = not known -> UTC. */
@@ -473,7 +473,7 @@ typedef struct State {
     char ask_nonce[32], ask_subject[32];
     struct { int idx, fs_only, port; unsigned long long now_bytes, orig_bytes; char word[24]; long long until; } ask[MAX_ASK_ROWS];
 
-    /* #1918: the power button pressed during a write (agent/lib/powerbtn.sh):
+    /* #1918: the power button pressed during a write (agent/lib/core/powerbtn.sh):
      * power_ask=<nonce>|<kind>|<can_stop>. Empty nonce = no question. kind:
      * localclone, round, restore, capture, unknown; can_stop 0 = "המשך" only. */
     char power_nonce[24], power_kind[16];

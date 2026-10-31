@@ -2,7 +2,7 @@
 
 ‏#87 שמר את הגודל המקורי של מחיצת המקור ב-`targets/<disk>/shrunk` — ‏tmpfs.
 אובדן חשמל בין `ntfsresize -s` לבין ההחזרה השאיר את דיסק הבנייה מכווץ
-בלי שאיש יודע. ‏`agent/lib/shrinkmem.sh`:
+בלי שאיש יודע. ‏`agent/lib/shrink/shrinkmem.sh`:
 
 * **‏#1466 (16/10): הקליטה כבר אינה פותחת רשומה.** הכיווץ רץ על עותק
   בזיכרון והמקור אינו נכתב -- אין מה לזכור. מה שנבדק כאן הוא לדיסקים
@@ -55,6 +55,7 @@ from test_shrink_on_capture import (
     stubs,
 )
 from test_timeouts import log_of, make_stubs, run_sh
+from agentlib import flat_lib, lib_path
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -194,7 +195,7 @@ def offer_run(tmp_path, *, answer_records: list[dict] | None, keys: str = "",
     stub.update(extra_stubs or {})
     if JQ is None:
         stub["jq"] = JQ_STUB
-    libs = " ".join(f". {posix(AGENT)}/lib/{n}.sh;" for n in (
+    libs = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in (
         "common", "sysinfo", "waits", "jsonq", "restore", "ui", "attended",
         "shrinkplan", "shrink", "shrinkmem", "shrinkoffer", "askgui"))   # ‏#929: ההצעה באתחול ב-shrinkoffer.sh
     # קלט מקובץ ולא מצינור: פונקציה בצינור רצה בתת-מעטפת, ו-`_shrink_offered`
@@ -209,7 +210,7 @@ def offer_run(tmp_path, *, answer_records: list[dict] | None, keys: str = "",
                                     encoding="utf-8", newline="\n")
     out = run_sh(
         make_stubs(box / "stubs", stub)
-        + f"export IMAGECTL_TEST=1 RUN_DIR={posix(run)!r} DEVROOT={posix(box / 'dev')!r} "
+        + f"export IMAGESRV_TEST=1 RUN_DIR={posix(run)!r} DEVROOT={posix(box / 'dev')!r} "
         f"SYSROOT={posix(box)!r} SERVER=http://s MAC=b4:2e:99:07:1a:c4; "
         + libs + " attended_hello() { :; }; " + GUI_ASK_STUB + prelude
         + " ".join(f"{keys_sh}shrink_offer_pending; echo \"rc=$?\";" for _ in range(calls))
@@ -548,7 +549,7 @@ def test_a_pending_two_partition_record_in_the_hello_refuses_the_capture_naming_
 
 
 def test_the_agent_loads_shrinkmem_after_shrink_and_offers_after_the_gui():
-    src = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    src = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert src.index('"$LIB_DIR/shrinkplan.sh"') < src.index('"$LIB_DIR/shrink.sh"') < src.index('"$LIB_DIR/shrinkmem.sh"') \
         < src.index('"$LIB_DIR/shrinkoffer.sh"') < src.index('"$LIB_DIR/capture.sh"')
     body = src[src.index("build_console_screen()"):src.index("do_restore_drawers()")]   # #1217: do_task -> task.sh
@@ -558,7 +559,7 @@ def test_the_agent_loads_shrinkmem_after_shrink_and_offers_after_the_gui():
 
 @pytest.mark.parametrize("name", ["shrinkmem.sh", "shrinkoffer.sh"])
 def test_no_destructive_step_in_shrinkmem_hides_its_exit_code(name):
-    src = (AGENT / "lib" / name).read_text(encoding="utf-8")
+    src = (lib_path(name)).read_text(encoding="utf-8")
     assert "|| true" not in src
     for line in src.splitlines():
         if "sgdisk -i" in line and not line.strip().startswith("#"):

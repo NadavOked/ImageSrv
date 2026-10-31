@@ -28,7 +28,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import room
+from server.rounds import room
 
 
 def _disk(dev: str, port: int | None, serial: str | None,

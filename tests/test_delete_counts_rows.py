@@ -87,7 +87,7 @@ def test_delete_existing_machine_still_works(server):
 def test_create_user_operational_error_surfaces_not_409(server, monkeypatch):
     """כשל אמיתי ביצירה (דיסק מלא / DB נעול) חייב לעלות כ-500 עם הסיבה,
     ולא להתחפש ל-409 «שם תפוס» ששולח את המפעיל לחפש חשבון שלא נוצר."""
-    from server import users
+    from server.console import users
 
     def boom(*args, **kwargs):
         raise sqlite3.OperationalError("database is locked")

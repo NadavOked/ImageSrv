@@ -31,7 +31,7 @@ pytestmark = requires_native(("bash", BASH))
 def _hello(fake, role: str) -> dict:
     out = sh(f'export SYSROOT={posix(fake["sysroot"])!r} DEVROOT={posix(fake["dev"])!r} '
              f'RUN_DIR={posix(fake["run"])!r} IFACE=eth0 IP=10.44.12.187 D_ROLE={role}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; build_hello')
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; build_hello')
     return json.loads(out)
 
 
@@ -73,7 +73,7 @@ GUID = re.compile(r"\$_tc_(dg|want|gu|u|gn|wn)\b")
 def test_no_target_error_names_a_guid_or_a_partition_name():
     """lc_table_check (lcplan.sh): every LC_ERROR is said without the
     values; the values go to the agent's log."""
-    src = (Path(AGENT) / "lib" / "lcplan.sh").read_text(encoding="utf-8")
+    src = (Path(AGENT) / "lib" / "localclone" / "lcplan.sh").read_text(encoding="utf-8")
     errors = re.findall(r'LC_ERROR="([^"]*)"', src)
     assert errors
     leaking = [e for e in errors if GUID.search(e)]

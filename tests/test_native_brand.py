@@ -118,18 +118,14 @@ def test_every_surface_draws_the_new_logo_and_the_old_mark_is_gone():
 
 
 def test_the_gui_never_shows_the_old_product_name():
-    """User-facing strings say ImageSrv. Internal names (paths, units,
-    imagectl-*) stay; two "ImageCtl" literals are left: one recognises an
-    older installation's disk label, and one is the kernel name of the
-    monitor's uinput device (#1475) -- matched against agent/monitor.c's
-    UINPUT_NAME, never drawn."""
-    internal = ('strstr(d->has,"ImageCtl")', "#define MONITOR_UINPUT_NAME ")
+    """User-facing strings say ImageSrv, and since #1699 so do the internal
+    names: no "ImageCtl" literal is left in the GUI at all."""
     shown = []
     for path in sorted(SRC.glob("*.c")):
         code = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
         for line in code.splitlines():
             for literal in re.findall(r'"(?:[^"\\]|\\.)*"', line):
-                if "ImageCtl" in literal and not any(name in line for name in internal):
+                if "ImageCtl" in literal:
                     shown.append(f"{path.name}: {literal}")
     assert shown == []
     assert '{"packages", "מתקין את חבילות ImageSrv"}' in (SRC / "install.c").read_text(encoding="utf-8")

@@ -17,18 +17,19 @@ from pathlib import Path
 
 from native import requires_native
 from test_smart import BASH, HEALTH_OK, REPO, AGENT, attrs, env, full, posix, sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
 PRELUDE = (
-    f'. {posix(AGENT)}/lib/common.sh; '
-    f'. {posix(AGENT)}/lib/waits.sh; '   # #1367: capped_run, the smartctl ceiling
-    f'. {posix(AGENT)}/lib/sysinfo.sh; '
-    f'. {posix(AGENT)}/lib/progress.sh; '
-    f'. {posix(AGENT)}/lib/smart.sh; '
+    f'. {posix(AGENT)}/lib/core/common.sh; '
+    f'. {posix(AGENT)}/lib/core/waits.sh; '   # #1367: capped_run, the smartctl ceiling
+    f'. {posix(AGENT)}/lib/hw/sysinfo.sh; '
+    f'. {posix(AGENT)}/lib/core/progress.sh; '
+    f'. {posix(AGENT)}/lib/smart/smart.sh; '
     # #1921: the knowledge tables judge the disk -- without them smart_probe says no_table
-    f'export SMART_KB={posix(AGENT)}/lib/data; . {posix(AGENT)}/lib/smartjudge.sh; . {posix(AGENT)}/lib/hwissues.sh; '
-    f'. {posix(AGENT)}/lib/crcdelta.sh; '
+    f'export SMART_KB={posix(flat_lib())}/data; . {posix(AGENT)}/lib/smart/smartjudge.sh; . {posix(AGENT)}/lib/smart/hwissues.sh; '
+    f'. {posix(AGENT)}/lib/smart/crcdelta.sh; '
 )
 
 
@@ -137,7 +138,7 @@ def test_the_report_carries_the_delta_only_when_it_was_measured(tmp_path):
         (t / "total").write_text("1000")
     (run / "targets" / "sda" / "crc_delta").write_text("5\n")
     out = sh(f'export RUN_DIR={posix(run)!r}; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
              'build_progress ses_1 aa:bb:cc:dd:ee:ff')
     report = json.loads(out.stdout)
     by_dev = {t["dev"]: t for t in report["targets"]}
@@ -153,9 +154,9 @@ def test_target_init_clears_a_delta_from_the_previous_round(tmp_path):
 
 
 def test_the_agent_loads_the_lib_and_measures_on_both_restore_paths():
-    """‏imagectl-agent הוא 300 שורות בדיוק: הטעינה והקריאות יושבות בשורות
+    """‏imagesrv-agent הוא 300 שורות בדיוק: הטעינה והקריאות יושבות בשורות
     קיימות. בלי הטעינה — `crc_delta_measure: not found` על הברזל."""
-    src = (REPO / "agent" / "imagectl-agent").read_text(encoding="utf-8")
+    src = (REPO / "agent" / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/crcdelta.sh"' in src
     assert 'crc_delta_measure $_disks' in src          # חדר השיכפולים
     assert 'crc_delta_after "$_disk"' in src           # תחנה בודדת

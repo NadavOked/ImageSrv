@@ -1,15 +1,15 @@
 """#1859 -- the full SMART: every attribute, Nadav's new orange, and what the server learns.
 
 Nadav, 20/10 00:20: "yes to all", "if the server is smart and learns". Until now the
-agent read 5/197/198/199 and nothing else (agent/lib/smart.sh). Now:
+agent read 5/197/198/199 and nothing else (agent/lib/smart/smart.sh). Now:
 
 * every attribute the disk reports goes to the server (ids and numbers in the hello,
-  with the vendor's names in the round's disk_event) -- agent/lib/smartattrs.sh;
+  with the vendor's names in the round's disk_event) -- agent/lib/smart/smartattrs.sh;
 * ORANGE (asked; no answer = write) on a disk that is otherwise ok: 5/187/10/196 over 0,
   an SSD worn to 90% or out of spare (170/173/177/231/233, NVMe Percentage Used /
   Available Spare), and what the server learned since this serial's previous round
   (183/188 that rose, a critical attribute that rose -> "replace the disk", hot while
-  writing) -- server/smart_history.py;
+  writing) -- server/disks/smart_history.py;
 * RED unchanged (FAILED, 197/198, read-only); with no history, "no comparison yet".
 
 The disk outputs are fixtures_smart.py's (860 EVO, MZ7LN256, NVMe, no SMART) -- see

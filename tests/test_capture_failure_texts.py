@@ -15,7 +15,7 @@ def capture_texts(reason, code=None):
     if code is not None:
         args.append(code)
     return sh(
-        f'. {shlex.quote(posix(AGENT / "lib/failscreen.sh"))}; '
+        f'. {shlex.quote(posix(AGENT / "lib/gui/failscreen.sh"))}; '
         + "fail_texts " + " ".join(map(shlex.quote, args))
         + '; printf "%s\\n" "$_ft_why" "$_ft_do" "$_ft_btn"'   # #2068: one sentence, then the buttons
     ).splitlines()
@@ -61,8 +61,8 @@ def test_capture_failure_code_reaches_screen_records(tmp_path, code, expected):
     arg = "" if code is None else " " + shlex.quote(code)
     output = sh(
         f'RUN_DIR={shlex.quote(posix(tmp_path))}; '
-        f'. {shlex.quote(posix(AGENT / "lib/capturesink.sh"))}; '
-        f'. {shlex.quote(posix(AGENT / "lib/failscreen.sh"))}; '
+        f'. {shlex.quote(posix(AGENT / "lib/capture/capturesink.sh"))}; '
+        f'. {shlex.quote(posix(AGENT / "lib/gui/failscreen.sh"))}; '
         'log() { :; }; shrink_restore_source() { return 0; }; target_set() { :; }; '
         'json_get() { echo null; }; '
         '_capture_failed sda "סיבת הכשל."' + arg + '; '
@@ -78,7 +78,7 @@ def test_capture_failure_code_reaches_screen_records(tmp_path, code, expected):
 def test_manifest_upload_failure_records_network_reason(tmp_path):
     output = sh(
         f'RUN_DIR={shlex.quote(posix(tmp_path))}; LOG_FILE="$RUN_DIR/log"; SERVER=http://test; '
-        f'. {shlex.quote(posix(AGENT / "lib/capturesink.sh"))}; '
+        f'. {shlex.quote(posix(AGENT / "lib/capture/capturesink.sh"))}; '
         'curl() { return 7; }; upload_manifest task /unused; rc=$?; '
         'printf "rc=%s\\n" "$rc"; cat "$RUN_DIR/capture.reason"'
     )
@@ -94,7 +94,7 @@ def test_the_space_check_says_cable_only_when_the_server_did_not_answer(tmp_path
     """A refusal from the server (no room) is not "check the network cable"."""
     output = sh(
         f'RUN_DIR={shlex.quote(posix(tmp_path))}; SERVER=http://test; '
-        f'. {shlex.quote(posix(AGENT / "lib/capturesink.sh"))}; '
+        f'. {shlex.quote(posix(AGENT / "lib/capture/capturesink.sh"))}; '
         'log() { :; }; target_set() { :; }; cd_used() { :; }; partition_node() { echo /dev/x; }; '
         '_fs_of() { echo ntfs; }; _partition_role() { echo data; }; partclone_for_fs() { echo partclone.ntfs; }; '
         '_used_bytes() { echo 100; }; '

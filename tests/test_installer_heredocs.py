@@ -1,6 +1,6 @@
 """‏#1149 — heredoc לא-מצוטט במתקין מרחיב כל `$NAME`, גם בתוך הערה.
 
-‏`setup-boot-server.sh` רץ תחת `set -u`, ולכן `$IMAGECTL_STORAGE_ARGS` בשורת
+‏`setup-boot-server.sh` רץ תחת `set -u`, ולכן `$IMAGESRV_STORAGE_ARGS` בשורת
 הערה בתוך `write_file … <<EOF` הפיל **כל** התקנה (גם `--dry-run`) מאז #734 —
 והטסטים היו ירוקים כי הם בדקו את הטקסט של הסקריפט, לא הרצה. הבדיקה כאן
 סטטית ורצה גם בווינדוס: כל משתנה שמורחב בתוך heredoc לא-מצוטט חייב
@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-INSTALLER = REPO / "install" / "setup-boot-server.sh"
+INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 
 # משתני סביבה שהסקריפט קורא ואינו משים — מותרים רק אם יש להם ברירת מחדל
 # `${NAME:-…}`; `$NAME` חשוף מהם היה נופל תחת set -u בדיוק כמו #1149.

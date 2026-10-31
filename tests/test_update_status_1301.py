@@ -39,7 +39,7 @@ def _app(data: Path, images_root: Path, clock, state: dict):
 
 @pytest.fixture()
 def server(tmp_path: Path, images_root: Path, clock):
-    from server import users
+    from server.console import users
     state = {"current": "v0.71.0"}
     app = _app(tmp_path / "data", images_root, clock, state)
     users.create(app.state.ctx.conn, "nadav", "admin-pass-123", "admin", by="test",
@@ -98,12 +98,12 @@ def test_running_at_stage_restart_keeps_the_old_reading_and_the_stage_says_the_r
 def test_the_console_session_survives_a_server_restart(server):
     """Same data dir, new process: the signed cookie is still a session (auth.py keeps no
     in-memory sessions). This is why the screen reloads into the console after an update."""
-    cookie = server["admin"].cookies.get("imagectl_session")
+    cookie = server["admin"].cookies.get("imagesrv_session")
     assert cookie
     server["state"]["current"] = "v0.72.0"
     restarted = _app(server["data"], server["images_root"], server["clock"], server["state"])
     after = TestClient(restarted)
-    after.cookies.set("imagectl_session", cookie)
+    after.cookies.set("imagesrv_session", cookie)
     me = after.get("/api/console/me")
     assert me.status_code == 200 and me.json()["username"] == "nadav"
     assert me.json()["version"] == "v0.72.0"

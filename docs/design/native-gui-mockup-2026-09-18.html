@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ImageCtl — מוקאפ: הגואי של מחשב הבנייה והשיכפול (#1090)</title>
+<title>ImageSrv — מוקאפ: הגואי של מחשב הבנייה והשיכפול (#1090)</title>
 <style>
-/* ImageCtl — מוקאפ הגואי הנייטיבי (#1090, 18/09): אותה שפת עיצוב כמו הקונסולה
+/* ImageSrv — מוקאפ הגואי הנייטיבי (#1090, 18/09): אותה שפת עיצוב כמו הקונסולה
    (design-tokens.css) ומסך הכניסה החדש (login-mockup-2026-09-18.html), ועל
    כל שטח המסך. הטוקנים מועתקים אחד-לאחד; כהה הוא ברירת המחדל (הגואי היום
    כהה), בהיר ב-data-theme="light". סרגל המוקאפ הסגול אינו חלק מהמוצר.
@@ -298,11 +298,11 @@ h1.title{font-size:24px;font-weight:600;line-height:1.25;margin:0 0 6px}
 <!-- ===================== header משותף (מוכפל לכל מסך ב-JS) ===================== -->
 <template id="hdr-tpl">
   <header class="hdr">
-    <div class="brand"><div class="mark" aria-hidden="true"></div><span>ImageCtl</span></div>
+    <div class="brand"><div class="mark" aria-hidden="true"></div><span>ImageSrv</span></div>
     <span class="role" data-role>מחשב בנייה</span>
     <div class="meta">
       <span><span class="k">מכונה</span><span class="mono" data-host>BUILD-01</span></span>
-      <span><span class="k">שרת</span><span class="mono">imagectl-srv · 10.10.10.1</span></span>
+      <span><span class="k">שרת</span><span class="mono">imagesrv-srv · 10.10.10.1</span></span>
       <span><span class="k">גרסה</span><span class="mono">v0.42.1</span></span>
     </div>
     <span class="sp"></span>
@@ -314,7 +314,7 @@ h1.title{font-size:24px;font-weight:600;line-height:1.25;margin:0 0 6px}
 <section class="screen on" id="s-login">
   <div class="login">
     <div class="pane">
-      <div class="brand"><div class="mark" aria-hidden="true"></div><span>ImageCtl</span></div>
+      <div class="brand"><div class="mark" aria-hidden="true"></div><span>ImageSrv</span></div>
       <form class="pane-body" onsubmit="return false">
         <h1 class="title">כניסה</h1>
         <p class="lead">מחשב הבנייה <span class="mono">BUILD-01</span></p>
@@ -323,7 +323,7 @@ h1.title{font-size:24px;font-weight:600;line-height:1.25;margin:0 0 6px}
         <button class="btn" type="submit" data-go="menu">כניסה</button>
       </form>
       <div class="foot">
-        <span>imagectl-srv</span><span class="sep">·</span>
+        <span>imagesrv-srv</span><span class="sep">·</span>
         <span>v0.42.1</span><span class="sep">·</span>
         <span class="mono">10.10.10.1</span>
       </div>
@@ -458,7 +458,7 @@ h1.title{font-size:24px;font-weight:600;line-height:1.25;margin:0 0 6px}
       <div class="mark" aria-hidden="true"></div>
       <h1>ממתין לשרת</h1>
       <p>מחשב שיכפול 2 · אין סבב פתוח. המחשב יצטרף לבד כשייפתח סבב.</p>
-      <div class="addr mono"><div><span>המכונה</span>10.10.10.59</div><div><span>MAC</span>b4:2e:99:1a:7c:03</div><div><span>השרת</span>imagectl-srv · 10.10.10.1</div></div>
+      <div class="addr mono"><div><span>המכונה</span>10.10.10.59</div><div><span>MAC</span>b4:2e:99:1a:7c:03</div><div><span>השרת</span>imagesrv-srv · 10.10.10.1</div></div>
       <div class="hello"><i></i>hello אחרון לפני 4 שניות · השרת ענה 200</div>
     </div>
   </div>
@@ -475,7 +475,7 @@ h1.title{font-size:24px;font-weight:600;line-height:1.25;margin:0 0 6px}
   <h2>מהקונסולה (design-tokens.css)</h2>
   <div class="notes">
     <p><b>כל הצבעים הם הטוקנים של הקונסולה, אחד-לאחד</b> — <span class="mono">--clr-bg / surface / text / muted / border / action / success / warning / danger</span> והגרסאות ה-soft, בבהיר ובכהה. לגואי אין פלטה משלו יותר: <span class="mono">theme.c</span> יקרא את אותם ערכים. הוספו רק <span class="mono">--art-*</span> (הגרפיקה, ממסך הכניסה) ו-<span class="mono">--bar-*</span> (ארבעה צבעי פסי דיסק).</p>
-    <p><b>ה-header כמו app-shell</b> — 48px, <span class="mono">--clr-header</span> כהה תמיד (גם בבהיר, כמו vSphere), brandmark + ImageCtl, פיל תפקיד ("מחשב בנייה" / "מחשב שיכפול 2"), ואז מכונה · שרת · גרסה, שעה משמאל ב-mono. מחליף את ה-topline של 40px.</p>
+    <p><b>ה-header כמו app-shell</b> — 48px, <span class="mono">--clr-header</span> כהה תמיד (גם בבהיר, כמו vSphere), brandmark + ImageSrv, פיל תפקיד ("מחשב בנייה" / "מחשב שיכפול 2"), ואז מכונה · שרת · גרסה, שעה משמאל ב-mono. מחליף את ה-topline של 40px.</p>
     <p><b>כותרת דף</b> — h1 24px + שורת משנה muted 13px, קו תחתון, ופעולות/פילים בצד השני — אותו דפוס כמו כותרות הדפים בקונסולה. <b>פילים</b> ‏(ok/warn/bad/info/off) בטוקני ה-soft — אותם pills של שורות המכונות בקונסולה.</p>
     <p><b>כפתורים</b> — 38px, פעולה כחולה מלאה, משני שקוף עם מסגרת, הרסני אדום. רדיוס 4px בבהיר, 3px בכהה (<span class="mono">--r</span>), כמו במסך הכניסה.</p>
   </div>

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from server import storage_nodes
+from server.interserver import storage_nodes
 from server.db import now_iso, set_setting
 
 

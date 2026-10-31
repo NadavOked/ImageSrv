@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from server import storage_disks
-from server import storage_locations as sl
-from server.storage_locations import FAILED, OK, UNCHECKED, HookResult
+from server.storage import storage_disks
+from server.storage import storage_locations as sl
+from server.storage.storage_locations import FAILED, OK, UNCHECKED, HookResult
 
 UUID = "0b5e2a43-6c1e-4f43-9a1c-6d2f0c7e9a11"
 BLANK = {"device": "/dev/sdb", "name": "sdb", "size_bytes": 4_000_787_030_016,
@@ -241,10 +241,10 @@ def test_fstab_line_for_a_disk_is_by_uuid_with_nofail_and_without_netdev(tmp_pat
     fstab.write_text("UUID=root / ext4 defaults 0 1\n", encoding="utf-8")
     monkeypatch.setattr(sl, "FSTAB_PATH", fstab)
     monkeypatch.setattr(sl, "daemon_reload", lambda: HookResult(OK), raising=False)   # ‏#2122: לא PID 1 של המריץ
-    entries = [{"source": "UUID=" + UUID, "target": "/var/lib/imagectl/storage/big",
+    entries = [{"source": "UUID=" + UUID, "target": "/var/lib/imagesrv/storage/big",
                 "fstype": "ext4", "opts": "defaults,nofail,x-systemd.device-timeout=10s",
                 "local": True},
-               {"source": "10.0.0.5:/images", "target": "/var/lib/imagectl/storage/nas",
+               {"source": "10.0.0.5:/images", "target": "/var/lib/imagesrv/storage/nas",
                 "fstype": "nfs", "opts": "vers=4.1"}]
     assert sl.fstab_write(entries).status == OK
     lines = fstab.read_text(encoding="utf-8").splitlines()
@@ -322,8 +322,8 @@ def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from server import sender as sender_module
-    from server import users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from server.app import create_app
     from test_sender import Recorder
 
@@ -581,7 +581,7 @@ def _press(runtime, keys, *pressed):
 @pytest.fixture()
 def dcui_conn(tmp_path):
     from server.db import connect
-    conn = connect(tmp_path / "imagectl.db")
+    conn = connect(tmp_path / "imagesrv.db")
     sl.ensure_local(conn, tmp_path / "images")
     return conn
 

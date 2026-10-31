@@ -5,7 +5,7 @@ a follow-up issue); orange until one is chosen; a backup older than two hours is
 "ישן"; the database is backed up every hour; backups are kept 30 days.
 
 Until #1895 the cron line was only documented and the health page had no backup
-row. ``server/backup_job.py`` is what ``imagectl-backup.timer`` runs every hour:
+row. ``server/system/backup_job.py`` is what ``imagesrv-backup.timer`` runs every hour:
 a consistent copy (``sqlite3.Connection.backup``), written atomically and read back,
 pruned by the stamp in its name, and ``last-backup.json`` for the health row.
 """
@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from server import backup_job, db
+from server.system import backup_job
+from server import db
 from test_server_health import health_server  # noqa: F401  (fixture)
 
 REPO = Path(__file__).resolve().parent.parent
@@ -31,7 +32,7 @@ NOW = datetime(2026, 10, 22, 12, 0, 0, tzinfo=timezone.utc)
 def data(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    conn = db.connect(data_dir / "imagectl.db")
+    conn = db.connect(data_dir / "imagesrv.db")
     db.set_setting(conn, "marker", "from-the-live-db")
     return {"dir": data_dir, "conn": conn, "dest": tmp_path / "nas"}
 
@@ -56,7 +57,7 @@ def test_a_backup_is_a_consistent_verified_copy_and_says_so(data):
     data["dest"].mkdir()
     status = backup_job.run(data["dir"], str(data["dest"]), NOW)
     assert status["ok"] is True and status["error"] is None, status
-    target = data["dest"] / "db" / "imagectl-20261022-120000.db"
+    target = data["dest"] / "db" / "imagesrv-20261022-120000.db"
     assert status["file"] == target.name and target.is_file()
     copy = sqlite3.connect(target)
     assert copy.execute("SELECT value FROM settings WHERE key = 'marker'").fetchone()[0] == "from-the-live-db"
@@ -112,9 +113,9 @@ def test_no_destination_chosen_does_nothing_and_exits_0(data):
 def test_backups_older_than_30_days_are_pruned_and_nothing_else(data):
     db_dir = data["dest"] / "db"
     db_dir.mkdir(parents=True)
-    old = db_dir / f"imagectl-{(NOW - timedelta(days=31)).strftime('%Y%m%d-%H%M%S')}.db"
-    young = db_dir / f"imagectl-{(NOW - timedelta(days=29)).strftime('%Y%m%d-%H%M%S')}.db"
-    foreign = db_dir / "imagectl-notes.db"
+    old = db_dir / f"imagesrv-{(NOW - timedelta(days=31)).strftime('%Y%m%d-%H%M%S')}.db"
+    young = db_dir / f"imagesrv-{(NOW - timedelta(days=29)).strftime('%Y%m%d-%H%M%S')}.db"
+    foreign = db_dir / "imagesrv-notes.db"
     for f in (old, young, foreign):
         f.write_bytes(b"x")
     status = backup_job.run(data["dir"], str(data["dest"]), NOW)
@@ -137,7 +138,7 @@ def _health(data, timer="active", now=NOW):
 
 
 def _status(data, **kw):
-    value = {"at": NOW.isoformat(timespec="seconds"), "dest": "/mnt/nas", "ok": True, "file": "imagectl-x.db",
+    value = {"at": NOW.isoformat(timespec="seconds"), "dest": "/mnt/nas", "ok": True, "file": "imagesrv-x.db",
              "error": None, "last_ok": NOW.isoformat(timespec="seconds"), **kw}
     (data["dir"] / "last-backup.json").write_text(json.dumps(value), encoding="utf-8")
 
@@ -193,11 +194,11 @@ def test_the_health_page_has_the_backup_row(health_server):
 
 def test_the_timer_runs_the_job_every_hour_and_the_installer_enables_it():
     def text(name: str) -> str:   # a unit that is not there reads as empty: the assertions say what is missing
-        path = REPO / "install" / name
+        path = REPO / "deploy" / name
         return path.read_text(encoding="utf-8") if path.is_file() else ""
-    timer, unit = text("imagectl-backup.timer"), text("imagectl-backup.service")
-    setup = (REPO / "install" / "setup-boot-server.sh").read_text(encoding="utf-8")
+    timer, unit = text("imagesrv-backup.timer"), text("imagesrv-backup.service")
+    setup = (REPO / "deploy" / "setup-boot-server.sh").read_text(encoding="utf-8")
     assert "OnCalendar=hourly" in timer and "Persistent=true" in timer
-    assert "ExecStart=/usr/bin/python3 -m server.backup_job --data-dir /var/lib/imagectl" in unit
+    assert "ExecStart=/usr/bin/python3 -m server.system.backup_job --data-dir /var/lib/imagesrv" in unit
     assert "ProtectSystem=full" in unit.splitlines()                   # not strict: the destination is outside ReadWritePaths
-    assert "run systemctl enable --now imagectl-backup.timer" in setup
+    assert "run systemctl enable --now imagesrv-backup.timer" in setup

@@ -15,12 +15,15 @@ from pathlib import Path
 
 import pytest
 
-from server import agent_logs, db, housekeeping, registry
+from server.agent import agent_logs, registry
+from server import db
+from server.system import housekeeping
+from agentlib import flat_lib
 
 MAC = "aa:bb:cc:dd:18:82"
 
-SECRET_LOG = """[10:00:01] hello: Cookie: imagectl_session=abc.def.ghi
-[10:00:02] curl -H X-Imagectl-Task-Token: 7f3e9a0b11
+SECRET_LOG = """[10:00:01] hello: Cookie: imagesrv_session=abc.def.ghi
+[10:00:02] curl -H X-Imagesrv-Task-Token: 7f3e9a0b11
 [10:00:03] login token=s3cr3t-value&next=1 password=hunter2
 -----BEGIN OPENSSH PRIVATE KEY-----
 b3BlbnNzaC1rZXktdjEAAAAA
@@ -36,7 +39,7 @@ b3BlbnNzaC1rZXktdjEAAAAA
 
 @pytest.fixture()
 def conn(tmp_path):
-    c = db.connect(tmp_path / "imagectl.db")
+    c = db.connect(tmp_path / "imagesrv.db")
     registry.add_machine(c, MAC, "cloner-9", "grp_CLONERS", "test")
     return c
 
@@ -205,7 +208,7 @@ def test_a_chunked_body_without_length_stops_at_the_ceiling(server):
         pulled.append(1)
         return {"type": "http.request", "body": b"Z" * 65536, "more_body": len(pulled) < 64}
 
-    from server.api import create_agent_router
+    from server.agent.api import create_agent_router
     [endpoint] = [r.endpoint for r in create_agent_router(server["ctx"]).routes
                   if getattr(r, "path", None) == "/api/v1/agent/log"]
     scope = {"type": "http", "method": "POST", "path": "/api/v1/agent/log", "headers": [],
@@ -221,9 +224,7 @@ def test_a_chunked_body_without_length_stops_at_the_ceiling(server):
 from native import requires_native                       # noqa: E402
 from test_agent import AGENT, BASH, posix, sh            # noqa: E402
 
-LIB = AGENT / "lib"
-
-
+LIB = flat_lib()
 def _send(tmp_path: Path, curl_rc: int, failed: bool) -> tuple[str, Path]:
     run = tmp_path / "run"
     for dev, state in (("sda", "failed" if failed else "done"), ("sdb", "done")):
@@ -274,8 +275,8 @@ def test_a_send_that_fails_returns_zero_and_says_so_locally(tmp_path):
 
 
 def test_the_agent_sends_at_the_end_of_both_round_paths():
-    """הצלחה (‏imagectl-agent, אחרי report_final) וכשל (‏end_failed_round) — פעם אחת כל אחד."""
-    main = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    """הצלחה (‏imagesrv-agent, אחרי report_final) וכשל (‏end_failed_round) — פעם אחת כל אחד."""
+    main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     idle = (LIB / "idle.sh").read_text(encoding="utf-8")
     assert main.count('agent_log_send "$2"') == 1 and idle.count('agent_log_send "$2"') == 1
     ok = main[main.index("report_final \"$_ppid\" \"$2\""):]

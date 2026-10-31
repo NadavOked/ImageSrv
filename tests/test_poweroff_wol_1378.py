@@ -7,8 +7,8 @@ from test_agent import AGENT
 
 
 def test_every_poweroff_path_uses_the_one_guard():
-    files = [AGENT / "lib/common.sh", AGENT / "lib/idle.sh",
-             AGENT / "lib/localclone.sh", AGENT / "lib/lcwait.sh",
+    files = [AGENT / "lib/core/common.sh", AGENT / "lib/core/idle.sh",
+             AGENT / "lib/localclone/localclone.sh", AGENT / "lib/localclone/lcwait.sh",
              AGENT / "monitor.c"]
     text = "\n".join(path.read_text(encoding="utf-8") for path in files)
     calls = [line.strip() for line in text.splitlines() if re.match(r"\s*poweroff(\s|$)", line)]
@@ -23,8 +23,8 @@ def test_every_poweroff_path_uses_the_one_guard():
 
 
 def test_failed_arm_is_in_the_next_hello_contract():
-    common = (AGENT / "lib/common.sh").read_text(encoding="utf-8")
-    hello = (AGENT / "lib/sysinfo.sh").read_text(encoding="utf-8")
+    common = (AGENT / "lib/core/common.sh").read_text(encoding="utf-8")
+    hello = (AGENT / "lib/hw/sysinfo.sh").read_text(encoding="utf-8")
     assert 'false > "$RUN_DIR/wol_armed"' in common
     assert '\"wol_armed\":false' in hello
     assert common.index('false > "$RUN_DIR/wol_armed"') < common.index("send_hello")

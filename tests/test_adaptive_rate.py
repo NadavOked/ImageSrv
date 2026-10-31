@@ -1,9 +1,9 @@
 """קצב מולטיקאסט אוטומטי לגמרי — הכרעת נדב 11/10: "אני לא נוגע בזה,
 והשרת לבד מחליט".
 
-על גבי #447 (‏`server/drive_rates.py`, שעד כאן רק הוריד מתחת לתקרה):
+על גבי #447 (‏`server/rounds/drive_rates.py`, שעד כאן רק הוריד מתחת לתקרה):
 
-* **פתיחה ב-600m** — נמדד נקי, ‏re-xmits=0 (מ.19, ‏06/09). ‏`IMAGECTL_MAX_BITRATE`,
+* **פתיחה ב-600m** — נמדד נקי, ‏re-xmits=0 (מ.19, ‏06/09). ‏`IMAGESRV_MAX_BITRATE`,
   כשהוגדר, הוא הגג; כשלא — הגג הוא 900m.
 * **למעלה** — רק על ראיה חיובית לגל נקי: אפס שידורים חוזרים **וגם** כל
   כונן בגל עמד בקצב. מדידה שחסרה = נשאר במקום (עיקרון 5).
@@ -19,7 +19,8 @@ import json
 
 import pytest
 
-from server import db, drive_rates
+from server import db
+from server.rounds import drive_rates
 
 MB = 1_000_000
 SENT = 10 ** 10                     # ‏10GB בגל — ‏6.87 מיליון בלוקים של 1456
@@ -30,7 +31,7 @@ MANY = 100_000                      # ‏~1.5% מהבלוקים — מעל הס�
 
 @pytest.fixture()
 def conn(tmp_path):
-    return db.connect(tmp_path / "imagectl.db")
+    return db.connect(tmp_path / "imagesrv.db")
 
 
 MAC_A = "aa:bb:cc:00:00:21"          # מחשב שיכפול 1
@@ -88,7 +89,7 @@ def _next(conn, serials=("S1", "S2"), ceiling=None, macs=None):
 
 
 def test_without_a_configured_cap_the_wave_opens_at_600m(conn):
-    """שרת שהותקן מה-ISO אינו מגדיר `IMAGECTL_MAX_BITRATE`. עד היום — אין
+    """שרת שהותקן מה-ISO אינו מגדיר `IMAGESRV_MAX_BITRATE`. עד היום — אין
     `--max-bitrate` בכלל; מעכשיו — קצב הפתיחה, והגג הוא 900m."""
     got = _next(conn)
     assert got["max_bitrate"] == "600m"
@@ -107,7 +108,7 @@ def test_a_configured_cap_below_600m_is_where_it_opens(conn):
 def test_a_configured_cap_above_900m_raises_the_roof_not_the_start(conn):
     # ‏15/10 (ב): מחשב שיכפול שמהירותו לא ידועה מונח 1Gb/s — ואז הגג 900m גם
     # מתחת ל-"1g". כשהמקבל הוגדר 10G — הגג המוגדר הוא שקובע, כמו קודם.
-    from server import nic_speed                                # noqa: PLC0415
+    from server.rounds import nic_speed                                # noqa: PLC0415
     assert _next(conn, ceiling="1g")["ceiling"] == "900m"
     nic_speed.set_manual(conn, _drive("S1")["mac"], 10000)
     got = _next(conn, ceiling="1g")
@@ -292,7 +293,7 @@ def test_the_floor_follows_a_lower_configured_cap(conn):
 
 
 def test_a_clean_wave_never_goes_above_the_configured_cap(conn):
-    """בקרה שלילית — עלייה מעל הגג: ‏`IMAGECTL_MAX_BITRATE` הוא מה שהשרת מכבד."""
+    """בקרה שלילית — עלייה מעל הגג: ‏`IMAGESRV_MAX_BITRATE` הוא מה שהשרת מכבד."""
     seen = [_wave(conn, f"ses_{n}", ceiling="200m") for n in range(3)]
     assert seen == ["200m", "200m", "200m"]
     got = _next(conn, ceiling="200m")

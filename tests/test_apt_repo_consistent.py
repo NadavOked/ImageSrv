@@ -1,4 +1,4 @@
-"""‏#1371 — `install/apt-repo-consistent.py`: המאגר המקומי של שרת מה-ISO מפרסם
+"""‏#1371 — `deploy/apt-repo-consistent.py`: המאגר המקומי של שרת מה-ISO מפרסם
 רק חבילות שהקובץ שלהן נמצא בו, ו-Release תואם את האינדקס אחרי השינוי.
 
 הבדיקה הכללית (`assert_consistent`) היא מה ש-apt עצמו דורש: כל `Filename`
@@ -15,11 +15,11 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SCRIPT = REPO / "install" / "apt-repo-consistent.py"
+SCRIPT = REPO / "deploy" / "apt-repo-consistent.py"
 
 STANZAS = {
-    "qemu-system-x86": "pool/main/imagectl/qemu-system-x86_1_amd64.deb",
-    "ovmf": "pool/main/imagectl/ovmf_1_all.deb",
+    "qemu-system-x86": "pool/main/imagesrv/qemu-system-x86_1_amd64.deb",
+    "ovmf": "pool/main/imagesrv/ovmf_1_all.deb",
     "openssh-server": "pool/main/o/openssh/openssh-server_10.0p1-7+deb13u4_amd64.deb",
     "dbus-user-session": "pool/main/d/dbus/dbus-user-session_1.16.2-2_amd64.deb",
 }

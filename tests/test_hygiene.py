@@ -94,7 +94,7 @@ def test_a_skipped_run_is_not_a_green_run_when_native_is_required(monkeypatch):
 def test_a_strict_xfail_that_failed_as_predicted_is_not_a_skipped_test(monkeypatch):
     """pytest מדווח xfail שנכשל כ-skipped + wasxfail. הוא רץ ונכשל כצפוי
     (‏strict הופך מעבר לכישלון), ולכן הוא אינו "טסט שלא רץ" -- אחרת כל xfail
-    מפיל את ריצת המעבדה כש-IMAGECTL_REQUIRE_NATIVE=1. אבל ``run=False``
+    מפיל את ריצת המעבדה כש-IMAGESRV_REQUIRE_NATIVE=1. אבל ``run=False``
     נדלג ב-setup ולא רץ: הוא נשאר ברשימת הדילוגים."""
     monkeypatch.setenv(native.ENV_FLAG, "1")
     ran = _Report("tests/x.py::test_known_bug", "expected failure")
@@ -230,7 +230,7 @@ def test_the_server_fixture_never_hands_out_the_real_sender(server):
     לפני התיקון `server` בנה אפליקציה בלי `sender_runner`, ולכן כל סבב
     שהבשיל תחתיו הפעיל `udp-sender` אמיתי — וזה הטסט שנכשל על הקוד ההוא.
     """
-    from server.sender import run_process
+    from server.rounds.sender import run_process
 
     assert server["ctx"].sender.runner is server["recorder"]
     assert server["ctx"].sender.runner is not run_process
@@ -318,7 +318,7 @@ def test_the_guard_blocks_a_real_spawn_and_records_it(tmp_path, monkeypatch):
     הרישום הוא מה שהופך את זה לראיה: החסימה לבדה הייתה "אין תהליך",
     ואי אפשר להבדיל בינה לבין "אין באג".
     """
-    from server import sender
+    from server.rounds import sender
 
     monkeypatch.setattr(sender, "SENDER_LOG", tmp_path / "sender.log")
     with pytest.raises(OSError):
@@ -327,7 +327,7 @@ def test_the_guard_blocks_a_real_spawn_and_records_it(tmp_path, monkeypatch):
     # ‏`_no_real_sender` מפיל טסט שהשאיר רישום — הרישום הזה מכוון.
     # ‏#1974: השולח רץ תחת `nice … ionice …` כשהכלים קיימים (‏priority.background_cmd) —
     # מה שנחסם הוא אותה שורת פקודה, עם הקידומת או בלעדיה.
-    from server import priority
+    from server.system import priority
     spawned = hygiene.blocked_spawns.pop()
     prefix = list(priority.BACKGROUND_PREFIX)
     if spawned[:len(prefix)] == prefix:
@@ -399,7 +399,7 @@ def test_the_session_verdict_says_not_checked_instead_of_clean(monkeypatch):
 def test_the_block_is_installed_for_the_whole_run():
     """החסימה מותקנת פעם אחת ואינה מוחזרת — אחרת תהליכון השידור שממשיך
     לרוץ אחרי סוף הטסט מוצא את `subprocess` האמיתי בדיוק בחלון הזה."""
-    from server import sender
+    from server.rounds import sender
 
     assert sender.subprocess is not subprocess
     assert getattr(sender.subprocess, "STDOUT", None) == subprocess.STDOUT

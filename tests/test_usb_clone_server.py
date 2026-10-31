@@ -21,7 +21,7 @@ PATHS = ("/api/console/usb-clone", "/api/console/usb-clone/download", "/api/cons
 
 @pytest.fixture()
 def usb_server(tmp_path: Path, images_root: Path, clock):
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock)

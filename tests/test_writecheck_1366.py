@@ -30,9 +30,10 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-LIB = REPO / "agent" / "lib"
+LIB = flat_lib()
 SBIN = "/usr/sbin:/sbin"
 MIB = 1048576
 HEAD = "הדיסק לא מקבל כתיבה — "
@@ -55,7 +56,7 @@ pytestmark = requires_native(
     why="loop and device-mapper devices as root: the Testrunner",
 )
 
-# expand: diskfit calls _expand_candidate since #1354 (2b195230), as imagectl-agent sources it.
+# expand: diskfit calls _expand_candidate since #1354 (2b195230), as imagesrv-agent sources it.
 LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "failmark", "verdict", "ntfsboot", "expand", "diskfit",
         "bootcadb", "restore", "drawers", "drawerfeed", "clonergui", "writecheck")
 
@@ -109,7 +110,7 @@ rm -rf "$D/run" "$D/dev" "$D"/*.img
 DRIVER = r'''
 set -u
 F=$1; MODE=$2; shift 2
-export RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGECTL_TEST=1 MAC=aa:bb:cc:dd:ee:ff EFIVARS_ROOT=$F/no-efivars
+export RUN_DIR=$F/run LIB_DIR=%(lib)s IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff EFIVARS_ROOT=$F/no-efivars
 rm -rf "$RUN_DIR"; mkdir -p "$RUN_DIR/targets"
 # DEVROOT is the test's own directory (test_tests_never_touch_host_dev): links to
 # the fixture's devices and nothing else, by their kernel names (loop7, dm-3).

@@ -37,7 +37,7 @@ from cryptography import x509
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 import server.main
-from server import console_tls
+from server.console import console_tls
 from test_console_bind import run_main
 from tools.e2e import harness
 
@@ -70,7 +70,7 @@ def test_console_certificate_has_server_auth_eku_1815(tmp_path: Path, issuance):
 
 
 def test_first_start_creates_cert_and_0600_key_with_the_management_sans(tmp_path: Path):
-    tls = console_tls.ensure_console_cert(tmp_path / "data", "10.0.0.1", "imagectl-srv")
+    tls = console_tls.ensure_console_cert(tmp_path / "data", "10.0.0.1", "imagesrv-srv")
 
     assert tls.cert_path == tmp_path / "data" / "console-tls" / "console.crt"
     assert tls.cert_path.is_file() and tls.key_path.is_file()
@@ -81,7 +81,7 @@ def test_first_start_creates_cert_and_0600_key_with_the_management_sans(tmp_path
     assert [item.value for item in common_names] == ["imagesrv-console"]
     if os.name == "posix":
         assert stat.S_IMODE(tls.key_path.stat().st_mode) == 0o600
-    assert set(tls.sans) == {"10.0.0.1", "imagectl-srv"}
+    assert set(tls.sans) == {"10.0.0.1", "imagesrv-srv"}
     assert FP_RE.match(tls.fingerprint_sha256), tls.fingerprint_sha256
 
 
@@ -125,10 +125,10 @@ def test_self_signed_cert_is_extended_when_console_address_changes(tmp_path: Pat
 
 
 def test_uploaded_self_signed_cert_is_never_regenerated_for_a_new_host(tmp_path: Path):
-    from server.interserver_auth import generate_self_signed
+    from server.interserver.interserver_auth import generate_self_signed
 
     data = tmp_path / "data"
-    cert, key = generate_self_signed("operator-cert", dns_sans=["imagectl.college.local"])
+    cert, key = generate_self_signed("operator-cert", dns_sans=["imagesrv.college.local"])
     console_tls.install_upload(data, cert, key)
     before = console_tls.fingerprint_sha256(cert)
 
@@ -221,7 +221,7 @@ def test_e2e_harness_runs_the_console_on_loopback_without_tls(
 def _console(tmp_path: Path, images_root: Path, clock, tls):
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_console_app, create_runtime
     from test_console_ports import SS_DNSMASQ
     from test_sender import Recorder

@@ -3,7 +3,7 @@ the server was off at the end of the copy -- was sent once and never again.
 The clone stood, the screen said "not reported", and the journal had a hole.
 
 What the fix promises, each one tested here through the real lc_report and
-lc_report_resend (agent/lib/localclone.sh, lcwait.sh), with curl stubbed:
+lc_report_resend (agent/lib/localclone/localclone.sh, lcwait.sh), with curl stubbed:
 
 1. No answer (000) or a server failure (5xx): the report is kept.
 2. After a hello the server answered, it goes again, marked late (late_s),
@@ -22,7 +22,7 @@ from native import requires_native
 from test_cloner_gui import BASH
 from test_local_clone_agent import run
 
-from server import local_clone_report
+from server.agent import local_clone_report
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -87,10 +87,10 @@ def test_nothing_is_sent_again_while_the_server_still_does_not_take_it_and_then_
 
 def test_the_main_loop_and_the_beat_both_resend_after_a_hello_the_server_answered():
     agent = (Path(__file__).resolve().parent.parent / "agent")
-    main = (agent / "imagectl-agent").read_text(encoding="utf-8")
+    main = (agent / "imagesrv-agent").read_text(encoding="utf-8")
     send_hello = main[main.index("send_hello() {"):main.index("read_answer() {")]
     assert send_hello.index("hello_post") < send_hello.index("lc_report_resend")
-    beat = (agent / "lib" / "attended.sh").read_text(encoding="utf-8")
+    beat = (agent / "lib" / "core" / "attended.sh").read_text(encoding="utf-8")
     hello = beat[beat.index("attended_hello() {"):beat.index("attended_keep() {")]
     assert hello.index("http_post_json") < hello.index("lc_report_resend")
 

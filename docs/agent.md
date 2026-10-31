@@ -14,8 +14,8 @@
 
 ```bash
 sudo ./tools/build_initramfs.sh
-cp imagectl-initramfs.cpio.gz /srv/imagectl/boot/initrd.img
-cp /boot/vmlinuz-$(uname -r)  /srv/imagectl/boot/vmlinuz
+cp imagesrv-initramfs.cpio.gz /srv/imagesrv/boot/initrd.img
+cp /boot/vmlinuz-$(uname -r)  /srv/imagesrv/boot/vmlinuz
 ```
 
 הבנאי אורז busybox, את הבינארים האמיתיים שהסוכן צריך (partclone, udpcast,
@@ -28,12 +28,12 @@ zstd, sgdisk, curl, jq, pv ועוד — הרשימה המלאה ב-`BINARIES` ב
 
 ```
 init        מרכיב /proc /sys /dev, טוען דרייברים, DHCP על כל ממשק עם כבל
-             (lib/initmods.sh, #1702: כרטיס הרשת קודם, לפי modalias; הקישור מתחיל
+             (lib/core/initmods.sh, #1702: כרטיס הרשת קודם, לפי modalias; הקישור מתחיל
              להתייצב בזמן שהשאר נטען; בלי כרטיס — כל הדרייברים, כמו קודם)
              #2040: הכרטיס הוא זה שה-server-id של החכירה שלו הוא השרת שלנו
-             (host של imagectl.server) — לא הראשון באלפבית; כל השאר יורדים
+             (host של imagesrv.server) — לא הראשון באלפבית; כל השאר יורדים
              (ip link down) לכל הריצה. אף אחד שלנו = אין ניחוש, אתחול לדיסק
-imagectl-agent
+imagesrv-agent
   ├─ hello         ממשק 2: MAC, דיסקים, קושחה → POST /api/v1/agent/hello
   ├─ החלטה         ממשק 3: known / role / task / session → פעולה אחת
   ├─ שחזור         ממשק 7: GPT מהמניפסט → udp-receiver → zstd → partclone
@@ -62,7 +62,7 @@ imagectl-agent
 `fs` בוחר את `partclone.<fs>` ואת כלי ההרחבה (`ntfsresize` / `resize2fs` /
 `btrfs filesystem resize`), ותפקידי המחיצות בוחרים איך נכתב השם —
 מחיצת `windows` → רג'יסטרי offline; מחיצת `linux` → `/etc/hostname`
-ושורת `127.0.1.1` ב-`/etc/hosts` (‏`agent/lib/hostname_linux.sh`); שתיהן
+ושורת `127.0.1.1` ב-`/etc/hosts` (‏`agent/lib/postdeploy/hostname_linux.sh`); שתיהן
 (dual-boot) → שני הצדדים, וכל צד מדווח בנפרד (#107). שורש btrfs שאינו
 ב-subvolume ברירת המחדל נמצא ב-top level — הילד היחיד שיש בו `etc/`, בלי
 לנחש שם (#89).
@@ -98,13 +98,14 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 נעצרה על מחיצה 16 (`data`), לא סימנה דבר, וכל שחזור 256→500 של האימג'
 הזה נגמר בשקט עם 244GB לא מוקצים (‏#58).
 
-**jq נגיש דרך עטיפה אחת** (`lib/jsonq.sh`), וה-JSON שהסוכן *מייצר*
+**jq נגיש דרך עטיפה אחת** (`lib/core/jsonq.sh`), וה-JSON שהסוכן *מייצר*
 נבנה ב-sh טהור — כדי שהבדיקות יוכלו לרוץ בכל סביבה ולפרסר את הפלט
 ב-python אמיתי.
 
 **שורת הפקודה של הקרנל נשארת ריקה ממשימות.** הסוכן קורא ממנה בדיוק
-שני מפתחות: `imagectl.server` ו-`imagectl.mode=recovery`. כל מפתח
-`imagectl.*` אחר נזרק בקול. יש בדיקה על זה משני הצדדים — במחולל ובסוכן.
+שלושה מפתחות: `imagesrv.server`, ‏`imagesrv.mode` ו-`imagesrv.monitor=1`
+(#690). כל מפתח
+`imagesrv.*` אחר נזרק בקול. יש בדיקה על זה משני הצדדים — במחולל ובסוכן.
 
 **כשל משאיר את המחשב דולק.** שחזור שנכשל באמצע = דיסק שבור. הסוכן לא
 מאתחל לתוכו: הוא נשאר על מסך שגיאה, ותהליך הדיווח ממשיך לשדר `failed`
@@ -134,7 +135,7 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 — יוצא מהם כשפעימת ההמתנה מחזירה סבב פתוח עבורו (‏`lcwait.sh:lc_round_calls`).
 
 **GUI בלבד — אין מסך טקסט חלופי** (הכרעת נדב, 11/10: "הכול גואי"). עד כאן,
-כשהגואי (‏`imagectl-kiosk` + ‏`imagectl-station-gui`) לא עלה, הסוכן נפל
+כשהגואי (‏`imagesrv-kiosk` + ‏`imagesrv-station-gui`) לא עלה, הסוכן נפל
 לזרימת טקסט על הקונסולה: אשף השחזור של התחנה ("Type ERASE"), שחזור לדיסק
 של מחשב הבנייה ("Type this computer's name"), תפריט הבנייה הממוספר, מסך
 החדר, פריסה ישירה, פתיחת סבב כיתה, תפריט ה-SMART, שאלת הכיווץ, שאלת
@@ -166,7 +167,7 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 **"שחזור לדיסק הזה" מוצג בגואי מההתחלה ועד הסוף (#1561, ‏`srgui.sh`).**
 הגשר מוסר את התצוגה ב-`restore-start`, ועוד לפני שהגואי משחרר את ה-VT
 הוא מאפס את באפר המסוף (RIS) ומסתיר את הסמן. מיד אחרי יציאת הקיוסק
-‏`gui_parent` מעלה את `imagectl-station-gui --screen progress` (‏`sr_gui_open`),
+‏`gui_parent` מעלה את `imagesrv-station-gui --screen progress` (‏`sr_gui_open`),
 וזה הגואי היחיד עד סוף השחזור: הבדיקות של ה-handoff, הכתיבה, והכרטיס האחרון.
 כותב אחד (תת-מעטפת) בונה לו את הרשומות `title`/`sub`/`pct`/`bytes`/`moving`/`updated`
 מקבצים בלבד: `restore.head` (‏`sr_gui_start`: הדיסק, שם האימג׳, הדיסק לפי
@@ -197,7 +198,7 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 **כשל צריך לדווח, לא להיתלות.** קפיאה אילמת היא הפרה של אותו עיקרון 4
 כמו זריקת בלוק בשקט: במעבדה היא נראית כמו מכונה תקועה בלי סיבה, ובלוג
 אין שורה שמסבירה על מה חיכינו. לכן לכל המתנה בסוכן יש תקרה, וכולן
-יושבות ב-[`agent/lib/waits.sh`](../agent/lib/waits.sh) עם הנימוק לכל ערך.
+יושבות ב-[`agent/lib/core/waits.sh`](../agent/lib/core/waits.sh) עם הנימוק לכל ערך.
 
 המדד הוא **חוסר התקדמות, לא משך כולל** — שחזור מחיצה של 100GB על כונן
 איטי לוקח דקות ארוכות וזה תקין; מונה שנעצר אינו. ‏`wait_progress` צופה
@@ -215,9 +216,9 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 ## כניסה לטכנאי — רק overlay של מעבדה
 
 **אין מעטפת מקומית במוצר** (‏#1303, הכרעת נדב 12/10). עד אז
-‏`imagectl.debug=1` בשורת הקרנל פתח מעטפת root על `tty2` ועל `ttyS0`, וכל
+‏`imagesrv.debug=1` בשורת הקרנל פתח מעטפת root על `tty2` ועל `ttyS0`, וכל
 מי שעמד ליד מחשב ועורך את שורת ה-GRUB קיבל אותה. הדגל נמחק: הסוכן מתייחס
-אליו כמו לכל פרמטר `imagectl.*` לא מוכר — אזהרה ביומן ותו לא — ואף קובץ
+אליו כמו לכל פרמטר `imagesrv.*` לא מוכר — אזהרה ביומן ותו לא — ואף קובץ
 של הסוכן אינו פותח מעטפת על מסוף (`test_agent_offers_no_shell_on_any_terminal`).
 השרת עדיין מסיר את הדגל מ-`--extra-cmdline` (‏`STRIPPED_CMDLINE`), כדי ש-initramfs
 ישן שעוד נושא את המעטפת לא יקבל אותו מ-PXE.
@@ -229,7 +230,7 @@ dropbear ולא מפתח, ולא מאזין לשום פורט.
 מכיר, בלי שהמוצר יידע מה זה:
 
 ```bash
-sudo env IMAGECTL_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
+sudo env IMAGESRV_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 ```
 
 - העץ שתחת התיקייה מועתק מעל שורש האימג' (בבעלות root), אחרון — כך
@@ -237,8 +238,8 @@ sudo env IMAGECTL_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 - ‏`<dir>/.binaries` — בינאריים מהבונה, שורה לכל אחד, נארזים עם הספריות
   שלהם בדיוק כמו `BINARIES` בבנאי (חסר = הבנייה נעצרת). הקובץ עצמו אינו
   נכנס לאימג'.
-- ‏`<dir>/etc/imagectl/hooks.d/*.sh` — ‏hooks שרצים אחרי DHCP
-  (‏[`agent/lib/sitehooks.sh`](../agent/lib/sitehooks.sh)), בסוכן ובמתקין
+- ‏`<dir>/etc/imagesrv/hooks.d/*.sh` — ‏hooks שרצים אחרי DHCP
+  (‏[`agent/lib/core/sitehooks.sh`](../agent/lib/core/sitehooks.sh)), בסוכן ובמתקין
   החי, כל אחד ב-subshell, עם `$IFACE`/`$IP`/`$RUN_DIR`/`$LOG_FILE` ו-`log()`.
   קוד יציאה ≠ 0 נרשם ביומן בשמו ואינו עוצר את הסוכן.
 - משתנה שהוגדר ואינו תיקייה = שגיאה **לפני apt**, לא "בלי overlay".
@@ -260,9 +261,9 @@ sudo env IMAGECTL_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 
 | נושא | איך זה עובד |
 |---|---|
-| כניסה במסך recovery | בגואי בלבד (מסך הכניסה של `imagectl-station-gui`, ‏`gui_auth` → ‏`POST /api/console/login`). הכניסה בטקסט מול `POST /api/v1/agent/login` הוסרה ב-11/10 עם שאר מסכי הטקסט |
+| כניסה במסך recovery | בגואי בלבד (מסך הכניסה של `imagesrv-station-gui`, ‏`gui_auth` → ‏`POST /api/console/login`). הכניסה בטקסט מול `POST /api/v1/agent/login` הוסרה ב-11/10 עם שאר מסכי הטקסט |
 | קליטת אימג' | משימת `capture` מגיעה בשדה `task` של תשובת ה-hello; הסוכן קורא עם partclone ומעלה בזרימה — פרטים ב-docs/server.md |
-| קונסולת מחשב הבנייה | הגואי הנייטיב (`native-gui/`, התהליך `imagectl-kiosk`), עברית ו-RTL; הוא מדבר עם השרת דרך פורט הסוכן (8080). בלי `--with-gui` בבנאי אין גואי, ולכן מסך שצריך אדם מסתיים בדיסק המקומי (`gui_unavailable_local`) — אין מסך טקסט חלופי (11/10). (#1247: דף ה-web `/console/station` והפורט 8082 הוסרו.) |
+| קונסולת מחשב הבנייה | הגואי הנייטיב (`native-gui/`, התהליך `imagesrv-kiosk`), עברית ו-RTL; הוא מדבר עם השרת דרך פורט הסוכן (8080). בלי `--with-gui` בבנאי אין גואי, ולכן מסך שצריך אדם מסתיים בדיסק המקומי (`gui_unavailable_local`) — אין מסך טקסט חלופי (11/10). (#1247: דף ה-web `/console/station` והפורט 8082 הוסרו.) |
 
 ## חדר השיכפולים — הכותב המקבילי
 
@@ -290,12 +291,12 @@ sudo env IMAGECTL_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 "מגירה 1/2/3" לפי החריץ: עליונה, אמצעית, תחתונה (#27). דיסק שאין ממנו
 לגזור חריץ (VM, ‏NVMe) מדווח `port: null` וממשיך רגיל.
 
-`agent/lib/drawers.sh` הופך את הדוח של `fanout` למצבי היעדים של ממשק 4,
+`agent/lib/restore/drawers.sh` הופך את הדוח של `fanout` למצבי היעדים של ממשק 4,
 מאמת sha256 פעם אחת למכונה (כל המגירות מקבלות את אותם בייטים), ובסיום
 מכבה את המחשב — כי לפי נספח א' מחליפים מגירות במחשב כבוי, כך שכיבוי
 הוא הצעד הבא בסבב ולא כשל.
 
-**פענוח אחד למכונה (`agent/lib/drawerfeed.sh`).** משתי מגירות ומעלה הזרם
+**פענוח אחד למכונה (`agent/lib/restore/drawerfeed.sh`).** משתי מגירות ומעלה הזרם
 מפוענח **פעם אחת**: ‏`udp-receiver | fanout -S -P > mid`, ‏`zstd -dc < mid |
 fanout -U > feed1..N`, ו-`partclone` לכל מגירה. עד 18/10 כל מגירה הריצה
 ‏`zstd -dc` משלה על אותם בייטים, ובמשכפל (‏i5-650, שתי ליבות) זה היה המעבד:
@@ -306,9 +307,9 @@ fanout -U > feed1..N`, ו-`partclone` לכל מגירה. עד 18/10 כל מגי�
 אחת נשאר הצינור הישן (‏fanout שני הוא שם עלות בלבד).
 
 מתגי ניסוי, ב-`$RUN_DIR/tune` (שורות `KEY=value`, גובר על הסביבה, נקרא בכל
-מחיצה) או בסביבת הסוכן: ‏`IMAGECTL_DRAWER_DECODE=auto|shared|each`,
-‏`IMAGECTL_DRAWER_NICE=0..19` (צד הפענוח והכתיבה בלבד; המקלט לעולם לא),
-‏`IMAGECTL_DRAWER_DIRECTIO=0|1` (‏`--write-direct-io` של partclone, כבוי עד
+מחיצה) או בסביבת הסוכן: ‏`IMAGESRV_DRAWER_DECODE=auto|shared|each`,
+‏`IMAGESRV_DRAWER_NICE=0..19` (צד הפענוח והכתיבה בלבד; המקלט לעולם לא),
+‏`IMAGESRV_DRAWER_DIRECTIO=0|1` (‏`--write-direct-io` של partclone, כבוי עד
 מדידה על ברזל). ערך לא מוכר נדחה בשורת `WARNING` ביומן, ושורת
 `partition N: decode=… drawers=…` אומרת מה רץ בפועל.
 
@@ -320,7 +321,7 @@ fanout -U > feed1..N`, ו-`partclone` לכל מגירה. עד 18/10 כל מגי�
 > יעד איטי **אינו** נפסל — הוא מאט את כל הזרם, והמכונה מתקדמת בקצב המגירה
 > האיטית ביותר החיה (גישת FOG/Clonezilla, כמו #657 בצד השולח). רק כשל
 > כתיבה (קורא שנעלם, EPIPE) פוסל יעד בודד; מגירה שבורה — לא איטית —
-> נתפסת בקוד היציאה של `partclone` ובתקרות של `agent/lib/waits.sh`,
+> נתפסת בקוד היציאה של `partclone` ובתקרות של `agent/lib/core/waits.sh`,
 > לא בשעון של `fanout`.
 >
 > ```

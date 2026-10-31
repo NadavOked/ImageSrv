@@ -26,8 +26,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import netcfg, netcfg_host, netcfg_rollback
-from server.netcfg_rollback import Pending
+from server.net import netcfg, netcfg_host, netcfg_rollback
+from server.net.netcfg_rollback import Pending
 
 from test_server_netcfg import (           # noqa: F401 — הפיקסטורה מיובאת בשמה
     CONF, ROUTE, STATIC, confirm, journal_events, net_server, put,
@@ -232,7 +232,7 @@ def test_a_change_is_refused_when_the_rollback_arm_is_not_running(net_server):
     net_server["fake"]["timer"] = (False, "inactive")
     response = put(net_server, name="eth0", address="10.10.10.9")
     assert response.status_code == 409
-    assert "imagectl-netrollback.timer" in response.json()["detail"]
+    assert "imagesrv-netrollback.timer" in response.json()["detail"]
     assert net_server["fake"]["confs"] == {}
     assert pending_file(net_server) is None
 
@@ -418,7 +418,7 @@ def test_a_crumb_left_while_the_server_was_down_is_read_at_startup(
     אין לה חיבור ל-DB. השורה מגיעה ליומן בהפעלה הבאה — עם זמן ההחזרה."""
     from fastapi.testclient import TestClient
 
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     state_dir = tmp_path / "netstate"
@@ -446,11 +446,11 @@ def test_a_crumb_left_while_the_server_was_down_is_read_at_startup(
 # --- היחידות עצמן: המקום שבו ההגנה יכולה להיות נכונה ולא קיימת ----------------
 
 REPO = Path(__file__).resolve().parent.parent
-UNIT = (REPO / "install" / "imagectl-netrollback.service").read_text(
+UNIT = (REPO / "deploy" / "imagesrv-netrollback.service").read_text(
     encoding="utf-8")
-TIMER = (REPO / "install" / "imagectl-netrollback.timer").read_text(
+TIMER = (REPO / "deploy" / "imagesrv-netrollback.timer").read_text(
     encoding="utf-8")
-INSTALLER = (REPO / "install" / "setup-boot-server.sh").read_text(encoding="utf-8")
+INSTALLER = (REPO / "deploy" / "setup-boot-server.sh").read_text(encoding="utf-8")
 
 
 def test_the_unit_reads_the_marker_where_the_server_writes_it():
@@ -458,7 +458,7 @@ def test_the_unit_reads_the_marker_where_the_server_writes_it():
     במקום אחד ונקרא באחר, וזה נראה **בדיוק** כמו הגנה שעובדת."""
     assert f"--state-dir {netcfg_host.STATE_DIR}" in UNIT
     # וזה גם מה שהשרת גוזר מ---data-dir שביחידה שלו.
-    server_unit = (REPO / "install" / "imagectl-server.service").read_text(
+    server_unit = (REPO / "deploy" / "imagesrv-server.service").read_text(
         encoding="utf-8")
     data_dir = server_unit.split("--data-dir ")[1].split()[0]
     assert netcfg_host.STATE_DIR == f"{data_dir}/netcfg"
@@ -477,14 +477,14 @@ def test_the_unit_may_write_everything_the_rollback_writes():
     paths = next(line for line in UNIT.splitlines()
                  if line.startswith("ReadWritePaths="))
     assert netcfg_host.INTERFACES_DIR in paths
-    assert netcfg_host.STATE_DIR.startswith("/var/lib/imagectl")
-    assert "/var/lib/imagectl" in paths and " /etc" in paths
+    assert netcfg_host.STATE_DIR.startswith("/var/lib/imagesrv")
+    assert "/var/lib/imagesrv" in paths and " /etc" in paths
 
 
 def test_the_installer_puts_the_guard_on_a_fresh_server():
     """בלי הטיימר הקונסולה חוסמת כל שינוי שיכול לנתק — ומפעיל שנחסם
     בלי להבין למה חוזר לערוך קבצים ב-SSH, כלומר לעבודה שהלשונית הזאת
     נועדה להחליף."""
-    assert "imagectl-netrollback.service" in INSTALLER
-    assert "imagectl-netrollback.timer" in INSTALLER
-    assert "systemctl enable --now imagectl-netrollback.timer" in INSTALLER
+    assert "imagesrv-netrollback.service" in INSTALLER
+    assert "imagesrv-netrollback.timer" in INSTALLER
+    assert "systemctl enable --now imagesrv-netrollback.timer" in INSTALLER

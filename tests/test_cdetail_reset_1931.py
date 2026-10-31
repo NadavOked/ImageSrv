@@ -31,7 +31,7 @@ def _second_capture(tmp_path) -> tuple[dict, str]:
     (run / "parts.txt").write_text("3|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|U|2048|4\n", newline="\n")
     script = (
         f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "log")!r}; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; . {posix(AGENT)}/lib/capturedetail.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/capture/capturedetail.sh; '
         '_fs_of() { echo ntfs; }; partition_node() { echo "/dev/$1$2"; }; _partition_role() { echo windows; }; '
         'job_reset; target_init sda 0; build_progress "" aa:bb:cc:dd:ee:ff tsk_f0fe > "$RUN_DIR/first.json"; '
         'cd_init sda "$RUN_DIR/parts.txt" 512; cat "$RUN_DIR/cdetail.txt"')

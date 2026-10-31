@@ -74,7 +74,7 @@ def _build(tmp_path: Path, lines: list[str], *, wait_for: str = "", fail: str = 
     env = {**_host_env(host), "STUB_DIR": posix(stub_dir), "STUB_WAIT_FOR": wait_for,
            "STUB_FAIL": fail}
     if tmpdir is not None:
-        env["IMAGECTL_BUILD_TMPDIR"] = tmpdir
+        env["IMAGESRV_BUILD_TMPDIR"] = tmpdir
     log = tmp_path / "build.log"
     proc = run_bash(
         f'bash "{posix(tree / "tools" / "boot-payload-build.sh")}" --http-root "{posix(host / "boot")}"'

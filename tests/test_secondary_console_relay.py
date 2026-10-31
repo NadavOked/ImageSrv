@@ -21,7 +21,8 @@ import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
-from server import db, interserver_api, interserver_auth, peer_safe, storage_nodes
+from server import db
+from server.interserver import interserver_api, interserver_auth, peer_safe, storage_nodes
 from test_storage_transfer import _peer, paired                # noqa: F401 — fixture
 
 try:
@@ -47,7 +48,7 @@ def secondary(tmp_path, clock):
     if TestClient is None:
         pytest.skip("fastapi is required")
     from conftest import complete_console_login                # noqa: PLC0415
-    from server import users                                   # noqa: PLC0415
+    from server.console import users                                   # noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
     from test_sender import Recorder                           # noqa: PLC0415
     from test_server_health import SS_DNSMASQ                  # noqa: PLC0415
@@ -58,7 +59,7 @@ def secondary(tmp_path, clock):
     (tftp / "grub").mkdir(parents=True)
     health_hooks = {
         "ss": lambda: SS_DNSMASQ, "ss_tcp": lambda: "", "installer_conf": lambda: "",
-        "nft_ruleset": lambda: "table inet imagectl {}",
+        "nft_ruleset": lambda: "table inet imagesrv {}",
         "unit_active": lambda name: "active", "http_get": lambda url: 200,
         "http_size": lambda url: (200, 9_000_000), "http_text": lambda url: (200, ""),
         "interfaces": lambda: [NIC], "tftp_root": lambda: tftp,
@@ -158,7 +159,7 @@ def test_a_relayed_get_is_what_the_secondarys_own_console_answers(server, second
 
 
 def test_the_secondarys_data_is_not_the_primarys(server, secondary, paired):
-    from server import registry                                # noqa: PLC0415
+    from server.agent import registry                                # noqa: PLC0415
     registry.add_machine(secondary["conn"], "aa:bb:cc:dd:ee:31", "H31", "grp_BUILD", "test")
     macs = [m["mac"] for m in _get(server, paired, "/machines").json()]
     assert macs == ["aa:bb:cc:dd:ee:31"]
@@ -347,7 +348,7 @@ def test_the_get_runs_as_primary_user_only_after_the_bound_token(server, seconda
 def test_the_peer_identity_cannot_come_from_an_http_request(secondary):
     """הזהות יושבת ב-scope; כותרת או עוגייה בשם הזה אינן זהות."""
     anon = TestClient(secondary["app"])
-    key = "imagectl.peer_user"
+    key = "imagesrv.peer_user"
     assert anon.get("/api/console/users", headers={key: "primary:x"}).status_code == 401
     anon.cookies.set(key, "primary:x")
     assert anon.get("/api/console/users").status_code == 401

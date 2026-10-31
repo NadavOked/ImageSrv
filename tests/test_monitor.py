@@ -22,7 +22,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import auth, monitor
+from server.console import auth, monitor
 from server.db import net_seen, set_setting
 from conftest import hello_body
 
@@ -115,12 +115,12 @@ def test_monitor_settings_are_admin_only(server):
 
 
 def test_monitor_is_off_by_default_and_cmdline_flag_follows_the_switch():
-    """ברירת מחדל כבוי: imagectl.monitor=1 נכנס לקרנל רק כשהמתג דלוק.
+    """ברירת מחדל כבוי: imagesrv.monitor=1 נכנס לקרנל רק כשהמתג דלוק.
     station_cmdline גם מסיר דגל שהגיע ב-extra-cmdline כשהמתג כבוי."""
-    extra = ("console=ttyS0,115200", "imagectl.monitor=1")
+    extra = ("console=ttyS0,115200", "imagesrv.monitor=1")
     assert monitor.station_cmdline(extra, False) == ("console=ttyS0,115200",)
     assert monitor.station_cmdline((), True) == (monitor.CMDLINE_PARAM,)
-    assert monitor.station_cmdline(extra, True).count("imagectl.monitor=1") == 1
+    assert monitor.station_cmdline(extra, True).count("imagesrv.monitor=1") == 1
 
 
 def test_settings_page_warns_that_enabling_exposes_5900():
@@ -140,7 +140,7 @@ def test_enabling_monitor_requires_explicit_confirmation(server):
 
     enabled = server["admin"].put(
         "/api/console/monitor/settings",
-        json={"enabled": True, "confirm": "imagectl.monitor"},
+        json={"enabled": True, "confirm": "imagesrv.monitor"},
     )
     assert enabled.status_code == 200
     assert enabled.json()["enabled"] is True
@@ -808,7 +808,7 @@ def test_the_console_translates_only_the_agent_fixed_prompts():
 
 
 def test_a_long_question_is_cut_not_refused(server):
-    from server.api import PROMPT_MAX_CHARS
+    from server.agent.api import PROMPT_MAX_CHARS
     prepare_build_machine(server)
     hello_waiting(server, "x" * (PROMPT_MAX_CHARS + 50))
     assert console_prompt(server) == "x" * PROMPT_MAX_CHARS
@@ -816,7 +816,7 @@ def test_a_long_question_is_cut_not_refused(server):
 
 # --- #1129: Origin, כוח בשרת, יומן, idle ---------------------------------------
 #
-# ‏R48: האישור בהקלדת שם היה UI בלבד — הדפדפן שלח `imagectl-power:` על ה-WS
+# ‏R48: האישור בהקלדת שם היה UI בלבד — הדפדפן שלח `imagesrv-power:` על ה-WS
 # והשרת גישר גולמי. עכשיו הגשר מסרב ל-ClientCutText מהדפדפן, והפקודה עוברת
 # רק ב-`POST /monitor/{mac}/power` שמשווה את השם לשם **מהטבלה**. ‏Origin זר
 # נסגר לפני accept; חיבור וסגירה נרשמים ביומן; 10 דק' בלי תעבורה סוגרות.
@@ -878,7 +878,7 @@ def test_origin_allowed_matches_host_only():
 
 
 def test_power_token_over_the_websocket_is_refused_and_never_reaches_the_machine(server):
-    """‏ClientCutText (סוג 6) מהדפדפן — הערוץ הישן של `imagectl-power:` —
+    """‏ClientCutText (סוג 6) מהדפדפן — הערוץ הישן של `imagesrv-power:` —
     נסגר 4403 בשם, והפריים אינו נכתב למכונה. הודעות לקוח רגילות לפניו
     (FramebufferUpdateRequest) כן מגיעות: הסינון הוא לפי סוג, לא "הכול"."""
     machine = prepare_secret_machine(server)
@@ -891,7 +891,7 @@ def test_power_token_over_the_websocket_is_refused_and_never_reaches_the_machine
         if payload.startswith(b"\x06"):
             machine._reply(b"leaked")
     machine.write = leaking_write
-    power_off = b"\x06\x00\x00\x00" + struct.pack(">I", 23) + b"imagectl-power:poweroff"
+    power_off = b"\x06\x00\x00\x00" + struct.pack(">I", 23) + b"imagesrv-power:poweroff"
 
     async def connector(_host, _port):
         return machine, machine
@@ -909,7 +909,7 @@ def test_power_token_over_the_websocket_is_refused_and_never_reaches_the_machine
         monitor.WS_FORBIDDEN, monitor.POWER_OVER_WS_REFUSED)
     assert FB_REQUEST in machine.writes
     assert not any(w.startswith(b"\x06") for w in machine.writes)
-    assert not any(b"imagectl-power" in w for w in machine.writes)
+    assert not any(b"imagesrv-power" in w for w in machine.writes)
     assert machine.closed is True
     assert journal_rows(server, "monitor_closed") == [(f"{MAC} refused", "noc")]
 
@@ -975,7 +975,7 @@ def test_client_message_length_table():
     assert monitor.client_message_length(b"\x02\x00") is None
     assert monitor.client_message_length(b"\x02\x00\x00\x03") == 16
     assert monitor.client_message_length(b"\x06\x00\x00") is None
-    assert monitor.client_message_length(monitor.power_frame("reboot")) == 8 + len(b"imagectl-power:reboot")
+    assert monitor.client_message_length(monitor.power_frame("reboot")) == 8 + len(b"imagesrv-power:reboot")
     with pytest.raises(ValueError):
         monitor.client_message_length(b"\x63")
 
@@ -1003,8 +1003,8 @@ def test_client_message_length_knows_what_novnc_1_6_sends():
 
 def test_power_frame_is_client_cut_text_with_the_token():
     frame = monitor.power_frame("reboot")
-    assert frame == b"\x06\x00\x00\x00" + struct.pack(">I", 21) + b"imagectl-power:reboot"
-    assert monitor.power_frame("poweroff").endswith(b"imagectl-power:poweroff")
+    assert frame == b"\x06\x00\x00\x00" + struct.pack(">I", 21) + b"imagesrv-power:reboot"
+    assert monitor.power_frame("poweroff").endswith(b"imagesrv-power:poweroff")
 
 
 def test_power_endpoint_is_admin_only_and_verifies_the_server_side_name(server):
@@ -1043,7 +1043,7 @@ def test_power_endpoint_is_admin_only_and_verifies_the_server_side_name(server):
 
 def test_power_endpoint_writes_the_token_to_the_machine_and_journals_who(server):
     """הראיה החיובית: עם מוניטור פתוח והשם הנכון, הפריים
-    ‏ClientCutText(`imagectl-power:reboot`) נכתב למכונה **מהשרת**,
+    ‏ClientCutText(`imagesrv-power:reboot`) נכתב למכונה **מהשרת**,
     ‏`monitor_power` נרשם עם המשתמש וה-MAC, וה-WS של הדפדפן נשאר פתוח."""
     machine = prepare_secret_machine(server)
 
@@ -1164,7 +1164,7 @@ def test_traffic_resets_the_idle_clock(server, monkeypatch):
 
 
 def test_journal_translates_monitor_events_to_hebrew(server):
-    from server.journal_he import EVENTS_HE, JournalTranslator
+    from server.console.journal_he import EVENTS_HE, JournalTranslator
     prepare_build_machine(server)
     tr = JournalTranslator(server["ctx"].conn, server["ctx"].library)
     for event in ("monitor_connected", "monitor_closed", "monitor_power"):

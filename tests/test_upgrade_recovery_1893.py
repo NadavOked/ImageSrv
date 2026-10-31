@@ -3,7 +3,7 @@ only what that run did is undone.
 
 ``tools/server-upgrade.sh`` keeps a durable marker (stage, the DB snapshot
 version and whether the boot payload was saved -- of THIS run);
-``tools/server-upgrade-recover.sh`` (unit ``imagectl-upgrade-recover``, before
+``tools/server-upgrade-recover.sh`` (unit ``imagesrv-upgrade-recover``, before
 the server) reads it at boot. Behaviour, through the real scripts with stand-ins
 for git/dpkg/systemctl/logger and a real DB:
 
@@ -39,7 +39,7 @@ RECOVER = REPO / "tools" / "server-upgrade-recover.sh"
 
 
 def _db(data: Path) -> sqlite3.Connection:
-    return sqlite3.connect(data / "imagectl.db")
+    return sqlite3.connect(data / "imagesrv.db")
 
 
 def _version(path: Path) -> int:
@@ -58,10 +58,10 @@ def _box(tmp_path: Path, bindir: Path, *, dpkg_fails: bool = False) -> tuple[Pat
     data = tmp_path / "data"
     _seed_db(data)
     from server.db import connect, journal
-    snap = data / "imagectl.db.pre-upgrade"
-    with sqlite3.connect(data / "imagectl.db") as live, sqlite3.connect(snap) as copy:
+    snap = data / "imagesrv.db.pre-upgrade"
+    with sqlite3.connect(data / "imagesrv.db") as live, sqlite3.connect(snap) as copy:
         live.backup(copy)
-    conn = connect(data / "imagectl.db")
+    conn = connect(data / "imagesrv.db")
     journal(conn, "test_marker", "written after the old snapshot")
     conn.close()
     boot = tmp_path / "boot"
@@ -72,7 +72,7 @@ def _box(tmp_path: Path, bindir: Path, *, dpkg_fails: bool = False) -> tuple[Pat
     repo = _fake_repo(tmp_path, live_ok=True)
     (repo / ".git").mkdir()
     # #2026: the recovery reads the cut tag's units from git before going back.
-    fake_tool(bindir, "git", 'case "$1" in ls-tree) echo install/imagectl-server.service ;; esac')
+    fake_tool(bindir, "git", 'case "$1" in ls-tree) echo deploy/imagesrv-server.service ;; esac')
     fake_tool(bindir, "dpkg", "exit 1" if dpkg_fails else "exit 0")
     fake_tool(bindir, "systemctl", "exit 0")
     fake_tool(bindir, "logger", "exit 0")
@@ -90,7 +90,7 @@ def _marker(data: Path, repo: Path, boot: Path, stage: str, *, db_snap_ver: str 
 
 def _recover(tmp_path: Path, bindir: Path, data: Path):
     return run_bash(f'bash "{posix(RECOVER)}"', tmp_path, bindir, env={
-        "IMAGECTL_DATA_DIR": posix(data), "IMAGECTL_UNIT_DIR": posix(tmp_path / "units"),
+        "IMAGESRV_DATA_DIR": posix(data), "IMAGESRV_UNIT_DIR": posix(tmp_path / "units"),
         "PYTHONPATH": posix(REPO)})
 
 
@@ -111,7 +111,7 @@ def test_a_cut_at_fetch_restores_nothing_an_older_run_left(tmp_path, bindir):
 
 def test_a_cut_after_the_new_server_migrated_puts_back_this_runs_db_and_payload(tmp_path, bindir):
     data, boot, repo = _box(tmp_path, bindir)
-    before = _version(data / "imagectl.db.pre-upgrade")
+    before = _version(data / "imagesrv.db.pre-upgrade")
     with _db(data) as c:
         c.execute(f"PRAGMA user_version = {before + 1}")            # the new server's migration
     _marker(data, repo, boot, "restart", db_snap_ver=str(before), payload_saved=True)
@@ -121,7 +121,7 @@ def test_a_cut_after_the_new_server_migrated_puts_back_this_runs_db_and_payload(
     assert "dpkg --configure -a" in seen
     assert "git checkout -q --detach v0.48.0" in seen
     assert "systemctl daemon-reload" in seen
-    assert _version(data / "imagectl.db") == before
+    assert _version(data / "imagesrv.db") == before
     assert (boot / "initrd.img").read_text() == "older initrd\n"
     assert not (boot / ".pre-upgrade").exists()
     status = _status(data)
@@ -157,13 +157,13 @@ def test_the_upgrade_marks_its_stages_and_leaves_no_marker_when_done(tmp_path, b
     fake_tool(bindir, "git", 'case "$1" in describe) echo "$FAKE_TAG" ;; checkout) exit 0 ;; '
                              'rev-parse) echo "commit-of-$FAKE_TAG" ;; rev-list) echo "commit-of-$4" ;; esac')
     fake_tool(bindir, "systemctl",
-              f'case "$1" in restart) [ "$2" != imagectl-server ] || cp "{posix(marker)}" "{posix(seen_at_restart)}" ;; '
-              'show) echo "IMAGECTL_URL=http://10.10.10.8:8080 X=y" ;; esac')
+              f'case "$1" in restart) [ "$2" != imagesrv-server ] || cp "{posix(marker)}" "{posix(seen_at_restart)}" ;; '
+              'show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac')
     proc = _run_upgrade(tmp_path, bindir, repo, data)
     assert proc.returncode == 0, proc.stderr + (tmp_path / "upgrade.log").read_text(encoding="utf-8")
     assert not marker.exists()
     at_restart = json.loads(seen_at_restart.read_text(encoding="utf-8"))
     assert at_restart["stage"] == "restart" and at_restart["tag"] == "v0.49.0"
     assert at_restart["db_snap_ver"].isdigit() and at_restart["payload_saved"] is True, at_restart
-    assert "systemctl enable imagectl-upgrade-recover.service" in calls(tmp_path)   # with the units, after checkout (#1193)
-    assert (tmp_path / "units" / "imagectl-upgrade-recover.service").exists()
+    assert "systemctl enable imagesrv-upgrade-recover.service" in calls(tmp_path)   # with the units, after checkout (#1193)
+    assert (tmp_path / "units" / "imagesrv-upgrade-recover.service").exists()

@@ -20,12 +20,12 @@
    (השרת דורש את שניהם) והסיכום אומר זאת במפורש.
 2. ‏`{"pci_any": [...]}` — כל `PCI\\VEN_xxxx&DEV_xxxx` מכל INF שה-`Class`
    שלו הוא רשת או אחסון (‏Net / HDC / SCSIAdapter): אלה שני ה-classes
-   היחידים שהסוכן מדווח במלאי (‏`agent/lib/inventory.sh`), ומזהה של
+   היחידים שהסוכן מדווח במלאי (‏`agent/lib/hw/inventory.sh`), ומזהה של
    כרטיס מסך או שבב אודיו לא יתאים לעולם. ‏SUBSYS/REV נזרקים — המלאי
    אינו מדווח אותם. ‏INF אינו נוקב בקוד class, ולכן המזהה נכתב בלי
    class (‏`8086:15bc`) והשרת מתאים לפי vendor:device.
 
-המניפסט עובר את `server.drivers.validate_manifest` **לפני** שה-tar
+המניפסט עובר את `server.library.drivers.validate_manifest` **לפני** שה-tar
 נכתב — הכלי אינו יכול לבנות מה שהשרת ידחה, כי זו אותה פונקציה.
 
 יציאה: ‏0 כשה-tar נכתב והסיכום הודפס; ‏1 על כל סירוב, בשמו.
@@ -49,7 +49,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from server.drivers import (FILES_LIMIT, NAME_RE, PCI_ANY_LIMIT,  # noqa: E402
+from server.library.drivers import (FILES_LIMIT, NAME_RE, PCI_ANY_LIMIT,  # noqa: E402
                             safe_relative, validate_manifest)
 
 #: ה-classes של INF שהמלאי יודע לזהות — רשת (02xxxx) ואחסון (01xxxx).
@@ -216,7 +216,7 @@ def write_tar(manifest: dict, root: Path, out: Path) -> None:
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="בניית חבילת דרייברים ל-ImageCtl מ-CAB או מתיקייה")
+    ap = argparse.ArgumentParser(description="בניית חבילת דרייברים ל-ImageSrv מ-CAB או מתיקייה")
     ap.add_argument("source", help="קובץ .cab, או תיקייה שכבר נפרשה (CAB/EXE)")
     ap.add_argument("--model", required=True, help="dmi.product_name / product_version כפי שהמכונה מדווחת")
     ap.add_argument("--vendor", help="dmi.sys_vendor (HP / LENOVO / Dell Inc.); בלעדיו אין כלל דגם")
@@ -230,7 +230,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 def run(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     source = Path(args.source)
-    with tempfile.TemporaryDirectory(prefix="imagectl-drv-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="imagesrv-drv-") as tmp:
         if source.is_dir():
             root = source
         elif source.is_file() and source.suffix.lower() == ".cab":

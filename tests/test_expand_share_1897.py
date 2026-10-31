@@ -16,10 +16,11 @@ import shutil
 
 import pytest
 
-from server import minfree
-from server.images import required_bytes
+from server.library import minfree
+from server.library.images import required_bytes
 
 from test_agent import AGENT, BASH, posix, run_expand, sh, tail_n
+from agentlib import flat_lib
 
 needs_shell = pytest.mark.skipif(
     BASH is None or shutil.which("jq") is None, reason="bash and jq are required")
@@ -106,7 +107,7 @@ def _grow(tmp_path, fail_on: str = "") -> tuple[str, str]:
     (run / "targets/sda/expanded").write_text("3|ntfs\n")
     (run / "targets/sda/expanded.more").write_text("4|ntfs\n")
     out = sh(f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
-             f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/restore.sh; . {posix(AGENT)}/lib/grow.sh; . {posix(AGENT)}/lib/ntfsunhib.sh; . {posix(AGENT)}/lib/expandshare.sh; "
+             f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; "
              f'grow_filesystem() {{ echo "$1 $2" >> {posix(run)!r}/grown; '
              f'[ "$2" != {fail_on!r} ] || {{ GROW_ERROR=boom; return 1; }}; }}; '
              'grow_expanded sda; echo "rc=$? err=$GROW_ERROR"')
@@ -131,7 +132,7 @@ def _agent_free(tmp_path, m: dict, disk: int) -> str:
     path = tmp_path / "m.json"
     path.write_text(json.dumps(m), encoding="utf-8")
     out = sh(f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path)!r}/log; "
-             + "".join(f". {posix(AGENT)}/lib/{lib}.sh; " for lib in
+             + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
                        ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
              + f'system_free_after {posix(path)!r} {disk} {required_bytes(m)} 3')
     return out.strip().splitlines()[-1]

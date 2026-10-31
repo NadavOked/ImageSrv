@@ -30,8 +30,8 @@ from pathlib import Path
 
 import pytest
 
-from server.imagefit import expandable_candidate, shrink_bytes
-from server.images import required_bytes
+from server.library.imagefit import expandable_candidate, shrink_bytes
+from server.library.images import required_bytes
 
 from test_agent import AGENT, BASH, posix, sh
 from test_capture_refusals import (CURL_SINK, ONE_PARTITION, capture_run,
@@ -320,7 +320,7 @@ def test_a_floor_that_is_not_a_number_refuses_instead_of_skipping_the_check(tmp_
 def test_an_unset_floor_is_recorded_as_null_and_not_as_a_number():
     """‏"לא נבדק" חייב להיות קריא במניפסט. שדה שנעדר או `0` היו שני
     ניסוחים של "נבדק ונכנס", וזה בדיוק הקיפול שעיקרון 5 אוסר."""
-    source = (AGENT / "lib" / "capture.sh").read_text(encoding="utf-8")
+    source = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     assert '_floor_json="null"' in source
     assert '"target_floor_bytes":%s' in source
     # הארגומנט שמוזן לשדה הוא המשתנה, ומיד אחרי min_target_bytes.

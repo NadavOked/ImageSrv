@@ -36,7 +36,7 @@
 ## התקנה
 
 ```bash
-sudo ./install/setup-boot-server.sh
+sudo ./deploy/setup-boot-server.sh
 ```
 
 המתקין שואל (‏#1088, הכרעת נדב 18/09):
@@ -62,13 +62,13 @@ sudo ./install/setup-boot-server.sh
 (dnsmasq, ‏shim ו-GRUB חתומים, ‏`python3-fastapi python3-uvicorn
 python3-websockets python3-cryptography python3-openssl` — ‏websockets
 למוניטור, cryptography/openssl לערוץ הבין-שרתי 8443; שרת שהותקן בלי
-`python3-websockets` מחזיר 500 על כל WebSocket, #904), מעתיק את הקוד ל-`/opt/imagectl`
+`python3-websockets` מחזיר 500 על כל WebSocket, #904), מעתיק את הקוד ל-`/opt/imagesrv`
 (או מושך אותו מ-git כשהסקריפט רץ לבדו), פורס את שרשרת האתחול על
 שורש ה-TFTP, יוצר את משתמש המנהל, ומרים את השרת כשירות systemd.
 
 בסיום הקונסולה זמינה בכתובת שהודפסה, עם המשתמש שהגדרתם.
 הכתובת היא **`https://…:8081`** (#703): המתקין מייצר תעודה חתומה-עצמית
-ל-`/var/lib/imagectl/console-tls/` ומדפיס את טביעת האצבע שלה (SHA-256) —
+ל-`/var/lib/imagesrv/console-tls/` ומדפיס את טביעת האצבע שלה (SHA-256) —
 הדפדפן יבקש לאשר את התעודה **פעם אחת**; משווים את טביעת האצבע שהוא
 מציג לזו שהודפסה, ורק אז מאשרים. ‏`--console-host ADDR` קובע על איזה
 כרטיס (הניהול) הקונסולה מאזינה — כתובת **או שם כרטיס**; ברירת המחדל
@@ -76,7 +76,7 @@ python3-websockets python3-cryptography python3-openssl` — ‏websockets
 עובד כשה-DNS של המכללה פותר את השם שהשרת שלח ב-DHCP.
 
 **המתקין אומר `מוכן.` רק כשתחנה באמת יכולה לעלות.** בסופו הוא מריץ את
-`install/verify-boot-payload.sh` (למטה): כל עוד הקרנל וה-initrd אינם
+`deploy/verify-boot-payload.sh` (למטה): כל עוד הקרנל וה-initrd אינם
 מוגשים הוא מדפיס מה חסר ומה עושים, ו**יוצא בקוד שאינו 0**. זה המצב
 שיתקבל אחרי התקנה טרייה — שלב שני עדיין לפניכם, וזה תקין.
 
@@ -85,7 +85,7 @@ python3-websockets python3-cryptography python3-openssl` — ‏websockets
 
 **בסוף ההתקנה — אחרי שהשרת עלה וענה** (‏#1131) — המתקין כותב חומת אש
 nftables לפי הוילנים (#1074 / R20-F1): מתקין את החבילה, מריץ את
-`install/nftables-rules.sh` עם כרטיס ההפצה (אם נבחר; בלעדיו — כללי
+`deploy/nftables-rules.sh` עם כרטיס ההפצה (אם נבחר; בלעדיו — כללי
 וילן השרתים בלבד, וההדלקה מהקונסולה מחוללת את הקובץ מחדש) וכרטיס
 השרתים (ובמשני — `--primary-ip` מכתובת הראשי; ראשי בשם נפתר לכתובת
 בזמן ההתקנה, עם אזהרה), בודק תחביר (`nft -c -f` — כשל = המתקין עוצר),
@@ -94,7 +94,7 @@ policy drop לפני שהשרת עלה, עם כרטיס שרתים שגוי, ה�
 ובלי דרך לתקן. כשל בתוך צעד חומת האש מחזיר את ה-ruleset שרץ לפניו
 ואת `/etc/nftables.conf` הקודם — מה שעבד לפני המתקין עובד גם אחרי
 כשל שלו. חומת האש אינה פותחת TCP 22 בשום מצב (‏#1266). TFTP נקשר לכרטיס ההפצה (`interface=` + `bind-interfaces`
-ב-`/etc/dnsmasq.d/imagectl.conf`). הסוכן (8080) נקשר
+ב-`/etc/dnsmasq.d/imagesrv.conf`). הסוכן (8080) נקשר
 לכתובת כרטיס ההפצה, לא ל-`0.0.0.0`.
 
 `--no-firewall` מדלג על השלב הזה ומדפיס אזהרה ביומן: `ללא חומת אש —
@@ -102,7 +102,7 @@ R20-F1`. לשרת בדיקה בלי שני כרטיסים, לא לפריסה.
 
 **הרצה חוזרת של המתקין על שרת מותקן עוצרת בשם** (‏#1131): המתקין הוא
 התקנה, ועדכון קוד הוא כפתור "עדכן" בקונסולה (`tools/server-upgrade.sh`).
-`--force` מריץ בכל זאת — כל קובץ קיים מגובה ל-`.pre-imagectl.<זמן>`
+`--force` מריץ בכל זאת — כל קובץ קיים מגובה ל-`.pre-imagesrv.<זמן>`
 לפני שנדרס, ורשת הפצה שהוגדרה מהקונסולה **נשמרת** (dnsmasq וחומת האש
 עם הכרטיס שלה; `--deploy-if` מפורש גובר).
 
@@ -113,17 +113,17 @@ R20-F1`. לשרת בדיקה בלי שני כרטיסים, לא לפריסה.
 החדשה בדיוק, ו-`verify-boot-payload.sh`; כשל → checkout לתג הקודם,
 restart, וסטטוס `failed` עם הסיבה בכפתור "עדכן". שדרוג בזמן סבב
 פתוח/רץ מסורב גם כשהסקריפט מופעל ידנית. כדי להחיל את המדיניות על שרת קיים: להריץ את המחולל ידנית
-(`install/nftables-rules.sh`), לבדוק ב-`nft -c -f`, ורק אז להניח ב-
+(`deploy/nftables-rules.sh`), לבדוק ב-`nft -c -f`, ורק אז להניח ב-
 `/etc/nftables.conf` ולהפעיל את השירות — בדגל מפורש, לא כחלק מהשדרוג.
 
 `--http-root PATH` קובע איפה יונחו הקרנל וה-initrd, **ומאיפה השרת מגיש
 אותם** (`--boot-dir` ב-drop-in של systemd, #395). ברירת המחדל בשני
-הצדדים היא `/srv/imagectl/boot`. אם מעבירים נתיב אחר — שלב שני למטה
-חייב לכתוב לאותו נתיב, לא ל-`/srv/imagectl/boot`.
+הצדדים היא `/srv/imagesrv/boot`. אם מעבירים נתיב אחר — שלב שני למטה
+חייב לכתוב לאותו נתיב, לא ל-`/srv/imagesrv/boot`.
 
 **הביאו את הריפו אל השרת והריצו את המתקין מתוכו.** קובץ ה-GRUB הקבוע
 אמנם מוטמע בסקריפט, אבל **העתקת הסקריפט לבדו כבר אינה מסלול עובד**:
-כשהריפו אינו לצידו הוא מנסה `git clone` מ-`ImageCtl-archive`, וזה ריפו
+כשהריפו אינו לצידו הוא מנסה `git clone` מ-`ImageSrv-dev`, וזה ריפו
 **פרטי** — ‏clone בלי אישורים נכשל תמיד (`could not read Username for
 'https://github.com'`, יציאה 128). כשהריפו נמצא לצד הסקריפט המתקין
 מעתיק ממנו ואינו פונה לרשת כלל.
@@ -133,10 +133,10 @@ restart, וסטטוס `failed` עם הסיבה בכפתור "עדכן". שדרו
 ## שלב שני, חובה: הקרנל וה-initrd
 
 **המתקין אינו בונה את ה-initrd ואינו מעתיק קרנל.** בסיומו
-`/srv/imagectl/boot/` **ריקה**, ולכן `GET /boot/vmlinuz` ו-`GET
+`/srv/imagesrv/boot/` **ריקה**, ולכן `GET /boot/vmlinuz` ו-`GET
 /boot/initrd.img` מחזירים **404** — ותפריט ה-GRUB מפנה אליהם כל תחנה
 שיש לה משימה. בלי השלב הזה השרת עולה, הקונסולה עובדת — ואף מחשב לא
-יצליח לעלות ל-ImageCtl.
+יצליח לעלות ל-ImageSrv.
 
 זהו המסלול היחיד שנבדק מקצה לקצה ב-#166, והוא הכשל שחוסם יום ראשון
 במכללה. **היום שני מקומות תופסים אותו** ולא אף אחד: המתקין מסרב לומר
@@ -152,18 +152,18 @@ sudo apt-get install -y linux-image-amd64
 
 KVER=$(ls /lib/modules | grep -v cloud | tail -n1)
 sudo bash tools/build_initramfs.sh --kernel-version "$KVER" \
-     --output /srv/imagectl/boot/initrd.img
-sudo cp "/boot/vmlinuz-$KVER" /srv/imagectl/boot/vmlinuz
+     --output /srv/imagesrv/boot/initrd.img
+sudo cp "/boot/vmlinuz-$KVER" /srv/imagesrv/boot/vmlinuz
 ```
 
-אם הרצתם את המתקין עם `--http-root PATH`, החליפו את `/srv/imagectl/boot`
+אם הרצתם את המתקין עם `--http-root PATH`, החליפו את `/srv/imagesrv/boot`
 בנתיב שהעברתם — זה הנתיב שהשרת מגיש.
 
 **שרת משני על kernel cloud — מעתיקים, לא בונים (#904).** שרת שעלה
 מאימג' ענן (`linux-image-cloud-amd64`) מקבל מ-`build_initramfs.sh` סירוב
 מפורש ("cloud kernel: do not build here"). במקום להתקין קרנל ולבנות,
 המסלול התקני למשני הוא להעתיק **שלושה** קבצים מהשרת הראשי אל
-`/srv/imagectl/boot/` שלו: `vmlinuz`, ‏`initrd.img` ו-`initrd.img.gui`
+`/srv/imagesrv/boot/` שלו: `vmlinuz`, ‏`initrd.img` ו-`initrd.img.gui`
 (האחרון — מוניטור על מכונה בלי מסך, #835), ואז להריץ את
 `verify-boot-payload.sh` למטה. הפקודות המדויקות ב-`docs/lab-site2-runbook.md`
 (שלב 4ב).
@@ -171,7 +171,7 @@ sudo cp "/boot/vmlinuz-$KVER" /srv/imagectl/boot/vmlinuz
 **אימות — ראיה חיובית, לא `is-active`:**
 
 ```bash
-sudo bash install/verify-boot-payload.sh --server-url http://<כתובת-השרת>:8080
+sudo bash deploy/verify-boot-payload.sh --server-url http://<כתובת-השרת>:8080
 ```
 
 זו אותה בדיקה שהמתקין מריץ בסופו, וניתן להריץ אותה לבדה כמה פעמים
@@ -179,13 +179,13 @@ sudo bash install/verify-boot-payload.sh --server-url http://<כתובת-השר�
 
 | שכבה | מה נבדק | למה |
 |---|---|---|
-| דיסק | הקובץ קיים ב-`/srv/imagectl/boot`, ובגודל סביר | תיקייה ריקה = 404 מובטח |
+| דיסק | הקובץ קיים ב-`/srv/imagesrv/boot`, ובגודל סביר | תיקייה ריקה = 404 מובטח |
 | ‏HTTP | ‏`GET /boot/<שם>` מחזיר **200** | זה מה שהתחנה מושכת בפועל |
 | גודל | ‏`Content-Length` מעל 1MB | גוף ה-404 של `/boot` הוא **תשעה** בייטים, ו-200 עם גודל אינו "יש קובץ" |
 
 **שרת שלא ענה אינו 404 ואינו 200 — הוא בדיקה שלא רצה, והבדיקה נכשלת
 עליו** (‏`CLAUDE.md`, עיקרון 5). המידות משותפות עם מסך הבריאות
-(`server/health.py`), כדי ששניהם יאמרו על אותו שרת את אותו דבר.
+(`server/system/health.py`), כדי ששניהם יאמרו על אותו שרת את אותו דבר.
 
 יציאה 0 = תחנה יכולה לעלות. כל דבר אחר = לא, ומה בדיוק חסר נאמר בשמו.
 
@@ -193,7 +193,7 @@ sudo bash install/verify-boot-payload.sh --server-url http://<כתובת-השר�
 
 ```bash
 curl -s -o /tmp/i http://<כתובת-השרת>:8080/boot/initrd.img
-cmp /tmp/i /srv/imagectl/boot/initrd.img && echo "זהה"
+cmp /tmp/i /srv/imagesrv/boot/initrd.img && echo "זהה"
 ```
 
 **עדכון הסוכן** = בניית הקובץ הזה מחדש והעתקתו שוב. אין חתימה ואין
@@ -205,20 +205,20 @@ cmp /tmp/i /srv/imagectl/boot/initrd.img && echo "זהה"
 
 ### האשף
 
-**רק בשרת בלי `/etc/imagectl/answers`** (שלא הותקן מהמתקין בגואי; ראו הטבלה
-למטה): אחרי שהאתחול הראשון בונה את שני קובצי ה-initrd, עולה `imagectl-wizard` על `https://<כתובת-השרת>:8081`. התעודה
+**רק בשרת בלי `/etc/imagesrv/answers`** (שלא הותקן מהמתקין בגואי; ראו הטבלה
+למטה): אחרי שהאתחול הראשון בונה את שני קובצי ה-initrd, עולה `imagesrv-wizard` על `https://<כתובת-השרת>:8081`. התעודה
 עצמית והדף כולו מקומי — השרת אינו צריך אינטרנט. האשף מאשר או משנה את
 תפקיד השרת, מגדיר את **רשת הניהול בלבד**, קובע hostname וסיסמת `admin`,
 ומציג סיכום לפני ההחלה. רשת ההפצה מוגדרת אחר כך בקונסולה.
 
 בלחיצה על "החל התקנה" האשף מריץ את `setup-boot-server.sh`, מציג את הפלט
 וההתקדמות, ומסמן סיום רק אם גם המתקין וגם `verify-boot-payload.sh` יצאו 0
-ו-`/etc/imagectl/firstboot.status` נקרא בחזרה כ-`state=done`. אז הוא
-משחרר את פורט 8081 ל-`imagectl-server`, מציג את כתובת הקונסולה ואת טביעת
-SHA-256 של התעודה, וכותב `/var/lib/imagectl/.firstboot-done`.
+ו-`/etc/imagesrv/firstboot.status` נקרא בחזרה כ-`state=done`. אז הוא
+משחרר את פורט 8081 ל-`imagesrv-server`, מציג את כתובת הקונסולה ואת טביעת
+SHA-256 של התעודה, וכותב `/var/lib/imagesrv/.firstboot-done`.
 
 אשף שמופעל אחרי שהחותמת קיימת מדולג על ידי תנאי היחידה ואינו משאיר יחידה
-כושלת. הרצה חוזרת מפורשת היא `systemctl start imagectl-wizard-rerun.service`;
+כושלת. הרצה חוזרת מפורשת היא `systemctl start imagesrv-wizard-rerun.service`;
 היחידה הייעודית מריצה `python3 -m server.wizard --rerun`, דורשת את סיסמת `admin` הקיימת
 ומעבירה למתקין `--force`.
 
@@ -247,10 +247,10 @@ SHA-256 של התעודה, וכותב `/var/lib/imagectl/.firstboot-done`.
   נפתחת בין האתרים.
 
 על הראשי עונה שם תשובה אחת (שם, גרסה, טביעת אצבע) — בלי כניסה ובלי
-פעולות. חומת האש של השרת הראשי עצמו (`install/nftables-rules.sh`) פותחת
+פעולות. חומת האש של השרת הראשי עצמו (`deploy/nftables-rules.sh`) פותחת
 8443 על כרטיס השרתים. שרת ראשי שהותקן לפני #1310 צריך להריץ את המחולל
 מחדש (או לעדכן גרסה) כדי שהבדיקה תעבור. הפירוט: `docs/interfaces.md`
-סעיף 18, ו-`install/firewall-rules.md`.
+סעיף 18, ו-`deploy/firewall-rules.md`.
 
 ### צימוד המשני לראשי — F4 במסך המשני (16/10)
 
@@ -267,7 +267,7 @@ SHA-256 של התעודה, וכותב `/var/lib/imagectl/.firstboot-done`.
 
 ### מסך השרת (DCUI)
 
-אחרי ההתקנה `imagectl-dcui` תופס את `tty1` ומציג באנגלית מסך 80×25 לקריאה:
+אחרי ההתקנה `imagesrv-dcui` תופס את `tty1` ומציג באנגלית מסך 80×25 לקריאה:
 כתובת הקונסולה וטביעת התעודה, כרטיסי הרשת, מצב השירותים, תפקיד האחסון
 והסבב הפעיל. ‏F2 פותח, אחרי סיסמת `admin`, הגדרת רשת ניהול,
 הפעלה מחדש של הרשת/השירותים ופרטי TLS (בלי איפוס סיסמה — הוסר ב-#1249; ובלי
@@ -277,13 +277,13 @@ SHA-256 של התעודה, וכותב `/var/lib/imagectl/.firstboot-done`.
 ‏F12 דורש שוב סיסמה, ואז Enter מבצע restart או shutdown — בלי הקלדת
 hostname (#1270); סבב פעיל מוצג כאזהרה ואינו חוסם. שינוי רשת חמוש באותה החזרה אוטומטית של 60 שניות כמו הקונסולה.
 
-אחרי העתקת `install/imagectl-dcui.service` אל `/etc/systemd/system/` ו-
+אחרי העתקת `deploy/imagesrv-dcui.service` אל `/etc/systemd/system/` ו-
 `systemctl daemon-reload`, אלה שתי שורות המתקין הנדרשות (ייכנסו למתקין
 רק אחרי בדיקת חלק 2):
 
 ```bash
 systemctl mask getty@tty1.service
-systemctl enable imagectl-dcui.service   # עולה באתחול הבא; tty1 עדיין של המתקין
+systemctl enable imagesrv-dcui.service   # עולה באתחול הבא; tty1 עדיין של המתקין
 ```
 
 שני השלבים למעלה — המתקין ואז הקרנל וה-initrd — ארוזים ב-ISO אחד
@@ -296,7 +296,7 @@ systemctl enable imagectl-dcui.service   # עולה באתחול הבא; tty1 ע
 sudo tools/iso/make-pool.sh --out /root/ic-iso-tmp/repo
 sudo tools/iso/build-iso.sh \
      --out /root/ic-iso-tmp --pool /root/ic-iso-tmp/repo --ref v0.48.0
-# → imagectl-v0.48.0-amd64.iso + SHA256SUMS
+# → imagesrv-v0.48.0-amd64.iso + SHA256SUMS
 ```
 
 סיסמת root נבחרת במסך ההתקנה ולא בבנייה (‏#1632); ‏`--root-password` מסורב.
@@ -305,10 +305,10 @@ sudo tools/iso/build-iso.sh \
 
 | שלב | מה | מי רואה |
 |---|---|---|
-| אתחול | ‏GRUB/isolinux עולים **ישר** (`timeout=0`, ערך אחד) למתקין החי: ‏`/live/vmlinuz` + ‏`/live/initrd.img` עם `imagectl.mode=installer`. אין מתקין דביאן ואין preseed | המסך |
+| אתחול | ‏GRUB/isolinux עולים **ישר** (`timeout=0`, ערך אחד) למתקין החי: ‏`/live/vmlinuz` + ‏`/live/initrd.img` עם `imagesrv.mode=installer`. אין מתקין דביאן ואין preseed | המסך |
 | המתקין בגואי | דיסק (רשימה + "אני מבין" למחיקה) ← תפקיד ← רשת ניהול (DHCP או סטטית, כרטיס אחד, שם קריא; #2096) ← שם ← מנהל **וסיסמת root** (#1632) ← סיכום ← התקדמות ← "ההתקנה הושלמה" (הפעלה מחדש אוטומטית אחרי 90 שניות, או Enter) | המסך |
-| המנוע | ‏`installer/gui-bridge.sh` ← `imagectl-install`: ‏GPT, ‏debootstrap מ-`/cdrom`, ‏`packages.txt` מה-pool, ‏GRUB לשתי הקושחות, ‏`/etc/imagectl/answers` (בלי סיסמאות) + ‏`answers.secret` (‏0600), ‏`iso-release.json`, המאגר המקומי `/var/lib/imagectl/apt-repo` | המסך |
-| אתחול ראשון | ‏`imagectl-firstboot` בונה `initrd.img` + `initrd.img.gui`, ואז `firstboot-answers.sh` מריץ את `setup-boot-server.sh` מהתשובות (הסיסמה דרך FD 3; ‏`answers.secret` נמחק), מאמת את המטען, ומדליק את ה-DCUI על tty1. **בלי אשף.** הכרטיס נקבע לפי MAC, ולכן שינוי השם (`eth0` ← `ens33`) לא מאבד את הכתובת (#2124) | המסך + `journalctl -u imagectl-firstboot` |
+| המנוע | ‏`installer/gui-bridge.sh` ← `imagesrv-install`: ‏GPT, ‏debootstrap מ-`/cdrom`, ‏`packages.txt` מה-pool, ‏GRUB לשתי הקושחות, ‏`/etc/imagesrv/answers` (בלי סיסמאות) + ‏`answers.secret` (‏0600), ‏`iso-release.json`, המאגר המקומי `/var/lib/imagesrv/apt-repo` | המסך |
+| אתחול ראשון | ‏`imagesrv-firstboot` בונה `initrd.img` + `initrd.img.gui`, ואז `firstboot-answers.sh` מריץ את `setup-boot-server.sh` מהתשובות (הסיסמה דרך FD 3; ‏`answers.secret` נמחק), מאמת את המטען, ומדליק את ה-DCUI על tty1. **בלי אשף.** הכרטיס נקבע לפי MAC, ולכן שינוי השם (`eth0` ← `ens33`) לא מאבד את הכתובת (#2124) | המסך + `journalctl -u imagesrv-firstboot` |
 | הקונסולה | `https://<כתובת>:8081`; ה-DCUI מציג את הכתובת ואת טביעת התעודה (זהה למה ש-openssl רואה; #2095). רשת ההפצה מוגדרת ממדף הרשת | הדפדפן |
 
 **האשף (למעלה) הוא המסלול בלי `answers`:** שרת שהותקן בדרך אחרת. אז ‏DHCP זמני, ‏DCUI טרום-התקנה ואשף ב-8081, והאתחול הראשון **אינו מנחש כרטיס**: ‏`network-nic-undecidable` ו-`check-error` נרשמים בשם ביומן ומחייבים בחירה.
@@ -342,9 +342,9 @@ SIGTERM. באינסטנס משותף זה אומר שמתג בקונסולה י�
 
 | | האינסטנס הראשי | אינסטנס ה-proxy |
 |---|---|---|
-| יחידה | `dnsmasq` | `imagectl-proxy` |
-| קובץ בסיס | `/etc/dnsmasq.d/imagectl.conf` (המתקין) | — |
-| קובץ מהקונסולה | `/etc/dnsmasq.d/imagectl-dhcp.conf` | `/etc/imagectl/dnsmasq-proxy.conf` |
+| יחידה | `dnsmasq` | `imagesrv-proxy` |
+| קובץ בסיס | `/etc/dnsmasq.d/imagesrv.conf` (המתקין) | — |
+| קובץ מהקונסולה | `/etc/dnsmasq.d/imagesrv-dhcp.conf` | `/etc/imagesrv/dnsmasq-proxy.conf` |
 | מה הוא עושה | DHCP מלא + TFTP | תשובות PXE בלבד + TFTP לכרטיסים שלו |
 | מתי רץ | תמיד | רק כשכרטיס במצב proxy |
 
@@ -353,20 +353,20 @@ SIGTERM. באינסטנס משותף זה אומר שמתג בקונסולה י�
 כל כרטיס proxy מופיע כ-`except-interface`, ומפורשות **לא** כ-`interface`
 — גם לא כדי להגיש TFTP, כי אז שני התהליכים היו נלחמים על פורט 69.
 
-המתקין יוצר את `/etc/imagectl`, מעתיק את `imagectl-proxy.service`
+המתקין יוצר את `/etc/imagesrv`, מעתיק את `imagesrv-proxy.service`
 ומשאיר את היחידה כבויה. הקונסולה היא שמריצה `systemctl restart` או
 `stop` עליה לפי מצב הכרטיסים, ולכן היחידה אינה `enabled`: אחרי אתחול
 היא לא עולה מעצמה, ומצב proxy נדלק ביודעין. יחידת השרת מוסיפה
-`-/etc/imagectl` ל-`ReadWritePaths` (המקף = "התעלם אם אינו קיים", כדי
+`-/etc/imagesrv` ל-`ReadWritePaths` (המקף = "התעלם אם אינו קיים", כדי
 ששרת ותיק בלי התיקייה יעלה כרגיל).
 
 **שדרוג שרת קיים** — שלושה צעדים, בלי התקנה מחדש:
 
 ```bash
-sudo install -d -m 0755 /etc/imagectl
-sudo install -m 0644 install/imagectl-proxy.service /etc/systemd/system/
-sudo install -m 0644 install/imagectl-server.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl restart imagectl-server
+sudo install -d -m 0755 /etc/imagesrv
+sudo install -m 0644 deploy/imagesrv-proxy.service /etc/systemd/system/
+sudo install -m 0644 deploy/imagesrv-server.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl restart imagesrv-server
 ```
 
 **אזהרה שנשארת בתוקף:** גם מבודד, ה-proxy עצמו עדיין קופא ב-2.91 —
@@ -384,10 +384,10 @@ sudo systemctl daemon-reload && sudo systemctl restart imagectl-server
 ### חתימה על גרסאות (‏#1277)
 
 כפתור העדכון מוריד קוד מגיטהאב ומריץ אותו כ-root. ‏TLS מוכיח שהקוד הגיע
-שלם מגיטהאב — לא שמפתח ImageCtl יצר את התג. לכן כל גרסה מתפרסמת עם **תג
+שלם מגיטהאב — לא שמפתח ImageSrv יצר את התג. לכן כל גרסה מתפרסמת עם **תג
 חתום**, והשרת מסרב לעדכן לתג שאינו חתום במפתח שהוא מכיר:
 
-- **המפתח הציבורי** נמצא ב-`install/release-signers` — חלק מעץ הקוד, ולכן
+- **המפתח הציבורי** נמצא ב-`deploy/release-signers` — חלק מעץ הקוד, ולכן
   מגיע עם ה-ISO ועם כל התקנה. השרת קורא אותו מהעץ **המותקן**, לא מהגרסה
   שמגיעה: גרסה שנחתמה במפתח זר לא יכולה להביא איתה את המפתח שיאשר אותה.
 - **"בדוק עדכון"** מציג ליד הגרסה החדשה: **חתום** (עם טביעת המפתח), **לא
@@ -423,25 +423,25 @@ sudo systemctl daemon-reload && sudo systemctl restart imagectl-server
 לכן זו יחידת systemd נפרדת, שאינה יודעת דבר על השרת:
 
 ```bash
-sudo install -m 0644 install/imagectl-netrollback.service \
-                     install/imagectl-netrollback.timer \
+sudo install -m 0644 deploy/imagesrv-netrollback.service \
+                     deploy/imagesrv-netrollback.timer \
                      /etc/systemd/system/
-sudo install -m 0644 install/imagectl-server.service /etc/systemd/system/
+sudo install -m 0644 deploy/imagesrv-server.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now imagectl-netrollback.timer
-sudo systemctl restart imagectl-server
+sudo systemctl enable --now imagesrv-netrollback.timer
+sudo systemctl restart imagesrv-server
 ```
 
 | | |
 |---|---|
-| היחידה | `imagectl-netrollback.service` — ‏`python3 -m server.netcfg_rollback` |
-| הטיימר | `imagectl-netrollback.timer` — ‏`OnBootSec=0`, ואז כל עשר שניות |
-| הסמן | `/var/lib/imagectl/netcfg/pending.json` |
-| ‏ReadWritePaths של היחידה | `/var/lib/imagectl /etc/network/interfaces.d /etc` |
+| היחידה | `imagesrv-netrollback.service` — ‏`python3 -m server.net.netcfg_rollback` |
+| הטיימר | `imagesrv-netrollback.timer` — ‏`OnBootSec=0`, ואז כל עשר שניות |
+| הסמן | `/var/lib/imagesrv/netcfg/pending.json` |
+| ‏ReadWritePaths של היחידה | `/var/lib/imagesrv /etc/network/interfaces.d /etc` |
 
 **‏`--state-dir` חייב להתאים לשרת.** ברירת המחדל בשרת היא
-`<data-dir>/netcfg`, וה-`data-dir` הוא `/var/lib/imagectl` — כלומר
-`/var/lib/imagectl/netcfg`, בדיוק כמו ב-`ExecStart`. שני נתיבים שונים
+`<data-dir>/netcfg`, וה-`data-dir` הוא `/var/lib/imagesrv` — כלומר
+`/var/lib/imagesrv/netcfg`, בדיוק כמו ב-`ExecStart`. שני נתיבים שונים
 פירושם שהסמן נכתב במקום אחד ונקרא באחר: זה נראה בדיוק כמו הגנה
 שעובדת, וזו הגנה שלעולם לא תיפעל.
 
@@ -496,10 +496,10 @@ tftp <כתובת-השרת> -c get bootx64.efi
 
 מה יש לגבות, ומה **לא** צריך: האימג'ים הם תיקיות עם `manifest.json`
 (הדיסק הוא מקור האמת, עיקרון 3) — הם מועתקים כקבצים ומאומתים מול
-המניפסט. ה-DB (`/var/lib/imagectl/imagectl.db`, ‏sqlite ב-WAL) מחזיק את
+המניפסט. ה-DB (`/var/lib/imagesrv/imagesrv.db`, ‏sqlite ב-WAL) מחזיק את
 מה שאין לו ייצוג כקבצים: מכונות וקבוצות, משתמשים, סודות MFA,
-‏`console_secret` (חותם את ה-cookies), מיקומי אחסון. **‏`cp imagectl.db`
-בזמן שהשרת רץ אינו גיבוי** — ב-WAL חלק מהטרנזאקציות יושב ב-`imagectl.db-wal`,
+‏`console_secret` (חותם את ה-cookies), מיקומי אחסון. **‏`cp imagesrv.db`
+בזמן שהשרת רץ אינו גיבוי** — ב-WAL חלק מהטרנזאקציות יושב ב-`imagesrv.db-wal`,
 והעותק יוצא חסר או לא תקין. הכלים כאן מעתיקים דרך ה-backup API של sqlite
 ובודקים `integrity_check` על העותק; "נכתב" אינו "קריא".
 
@@ -507,7 +507,7 @@ tftp <כתובת-השרת> -c get bootx64.efi
 
 | כלי | מה הוא עושה | מתי |
 |---|---|---|
-| `tools/backup-server.sh --dest DIR` | ‏DB (עותק עקבי + integrity) → `db/`, שאר `data_dir` → `data/`, קובצי המערכת של ImageCtl (dnsmasq, nftables, ‏interfaces.d, ‏`/etc/imagectl`, שורות fstab, יחידות) → `system/<ts>/`, אימג'ים → `images/` (‏rsync **בלי** `--delete` — או `cp -au` כשאין rsync, כמו בשרת מה-ISO של v0.53.0 — בלי `.capture-*`/`.import-*`) **ואימות** מול המניפסטים; ‏`SHA256SUMS-<ts>`. ‏`--no-images` לריצה השעתית | cron |
+| `tools/backup-server.sh --dest DIR` | ‏DB (עותק עקבי + integrity) → `db/`, שאר `data_dir` → `data/`, קובצי המערכת של ImageSrv (dnsmasq, nftables, ‏interfaces.d, ‏`/etc/imagesrv`, שורות fstab, יחידות) → `system/<ts>/`, אימג'ים → `images/` (‏rsync **בלי** `--delete` — או `cp -au` כשאין rsync, כמו בשרת מה-ISO של v0.53.0 — בלי `.capture-*`/`.import-*`) **ואימות** מול המניפסטים; ‏`SHA256SUMS-<ts>`. ‏`--no-images` לריצה השעתית | cron |
 | `tools/verify-images.py DIR` | לכל `manifest.json`: ‏sha256 של כל מחיצה מול המניפסט. יציאה 0 רק כשהכול תואם; **אפס אימג'ים אינו פאס** (יציאה 3) אלא עם `--allow-empty` | אחרי כל העתקה, ועל השרת עצמו |
 | `tools/restore-drill.sh` | גיבוי (או `--backup DIR` קיים) → שחזור לתיקייה זמנית → **שרת שני** על העותק (‏loopback, פורט 18080+, כ-`nobody` כדי שלא ייגע ב-`/etc` של הייצור) → `GET /health/live` = 200, מספר האימג'ים שווה, ‏verify-images ירוק. **זה הפאס** — לא `is-active`. ‏`--skip-images` כשאין מקום לעותק האימג'ים (אז DB ותצורה בלבד, ונאמר) | שבועי |
 
@@ -522,40 +522,40 @@ tftp <כתובת-השרת> -c get bootx64.efi
 - **אימג'ים: אחרי כל קליטה/העלאה + לילי** — `backup-server.sh` מלא.
 
 ```bash
-# /etc/cron.d/imagectl-backup — יעד על דיסק אחר או NAS מעוגן
-0 * * * *   root  bash /opt/imagectl/tools/backup-server.sh --dest /backup/imagectl --no-images >> /var/log/imagectl-backup.log 2>&1
-30 2 * * *  root  bash /opt/imagectl/tools/backup-server.sh --dest /backup/imagectl >> /var/log/imagectl-backup.log 2>&1
-0 4 * * 0   root  bash /opt/imagectl/tools/restore-drill.sh --backup /backup/imagectl >> /var/log/imagectl-backup.log 2>&1
+# /etc/cron.d/imagesrv-backup — יעד על דיסק אחר או NAS מעוגן
+0 * * * *   root  bash /opt/imagesrv/tools/backup-server.sh --dest /backup/imagesrv --no-images >> /var/log/imagesrv-backup.log 2>&1
+30 2 * * *  root  bash /opt/imagesrv/tools/backup-server.sh --dest /backup/imagesrv >> /var/log/imagesrv-backup.log 2>&1
+0 4 * * 0   root  bash /opt/imagesrv/tools/restore-drill.sh --backup /backup/imagesrv >> /var/log/imagesrv-backup.log 2>&1
 ```
 
 `db/` צובר קובץ לכל ריצה — לגזום לפי מדיניות האתר (למשל
-`find /backup/imagectl/db -name 'imagectl-*.db' -mtime +30 -delete`).
+`find /backup/imagesrv/db -name 'imagesrv-*.db' -mtime +30 -delete`).
 
 ### סדר השחזור לשרת חדש
 
 1. **התקנה נקייה** מה-ISO (או `setup-boot-server.sh`) לאותה גרסה
    (‏`MANIFEST.txt` / שם קובץ ה-DB אומרים איזו). לא לגעת בקונסולה עדיין.
-2. `systemctl stop imagectl-server imagectl-proxy`.
-3. **‏`data_dir`:** ‏`rsync -a <גיבוי>/data/ /var/lib/imagectl/` ואז
-   `cp <גיבוי>/db/imagectl-<האחרון>.db /var/lib/imagectl/imagectl.db`
-   (למחוק `imagectl.db-wal`/`-shm` ישנים אם יש). התעודה, ‏`console_secret`
+2. `systemctl stop imagesrv-server imagesrv-proxy`.
+3. **‏`data_dir`:** ‏`rsync -a <גיבוי>/data/ /var/lib/imagesrv/` ואז
+   `cp <גיבוי>/db/imagesrv-<האחרון>.db /var/lib/imagesrv/imagesrv.db`
+   (למחוק `imagesrv.db-wal`/`-shm` ישנים אם יש). התעודה, ‏`console_secret`
    ו-MFA **משוחזרים, לא נוצרים מחדש** — מי שהיה רשום ממשיך להיכנס.
-4. **אימג'ים:** ‏`rsync -a <גיבוי>/images/ /srv/imagectl/images/` ואז
-   `python3 tools/verify-images.py /srv/imagectl/images` — חייב 0.
+4. **אימג'ים:** ‏`rsync -a <גיבוי>/images/ /srv/imagesrv/images/` ואז
+   `python3 tools/verify-images.py /srv/imagesrv/images` — חייב 0.
 5. **קובצי מערכת — בזהירות:** ‏`system/<ts>/` מכיל שמות כרטיסים
    (‏`ens33`, ‏`enp3s0`) של השרת הישן. על חומרה אחרת **לא** מעתיקים
    עיוור: משווים, ומתקנים שמות כרטיסים ב-dnsmasq/nftables/interfaces.d
    לפני שמעתיקים. ‏`/etc/iscsi/initiatorname.iscsi` — לפי ACL של האחסון
    (הכרעת אתר: לשמור את הישן או לרשום את החדש באחסון).
 6. **‏boot payload:** ‏`tools/build_initramfs.sh` (או ההעתקה מה-ISO), ואז
-   `bash install/verify-boot-payload.sh --server-url http://<כתובת ההפצה>:8080`.
-7. `systemctl start imagectl-server` → קונסולה → **בריאות** ירוק.
+   `bash deploy/verify-boot-payload.sh --server-url http://<כתובת ההפצה>:8080`.
+7. `systemctl start imagesrv-server` → קונסולה → **בריאות** ירוק.
 8. **ניתוק sessions ישנים:** לכל מנהל — משתמשים → "נתק מכל מקום"
    (‏`POST /api/console/sessions/revoke`): ‏cookies שנחתמו על השרת הישן
    תקפים גם כאן (אותו `console_secret`), וזה הרגע לאפס אותם.
 
 **הכרעות נעולות (R41 §10):** ‏backup API למחזורי, ‏`VACUUM INTO` לאד-הוק;
-העתקה גולמית של `imagectl.db` **רק** כשהשרת עצור; תרגיל restore שבועי.
+העתקה גולמית של `imagesrv.db` **רק** כשהשרת עצור; תרגיל restore שבועי.
 
 ---
 

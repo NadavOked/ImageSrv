@@ -16,8 +16,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import capture  # noqa: E402
-from server.tasks import TOKEN_HEADER, staging_dir  # noqa: E402
+from server.library import capture  # noqa: E402
+from server.core.tasks import TOKEN_HEADER, staging_dir  # noqa: E402
 
 from test_capture import (  # noqa: E402
     PART_A, PART_B, make_task, manifest_for, setup_build_machine, task_token,

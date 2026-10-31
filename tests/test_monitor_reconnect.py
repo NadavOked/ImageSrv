@@ -4,9 +4,9 @@
 רק ב-hello הבא. כל חיבור חוזר לפני ה-hello נדחה ב-`password check failed!`
 — שש דחיות ברצף במעבר מהיר בין שלוש מכונות. התיקון: הסוד הבא **נגזר**
 בשני הצדדים מאותו סוד ומאותו challenge (HMAC-SHA256(סוד,
-‏"imagectl-monitor-rekey"‖challenge)[:16]), ברגע האימות. ‏`RekeyingMachine`
+‏"imagesrv-monitor-rekey"‖challenge)[:16]), ברגע האימות. ‏`RekeyingMachine`
 כאן הוא המראה של `agent/monitor.c` — הגזירה כתובה בו **בנפרד** מ-
-‏`server.monitor.next_secret`, כדי שהטסט לא יאשר את עצמו;
+‏`server.console.monitor.next_secret`, כדי שהטסט לא יאשר את עצמו;
 ‏`test_monitor_native.py` מריץ את הבינארי האמיתי מול אותו וקטור.
 
 בקרה שלילית: על הקוד שלפני התיקון (‏`server/*` ו-`agent/monitor.c` של
@@ -26,7 +26,7 @@ pytest.importorskip("fastapi")
 
 from starlette.websockets import WebSocketDisconnect
 
-from server import monitor
+from server.console import monitor
 from server import db as db_module
 from test_monitor import (CHALLENGE, MAC, SECRET, SERVER_INIT, FakeMachine,
                           browser_handshake, hello_with_secret, hmac16,
@@ -34,12 +34,12 @@ from test_monitor import (CHALLENGE, MAC, SECRET, SERVER_INIT, FakeMachine,
 
 #: וקטור ידוע של הגזירה — חושב פעם אחת, לא בזמן הטסט. ‏`test_monitor_native`
 #: מוודא שהבינארי של הסוכן כותב לקובץ הסוד בדיוק את זה.
-KNOWN_NEXT = "fe24991e4bf38d8e110c7f8010d5806b"
+KNOWN_NEXT = "408f3bced059aba379c89a413e334fed"
 
 
 def rekey(secret: str, challenge: bytes) -> str:
     """‏`rekey_secret` של monitor.c, כתוב כאן בנפרד מהשרת."""
-    return hmaclib.new(bytes.fromhex(secret), b"imagectl-monitor-rekey" + challenge,
+    return hmaclib.new(bytes.fromhex(secret), b"imagesrv-monitor-rekey" + challenge,
                        hashlib.sha256).digest()[:16].hex()
 
 

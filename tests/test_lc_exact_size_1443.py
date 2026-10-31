@@ -42,10 +42,10 @@ from native import requires_native
 from test_cloner_gui import BASH, posix
 from test_json_escape import BUSYBOX, busybox_env
 from test_local_clone_agent import run
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
-LIB = REPO / "agent" / "lib"
-
+LIB = flat_lib()
 needs_busybox = requires_native(("busybox", BUSYBOX), posix=True,
                                 why="the agent runs under busybox ash: its awk, its kill/wait")
 
@@ -90,7 +90,7 @@ def _ash(tmp_path: Path, body: str, stubs: dict[str, str] | None = None, **env: 
     e = busybox_env(tmp_path)
     # no real partclone may answer for a missing stand-in: the stubs, busybox, the base system only
     e["PATH"] = os.pathsep.join([str(sdir), e["PATH"].split(os.pathsep)[0], "/usr/bin", "/bin"])
-    e.update(RUN_DIR=str(run_dir), STUB_DIR=str(sdir), DEVROOT=str(tmp_path / "dev"), IMAGECTL_TEST="1", **env)
+    e.update(RUN_DIR=str(run_dir), STUB_DIR=str(sdir), DEVROOT=str(tmp_path / "dev"), IMAGESRV_TEST="1", **env)
     (tmp_path / "dev").mkdir(exist_ok=True)
     pre = "".join(f'. "{LIB}/{n}.sh"\n' for n in ("common", "waits", "restore", "manifest", "lcinv", "lcsize"))
     script = tmp_path / "t.sh"
@@ -154,7 +154,7 @@ def _measure(tmp_path, ntfs: str | None, fat: str | None = None, **env):
     body = FS_OF + f'cp "{posix(tmp_path / "parts")}" "$LC/inv/sdc.parts"\n' + SHOW
     out, took = _ash(tmp_path, body, stubs, **env)
     assert out.returncode == 0, out.stderr
-    got = dict(l.split("=", 1) for l in out.stdout.splitlines() if "=" in l and not l.startswith("imagectl"))
+    got = dict(l.split("=", 1) for l in out.stdout.splitlines() if "=" in l and not l.startswith("imagesrv"))
     calls = (tmp_path / "stubs" / "calls.log")
     return got, (calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []), took
 
@@ -240,7 +240,7 @@ def test_lc_measure_writes_the_copy_size_on_every_path(tmp_path):
               'lc_measure sdc; echo "rc=$?"; echo "m=$(cat "$LC/measure/sdc")"; echo "c=$(cat "$LC/measure/sdc.copy")"; '
               '_lc_measure_fit() { return 1; }; lc_measure sdc; echo "rc=$?"; echo "c=$(cat "$LC/measure/sdc.copy")"')
     assert out.returncode == 0, out.stderr
-    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagectl")]
+    lines = [l for l in out.stdout.splitlines() if not l.startswith("imagesrv")]
     assert lines == ["seen=", "rc=0", "m=none||", "c=1|", "seen=", "rc=1", "c=1|"], lines
 
 

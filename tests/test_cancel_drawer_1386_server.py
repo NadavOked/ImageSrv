@@ -124,7 +124,7 @@ def test_refusals_say_why(room_server):
 
 
 def test_only_a_round_operator_signed_in_may_cancel(room_server, monkeypatch):
-    from server import room as room_module                  # noqa: PLC0415
+    from server.rounds import room as room_module                  # noqa: PLC0415
     anon = room_server["anon"]
     wave = _running(room_server)
     _progress(anon, wave, CLONER1, {"sda": "writing", "sdb": "writing"})
@@ -152,7 +152,7 @@ def test_console_and_build_machine_are_told_apart(kiosk_env, monkeypatch):  # no
     """The split apps of production: the console (:8081) records "על ידי", the
     kiosk of the build machine (:8080) "ממחשב הבנייה" -- same RBAC, same route."""
     from fastapi.testclient import TestClient                # noqa: PLC0415
-    from server import sender as sender_module               # noqa: PLC0415
+    from server.rounds import sender as sender_module               # noqa: PLC0415
     monkeypatch.setattr(sender_module, "port_holders", lambda _port: [])   # as room_server: no /proc/net/udp here
     rt = kiosk_env["rt"]
     mac = "aa:bb:cc:00:00:20"

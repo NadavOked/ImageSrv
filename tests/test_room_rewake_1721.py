@@ -22,10 +22,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from server import room as room_mod
+from server.rounds import room as room_mod
 
 try:
-    from server import clockstep          # #1947
+    from server.system import clockstep          # #1947
 except ImportError:                       # pragma: no cover — negative control
     clockstep = None
 

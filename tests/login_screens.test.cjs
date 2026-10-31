@@ -33,7 +33,7 @@ function setup() {
     },
     window: {addEventListener() {}, matchMedia: () => ({matches: false})},
     localStorage: {getItem: () => null, setItem() {}, removeItem() {}},
-    location: {hostname: 'imagectl-srv'},
+    location: {hostname: 'imagesrv-srv'},
     navigator: {clipboard: {writeText: async () => {}}},
     CSS: {escape: (x) => x},
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},

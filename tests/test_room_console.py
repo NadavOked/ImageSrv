@@ -1,4 +1,4 @@
-"""‏#980 — כיבוי כל המשכפלים והיסטוריית סבבי החדר (‏`server/room_console.py`).
+"""‏#980 — כיבוי כל המשכפלים והיסטוריית סבבי החדר (‏`server/rounds/room_console.py`).
 
 הכיבוי **אינו** נעשה מהשרת: הוא בקשה שנוסעת בתשובת ה-hello הבא
 (‏`power_action`), והסוכן מכבה אחרי `arm_wol` (‏#587). מה שנבדק כאן:
@@ -26,7 +26,7 @@ LABEL = "מחשבי שיכפול"
 
 @pytest.fixture()
 def server(tmp_path: Path, images_root):
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
@@ -121,7 +121,7 @@ def test_deploy_and_anonymous_cannot_power_off_the_room(server):
 
 
 def test_an_expired_request_does_not_power_off_a_machine_that_boots_later(server):
-    from server import room_console
+    from server.rounds import room_console
 
     assert server["admin"].post("/api/console/room/poweroff",
                                 json={"confirm_name": LABEL}).status_code == 200

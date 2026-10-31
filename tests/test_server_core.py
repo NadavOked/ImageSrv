@@ -12,10 +12,11 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import registry, users
+from server.agent import registry
+from server.console import users
 from server.db import connect
-from server.images import ImageLibrary
-from server.sessions import SessionError, SessionStore
+from server.library.images import ImageLibrary
+from server.rounds.sessions import SessionError, SessionStore
 
 from conftest import MANIFEST_256, MANIFEST_500, MANIFEST_LINUX, Clock, write_image
 
@@ -82,7 +83,7 @@ def test_conflicting_suffix_is_an_error_not_a_note(tmp_path):
 #: הגבול נגזר בטסט בדיוק כמו בקוד — מ-HOSTNAME_MAX (קיים גם על ה-base)
 #: ומהקידומת הארוכה ביותר ("ROOM") — ולא כמספר קסם, כדי שהבקרה השלילית
 #: תיכשל **התנהגותית** ולא ב-ImportError על הסמל החדש.
-from server.sessions import HOSTNAME_MAX          # noqa: E402
+from server.rounds.sessions import HOSTNAME_MAX          # noqa: E402
 _NAME_MAX = HOSTNAME_MAX - len("ROOM") - 1        # = 10
 
 

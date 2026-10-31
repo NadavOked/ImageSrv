@@ -1,13 +1,13 @@
 # Third-party notices
 
-ImageSrv / ImageCtl is released under the MIT License (see `LICENSE`).
+ImageSrv is released under the MIT License (see `LICENSE`).
 The ISO, the boot image (initramfs) and the server install additionally
 contain, or install from the Debian archive, software written by others.
 That software stays under its own licenses, listed below. Nothing here
 changes those licenses.
 
 > DRAFT for review by the project owner. Versions are not frozen here: the
-> exact package versions of every release are in `imagectl-iso.json`
+> exact package versions of every release are in `imagesrv-iso.json`
 > (`pool_debs`: name + version + sha256), shipped next to each ISO and
 > inside it. License names below are the Debian packaging metadata
 > (`/usr/share/doc/<package>/copyright`) as understood at drafting time and
@@ -67,7 +67,7 @@ Assistant, Cascadia Mono, ...) are system-font fallbacks; no font file is shippe
 | dbus | AFL-2.1 OR GPL-2.0+ |
 | systemd-timesyncd | LGPL-2.1+ |
 | ca-certificates | MPL-2.0 (CA bundle), GPL-2.0+ (scripts) |
-| Everything else pulled in as a dependency by `make-pool.sh` | see `pool_debs` in `imagectl-iso.json` and each package's `copyright` file |
+| Everything else pulled in as a dependency by `make-pool.sh` | see `pool_debs` in `imagesrv-iso.json` and each package's `copyright` file |
 
 ### C. Boot-image (initramfs) tools
 
@@ -100,8 +100,8 @@ Assistant, Cascadia Mono, ...) are system-font fallbacks; no font file is shippe
 | Live installer only: debootstrap, dpkg, perl-base, dash, dosfstools, eject | per Debian `copyright` files (mostly GPL-2.0+ / BSD / Artistic) |
 
 Our own programs in the initramfs (`fanout`, `hivewrite`, `lldpsniff`,
-`imagectl-monitor`, `native-gui`, the agent shell scripts) are MIT. Note that
-`imagectl-monitor` links LibVNCServer (section D), see the note there.
+`imagesrv-monitor`, `native-gui`, the agent shell scripts) are MIT. Note that
+`imagesrv-monitor` links LibVNCServer (section D), see the note there.
 
 ### D. Kiosk / GUI libraries and font (`--with-gui`)
 
@@ -123,7 +123,7 @@ Our own programs in the initramfs (`fanout`, `hivewrite`, `lldpsniff`,
 | libdrm | 2.4.124-2 | MIT |
 | **IBM Plex** (`fonts-ibm-plex`, only a few faces are used) | 6.1.1-1 | **SIL OFL-1.1** (Reserved Font Name "Plex") (verified) |
 
-Linking note: `imagectl-monitor` is our MIT code linked with LibVNCServer
+Linking note: `imagesrv-monitor` is our MIT code linked with LibVNCServer
 (GPL-2.0+). The resulting binary is distributed under the GPL-2.0+; its
 complete source is `agent/monitor.c` and `agent/hmac_sha256.c` in this
 repository (MIT, which is GPL-compatible).
@@ -197,7 +197,7 @@ physically providing it. Contact: <CONTACT-ADDRESS-TO-BE-FILLED>.
 package. Its source package of the same version is published by Debian:
 `https://deb.debian.org/debian/pool/` and permanently at
 `https://snapshot.debian.org/`. The exact versions of a release are listed in
-`imagectl-iso.json` (`pool_debs`). `apt-get source <package>=<version>` fetches
+`imagesrv-iso.json` (`pool_debs`). `apt-get source <package>=<version>` fetches
 a given source package. We keep a copy of those source packages for each
 release. (TO BE CONFIRMED: see decision 2.)
 
@@ -213,12 +213,6 @@ release. (TO BE CONFIRMED: see decision 2.)
 * IBM Plex, SIL Open Font License 1.1: https://openfontlicense.org/ and
   `/usr/share/doc/fonts-ibm-plex/`.
 
-## 5. Not distributed
-
-The directory `vendor/diskless-pxe` (an iPXE/Alpine/kiosk scaffold) is stored
-in the repository only. It is not built into any release; the packages it
-names (Alpine, cage, cog, Mesa, iPXE) are not shipped.
-
 "Debian" is a registered trademark of Software in the Public Interest, Inc.
-ImageCtl is not affiliated with or endorsed by the Debian project; the ISO is
+ImageSrv is not affiliated with or endorsed by the Debian project; the ISO is
 built from the official Debian netinst image and Debian packages.

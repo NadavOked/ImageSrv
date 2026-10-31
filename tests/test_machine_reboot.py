@@ -30,7 +30,7 @@ STATION = "aa:bb:cc:00:00:31"
 
 @pytest.fixture()
 def server(tmp_path, images_root):
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",

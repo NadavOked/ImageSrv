@@ -1,5 +1,5 @@
 #!/bin/bash
-# build_initramfs.sh -- builds the ImageCtl agent initramfs on a Debian
+# build_initramfs.sh -- builds the ImageSrv agent initramfs on a Debian
 # machine (the boot server itself is fine). The output is a cpio.gz that
 # GRUB loads after the distro kernel; nothing in it needs signing.
 #
@@ -17,15 +17,15 @@
 # SOURCE_DATE_EPOCH -- the flag, the environment variable, or the time of
 # the commit the checkout is at, in that order.
 #
-# IMAGECTL_EXTRA_OVERLAY=<dir> (environment, optional) is the lab/site
+# IMAGESRV_EXTRA_OVERLAY=<dir> (environment, optional) is the lab/site
 # overlay (#1266): files the product does not know about, copied over the
 # image just before packing -- see "site/lab overlay" near the end.
 #
 # --tools-selection packs the IT toolbox the operator chose in the console
 # (#1050): FILE is <data_dir>/tools-selection.json (interfaces.md §23). Its
-# "build" ids are mapped to binaries through agent/lib/toolbins.sh -- the
+# "build" ids are mapped to binaries through agent/lib/tools/toolbins.sh -- the
 # same table the station filters by -- and the file itself rides into the
-# initrd as /etc/imagectl/tools-selection.json. Without the flag no toolbox
+# initrd as /etc/imagesrv/tools-selection.json. Without the flag no toolbox
 # binary beyond the base set is packed and the tools screen is empty.
 #
 # The agent scripts are taken from the agent/ directory next to this
@@ -35,7 +35,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 AGENT_DIR="$SCRIPT_DIR/../agent"
-OUTPUT="$PWD/imagectl-initramfs.cpio.gz"
+OUTPUT="$PWD/imagesrv-initramfs.cpio.gz"
 KVER="$(uname -r)"
 SKIP_APT=0
 WITH_GUI=0
@@ -73,23 +73,23 @@ done
 # path should cost a second, not the whole build. Set but not a directory
 # is an error, never "no overlay" -- that would be a lab image built
 # without the lab's files and looking exactly like one built with them.
-EXTRA_OVERLAY="${IMAGECTL_EXTRA_OVERLAY:-}"
+EXTRA_OVERLAY="${IMAGESRV_EXTRA_OVERLAY:-}"
 if [ -n "$EXTRA_OVERLAY" ]; then
     [ -d "$EXTRA_OVERLAY" ] \
-        || { echo "IMAGECTL_EXTRA_OVERLAY is not a directory: $EXTRA_OVERLAY" >&2; exit 1; }
+        || { echo "IMAGESRV_EXTRA_OVERLAY is not a directory: $EXTRA_OVERLAY" >&2; exit 1; }
 fi
 
 # --- the toolbox selection (--tools-selection, #1050) ---------------------------
 # Resolved here, before apt and the compiles, for the same reason as the
 # overlay: an id the table does not know should cost a second, not a build.
-# tools_bins_plan (agent/lib/toolbins.sh -- POSIX sh, bash sources it fine)
+# tools_bins_plan (agent/lib/tools/toolbins.sh -- POSIX sh, bash sources it fine)
 # prints one binary per line and exits 1 naming every unknown id; an empty
 # "build" list is a valid answer and packs nothing.
 TOOL_BINS=()
 if [ -n "$TOOLS_SELECTION_FILE" ]; then
     [ -f "$TOOLS_SELECTION_FILE" ] \
         || { echo "tools selection file not found: $TOOLS_SELECTION_FILE" >&2; exit 1; }
-    . "$AGENT_DIR/lib/toolbins.sh"
+    . "$AGENT_DIR/lib/tools/toolbins.sh"
     _plan=$(tools_bins_plan "$TOOLS_SELECTION_FILE") \
         || { echo "--tools-selection: the selection is not packable (see above)" >&2; exit 1; }
     [ -z "$_plan" ] || mapfile -t TOOL_BINS <<< "$_plan"
@@ -149,7 +149,7 @@ GUI_PACKAGES=(fonts-ibm-plex fontconfig-config
               libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0
               libcairo2 libpixman-1-0 libharfbuzz0b libfribidi0
               libfreetype6 libfontconfig1 libglib2.0-0t64 libdrm2
-              # #690: LibVNCServer runtime for imagectl-monitor. Its .so
+              # #690: LibVNCServer runtime for imagesrv-monitor. Its .so
               # closure rides along via ldd like any packed binary's.
               libvncserver1)
 
@@ -232,13 +232,13 @@ fi
 # שרת עם `/tmp` ב-tmpfs זה אומר לכתוב מאות MB אל תוך ה-RAM. תבנית
 # ‏`mktemp` שמתחילה ב-`/` מתעלמת מ-TMPDIR לגמרי, ולכן `TMPDIR=...`
 # מהקורא לא עשה דבר.
-ROOT=$(mktemp -d "${TMPDIR:-/tmp}/imagectl-initramfs.XXXXXX")
+ROOT=$(mktemp -d "${TMPDIR:-/tmp}/imagesrv-initramfs.XXXXXX")
 trap 'rm -rf "$ROOT"' EXIT
 
-mkdir -p "$ROOT"/{bin,sbin,usr/bin,usr/sbin,usr/lib/imagectl,etc/imagectl,proc,sys,dev,run,tmp,lib}
+mkdir -p "$ROOT"/{bin,sbin,usr/bin,usr/sbin,usr/lib/imagesrv,etc/imagesrv,proc,sys,dev,run,tmp,lib}
 . "$SCRIPT_DIR/initramfs-version.sh"
 stamp_initramfs_version "$SCRIPT_DIR/.." "$SOURCE_VERSION" \
-    "${IMAGECTL_ISO_MANIFEST:-/etc/imagectl/iso-release.json}" "$ROOT"
+    "${IMAGESRV_ISO_MANIFEST:-/etc/imagesrv/iso-release.json}" "$ROOT"
 
 # --- busybox and its applets -------------------------------------------------
 
@@ -314,14 +314,14 @@ EOF
 # --- the agent ---------------------------------------------------------------
 
 install -m 0755 "$AGENT_DIR/init"           "$ROOT/init"
-install -m 0755 "$AGENT_DIR/imagectl-agent" "$ROOT/usr/bin/imagectl-agent"
-install -m 0644 "$AGENT_DIR"/lib/*.sh       "$ROOT/usr/lib/imagectl/"
+install -m 0755 "$AGENT_DIR/imagesrv-agent" "$ROOT/usr/bin/imagesrv-agent"
+bash "$SCRIPT_DIR/agent-lib-flatten.sh" "$AGENT_DIR/lib" "$ROOT/usr/lib/imagesrv"
 # #1921: the two knowledge tables (SMART, hardware) -- smartjudge.sh reads them from here, and the
 # server reads the same files from the repo. A build without them would judge nothing: stop.
-install -d "$ROOT/usr/lib/imagectl/data"
+install -d "$ROOT/usr/lib/imagesrv/data"
 for _kb in smart-knowledge.tsv hw-issues.tsv; do
     [ -s "$AGENT_DIR/lib/data/$_kb" ] || { echo "build_initramfs: agent/lib/data/$_kb missing" >&2; exit 1; }
-    install -m 0644 "$AGENT_DIR/lib/data/$_kb" "$ROOT/usr/lib/imagectl/data/$_kb"
+    install -m 0644 "$AGENT_DIR/lib/data/$_kb" "$ROOT/usr/lib/imagesrv/data/$_kb"
 done
 if [ "$WITH_INSTALLER" -eq 1 ]; then
     # --installer (#1190): the live installer -- engine, its libs, the console
@@ -343,16 +343,16 @@ if [ "$WITH_INSTALLER" -eq 1 ]; then
         cp -L /usr/lib/debootstrap/pkgdetails "$ROOT/usr/lib/debootstrap/pkgdetails"
         copy_libs /usr/lib/debootstrap/pkgdetails
     fi
-    [ -x "$INSTALLER_SRC/imagectl-install" ] && [ -x "$INSTALLER_SRC/imagectl-installer" ] \
-        || { echo "--installer: $INSTALLER_SRC lacks imagectl-install/imagectl-installer" >&2; exit 1; }
-    install -d "$ROOT/usr/lib/imagectl/installer/lib"
-    install -m 0755 "$INSTALLER_SRC/imagectl-install"   "$ROOT/usr/lib/imagectl/installer/imagectl-install"
-    install -m 0755 "$INSTALLER_SRC/imagectl-installer" "$ROOT/usr/lib/imagectl/installer/imagectl-installer"
-    install -m 0644 "$INSTALLER_SRC"/lib/*.sh           "$ROOT/usr/lib/imagectl/installer/lib/"
+    [ -x "$INSTALLER_SRC/imagesrv-install" ] && [ -x "$INSTALLER_SRC/imagesrv-installer" ] \
+        || { echo "--installer: $INSTALLER_SRC lacks imagesrv-install/imagesrv-installer" >&2; exit 1; }
+    install -d "$ROOT/usr/lib/imagesrv/installer/lib"
+    install -m 0755 "$INSTALLER_SRC/imagesrv-install"   "$ROOT/usr/lib/imagesrv/installer/imagesrv-install"
+    install -m 0755 "$INSTALLER_SRC/imagesrv-installer" "$ROOT/usr/lib/imagesrv/installer/imagesrv-installer"
+    install -m 0644 "$INSTALLER_SRC"/lib/*.sh           "$ROOT/usr/lib/imagesrv/installer/lib/"
     # #1447: the zone list answers.sh checks the timezone against (not a .sh)
-    install -m 0644 "$INSTALLER_SRC/lib/zones.txt"      "$ROOT/usr/lib/imagectl/installer/lib/zones.txt"
+    install -m 0644 "$INSTALLER_SRC/lib/zones.txt"      "$ROOT/usr/lib/imagesrv/installer/lib/zones.txt"
     if [ -f "$INSTALLER_SRC/gui-bridge.sh" ]; then
-        install -m 0755 "$INSTALLER_SRC/gui-bridge.sh" "$ROOT/usr/lib/imagectl/installer/gui-bridge.sh"
+        install -m 0755 "$INSTALLER_SRC/gui-bridge.sh" "$ROOT/usr/lib/imagesrv/installer/gui-bridge.sh"
     else
         echo "--installer: installer/gui-bridge.sh not present -- the GUI cannot drive the engine in this image" >&2
     fi
@@ -366,8 +366,8 @@ gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/fanout" "$AGENT_DIR/fanout.c"
 
 # #1971: netlink KOBJECT_UEVENT listener for immediate drawer changes.
 echo "compiling uevent listener..."
-gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/imagectl-uevent" "$AGENT_DIR/uevent.c"
-[ -x "$ROOT/usr/bin/imagectl-uevent" ] || { echo "imagectl-uevent missing" >&2; exit 1; }
+gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/imagesrv-uevent" "$AGENT_DIR/uevent.c"
+[ -x "$ROOT/usr/bin/imagesrv-uevent" ] || { echo "imagesrv-uevent missing" >&2; exit 1; }
 
 # hivewrite: single-value registry reads/writes that preserve the key's
 # other values (#33). Links against libhivex (no static build shipped),
@@ -379,9 +379,9 @@ copy_libs "$ROOT/usr/bin/hivewrite"
 # lldpsniff: one LLDP frame → JSON in hello (#1048). libc only; packed in
 # every image (classroom stations report switch/port too, not only GUI).
 echo "compiling lldpsniff..."
-gcc -O2 -Wall -Wextra -o "$ROOT/usr/bin/imagectl-lldpsniff" "$AGENT_DIR/lldpsniff.c"
-[ -s "$ROOT/usr/bin/imagectl-lldpsniff" ] && [ -x "$ROOT/usr/bin/imagectl-lldpsniff" ] \
-    || { echo "imagectl-lldpsniff missing or not executable" >&2; exit 1; }
+gcc -O2 -Wall -Wextra -o "$ROOT/usr/bin/imagesrv-lldpsniff" "$AGENT_DIR/lldpsniff.c"
+[ -s "$ROOT/usr/bin/imagesrv-lldpsniff" ] && [ -x "$ROOT/usr/bin/imagesrv-lldpsniff" ] \
+    || { echo "imagesrv-lldpsniff missing or not executable" >&2; exit 1; }
 
 # libhivex converts registry key names with glibc's iconv, and iconv
 # loads its converters at runtime from the gconv directory. Without
@@ -407,14 +407,13 @@ if [ -e "$GCONV_SRC/gconv-modules.cache" ]; then
 fi
 
 # --- tools: framework (#649) -------------------------------------------------
-# The IT toolbox: agent/lib/tools.sh and every agent/lib/tools_<domain>.sh
-# ride with the lib/*.sh glob above, so a new domain module is packed by
+# The IT toolbox: agent/lib/tools/tools.sh and every agent/lib/tools/tools_<domain>.sh
+# ride with the recursive library copy above, so a new domain module is packed by
 # existing -- this gate proves it landed. The framework's built-in tools need
 # dmidecode (in BINARIES and in the apt list, so tests/test_agent.py
 # cross-checks it) and smartctl (packed since #652).
-for _t in "$AGENT_DIR"/lib/tools_*.sh "$AGENT_DIR/lib/toolbins.sh"; do
-    [ -f "$_t" ] || continue
-    [ -s "$ROOT/usr/lib/imagectl/$(basename "$_t")" ] \
+for _t in "$ROOT/usr/lib/imagesrv"/tools_*.sh "$ROOT/usr/lib/imagesrv/toolbins.sh"; do
+    [ -s "$_t" ] \
         || { echo "tools: $(basename "$_t") was not packed" >&2; exit 1; }
 done
 [ -x "$ROOT/usr/bin/dmidecode" ] || copy_bin dmidecode
@@ -451,12 +450,12 @@ if [ "$WITH_INSTALLER" -eq 1 ]; then
     done
 fi
 if [ -n "$TOOLS_SELECTION_FILE" ]; then
-    install -m 0644 "$TOOLS_SELECTION_FILE" "$ROOT/etc/imagectl/tools-selection.json"
-    [ -s "$ROOT/etc/imagectl/tools-selection.json" ] \
+    install -m 0644 "$TOOLS_SELECTION_FILE" "$ROOT/etc/imagesrv/tools-selection.json"
+    [ -s "$ROOT/etc/imagesrv/tools-selection.json" ] \
         || { echo "tools: tools-selection.json was not packed" >&2; exit 1; }
 fi
 
-cat > "$ROOT/etc/imagectl/udhcpc.script" << 'EOF'
+cat > "$ROOT/etc/imagesrv/udhcpc.script" << 'EOF'
 #!/bin/sh
 # Minimal udhcpc hook: configure the interface, default route and DNS.
 # udhcpc stays resident and renews (#1949), so this also runs mid-stream:
@@ -479,22 +478,22 @@ case "$1" in
 esac
 exit 0
 EOF
-chmod 0755 "$ROOT/etc/imagectl/udhcpc.script"
+chmod 0755 "$ROOT/etc/imagesrv/udhcpc.script"
 
 # #2040: the probe hook (udhcpc -q in agent/init). It configures nothing --
 # it only records which DHCP server answered on this NIC, so init can take the
 # NIC whose server-id is our server and leave the classroom NIC untouched.
-cat > "$ROOT/etc/imagectl/udhcpc.probe" << 'EOF'
+cat > "$ROOT/etc/imagesrv/udhcpc.probe" << 'EOF'
 #!/bin/sh
 case "$1" in
     bound|renew)
         printf 'serverid=%s\nip=%s\n' "${serverid:-}" "${ip:-}" \
-            > "/run/imagectl/dhcp-probe.$interface"
+            > "/run/imagesrv/dhcp-probe.$interface"
         ;;
 esac
 exit 0
 EOF
-chmod 0755 "$ROOT/etc/imagectl/udhcpc.probe"
+chmod 0755 "$ROOT/etc/imagesrv/udhcpc.probe"
 
 # --- the account --------------------------------------------------------------
 # The one account in the image. Something has to answer getpwnam, and the
@@ -517,7 +516,7 @@ case "$AFTER_TASK" in
     auto|poweroff|reboot) ;;
     *) echo "build_initramfs: --after-task must be auto, poweroff or reboot, got '$AFTER_TASK'" >&2; exit 2 ;;
 esac
-echo "$AFTER_TASK" > "$ROOT/etc/imagectl/after-task"
+echo "$AFTER_TASK" > "$ROOT/etc/imagesrv/after-task"
 echo "after-task: $AFTER_TASK"
 
 # --- the kiosk (optional): the build machine's graphical face ----------------
@@ -536,11 +535,11 @@ if [ "$WITH_GUI" -eq 1 ]; then
     echo "compiling the native station GUI..."
     GUI_DIR="$SCRIPT_DIR/../native-gui"
     # Force a fresh host build rather than reuse a binary from another host.
-    make -B -C "$GUI_DIR" imagectl-station-gui
-    GUI_BIN="$GUI_DIR/imagectl-station-gui"
+    make -B -C "$GUI_DIR" imagesrv-station-gui
+    GUI_BIN="$GUI_DIR/imagesrv-station-gui"
     [ -s "$GUI_BIN" ] && [ -x "$GUI_BIN" ] \
         || { echo "--with-gui: native GUI binary missing or not executable: $GUI_BIN" >&2; exit 1; }
-    install -m 0755 "$GUI_BIN" "$ROOT/usr/bin/imagectl-station-gui"
+    install -m 0755 "$GUI_BIN" "$ROOT/usr/bin/imagesrv-station-gui"
     # Same closure as measure-size.sh/copy_libs(), but this is a known ELF:
     # unresolved libraries or a failed copy must stop the GUI build.
     #
@@ -599,48 +598,48 @@ if [ "$WITH_GUI" -eq 1 ]; then
         || { echo "--with-gui: no nice binary packed ($ROOT/usr/bin/nice); the GUI starts under it (#1493)" >&2; exit 1; }
     # 17/10 (owner): the last-resort screen when the GUI is not coming back --
     # rendered here by the GUI itself, painted on the machine by
-    # agent/lib/splash.sh, which reads the size from the file name. After the
+    # agent/lib/gui/splash.sh, which reads the size from the file name. After the
     # closure, font and nice gates: the binary needs its libraries and fonts.
     SPLASH_W=640 SPLASH_H=240
-    SPLASH_RAW="$ROOT/usr/share/imagectl/splash-${SPLASH_W}x$SPLASH_H.raw"
-    mkdir -p "$ROOT/usr/share/imagectl"
+    SPLASH_RAW="$ROOT/usr/share/imagesrv/splash-${SPLASH_W}x$SPLASH_H.raw"
+    mkdir -p "$ROOT/usr/share/imagesrv"
     "$GUI_BIN" --splash-raw "$SPLASH_RAW" --size "${SPLASH_W}x$SPLASH_H" \
         || { echo "--with-gui: the last-resort screen did not render" >&2; exit 1; }
     [ -f "$SPLASH_RAW" ] && [ "$(stat -c %s "$SPLASH_RAW")" -eq $((SPLASH_W * SPLASH_H * 4)) ] \
         || { echo "--with-gui: $SPLASH_RAW is not ${SPLASH_W}x$SPLASH_H XRGB8888" >&2; exit 1; }
 
-    cat > "$ROOT/usr/bin/imagectl-kiosk" << 'EOF'
+    cat > "$ROOT/usr/bin/imagesrv-kiosk" << 'EOF'
 #!/bin/sh
-LIB_DIR=${LIB_DIR:-/usr/lib/imagectl}
+LIB_DIR=${LIB_DIR:-/usr/lib/imagesrv}
 export LIB_DIR
 . "$LIB_DIR/guibridge.sh"
 gui_main "$@"
 EOF
-    chmod 0755 "$ROOT/usr/bin/imagectl-kiosk"
+    chmod 0755 "$ROOT/usr/bin/imagesrv-kiosk"
 
     # --- the remote monitor (#690) -------------------------------------------
     # An RFB server exposing /dev/fb0 over TCP 5900, packed only in the GUI
     # image: build and cloner have a framebuffer, and a classroom station
-    # never starts it (agent/lib/monitor.sh gates by role). Input mode needs
+    # never starts it (agent/lib/core/monitor.sh gates by role). Input mode needs
     # the uinput module, declared in REQUIRED_MODULES below.
     echo "compiling the remote monitor..."
-    gcc -O2 -Wall -Wextra -o "$ROOT/usr/bin/imagectl-monitor" \
+    gcc -O2 -Wall -Wextra -o "$ROOT/usr/bin/imagesrv-monitor" \
         "$AGENT_DIR/monitor.c" "$AGENT_DIR/hmac_sha256.c" -lvncserver
-    [ -s "$ROOT/usr/bin/imagectl-monitor" ] && [ -x "$ROOT/usr/bin/imagectl-monitor" ] \
-        || { echo "--with-gui: imagectl-monitor missing or not executable" >&2; exit 1; }
+    [ -s "$ROOT/usr/bin/imagesrv-monitor" ] && [ -x "$ROOT/usr/bin/imagesrv-monitor" ] \
+        || { echo "--with-gui: imagesrv-monitor missing or not executable" >&2; exit 1; }
     # Same closure gate as the native GUI binary: an unresolved .so or a
     # failed copy is a build that looks clean and a monitor that never
     # listens -- the #78 failure mode, caught here instead of on the metal.
-    _mon_ldd=$(ldd "$ROOT/usr/bin/imagectl-monitor")
+    _mon_ldd=$(ldd "$ROOT/usr/bin/imagesrv-monitor")
     if [[ "$_mon_ldd" == *"not found"* ]]; then
-        printf '%s\n' "--with-gui: unresolved imagectl-monitor libraries:" "$_mon_ldd" >&2
+        printf '%s\n' "--with-gui: unresolved imagesrv-monitor libraries:" "$_mon_ldd" >&2
         exit 1
     fi
-    echo "imagectl-monitor ldd closure:"
+    echo "imagesrv-monitor ldd closure:"
     printf '%s\n' "$_mon_ldd"
     while read -r lib; do
         [ -f "$lib" ] \
-            || { echo "--with-gui: imagectl-monitor library missing: $lib" >&2; exit 1; }
+            || { echo "--with-gui: imagesrv-monitor library missing: $lib" >&2; exit 1; }
         mkdir -p "$ROOT$(dirname "$lib")"
         cp -L "$lib" "$ROOT$lib"
     done < <(printf '%s\n' "$_mon_ldd" | awk '/=>/ { print $3 } /^[[:space:]]*\// { print $1 }')
@@ -734,8 +733,8 @@ MODULE_SUBDIRS=(kernel/drivers/net/ethernet kernel/drivers/net/phy
 # שלא קיימת במכללה. ההצהרה כאן עולה ‏~150KB — והיא גם נבדקת.
 # These four are not a platform: dm-mod + dm-snapshot (+ dm-bufio, its
 # dependency) make the copy-on-write view, and brd is its RAM store
-# (agent/lib/lcsnap.sh). They are loaded on demand by the agent with modprobe,
-# NOT at boot, so they are deliberately absent from etc/imagectl/modules. A
+# (agent/lib/localclone/lcsnap.sh). They are loaded on demand by the agent with modprobe,
+# NOT at boot, so they are deliberately absent from etc/imagesrv/modules. A
 # missing module stops the build like any declared module (#78). A kernel with
 # one built in also stops here on purpose: the agent sizes brd through its
 # rd_size module parameter, and a built-in brd cannot be sized.
@@ -879,7 +878,7 @@ esac
 if [ -n "$_missing" ] || [ -n "$_missing_sub" ]; then
     [ -z "$_missing_sub" ] || echo "missing module trees under $MODSRC:$_missing_sub" >&2
     [ -z "$_missing" ] || echo "missing required modules:$_missing" >&2
-    echo "kernel $KVER cannot serve every platform and filesystem ImageCtl" >&2
+    echo "kernel $KVER cannot serve every platform and filesystem ImageSrv" >&2
     echo "claims to support." >&2
     # ‏#904: על קרנל cloud (linux-image-cloud-amd64 — אימג' הענן של
     # דביאן) זה צפוי: הוא נבנה בלי חלק מהדרייברים ומערכות הקבצים.
@@ -889,7 +888,7 @@ if [ -n "$_missing" ] || [ -n "$_missing_sub" ]; then
         *cloud*)
             echo "kernel $KVER is a cloud kernel: do not build here." >&2
             echo "Copy vmlinuz, initrd.img and initrd.img.gui from the primary" >&2
-            echo "server's boot dir (/srv/imagectl/boot) instead, or install" >&2
+            echo "server's boot dir (/srv/imagesrv/boot) instead, or install" >&2
             echo "linux-image-amd64 and build against it (docs/server-install.md)." >&2
             ;;
     esac
@@ -1113,7 +1112,7 @@ _phy_mods=$(find "$ROOT/lib/modules/$KVER/kernel/drivers/net/phy" \
         # ‏GPU של אחד משלושת היצרנים, ועכבר/evdev לקיוסק, ו-uinput למוניטור.
         printf '%s\n' i915 amdgpu nouveau radeon mgag200 ast bochs cirrus-qemu vmwgfx simpledrm evdev uinput   # #1914: + older/virtual
     fi
-} | awk '!seen[$0]++' > "$ROOT/etc/imagectl/modules"
+} | awk '!seen[$0]++' > "$ROOT/etc/imagesrv/modules"
 
 # #1702: the same list, split so agent/init (lib/initmods.sh) can load by
 # hardware instead of by name. `modules` stays complete and ordered -- it is
@@ -1121,14 +1120,14 @@ _phy_mods=$(find "$ROOT/lib/modules/$KVER/kernel/drivers/net/phy" \
 # and the fallback. phy = loaded first; nic = every other NIC driver, loaded
 # only for a PCI network device that is present (or all of them if no NIC
 # shows up); gpu = loaded only for a PCI display device that is present.
-printf '%s\n' "$_phy_mods" | awk 'NF' > "$ROOT/etc/imagectl/modules.phy"
+printf '%s\n' "$_phy_mods" | awk 'NF' > "$ROOT/etc/imagesrv/modules.phy"
 find "$ROOT/lib/modules/$KVER/kernel/drivers/net" -name '*.ko*' 2>/dev/null \
     | sed 's|.*/||; s|\.ko.*||' | sort \
     | awk 'FILENAME == ARGV[1] { phy[$0]; next } !($0 in phy)' \
-          "$ROOT/etc/imagectl/modules.phy" - > "$ROOT/etc/imagectl/modules.nic"
+          "$ROOT/etc/imagesrv/modules.phy" - > "$ROOT/etc/imagesrv/modules.nic"
 if [ "$WITH_GUI" -eq 1 ]; then
     printf '%s\n' i915 amdgpu nouveau radeon mgag200 ast bochs cirrus-qemu vmwgfx simpledrm \
-        > "$ROOT/etc/imagectl/modules.gpu"   # #1914: + older/virtual adapters, the fallback after modalias
+        > "$ROOT/etc/imagesrv/modules.gpu"   # #1914: + older/virtual adapters, the fallback after modalias
 fi
 
 # ‏מודולי החובה, בנפרד: מערכות הקבצים שהמערכת נשענת עליהן בכל מכונה. אלה
@@ -1137,7 +1136,7 @@ fi
 # ‏agent/init מפריד לפי הרשימה הזאת: מודול חובה שנכשל נקרא בשם וכ-ERROR,
 # ומודול פלטפורמה שנכשל מדווח כמצב הצפוי. בלעדיה `N modules did not load`
 # קיפל את שניהם למספר אחד (#407).
-printf '%s\n' "${REQUIRED_FS_MODULES[@]}" > "$ROOT/etc/imagectl/modules.required"
+printf '%s\n' "${REQUIRED_FS_MODULES[@]}" > "$ROOT/etc/imagesrv/modules.required"
 
 # קושחה מוצהרת שחסרה עוצרת: ‏rtl_nic הוא ה-NIC של הצי (‏firmware-realtek),
 # ו-i915 מצטרף עם --with-gui (‏firmware-intel-graphics בדביאן 13). ‏`if [ -d ]`
@@ -1181,11 +1180,11 @@ if [ "$RADEON_LEGACY_FW" -eq 1 ]; then
 fi
 
 # --- site/lab overlay (#1266) ---------------------------------------------------
-# IMAGECTL_EXTRA_OVERLAY=<dir>: a lab or a site adds to the image what the
+# IMAGESRV_EXTRA_OVERLAY=<dir>: a lab or a site adds to the image what the
 # product does not ship and does not know about. Two parts, both optional:
 #   * the tree under <dir> is copied over the image root (owned by root),
 #     last, so it can add or replace files. Start hooks go in
-#     <dir>/etc/imagectl/hooks.d/*.sh -- agent/lib/sitehooks.sh runs them
+#     <dir>/etc/imagesrv/hooks.d/*.sh -- agent/lib/core/sitehooks.sh runs them
 #     after DHCP;
 #   * <dir>/.binaries names builder binaries, one per line, packed with
 #     their library closure exactly like BINARIES above (a missing one stops
@@ -1199,18 +1198,18 @@ if [ -n "${EXTRA_OVERLAY:-}" ]; then
         done < "$EXTRA_OVERLAY/.binaries"
     fi
     cp -a --no-preserve=ownership "$EXTRA_OVERLAY/." "$ROOT/" \
-        || { echo "IMAGECTL_EXTRA_OVERLAY: copying $EXTRA_OVERLAY failed" >&2; exit 1; }
+        || { echo "IMAGESRV_EXTRA_OVERLAY: copying $EXTRA_OVERLAY failed" >&2; exit 1; }
     rm -f "$ROOT/.binaries"
     # #1412: the image says it carries an overlay; tools/iso/initrd-lab-gate.sh refuses it without --lab.
-    mkdir -p "$ROOT/etc/imagectl" && printf 'overlay: %s\n' "$EXTRA_OVERLAY" > "$ROOT/etc/imagectl/overlay.txt" \
-        || { echo "IMAGECTL_EXTRA_OVERLAY: writing the overlay marker failed" >&2; exit 1; }
+    mkdir -p "$ROOT/etc/imagesrv" && printf 'overlay: %s\n' "$EXTRA_OVERLAY" > "$ROOT/etc/imagesrv/overlay.txt" \
+        || { echo "IMAGESRV_EXTRA_OVERLAY: writing the overlay marker failed" >&2; exit 1; }
     echo "overlay: $EXTRA_OVERLAY copied over the image"
 fi
 
 # --- third-party licenses (#1707) ---------------------------------------------
 # Work from a snapshot of the final file set: this is after every binary,
 # ldd closure, firmware directory, GUI font and site overlay has been copied.
-# Files built by ImageCtl itself have no Debian owner and need no Debian notice.
+# Files built by ImageSrv itself have no Debian owner and need no Debian notice.
 # Every file that does have an owner must bring that package's copyright file;
 # a missing notice is a failed build, never an image with silent omissions.
 mapfile -d '' -t PACKED_FILES < <(find "$ROOT" -type f -print0)
@@ -1265,13 +1264,13 @@ if [ "$WITH_GUI" = 1 ]; then
     # --with-gui builds the kiosk initramfs. It is served next to the
     # text one under a fixed name, and the menu generator hands it only
     # to the roles that have a screen -- build and classroom (#32).
-    echo "       cp $OUTPUT /srv/imagectl/boot/initrd.img.gui"
+    echo "       cp $OUTPUT /srv/imagesrv/boot/initrd.img.gui"
     echo "     (--with-gui: this is the GUI initramfs. Do NOT overwrite"
     echo "      initrd.img with it -- cloning machines still need that one.)"
 else
-    echo "       cp $OUTPUT /srv/imagectl/boot/initrd.img"
+    echo "       cp $OUTPUT /srv/imagesrv/boot/initrd.img"
 fi
-echo "       cp /boot/vmlinuz-$KVER /srv/imagectl/boot/vmlinuz"
+echo "       cp /boot/vmlinuz-$KVER /srv/imagesrv/boot/vmlinuz"
 echo "  2. The GRUB menu generator already points clients at those paths."
 echo "  3. Updating the agent = rebuilding this file and copying it again."
 echo "     No signing, no key handling."

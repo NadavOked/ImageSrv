@@ -16,7 +16,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import setup_classroom  # noqa: E402
-from server import probe  # noqa: E402
+from server.agent import probe  # noqa: E402
 
 MAC = "b4:2e:99:07:1a:c4"
 

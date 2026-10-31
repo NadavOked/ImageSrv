@@ -8,8 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import room, update
-from .atomicfile import write_atomic
+from server.paths import REPO_ROOT
+
+from server.rounds import room
+from . import update
+from server.core.atomicfile import write_atomic
 from .db import get_setting, journal
 
 MODE = "auto_reboot"
@@ -85,7 +88,7 @@ def update_verdict(rt, now: datetime | None = None) -> tuple[bool, str | None]:
     doc = update.get_status(rt.conn) or {}
     if doc.get("state") != "running":
         return False, None
-    repo_dir = getattr(rt, "repo_dir", None) or Path(__file__).resolve().parents[1]
+    repo_dir = getattr(rt, "repo_dir", None) or REPO_ROOT
     hooks = {**update.default_hooks(), **(getattr(rt, "update_hooks", None) or {})}
     current = update.current_version(hooks, repo_dir)
     tag = doc.get("tag") or "ללא תג"

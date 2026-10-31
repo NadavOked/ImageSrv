@@ -62,7 +62,7 @@ def probe_of(sysroot: Path, extra: str = "", stubs: Path | None = None,
                 env += f"export {var}={posix(p)!r}; "
     out = sh(
         env + extra
-        + f". {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/probe.sh; "   # #1367: capped_run
+        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; "   # #1367: capped_run
         r'printf "{\"x\":0%s}" "$(probe_json)"'
     )
     return json.loads(out)["probe"]
@@ -73,7 +73,7 @@ def _agent_hello(fake_machine, libs: str) -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/waits.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
         f'{libs} build_hello'
     ))
 
@@ -82,13 +82,13 @@ def _agent_hello(fake_machine, libs: str) -> dict:
 
 
 def test_probe_sh_stays_under_the_lamp():
-    n = sizelimit.assert_within_limit(AGENT / "lib" / "probe.sh")
+    n = sizelimit.assert_within_limit(AGENT / "lib" / "hw" / "probe.sh")
     assert n <= 280
-    assert sizelimit.count_lines(AGENT / "imagectl-agent") <= 300
+    assert sizelimit.count_lines(AGENT / "imagesrv-agent") <= 300
 
 
 def test_the_agent_loads_probe_sh():
-    text = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    text = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/probe.sh"' in text
 
 
@@ -404,7 +404,7 @@ def test_missing_optional_tools_are_null_not_ok(fake_machine):
 
 
 def test_hello_schema_2_carries_probe(fake_machine):
-    hello = _agent_hello(fake_machine, f'. {posix(AGENT)}/lib/probe.sh;')
+    hello = _agent_hello(fake_machine, f'. {posix(AGENT)}/lib/hw/probe.sh;')
     assert hello["schema"] == 2
     assert "probe" in hello
     assert isinstance(hello["probe"]["probe_seconds"], int)

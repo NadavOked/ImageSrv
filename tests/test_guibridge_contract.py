@@ -1,6 +1,6 @@
 """#1538: tests/guibridge-contract.sh runs as part of pytest.
 
-The script is the GUI bridge's contract (agent/lib/guibridge.sh): HTTP and
+The script is the GUI bridge's contract (agent/lib/gui/guibridge.sh): HTTP and
 cookie refusal, gui_auth's output, the record parser, direct-open,
 restore-start (#1073), room-open and class-pick. Nothing ran it, so when
 #1499 made gui_auth print the theme after the role, its auth check failed
@@ -13,7 +13,7 @@ line, by name, in order. An exit 0 that printed fewer cases is a failure.
 It needs only `sh`: every jq the script reaches is a shell function stub,
 except gui_saved_theme, whose "auto" fallback is the expected answer with
 jq and without it. A missing `sh` is a declared skip (requires_native) --
-and a failure where IMAGECTL_REQUIRE_NATIVE is set.
+and a failure where IMAGESRV_REQUIRE_NATIVE is set.
 """
 
 from __future__ import annotations

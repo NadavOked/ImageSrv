@@ -3,7 +3,7 @@
 בהפצה ישירה udp-sender רץ במחשב הבנייה, ולשרת אין את הלוג שלו (במסלול
 הספרייה #1950 קורא אותו בשרת). לכן ה-hello שלפני כל מחיצה, מהשנייה, נושא
 ‏`direct_finished`: הכתובות שהתחברו ולא נזרקו ולא התנתקו לפני `Transfer
-complete` (‏`agent/lib/directrecv.sh`). השרת סופר לפיהן חבר `lost` שעדיין
+complete` (‏`agent/lib/restore/directrecv.sh`). השרת סופר לפיהן חבר `lost` שעדיין
 מקבל (‏`tests/test_direct_lost_receiver_1952.py`).
 """
 
@@ -45,7 +45,7 @@ def _finished(tmp_path: Path, text: str | None) -> tuple[str, str]:
     log = tmp_path / "dsend.1.log"
     if text is not None:
         log.write_text(text, encoding="utf-8", newline="\n")
-    out = sh(f". {posix(AGENT)}/lib/directrecv.sh; "
+    out = sh(f". {posix(AGENT)}/lib/restore/directrecv.sh; "
              f'out=$(direct_finished_ips {posix(log)!r}); echo "rc=$?"; printf "%s" "$out"')
     rc, _, body = out.partition("\n")
     return rc, body
@@ -77,7 +77,7 @@ def _direct_hello(tmp_path: Path, prev: str, log: str | None, hello_rc: int = 0)
     if log is not None:
         (run / f"dsend.{prev}.log").write_text(log, encoding="utf-8", newline="\n")
     return sh(
-        f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/directrecv.sh; "
+        f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/restore/directrecv.sh; "
         'send_hello() { cat "$RUN_DIR/direct.finished" 2>/dev/null || printf NONE; '
         f'return {hello_rc}; }}; '
         f'direct_hello {prev!r}; echo " rc=$?"; [ -e "$RUN_DIR/direct.finished" ] && echo LEFT || :')
@@ -104,7 +104,7 @@ def test_build_hello_carries_the_fragment_and_only_while_it_exists(fake_machine)
     env = (f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
            f'DEVROOT={posix(fake_machine["dev"])!r} '
            f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-           f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; build_hello')
+           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; build_hello')
     assert "direct_finished" not in json.loads(sh(env))
     (fake_machine["run"] / "direct.finished").write_text(
         f',"direct_finished":["{LIVE}"]', encoding="utf-8", newline="\n")

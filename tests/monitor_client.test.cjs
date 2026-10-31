@@ -128,7 +128,7 @@ test('power goes to POST …/power with the typed name; the client never builds 
   assert.deepEqual(JSON.parse(fetches[0].options.body), {action: 'reboot', confirm: 'typed-name'});
   assert.equal(sockets[0].sent.length, 0, 'nothing on the RFB channel');
   const js = fs.readFileSync(path.join(root, 'monitor.js'), 'utf8');
-  assert.doesNotMatch(js, /clientCutText|imagectl-power/);
+  assert.doesNotMatch(js, /clientCutText|imagesrv-power/);
   // דרך משני: הנתיב של המשני, אותו גוף.
   const remote = setup('?mac=aa:bb:cc:dd:ee:ff&node=n0de');
   await remote.run('sendPower("poweroff", "x")');

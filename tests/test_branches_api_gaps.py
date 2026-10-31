@@ -15,7 +15,8 @@ import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
-from server import db, interserver_auth, storage_nodes
+from server import db
+from server.interserver import interserver_auth, storage_nodes
 from test_storage_transfer import paired, secondary          # noqa: F401 — fixtures
 
 pytestmark = pytest.mark.skipif(
@@ -167,7 +168,7 @@ def test_record_version_only_when_the_field_was_in_the_answer(tmp_path):
 
 def test_check_and_machines_record_the_secondary_version_and_the_list_returns_it(
         server, secondary, paired, monkeypatch):
-    from server import agent_version
+    from server.core import agent_version
     admin = server["admin"]
     assert _row(server, paired)["server_version_at"] is None, "never read = not checked"
     monkeypatch.setattr(agent_version, "server_version", lambda: "v9.8.7")

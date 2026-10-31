@@ -167,7 +167,7 @@ partition_raid() {
 
 # In the target, after its packages (mdadm among them): the array's own
 # line in mdadm.conf, an initramfs that assembles it, and the fact the
-# server's health page reads (/etc/imagectl/raid, world-readable).
+# server's health page reads (/etc/imagesrv/raid, world-readable).
 raid_target_config() {
     [ "${RAID_LEVEL:-none}" != none ] || return 0
     if [ "$DRY_RUN" -eq 1 ]; then
@@ -182,7 +182,7 @@ MAILADDR root
 $_tc_scan
 "
     must_run raid-initramfs "update-initramfs failed after writing mdadm.conf" chroot "$TARGET" update-initramfs -u -k all
-    write_target 0644 /etc/imagectl/raid "level=$RAID_LEVEL
+    write_target 0644 /etc/imagesrv/raid "level=$RAID_LEVEL
 disks=$ANSWER_RAID_DISKS
 spares=$RAID_SPARES
 array=/dev/$RAID_ARRAY

@@ -21,8 +21,8 @@ def _hello(fake_machine) -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
-        f'. {posix(AGENT)}/lib/disklink.sh; build_hello'))
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/hw/disklink.sh; build_hello'))
 
 
 def _pci(resolved: str) -> str:
@@ -30,7 +30,7 @@ def _pci(resolved: str) -> str:
     A real sysfs path for NVMe holds colons (0000:03:00.0), which a Windows
     test tree cannot hold -- so the link is stubbed, not the code under test."""
     return sh(f'readlink() {{ printf "%s\\n" "{resolved}"; }}; '
-              f'. {posix(AGENT)}/lib/disklink.sh; disk_pci_json nvme0n1')
+              f'. {posix(AGENT)}/lib/hw/disklink.sh; disk_pci_json nvme0n1')
 
 
 def test_nvme_pci_identity_and_non_nvme_null():
@@ -71,8 +71,8 @@ def test_optical_parse_without_symlinks(tmp_path):
     (root / "sys/block/sr0/device/model").write_text("  HL-DT-ST DVDRAM  \n", encoding="utf-8")
     out = sh(f'export SYSROOT={posix(root)!r}; '
              'readlink() { printf "%s\\n" "/sys/devices/pci0000:00/0000:00:17.0/ata3/host2/target2/2:0:0:0"; }; '
-             f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/sysinfo.sh; '
-             f'. {posix(AGENT)}/lib/disklink.sh; optical_json')
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+             f'. {posix(AGENT)}/lib/hw/disklink.sh; optical_json')
     assert json.loads("{" + out.lstrip(",") + "}") == {
         "optical": [{"dev": "sr0", "model": "HL-DT-ST DVDRAM", "port": 3}]}
 
@@ -92,7 +92,7 @@ def test_without_sr_mod_optical_is_null_not_empty(fake_machine):
 def _refresh(run: Path, body: object) -> int:
     (run / "response.json").write_text(json.dumps(body), encoding="utf-8", newline="\n")
     out = proc_sh(
-        f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/slotnames.sh; '
+        f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/hw/slotnames.sh; '
         'drawer_slots_refresh')
     return out.returncode
 

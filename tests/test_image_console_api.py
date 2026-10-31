@@ -24,7 +24,7 @@ pytest.importorskip("fastapi")
 
 from conftest import MANIFEST_256, write_image
 
-from server.room import CLONERS_GROUP
+from server.rounds.room import CLONERS_GROUP
 
 _MISSING = "field missing"
 
@@ -140,7 +140,7 @@ def test_the_scrub_result_lives_in_the_database_file(server, tmp_path):
     """שמור = נקרא מחיבור אחר לאותו קובץ, כמו אחרי אתחול שרת — לא מזיכרון
     התהליך ולא מזיכרון הדפדפן (עיקרון 3: ‏DB, כי אין לזה ייצוג כקובץ)."""
     server["admin"].post("/api/console/images/img_7f3a91/scrub")
-    raw = sqlite3.connect(tmp_path / "data" / "imagectl.db")
+    raw = sqlite3.connect(tmp_path / "data" / "imagesrv.db")
     try:
         tables = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "image_scrubs" in tables

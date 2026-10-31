@@ -7,7 +7,7 @@
 עוצר רק על שאלה פתוחה (‏smart_ask.waiting_in_wave) — שער שאינו שואל אינו עוצר גל.
 
 בקרה שלילית (מעבדה, משורש העץ, אחרי commit):
-  git checkout 4f6068e8 -- agent/lib/smartgate.sh agent/imagectl-agent server/static/console.js \
+  git checkout 4f6068e8 -- agent/lib/smart/smartgate.sh agent/imagesrv-agent server/static/console.js \
       server/static/index.html server/static/monitor.html
   python3 -m pytest tests/test_orange_no_ask_2042.py -q   # כל מה שמסומן RED נופל
   git checkout HEAD -- agent/ server/
@@ -126,8 +126,8 @@ def test_a_wave_with_one_orange_drawer_does_not_wait(tmp_path):
 
 # --- the end: the note rides on a done target -----------------------------------------
 
-APPLY = (f'. {posix(AGENT)}/lib/common.sh; . {posix(AGENT)}/lib/progress.sh; '
-         f'. {posix(AGENT)}/lib/smart.sh; . {posix(AGENT)}/lib/smartgate.sh; ')
+APPLY = (f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+         f'. {posix(AGENT)}/lib/smart/smart.sh; . {posix(AGENT)}/lib/smart/smartgate.sh; ')
 
 
 def _target(run: Path, dev: str, state: str, error: str | None = None, smart_note: str | None = None) -> None:
@@ -165,7 +165,7 @@ def test_the_note_rides_on_a_done_target_and_only_there(tmp_path):
 
 
 #: the gate as a round meets it: sdb orange (its note written, as smart_preflight does), sdc green
-ORANGE_GATE = (f'. {posix(AGENT)}/lib/smartgate.sh; '
+ORANGE_GATE = (f'. {posix(AGENT)}/lib/smart/smartgate.sh; '
                'smart_gate() { shift; mkdir -p "$RUN_DIR/targets/sdb"; '
                f'printf %s {NOTE_187!r} > "$RUN_DIR/targets/sdb/smart_note"; echo "$@"; }}; ')
 

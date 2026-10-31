@@ -16,7 +16,8 @@ import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
-from server import interserver_api, interserver_auth, storage_client, storage_nodes, users
+from server.interserver import interserver_api, interserver_auth, storage_client, storage_nodes
+from server.console import users
 from test_secondary_console_relay import _parent, secondary              # noqa: F401
 from test_storage_transfer import paired                                  # noqa: F401
 

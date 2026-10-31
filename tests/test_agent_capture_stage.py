@@ -22,12 +22,11 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
-LIB = AGENT / "lib"
-
-
+LIB = flat_lib()
 def _progress(tmp_path: Path, stage: str | None, who: str = "task") -> dict:
     run = tmp_path / "run"
     (run / "targets").mkdir(parents=True, exist_ok=True)
@@ -140,5 +139,5 @@ def test_the_probe_carries_ntfs_and_stays_null_without_hibernation_sh(tmp_path):
 
 
 def test_the_agent_loads_hibernation_sh():
-    text = (AGENT / "imagectl-agent").read_text(encoding="utf-8")
+    text = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/hibernation.sh"' in text

@@ -7,7 +7,7 @@ on the question in every round until a manual "נקה". A write the round counts
 journaled "נוקה אוטומטית: נכתב בהצלחה בסבב X". **Red does not clear itself** (#1742,
 #1580): a `readonly` row -- as read today -- stays until the operator's "נקה".
 
-Negative control: server/room.py and server/disk_failures.py back to the base, both
+Negative control: server/rounds/room.py and server/disks/disk_failures.py back to the base, both
 (#439) -- see the PR.
 """
 
@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server import disk_failures
+from server.disks import disk_failures
 from test_server_room import (  # noqa: F401 -- `room_server` is a fixture
     CLONER1, cloner_hello, heartbeat, report, room as room_view, room_body, room_server,
 )

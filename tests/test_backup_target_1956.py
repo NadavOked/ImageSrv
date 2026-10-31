@@ -6,7 +6,7 @@ share with a user and password; (3) NFS. On every one of them a test file is
 written **and read back** while the destination is being set, so a destination
 that does not take a file is refused now and not at the first backup an hour later
 (principle 5). The SMB password is kept the way the server already keeps it for
-storage locations (#1123): a 0600 ``credentials=`` file under /etc/imagectl/creds,
+storage locations (#1123): a 0600 ``credentials=`` file under /etc/imagesrv/creds,
 never in the database and never in a mount option.
 
 Every system tool runs through the storage hooks injected into ``create_app``
@@ -30,13 +30,14 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from native import requires_native
-from server import backup_job, db
-from server import storage_locations as sl
-from server.storage_locations import FAILED
+from server.system import backup_job
+from server import db
+from server.storage import storage_locations as sl
+from server.storage.storage_locations import FAILED
 from test_storage_locations import FakeHooks
 
 try:
-    from server import backup_target
+    from server.system import backup_target
 except ImportError:   # the server before #1956: the endpoint answers 404 and these say nothing, so every
     # assertion below fails on what the server does -- not on a missing module (bakara-shlilit)
     from types import SimpleNamespace
@@ -55,8 +56,8 @@ NFS = {"server": "10.44.10.21", "export": "/pool/dbbackup", "version": "4.1"}
 
 @pytest.fixture()
 def bk(tmp_path: Path, images_root: Path, clock, monkeypatch):
-    from server import sender as sender_module
-    from server import users
+    from server.rounds import sender as sender_module
+    from server.console import users
     from server.app import create_app
     from test_sender import Recorder
 
@@ -357,7 +358,7 @@ def test_only_an_admin_sets_it_and_the_old_settings_key_cannot_skip_the_test(bk)
 def _network_db(tmp_path: Path, kind: str = "nfs"):
     data = tmp_path / "data"
     data.mkdir()
-    conn = db.connect(data / "imagectl.db")
+    conn = db.connect(data / "imagesrv.db")
     dest = data / "storage" / MOUNT_NAME
     dest.mkdir(parents=True)
     db.set_settings(conn, {backup_job.SETTING: dest.as_posix(),
@@ -387,7 +388,7 @@ def test_the_job_mounts_the_share_from_fstab_and_then_backs_up(tmp_path, monkeyp
     monkeypatch.setattr(backup_job, "_mount_from_fstab", lambda p: state.update(mounted=True) or (0, ""),
                         raising=False)
     assert backup_job.main(["--data-dir", str(data)]) == 0
-    assert len(list((dest / "db").glob("imagectl-*.db"))) == 1
+    assert len(list((dest / "db").glob("imagesrv-*.db"))) == 1
 
 
 # --- the console ----------------------------------------------------------------------
@@ -415,7 +416,7 @@ for (const [name, t] of Object.entries({
   none: { type: "none", dest: "" },
   same: { type: "local", dest: "/srv/backup", display: "/srv/backup", same_disk: true },
   other: { type: "local", dest: "/mnt/usb", display: "/mnt/usb", same_disk: false },
-  smb: { type: "smb", dest: "/var/lib/imagectl/storage/.db-backup", display: "//nas/db", same_disk: null } })) {
+  smb: { type: "smb", dest: "/var/lib/imagesrv/storage/.db-backup", display: "//nas/db", same_disk: null } })) {
   SETTINGS = { backup_target: t };
   rows[name] = backupTargetRowHtml();
 }

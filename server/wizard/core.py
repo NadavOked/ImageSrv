@@ -21,10 +21,12 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlsplit
 
-from server import hostname_rule, ifaddr, login_guard, users
-from server.atomicfile import write_atomic
-from server.console_tls import ensure_console_cert
-from server.interserver_auth import generate_self_signed
+from server.core import hostname_rule
+from server.console import login_guard, users
+from server.net import ifaddr
+from server.core.atomicfile import write_atomic
+from server.console.console_tls import ensure_console_cert
+from server.interserver.interserver_auth import generate_self_signed
 
 HOSTNAME_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 IFNAME_RE = re.compile(r"[A-Za-z0-9._-]+\Z")
@@ -208,8 +210,8 @@ def check_primary(url: str, timeout: float = 5.0) -> dict:
     try:
         # Port 8443 requires a client certificate even before pairing. The probe
         # presents a one-use identity; it stores no key and performs no pairing.
-        probe_cert, probe_key = generate_self_signed("imagectl-wizard-probe")
-        with tempfile.TemporaryDirectory(prefix="imagectl-wizard-probe-") as tmp:
+        probe_cert, probe_key = generate_self_signed("imagesrv-wizard-probe")
+        with tempfile.TemporaryDirectory(prefix="imagesrv-wizard-probe-") as tmp:
             cert_file, key_file = Path(tmp) / "probe.crt", Path(tmp) / "probe.key"
             cert_file.write_bytes(probe_cert)
             key_file.write_bytes(probe_key)
@@ -246,14 +248,14 @@ def check_primary(url: str, timeout: float = 5.0) -> dict:
 
 @dataclass
 class WizardPaths:
-    source_dir: Path = Path("/opt/imagectl-src")
-    app_dir: Path = Path("/opt/imagectl")
-    data_dir: Path = Path("/var/lib/imagectl")
-    status_file: Path = Path("/etc/imagectl/firstboot.status")
-    stamp_file: Path = Path("/var/lib/imagectl/.firstboot-done")
-    installer: Path = Path("/opt/imagectl-src/install/setup-boot-server.sh")
-    verify: Path = Path("/opt/imagectl/install/verify-boot-payload.sh")
-    http_root: Path = Path("/srv/imagectl/boot")
+    source_dir: Path = Path("/opt/imagesrv-src")
+    app_dir: Path = Path("/opt/imagesrv")
+    data_dir: Path = Path("/var/lib/imagesrv")
+    status_file: Path = Path("/etc/imagesrv/firstboot.status")
+    stamp_file: Path = Path("/var/lib/imagesrv/.firstboot-done")
+    installer: Path = Path("/opt/imagesrv-src/deploy/setup-boot-server.sh")
+    verify: Path = Path("/opt/imagesrv/deploy/verify-boot-payload.sh")
+    http_root: Path = Path("/srv/imagesrv/boot")
 
 
 @dataclass
@@ -339,7 +341,7 @@ class WizardState:
         — ההרצה החוזרת אינה ערוץ ניחוש סיסמה בלי השהיה ונעילה, וכשלונות
         בשני הערוצים נספרים יחד."""
         wrong = "סיסמת admin הקיימת שגויה."
-        db = self.paths.data_dir / "imagectl.db"
+        db = self.paths.data_dir / "imagesrv.db"
         if not db.is_file():
             return wrong
         ip = self._client_ip or "?"
@@ -377,13 +379,13 @@ class WizardState:
             parent_handoff, child_handoff = parent_sock, child_sock
             child_sock.set_inheritable(True)
             pass_fds += (child_sock.fileno(),)
-            env["IMAGECTL_WIZARD_HANDOFF_FD"] = str(child_sock.fileno())
+            env["IMAGESRV_WIZARD_HANDOFF_FD"] = str(child_sock.fileno())
         popen_argv = argv
         if read_fd is not None:
             # Fixed wrapper, positional arguments only: map the inherited pipe
             # to fd 3 without preexec_fn (unsafe in this threaded server).
             popen_argv = ["bash", "-c", 'exec 3<&"$1"; shift; exec "$@"',
-                          "imagectl-wizard-fd3", str(read_fd), *argv]
+                          "imagesrv-wizard-fd3", str(read_fd), *argv]
         kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT,
                   "stdin": subprocess.PIPE if password is not None and os.name != "posix" else subprocess.DEVNULL,
                   "text": True, "encoding": "utf-8", "errors": "replace", "env": env}

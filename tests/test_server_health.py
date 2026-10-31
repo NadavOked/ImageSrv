@@ -14,7 +14,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server.health import port_owner
+from server.system.health import port_owner
 
 try:
     from fastapi.testclient import TestClient
@@ -43,7 +43,7 @@ def health_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
     """שרת עם בדיקות מזויפות שאפשר לסובב תרחיש-תרחיש."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server import users
+    from server.console import users
     from server.app import create_app
 
     # #1817: pytest's private ancestors (including /root on the VM) are not
@@ -80,7 +80,7 @@ def health_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
             # ‏#1074: ברירת המחדל כאן — טבלה טעונה, כדי ש-all-green יישאר
             # ירוק. שלושת המצבים נבדקים בנפרד עם subprocess מזויף.
             "nft_ruleset": (
-                "table inet imagectl {\n"
+                "table inet imagesrv {\n"
                 "\tchain input {\n"
                 "\t\tiifname \"lo\" accept\n"
                 "\t\tct state established,related accept\n"
@@ -159,7 +159,7 @@ def test_1816_recovered_dnsmasq_does_not_read_old_errors(health_server):
 @pytest.mark.parametrize("failure", ["exit", "timeout", "missing"])
 def test_1816_journal_command_failure_discards_partial_output(monkeypatch, failure):
     import subprocess
-    from server import health
+    from server.system import health
 
     def failed_run(cmd, **kwargs):
         assert cmd == ["journalctl", "-b", "-u", "dnsmasq.service", "-t", "dnsmasq",
@@ -191,7 +191,7 @@ def test_a_healthy_server_is_all_green(health_server):
     assert rows["udp_sender"]["state"] == "ok"
     assert rows["firewall"]["state"] == "ok"
     assert "פעילה" in rows["firewall"]["detail"]
-    assert "כללים לטבלת imagectl" in rows["firewall"]["detail"]
+    assert "כללים לטבלת imagesrv" in rows["firewall"]["detail"]
 
 
 def test_a_stranger_on_port_67_is_red(health_server):
@@ -277,7 +277,7 @@ def test_1817_symlink_target_directory_must_be_traversable(health_server):
 # --- #333: שרשרת האתחול אינה נגמרת בשורש ה-TFTP -------------------------
 #
 # ‏shim, ‏GRUB ו-grub.cfg מביאים את התחנה עד התפריט. משם היא מושכת ב-HTTP
-# את ‎/boot/vmlinuz ואת ‎/boot/initrd.img מ-/srv/imagectl/boot, ואת
+# את ‎/boot/vmlinuz ואת ‎/boot/initrd.img מ-/srv/imagesrv/boot, ואת
 # **אלה** ‎boot_files לא בדק. בהתקנה נקייה (#332) התיקייה נשארה ריקה,
 # שניהם החזירו 404, והשורה הייתה ירוקה בשני המקרים.
 
@@ -358,7 +358,7 @@ def test_health_is_admin_only(health_server):
 # "תקין" — זו בדיקה שלא רצה.
 
 def _shim(server, tmp_path, src_bytes, tftp_bytes):
-    from server import health
+    from server.system import health
     src = tmp_path / "shimx64.efi.signed"
     if src_bytes is not None:
         src.write_bytes(src_bytes)
@@ -413,7 +413,7 @@ def test_udp_sender_not_running_is_ok(health_server):
 
 
 def test_udp_sender_during_a_round_is_a_warning(health_server):
-    from server.sender import SendState
+    from server.rounds.sender import SendState
     ctx = health_server["admin"].app.state.ctx
     ctx.sender._state = SendState("ses_1", "img_7f3a91")
     ctx.sender._state.state = "sending"
@@ -444,7 +444,7 @@ def test_firewall_loaded_is_ok_with_rule_count(health_server):
     rows = by_id(health_server["admin"].get("/api/console/health").json())
     assert rows["firewall"]["state"] == "ok"
     assert rows["firewall"]["detail"].startswith("פעילה, ")
-    assert "כללים לטבלת imagectl" in rows["firewall"]["detail"]
+    assert "כללים לטבלת imagesrv" in rows["firewall"]["detail"]
 
 
 def test_firewall_missing_table_is_not_loaded(health_server):
@@ -466,7 +466,7 @@ def test_firewall_unread_is_unknown_not_ok(health_server):
 def test_read_nft_ruleset_subprocess_three_outcomes(monkeypatch):
     """שלושת המצבים מול subprocess מזויף — לא מול nft אמיתי."""
     import subprocess as sp
-    from server import ports
+    from server.net import ports
 
     def missing(*a, **k):
         raise FileNotFoundError("nft")
@@ -485,11 +485,11 @@ def test_read_nft_ruleset_subprocess_three_outcomes(monkeypatch):
     assert ports.read_nft_ruleset() == ""
     assert ports.firewall_status("") == ("off", "לא נטענה")
 
-    loaded = "table inet imagectl {\n\tchain input {\n\t\tiif lo accept\n\t}\n}\n"
+    loaded = "table inet imagesrv {\n\tchain input {\n\t\tiif lo accept\n\t}\n}\n"
     def has_table(*a, **k):
         return sp.CompletedProcess(["nft"], 0, stdout=loaded, stderr="")
     monkeypatch.setattr(ports.subprocess, "run", has_table)
-    assert "table inet imagectl" in ports.read_nft_ruleset()
+    assert "table inet imagesrv" in ports.read_nft_ruleset()
     state, detail = ports.firewall_status(loaded)
     assert state == "ok"
-    assert detail == "פעילה, 1 כללים לטבלת imagectl"
+    assert detail == "פעילה, 1 כללים לטבלת imagesrv"

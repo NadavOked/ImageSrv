@@ -47,8 +47,8 @@ def run_case(tmp_path: Path, reply: str | None) -> subprocess.CompletedProcess:
         (run_dir / "progress.reply").write_text(reply, encoding="utf-8")
     script = textwrap.dedent(f"""
         RUN_DIR={run_dir.as_posix()!r}
-        . {AGENT.as_posix()}/lib/jsonq.sh
-        . {AGENT.as_posix()}/lib/progress.sh
+        . {AGENT.as_posix()}/lib/core/jsonq.sh
+        . {AGENT.as_posix()}/lib/core/progress.sh
         log() {{ printf '%s\\n' "$*" >&2; }}
         if progress_refused_for_good; then echo STOP; else echo CONTINUE; fi
     """)
@@ -116,8 +116,8 @@ def test_actual_progress_loop_returns_after_one_not_open_reply(tmp_path):
     """Execute the loop, not just its predicate; no network/server involved."""
     script = f'''
         RUN_DIR={tmp_path.as_posix()!r}
-        . {AGENT.as_posix()}/lib/jsonq.sh
-        . {AGENT.as_posix()}/lib/progress.sh
+        . {AGENT.as_posix()}/lib/core/jsonq.sh
+        . {AGENT.as_posix()}/lib/core/progress.sh
         log() {{ echo "$*" >&2; }}
         http_post_json() {{
             echo post >> "$RUN_DIR/posts"

@@ -1,8 +1,0 @@
-# ImageCtl diskless client runtime configuration
-SERVER_BASE_URL=http://192.0.2.10:8080
-KIOSK_URL=http://192.0.2.10:8080/
-ALLOW_IMAGING=0
-TARGET_DEVICE=
-LOG_LEVEL=info
-NETWORK_TIMEOUT=30
-KIOSK_RESTART_DELAY=2

@@ -1,8 +1,8 @@
-"""‏#641 — היפוך #140: build/classroom בלי משימה עולה ישר ל-ImageCtl.
+"""‏#641 — היפוך #140: build/classroom בלי משימה עולה ישר ל-ImageSrv.
 
 הכרעת נדב מ-2026-09-10: תחנת תלמיד ומחשב בנייה רשומים שאין להם משימה
-עולים **ישר ל-ImageCtl, אוטומטי לגמרי** — בלי מסך בחירה, בלי ESC ובלי
-טיימר. בחירת "דיסק מקומי" עברה אל תוך מסך ה-ImageCtl עצמו. זה הופך את
+עולים **ישר ל-ImageSrv, אוטומטי לגמרי** — בלי מסך בחירה, בלי ESC ובלי
+טיימר. בחירת "דיסק מקומי" עברה אל תוך מסך ה-ImageSrv עצמו. זה הופך את
 #140 (תפריט בחירה גלוי שהמתין לאדם, `timeout=-1`).
 
 הקובץ הזה נפרד מ-test_grub_menu.py בכוונה: חציו הראשון מקבע את ההתנהגות
@@ -51,10 +51,10 @@ def settings(text: str) -> dict[str, str]:
 # --- ההתנהגות החדשה ---------------------------------------------------------
 
 
-def test_a_classroom_station_with_no_task_auto_boots_imagectl():
+def test_a_classroom_station_with_no_task_auto_boots_imagesrv():
     """זה השינוי עצמו: עד #641 היה כאן תפריט גלוי שהמתין לאדם
     (`show_menu=True`, `timeout=-1`). עכשיו תחנת כיתה בלי משימה עולה ישר
-    ל-ImageCtl, אוטומטי — בלי תפריט. הערך נשאר recovery (#144): הערך
+    ל-ImageSrv, אוטומטי — בלי תפריט. הערך נשאר recovery (#144): הערך
     הרגיל בתחנת כיתה מחזיר `local` ומאתחל."""
     decision = decide(answer())
     assert decision.action == AGENT
@@ -67,41 +67,41 @@ def test_the_classroom_station_boots_without_a_menu_and_without_a_timer():
     conf = settings(text)
     assert conf["set timeout_style"] == "hidden", "נשאר תפריט גלוי"
     assert conf["set timeout"] == "0", "נשאר טיימר המתנה"
-    assert conf["set default"] == "imagectl"
+    assert conf["set default"] == "imagesrv"
 
 
 def test_the_classroom_file_still_carries_a_hidden_local_entry():
-    """"בחירת דיסק מקומי מתוך מסך ImageCtl" — הערך המקומי נשאר בקובץ
+    """"בחירת דיסק מקומי מתוך מסך ImageSrv" — הערך המקומי נשאר בקובץ
     (חבוי, לעולם לא נבחר תחת timeout=0), בדיוק כמו במסלול המשימה. שני
-    ערכים: ImageCtl וה-disk."""
+    ערכים: ImageSrv וה-disk."""
     text = render(answer(), CFG)
     assert "--id local {" in text
-    assert "--id imagectl {" in text
+    assert "--id imagesrv {" in text
     assert text.count("menuentry ") == 2
 
 
 def test_the_build_machine_also_auto_boots_without_a_menu():
     """מחשב הבנייה — אותה התנהגות, אבל הערך הרגיל (build_console, #29)
-    ולא recovery: אין `imagectl.mode=recovery` בשורת הקרנל."""
+    ולא recovery: אין `imagesrv.mode=recovery` בשורת הקרנל."""
     text = render(answer(role="build"), CFG)
     conf = settings(text)
     assert conf["set timeout_style"] == "hidden"
     assert conf["set timeout"] == "0"
-    assert conf["set default"] == "imagectl"
-    assert "--id imagectl {" in text
-    assert "imagectl.mode=recovery" not in text
+    assert conf["set default"] == "imagesrv"
+    assert "--id imagesrv {" in text
+    assert "imagesrv.mode=recovery" not in text
 
 
 @pytest.mark.parametrize("role", ["classroom", "build"])
-def test_a_gui_role_with_no_task_auto_boots_imagectl_hidden(role):
-    """הטסט החדש של #641, על שני התפקידים: בלי משימה → `default=imagectl`,
+def test_a_gui_role_with_no_task_auto_boots_imagesrv_hidden(role):
+    """הטסט החדש של #641, על שני התפקידים: בלי משימה → `default=imagesrv`,
     `timeout=0`, `show_menu=False`. זה הקיבוע הישיר של הכרעת נדב."""
     decision = decide(answer(role=role))
     assert decision.action == AGENT
     assert decision.show_menu is False
 
     conf = settings(render(answer(role=role), CFG))
-    assert conf["set default"] == "imagectl"
+    assert conf["set default"] == "imagesrv"
     assert conf["set timeout"] == "0"
     assert conf["set timeout_style"] == "hidden"
 
@@ -135,14 +135,14 @@ def test_a_machine_we_cannot_identify_still_gets_no_menu(a, code):
     conf = settings(text)
     assert conf["set timeout_style"] == "hidden"
     assert conf["set default"] == "local"
-    assert "--id imagectl" not in text
+    assert "--id imagesrv" not in text
     assert "vmlinuz" not in text
 
 
 @pytest.mark.parametrize("a", [answer(schema=2), answer(known=False)])
 def test_a_machine_we_cannot_identify_waits_for_nothing_at_all(a):
     """"אם אין MAC הוא לא אמור לקבל GRUB" (נדב, #140). הקובץ מכיל ערך
-    אחד — הדיסק המקומי — ואין בו מה ללחוץ עליו: לא ImageCtl, לא שחזור,
+    אחד — הדיסק המקומי — ואין בו מה ללחוץ עליו: לא ImageSrv, לא שחזור,
     ואפילו לא רמז. שתי שניות המתנה שם היו עיכוב בלי תכלית על מחשב זר,
     ולכן הוא מקבל אותו טיפול כמו MAC פגום ב-render_local_only."""
     text = render(a, CFG)
@@ -162,7 +162,7 @@ def test_the_cloning_machine_still_goes_straight_to_the_agent():
     conf = settings(render(answer(role="cloner"), CFG))
     assert conf["set timeout_style"] == "hidden"
     assert conf["set timeout"] == "0"
-    assert conf["set default"] == "imagectl"
+    assert conf["set default"] == "imagesrv"
 
 
 def test_a_machine_with_a_task_still_goes_straight_to_the_agent():
@@ -170,4 +170,4 @@ def test_a_machine_with_a_task_still_goes_straight_to_the_agent():
     conf = settings(render(answer(task={"id": "tsk_0091"}), CFG))
     assert conf["set timeout_style"] == "hidden"
     assert conf["set timeout"] == "0"
-    assert conf["set default"] == "imagectl"
+    assert conf["set default"] == "imagesrv"

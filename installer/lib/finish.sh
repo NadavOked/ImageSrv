@@ -87,13 +87,13 @@ install_bootloader() {
     [ "${RAID_LEVEL:-none}" = none ] || raid_extra_esps
     # Boot straight through like ESXi, while leaving a short Esc/Shift window.
     # Written before update-grub reads it.
-    write_target 0644 /etc/default/grub.d/imagectl.cfg "GRUB_TIMEOUT_STYLE=hidden
+    write_target 0644 /etc/default/grub.d/imagesrv.cfg "GRUB_TIMEOUT_STYLE=hidden
 GRUB_TIMEOUT=3
 "
     # A deterministic recovery path that does not depend on Debian's optional
     # recovery submenu. grub-probe runs when update-grub generates grub.cfg, so
     # both BIOS and UEFI installations use the installed root filesystem UUID.
-    write_target 0755 /etc/grub.d/41_imagectl_recovery '#!/bin/sh
+    write_target 0755 /etc/grub.d/41_imagesrv_recovery '#!/bin/sh
 set -eu
 root_uuid=$(grub-probe --target=fs_uuid /)
 cat <<EOF
@@ -182,7 +182,7 @@ UUID=$_wh_esp_uuid /boot/efi vfat umask=0077 0 1
     # synchronization start on the first installed-system boot.
     must_run time-sync "could not enable chrony" \
         chroot "$TARGET" systemctl enable chrony.service
-    write_target 0600 /etc/imagectl/answers "disk=$ANSWER_DISK
+    write_target 0600 /etc/imagesrv/answers "disk=$ANSWER_DISK
 role=$ANSWER_ROLE
 primary_url=$ANSWER_PRIMARY_URL
 primary_fingerprint=$ANSWER_PRIMARY_FINGERPRINT
@@ -200,5 +200,5 @@ raid_level=${RAID_LEVEL:-none}
 raid_disks=${ANSWER_RAID_DISKS:-}
 raid_spares=${RAID_SPARES:-0}
 "
-    write_target_secret /etc/imagectl/answers.secret "$ANSWER_ADMIN_PASS"
+    write_target_secret /etc/imagesrv/answers.secret "$ANSWER_ADMIN_PASS"
 }

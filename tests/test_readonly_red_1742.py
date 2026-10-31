@@ -33,7 +33,8 @@ from pathlib import Path
 
 import pytest
 
-from server import ata_cause, db, disk_failures
+from server.disks import ata_cause, disk_failures
+from server import db
 from test_smart import BASH, HEALTH_OK, PRELUDE, env, full, make_smartctl, posix
 from native import requires_native
 
@@ -145,7 +146,7 @@ def test_the_build_stations_disk_line_is_redrawn_when_ro_changes(tmp_path):
     base, run, blk, _ = rig(tmp_path, ro="0")
     gui = tmp_path / "gui"; gui.mkdir()
     (gui / "station.json").write_text("{}", newline="\n")
-    run_it = (base + f". {posix(AGENT)}/lib/guistate.sh; export GUI_DIR={posix(gui)!r}; "
+    run_it = (base + f". {posix(AGENT)}/lib/gui/guistate.sh; export GUI_DIR={posix(gui)!r}; "
               "jq() { echo sda; }; disk_port() { echo 3; }; gui_disk_smart")
     first = sh(run_it)
     assert first.stdout.split() == ["dsmart=sda|ok|ok|S6PNNS0T123456|3"], first.stderr
@@ -363,7 +364,7 @@ def test_the_local_clone_fails_a_read_only_target_in_its_words(tmp_path):
 def test_restore_to_this_disk_refuses_a_read_only_disk_in_its_words(tmp_path):
     from test_single_restore_progress_gui import body, cards, restore
     run_restore = ('run_restore() { echo STARTED >> "$RUN_DIR/trace"; return 0; }; '
-                   f'. {posix(AGENT)}/lib/smart.sh; ' + RO_PROBE.replace("{ro}", "sda"))
+                   f'. {posix(AGENT)}/lib/smart/smart.sh; ' + RO_PROBE.replace("{ro}", "sda"))
     r = restore(tmp_path, run_restore)
     assert "STARTED" not in r["trace"], r["out"]
     last = body(cards(r["seen"])[-1]) if r["seen"] else ""

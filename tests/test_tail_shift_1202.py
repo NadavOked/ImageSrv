@@ -6,7 +6,7 @@ measured on metal 20/09, source NVMe 256,062,259,200 -> target Samsung
 regular shrink (margin 10% / 2GiB) moves nothing, the layout ends at the end
 of the source disk, and every slightly smaller drive is refused.
 
-The rule (agent/lib/shrinkplan.sh, ``_shrink_tail``): the captured layout must
+The rule (agent/lib/shrink/shrinkplan.sh, ``_shrink_tail``): the captured layout must
 end at least ``SHRINK_TAIL_BYTES`` (64MiB) before the end of the source disk.
 What is missing is taken from the LAST system partition that still keeps that
 much free above ntfsresize's minimum; everything after it (recovery, MSR) moves
@@ -131,7 +131,7 @@ def _capture(tmp_path, ntfs_min: int, disk_sectors: int = DISK_SECTORS, env: dic
 
 def _layout_need(parts: list[tuple[int, int]]) -> int:
     """required_bytes of the layout (start sector, size bytes) on the source disk."""
-    from server.images import required_bytes
+    from server.library.images import required_bytes
     return required_bytes({"sector_size": 512, "source_disk_bytes": SOURCE_DISK_BYTES,
                            "partitions": [{"start_sector": s, "size_bytes": b} for s, b in parts]})
 
@@ -161,7 +161,7 @@ def test_a_nearly_full_c_gives_the_tail_and_the_image_fits_the_smaller_drive(tmp
     assert rec["source_start_sector"] == REC_START
     assert rec["size_bytes"] == REC_SECTORS * 512 and "shrunk_from_bytes" not in rec
     assert rec["start_sector"] % 2048 == 0
-    from server.images import required_bytes
+    from server.library.images import required_bytes
     assert required_bytes(m) == m["min_target_bytes"] <= TARGET_BYTES, (m["min_target_bytes"], TARGET_BYTES)
 
 
@@ -202,7 +202,7 @@ def _tail(tmp_path: Path, meas: list[str], slack: int, tail: int = TAIL) -> tupl
     run = tmp_path / "run"
     run.mkdir(exist_ok=True)
     (run / "meas").write_text("".join(f"{m}\n" for m in meas), encoding="utf-8", newline="\n")
-    out = sh(f"export RUN_DIR={posix(run)!r} SHRINK_TAIL_BYTES={tail}; . {posix(AGENT)}/lib/shrinkplan.sh; "
+    out = sh(f"export RUN_DIR={posix(run)!r} SHRINK_TAIL_BYTES={tail}; . {posix(AGENT)}/lib/shrink/shrinkplan.sh; "
              f"_shrink_tail {posix(run / 'meas')!r} {slack}")
     return out.splitlines(), (run / "shrink.tail").read_text(encoding="utf-8").strip()
 

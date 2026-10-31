@@ -1,5 +1,5 @@
 """#1364 -- the graphical server screen without its fonts: the text screen said
-"imagectl-station-gui exited before opening the screen (exit 1)" and not why.
+"imagesrv-station-gui exited before opening the screen (exit 1)" and not why.
 
 ``main.c`` checks the IBM Plex families before ``dcui_main`` runs, so the
 ``FAIL <why>`` that #1362 added to the protocol was never sent: the reason went

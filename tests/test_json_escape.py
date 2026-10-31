@@ -48,16 +48,17 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
+from agentlib import flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
 
-#: ה-busybox שתחתיו רצות הבדיקות. ‏`IMAGECTL_BUSYBOX` גובר, כדי שאפשר
+#: ה-busybox שתחתיו רצות הבדיקות. ‏`IMAGESRV_BUSYBOX` גובר, כדי שאפשר
 #: יהיה לכוון בדיוק לזה שחולץ מ-initrd מסוים.
-BUSYBOX = os.environ.get("IMAGECTL_BUSYBOX") or shutil.which("busybox")
+BUSYBOX = os.environ.get("IMAGESRV_BUSYBOX") or shutil.which("busybox")
 
 #: ה-initrd שנארז בפועל. כשהוא כאן — משווים אליו את הבינארי שבבדיקה.
-INITRD = Path(os.environ.get("IMAGECTL_INITRD", "/srv/imagectl/boot/initrd.img"))
+INITRD = Path(os.environ.get("IMAGESRV_INITRD", "/srv/imagesrv/boot/initrd.img"))
 
 pytestmark = requires_native(
     ("busybox", BUSYBOX), posix=True,
@@ -80,7 +81,7 @@ LIBS = ("common.sh", "jsonq.sh", "sysinfo.sh", "restore.sh", "progress.sh", "ui.
 
 
 def source_line(*names: str) -> str:
-    return "".join(f'. "{AGENT}/lib/{name}"\n' for name in names)
+    return "".join(f'. "{flat_lib()}/{name}"\n' for name in names)
 
 
 #: ה-applets שהסוכן משתמש בהם בנתיבים שנבדקים כאן. מקושרים ל-busybox
@@ -203,7 +204,7 @@ def test_the_busybox_under_test_is_the_one_the_initrd_ships(tmp_path):
     ולכן על מכונה שבנתה initrd שני העותקים חייבים להיות אותו בינארי.
 
     בלי initrd (‏CI, עמדת פיתוח) אין מה להשוות — ולא מדלגים, כי דילוג
-    תחת `IMAGECTL_REQUIRE_NATIVE=1` מפיל את הריצה כולה (#52). מה שכן
+    תחת `IMAGESRV_REQUIRE_NATIVE=1` מפיל את הריצה כולה (#52). מה שכן
     נבדק תמיד: הבינארי קיים ומזדהה."""
     assert BUSYBOX and Path(BUSYBOX).exists()
     if not INITRD.exists():
