@@ -318,7 +318,8 @@ def test_upgrade_to_a_signed_tag_verifies_before_checkout(server, world):
     text = (server["tmp"] / "upgrade.log").read_text(encoding="utf-8")
     assert proc.returncode == 0, text
     assert f"חתימה: v0.72.0 signed: {PRINCIPAL} {key_fingerprint(world['release'])}" in text
-    fetch = next(i for i, row in enumerate(log) if row.endswith(" fetch --tags"))
+    fetch = next(i for i, row in enumerate(log) if row.endswith(
+        " fetch --no-tags origin refs/tags/v0.72.0:refs/tags/v0.72.0"))
     checkout = next(i for i, row in enumerate(log) if " checkout --detach v0.72.0" in row)
     assert fetch < checkout
     # בלינוקס המאמת עובר דרך ה-shim, ואז גם הסדר שלו נראה ביומן

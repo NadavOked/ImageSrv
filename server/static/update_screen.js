@@ -418,10 +418,10 @@ function updHtml() {
     sub = `השרת ממשיך לעבוד על ${fromTxt}. שום דבר לא הוחלף.`;
     steps = updStepsHtml(["fail", "skip", "skip", "skip"], { 0: net ? "השרת לא הצליח להגיע ל-github.com" : "ההורדה מ-github.com נכשלה — הפירוט למטה" });
     time = false;
-    body = `<h3>מה לבדוק</h3><ol class="u-chk">
+    body = (net ? `<h3>מה לבדוק</h3><ol class="u-chk">
       <li><span>חומת האש של המכללה<small>השרת צריך יציאה ל-<span class="mono">github.com</span> בפורט <span class="mono">443</span>.</small></span></li>
       <li><span>שרת ה-DNS בהגדרות הרשת של השרת<small>ההודעה <span class="mono">Could not resolve host</span> פירושו שהשם לא תורגם לכתובת.</small></span></li>
-    </ol>${updTech(st.error)}`;
+    </ol>` : `<p>ההורדה נכשלה מסיבה שאינה קשורה לרשת. הפרטים הטכניים למטה מציגים את השגיאה שהתקבלה.</p>`) + updTech(st.error);
     foot = `<span class="n-hint" id="updFootHint">נרשם ביומן הפעולות</span>${updBtn("חזרה לקונסולה", "updClose()")}${updBtn("נסה שוב", "updRetry()", "pri")}`;
   } else if (u.phase === "rollback") {
     badge = updBadge("bad", "undo");
