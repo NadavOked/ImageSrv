@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from server.agent import agent_logs, registry
+from server.agent import logs as agent_logs, registry
 from server import db
 from server.system import housekeeping
 from agentlib import flat_lib

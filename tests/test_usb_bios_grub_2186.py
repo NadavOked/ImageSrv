@@ -47,7 +47,10 @@ def build(tmp: Path, **env: str) -> tuple[subprocess.CompletedProcess, Path | No
     tree = host / "initrd-tree"
     (tree / "lib" / "modules" / KVER).mkdir(parents=True)
     initrd = host / "initrd.img"
-    subprocess.run([BASH, "-c", f"cd {posix(tree)!r} && find lib | cpio -o -H newc --quiet > {posix(initrd)!r}"],
+    # zstd, as build_initramfs.sh writes it: since #2091 the USB build runs the lab gate on
+    # the initrd, and since #1775 the gate refuses an uncompressed cpio (round 20, 31/10)
+    subprocess.run([BASH, "-o", "pipefail", "-c",
+                    f"cd {posix(tree)!r} && find lib | cpio -o -H newc --quiet | zstd -q > {posix(initrd)!r}"],
                    check=True, timeout=60, stdin=subprocess.DEVNULL)
     run_env = {k: v for k, v in os.environ.items() if not k.startswith("USB_")}
     run_env.update(IMAGESRV_MODULES_DIR=posix(host / "modules"), IMAGESRV_KERNEL_DIR=posix(host / "boot"),

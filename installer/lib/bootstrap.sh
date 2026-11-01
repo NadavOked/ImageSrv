@@ -168,12 +168,33 @@ install_target_packages() {
     must_run firstboot-service "could not install firstboot service" cp "$CDROM/imagesrv/imagesrv-firstboot.service" "$TARGET/etc/systemd/system/imagesrv-firstboot.service"
     must_run firstboot-tty1 "could not reserve tty1 for firstboot progress" chroot "$TARGET" systemctl mask getty@tty1.service
     must_run firstboot-enable "could not enable firstboot service" chroot "$TARGET" systemctl enable imagesrv-firstboot.service
+    install_boot_splash
     copy_local_repo
     write_target 0644 /etc/apt/sources.list ""
     write_target 0644 /etc/apt/sources.list.d/imagesrv-iso.list \
         "deb [trusted=yes] file:/var/lib/imagesrv/apt-repo trixie main contrib
 "
     write_installer_facts
+}
+
+install_boot_splash() {
+    # Owner 17/10: no black screen. The server's boot screen from its very
+    # first boot (server/system/bootsplash.py) -- before firstboot builds the GUI
+    # binary, so the picture is the one this installer image already carries
+    # (build_initramfs.sh renders it with the GUI itself). Without it the
+    # unit still installs and says "no prebuilt screen" in the journal; the
+    # install goes on, and the progress line says so.
+    must_run splash-script "could not install the boot screen" install -D -m 0755 \
+        "$CDROM/imagesrv-src/server/system/bootsplash.py" "$TARGET/usr/local/sbin/imagesrv-boot-splash"
+    must_run splash-service "could not install the boot screen unit" install -D -m 0644 \
+        "$CDROM/imagesrv-src/deploy/imagesrv-boot-splash.service" "$TARGET/etc/systemd/system/imagesrv-boot-splash.service"
+    set -- "${SPLASH_SRC_DIR:-/usr/share/imagesrv}"/splash-*x*.raw
+    if [ -f "$1" ]; then
+        must_run splash-picture "could not copy the boot screen picture" install -D -m 0644 "$1" "$TARGET/usr/share/imagesrv/${1##*/}"
+    else
+        progress packages 62 "Installing packages" "no boot screen picture in the installer image: the server boots on the text console until the DCUI"
+    fi
+    must_run splash-enable "could not enable the boot screen" chroot "$TARGET" systemctl enable imagesrv-boot-splash.service
 }
 
 # What is mounted under the target, deepest first, as the kernel lists it

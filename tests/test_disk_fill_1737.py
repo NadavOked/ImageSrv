@@ -28,7 +28,7 @@ pytest.importorskip("fastapi")
 from conftest import MANIFEST_256, write_image
 
 from server.library import archive, work_areas
-from server.console import console_library
+from server.console import library as console_library
 from server.rounds import drive_rates, room_precheck
 from server.agent import inventory, probe
 from server.system import housekeeping

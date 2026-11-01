@@ -79,7 +79,7 @@ def test_the_console_apps_never_fall_back_to_the_machine():
     """הראיה מהצד של ה-HTTP: כל ראוטר שיש לו hook בשם `interfaces`
     מקבל אותו מ-`default_hooks()`, ובריצת בדיקות ברירת המחדל הזאת
     היא השומר. ‏endpoint שלא הוזרק לו hook ייכשל — ולא יקרא מכונה."""
-    from server.console import console_dhcp, console_netcfg
+    from server.console import dhcp as console_dhcp, netcfg as console_netcfg
     from server.system import health
 
     for module in (console_dhcp, console_netcfg, health):

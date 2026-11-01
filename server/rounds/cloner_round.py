@@ -64,6 +64,10 @@ RATE_S = 10
 _now = time.monotonic
 
 
+def _journal_image_id(image_id: str) -> str:
+    return image_id.replace("\r", " ").replace("\n", " ")[:64]
+
+
 def initiator(machine) -> str:
     """היוזם כפי שהוא נרשם ביומן וב-``opened_by`` של הסבב."""
     return f"מחשב שיכפול {machine['suffix'] or machine['mac']}"
@@ -156,7 +160,7 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         # המגירות שנבחרו, אותה `fit_refusal` של הקונסולה (‏FitRefusal למטה).
         if image_id not in ctx.library.allowed_for_disks(None):
             return refuse(mac, 403, "האימג' הזה אינו מותר למחשב הזה", "image_not_allowed",
-                          f"האימג' {image_id} אינו מותר למחשב הזה")
+                          f"האימג' {_journal_image_id(image_id)} אינו מותר למחשב הזה")
 
         who = initiator(machine)
         try:
@@ -170,7 +174,7 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
             return refuse(mac, 400, str(exc) or "בקשה לא תקינה", "bad_round")
         journal(ctx.conn, "room_open_cloner",
                 f"{opened['id']} — נפתח ממחשב שיכפול {machine['suffix'] or mac}"
-                f" ({mac}), {image_id}, מגירות {','.join(str(p) for p in sorted(ports))}",
+                f" ({mac}), {_journal_image_id(image_id)}, מגירות {','.join(str(p) for p in sorted(ports))}",
                 who)
         return JSONResponse({"ok": True, **opened})
 
@@ -197,7 +201,7 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         if why is not None:
             return refuse(mac, 409, why, "not_marked")
         journal(ctx.conn, "image_system_partition",
-                f"{image_id} system={index} (ממחשב שיכפול {machine['suffix'] or mac})", initiator(machine))
+                f"{_journal_image_id(image_id)} system={index} (ממחשב שיכפול {machine['suffix'] or mac})", initiator(machine))
         return JSONResponse({"ok": True, "index": index})
 
     return router

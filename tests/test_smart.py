@@ -206,6 +206,29 @@ def test_smart_cache_is_invalidated_when_device_name_has_a_new_serial(tmp_path):
     assert (run / "smart/sdb.serial").read_text().strip() == "SERIAL-B"
 
 
+def test_probe_leaves_a_standby_disk_as_not_checked(tmp_path):
+    assert probe(tmp_path, "Device is in STANDBY mode, exit(2)", rc=2) == "unchecked"
+    assert (tmp_path / "run/smart/sda.v").read_text().split()[:2] == ["unchecked", "standby"]
+
+
+def test_health_probe_asks_smartctl_not_to_wake_the_disk(tmp_path):
+    run = tmp_path / "run"; run.mkdir()
+    dev = tmp_path / "dev"; dev.mkdir(); (dev / "sda").write_bytes(b"\0")
+    blk = tmp_path / "sysro/sys/block/sda"; blk.mkdir(parents=True)
+    (blk / "ro").write_text("0\n", newline="\n")
+    args = tmp_path / "args"
+    body = tmp_path / "body"; body.write_text(full(HEALTH_OK), newline="\n")   # #1903: health + table
+    fake = tmp_path / "smartctl"
+    fake.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" > {posix(args)!r}\n'
+                    f'cat {posix(body)!r}\nexit 0\n', newline="\n")
+    subprocess.run([BASH, "-c", f'chmod +x {posix(fake)!r}'], check=True,
+                   stdin=subprocess.DEVNULL)
+    out = sh(env(run, dev, sysroot=tmp_path / "sysro", smartctl=posix(fake))
+             + PRELUDE + 'smart_probe sda')
+    assert out.stdout.strip() == "ok", out.stderr
+    assert "-n standby" in args.read_text(), args.read_text()
+
+
 def test_probe_pending_sectors_are_orange_and_recorded(tmp_path):
     # ‏#1921 (נדב 20/10): 197 מעל 0 = כתום (סימן מוקדם, הדיסק עובד), לא אדום; הערך נשמר במטמון.
     assert probe(tmp_path, full(HEALTH_OK, pending=4)) == "warn"

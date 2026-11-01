@@ -402,15 +402,13 @@ test('WoL: builder card, cloner card (object and room), capture card, drawer, bu
   const cr=run(`clonerCardHtml(findMachine('${MAC_C}'), true, true)`);
   assert.match(cr,/wakeMachine\(/,'room card, not connected → per-machine WoL');
   const bv=run("buildersView(GROUPS[0], [findMachine('"+MAC_B+"')], 0)");
-  assert.doesNotMatch(bv.actions,/wakeGroup|בקרוב/,'#1485 (P.build): the header has "+ מחשב בנייה" only; the group WoL stays in the machines table (below)');
+  assert.match(bv.actions,/onclick="wakeGroup\('grp_BUILD'\)">הער את כולם</,'#2156 (P.build, Nadav 25/10): the one entry point left for WoL to the build group');
+  assert.doesNotMatch(bv.actions,/בקרוב/);
   const cl=run("clonersView({id:'grp_CLONERS',label:'x',role:'cloner'}, [findMachine('"+MAC_C+"')])");
   assert.match(cl.body,new RegExp(`מחשבים שלא דיווחו[^]*wakeMachine\\('${encodeURIComponent(MAC_C)}'\\)">WoL<`),'#1485 (P.cloners): WoL per machine in "machines that did not report"');
   const dB=run(`machineDrawerHtml(findMachine('${MAC_B}'))`), dC=run(`machineDrawerHtml(findMachine('${MAC_C}'))`), dS=run(`machineDrawerHtml(findMachine('${MAC_S}'))`);
   assert.match(dB,/wakeMachine\(/); assert.match(dC,/wakeMachine\(/); assert.doesNotMatch(dC,/wakeRoom/);
   assert.match(dS,/title="v2">WoL ואתחול מרחוק — לתחנות כיתה ב-v2</); assert.doesNotMatch(dS,/wakeMachine|בקרוב">Wake/);
-  run("MCH.history={}; MCH.sel=new Set()");
-  const g=run("groupRowHtml(GROUPS[0], [findMachine('"+MAC_B+"')]).html");
-  assert.match(g,/wakeGroup\('grp_BUILD'\)">WoL לבנייה</);
   assert.equal(requests.filter((r)=>r.url.endsWith('/wake')).length,0,'rendering sends nothing');
 });
 

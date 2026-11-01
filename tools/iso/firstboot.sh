@@ -47,6 +47,11 @@ HTTP_ROOT=/srv/imagesrv/boot
 BUILD_LOG=/var/log/imagesrv-firstboot-build.log
 FIRSTBOOT_TTY=/dev/tty1
 TTY_PROGRESS=1
+# Owner 17/10: no screen that is not the GUI. When the boot screen is up
+# (server/system/bootsplash.py wrote its marker), progress stays in the journal and
+# the picture stays on tty1; a failure (fail) is still printed there.
+SPLASH_MARKER=${IMAGESRV_SPLASH_MARKER:-/run/imagesrv-boot-splash.on}
+if [[ -e "$SPLASH_MARKER" ]]; then TTY_PROGRESS=0; fi
 
 log() {
     printf 'imagesrv-firstboot: %s\n' "$*"

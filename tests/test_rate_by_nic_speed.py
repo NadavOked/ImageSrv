@@ -312,7 +312,7 @@ def _on(mac, serial):
 
 def _report(conn, mac, nics):
     """דגימת probe כפי שהסוכן שולח ב-hello (‏`probe.nic`)."""
-    from server.agent import probe                                # noqa: PLC0415
+    from server.agent import probe# noqa: PLC0415
     probe.record(conn, mac, probe.well_formed({"nic": nics}))
 
 

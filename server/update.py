@@ -37,7 +37,7 @@ log = logging.getLogger("imagesrv.update")
 Hooks = dict[str, Callable]
 _DISPLAY_VERSION_CACHE: dict[tuple[str, str], "DisplayVersion"] = {}
 
-#: מפתח המתג ב-``WRITE_SETTINGS`` (console_api.py) — כבוי כברירת מחדל,
+#: מפתח המתג ב-``WRITE_SETTINGS`` (console/api.py) — כבוי כברירת מחדל,
 #: כמו כל דגל אחר שם: ``get_setting`` שמחזיר ``None`` נקרא "כבוי".
 ENABLED_KEY = "update_enabled"
 #: התג הקודם, נשמר לפני כל ``apply`` — כדי ש"חזור לגרסה הקודמת" לא
@@ -443,14 +443,17 @@ def get_last_check(conn) -> dict | None:
 
 
 def running_verdict(doc: dict, current: str | None) -> bool | None:
-    """‏#1642: מה ``running`` שב-DB שווה, מול הגרסה שרצה **עכשיו**.
+    """Shared verdict for console status and scheduled auto-reboot (#1642, #2183).
 
-    ‏``None`` = הסטטוס אינו "רץ עם תג"; ‏``True`` = הגרסה הרצה היא התג, כלומר
-    העדכון הסתיים והסטטוס רק לא עודכן (הקונסולה מציגה "הושלם"); ‏``False`` =
-    גרסה אחרת (או שלא נקראה) רצה — העדכון אולי עדיין רץ. תשובה אחת לשני
-    הקוראים: הקונסולה (``status_with_verification``) וההפעלה המתוזמנת."""
+    ``None`` means not running with a tag; ``False`` means possibly still running.
+    ``current_version`` reads git HEAD, which moves at install, before restart.
+    A matching tag therefore means ``True`` only at restart/done, or for legacy
+    docs without a stage key. Pre-restart and unknown stages are not completion.
+    """
     if doc.get("state") != "running" or not doc.get("tag"):
         return None
+    if "stage" in doc and doc["stage"] not in ("restart", "done"):
+        return False
     return current == doc["tag"]
 
 

@@ -763,6 +763,14 @@ def _kernel_cmdline(config: GrubConfig, *, recovery: bool) -> str:
         "console=tty0",
         "quiet",
         "loglevel=3",
+        # ‏thermal.psv=-1 (הכרעת נדב 20/10, #1871: "רק החלק שמאט"): פרמטר
+        # של דרייבר ה-ACPI thermal של הקרנל שמבטל את נקודות ה-trip הפסיביות,
+        # ולכן ‏_PSL אינו מוערך. על ‏HP EliteDesk 800 G6 ההערכה הזו נכשלה
+        # ב-timeouts (‏`_PSL evaluation failure` ב-5.83 ש', ‏20/10). נשארים:
+        # אזורי ‏acpitz (‏probe.thermal), ‏_CRT ו-_ACx, והגנת החום של המעבד
+        # בחומרה (‏TCC/THERMTRIP). פרמטר של הקרנל ולא פרט משימה (עיקרון 2),
+        # ורק בערך הרשת של הסוכן — לא בערכים המקומיים.
+        "thermal.psv=-1",
     ]
     if recovery:
         parts.append("imagesrv.mode=recovery")

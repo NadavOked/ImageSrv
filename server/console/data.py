@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from server.agent import agent_logs, cloner_cpu, registry
+from server.agent import logs as agent_logs, cloner_cpu, registry
 from server.console import auth
 from server.net import pxe_log
 from server.learn import net_history

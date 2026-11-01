@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from server import db
-from server.learn import learn_eta
+from server.learn import eta as learn_eta
 
 from test_server_room import CLONER1, cloner_hello, room, room_body, room_server  # noqa: F401
 

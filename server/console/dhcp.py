@@ -1,6 +1,6 @@
 """לשונית "רשת", החצי השני: DHCP לכל כרטיס רשת (אפיון סעיף 24).
 
-console_net.py מראה מה השרת ראה; כאן מגדירים מה השרת *מחלק*. ההגדרות
+console/net.py מראה מה השרת ראה; כאן מגדירים מה השרת *מחלק*. ההגדרות
 נשמרות בטבלת settings (מפתח `dhcp:<ממשק>`), ואחרי כל שינוי נכתב קובץ
 dnsmasq ו-dnsmasq מופעל מחדש.
 
@@ -21,7 +21,7 @@ from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from server.console import auth, console_netcfg
+from server.console import auth, netcfg as console_netcfg
 from server.core import capabilities
 from server.net import deploy_net, dhcp, ports
 from server.agent.api import ServerContext

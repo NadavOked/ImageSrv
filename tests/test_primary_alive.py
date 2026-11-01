@@ -32,7 +32,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server import db
-from server.interserver import interserver_auth, primary_alive, storage_nodes
+from server.interserver import auth as interserver_auth, primary_alive, storage_nodes
 
 SPKI = "ab" * 32
 

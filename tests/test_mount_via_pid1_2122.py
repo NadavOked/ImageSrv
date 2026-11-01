@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from server.storage import storage_locations as sl
-from server.storage.storage_locations import FAILED, OK, UNCHECKED, HookResult
+from server.storage import locations as sl
+from server.storage.locations import FAILED, OK, UNCHECKED, HookResult
 
 REPO = Path(__file__).resolve().parents[1]
 TARGET = "/var/lib/imagesrv/storage/extra20"

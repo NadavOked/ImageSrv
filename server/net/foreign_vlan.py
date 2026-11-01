@@ -26,7 +26,7 @@ import logging
 import sqlite3
 from datetime import datetime, timedelta
 
-from server.agent.agent_loops import SILENCE_SECONDS
+from server.agent.loops import SILENCE_SECONDS
 from server.db import _write_lock, journal, now_iso, writing
 
 log = logging.getLogger("imagesrv.foreign_vlan")

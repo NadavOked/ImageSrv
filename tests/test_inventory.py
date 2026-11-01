@@ -129,7 +129,7 @@ def test_the_agent_loads_the_inventory_lib():
 
 pytest.importorskip("fastapi")
 
-from server.agent import inventory  # noqa: E402
+from server.agent import inventory# noqa: E402
 
 GOOD = {
     "dmi": {"sys_vendor": "LENOVO", "product_name": "10SQS0AK00",

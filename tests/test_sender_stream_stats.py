@@ -119,6 +119,14 @@ def engine_env(tmp_path, monkeypatch):
     engine.stop()
 
 
+def sending(engine: SenderEngine, recorder: Recorder) -> bool:
+    """State "sending" and the partition's command recorded. The engine sets the state
+    before runner(cmd) runs (sender.py), so a test that reads current_log right
+    after the state alone hit an empty recorder.commands -- IndexError under the
+    full gate's load (round 20, 31/10)."""
+    return wait_for(lambda: engine.status()["state"] == "sending" and bool(recorder.commands))
+
+
 def current_log(recorder: Recorder, index: int = -1) -> Path:
     cmd = recorder.commands[index]
     return sender_module.partition_log(cmd[cmd.index("--file") + 1])
@@ -135,7 +143,7 @@ def test_nothing_is_measured_for_a_wave_the_engine_is_not_sending(engine_env):
 def test_the_rate_is_bytes_between_two_printed_lines_over_their_time(engine_env):
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert wait_for(lambda: engine.status()["state"] == "sending")
+    assert sending(engine, recorder)
     log, now = current_log(recorder), time.time()
     write_log(log, "Starting transfer: f\n" + line(100_000_000, 4), mtime=now - 2)
     first = engine.stream_stats("ses_1")
@@ -150,7 +158,7 @@ def test_the_rate_is_bytes_between_two_printed_lines_over_their_time(engine_env)
 def test_a_log_that_stopped_printing_has_no_rate(engine_env):
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert wait_for(lambda: engine.status()["state"] == "sending")
+    assert sending(engine, recorder)
     log, old = current_log(recorder), time.time() - 60
     write_log(log, "Starting transfer: f\n" + line(1_000, 0), mtime=old - 2)
     engine.stream_stats("ses_1")
@@ -178,7 +186,7 @@ def test_a_started_partition_without_a_readable_line_makes_loss_unknown(engine_e
     לוג שנמחק — אינו "אפס שידורים חוזרים"."""
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert wait_for(lambda: engine.status()["state"] == "sending")
+    assert sending(engine, recorder)
     write_log(current_log(recorder), "Starting transfer: f\nsomething else\r")
     assert engine.stream_stats("ses_1")["loss_blocks"] is None
     current_log(recorder).unlink()
@@ -252,7 +260,7 @@ def test_a_started_partition_without_a_line_makes_the_outcome_unknown(engine_env
     """עיקרון 5: מחיצה ששודרה ואין לה מונה — כל הגל "לא נמדד", לא אפס."""
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert wait_for(lambda: engine.status()["state"] == "sending")
+    assert sending(engine, recorder)
     write_log(current_log(recorder), "Starting transfer: f\nsomething else\r")
     assert _counts(engine.wave_outcome("ses_1")) == {"sent_bytes": None, "loss_blocks": None}
 

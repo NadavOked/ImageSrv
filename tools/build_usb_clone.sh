@@ -47,7 +47,7 @@
 # Output: $OUT/imagesrv-usb-<version>.img, .img.sha256 ("<sha>  <name>"), and
 # imagesrv-usb.json. --publish DATA_DIR also puts the three in
 # DATA_DIR/usb/ under fixed names, where the console's download reads them
-# (server/console/console_usb.py) -- each written to .new first, renamed together.
+# (server/console/usb.py) -- each written to .new first, renamed together.
 
 set -euo pipefail
 
@@ -129,6 +129,8 @@ if [[ -z "$INITRD" ]]; then
         || { tail -n 30 "$WORK/initramfs.log" >&2; die "build_initramfs.sh failed"; }
 fi
 [[ -s "$INITRD" ]] || die "the initramfs is missing or empty: $INITRD"
+bash "$REPO/tools/iso/initrd-lab-gate.sh" "$INITRD" >/dev/null \
+    || die "initrd contains lab access (overlay/site hook/SSH) or could not be inspected; a USB image must be built from a clean environment (IMAGESRV_EXTRA_OVERLAY unset)"
 # its modules must be this kernel's -- another kernel's modules do not load, and
 # that looks like "no disks" on the machine (build-iso.sh, the same check)
 ikver=$( (zstd -dc "$INITRD" 2>/dev/null || gzip -dc "$INITRD" 2>/dev/null || cat "$INITRD") \

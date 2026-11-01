@@ -16,7 +16,7 @@ import pytest
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
 from server import db
-from server.interserver import interserver_auth, storage_nodes
+from server.interserver import auth as interserver_auth, storage_nodes
 from test_storage_transfer import paired, secondary          # noqa: F401 — fixtures
 
 pytestmark = pytest.mark.skipif(

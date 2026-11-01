@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 
-from server.interserver import interserver_auth, storage_nodes
+from server.interserver import auth as interserver_auth, storage_nodes
 
 log = logging.getLogger("imagesrv.storage_heartbeat")
 

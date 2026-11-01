@@ -16,7 +16,7 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from server.console import console_tls
+from server.console import tls as console_tls
 
 REPO = Path(__file__).resolve().parent.parent
 INSTALLER = REPO / "deploy" / "setup-boot-server.sh"

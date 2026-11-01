@@ -432,6 +432,10 @@ typedef struct State {
      * /api/v1/agent/state, server_addr= from imagesrv.server. Empty = not
      * known, drawn as "לא ידוע" -- never the mockup's numbers. */
     char server_name[64], server_addr[64], server_version[129];
+    /* #1709: screen=boot|class|cloner (empty = the build menu), ip=, mac= --
+     * a GUI started before the hello (agent/lib/guiearly.sh) learns its role
+     * and address here instead of from --screen/--ip/--mac. */
+    char screen[16], ip[48], mac[40];
     char tz[65]; /* #1447: POSIX TZ from the server; empty = not known -> UTC. */
     /* #1269: driver_models=<n> and one driver_model=<vendor>|<model> per
      * model, from GET /api/console/room/driver-models. driver_models_read
@@ -567,6 +571,7 @@ typedef struct App {
     int force_progress;         /* --screen progress: show it even with no task */
     int force_cloner;           /* --screen cloner: the cloning machine's own screen */
     int force_standby;          /* --screen standby / idle cloner */
+    int screen_set;             /* #1709: the state file's screen= was applied (once) */
     int fixed_clock;            /* --png: header clock is a constant, so two renders
                                    a minute apart are byte-identical (test flake, 19/09) */
     int watching;               /* #st-progress was on screen (drawDone trigger) */
@@ -705,6 +710,7 @@ int app_hit(const App *a, double x, double y);
 /* Decide a->screen from the task, the message, the session and the mode --
  * the order of station.js poll(). Called before every draw. */
 void app_route(App *a);
+void app_take_screen(App *a);   /* #1709: screen=/ip=/mac= from the state file, once */
 /* #1245: what the status bar's language chip says. LANG_NONE when no text
  * field on this screen has the focus; LANG_EN_ONLY on a field that takes
  * English only (the chip then explains instead of switching). main.c. */

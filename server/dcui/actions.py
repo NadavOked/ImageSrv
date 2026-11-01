@@ -464,8 +464,8 @@ def request_network_rollback(conn, data_dir: Path,
 
 def blank_disks(hooks: dict | None = None) -> tuple[dict | None, ActionResult | None]:
     """(listing, None) or (None, the reason it could not be read)."""
-    from server.storage import storage_disks
-    from server.storage import storage_locations as sl
+    from server.storage import disks as storage_disks
+    from server.storage import locations as sl
     try:
         return storage_disks.blank_disks({**sl.default_hooks(), **(hooks or {})}), None
     except storage_disks.AddDiskError as exc:
@@ -485,8 +485,8 @@ def disk_name(conn, disk: dict) -> str:
 
 
 def add_disk(conn, data_dir: Path, disk: dict, hooks: dict | None = None) -> ActionResult:
-    from server.storage import storage_disks
-    from server.storage import storage_locations as sl
+    from server.storage import disks as storage_disks
+    from server.storage import locations as sl
     if conn is None:
         return ActionResult(False, "The server database is not available.")
     name = disk_name(conn, disk)

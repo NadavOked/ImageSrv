@@ -51,7 +51,7 @@ def probing_server(tmp_path: Path, images_root: Path, clock):
         pytest.skip("fastapi is required")
     from test_sender import Recorder                           # noqa: PLC0415
 
-    from server.console import users                                   # noqa: PLC0415
+    from server.console import users# noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
 
     tftp = tmp_path / "tftp"

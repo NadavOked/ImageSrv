@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from server import db
-from server.learn import learn_waits
+from server.learn import waits as learn_waits
 
 T0 = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=2)
 

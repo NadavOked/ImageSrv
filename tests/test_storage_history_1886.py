@@ -15,7 +15,7 @@ import pytest
 from server import db
 from server.agent import registry
 from server.system import housekeeping
-from server.storage import disk_reserve, storage_history
+from server.storage import disk_reserve, history as storage_history
 
 GB = 10 ** 9
 Usage = namedtuple("Usage", "total used free")
@@ -66,7 +66,7 @@ def test_an_unreadable_location_is_not_a_zero(conn):
 
 
 def test_only_connected_locations_are_sampled(conn, tmp_path):
-    from server.storage import storage_locations
+    from server.storage import locations as storage_locations
     storage_locations.ensure_local(conn, tmp_path)
     assert storage_history.sample_all(conn, "daily",
                                       usage=lambda p: Usage(100 * GB, 0, 40 * GB)) == 1

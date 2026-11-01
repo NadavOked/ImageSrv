@@ -106,7 +106,8 @@ AGENT_STEPS: tuple[str, ...] = STEPS[6:]
 
 #: ‏#1452: נקודות הזמן ש-`agent/init` מודד (שניות `/proc/uptime`) ושולח
 #: כ-`up=` עם `agent-net` — לפני DHCP אין רשת. רשימה סגורה, כמו STEPS.
-INIT_MARKS: tuple[str, ...] = ("init", "modules", "nic", "link", "dhcp")
+#: ‏#1709: `gui` = הרגע שבו init הפעיל את הגואי, לפני DHCP (agent/lib/guiearly.sh).
+INIT_MARKS: tuple[str, ...] = ("init", "modules", "nic", "link", "dhcp", "gui")
 _MARK_VALUE = re.compile(r"[0-9]{1,7}(?:\.[0-9]{1,3})?")
 
 

@@ -18,7 +18,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from server.console import auth, console_login, console_mfa, console_presence, users
+from server.console import auth, login as console_login, mfa as console_mfa, presence as console_presence, users
 from server.core import capabilities, hostname_rule
 from server.library import minfree
 from server.rounds import drive_rates, nic_speed, room
@@ -27,7 +27,7 @@ from server.system import backup_target, timezone
 from server.net import dhcp, ports
 from server.disks import (crcwarn, disk_failures, drawer_slots, shrink_records, slot_names,
                           smart_history)
-from server.storage import disk_reserve, storage_locations
+from server.storage import disk_reserve, locations as storage_locations
 from server.interserver import storage_nodes, transfer_cap
 from server.agent.api import ServerContext
 from server.db import _write_lock, get_setting, journal, now_iso, set_settings, update_one, writing
@@ -37,13 +37,13 @@ from server.console.journal_he import EVENTS_HE, JournalTranslator, severity
 from server.rounds.session_view import label as session_label
 from server.rounds.sessions import SessionError
 from server.rounds.station import ROUND_OPENER_ROLES
-from server.agent import agent_timing
+from server.agent import timing as agent_timing
 from server import auto_reboot
 from server.net import igmp_querier
-from server.console import console_disk_sets   # #1857
-from server.agent import firmware_image   # #2080
+from server.console import disk_sets as console_disk_sets   # #1857
+from server.agent import firmware_image# #2080
 from server.disks import model_slots   # #2001
-from server.agent import held   # #2031
+from server.agent import held# #2031
 
 #: נדב 18/10: ניתוק אוטומטי בחוסר פעילות. השדה נשאר בשניות (‏#1243, ברירת מחדל 600);
 #: ‏0 = כבוי (אין ניתוק — העוגייה עדיין פגה ב-auth.TTL_SECONDS, ו-logout עובד), אחרת
@@ -304,7 +304,7 @@ def create_console_router(
         (המפעיל ביקש את המכונה) — התשובה פשוט מבחינה.
 
         ‏`known_macs_hooks` הוא `None` כברירת מחדל בכוונה (בדיוק כמו
-        `dhcp_hooks` ב-console_dhcp.py, אבל כאן ה-None הוא גם ברירת
+        `dhcp_hooks` ב-console/dhcp.py, אבל כאן ה-None הוא גם ברירת
         המחדל הבטוחה לבדיקות): הוספה/מחיקה/ייבוא של מכונה קורים כמעט
         בכל בדיקה בחבילה, ובלי hook מוזרק זה היה אומר כתיבה אמיתית
         ל-/etc/imagesrv/known-macs ו-`systemctl reload dnsmasq` על כל
@@ -467,7 +467,7 @@ def create_console_router(
             "uptime_seconds": uptime() if uptime else None,
         }
 
-    # אימג'ים ותיקיות — ב-console_library.py.
+    # אימג'ים ותיקיות — ב-console/library.py.
 
     # --- קבוצות וטבלת MAC (admin) -------------------------------------------
 

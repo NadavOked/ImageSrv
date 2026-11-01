@@ -112,7 +112,7 @@ def test_a_capture_is_on_disk_before_it_enters_the_library(server, images_root, 
 
 def test_a_pulled_image_is_on_disk_before_it_enters_the_library(server, events, request):
     pytest.importorskip("OpenSSL")
-    from server.interserver import interserver_auth
+    from server.interserver import auth as interserver_auth
     if not interserver_auth.can_export_keying_material():
         pytest.skip("אין tls-exporter (pyOpenSSL) — המשיכה אינה ניתנת להרצה כאן")
     from test_storage_pull import PULL, PULL_ID, _incoming, _wait

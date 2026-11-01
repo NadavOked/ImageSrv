@@ -22,7 +22,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server.agent import reports  # noqa: E402
+from server.agent import reports# noqa: E402
 from server.rounds import room as room_mod  # noqa: E402
 from test_server_room import (  # noqa: E402,F401
     CLONER1, CLONER2, cloner_hello, room, room_body, room_server,

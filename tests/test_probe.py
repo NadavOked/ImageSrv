@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 
 import sizelimit
@@ -62,7 +63,7 @@ def probe_of(sysroot: Path, extra: str = "", stubs: Path | None = None,
                 env += f"export {var}={posix(p)!r}; "
     out = sh(
         env + extra
-        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; "   # #1367: capped_run
+        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; "   # #1367: capped_run
         r'printf "{\"x\":0%s}" "$(probe_json)"'
     )
     return json.loads(out)["probe"]
@@ -90,6 +91,7 @@ def test_probe_sh_stays_under_the_lamp():
 def test_the_agent_loads_probe_sh():
     text = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/probe.sh"' in text
+    assert '. "$LIB_DIR/probe_bg.sh"' in text
 
 
 # --- שלושת המצבים, שדה-שדה -------------------------------------------------
@@ -404,8 +406,15 @@ def test_missing_optional_tools_are_null_not_ok(fake_machine):
 
 
 def test_hello_schema_2_carries_probe(fake_machine):
-    hello = _agent_hello(fake_machine, f'. {posix(AGENT)}/lib/hw/probe.sh;')
-    assert hello["schema"] == 2
+    libs = f'. {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh;'
+    first = _agent_hello(fake_machine, libs)
+    assert first["schema"] == 2
+    assert "probe" not in first
+    for _ in range(100):
+        if (fake_machine["run"] / "probe.json").exists():
+            break
+        time.sleep(0.05)
+    hello = _agent_hello(fake_machine, libs)
     assert "probe" in hello
     assert isinstance(hello["probe"]["probe_seconds"], int)
     assert hello["probe"]["memory"]["total_bytes"] == 8388608 * 1024
@@ -429,11 +438,25 @@ def test_probe_is_cached_in_run_dir_between_hellos(fake_machine):
     (ac / "type").write_text("Mains\n"); (ac / "online").write_text("1\n")
     (bat / "type").write_text("Battery\n"); (bat / "status").write_text("Charging\n")
     run = f'export RUN_DIR={posix(fake_machine["run"])!r}; '
+    sh(run + f'export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/core/common.sh; '
+       f'. {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; '
+       f'. {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
+    for _ in range(100):
+        if (fake_machine["run"] / "probe.json").exists():
+            break
+        time.sleep(0.05)
     assert probe_of(sysroot, extra=run)["power"] == {"on_battery": False, "supply": "AC"}
     assert (fake_machine["run"] / "probe.json").exists()
     (ac / "online").write_text("0\n"); (bat / "status").write_text("Discharging\n")   # נותק מהחשמל
     assert probe_of(sysroot, extra=run)["power"]["on_battery"] is False   # עדיין מהמטמון
     (fake_machine["run"] / "probe.json.at").write_text("0")  # המטמון פקע
+    sh(run + f'export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/core/common.sh; '
+       f'. {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; '
+       f'. {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
+    for _ in range(100):
+        if not (fake_machine["run"] / "probe.json.running").exists():
+            break
+        time.sleep(0.05)
     assert probe_of(sysroot, extra=run)["power"] == {"on_battery": True, "supply": "BAT0"}
 
 

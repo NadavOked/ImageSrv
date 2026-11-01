@@ -56,7 +56,7 @@ def main_loop_starts() -> str:
     known: from watchdog_start/monitor_start to the decision."""
     lines = AGENT.read_text(encoding="utf-8").split("\n")
     start = next(i for i, l in enumerate(lines) if l.strip().startswith("watchdog_start; monitor_start"))
-    end = next(i for i, l in enumerate(lines[start:], start) if l.strip().startswith('case "$(decide)"'))
+    end = next(i for i, l in enumerate(lines[start:], start) if l.strip().startswith('_dec=$(decide)'))   # #1709
     return "\n".join(lines[start:end])
 
 

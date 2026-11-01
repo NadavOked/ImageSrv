@@ -15,7 +15,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 # waits.sh לפני כל מי שמזרים: התקרות שלו נקראות כבר בטעינה של restore.sh.
 . "$LIB_DIR/waits.sh"
 . "$LIB_DIR/jsonq.sh"
-. "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/inventory.sh"; . "$LIB_DIR/probe.sh"; . "$LIB_DIR/netprobe.sh"; . "$LIB_DIR/cablelive.sh"; . "$LIB_DIR/disklink.sh"   # #720+#1049+#1048(+#1968); #432 link speed per disk
+. "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/inventory.sh"; . "$LIB_DIR/probe.sh"; . "$LIB_DIR/probe_bg.sh"; . "$LIB_DIR/netprobe.sh"; . "$LIB_DIR/cablelive.sh"; . "$LIB_DIR/disklink.sh"   # #720+#1049+#1048(+#1968); #432 link speed per disk
 . "$LIB_DIR/decide.sh"
 . "$LIB_DIR/progress.sh"; . "$LIB_DIR/datareport.sh"   # #1882-#1889: what the server keeps beyond the report
 . "$LIB_DIR/pull.sh"   # אחרי progress.sh: pull_close קורא ל-report_final (#562)
@@ -36,7 +36,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/roomflow.sh"   # the room round the GUI opens (#418)
 . "$LIB_DIR/hold.sh"; . "$LIB_DIR/task.sh"   # #1217: do_task, split from this file
 . "$LIB_DIR/poll.sh"; . "$LIB_DIR/idle.sh"; . "$LIB_DIR/roundbeep.sh"   # #434/#1967: idle power-off and audible result
-. "$LIB_DIR/guiparent.sh"; . "$LIB_DIR/localboot.sh"; . "$LIB_DIR/splash.sh"   # 11/10: no GUI -> BootNext to the local disk + told to the server; 17/10: the static screen
+. "$LIB_DIR/guiparent.sh"; . "$LIB_DIR/localboot.sh"; . "$LIB_DIR/splash.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: no GUI -> BootNext to the local disk + told to the server; 17/10: the static screen; #1709: the GUI init started
 . "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"   # #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
 . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcsize.sh"; . "$LIB_DIR/lcplan.sh"; . "$LIB_DIR/lcsnap.sh"; . "$LIB_DIR/lctune.sh"; . "$LIB_DIR/lccopy.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/localclone.sh"; . "$LIB_DIR/lcwait.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/syspartgui.sh"   # #1896: C: from the screen; #1322: local clone (lcgui.sh runs in the kiosk); 16/10: restore from the server
 . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/drawergate.sh"   # #928: the shrink question; 11/10: grow-back / end-of-capture dialogs
@@ -66,6 +66,7 @@ NET_FILE="${NET_FILE:-$RUN_DIR/net.conf}"
 MAC=$(cat "$SYSROOT/sys/class/net/$IFACE/address" 2>/dev/null)
 run_site_hooks   # #1266: after $IP, before the first hello
 RESP="$RUN_DIR/response.json"; trace_step agent-start   # #400, see common.sh
+gui_early_adopt   # #1709: a GUI init started before DHCP is this agent's -- never a second one
 
 send_hello() {
     build_hello > "$RUN_DIR/hello.json" || return 1
@@ -226,7 +227,8 @@ while :; do
     power_watch_start   # #1918: the power button -- once the role is known; re-entrant
     disk_uevent_start   # #1971: kernel-driven insert/remove detection
 
-    case "$(decide)" in
+    _dec=$(decide); gui_early_settle "$_dec"   # #1709: a path with no GUI closes the early one first
+    case "$_dec" in
         local)
             die_local "no work for this machine"
             ;;

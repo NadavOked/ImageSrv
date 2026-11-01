@@ -268,6 +268,48 @@ def test_retry_keeps_the_kernel_command_line_clean_and_the_menu_ascii():
                              "imagesrv.mode=recovery"]
 
 
+# רשימה סגורה של כל מה שמותר בשורת הקרנל של הסוכן. פרמטר חדש חייב להיכנס
+# לכאן במפורש, ולכן אי אפשר שפרט משימה ידלוף לשם "על הדרך".
+# thermal.psv=-1: ‏ACPI _PSL timeouts על HP EliteDesk 800 G6 (#1848, #1870). נדב 20/10:
+# רק החלק שמאט -- לא thermal.off. פרמטר של הקרנל ולא פרט משימה, ולכן נכנס לרשימה במודע.
+AGENT_KERNEL_PARAMS = {
+    "ip=dhcp", "imagesrv.server=http://10.44.12.10:8080", "console=tty0",
+    "quiet", "loglevel=3", "thermal.psv=-1", "imagesrv.mode=recovery",
+}
+
+
+@pytest.mark.parametrize(
+    "a",
+    [
+        answer(),
+        answer(role="build"),
+        answer(role="cloner"),
+        answer(task={"id": "tsk_1"}),
+        answer(session=OPEN_SESSION),
+    ],
+)
+def test_agent_kernel_line_has_thermal_psv_and_stays_a_closed_clean_list(a):
+    text = render(a, CFG)
+    lines = [line for line in text.splitlines() if line.strip().startswith("if linux ")]
+    assert lines, "no network kernel line was generated"
+    for line in lines:
+        params = line.split()[3:]  # if linux (http,..)/boot/vmlinuz <params...>
+        assert "thermal.psv=-1" in params
+        assert not any(w.startswith("thermal.off") for w in params)   # the owner chose psv, not off (20/10)
+        assert set(params) <= AGENT_KERNEL_PARAMS, set(params) - AGENT_KERNEL_PARAMS
+        # ושום פרט משימה לא עבר לשורה
+        assert not any(w.startswith(("imagesrv.task", "imagesrv.image", "imagesrv.session"))
+                       for w in params)
+
+
+def test_thermal_is_not_in_the_local_boot_entries():
+    """thermal.psv=-1 שייך לסוכן שעולה מהרשת בלבד — לא לדיסק המקומי."""
+    text = render(answer(), CFG)
+    local = text.split("--id local {", 1)[1].split("\n}", 1)[0]
+    assert "thermal." not in local
+    assert "thermal." not in render_local_only("x")
+
+
 def test_agent_config_leaks_nothing_from_the_answer():
     """הפרטים מגיעים לסוכן מ-hello, לא מ-GRUB."""
     text = render(answer(task={"id": "tsk_0091"}, session=OPEN_SESSION), CFG)

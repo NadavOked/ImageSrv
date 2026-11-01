@@ -132,9 +132,10 @@ def server_sources() -> list[Path]:
 def test_scan_actually_covers_the_server_tree() -> None:
     """סריקה שלא קראה דבר "עוברת" — עיקרון 5. מוודאים שהיא ראתה את הקבצים
     שמשתמשים בספריות הנבדקות, ולא רק שלא מצאה כלום."""
-    names = {p.name for p in server_sources()}
+    # נתיב יחסי ולא שם קובץ: auth.py ו-api.py קיימים בכמה חבילות (#2239).
+    names = {p.relative_to(SERVER).as_posix() for p in server_sources()}
     assert len(names) > 20, f"הסריקה ראתה רק {len(names)} קבצים"
-    for must in ("interserver_auth.py", "interserver_api.py", "console_tls.py"):
+    for must in ("interserver/auth.py", "interserver/api.py", "console/tls.py"):
         assert must in names, f"{must} לא נסרק (יש: {sorted(names)[:10]}...)"
 
 
@@ -151,7 +152,7 @@ def test_server_code_does_not_use_the_vulnerable_paths() -> None:
 
 def test_the_only_curve_we_generate_is_p256() -> None:
     """ראיה חיובית לצד השלילית: מה שכן בשימוש הוא SECP256R1 (לא SECT)."""
-    text = (SERVER / "interserver" / "interserver_auth.py").read_text(encoding="utf-8")
+    text = (SERVER / "interserver" / "auth.py").read_text(encoding="utf-8")
     assert "ec.generate_private_key(ec.SECP256R1())" in text
 
 

@@ -199,7 +199,7 @@ gui_records() {
             esac
         done
         [ "$_complete" = 1 ] && [ "$_bad" = 0 ] || { gui_error 'בקשת הפעולה מהמסך פגומה או חסרה' 'Malformed/incomplete action record'; return 1; }
-        rm -f "$GUI_DIR/error" || return 1
+        rm -f "$GUI_DIR/error" || return 1; [ "${GUI_SCREEN:-}" != boot ] || gui_early_env || :   # #1709: the role, once the hello named it
         gui_dispatch
         _gr=$?
         [ "$_gr" = 2 ] && return 0
@@ -252,7 +252,7 @@ gui_libs() {
     . "$LIB_DIR/buildcapture.sh"
     . "$LIB_DIR/roomflow.sh"   # #418: the room round (open/wake/start)
     . "$LIB_DIR/guistate.sh"
-    . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/syspartgui.sh"   # 11/10: the question dialog; #1896: C: of an old image
+    . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/syspartgui.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: the question dialog; #1896: C: of an old image; #1709: the boot screen
     . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/disklink.sh"   # disk_port + disk_link (#432), for the cloner state producer
     . "$LIB_DIR/progress.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
     . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/manifest.sh"     # #1921: the tables judge the disk, the hw note per drawer; smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591)
@@ -272,12 +272,13 @@ gui_main() {
         "$RUN_DIR/console_login.json" "$GUI_DIR/actions" || return 1
     if [ "${GUI_SCREEN:-}" = class ]; then _initial=classes; else _initial=menu; fi
     printf '%s\n' "$_initial" > "$GUI_DIR/mode" || return 1
-    printf 'message=מתחבר לשרת|ממתין למצב תחנה מאומת\n' > "$GUI_DIR/state" || return 1
+    if [ "${GUI_SCREEN:-}" = boot ]; then gui_early_state; else printf 'message=מתחבר לשרת|ממתין למצב תחנה מאומת\n'; fi > "$GUI_DIR/state" || return 1
     mkfifo "$GUI_DIR/actions" || return 1
     trap gui_cleanup EXIT
     trap 'exit 1' HUP INT TERM
     export FONTCONFIG_FILE=/etc/imagesrv/fonts.conf
-    if [ "${GUI_SCREEN:-}" = cloner ]; then
+    if [ "${GUI_SCREEN:-}" = boot ]; then gui_early_loop & GUI_STATE_PID=$!   # #1709: started before the hello (guiearly.sh)
+    elif [ "${GUI_SCREEN:-}" = cloner ]; then
         cloner_gui_state_loop & GUI_STATE_PID=$!
     else
         gui_state_loop & GUI_STATE_PID=$!

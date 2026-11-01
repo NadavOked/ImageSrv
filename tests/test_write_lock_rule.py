@@ -56,10 +56,10 @@ STILL_BARE = frozenset({
     # וה-INSERT שם עטוף ב-writing().
     # ‏finish_capture יצא מהחוב ב-#1470: ה-UPDATE ל-verifying בתוך writing().
     "capture.py:upload_partition",
-    "console_dhcp.py:forget",
-    "console_net.py:add_device",
-    "console_net.py:describe_device",
-    "console_net.py:forget_device",
+    "dhcp.py:forget",
+    "net.py:add_device",
+    "net.py:describe_device",
+    "net.py:forget_device",
     "pulls.py:open_pull",
     "reports.py:_ingest_task",
     "reports.py:ingest",
@@ -84,7 +84,7 @@ STILL_BARE = frozenset({
 #: ``.commit()`` בתוך ``with`` מחפש דבר שאינו קיים — וזו הייתה
 #: הגרסה הראשונה של הקובץ הזה.
 MUST_BE_FOUND_BARE = frozenset({
-    "console_dhcp.py:forget",
+    "dhcp.py:forget",
     "room.py:open_round",
     "sessions.py:_transition",
 })

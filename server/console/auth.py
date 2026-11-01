@@ -143,7 +143,7 @@ def console_only(conn: sqlite3.Connection):
     from fastapi import HTTPException
     from starlette.requests import HTTPConnection
 
-    from server.console import console_presence
+    from server.console import presence as console_presence
 
     def no_deploy(connection: HTTPConnection) -> None:
         if connection.scope.get("type") != "http":

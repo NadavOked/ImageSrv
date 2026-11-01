@@ -12,7 +12,7 @@ from __future__ import annotations
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
-from server.console import auth, console_mfa, login_guard, users
+from server.console import auth, mfa as console_mfa, login_guard, users
 from server.db import get_setting, journal
 
 

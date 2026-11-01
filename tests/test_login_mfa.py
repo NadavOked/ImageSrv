@@ -180,7 +180,7 @@ def test_2114_mfa_setup_rejects_active_mfa_without_changing_it(server):
 
 def test_mfa_pending_secret_expires(server, monkeypatch):
     """‏#2101: הסוד הממתין מוגבל בזמן — אחרי `PENDING_TTL` בלי אישור, setup מגריל חדש."""
-    from server.console import console_mfa
+    from server.console import mfa as console_mfa
     first = _setup_as_new_admin(server, "stale")
     later = time.time() + console_mfa.PENDING_TTL + 1
     monkeypatch.setattr(console_mfa, "_now", lambda: later)

@@ -164,7 +164,7 @@ def test_the_agent_loads_bootstorage_before_postdeploy():
 
 pytest.importorskip("fastapi")
 
-from server.agent import reports   # noqa: E402
+from server.agent import reports# noqa: E402
 from test_room_drivers import M70Q, _wave   # noqa: E402,F401
 from test_server_room import CLONER1, cloner_hello, room, room_server   # noqa: E402,F401
 

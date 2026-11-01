@@ -15,7 +15,7 @@ import pytest
 from server import db
 from server.rounds import room_precheck
 from server.system import housekeeping
-from server.learn import learn_ports
+from server.learn import ports as learn_ports
 
 from test_server_room import (CLONER1, CLONER2, cloner_hello, heartbeat, room,  # noqa: F401
                               room_body, room_server)

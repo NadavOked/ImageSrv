@@ -15,7 +15,7 @@ import pytest
 from server.agent import boottrace
 from server import db
 from server.net import wol
-from server.learn import learn_wol
+from server.learn import wol as learn_wol
 
 from test_server_room import CLONER1, room_server  # noqa: F401
 from conftest import hello_body

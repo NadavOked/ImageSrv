@@ -8,7 +8,7 @@
 * דלוק — בדיוק מה שהיה (‏test_login_mfa.py רץ כולו כך).
 * שדרוג — שרת קיים עם מנהל כזה מקבל "false", ושורת יומן אומרת את זה.
 
-בקרה שלילית: ‏server/console/console_login.py ו-server/console/console_api.py (התנאי הישן), ו-db.py
+בקרה שלילית: ‏server/console/login.py ו-server/console/api.py (התנאי הישן), ו-db.py
 (בלי ברירת המחדל) מוחזרים יחד — הטסטים של "כבוי" נופלים.
 """
 
@@ -21,7 +21,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login
-from server.console import console_mfa, totp
+from server.console import mfa as console_mfa, totp
 from server import db
 from server.app import create_console_app
 

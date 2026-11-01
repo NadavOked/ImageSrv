@@ -22,7 +22,7 @@ import pytest
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
 from server import db
-from server.interserver import interserver_api, interserver_auth, peer_safe, storage_nodes
+from server.interserver import api as interserver_api, auth as interserver_auth, peer_safe, storage_nodes
 from test_storage_transfer import _peer, paired                # noqa: F401 — fixture
 
 try:
@@ -48,7 +48,7 @@ def secondary(tmp_path, clock):
     if TestClient is None:
         pytest.skip("fastapi is required")
     from conftest import complete_console_login                # noqa: PLC0415
-    from server.console import users                                   # noqa: PLC0415
+    from server.console import users# noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
     from test_sender import Recorder                           # noqa: PLC0415
     from test_server_health import SS_DNSMASQ                  # noqa: PLC0415
@@ -159,7 +159,7 @@ def test_a_relayed_get_is_what_the_secondarys_own_console_answers(server, second
 
 
 def test_the_secondarys_data_is_not_the_primarys(server, secondary, paired):
-    from server.agent import registry                                # noqa: PLC0415
+    from server.agent import registry# noqa: PLC0415
     registry.add_machine(secondary["conn"], "aa:bb:cc:dd:ee:31", "H31", "grp_BUILD", "test")
     macs = [m["mac"] for m in _get(server, paired, "/machines").json()]
     assert macs == ["aa:bb:cc:dd:ee:31"]

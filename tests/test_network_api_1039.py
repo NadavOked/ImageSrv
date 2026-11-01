@@ -86,7 +86,7 @@ def presence_clock(monkeypatch):
 
     now = {"t": time.time()}
     try:
-        presence = importlib.import_module("server.console.console_presence")
+        presence = importlib.import_module("server.console.presence")
     except ImportError:
         # בקרה שלילית: בלי המודול הבדיקות נופלות על ההתנהגות (404, אין
         # שורה), לא על ImportError בפיקסטורה.

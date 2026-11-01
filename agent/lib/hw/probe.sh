@@ -256,15 +256,6 @@ probe_encryption() {
     printf ']'
 }
 
-# Prints ,"probe":{...} — the fragment build_hello appends (like inventory_json).
-# hello is the poll and stays cheap: arping (~2s) and smartctl per disk run once
-# per PROBE_TTL seconds; between runs the last answer is served from $RUN_DIR.
-probe_json() {
-    _pc="${RUN_DIR:-/run/imagesrv}/probe.json"; _now=$(date +%s 2>/dev/null) || _now=0
-    [ -s "$_pc" ] && [ -s "$_pc.at" ] && [ $((_now - $(cat "$_pc.at"))) -lt "${PROBE_TTL:-600}" ] && { cat "$_pc"; return; }
-    if [ -d "${_pc%/*}" ] && _probe_fresh > "$_pc.tmp" 2>/dev/null; then mv "$_pc.tmp" "$_pc"; printf '%s' "$_now" > "$_pc.at"; cat "$_pc"
-    else rm -f "$_pc.tmp"; _probe_fresh; fi   # no RUN_DIR (tests, host) = no cache, never no answer
-}
 _probe_fresh() {
     _t0=$(date +%s 2>/dev/null) || _t0=""
     _power=$(probe_power); _rtc=$(probe_rtc); _cpu=$(probe_cpu)

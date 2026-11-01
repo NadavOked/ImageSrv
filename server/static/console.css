@@ -732,13 +732,7 @@ button:focus-visible,[role="button"]:focus-visible,.inventory-node:focus-visible
 .page.drw .note.ok{border-color:color-mix(in srgb,var(--led-ok) 40%,var(--surface));background:color-mix(in srgb,var(--led-ok) 10%,var(--surface));color:var(--clr-success-fg)}
 .page.drw a.btn{display:inline-flex;align-items:center;text-decoration:none}
 @media(max-width:740px){.page .split{grid-template-columns:1fr}.page .split > .side{border-inline-end:0;border-bottom:1px solid var(--hair)}.page .ftree .kids{margin-inline-start:0;display:flex;flex-wrap:wrap;gap:4px}.page .ftree{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.page .ftree .f{border:1px solid var(--hair);padding:4px 8px}.page .dg-bar{flex-wrap:wrap}.page .dg-bar input{width:100%!important}.page .split table.dg{min-width:760px}.page .split .dg td:nth-child(2){min-width:200px}}
-/* ---------- #954 גל 3: מחשבים — שורות קבוצה, דיסקים לפי חריץ, מודאל "+ מחשב" ---------- */
-.page .dg tr.group td .grp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-weight:600}
-.page .dg tr.group td .grp .muted,.page .dg tr.group td .grp .st{font-weight:400}
-.page .dg tr.group td .grp a{color:var(--clr-action-fg);text-decoration:none;cursor:pointer}
-.page .dg tr.group td .grp .sp{flex:1}
-.page .dg tr.group td .acts{visibility:visible}
-.page .dg tr.group td .btn.flat{width:26px;padding:0;color:var(--muted)}
+/* ---------- #954 גל 3: מחשבים — דיסקים לפי חריץ, מודאל "+ מחשב" (שורות הקבוצה יצאו: הטבלה שטוחה, נדב 18/10) ---------- */
 .page .dg tr.group:hover td{background:var(--porcelain)}
 .page .dg-bar select{height:30px;width:auto;flex:none;border:1px solid var(--hair);border-radius:var(--rp);padding:0 8px;background:var(--surface);color:var(--ink);font:inherit;font-size:var(--t-base)}
 .page .dg-bar input[type="search"]{flex:none}
@@ -760,7 +754,7 @@ button:focus-visible,[role="button"]:focus-visible,.inventory-node:focus-visible
 .page.am .tabs{margin-top:0}
 .page.am .form[hidden]{display:none}
 .page.am .stack .st{display:flex}
-@media(max-width:740px){.page .dg tr.group td .grp{gap:6px}.page .dg tr.group td .acts{flex-wrap:wrap}.page #mch-table table.dg{min-width:760px}.page .dg-bar{flex-wrap:wrap}.page .dg-bar select,.page .dg-bar input[type="search"]{width:100%!important}}
+@media(max-width:740px){.page #mch-table table.dg{min-width:760px}.page .dg-bar{flex-wrap:wrap}.page .dg-bar select,.page .dg-bar input[type="search"]{width:100%!important}}
 /* ---------- #954 גל 3א: משכפלים ומחשבי בנייה — גריד מחשבים, חריצים, מקרא, קליטה בתהליך ---------- */
 .page .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
 .page .mgrid.big{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
@@ -1489,6 +1483,9 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
 .page .round+.round{margin-top:16px;padding-top:16px;border-top:1px solid var(--clr-row-border)}
 .page .tile small{font-size:var(--t-xs)}
 .page .dg tr.clk{cursor:pointer}
+/* דף המחשבים (נדב 18/10, console-full.html P.machines): פס הבחירה בקצה פס הסינון; ההערה בלשונית "נראו ברשת". */
+.page .dg-bar .bulk{display:inline-flex;align-items:center;gap:8px}
+.page .seen-note{margin:12px 16px}
 /* ספריית אימג'ים: כותרת "כל האימג'ים" בולטת, שורות נמוכות, "מתאים לדיסק" ופיל sha256 בלי שבירה */
 .page .dg-bar .fcrumb{font-size:var(--t-md);color:var(--clr-text);display:flex;gap:6px;align-items:baseline}
 .page .dg-bar .fcrumb b{font-weight:600}

@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from server.core.atomicfile import write_atomic
-from server.interserver.interserver_auth import (generate_self_signed, is_loopback,
+from server.interserver.auth import (generate_self_signed, is_loopback,
                                                  write_credential_0600)
 
 #: תת-התיקייה של ``data_dir`` שבה חיה זהות הקונסולה.

@@ -130,7 +130,8 @@ def run_in(shell: str, script: str, timeout: int = 60) -> str:
 
 def room(tmp_path: Path, fanout_dir: Path, shell: str = BASH, payload: bytes = PACKED,
          sha: str = SHA, tune: str = "", env: str = "",
-         disks: tuple[str, ...] = DISKS) -> tuple[Path, Path, str]:
+         disks: tuple[str, ...] = DISKS, before_restore: str = "",
+         timeout: int = 60) -> tuple[Path, Path, str]:
     box = tmp_path / "box"
     run, dev = box / "run", box / "dev"
     (run / "targets").mkdir(parents=True)
@@ -159,10 +160,11 @@ def room(tmp_path: Path, fanout_dir: Path, shell: str = BASH, payload: bytes = P
         + "".join(f"target_init {d} {len(payload)}; echo SER-{d} > \"$RUN_DIR/targets/{d}/write_started\"; "
                   for d in disks)
         + f'stream_source() {{ nice > "$BOX/source.nice"; cat {posix(box / "part.gz")!r}; }}; '
+        + before_restore
         + f"restore_partition_drawers unicast http://s img 3 dd part.zst {sha} '' {' '.join(disks)}"
         " > /dev/null 2>&1; " 'echo "rc=$?"; '
         + "".join(f'echo "{d} $(target_bytes {d})"; ' for d in disks)
-        + f"pkill -9 -f {posix(box)!r} 2>/dev/null; :")
+        + f"pkill -9 -f {posix(box)!r} 2>/dev/null; :", timeout=timeout)
     return box, run, out
 
 
@@ -257,6 +259,69 @@ def test_a_decoder_that_fails_fails_every_drawer_as_the_stream(tmp_path, fanout_
         assert state(run, d) == "failed", (d, log)
         assert "פענוח הזרם נכשל" in state(run, d, "error"), state(run, d, "error")
         assert not (run / "targets" / d / "ata_log.json").exists(), (d, "a healthy disk was blamed")
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+def test_decoder_bad_trailer_fails_every_drawer_despite_matching_sha(tmp_path, fanout_dir, shell):
+    # Damage only gzip's CRC trailer: all input is consumed and all RAW bytes
+    # are emitted, but gzip exits nonzero. Neither fanout nor SHA can mask a
+    # swallowed decoder status with an unrelated failure.
+    bad = PACKED[:-8] + bytes([PACKED[-8] ^ 1]) + PACKED[-7:]
+    sha = hashlib.sha256(bad).hexdigest()
+    box, run, out = room(tmp_path, fanout_dir, shell, payload=bad, sha=sha)
+    log = log_of(run)
+    assert (run / "sha.out").read_text().split()[0] == sha, log
+    assert (run / "fanout.rc").read_text().strip() == "0", log
+    assert (run / "dfanout.rc").read_text().strip() == "0", log
+    for d in DISKS:
+        assert (box / "dev" / f"{d}3").read_bytes() == RAW, d
+        assert state(run, d, "pipeline.rc") == "0", (d, log)
+    assert "rc=1" in out.splitlines(), out + log
+    for d in DISKS:
+        assert state(run, d) == "failed", (d, log)
+        assert "פענוח הזרם נכשל" in state(run, d, "error"), (d, log)
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+def test_failed_stream_releases_decoder_blocked_on_mid_fifo(tmp_path, fanout_dir, shell):
+    # A decoder already reading corrupt bytes is not blocked in open(). The
+    # release path needs an upstream fanout failure BEFORE it opens mid.
+    # Drain the source without opening mid; the real decoder and downstream
+    # fanout must then finish on EOF when drawer_feed_finish releases mid.
+    fail_before_open = 'feed_fanout() { cat > /dev/null; sleep 1; return 1; }; '
+    try:
+        box, run, out = room(
+            tmp_path, fanout_dir, shell, before_restore=fail_before_open,
+            env="WAIT_DRAWER_S=30 WAIT_HELPER_S=30", timeout=8)
+    except subprocess.TimeoutExpired:
+        # run_in uses hygiene.run_group: the whole group is killed before
+        # TimeoutExpired reaches us, including the blocked FIFO reader.
+        pytest.fail("mid FIFO reader was not released within 8 seconds")
+    log = log_of(run)
+    assert "rc=1" in out.splitlines(), out + log
+    assert (run / "fanout.rc").read_text().strip() == "1", log
+    assert len(lines(box / "zstd.calls")) == 1, log
+    assert (run / "dfanout.rc").read_text().strip() == "1", log
+    for d in DISKS:
+        assert state(run, d) == "failed", (d, log)
+        assert state(run, d, "pipeline.rc") == "0", (d, log)
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+def test_shared_fanout_final_drawer_counter_is_compressed_size(tmp_path, fanout_dir, shell):
+    box, run, out = room(tmp_path, fanout_dir, shell)
+    log = log_of(run)
+    assert "rc=0" in out.splitlines(), out + log
+    assert len(PACKED) != len(RAW)
+    assert int((run / "mid.bytes").read_text().splitlines()[-1]) == len(PACKED)
+    for d in DISKS:
+        assert (box / "dev" / f"{d}3").read_bytes() == RAW, d
+        # feed.bytes points at bytes.0 while fanout writes this partition.
+        # Success repoints it at the next (empty) counter, so read the saved
+        # counter itself, not the helper's aggregate printed in stdout.
+        counter = run / "targets" / d / "bytes.0"
+        assert int(counter.read_text().splitlines()[-1]) == len(PACKED), (
+            d, counter.read_text(), len(PACKED), len(RAW))
 
 
 def test_a_hung_drawer_is_evicted_alone_and_the_machine_carries_on(tmp_path, fanout_dir):

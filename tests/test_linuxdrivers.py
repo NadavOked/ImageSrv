@@ -277,7 +277,7 @@ def test_the_agent_loads_linuxdrivers_before_postdeploy():
 
 
 def test_the_journal_event_has_a_hebrew_label_and_is_a_warning():
-    from server.console import journal_he   # noqa: PLC0415
+    from server.console import journal_he# noqa: PLC0415
     assert "linux_initramfs_warning" in journal_he.EVENTS_HE
     assert journal_he.severity("linux_initramfs_warning") == "warn"
 

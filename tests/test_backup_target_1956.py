@@ -32,8 +32,8 @@ from fastapi.testclient import TestClient
 from native import requires_native
 from server.system import backup_job
 from server import db
-from server.storage import storage_locations as sl
-from server.storage.storage_locations import FAILED
+from server.storage import locations as sl
+from server.storage.locations import FAILED
 from test_storage_locations import FakeHooks
 
 try:

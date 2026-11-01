@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -34,6 +35,7 @@ USB = REPO / "tools" / "usb"
 
 pytestmark = requires_native(("bash", BASH))
 needs_jq = requires_native(("jq", shutil.which("jq")))
+needs_usb_build = requires_native("cpio", "gzip", "zstd", "python3", "git", posix=True)
 
 LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
         "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
@@ -434,6 +436,80 @@ def test_the_stick_carries_what_the_shrink_needs():
     assert re.search(r"dm-mod dm-snapshot dm-bufio brd", build)
     usb = (REPO / "tools" / "build_usb_clone.sh").read_text(encoding="utf-8")
     assert "build_initramfs.sh" in usb and "--with-gui" in usb
+
+
+def usb_build_to_format(tmp_path: Path, contents: str) -> subprocess.CompletedProcess:
+    """Run the real build and initrd gate, stopping at the first image formatter."""
+    kver = "6.0.0-test2091"
+    modules = tmp_path / "modules" / kver
+    modules.mkdir(parents=True)
+    boot = tmp_path / "boot"; boot.mkdir()
+    (boot / f"vmlinuz-{kver}").write_bytes(b"test kernel")
+    for name in ("shim", "grub"):
+        (tmp_path / name).write_bytes(b"test EFI payload")
+    tree = tmp_path / "initrd-tree"
+    (tree / "lib" / "modules" / kver).mkdir(parents=True)
+    if contents not in ("clean", "invalid"):
+        marker = tree / contents
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("test lab access\n")
+    initrd = tmp_path / "initrd.img"
+    if contents == "invalid":
+        initrd.write_bytes(b"not a cpio archive\n")
+    else:
+        # gzip, as build_initramfs.sh writes it: an uncompressed cpio is no initramfs of
+        # ours, and since #1775 the gate refuses one as uninspectable (initramfs-format.sh)
+        # -- so a lab marker would be refused for the wrong reason (round 20, 31/10).
+        with initrd.open("wb") as archive:
+            subprocess.run([BASH, "-o", "pipefail", "-c", "find * | cpio -o -H newc --quiet | gzip -9n"],
+                           cwd=tree, stdout=archive, check=True, timeout=30, stdin=subprocess.DEVNULL)
+    bins = tmp_path / "bin"; bins.mkdir()
+    for tool in ("mformat", "mcopy", "mmd", "mdir", "mtype", "sfdisk"):
+        stub = bins / tool
+        stub.write_text(f"#!/bin/sh\necho 'image tool reached: {tool}' >&2\nexit 73\n", newline="\n")
+        stub.chmod(0o755)
+    env = dict(os.environ, PATH=f"{bins}:{os.environ['PATH']}",
+               IMAGESRV_MODULES_DIR=str(modules.parent), IMAGESRV_KERNEL_DIR=str(boot),
+               USB_SHIM=str(tmp_path / "shim"), USB_GRUB=str(tmp_path / "grub"))
+    return subprocess.run([BASH, str(REPO / "tools" / "build_usb_clone.sh"),
+                           "--out", str(tmp_path / "out"), "--initrd", str(initrd), "--no-bios"],
+                          env=env, capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+
+
+@needs_usb_build
+@pytest.mark.parametrize("marker", ["etc/imagesrv/overlay.txt", "usr/sbin/dropbear",
+                                  "root/.ssh/authorized_keys", "etc/imagesrv/hooks.d/site.sh"])
+def test_usb_build_refuses_lab_initrd_before_image_creation(tmp_path, marker):
+    out = usb_build_to_format(tmp_path, marker)
+    assert out.returncode != 0, out.stdout + out.stderr
+    assert "build_usb_clone: initrd contains lab access (overlay/site hook/SSH)" in out.stderr, out.stderr
+    # the gate's own verdict -- not "cannot inspect", which ends in the same refusal line
+    assert "build-iso: initrd contains lab access" in out.stderr, out.stderr
+    assert "IMAGESRV_EXTRA_OVERLAY unset" in out.stderr, out.stderr
+    assert "image tool reached" not in out.stderr, out.stderr
+    assert not list((tmp_path / "out").rglob("*.img"))
+
+
+@needs_usb_build
+def test_usb_build_clean_initrd_reaches_image_formatter(tmp_path):
+    out = usb_build_to_format(tmp_path, "clean")
+    # The formatter deliberately fails: reaching it proves the real gate and kernel check passed.
+    assert out.returncode != 0, out.stdout + out.stderr
+    assert "image tool reached: mformat" in out.stderr, out.stderr
+    assert "mformat of the boot partition failed" in out.stderr, out.stderr
+    manifest = json.loads((tmp_path / "out" / "work" / "esp" / "imagesrv-usb.json").read_text())
+    assert manifest["kernel"] == "6.0.0-test2091"
+
+
+@needs_usb_build
+def test_usb_build_refuses_uninspectable_initrd(tmp_path):
+    out = usb_build_to_format(tmp_path, "invalid")
+    assert out.returncode != 0, out.stdout + out.stderr
+    assert "cannot inspect initrd contents" in out.stderr, out.stderr
+    assert "build_usb_clone: initrd contains lab access" in out.stderr, out.stderr
+    assert "or could not be inspected" in out.stderr, out.stderr
+    assert "image tool reached" not in out.stderr, out.stderr
+    assert not list((tmp_path / "out").rglob("*.img"))
 
 
 def test_a_smaller_target_is_offered_the_shrink_on_the_stick_with_no_server_call(tmp_path):
