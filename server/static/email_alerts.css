@@ -1,0 +1,99 @@
+/* ‏#1751 — לשונית "התראות במייל" בהגדרות (מוקאפ #1762, אושר 31/10). רק טוקנים קיימים
+   (‏--clr-*, --r*, --t-*, --dur*), כמו במוקאפ. ‏.em-opt/.em-in הם העתק של ‏.win .n-opt/.win .n-in
+   (כרטיסי בחירה ושדה בחלון), כי אלה מוגבלים ל-.win והטאב מציג אותם בגוף העמוד. */
+.page.settings .em-pad{padding:14px 0}
+.page.settings .em-lead{margin:0;color:var(--clr-muted);font-size:var(--t-sm)}
+
+/* כרטיסי ספק */
+.em-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.em-opt{position:relative;display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--clr-border);border-radius:var(--r);cursor:pointer;
+  transition:border-color var(--dur-fast),background var(--dur-fast);margin:0;color:var(--clr-text);font-weight:400}
+.em-opt input{position:absolute;opacity:0}
+.em-opt strong{display:block;font-size:var(--t-base);font-weight:600}
+.em-opt small{display:block;font-size:var(--t-xs);color:var(--clr-muted);margin-top:2px}
+.em-opt .em-tag{display:inline-block;margin-top:6px;padding:1px 8px;border-radius:999px;font-size:var(--t-xs);font-weight:500;
+  color:var(--clr-success-fg);background:color-mix(in srgb,var(--led-ok) 12%,transparent);border:1px solid color-mix(in srgb,var(--led-ok) 35%,transparent)}
+.em-opt:hover{background:var(--clr-hover)}
+.em-opt:has(input:checked){border-color:var(--clr-action);background:var(--clr-action-soft);box-shadow:0 0 0 1px var(--clr-action)}
+.em-opt:has(input:focus-visible){outline:2px solid var(--clr-action);outline-offset:2px}
+.em-opt .em-ring{flex:none;width:16px;height:16px;margin-top:2px;border-radius:50%;border:1.5px solid var(--clr-border);background:var(--clr-field)}
+.em-opt:has(input:checked) .em-ring{border:5px solid var(--clr-action)}
+
+/* שדה בגוף העמוד */
+.em-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.em-row .em-in{flex:1;min-width:220px}
+.em-fields{gap:12px 16px}
+.em-save{margin-top:12px}
+.page .em-in{display:block;width:100%;height:36px;padding:0 12px;margin:0;background:var(--clr-field);color:var(--clr-text);border:1px solid var(--clr-border);
+  border-radius:var(--r-sm);font-size:var(--t-base);outline:0;transition:border-color var(--dur-fast),box-shadow var(--dur-fast)}
+.page .em-in:focus{border-color:var(--clr-action);box-shadow:0 0 0 3px color-mix(in srgb,var(--clr-action) 25%,transparent);outline:0}
+.page .em-in.mono{font-family:var(--font-mono);direction:ltr;text-align:start}
+.page .em-lbl{display:block;font-size:var(--t-sm);font-weight:500;color:var(--clr-text);margin:0 0 6px}
+.page .em-help{font-size:var(--t-xs);color:var(--clr-muted);margin:6px 0 0}
+.page .em-need{font-size:var(--t-sm);color:var(--clr-text);margin:10px 0 0;padding:8px 12px;border-radius:var(--r-sm);
+  background:color-mix(in srgb,var(--warn-ink) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--warn-ink) 30%,var(--surface))}
+.page .em-link{color:var(--clr-action-fg)}
+.page .btn.em-tall{height:36px;padding:0 16px}
+.page .em-err{color:var(--clr-danger-fg);font-size:var(--t-sm);margin:6px 0 0}
+.page .em-err:empty{display:none}
+.page .em-keep{margin-top:12px}
+
+/* פאנל הספק שנבחר — נפתח מתחת לכרטיסים, באותו כרטיס */
+.em-panel{margin-top:14px;padding:14px 0 2px;border-top:1px solid var(--clr-row-border)}
+
+/* device code */
+.em-steps{list-style:none;margin:0;padding:0;display:grid;gap:12px;counter-reset:em}
+.em-steps>li{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start;font-size:var(--t-base)}
+.em-steps>li::before{counter-increment:em;content:counter(em);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  font-size:var(--t-xs);font-weight:700;color:var(--clr-action-fg);border:1.5px solid var(--clr-action)}
+.em-code{display:inline-flex;align-items:center;gap:10px;margin-top:6px;padding:8px 8px 8px 14px;border:1px solid var(--clr-border);border-radius:var(--r-sm);background:var(--clr-bg)}
+.em-code b{font-family:var(--font-mono);font-size:var(--t-xl);font-weight:600;letter-spacing:.14em;direction:ltr;unicode-bidi:isolate}
+.em-url{font-family:var(--font-mono);direction:ltr;unicode-bidi:isolate;color:var(--clr-action-fg);text-decoration:none}
+.em-wait{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--clr-row-border);font-size:var(--t-sm);color:var(--clr-muted)}
+.em-wait .grow{flex:1}
+.em-spin{width:14px;height:14px;border-radius:50%;border:2px solid color-mix(in srgb,var(--clr-action) 25%,transparent);border-top-color:var(--clr-action);animation:em-spin .9s linear infinite;flex:none}
+@keyframes em-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.em-spin{animation:none;border-top-color:color-mix(in srgb,var(--clr-action) 25%,transparent);background:var(--clr-action-soft)}}
+
+/* שורת סטטוס בכרטיס, ותוצאת בדיקה */
+.page.settings dl.mkv dt .sub{display:block;color:var(--clr-muted);font-size:var(--t-sm);font-weight:400}
+.page.settings dl.mkv dt.two{flex-direction:column;align-items:flex-start;justify-content:center;gap:1px}
+.page.settings .em-res{grid-column:1/-1;margin:0 0 12px}
+.page.settings .em-res code{font-family:var(--font-mono);font-size:var(--t-sm)}
+.page .em-mail{font-family:var(--font-mono);direction:ltr;unicode-bidi:isolate;color:var(--clr-text)}
+.page.settings .em-top{margin:0 0 18px}
+.page.settings .note.em-in-card{margin:12px 0 4px}
+/* הצלחה — אותו כלל כמו ‏.page .mupd .note.ok ו-.page.drw .note.ok */
+.page.settings .note.ok{border-color:color-mix(in srgb,var(--led-ok) 40%,var(--surface));background:color-mix(in srgb,var(--led-ok) 10%,var(--surface));color:var(--clr-success-fg)}
+.page.settings .note.ok > span:last-child,.page.settings .note.err > span:last-child{color:var(--ink)}
+
+/* "מתקדם" — מקופל; הכותרת היא כפתור הקיפול */
+.em-adv{margin:4px 0 22px}
+.em-adv>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border:1px solid var(--clr-border);
+  border-radius:var(--rp);background:var(--clr-surface);font-weight:600;font-size:var(--t-md);box-shadow:var(--shadow-card)}
+.em-adv>summary::-webkit-details-marker{display:none}
+.em-adv>summary small{font-weight:400;color:var(--clr-muted);font-size:var(--t-sm);flex:1}
+.em-adv>summary .ui-icon{transition:transform var(--dur) var(--ease);color:var(--clr-muted)}
+.em-adv[open]>summary .ui-icon{transform:rotate(180deg)}
+.em-adv>summary:focus-visible{outline:2px solid var(--clr-action);outline-offset:2px}
+.em-adv[open]>summary{margin-bottom:16px}
+@media (prefers-reduced-motion:reduce){.em-adv>summary .ui-icon{transition:none}}
+.page.settings .set-grp .card-b.flush{padding:0}
+.page .dg .em-mail{font-size:var(--t-sm)}
+.page .dg.em-hist tbody tr{cursor:pointer}
+.page .dg.em-hist tbody tr:focus-visible{outline:2px solid var(--clr-action);outline-offset:-2px}
+
+/* חלון כלל/נמען: רשימות סימון */
+.win .em-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 16px}
+.win .em-checks.one{grid-template-columns:minmax(0,1fr)}
+.win .em-checks label.check{font-size:var(--t-base);color:var(--clr-text);font-weight:400;margin:0}
+.win .em-checks input{accent-color:var(--clr-action)}
+.win .n-f>legend.n-lbl{padding:0}
+.win dl.em-kv{display:grid;grid-template-columns:minmax(130px,max-content) 1fr;margin:0 0 8px;font-size:var(--t-base)}
+.win dl.em-kv dt,.win dl.em-kv dd{margin:0;padding:8px 0;border-bottom:1px solid var(--clr-row-border)}
+.win dl.em-kv dt{color:var(--clr-muted);padding-inline-end:20px}
+.win dl.em-kv dd{min-width:0;overflow-wrap:anywhere}
+.win dl.em-kv code{font-family:var(--font-mono);font-size:var(--t-sm)}
+.win .em-items{margin:0;padding-inline-start:18px;font-size:var(--t-sm);line-height:1.7}
+
+@media(max-width:740px){.em-opts,.win .em-checks{grid-template-columns:minmax(0,1fr)}}

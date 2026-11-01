@@ -33,7 +33,9 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # 6: net_devices.held_at + held_json (#2031, PR #2036, 22/10; it did not bump)
                 6: "745aae931b0522af00e91d463f7a8ccb84894c6eb4f133ca80160d92923ae02c",
                 # 7: applied_timing (#2056/#2059), disk sets + inventory (#1857), firmware images (#2080) -- mockups 05/04/06, 24/10
-                7: "47896c6739283e20dfc43b9458dc2d6f039de4717af91caa89b20004e3387a1c"}
+                7: "47896c6739283e20dfc43b9458dc2d6f039de4717af91caa89b20004e3387a1c",
+                # 8: email_queue (#1751, PR #1757, 31/10)
+                8: "d43d9f74c5c05f8448f2a0c9333c82875fc77fd608874320707e34a9f2a9db00"}
 
 
 def _fingerprint(conn) -> str:
@@ -72,7 +74,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 8
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'model_slot_maps'").fetchone()
     assert "disk_serial" in [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
 
@@ -89,9 +91,25 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 8
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "held_at" in columns and "held_json" in columns
+
+
+def test_a_database_on_7_gains_the_email_queue_and_is_stamped_8(tmp_path):
+    """#1751: the email-alert queue is a new table. A server already on 7 gains it
+    (with its one-pending-per-combination index) and is stamped 8."""
+    path = tmp_path / "imagesrv.db"
+    connect(path).close()
+    raw = sqlite3.connect(path)
+    raw.execute("DROP TABLE email_queue")
+    raw.execute("PRAGMA user_version = 7")
+    raw.commit()
+    raw.close()
+    conn = connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 8
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+    assert {"email_queue", "email_queue_one_pending"} <= names
 
 
 def test_a_database_newer_than_the_code_is_refused_and_left_untouched(tmp_path):

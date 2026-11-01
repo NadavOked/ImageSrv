@@ -165,6 +165,12 @@ enum {
     HIT_FAIL_BTN,         /* #2068: the failure screen's buttons, HIT_FAIL_BTN + i (MAX_FAIL_BTNS of them) */
     HIT_FAIL_BTN1,
     HIT_FAIL_BTN_LAST,
+    /* #2265: the plain ids reached 100 = HIT_DISK_BASE, and handle() tests the
+     * ranges before its switch -- "בטל דיסק…  X" (101) was read as the capture
+     * screen's disk 2. Plain ids from here on start above every *_BASE block
+     * below; tests/test_hit_ids_2265.py keeps all of them out of those blocks.
+     * HIT_PLAIN_HIGH itself is a marker, never drawn. */
+    HIT_PLAIN_HIGH = 4000,
     /* #1386: "בטל דיסק זה" -- the window's two buttons, and "בטל דיסק…" in the foot */
     HIT_CDLG_KEEP, HIT_CDLG_GO, HIT_CDLG_OPEN,
     HIT_LC_REBOOT,        /* #1914 (Nadav 20/10): "הפעל מחדש" on the USB stick's result screen */

@@ -370,6 +370,22 @@ EVENTS_HE = {
     "ups_reachable": "ה-UPS נקרא שוב",
     "ups_config_changed": "הגדרת ה-UPS שונתה",
     "ups_config_failed": "הגדרת ה-UPS נכשלה",
+    # #1751: התראות במייל
+    "server_started": "השרת עלה",
+    "update_available": "יש עדכון זמין",
+    "peer_unreachable": "שרת ראשי או שרת משנה לא עונה",
+    "peer_back": "שרת ראשי או שרת משנה חזר לענות",
+    "email_alert_sent": "התראה נשלחה במייל",
+    "email_alert_refused": "נמענים דחו התראה במייל",
+    "email_alert_failed": "שליחת התראה במייל נכשלה — תנסה שוב",
+    "email_alert_gave_up": "התראה במייל לא נשלחה — הניסיונות נגמרו",
+    "email_alert_requeued": "התראות שנקטעו באמצע שליחה חזרו לתור",
+    "email_alerts_settings": "הגדרות ההתראות במייל שונו",
+    "email_alerts_password_cleared": "סיסמת שרת הדואר נמחקה — היעד שונה בלי סיסמה",
+    "email_alerts_step_failed": "תהליכון ההתראות במייל נתקל בתקלה",
+    "email_test": "מייל בדיקה",
+    "email_oauth_connected": "חשבון שליחה התחבר (OAuth)",
+    "email_oauth_failed": "התחברות חשבון שליחה (OAuth) נכשלה",
 }
 
 #: ‏#968: חומרת האירוע לציר-הזמן ולעמודת הצבע ביומן — נקבעת **כאן**, לצד
@@ -388,6 +404,7 @@ _SEVERITY_ERR = {
     "known_macs_apply_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
     "vmupdate_no_lease", "vmupdate_net_teardown_failed",
     "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
+    "peer_unreachable", "email_alert_gave_up", "email_alerts_step_failed", "email_oauth_failed",   # #1751
 }
 _SEVERITY_WARN = {
     "fw_changed",   # #2080
@@ -404,6 +421,8 @@ _SEVERITY_WARN = {
     "readback_list_not_fetched",   # #1907
     "local_clone_note",   # #2049: a local clone done with a note (ntfs_note) -- orange, not "succeeded"
     "ups_on_battery", "ups_work_stopped",
+    "update_available", "email_alert_failed", "email_alert_refused",   # #1751
+    "email_alert_requeued", "email_alerts_password_cleared",
 }
 _SEVERITY_OK = {
     "login", "capture_done", "client_done", "pull_done", "room_done",
@@ -411,6 +430,7 @@ _SEVERITY_OK = {
     "disk_failure_cleared", "drivers_staged", "storage_image_received",
     "wol_sent", "vmupdate_saved", "vmupdate_lease",
     "ups_power_restored", "ups_reachable",
+    "email_alert_sent", "peer_back", "email_oauth_connected",   # #1751
 }
 
 
