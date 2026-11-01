@@ -7743,7 +7743,7 @@ const SETTING_ROWS = [
     more: "השרת שולח שאילתת IGMP כל 125 שניות בכרטיס ההפצה, כדי שסוויץ' עם IGMP snooping ידע לאן לשלוח את השידור. כשיש ברשת querier אחר עם כתובת נמוכה יותר — השרת שותק לבד. המצב במסך הבריאות." },
   { key: "class_deploy_enabled", card: "deploy", label: "הפצה לכיתה ממסך התחנה", more: "כבוי במהדורת השיכפול — הכרטיס יורד מהתפריט והשרת מסרב לסבב כיתה", type: "switch" },
   { key: "cloner_beep", card: "deploy", label: "צליל בסיום סבב שיכפול", type: "switch", defaultOn: true,
-    more: "דלוק (ברירת המחדל): שלושה צפצופים קצרים בהצלחה, צפצוף ארוך בכשל, דרך הרמקול הפנימי של המחשב" },
+    more: "דלוק (ברירת המחדל): מנגינה לכל מצב, ברמקול הפנימי של המחשב — במשכפל ובמחשב הבנייה. הצלחה: ארבעה צלילים עולים. כשל (בסוף, באמצע, או שהמקור נכשל): גבוה-נמוך מתחלף, כשתי שניות. ניתוק רשת: שלושה צלילים יורדים. הרשת חזרה: שניים עולים. מגירה שנשלפה: ארבע דפיקות קצרות. כבוי: שקט — המסך מראה הכול כרגיל." },
   // ‏#2059 (מוקאפ 05): כיבוי כשאין פעילות (אזהרה 30ש' לפני), וספירה לכיבוי בסוף משימה. בלי "לא לכבות לבד" -- ממתין להכרעת נדב.
   { key: "gui_idle_poweroff_seconds", card: "guipower", type: "agenttime", label: "כיבוי כשאין פעילות",
     sub: "אזהרה על המסך 30 שניות לפני. כל מקש או תזוזת עכבר מאפסים.",
@@ -8034,7 +8034,7 @@ function backupTargetDetailsSheet(kind, t) {
 let TZ_STATUS = null, tzError = "";
 function timezoneRow(r) {
   const attrs = r.more ? ` title="${esc(r.more)}"` : "";
-  if (!TZ_STATUS) return [r.label, `<span class="muted">לא נקרא${tzError ? ": " + esc(tzError) : ""}</span>`, attrs];
+  if (!TZ_STATUS) return [r.label, settingUnreadHtml(tzError || "לא נטען"), attrs];
   const sys = TZ_STATUS.system;
   const differs = sys === TZ_STATUS.zone ? "" : ` <span class="muted">· מסך השרת: ${sys ? ltr(sys) : "לא נקרא"}</span>`;
   return [r.label, `${ltr(TZ_STATUS.zone)}${differs} ${ghostBtn(r.action, "timezoneSheet()")}`, attrs];

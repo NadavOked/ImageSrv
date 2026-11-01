@@ -420,7 +420,7 @@ GUI_STUB = (
 )
 
 
-def preflight(tmp_path, body, gui=(), disks="sda", failed=(), extra="", keys="1\n"):
+def preflight(tmp_path, body, gui=(), disks="sda", failed=(), extra="", keys="1\n", *, ro: str | None = "0"):
     """‏`gui` = התשובות שהמסך הגרפי נותן, לפי הסדר. ‏`keys` הם מקשים שמחכים
     ב-stdin — הם **אינם** נקראים יותר (בקוד הישן "1" היה "החלף")."""
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
@@ -434,7 +434,8 @@ def preflight(tmp_path, body, gui=(), disks="sda", failed=(), extra="", keys="1\
     for d in disks.split():
         (dev / d).write_bytes(b"\x00")
         blk = sysro / "sys" / "block" / d; blk.mkdir(parents=True, exist_ok=True)
-        (blk / "ro").write_text("0\n", newline="\n")
+        if ro is not None:
+            (blk / "ro").write_text(f"{ro}\n", newline="\n")
     # ‏#874: `failed` הוא dev → cause (מחרוזת = cable); הרשומה מגיעה מהשרת.
     failed = {d: "cable" for d in failed} if not isinstance(failed, dict) else failed
     (run / "response.json").write_text('{"schema":1}', newline="\n")

@@ -22,12 +22,12 @@ from test_netprobe import _stub, netprobe_of
 pytestmark = requires_native(("bash", BASH))
 
 
-def _nic(sysroot: Path, speed: str, changes: str) -> None:
+def _nic(sysroot: Path, speed: str, changes: str | None) -> None:
     nic = sysroot / "sys/class/net/eth0"
     (nic / "carrier").write_text("1\n")
     (nic / "speed").write_text(speed + "\n")
-    (nic / "statistics").mkdir(exist_ok=True)
-    (nic / "statistics/carrier_changes").write_text(changes + "\n")
+    if changes is not None:
+        (nic / "carrier_changes").write_text(changes + "\n")
 
 
 def _live(sysroot: Path, run: Path, ethtool: Path, env: str = "") -> str:
@@ -69,9 +69,34 @@ def test_a_link_that_dropped_since_boot_is_tested_and_the_pair_reported(fake_mac
     assert not count.exists(), "a link that only came up was tested"
     _nic(sysroot, "1000", "4")                    # it went down and up again
     _live(sysroot, run, ethtool)
+    assert (run / "cable-live.json").exists(), "the drop (2 -> 4 in /sys/class/net/eth0/carrier_changes) was not seen"
     assert json.loads((run / "cable-live.json").read_text()) == {
         "status": "open", "pairs": [{"pair": "C", "code": "Open", "length_m": 12}]}
     assert not (run / "netprobe.json.at").exists()
+
+
+def test_an_unread_carrier_counter_is_logged_as_not_checked_once(fake_machine, tmp_path):
+    sysroot, run = fake_machine["sysroot"], fake_machine["run"]
+    _nic(sysroot, "1000", None)
+    called = tmp_path / "ethtool.called"
+    ethtool = _stub(tmp_path, "ethtool", f"echo ran > {posix(called)!r}; exit 0")
+    _live(sysroot, run, ethtool)
+    _live(sysroot, run, ethtool)
+    assert not called.exists(), "a fast link with an unread counter was tested"
+    log = (run / "agent.log").read_text()   # common.sh sets LOG_FILE=$RUN_DIR/agent.log
+    assert log.count("carrier_changes of eth0 not read") == 1
+    assert "not checked" in log
+
+
+def test_a_slow_link_is_tested_even_when_the_carrier_counter_is_unread(fake_machine, tmp_path):
+    sysroot, run = fake_machine["sysroot"], fake_machine["run"]
+    _nic(sysroot, "100", None)
+    count = tmp_path / "count"
+    ethtool = _stub(tmp_path, "ethtool", f"echo x >> {posix(count)!r}; echo 'netlink error: Operation not supported' >&2; exit 95")
+    _live(sysroot, run, ethtool)
+    _live(sysroot, run, ethtool)
+    assert count.read_text().split() == ["x"], "tested more than once per boot"
+    assert (run / "cable-live.json").exists(), "the slow link with an unread counter was not tested"
 
 
 def test_never_with_a_round_open_a_task_or_off_the_cloner(fake_machine, tmp_path):

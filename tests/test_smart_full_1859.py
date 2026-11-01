@@ -131,6 +131,30 @@ def test_what_the_server_learned_makes_a_clean_disk_orange(tmp_path, reason):
     assert line.startswith("SMART: ") and reason not in line, line
 
 
+@pytest.mark.parametrize("reason", ["downshift_rose", "timeout_rose", "critical_rose", "hot"])
+def test_what_the_server_learned_makes_an_unchecked_disk_orange_too(tmp_path, reason):
+    written, run, err = preflight(tmp_path, F.evo860(), extra=learned_reply(reason), ro=None)
+    assert (run / "smart/sda.v").read_text().split()[:2] == ["unchecked", "ro_unread"]
+    assert written == "sda", err
+    note = run / "targets/sda/smart_note"
+    message = f"#2168: an unchecked disk the server learned is {reason} was written without the orange note"
+    assert note.exists(), message
+    line = note.read_text(encoding="utf-8")
+    assert line.startswith("SMART: ") and reason not in line, message
+    # not folded into warn: the counters were not all read, and warn is the server's CRC baseline
+    ev = json.loads((run / "disk_event.json").read_text())
+    assert (ev["smart"]["verdict"], ev["smart"]["reason"]) == ("unchecked", "ro_unread"), ev["smart"]
+
+
+def test_an_unchecked_disk_with_nothing_learned_stays_unchecked(tmp_path):
+    written, run, err = preflight(tmp_path, F.evo860(), ro=None)
+    assert written == "sda", err
+    assert not (run / "targets/sda/smart_note").exists()
+    ev = json.loads((run / "disk_event.json").read_text())
+    assert ev["smart"]["verdict"] == "unchecked"
+    assert ev["smart"]["reason"] == "ro_unread"
+
+
 def test_a_word_the_agent_does_not_know_is_not_an_orange(tmp_path):
     written, run, err = preflight(tmp_path, F.evo860(), extra=learned_reply("brand_new"))
     assert written == "sda" and not (run / "asked").exists(), err
