@@ -18,7 +18,7 @@ from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "waits", "progress", "failmark", "writecheck")
+LIBS = ("common", "waits", "sysinfo", "progress", "failmark", "writecheck")
 
 
 def verdict(tmp_path, disks: dict[str, int | str | None], states: dict[str, str] | None = None,

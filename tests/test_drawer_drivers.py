@@ -17,6 +17,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import agent_sources
 from test_postdeploy import FILES, Box, answer_for
 
 pytestmark = requires_native(("bash", BASH))
@@ -151,7 +152,7 @@ def test_the_progress_report_carries_each_drawers_outcome(tmp_path):
     (run / "targets/sdb/drivers.json").write_text('{"state":"staged","packages":["m70q"]}\n')
     (run / "state").write_text("done\n")
     script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; '
-              f'. {posix(AGENT)}/lib/core/progress.sh; build_progress ses_1 b4:2e:99:07:1a:c4')
+              f'{agent_sources("sysinfo", "progress")}build_progress ses_1 b4:2e:99:07:1a:c4')
     report = json.loads(subprocess.run([BASH, "-c", script], capture_output=True, text=True,
                                        stdin=subprocess.DEVNULL, cwd=str(AGENT.parent)).stdout)
     by_dev = {t["dev"]: t for t in report["targets"]}

@@ -47,7 +47,7 @@ def test_the_reporter_tells_the_main_path_that_the_session_closed(tmp_path):
     out = run_sh(
         f"export RUN_DIR={posix(run)!r}; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; "
+        f"{agent_sources('sysinfo', 'progress')}"
         "build_progress() { echo '{}'; }; "
         "http_post_json() { echo '{\"ok\":false,\"code\":\"not_open\"}'; return 22; }; "
         'progress_loop ses_d6e79f65 78:ac:c0:9b:11:c2 http://s; echo "rc=$?"')
@@ -64,7 +64,7 @@ def test_a_reply_that_is_not_not_open_leaves_no_mark(tmp_path):
     run_sh(
         f"export RUN_DIR={posix(run)!r} PROGRESS_INTERVAL_S=0.2; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; "
+        f"{agent_sources('sysinfo', 'progress')}"
         "build_progress() { echo '{}'; }; "
         "http_post_json() { return 7; }; "
         "progress_loop ses_1 m http://s & p=$!; sleep 2; kill $p; wait $p 2>/dev/null; :")
@@ -121,7 +121,7 @@ def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=2 "
         "WAIT_STREAM_START_S=40 WAIT_STREAM_STALL_S=40; "
-        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "target_init sda 8192; "
         "stream_source() { sleep 120; }; "
         '( sleep 2; echo ses_d6e79f65 > "$RUN_DIR/session-closed" ) & '

@@ -13,6 +13,7 @@ from __future__ import annotations
 import shutil
 
 import pytest
+from agentlib import agent_sources
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
@@ -88,7 +89,7 @@ def test_the_reporter_keeps_the_reason_before_the_mark(tmp_path):
     out = run_sh(
         make_stubs(tmp_path / "stubs", stubs)
         + f"export RUN_DIR={posix(run)!r}; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/core/progress.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; {agent_sources('sysinfo', 'progress')}"
         "build_progress() { echo '{}'; }; "
         f"http_post_json() {{ cat {posix(tmp_path / 'reply.json')!r}; return 22; }}; "
         'progress_loop ses_1 78:ac:c0:9b:11:c2 http://s; echo "rc=$?"')

@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 from native import requires_native
+from agentlib import agent_sources
 from test_final_report import (  # noqa: F401 -- `reports` is a fixture
     IMAGE, SESSION, native_tools, reports, run_path, url_of,
 )
@@ -126,7 +127,7 @@ def test_a_wave_with_one_orange_drawer_does_not_wait(tmp_path):
 
 # --- the end: the note rides on a done target -----------------------------------------
 
-APPLY = (f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+APPLY = (f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress")}'
          f'. {posix(AGENT)}/lib/smart/smart.sh; . {posix(AGENT)}/lib/smart/smartgate.sh; ')
 
 

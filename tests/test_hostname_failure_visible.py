@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 
 from native import requires_native
+from agentlib import agent_sources
 from test_captured_stdout import HIVEWRITE_OK, posix, sh, windows_box
 from test_smart import AGENT, BASH
 
@@ -39,7 +40,7 @@ def restore_done_station(tmp_path: Path, **override: str) -> tuple[str, Path]:
     script, run = windows_box(tmp_path, **override)
     (run / "response.json").write_text("{}", encoding="utf-8")
     script += (
-        f'. {posix(AGENT)}/lib/core/progress.sh; '
+        f'{agent_sources("sysinfo", "progress")}'
         f'RESP={posix(run / "response.json")!r}; MAC=b4:2e:99:07:1a:c4; '
         'json_get() { case "$2" in *prefix) echo lab1;; *suffix) echo 05;; '
         '  .error) sed -n \'s/.*"error":"\\([^"]*\\)".*/\\1/p\' "$1";; *) echo null;; esac; }; '

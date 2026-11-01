@@ -10,6 +10,10 @@ waited out its stall ceiling (#2248, c516dc43 -- found there, fixed in one file)
 So a room is built by `agentlib.agent_sources` (or `agent_libs` for a
 `$LIB_DIR` loop): imagesrv-agent's order, and an error on a library loaded
 without what it calls. This file holds every test file to that.
+
+#2281: the same family on the failure path -- failmark.sh and progress.sh call
+disk_serial (sysinfo.sh), and rooms that loaded them without it marked a failed
+drawer with "disk_serial: not found": not the evidence the agent would write.
 """
 
 from __future__ import annotations
@@ -31,7 +35,9 @@ LITERAL_SOURCE = re.compile(
 
 
 def _rooms(path: Path, names: set[str]) -> list[tuple[int, list[str]]]:
-    """Every tuple or list literal in ``path`` made only of agent library names."""
+    """Every tuple or list literal in ``path`` made only of agent library names, and
+    every `agent_sources(...)` / `agent_libs(...)` call by its literal names (#2281:
+    18 rooms were call arguments, and only a run of the test itself saw them)."""
     found = []
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SyntaxWarning)   # another file's escapes are not this scan's
@@ -41,6 +47,11 @@ def _rooms(path: Path, names: set[str]) -> list[tuple[int, list[str]]]:
                 isinstance(e, ast.Constant) and isinstance(e.value, str) and e.value in names
                 for e in node.elts):
             found.append((node.lineno, [e.value for e in node.elts]))
+        elif isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", "")) in (
+                "agent_sources", "agent_libs"):
+            got = [a.value for a in node.args if isinstance(a, ast.Constant) and isinstance(a.value, str)]
+            if got:
+                found.append((node.lineno, got))
     return found
 
 
@@ -61,22 +72,32 @@ def offenders(directory: Path = TESTS) -> list[str]:
     return bad
 
 
-def test_every_room_loads_writeback_with_the_drawers():
+def test_every_room_loads_what_its_libraries_call():
     assert offenders() == []
 
 
 def test_the_scan_sees_both_shapes(tmp_path):
-    """The guard's own control: each shape that hid #2248 is caught, and the
-    agent's shape passes."""
+    """The guard's own control: each shape that hid #2248 and #2281 is caught,
+    and the agent's shape passes."""
     for n in range(601):
         (tmp_path / f"test_pad_{n}.py").write_text("")
     (tmp_path / "test_path.py").write_text(
         'X = f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; "\n')
     (tmp_path / "test_names.py").write_text('LIBS = ("common", "restore", "drawers", "drawerfeed")\n')
+    (tmp_path / "test_failpath.py").write_text(   # #2281: the failure path's own room
+        'R = ("common", "progress", "failmark")\n'
+        'X = f". {posix(AGENT)}/lib/core/progress.sh; "\n'
+        'Y = agent_sources("common", "waits", "progress")\n')   # a room as call arguments
     (tmp_path / "test_ok.py").write_text('LIBS = ("common", "restore", "writeback", "drawers")\n'
+                                         'R = ("common", "sysinfo", "progress", "failmark")\n'
+                                         'Y = agent_sources("common", "sysinfo", "progress")\n'
                                          'D = ("drawers", "2", "2", "0")   # a progress row, not a room\n')
     got = offenders(tmp_path)
-    assert got == ["test_names.py:1: loads drawers without writeback",
+    assert got == ["test_failpath.py:2: sources progress.sh by path -- use agent_sources",
+                   "test_failpath.py:1: loads failmark without sysinfo",
+                   "test_failpath.py:1: loads progress without sysinfo",
+                   "test_failpath.py:3: loads progress without sysinfo",
+                   "test_names.py:1: loads drawers without writeback",
                    "test_names.py:1: loads drawerfeed without writeback",
                    "test_path.py:1: sources drawers.sh by path -- use agent_sources",
                    "test_path.py:1: sources drawerfeed.sh by path -- use agent_sources"], got
@@ -93,5 +114,7 @@ def test_agent_libs_keeps_the_agent_order_and_refuses_a_lone_drawer():
     assert agent_libs("drawers", "common", "writeback", "restore") == ["common", "restore", "writeback", "drawers"]
     with pytest.raises(ValueError, match="drawerfeed needs writeback"):
         agent_libs("common", "drawerfeed")
+    with pytest.raises(ValueError, match="failmark needs sysinfo.*progress needs sysinfo"):   # #2281
+        agent_libs("common", "progress", "failmark")
     with pytest.raises(ValueError, match="not sourced"):
         agent_libs("common", "no-such-lib")
