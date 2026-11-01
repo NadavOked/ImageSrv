@@ -428,6 +428,21 @@ target=$(git rev-list -n 1 "$TAG" 2>&1) || rollback "git rev-list נכשל עב�
 
 # 3. יחידות + 4. initrd
 install_units || rollback "התקנת יחידות systemd ל-$UNIT_DIR נכשלה"
+# ‏#1816: ניסיון חוזר של dnsmasq כשכרטיס ההפצה עולה אחרי network.target — גם לשרת
+# שהותקן לפניו (setup-boot-server.sh מתקין אותו רק בהתקנה). לפני ה-daemon-reload שלמטה.
+# כשל אינו מחזיר את הקוד (dnsmasq עובד גם בלעדיו כשהכרטיס כבר קיים), אבל נאמר בסטטוס.
+DNSMASQ_DROPIN="deploy/dnsmasq-imagesrv-restart.conf"
+if [[ -f "$DNSMASQ_DROPIN" ]]; then
+    if dq_out="$(install -D -m 0644 "$DNSMASQ_DROPIN" "$UNIT_DIR/dnsmasq.service.d/imagesrv-restart.conf" 2>&1)"; then
+        echo "ניסיון חוזר ל-dnsmasq: $UNIT_DIR/dnsmasq.service.d/imagesrv-restart.conf"
+    else
+        dq_why="הניסיון החוזר של dnsmasq (#1816) לא הותקן: $(printf '%s\n' "${dq_out:-אין פלט}" | tail -n 1)"
+        echo "server-upgrade: $dq_why"
+        UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$dq_why"
+    fi
+else
+    echo "$DNSMASQ_DROPIN אינו בתג $TAG — גרסה בלי ניסיון חוזר ל-dnsmasq"
+fi
 systemctl daemon-reload || rollback "systemctl daemon-reload נכשל"
 enable_timers || rollback "הפעלת $FAILED_TIMER נכשלה (systemctl enable --now)"
 # ‏#1893: יחידת השחזור (בתוך deploy/*.service שלמעלה) מופעלת כאן — לא לפני ה-fetch: עד שהעץ

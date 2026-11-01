@@ -854,6 +854,30 @@ CREATE TABLE IF NOT EXISTS unsafe_rates (
     at         TEXT NOT NULL,
     PRIMARY KEY (mac, drawers, rate_bps)
 );
+
+-- ‏#1751: תור ההתראות במייל (`server/system/email_alerts.py`). שורה = מייל אחד
+-- ל-(כלל, סוג אירוע, שפה); ‏`items_json` = שורות האירוע שאוחדו לתוכו, ו-
+-- ‏`dropped` = כמה נוספו מעבר לתקרת השורות. ‏`pending` אחת לכל צירוף לכל
+-- היותר (האינדקס החלקי למטה) — כך האיחוד מוכרע ב-DB ולא ב"בדוק ואז הכנס".
+-- ‏`sending` = נלקחה לשליחה; ‏`sent` רק על 250 ל-DATA (עיקרון 5).
+CREATE TABLE IF NOT EXISTS email_queue (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id    TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    lang       TEXT NOT NULL,
+    items_json TEXT NOT NULL,
+    dropped    INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    state      TEXT NOT NULL DEFAULT 'pending'
+               CHECK (state IN ('pending', 'sending', 'sent', 'failed')),
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    next_at    TEXT NOT NULL,
+    last_code  INTEGER,
+    last_error TEXT,
+    sent_at    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS email_queue_one_pending
+    ON email_queue (rule_id, kind, lang) WHERE state = 'pending';
 """
 
 #: הקבוצות הקבועות: חדר שיכפולים ומחשב הבנייה הם יחידים במערכת —
@@ -1372,7 +1396,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 7   # ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 8   # ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:
