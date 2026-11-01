@@ -716,14 +716,9 @@ dhcp-hostsfile=/etc/imagesrv/known-macs
 EOF
 # #1816: a USB NIC / VLAN may appear after network.target. Keep the strict
 # interface binding (#1078), and retry even after a long absence of the NIC.
-write_file /etc/systemd/system/dnsmasq.service.d/imagesrv-restart.conf <<'EOF'
-[Unit]
-StartLimitIntervalSec=0
-
-[Service]
-Restart=on-failure
-RestartSec=5s
-EOF
+# One source with tools/server-upgrade.sh (a server installed before #1816).
+write_file /etc/systemd/system/dnsmasq.service.d/imagesrv-restart.conf \
+    < "$APP_DIR/deploy/dnsmasq-imagesrv-restart.conf"
 run systemctl daemon-reload
 if [[ -n "$IFACE" ]]; then
     run systemctl enable dnsmasq

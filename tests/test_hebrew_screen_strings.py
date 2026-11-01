@@ -313,37 +313,94 @@ def test_every_english_journal_detail_has_a_translation_rule():
 # מסך השרת (DCUI)
 # --------------------------------------------------------------------------- #
 
+#: הודעות DCUI שמוצגות במסך הטקסט בלבד (‏curses, ‏ASCII) ולעולם לא עוברות ב-`view.he`.
+DCUI_TEXT_SCREEN_ONLY = {
+    # app.py: נכתבת רק כשהמסך הגרפי לא עלה — אז אין מסך עברי שיציג אותה.
+    "Graphic screen unavailable: ",
+    # app.py `_draw`: ‏curses על מסוף קטן מ-80x25 — המסך הגרפי אינו מעורב.
+    "terminal too small (80x25 needed)",
+}
+#: ‏`samples.py` הוא נתוני הדגמה לפריימים של המוקאפ, לא הודעות שהשרת כותב.
+DCUI_NOT_SCANNED = {"samples.py"}
+
+
+def _dcui_messages() -> list[tuple[str, list[str]]]:
+    """Every constant English text that server/dcui hands the screen as a message:
+    an ActionResult's text, anything assigned to ``.message`` or ``message``, and
+    the ``message`` argument of a dcui function that takes one. #2266: app.py's
+    assignments were not scanned, and "Cancelled; nothing was erased." reached
+    the Hebrew screen in English.
+
+    Each entry is (where, candidates): an f-string's holes are filled once with a
+    word and once with a number, and a translation of either counts."""
+    trees = [(p.name, ast.parse(p.read_text(encoding="utf-8")))
+             for p in sorted((REPO / "server" / "dcui").glob("*.py")) if p.name not in DCUI_NOT_SCANNED]
+    takes = {}   # a dcui function with a `message` parameter -> its position
+    for _name, tree in trees:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                params = [a.arg for a in node.args.args]
+                if "message" in params:
+                    takes[node.name] = params.index("message")
+
+    def texts(node) -> list[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return [node.value]
+        if isinstance(node, ast.JoinedStr):
+            return ["".join(v.value if isinstance(v, ast.Constant) else fill for v in node.values)
+                    for fill in ("reboot", "7")]
+        return []
+
+    def parts(node) -> list:
+        if isinstance(node, ast.IfExp):
+            return parts(node.body) + parts(node.orelse)
+        if isinstance(node, ast.BoolOp):
+            return [p for v in node.values for p in parts(v)]
+        if isinstance(node, (ast.Tuple, ast.List)):
+            return [p for e in node.elts for p in parts(e)]
+        return [node]
+
+    def is_message(target) -> bool:
+        return (isinstance(target, ast.Attribute) and target.attr == "message") or \
+               (isinstance(target, ast.Name) and target.id == "message")
+
+    found = []
+    for name, tree in trees:
+        for node in ast.walk(tree):
+            values = []
+            if isinstance(node, ast.Call):
+                func = getattr(node.func, "id", getattr(node.func, "attr", ""))
+                if func == "ActionResult":
+                    values = node.args[1:]
+                elif func in takes:
+                    i = takes[func]
+                    values = [a for a in node.args[i:i + 1]] + [k.value for k in node.keywords if k.arg == "message"]
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if is_message(target):
+                        values.append(node.value)
+                    elif isinstance(target, ast.Tuple) and isinstance(node.value, ast.Tuple):
+                        values += [v for t, v in zip(target.elts, node.value.elts) if is_message(t)]
+            for value in values:
+                for part in parts(value):
+                    cands = [t for t in texts(part) if re.search(r"[A-Za-z]{3,}", t)]
+                    if cands:
+                        found.append((f"{name}:{part.lineno}", cands))
+    return found
+
+
 def test_every_dcui_action_message_is_translated_for_the_graphic_screen():
     from server.dcui import view
 
-    # 16/10: pairing.py (F4 on a secondary) writes ActionResults too.
-    trees = [(name, ast.parse((REPO / "server" / "dcui" / name).read_text(encoding="utf-8")))
-             for name in ("actions.py", "pairing.py")]
-    messages = []
-
-    def text_of(node):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            return node.value
-        if isinstance(node, ast.JoinedStr):
-            return "".join(v.value if isinstance(v, ast.Constant) else "reboot" for v in node.values)
-        return None
-
-    for name, node in ((name, node) for name, tree in trees for node in ast.walk(tree)):
-        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "ActionResult":
-            for arg in node.args[1:]:
-                if isinstance(arg, ast.IfExp):
-                    parts = [arg.body, arg.orelse]
-                elif isinstance(arg, (ast.Tuple, ast.List)):
-                    parts = list(arg.elts)
-                else:
-                    parts = [arg]
-                for part in parts:
-                    text = text_of(part)
-                    if text and re.search(r"[A-Za-z]{3,}", text):
-                        messages.append((f"{name}:{node.lineno}", text))
-    assert len(messages) > 25, len(messages)
-    assert any(where.startswith("pairing.py") for where, _t in messages)
-    untranslated = [f"{n} {t}" for n, t in messages if view.he(t) == t]
+    messages = _dcui_messages()
+    assert len(messages) > 50, len(messages)
+    # 16/10: pairing.py (F4 on a secondary) writes ActionResults too; #2266: app.py's own
+    for module in ("actions.py", "pairing.py", "app.py"):
+        assert any(where.startswith(module) for where, _t in messages), module
+    assert any("Cancelled; nothing was erased." in c for _w, c in messages)   # the scan reaches #2266's line
+    untranslated = [f"{where} {cands[0]}" for where, cands in messages
+                    if all(view.he(t) == t for t in cands)
+                    and not any(t.startswith(p) for t in cands for p in DCUI_TEXT_SCREEN_ONLY)]
     assert not untranslated, "הודעת DCUI בלי תרגום ב-view.he:\n" + "\n".join(untranslated)
 
 

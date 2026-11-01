@@ -7338,6 +7338,13 @@ best-effort מצד הסוכן, אחרי כל ריצה. גוף:
 לבדיקות). כשל בהתקנה או ב-`restart systemd-journald` בעדכון — `warning` בסטטוס,
 לא חזרה לגרסה הקודמת.
 
+**‏dnsmasq — `deploy/dnsmasq-imagesrv-restart.conf`** (‏#1816) →
+‏`/etc/systemd/system/dnsmasq.service.d/imagesrv-restart.conf`: ‏`Restart=on-failure`,
+‏`RestartSec=5s`, ‏`StartLimitIntervalSec=0` — כרטיס הפצה שעולה אחרי `network.target`
+(‏USB, ‏VLAN) מחזיר את dnsmasq בלי לוותר על `bind-interfaces` (‏#1078). מקור אחד לשניים:
+‏`setup-boot-server.sh` (שרת חדש) ו-`tools/server-upgrade.sh` (שרת שהותקן לפני #1816,
+לפני ה-`daemon-reload` של שלב 3). כשל בהתקנה בעדכון — `warning` בסטטוס, לא חזרה.
+
 **‏apt — אין שינוי, ונמדד למה:** ‏`apt-repo` הוא מאגר ה-ISO שהועתק פעם אחת
 בהתקנה (‏`bootstrap.sh`) ואינו גדל עם עדכונים; עדכוני האבטחה (‏#1411) נפרסים
 ב-`$DATA_DIR/security-pool` עם `Dir::Cache` משלהם, ו-`trap cleanup EXIT` מוחק
@@ -7785,3 +7792,185 @@ array=/dev/md0
 
 `gap_below_populated` — חיבור SATA ריק בזמן שגבוה ממנו מאוכלס (הדוגמה של #1858; **הכלל עצמו עוד לא נמדד על ה-8100**, ולכן הקונסולה מציגה אותו רק כהערה ליד שינוי).
 **לא בגרסה הזו:** (1) הגואי של המשכפל (אזהרת "החיבורים השתנו" במסך ההמתנה) — שינוי בסוכן/בגואי; (2) **התאמה לאימג׳** ("בקר IDE, האימג׳ נקלט ב-AHCI: Windows לא יעלה" לפני סבב) — דורשת שהקליטה תרשום את `sata_mode` של מכונת המקור במניפסט; (3) שליחת `sata_mode`/`bios` בפועל — הסוכן.
+
+## 42. התראות במייל מהשרת (‏#1751)
+
+כמו ה-Notification Center של QNAP (נדב 18/10), בשלושה חלקים: **חשבונות שליחה**, **כללים**, **היסטוריה**.
+הקוד: `server/system/email_config.py` (המבנה, האימות, הסודות), `server/system/email_oauth.py` (device code ו-XOAUTH2),
+`server/system/email_alerts.py` (התור, השליחה, מקורות האירועים, תהליכון הרקע), `server/system/email_text.py` (הטקסט,
+he/en), `server/console/email_alerts.py` (ה-API). נכנס כ-v1.0.x, אחרי v0.76.0. ההגדרות וה-OAuth למפעיל:
+`docs/email-alerts.md`.
+
+**המסלול הקצר של המסך** ("אני לא זוכר שהגדרתי הרבה ב-QNAP"):
+1. איך שולחים: `POST /accounts` עם `provider`. אם הספק תומך ב-OAuth, אחריו `oauth/start` ו-`oauth/poll`
+   ("התחבר עם Microsoft"). ב-relay מספיקים `host` ו-`from_addr`.
+2. לאן שולחים: `POST /recipients`. **כלל ברירת המחדל נוצר לבד** עם הנמען הראשון.
+3. ‏`POST /accounts/{id}/test`.
+
+כללים נוספים, שפה לכל נמען, פורט, הצפנה וההיסטוריה הם "מתקדם".
+
+**הרשאות:** כל הנתיבים מתחת ל-`/api/console/email-alerts` הם **admin בלבד**. ‏deploy מקבל 403, ובלי כניסה 401.
+**שום תשובה אינה מחזירה** סיסמה, ‏refresh/access token, ‏client secret או device code.
+
+### `GET /api/console/email-alerts`
+
+```json
+{
+ "accounts": [{
+   "id": "acc_1a2b3c4d", "name": "דואר המכללה", "provider": "office365",
+   "host": "smtp.office365.com", "port": 587, "security": "starttls", "auth": "oauth",
+   "username": "alerts@college.example", "from_addr": "alerts@college.example",
+   "oauth_client_id": "00000000-0000-0000-0000-000000000000", "oauth_tenant": "organizations",
+   "password_set": false, "oauth_connected": true, "oauth_client_secret_set": false,
+   "secret_error": null, "blocked": null, "oauth_pending": false}],
+ "rules": [{
+   "id": "rule_5e6f7a8b", "name": "ברירת מחדל", "enabled": true, "account_id": "acc_1a2b3c4d",
+   "categories": ["cloning", "disks", "updates", "system", "peers"], "min_severity": "warn",
+   "recipients": [{"address": "nadav@college.example", "lang": "he"},
+                  {"address": "vendor@partner.example", "lang": "en"}]}],
+ "kinds": [{"key": "round_failed", "label": "סבב שיכפול נכשל", "severity": "err", "category": "cloning"}],
+ "categories": [{"key": "cloning", "label": "שיכפול", "kinds": ["round_failed"]}],
+ "severities": ["info", "warn", "err"],
+ "languages": ["he", "en"], "default_language": "he",
+ "providers": [{"key": "office365", "host": "smtp.office365.com", "port": 587, "security": "starttls",
+                "auth": ["oauth", "password"], "oauth": "microsoft"}],
+ "warnings": ["Direct Send מעביר רק לנמענים בדומיין college.ac.il — לא יגיע אל: x@gmail.example"],
+ "config_error": null,
+ "queue": {"pending": 1, "last_sent_at": "2026-10-18T11:32:00+00:00",
+           "last_failure": {"kind": "disk_red", "rule_id": "rule_5e6f7a8b", "attempts": 3, "max_attempts": 8,
+                            "code": 421, "error": "4.3.2 Service not available", "state": "pending"}},
+ "running": true
+}
+```
+
+- **`accounts[].blocked`**: ‏`null`, או למה החשבון לא שולח עכשיו. הסיבות האפשריות: סיסמה חסרה (נמחקה בשינוי יעד),
+  ‏OAuth שלא חובר, או קובץ סוד שלא נקרא. מיילים של חשבון חסום ממתינים בתור **בלי** לבזבז ניסיונות.
+- ‏`config_error`: ההגדרות השמורות לא פוענחו. במצב הזה שום מייל לא יוצא עד שמירה מחדש.
+- ‏`running`: תהליכון הרקע חי. ‏`false` = שום מייל לא יוצא ואין דופק לדיסק.
+
+**ספקים** (`provider`): הבחירה ממלאת את כל השדות. המפעיל רואה פורט והצפנה רק ב-`custom`.
+
+| `provider` | `host` | `port` | `security` | `auth` (הראשון = ברירת מחדל) |
+|---|---|---|---|---|
+| `office365` | `smtp.office365.com` | 587 | `starttls` | `oauth`, `password` |
+| `o365_direct` | נגזר: `<domain-with-dashes>.mail.protection.outlook.com` מהדומיין של `from_addr`, וניתן לעריכה | 25 | `starttls` | `none` |
+| `relay` | של המפעיל | 25 | `none` | `none` |
+| `gmail` | `smtp.gmail.com` | 587 | `starttls` | `oauth`, `password` (App Password) |
+| `custom` | של המפעיל | 587 | של המפעיל | `none`, `password` |
+
+**קטגוריות וחומרה:**
+
+| קטגוריה | סוגים (`kinds`) וחומרה |
+|---|---|
+| `cloning` שיכפול | `round_failed` err |
+| `disks` דיסקים | `disk_red` err |
+| `updates` עדכונים | `update_available` info · `update_installed` info · `update_failed` err |
+| `system` מערכת | `server_started` warn · `auto_reboot` info · `low_space` warn (אין עדיין כותב) |
+| `peers` שרתי משנה | `peer` err ("לא עונה", ו"חזר לענות" באותו סוג) |
+
+כלל שולח אירוע אם הקטגוריה שלו נמצאת ב-`categories` **וגם** החומרה שלו היא לפחות `min_severity`.
+
+### חשבונות שליחה
+
+| נתיב | גוף | תשובה |
+|---|---|---|
+| `POST /accounts` | `provider`, `name`, `host`, `port`, `security`, `auth`, `username`, `from_addr`, `password`, `oauth_client_id`, `oauth_tenant`, `oauth_client_secret` — כולם אופציונליים | `{"account_id": …}` + ה-GET |
+| `PUT /accounts/{id}` | אותם שדות, חלקי. ‏`clear_secrets: true` = מחיקת הסיסמה והאסימון | ה-GET |
+| `DELETE /accounts/{id}` | — | ה-GET; ‏409 אם כלל משתמש בחשבון |
+| `POST /accounts/{id}/test` | `{"to": "addr", "lang": "he"}` (`lang` אופציונלי, ברירת המחדל היא שפת הממשק) | `{"ok", "code", "message", "refused"}` |
+
+- **400** (בעברית, לפני שנכתב דבר) על:
+  - ספק או אימות לא מוכרים, או אימות שהספק לא תומך בו.
+  - `auth: none` עם `username`.
+  - אימות (`password`/`oauth`) עם `security: none`.
+  - כתובת לא תקינה או תווי בקרה (הזרקת כותרת).
+  - פורט מחוץ ל-1–65535.
+  - יותר מ-5 חשבונות.
+- **שינוי יעד בלי סיסמה** (סקירת אבטחה): שינוי של `provider`, ‏`host`, ‏`port`, ‏`security`, ‏`auth`, ‏`username`,
+  ‏`oauth_client_id` או `oauth_tenant` בלי `password` באותה בקשה **מוחק את הסיסמה ואת האסימון השמורים**. המחיקה
+  נרשמת ביומן כ-`email_alerts_password_cleared`, והחשבון נשאר `blocked` עד שמזינים סוד מחדש.
+- **‏test**: ‏`ok` רק על 250 ל-DATA. ‏`code: null` = לא הגענו לתשובת SMTP (חיבור, TLS, תם הזמן, OAuth). ‏409 =
+  החשבון `blocked`. נרשם ביומן `email_test`.
+- **הסודות**: `<data_dir>/email-accounts/<id>.password` ו-`<id>.oauth` (JSON: `refresh_token`, `client_secret`), שניהם
+  ב-0600 דרך `write_credential_0600`. אף אחד מהם לא נשמר ב-DB או ביומן.
+
+### ‏OAuth — device code
+
+| נתיב | תשובה |
+|---|---|
+| `POST /accounts/{id}/oauth/start` | `{"user_code": "ABCD-1234", "verification_uri": "https://microsoft.com/devicelogin", "expires_in": 900, "interval": 5, "message": "…"}`. ‏502 + הסיבה אם הספק לא ענה או סירב (למשל אין יציאה לאינטרנט, או client id לא תקין), וגם "ההתחברות בוטלה" אם החשבון שונה, נמחק או נותק בזמן שהבקשה לספק הייתה בדרך. ‏409 אם `auth` אינו `oauth` |
+| `POST /accounts/{id}/oauth/poll` | `{"state": "pending" \| "connected" \| "expired" \| "cancelled" \| "error" \| "idle", "message": "…", "interval"?: 10}`. המסך שואל כל `interval` שניות. ‏`connected` נשלח רק כשה-refresh token נכתב לקובץ |
+| `DELETE /accounts/{id}/oauth` | ה-GET. מנתק: מוחק את האסימון |
+
+ה-`device_code` נשמר רק בזיכרון השרת, ו-`accounts[].oauth_pending` מראה שיש התחברות פתוחה.
+**התחברות פתוחה לא שורדת שינוי** (סקירת אבטחה). אם החשבון שונה (שדות `RETARGET`), נמחק או נותק, ההתחברות
+מבוטלת ולא תשמור אסימון, גם אם המפעיל כבר אישר בדפדפן. אחרי זה `poll` מחזיר `cancelled` או `idle`, וצריך
+ללחוץ "התחבר" שוב. זה נכון גם כשהשינוי קרה בזמן ש-`start` או `poll` חיכו לתשובת הספק.
+
+בשליחה: refresh → access token (בזיכרון, עד דקה לפני שפג) → `AUTH XOAUTH2`
+(`user=<username>\x01auth=Bearer <token>\x01\x01`). אם הספק מחזיר refresh token חדש, הוא נשמר במקום הישן.
+חידוש שנכשל נכשל כמו כל שליחה: נרשם ביומן, עם ניסיון חוזר. יומן: `email_oauth_connected`, `email_oauth_failed`.
+
+### נמענים וכללים
+
+| נתיב | גוף | תשובה |
+|---|---|---|
+| `POST /recipients` | `{"address": "…", "lang"?: "he"}` | `{"rule_id", "rule_created"}` + ה-GET. **המסלול הקצר**: מוסיף את הנמען לכלל הראשון. אם אין עדיין כלל, נוצר `ברירת מחדל` עם `categories` = כולן, ‏`min_severity: "warn"`, הנמען בשפת הממשק, והחשבון הראשון. ‏409 אם אין עדיין חשבון |
+| `POST /rules` | `name`, `enabled`, `account_id` (ברירת המחדל: החשבון הראשון), `categories` (לפחות אחת), `min_severity`, `recipients: [{address, lang}]` (עד 20) | `{"rule_id"}` + ה-GET; עד 20 כללים |
+| `PUT /rules/{id}` | אותם שדות, חלקי | ה-GET |
+| `DELETE /rules/{id}` | — | ה-GET |
+
+**שפה לכל נמען** (`he` / `en`): מכל אירוע יוצא מייל אחד לכל שפה בכלל, ובו רק הנמענים של אותה שפה.
+- בעברית: חלק HTML עם `dir="rtl" lang="he"` ו-`text-align:right`.
+- באנגלית: `dir="ltr" lang="en"` ו-`left`.
+- תמיד יש גם חלק `text/plain` וכותרת `Content-Language`.
+- כל טקסט של המייל עובר דרך `email_text.t(lang, key)`. ה-`detail` של אירוע מהיומן עובר כמו שהוא נכתב; התרגום שלו הוא חלק מ-#1700.
+
+### `GET /api/console/email-alerts/history`
+
+```json
+{"queue": [{"id": 7, "kind": "disk_red", "label": "דיסק אדום", "severity": "err", "lang": "he",
+            "rule_id": "rule_5e6f7a8b", "rule_name": "ברירת מחדל",
+            "account_id": "acc_1a2b3c4d", "account_name": "דואר המכללה",
+            "recipients": ["nadav@college.example"], "state": "pending",
+            "attempts": 1, "max_attempts": 8, "code": 451, "error": "…",
+            "created_at": "…", "sent_at": null, "next_at": "…", "count": 1, "items": ["…"]}],
+ "journal": [{"ts": "…", "user": "", "event": "email_alert_failed", "detail": "…: ניסיון 1/8 נכשל — קוד 451: …"}]}
+```
+
+- ‏`state`: ‏`pending` (ממתין: נאסף, או ממתין לניסיון הבא ב-`next_at`), ‏`sending`, ‏`sent` (רק אחרי 250; הזמן ב-`sent_at`), או `failed` (ויתור, כלל או חשבון שנמחקו, או אין נמענים בשפה).
+- 50 השורות האחרונות מהתור; שורות שהסתיימו נשמרות עד 200.
+- 50 שורות היומן האחרונות מהאירועים `email_alert_*`, ‏`email_test`, ‏`email_alerts_*` ו-`email_oauth_*`.
+- החדשות קודם. אין טבלה חדשה.
+
+### האירועים — מהיומן
+
+תהליכון הרקע קורא את `journal` מהשורה האחרונה שראה. הסמן נשמר ב-`settings.email_alerts_journal_cursor`; בהפעלה הראשונה
+הוא מתחיל מהשורה האחרונה הקיימת ולא מההיסטוריה. כל אירוע ממופה לסוג:
+
+| אירוע ביומן | סוג | מי כותב |
+|---|---|---|
+| `update_available` | `update_available` | התהליכון, פעם אחת לכל גרסה, מתוך `update_last_check` |
+| `update_apply_done` / `update_apply_failed` | `update_installed` / `update_failed` | `tools/server-upgrade.sh` / `update.py` |
+| `server_started` | `server_started` | התהליכון, בעלייה: "לא רץ בערך N, מ-X עד Y", לפי `<data_dir>/alive.heartbeat` (נכתב כל 60 ש') |
+| `auto_reboot` — רק "השרת אותחל…", "דולג…", "תקלה…" | `auto_reboot` | `auto_reboot.py` (דחייה אינה התראה) |
+| `room_failed` | `round_failed` | `room.py` |
+| `disk_failure` | `disk_red` | `disk_failures.py` |
+| `low_space` | `low_space` | **נקודת חיבור**. ‏#1737 (סעיף 35) אינו רושם אירוע כזה |
+| `peer_unreachable` / `peer_back` | `peer` | התהליכון: בראשי — משני שהכשל האחרון שלו מאוחר מהתשובה האחרונה, ושלא ענה 10 דקות; במשני — ראשי שלא פנה 10 דקות. "לא נמדד" אינו "לא עונה" |
+
+### התור — טבלת `email_queue`
+
+שורה = מייל אחד ל-(כלל, סוג, שפה). לכל צירוף כזה יכולה להיות לכל היותר שורה `pending` אחת (אינדקס חלקי ייחודי),
+ואירועים מאותו צירוף מצטרפים אליה: עד 50 שורות, והשאר נספרים ב-`dropped`.
+- **מתי יוצא:** לא לפני 60 ש' מהאירוע הראשון בשורה, ולא לפני 15 דקות מהמייל הקודם באותו צירוף.
+- **הנמענים:** נקבעים בזמן השליחה, מהכלל.
+- **כשל:** חוזר ל-`pending` עם backoff של 1, 2, 4… דקות (עד שעה). אחרי 8 ניסיונות: `failed`.
+- **יומן:** כל ניסיון נרשם: `email_alert_sent`, ‏`email_alert_refused`, ‏`email_alert_failed`, ‏`email_alert_gave_up`.
+- **שליחה שנקטעה:** שורה שנשארה `sending` כשהשרת נעצר חוזרת לתור בעלייה. ייתכן שהמייל יישלח פעמיים; נרשם ביומן `email_alert_requeued`.
+
+**השליחה** — `smtplib` מהספרייה הסטנדרטית.
+- תקרה אחת של 20 שניות לכל השליחה.
+- תעודת ה-TLS נבדקת. STARTTLS שהשרת לא מציע = כשל.
+- חשבון עם אימות ובלי סוד לא מתחבר בכלל.
+- נושא המייל: `[ImageSrv] <שם השרת>: <סוג>`. הזמנים בגוף לפי אזור הזמן של השרת (#1447).

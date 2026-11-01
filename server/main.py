@@ -388,6 +388,20 @@ def _start_ups_monitor(runtime) -> None:
     threading.Thread(target=monitor.run_forever, daemon=True, name="ups-monitor").start()
 
 
+def _host_config_writes() -> dict:
+    """‏#2267: שני הכותבים ל-/etc בעלייה — ‏known-macs (‏#141) והקובץ הראשי של
+    ‏dnsmasq (‏#1013) — רק על לינוקס, מערכת ההפעלה של השרת (דביאן 13). שם הם
+    בדיוק כמו קודם, כולל כשל גלוי ביומן (עיקרון 5). על תחנת פיתוח (ווינדוס)
+    אין /etc, אין systemctl ואין dnsmasq: הכתיבה רק יצרה ‏`C:\\etc\\imagesrv`
+    ו-`C:\\etc\\dnsmasq.d` מחוץ ל-data-dir — ולכן לא מדליקים אותם, ואומרים זאת."""
+    from server.net import dhcp_host
+    if not sys.platform.startswith("linux"):
+        print(f"dev station ({sys.platform}): /etc/imagesrv/known-macs and "
+              "/etc/dnsmasq.d are not written (#2267)")
+        return {"known_macs_hooks": None, "sync_dnsmasq": False}
+    return {"known_macs_hooks": {"apply": dhcp_host.apply_known_macs}, "sync_dnsmasq": True}
+
+
 def main() -> None:
     _configure_stdio()
     parser = build_parser()
@@ -523,7 +537,7 @@ def main() -> None:
 
     import uvicorn
 
-    from server.net import dhcp_host, ports
+    from server.net import ports
     from .app import create_agent_app, create_console_app, create_runtime
     from .db import journal
 
@@ -574,10 +588,10 @@ def main() -> None:
                              sender_simulate=args.sender_simulate,
                              storage_role=args.storage_role,
                              primary_url=args.primary_url,
-                             known_macs_hooks={"apply": dhcp_host.apply_known_macs},
-                             # ‏#1013: קובץ ה-dnsmasq הראשי נגזר מה-DB בעלייה —
-                             # כאן בלבד, מאותו טעם כמו known_macs_hooks.
-                             sync_dnsmasq=True,
+                             # ‏known_macs_hooks, ו-‏#1013: קובץ ה-dnsmasq הראשי נגזר
+                             # מה-DB בעלייה (‏sync_dnsmasq) — כאן בלבד, ועל לינוקס
+                             # בלבד (‏#2267: לא על תחנת פיתוח בווינדוס).
+                             **_host_config_writes(),
                              # הכרעת נדב 15/10: הגג והפתיחה של הקצב לפי מהירות
                              # כרטיס ההפצה — כאן בלבד, כמו sync_dnsmasq.
                              link_speed=drive_rates.read_link,
