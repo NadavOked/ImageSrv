@@ -16,6 +16,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from agentlib import agent_sources
 
 AGENT = Path(__file__).resolve().parent.parent / "agent"
 BASH = shutil.which("bash")
@@ -48,7 +49,7 @@ def run_case(tmp_path: Path, reply: str | None) -> subprocess.CompletedProcess:
     script = textwrap.dedent(f"""
         RUN_DIR={run_dir.as_posix()!r}
         . {AGENT.as_posix()}/lib/core/jsonq.sh
-        . {AGENT.as_posix()}/lib/core/progress.sh
+        {agent_sources('sysinfo', 'progress')}
         log() {{ printf '%s\\n' "$*" >&2; }}
         if progress_refused_for_good; then echo STOP; else echo CONTINUE; fi
     """)
@@ -117,7 +118,7 @@ def test_actual_progress_loop_returns_after_one_not_open_reply(tmp_path):
     script = f'''
         RUN_DIR={tmp_path.as_posix()!r}
         . {AGENT.as_posix()}/lib/core/jsonq.sh
-        . {AGENT.as_posix()}/lib/core/progress.sh
+        {agent_sources('sysinfo', 'progress')}
         log() {{ echo "$*" >&2; }}
         http_post_json() {{
             echo post >> "$RUN_DIR/posts"

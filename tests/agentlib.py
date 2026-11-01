@@ -69,7 +69,11 @@ AGENT_MAIN = REPO_ROOT / "agent" / "imagesrv-agent"
 #: Without it the job is "not found" and exits at once; its SIGCHLD lands while
 #: busybox ash is blocked opening the drawer's fifo, ash does not retry that open
 #: on EINTR (dash and bash do), and the drawer never starts (#2248, #2272).
-NEEDS = {"drawers": ("writeback",), "drawerfeed": ("writeback",)}
+#: failmark.sh and progress.sh call disk_serial (sysinfo.sh) -- on the failure path
+#: (target_ident_keep, wipe_written_gpt, target_write_started), so a room without it
+#: shows "disk_serial: not found" exactly where the evidence is written (#2281).
+NEEDS = {"drawers": ("writeback",), "drawerfeed": ("writeback",),
+         "failmark": ("sysinfo",), "progress": ("sysinfo",)}
 _ORDER: list[str] = []
 
 

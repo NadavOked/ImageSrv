@@ -19,6 +19,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from agentlib import agent_sources
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
@@ -340,7 +341,7 @@ def test_the_progress_report_carries_drivers_only_once_it_exists(tmp_path):
         (run / "targets/sda" / name).write_text(value + "\n")
     (run / "state").write_text("done\n")
     script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; '
-              f'. {posix(AGENT)}/lib/core/progress.sh; build_progress ses_1 b4:2e:99:07:1a:c4')
+              f'{agent_sources("sysinfo", "progress")}build_progress ses_1 b4:2e:99:07:1a:c4')
     before = json.loads(subprocess.run([BASH, "-c", script], capture_output=True, text=True,
                                        stdin=subprocess.DEVNULL, cwd=str(AGENT.parent)).stdout)
     assert "drivers" not in before

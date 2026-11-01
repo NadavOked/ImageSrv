@@ -28,7 +28,7 @@ import re
 import shutil
 from pathlib import Path
 
-from agentlib import lib_files
+from agentlib import lib_files, agent_sources
 
 import pytest
 
@@ -228,8 +228,8 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} "
         f"SYSROOT={posix(box)!r} SERVER=http://s; " + extra_env
         # ‏#926: jsonq.sh — shrink_open_record קורא את תשובת השרת (ok/id) ב-json_get.
-        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f". {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/core/progress.sh; "
+        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f". {posix(AGENT)}/lib/core/waits.sh; {agent_sources('sysinfo', 'progress')}"
         # ‏manifest.sh (#338) ואז bootca.sh, בדיוק כסדר של
         # `imagesrv-agent`: ‏`capture_disk` קורא לשניהם בשורת המניפסט,
         # ופונקציה שאינה טעונה היא מניפסט פגום — לא שגיאה.
@@ -447,7 +447,10 @@ def test_the_harness_loads_every_lib_that_capture_calls():
     פונקציה ש-`capture.sh` קורא לה בקוד חייבת להיות בשרשרת. ה-lib הבא
     שייחתך מ-`capture.sh` (‏#211) ייתפס כאן ביום שהוא נוצר.
     """
-    chain = set(re.findall(r"lib/(?:\w+/)?(\w+\.sh)", inspect.getsource(capture_run)))
+    src = inspect.getsource(capture_run)
+    chain = set(re.findall(r"lib/(?:\w+/)?(\w+\.sh)", src))
+    chain |= {f"{n}.sh" for args in re.findall(r"agent_sources\(([^)]*)\)", src)   # #2281
+              for n in re.findall(r"\w+", args)}
     # ההערות יורדות: `ui_clear` מוזכר בהערה ב-capture.sh ואינו נקרא ממנה,
     # והשומר היה דורש את `ui.sh` בשרשרת בלי סיבה.
     body = re.sub(r"(?m)(?<!\S)#.*$", "",

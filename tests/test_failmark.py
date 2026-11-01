@@ -27,6 +27,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import agent_sources
 from test_drawer_evidence import MIXED_FANOUT
 from test_restore_evidence import build_box, restore_run
 from test_stream_honesty import GOOD_FANOUT, GOOD_SHA, call, drawer_run, errors_of
@@ -94,8 +95,8 @@ IDENT = ('disk_serial() { case "$1" in sda) printf S3TWNE0JB04745 ;; sdb) printf
          'disk_port() { case "$1" in sda) printf 1 ;; sdb) printf 2 ;; esac; }; '
          'ata_port_of() { case "$1" in sda) printf 1 ;; sdb) printf 2 ;; esac; }; ')
 
-LIBS = (f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/failmark.sh; ")
+LIBS = (f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}")
 
 
 def fail_run(tmp_path, *, script, state="writing", error="", since="300", dmesg=DMESG,

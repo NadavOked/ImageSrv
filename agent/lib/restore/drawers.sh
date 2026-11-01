@@ -147,8 +147,8 @@ restore_partition_drawers() {
             "מחיצה $_idx: פג הזמן — המגירה לא סיימה לכתוב" "$_blame"
     done
 
-    # ה-sha התואם הוא הראיה החיובית שהזרם הגיע שלם, ולכן הוא נשאל ראשון:
-    # מקור שיצא בקוד מוזר על זרם שאומת אינו כישלון. כשאין ראיה — שואלים
+    # ה-sha התואם הוא הראיה החיובית שהזרם הגיע שלם, ולכן הוא נשאל לפני השאר -- אחרי פקיעה:
+    # מקור שיצא בקוד מוזר על זרם שאומת אינו כישלון (#2274: זרם שפקע כן). כשאין ראיה — שואלים
     # **למה**, ולכל סיבה הודעה משלה (#73). עד כאן היה ענף sha אחד שבלע גם
     # את המקרים שבהם הבדיקה כלל לא נעשתה: ‏fanout שנהרג (‏OOM, ‏#21) או
     # מקור שנקטע משאירים בייטים חלקיים, ה-sha בהכרח אינו תואם, וההודעה
@@ -161,10 +161,10 @@ restore_partition_drawers() {
     _ok_rc=$?
     if [ -n "$_dec_why" ]; then
         _why="$_dec_why"
+    elif [ "$_fanout_rc" = "$WAIT_TIMED_OUT" ]; then   # #2274: before the sha -- killed on its ceiling, fanout.rc unread
+        _why="פג הזמן -- הזרם לא הגיע"; round_closed && _why="$(round_closed_why)"
     elif is_sha256 "$_got" && [ "$_got" = "$_sha" ]; then
         _why=""
-    elif [ "$_fanout_rc" = "$WAIT_TIMED_OUT" ]; then
-        _why="פג הזמן -- הזרם לא הגיע"; round_closed && _why="$(round_closed_why)"
     elif [ "$_fanout_rc" != "0" ] && [ "$_fanout_rc" != "1" ]; then
         # ‏2 של fanout, ‏137 של OOM (#21) = ההפצה עצמה נפלה.
         _why="הפצת הזרם למגירות נכשלה (fanout rc=${_fanout_rc:-לא נרשם})"

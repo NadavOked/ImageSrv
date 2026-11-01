@@ -26,7 +26,7 @@ from server.library.images import ImageLibrary, disk_family, layout_end_bytes, r
 
 from conftest import ESP_GUID, WINDOWS_GUID, write_image
 from test_agent import AGENT, BASH, posix, sh
-from agentlib import lib_path
+from agentlib import lib_path, agent_sources
 
 #: הכונן שעליו נשבר #82 — NVMe פיזי "256GB" במחשב הלנובו של המעבדה.
 NVME_256 = 256060514304
@@ -331,7 +331,7 @@ def fits_box(tmp_path, blockdev_body: str, image=TINY11):
         f"chmod 0755 {posix(stubs)}/blockdev; "
         f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress")}'
         f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/diskfit.sh; '   # #1217
         "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
     )

@@ -37,7 +37,7 @@ from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "waits", "jsonq", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writeback", "drawers", "drawerfeed",
+LIBS = ("common", "waits", "jsonq", "sysinfo", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writeback", "drawers", "drawerfeed",
         "verdict", "failmark", "ntfsboot", "writecheck",
         "writemark")   # #1877: finish_grow -> writemark_release (writemark.sh) -> writemark_clear (stubbed)
 
@@ -225,7 +225,7 @@ def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
         make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
+        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
                         "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ cat {posix(payload)!r}; }}; "

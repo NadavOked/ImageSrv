@@ -14,7 +14,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
-from agentlib import flat_lib
+from agentlib import flat_lib, agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -34,7 +34,7 @@ def run(tmp_path: Path, body: str, who: str = "task", parts: str = PARTS, setup:
     ids = '"" b4:2e:99:07:1a:c4 tsk_4e10' if who == "task" else "ses_1 b4:2e:99:07:1a:c4"
     return sh(
         f'export RUN_DIR={posix(run_dir)!r} CAPTURE_LEVEL=3\n'
-        f'. {posix(LIB)}/common.sh; . {posix(LIB)}/manifest.sh; . {posix(LIB)}/progress.sh; '
+        f'. {posix(LIB)}/common.sh; . {posix(LIB)}/manifest.sh; {agent_sources("sysinfo", "progress")}'
         f'. {posix(LIB)}/capturedetail.sh\n{STUBS}target_init sda 0; {setup}\n{body}\n'
         f'build_progress {ids}')
 
