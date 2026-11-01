@@ -80,6 +80,7 @@ const char *smart_reason_text(const char *reason) {
     if (!strcmp(reason, "ro_unread")) return "לא נקרא אם הדיסק במצב קריאה בלבד — לא נבדק";
     if (!strcmp(reason, "cmd_failed")) return "פקודת SMART לדיסק נכשלה — לא נבדק";   /* #1903 */
     if (!strcmp(reason, "no_attrs")) return "הדיסק לא החזיר טבלת מאפייני SMART — לא נבדק";
+    if (!strcmp(reason, "standby")) return "הדיסק במצב המתנה ולא הוער לבדיקת SMART — לא נבדק";   /* #1775 */
     if (!strcmp(reason, "pending")) return "ממתין להכרעה";
     /* #1859 (Nadav 20/10): the orange -- smart.sh SMART_WARN_REASONS, the same words as smart_reason_he */
     if (!strcmp(reason, "critical_rose")) return "מאפיין קריטי עלה מאז הסבב הקודם — להחליף את הדיסק";

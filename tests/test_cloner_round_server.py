@@ -237,6 +237,26 @@ def test_an_image_not_allowed_for_this_machine_is_refused(identity_server, image
     assert no_round(srv)
 
 
+def test_refused_image_id_is_single_line_and_bounded_in_journal(identity_server):
+    srv = identity_server
+    cloner(srv)
+    image_id = "img_\n\r" + "x" * 500
+    r = ask(srv, image_id=image_id)
+    assert r.status_code == 403, r.text
+    assert r.json()["code"] == "image_not_allowed", r.text
+    assert no_round(srv)
+    lines = journal_details(srv, "cloner_round_refused")
+    assert len(lines) == 1, lines
+    detail = lines[0][1]
+    assert "\n" not in detail and "\r" not in detail
+    prefix = f"{MAC1} — האימג' "
+    suffix = " אינו מותר למחשב הזה (image_not_allowed)"
+    assert detail.startswith(prefix) and detail.endswith(suffix), detail
+    journaled_id = detail[len(prefix):-len(suffix)]
+    assert len(journaled_id) <= 64
+    assert journaled_id == "img_  " + "x" * 58
+
+
 def test_no_second_round_while_one_is_active(identity_server):
     srv = identity_server
     cloner(srv)

@@ -21,7 +21,7 @@ import threading
 import time
 from pathlib import Path
 
-from server.storage import storage_locations as sl
+from server.storage import locations as sl
 from server.db import _settle, _write_lock, journal, now_iso, writing
 
 #: קובץ נעילה ב-data_dir: הקונסולה ומסך השרת הם שני תהליכים.

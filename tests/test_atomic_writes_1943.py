@@ -30,7 +30,7 @@ import pytest
 from server import auto_reboot
 from server.library import images
 from server.net import netcfg_rollback
-from server.storage import storage_locations
+from server.storage import locations as storage_locations
 from server.interserver import storage_nodes
 from server.vm import vmupdate
 from server.db import connect
@@ -117,7 +117,7 @@ def test_interserver_cert_is_durable(tmp_path, fsynced):
 # --- console_tls: תעודת הקונסולה וסמן טביעת האצבע ------------------------------
 
 def test_console_cert_and_marker_are_durable_on_first_issue(tmp_path, fsynced):
-    from server.console import console_tls
+    from server.console import tls as console_tls
     console_tls.ensure_console_cert(tmp_path, "10.0.0.1", hostname="imgsrv")
     directory = tmp_path / console_tls.CONSOLE_TLS_DIRNAME
     assert_durable(directory / console_tls.CERT_NAME, fsynced)
@@ -125,7 +125,7 @@ def test_console_cert_and_marker_are_durable_on_first_issue(tmp_path, fsynced):
 
 
 def test_console_cert_reissue_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
-    from server.console import console_tls
+    from server.console import tls as console_tls
     console_tls.ensure_console_cert(tmp_path, "10.0.0.1", hostname="imgsrv")
     directory = tmp_path / console_tls.CONSOLE_TLS_DIRNAME
     before = (directory / console_tls.CERT_NAME).read_bytes()
@@ -136,7 +136,7 @@ def test_console_cert_reissue_survives_a_write_that_dies_halfway(tmp_path, monke
 
 
 def test_console_cert_reissue_is_durable(tmp_path, fsynced):
-    from server.console import console_tls
+    from server.console import tls as console_tls
     console_tls.ensure_console_cert(tmp_path, "10.0.0.1", hostname="imgsrv")
     fsynced.clear()
     console_tls.reissue_self_signed(tmp_path, "imgsrv2")

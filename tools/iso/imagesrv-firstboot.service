@@ -15,7 +15,9 @@ Conflicts=getty@tty1.service
 Type=oneshot
 ExecStart=/usr/local/sbin/imagesrv-firstboot
 TimeoutStartSec=0
-StandardOutput=journal+console
+# stdout (progress, the build's summary) to the journal only: the boot
+# screen is on the console (imagesrv-boot-splash). Errors still reach it.
+StandardOutput=journal
 StandardError=journal+console
 
 [Install]

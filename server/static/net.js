@@ -301,31 +301,8 @@ function sinceSeconds(seconds) {
   return `לפני ${Math.round(seconds / 86400)} ימים`;
 }
 
-/* ‏#954 גל 3: הרשימה עצמה מצוירת ב-console.js (seenDevicesCard, מ-NET); כאן
-   נשארו שלושת הטפסים — תיאור, הסרה, הוספה ידנית — וכולם טוענים מחדש דרך
-   loadMachines (שקורא גם /net). */
-function netDeviceDescribe(macEnc) {
-  let mac = macEnc; try { mac = decodeURIComponent(macEnc); } catch (e) {}
-  const device = (NET || []).find((d) => d.mac === mac);
-  if (!device) return;
-  sheet({
-    title: "תיאור ההתקן", sub: device.mac,
-    fields: [{ id: "description", label: "תיאור חופשי",
-               value: device.description, placeholder: "למשל: מדפסת מעבדה 2" }],
-    onSubmit: async (v) => {
-      await put(`/net/${encodeId(device.mac)}`, { description: v.description });
-      await loadMachines();
-    },
-  });
-}
-function netDeviceForget(macEnc) {
-  let mac = macEnc; try { mac = decodeURIComponent(macEnc); } catch (e) {}
-  confirmSheet(
-    "להסיר מהרשימה?",
-    mac,
-    "הסרה מהרשימה", async () => { await del(`/net/${encodeId(mac)}`); await loadMachines(); },
-    [["w", "המכונה תוסר מהרשימה"], ["ok", "אם תדבר עם השרת שוב — היא תחזור לרשימה"]]);
-}
+/* ‏#954 גל 3: הרשימה עצמה מצוירת ב-console.js (seenDevicesCard, מ-NET); כאן נשאר טופס
+   ההוספה הידנית ("התקן ידנית" בכותרת דף המחשבים), שטוען מחדש דרך loadMachines (שקורא גם /net). */
 function netDeviceAdd() {
   sheet({
     title: "הוספת התקן ידנית",

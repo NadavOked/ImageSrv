@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from server import db
-from server.interserver import interserver_auth, storage_nodes
+from server.interserver import auth as interserver_auth, storage_nodes
 from server.dcui import app as dcui_app
 from server.dcui import gui, pairing, view
 from server.dcui.data import demo_snapshot

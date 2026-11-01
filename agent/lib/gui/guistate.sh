@@ -245,7 +245,7 @@ gui_hello_state() {
         [ "$_now" -ge "$_hello_at" ] || { printf 'native-gui: hello timestamp is in the future\n' >&2; return 1; }
         _hello_age=$((_now - _hello_at))
     fi
-    printf 'hello_age=%s\nhello_rc=%s\n' "$_hello_age" "$_hello_rc"
+    printf 'hello_age=%s\nhello_rc=%s\nscreen=%s\nip=%s\nmac=%s\n' "$_hello_age" "$_hello_rc" "${GUI_SCREEN:-}" "${IP:-}" "${MAC:-}"   # #1709: a GUI up before the hello learns its role here
     # #1483: a power-off that came back (safe_poweroff) -- on every screen, said
     [ -s "$RUN_DIR/power.fail" ] && printf 'toast=%s\n' "$(tr -d '\r\n|' < "$RUN_DIR/power.fail")"
     [ -s "$RUN_DIR/power.ask" ] && printf 'power_ask=%s\n' "$(tr -d '\r\n' < "$RUN_DIR/power.ask")"   # #1918: the power button's question (powerbtn.sh)

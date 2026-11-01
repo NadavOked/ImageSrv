@@ -12,7 +12,7 @@ import pytest
 
 from server.agent import boottrace
 from server import db
-from server.learn import learn_boot
+from server.learn import boot as learn_boot
 
 MAC = "78:ac:c0:9b:11:c2"
 OTHER = "aa:bb:cc:00:00:32"

@@ -26,7 +26,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from server.console import auth, monitor
 from server.agent import registry
-from server.interserver import (interserver_api, interserver_auth, peer_safe, storage_client,
+from server.interserver import (api as interserver_api, auth as interserver_auth, peer_safe, storage_client, 
                                 storage_nodes, storage_transfer)
 from server.agent.api import ServerContext
 from server.db import journal, now_iso

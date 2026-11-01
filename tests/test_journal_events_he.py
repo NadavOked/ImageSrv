@@ -65,7 +65,7 @@ def test_every_console_setting_has_a_hebrew_label():
     לא נשברת — היא מגיעה ליומן העברי כ-`readback_full: פעיל`. ההצלבה מול
     `WRITE_SETTINGS` (מה שהקונסולה באמת כותבת) היא מה שמונע את הסחיפה."""
     pytest.importorskip("fastapi")
-    from server.console import console_api
+    from server.console import api as console_api
     assert len(console_api.WRITE_SETTINGS) > 10, "ההצלבה לא רואה את ההגדרות שנכתבה בשבילן"
     missing = sorted(k for k in console_api.WRITE_SETTINGS if k not in journal_he.SETTINGS_HE)
     assert missing == [], f"הגדרות בלי תווית עברית ב-SETTINGS_HE: {missing}"

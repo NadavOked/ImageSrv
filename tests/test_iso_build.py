@@ -328,7 +328,9 @@ def test_firstboot_reads_the_installer_facts_and_never_guesses_a_nic() -> None:
 def test_firstboot_owns_tty1_shows_progress_and_leaves_failure_visible() -> None:
     unit = FIRSTBOOT_SERVICE.read_text(encoding="utf-8")
     assert "Type=oneshot" in unit and "Restart=" not in unit
-    assert "StandardOutput=journal+console" in unit and "StandardError=journal+console" in unit
+    # נדב 17/10 ("אין מסך שאינו גואי"): stdout ליומן בלבד — מסך האתחול על
+    # הקונסולה (imagesrv-boot-splash); שגיאות (stderr) עדיין מגיעות אליה.
+    assert "StandardOutput=journal\n" in unit and "StandardError=journal+console" in unit
     assert "Before=getty@tty1.service" in unit and "Conflicts=getty@tty1.service" in unit, \
         "firstboot must stop tty1 getty from racing its progress output"
 

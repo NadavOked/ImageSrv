@@ -14,7 +14,7 @@ import pytest
 from server import db
 from server.rounds import room_precheck
 from server.system import housekeeping
-from server.learn import learn_models
+from server.learn import models as learn_models
 
 from test_server_room import (CLONER1, cloner_hello, heartbeat, room,  # noqa: F401
                               room_body, room_server)

@@ -174,20 +174,29 @@ class Scheduler:
         except Exception as exc:
             journal(self.rt.conn, "auto_reboot", f"תקלה: {type(exc).__name__}: {exc}")
             reason = "לא ניתן לבדוק אם השרת עסוק"
+        if (self.first_deferred is not None
+                and current - self.first_deferred >= timedelta(minutes=GIVE_UP_MINUTES)):
+            detail = (f"השרת היה עסוק במשך שעתיים: {reason}" if reason else
+                      "ההפעלה מחדש המתוזמנת לא הושלמה במשך שעתיים (שרת עסוק או כשל בהפעלה מחדש)")
+            journal(self.rt.conn, "auto_reboot", f"דולג — {detail}")
+            self.due = next_occurrence(mode, at, weekday, current)
+            self.first_deferred = self.retry_at = None
+            return "skipped"
         if reason:
             self.first_deferred = self.first_deferred or current
-            if current - self.first_deferred >= timedelta(minutes=GIVE_UP_MINUTES):
-                journal(self.rt.conn, "auto_reboot", f"דולג — השרת היה עסוק במשך שעתיים: {reason}")
-                self.due = next_occurrence(mode, at, weekday, current)
-                self.first_deferred = self.retry_at = None
-                return "skipped"
             journal(self.rt.conn, "auto_reboot", f"נדחה — {reason}")
             self.retry_at = current + timedelta(minutes=RETRY_MINUTES)
             return "deferred"
         ignored = update_verdict(self.rt)[1]
         if ignored:
             journal(self.rt.conn, "auto_reboot", f"התעלמות — {ignored}")
-        self.reboot()
+        try:
+            self.reboot()
+        except Exception as exc:
+            self.first_deferred = self.first_deferred or current
+            self.retry_at = current + timedelta(minutes=RETRY_MINUTES)
+            journal(self.rt.conn, "auto_reboot", f"נכשל — {type(exc).__name__}: {exc}")
+            return "failed"
         write_atomic(Path(self.rt.data_dir) / MARKER, current.isoformat(), encoding="ascii")
         journal(self.rt.conn, "auto_reboot", "בוצע — הפעלה מחדש לפי לוח הזמנים")
         self.due = next_occurrence(mode, at, weekday, current)

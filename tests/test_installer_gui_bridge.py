@@ -194,7 +194,7 @@ SECONDARY = {**FORM, "role": "secondary", "hostname": "imagesrv-haifa", "primary
 
 def _primary_cert(tmp_path: Path, name: str = "primary") -> tuple[Path, str]:
     """תעודה אמיתית (כמו זהות הראשי) ו-SHA-256 של ה-SPKI שלה."""
-    from server.interserver import interserver_auth
+    from server.interserver import auth as interserver_auth
     cert, _key = interserver_auth.generate_self_signed(name, ip_sans=["127.0.0.1"])
     pem = tmp_path / f"{name}.pem"
     pem.write_bytes(cert)

@@ -218,7 +218,7 @@ def test_the_free_text_description_survives_the_throttle(db):
 def test_the_loop_counter_climbs_while_the_writes_stop(db):
     """שני המונים על חיבור אחד, זה מול זה: ‏`agent_loops` עולה בכל
     הגעה, ו-`net_devices` לא נכתבת אף פעם."""
-    from server.agent import agent_loops                          # noqa: PLC0415
+    from server.agent import loops as agent_loops   # noqa: PLC0415
 
     net_seen(db, MAC, IP)
     beats = 12

@@ -32,7 +32,7 @@ import time
 import pytest
 
 from server.net import foreign_vlan
-from server.agent.agent_loops import note
+from server.agent.loops import note
 from server.agent.bootguard import guard
 from server.db import _open, connect
 

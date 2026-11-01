@@ -17,8 +17,8 @@ from starlette.concurrency import run_in_threadpool
 from server.console import auth
 from server.agent.api import ServerContext
 from server.db import _settle, _write_lock, journal, now_iso, writing
-from server.storage import storage_disks
-from server.storage import storage_locations as sl
+from server.storage import disks as storage_disks
+from server.storage import locations as sl
 
 log = logging.getLogger("imagesrv.storage_locations")
 
@@ -385,7 +385,20 @@ def create_storage_locations_router(
         if row["id"] == sl.LOCAL_ID:
             raise HTTPException(409, "המיקום המקומי אינו ניתן לניתוק")
         sl.refresh_catalog(ctx.conn, ctx.library)
-        hooks["umount"](row["mount_point"])
+        result = hooks["umount"](row["mount_point"])
+        if result.status != sl.OK:
+            # #2126: a failed umount is not "disconnected". Only mountinfo at both
+            # PID 1 and the service saying "not mounted" lets it through (umount
+            # of an already-gone mount fails too), never umount's own wording.
+            seen = hooks["mount_presence"](row["mount_point"])
+            gone = (seen.status == sl.FAILED
+                    and len((seen.payload or {}).get("missing") or []) == 2)
+            if not gone:
+                status = 503 if sl.UNCHECKED in (result.status, seen.status) else 409
+                why = result.reason or seen.reason or "umount נכשל"
+                journal(ctx.conn, "storage_location_disconnect_failed",
+                        f"{loc_id} {row['name']} — {why}", user[0])
+                raise HTTPException(status, f"הניתוק נכשל: {why}")
         params = sl.params_of(row)
         if row["type"] == "iscsi" and params.get("iqn"):
             hooks["iscsi_logout"](params.get("iqn"), params.get("portal") or "")

@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.console import auth
-from server.learn import learn_waits
+from server.learn import waits as learn_waits
 from server.disks import smart_ask
 from server.db import _write_lock, journal, now_iso, writing
 from server.agent.registry import ROOM_GROUPS

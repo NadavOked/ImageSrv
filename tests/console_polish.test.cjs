@@ -48,13 +48,12 @@ test('1032/1: .page .dg td .acts is always display:flex (reserves its box) and s
     'hidden by visibility, not display — the box stays in the layout so no column ever resizes on hover');
 });
 
-test('1032/1: hover, focus-within, selection, group rows and acts-on tables reveal the buttons via visibility:visible (not display:flex, which would re-introduce the shift)', () => {
+test('1032/1: hover, focus-within, selection and acts-on tables reveal the buttons via visibility:visible (not display:flex, which would re-introduce the shift)', () => {
   const css = read('console.css');
   const revealSelectors = [
     '.page .dg tr:hover td .acts',
     '.page .dg tr:focus-within td .acts',
     '.page .dg tr.sel td .acts',
-    '.page .dg tr.group td .acts',
     '.page .dg.acts-on td .acts',
   ];
   for (const sel of revealSelectors) {

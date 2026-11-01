@@ -40,6 +40,67 @@ NOBODY_JOINED_LOG = (
 )
 
 
+SENDER_PROGRESS_LOG = (
+    "bytes=  3 614 497K re-xmits=0001738 (  0.0%) slice=0112 -   0\r"
+)
+SENDER_BROADCAST_ERROR = (
+    "Could not broadcast data packet to 10.44.0.196:39000 (Operation not permitted)"
+)
+SENDER_BROADCAST_FAILURE_LOG = (
+    "Earlier sender diagnostic\n" * 20
+    + SENDER_PROGRESS_LOG * 20
+    + "...=0112 -   0\r"
+    + SENDER_PROGRESS_LOG * 5
+    + SENDER_BROADCAST_ERROR + "\n"
+)
+
+
+def test_sender_log_tail_leads_with_real_error_and_preserves_raw_log(tmp_path):
+    log = tmp_path / "sender.log"
+    raw = SENDER_BROADCAST_FAILURE_LOG.encode()
+    log.write_bytes(raw)
+
+    reason = sender_module.sender_log_tail(log)
+
+    assert reason.startswith(SENDER_BROADCAST_ERROR)
+    assert "slice=" not in reason
+    assert "re-xmits" not in reason
+    assert "=0112 -   0" not in reason
+    assert len(reason) <= 400
+    assert log.read_bytes() == raw
+
+
+def test_sender_log_tail_keeps_unknown_error_and_other_diagnostics(tmp_path):
+    log = tmp_path / "sender.log"
+    log.write_bytes((
+        "Earlier diagnostic\n" + SENDER_PROGRESS_LOG * 20
+        + "something new went wrong\n" + SENDER_PROGRESS_LOG * 20
+    ).encode())
+
+    reason = sender_module.sender_log_tail(log)
+
+    assert reason == "something new went wrong\nEarlier diagnostic"
+
+
+@pytest.mark.parametrize("fragment", ["", "=0112 -   0\r"])
+def test_sender_log_tail_only_progress_is_empty(tmp_path, fragment):
+    log = tmp_path / "sender.log"
+    log.write_bytes((fragment + SENDER_PROGRESS_LOG * 100).encode())
+
+    assert sender_module.sender_log_tail(log) == ""
+
+
+def test_sender_log_tail_limit_preserves_the_leading_error(tmp_path):
+    log = tmp_path / "sender.log"
+    log.write_bytes(("Earlier diagnostic\n" * 30
+                     + SENDER_BROADCAST_ERROR + "\n").encode())
+
+    reason = sender_module.sender_log_tail(log, limit=100)
+
+    assert reason.startswith(SENDER_BROADCAST_ERROR + "\n")
+    assert len(reason) <= 100
+
+
 class FakeProcess:
     """תהליך מזויף: נחסם עד ש-`release` נקרא, בדיוק כמו udp-sender שמחכה."""
 
@@ -425,6 +486,20 @@ def test_a_started_transfer_that_then_fails_is_not_blamed_on_nobody_joining(
     error = engine.status()["error"]
     assert "אף מחשב לא הצטרף" not in error
     assert "קוד 1" in error
+
+
+def test_sender_failure_reason_leads_with_real_error(library, free_ports):
+    recorder = Recorder(code=1, log_text=SENDER_BROADCAST_FAILURE_LOG)
+    engine = SenderEngine(library, runner=recorder)
+    engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
+    assert wait_for(lambda: engine.status()["state"] == "failed")
+
+    error = engine.status()["error"]
+    assert error.startswith(
+        "udp-sender נכשל על p1.esp.pcl.zst (קוד 1): " + SENDER_BROADCAST_ERROR
+    )
+    assert "slice=" not in error
+    assert "re-xmits" not in error
 
 
 def test_a_failed_partition_stops_the_round(library, free_ports):

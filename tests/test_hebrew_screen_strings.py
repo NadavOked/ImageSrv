@@ -355,8 +355,8 @@ def test_every_dcui_action_message_is_translated_for_the_graphic_screen():
 HTTP_ENGLISH_OK = {
     ("server/console/auth.py", "password_change_required"),
     ("server/console/auth.py", "mfa_enrollment_required"),
-    ("server/console/console_mfa.py", "builtin_no_mfa"),
-    ("server/console/console_storage.py", "{}: {}"),
+    ("server/console/mfa.py", "builtin_no_mfa"),
+    ("server/console/storage.py", "{}: {}"),
 }
 #: מודולים שהם ממשק סוכן↔שרת בלבד: התשובה נרשמת ביומן הסוכן.
 AGENT_PROTOCOL = {"server/library/capture.py", "server/rounds/direct.py"}

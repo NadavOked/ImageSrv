@@ -171,7 +171,7 @@ test('#1485 cloners page = console-full.html P.cloners: header (counters, add, p
   run("selectMachinesGroup('grp_CLONERS')"); assert.equal(run('MACHINES_CLASS'),'grp_CLONERS'); assert.equal(run('MACHINES_FILTER'),null);
   const html=run('machines(0)'); balanced(html);
   assert.match(html,/obj-name">מחשבי שיכפול</);
-  assert.match(html,/<span>מחשבים<\/a>|onclick="openMachinesPage\(\)">מחשבים<\/a><span>\/<\/span><span>מחשבי שיכפול<\/span><\/div>/,'crumbs: … › מחשבים › מחשבי שיכפול');
+  assert.match(html,/<span>מחשבים<\/a>|onclick="openMachinesPage\(\)">מחשבים<\/a><span class="sep" aria-hidden="true">›<\/span><span>מחשבי שיכפול<\/span><\/div>/,'crumbs: … › מחשבים › מחשבי שיכפול');
   assert.match(html,/obj-sub" title="3 מחשבים · 2 מחוברים · דיסק אחד נכשל בשיכפול הקודם">/);   // #1580: orange
   assert.doesNotMatch(html,/role="tab"/,'the mockup page has no tabs');
   assert.doesNotMatch(html,/class="kpi/,'no KPI strip in the mockup');
@@ -199,7 +199,8 @@ test('#1485 cloner cards (.mach): name + status pill, MAC, one row per slot "ד�
   run(`MACHINES.find(m=>m.mac==='${C2}').disks.find(d=>d.serial==='S5Y2NX0R12345').smart='fail'`);   // #1580: SMART fail = red
   const c2r=mach(between(run('machines(0)'),'<div class="rgrid">','מחשבים שלא דיווחו'),C2);
   assert.match(dsk(c2r,3),/<div class="bar err"><i style="--w:100%"><\/i><\/div><b>אדום<\/b>/,'SMART fail = red');
-  assert.match(c2r,/^<div class="mach err"[^>]*><div class="mt"><span>מחשב 2<\/span><span class="pill ok">מחובר<\/span><span class="pill err">דיסק אדום<\/span>/,'a red disk paints the card red (mockup CLONE-04)');
+  assert.match(c2r,/^<div class="mach err"[^>]*><div class="mt"><span>מחשב 2<\/span><span class="pill err">דיסק אדום<\/span><\/div>/,'a red disk paints the card red and its one pill says so (mockup CLONE-04 stPill: "דיסק אדום" instead of the state)');
+  assert.match(run('machines(0)'),/obj-sub" title="3 מחשבים · 2 מחוברים · 1 דיסק אדום · דיסק אחד נכשל בשיכפול הקודם">/,'the mockup header counts red disks; the orange failure is still said');
   assert.match(c2,/<div class="acts"><button class="btn sm" type="button" onclick="event.stopPropagation\(\);openMachineDetail\('78%3Aac%3Ac0%3A9b%3A11%3Ac2','disks'\)">חריצים<\/button><\/div>/);
   assert.match(c3,/^<div class="mach off"/,'not connected → dashed'); assert.match(c3,/מעולם לא דיווח על דיסקים/);
   assert.doesNotMatch(grid,/editDrawerCount|monitorMachine\(|clearDiskFailure/,'the count dialog is gone; clearing a red disk is in the panel');
@@ -281,8 +282,8 @@ test('#1485 builders page = console-full.html P.build: header (counters, add), n
   assert.match(html,/obj-name">מחשבי בנייה</);
   assert.match(html,/obj-sub" title="2 מחשבים · מחשב אחד מחובר">/);
   assert.match(html,/pill info">2 קליטות בתהליך</);
-  assert.match(between(html,'obj-actions','<div class="body">'),/^obj-actions"><button class="btn" onclick="openAddMachine\(\{group:'grp_BUILD'\}\)">\+ מחשב בנייה<\/button><button class="btn" onclick="refreshPage\(\)">/);
-  assert.doesNotMatch(html,/role="tab"|openDirectRound|wakeGroup/);
+  assert.match(between(html,'obj-actions','<div class="body">'),/^obj-actions"><button class="btn" onclick="openAddMachine\(\{group:'grp_BUILD'\}\)">\+ מחשב בנייה<\/button><button class="btn" onclick="wakeGroup\('grp_BUILD'\)">הער את כולם<\/button><button class="btn" onclick="refreshPage\(\)">/);
+  assert.doesNotMatch(html,/role="tab"|openDirectRound/);
   assert.match(html,/<div class="c12 grid2"><div class="card bcard" data-mac="c8:d9:d2:0b:fe:32">/);
   assert.equal((html.match(/<div class="card bcard"/g)||[]).length,2);
   const b1=between(html,'data-mac="c8:d9:d2:0b:fe:32"','data-mac="c8:d9:d2:0b:fe:34"'), b2=between(html,'data-mac="c8:d9:d2:0b:fe:34"','קליטות אחרונות');
@@ -368,11 +369,12 @@ test('data: loadMachines reads /room and /tasks; the 2s poll re-reads /room only
   await run('loadCaptures()'); assert.equal(run('rendered'),1,'same task list → not again');
 });
 
-test('the machines table links every group row to its object, fixed groups included', () => {
+test('the machines table is flat (console-full.html P.machines, Nadav 18/10): the group is a column, the fixed groups open from the tree', () => {
   const {run}=setup();
   run('MACHINES_CLASS=null'); const html=run('machines(0)');
-  assert.match(html,/<tr class="group" data-group="grp_CLONERS">[^]*?openClass\('grp_CLONERS'\)">מחשבי שיכפול<\/a>/);
-  assert.match(html,/<tr class="group" data-group="grp_BUILD">[^]*?openClass\('grp_BUILD'\)">פתח</);
+  assert.equal((html.match(/<tr class="group"/g)||[]).length,0);
+  assert.match(html,/<td>שיכפול<\/td><td class="c-opt">מחשבי שיכפול<\/td>/);
+  assert.match(html,/<td>בנייה<\/td><td class="c-opt">מחשבי בנייה<\/td>/);
 });
 
 test('#980 §1: "power off all" is a danger sheet behind the typed group name, posts confirm_name, and reports requests — not machines powered off', async () => {

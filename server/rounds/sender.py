@@ -287,7 +287,18 @@ def sender_log_tail(log_path: Path, limit: int = 400) -> str:
         text = log_path.read_text(errors="replace")
     except OSError:
         return ""
-    return text[-limit:].strip()
+    # Filter complete records before applying the display limit: cutting first
+    # can turn a progress record into an unrecognizable fragment.
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or _PROGRESS.match(line):
+            continue
+        if re.fullmatch(r"(?:\.\.\.)?=\d+\s+-\s+\d+", line):
+            continue  # A truncated slice counter is still progress.
+        lines.append(line)
+    # Put the newest diagnostic first so truncation preserves its beginning.
+    return "\n".join(reversed(lines))[:limit].strip()
 
 
 def transfer_started_in_log(log_path: Path) -> bool | None:
@@ -788,7 +799,7 @@ class SenderEngine:
         לא יזרוק מקבל שהשרת עוד מחכה לו. ההמרה: 200 בקשות ≈ 190ש' (ראו למעלה)."""
         if self.lost_wait is None:
             return self.retries_until_drop
-        from server.agent import agent_timing   # noqa: PLC0415 -- בלי מעגל ייבוא בעלייה
+        from server.agent import timing as agent_timing   # noqa: PLC0415 -- בלי מעגל ייבוא בעלייה
         return agent_timing.retries_until_drop(self.retries_until_drop, self.lost_wait())
 
     def command_for(self, path: Path, receivers: int, number: int = 1,

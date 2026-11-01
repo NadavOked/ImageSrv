@@ -888,7 +888,7 @@ def test_the_read_names_the_card_the_console_came_through(net_server):
 
 
 def test_installed_management_reads_servers_if_from_the_firstboot_status(tmp_path):
-    from server.console.console_netcfg import installed_management
+    from server.console.netcfg import installed_management
     status = tmp_path / "firstboot.status"
     status.write_text("state=done\nservers_if=ens18\nrole=primary\n", encoding="utf-8")
     assert installed_management(status) == "ens18"

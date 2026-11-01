@@ -40,7 +40,7 @@ from agentlib import flat_lib
 
 pytest.importorskip("fastapi")
 
-from server.console import monitor  # noqa: E402
+from server.console import monitor# noqa: E402
 from server.rounds import room as room_mod  # noqa: E402
 from test_room_rewake_1721 import CAP, STEP, _packets_to, _round, _wave1_partial  # noqa: E402
 from test_server_room import (  # noqa: E402,F401 — room_server is a fixture

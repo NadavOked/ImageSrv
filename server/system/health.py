@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, Response
 import hashlib
 import shutil
 
-from server.agent import agent_loops, hello, identity
+from server.agent import loops as agent_loops, hello, identity
 from server.console import auth, monitor
 from server.core import capabilities
 from server.net import dhcp, foreign_vlan, ports
@@ -599,26 +599,26 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(check("vm_host", "עדכון ב-VM", *hooks["vm_host"]()))
 
     # ‏#1846: האבדן ברשת ההפצה מול הבסיס שלה — שורה לכל כרטיס הפצה שנמדד עליו גל.
-    from server.learn import learn_netloss as _learn_netloss
+    from server.learn import netloss as _learn_netloss
     results.extend(_learn_netloss.health_checks(ctx.conn))
     # ‏#1847: מכונה שלא מתעוררת מ-WoL — רצף של הערות בלי תשובה.
-    from server.learn import learn_wol as _learn_wol
+    from server.learn import wol as _learn_wol
     results.extend(_learn_wol.health_checks(ctx.conn))
     # ‏#1848: שלב אתחול שהתארך פי 2 מהבסיס של המכונה, ולפני/אחרי עדכון.
-    from server.learn import learn_boot as _learn_boot
+    from server.learn import boot as _learn_boot
     results.extend(_learn_boot.health_checks(ctx.conn))
     # ‏#1884: דיסק הספרייה בגל האחרון — קצב ולחץ I/O.
     from server.learn import server_io as _server_io
     results.extend(_server_io.health_checks(ctx.conn))
     # ‏#1886: המקום הפנוי לאורך זמן — "מתמלא בעוד ~N ימים".
-    from server.storage import storage_history as _storage_history
+    from server.storage import history as _storage_history
     results.extend(_storage_history.health_checks(ctx.conn))
     # ‏#1889: סיכום שבועי של ההמתנה למפעיל — המלצה לאדם, לא פעולה.
-    from server.learn import learn_waits as _learn_waits
+    from server.learn import waits as _learn_waits
     results.extend(_learn_waits.health_checks(ctx.conn))
 
     # #1066: שורה לכל מיקום אחסון — מחובר / לא נגיש / מנותק / לא נבדק.
-    from server.storage import storage_locations as _storage_locations
+    from server.storage import locations as _storage_locations
     results.extend(_storage_locations.health_checks(ctx))
     # ‏#1989: שורה לכל מערך RAID — תקין / פגוע / בבנייה מחדש (עם אחוז).
     results.extend(raid_status.health_checks(hooks.get("mdstat"), hooks.get("raid_declared")))

@@ -6,10 +6,12 @@ set -euo pipefail
 INITRD=$1
 ALLOW_LAB=false
 [[ ${2:-} == --lab ]] && ALLOW_LAB=true
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "$SCRIPT_DIR/../initramfs-format.sh"
 
 listing=$(mktemp)
 trap 'rm -f "$listing"' EXIT
-(zstd -dc "$INITRD" 2>/dev/null || gzip -dc "$INITRD" 2>/dev/null || cat "$INITRD") \
+initramfs_decompress "$INITRD" \
     | cpio -t >"$listing" 2>/dev/null \
     || { echo "build-iso: cannot inspect initrd contents" >&2; exit 1; }
 

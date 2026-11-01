@@ -13,8 +13,8 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import MANIFEST_256, setup_classroom, write_image
-from server.storage import storage_locations as sl
-from server.storage.storage_locations import FAILED, OK, UNCHECKED, HookResult
+from server.storage import locations as sl
+from server.storage.locations import FAILED, OK, UNCHECKED, HookResult
 
 IQN = "iqn.2005-10.org.freenas.ctl:images"
 PORTAL = "10.44.3.75:3260"
@@ -31,6 +31,8 @@ class FakeHooks:
         self.scan_reason = "showmount: command not found"
         self.mount_status = OK
         self.mount_reason = "access denied"
+        self.umount_status = OK
+        self.umount_reason = "target is busy"
         self.mount_fail_substr = ""      # #1123: כשל רק בעיגון שהיעד מכיל את זה
         self.fstab_status = OK           # #1123: כשל בכתיבת fstab
         self.login_status = OK
@@ -124,11 +126,18 @@ class FakeHooks:
 
     def umount(self, target):
         self.umounts.append(target)
+        if self.umount_status != OK:
+            return HookResult(self.umount_status, self.umount_reason)
         self.mounted.discard(str(Path(target)))
         return HookResult(OK)
 
     def is_mount(self, target):
         return str(Path(target)) in self.mounted
+
+    def mount_presence(self, target):
+        if self.is_mount(target):
+            return HookResult(OK)
+        return HookResult(FAILED, "not mounted", {"missing": ["PID 1", "service"]})
 
     def fstab_write(self, entries):
         self.fstab.append(list(entries))
@@ -162,6 +171,7 @@ class FakeHooks:
             "mount": self.mount,
             "umount": self.umount,
             "is_mount": self.is_mount,
+            "mount_presence": self.mount_presence,
             "fstab_write": self.fstab_write,
             "creds_write": self.creds_write,
             "creds_remove": self.creds_remove,
@@ -489,6 +499,86 @@ def _connected_iscsi(env):
     env["fake"].disk_status = "fs"
     return env["admin"].post(f"/api/console/storage-locations/{loc_id}/mount",
                              json={"format": False})
+
+
+@pytest.mark.parametrize("make", [_create_nfs, _connected_iscsi], ids=["nfs", "iscsi"])
+@pytest.mark.parametrize("status,reason,http_status", [
+    (FAILED, "target is busy", 409),
+    (UNCHECKED, "umount: command not found", 503),
+    (FAILED, "", 409),
+    (UNCHECKED, "", 503),
+])
+def test_disconnect_umount_failure_preserves_location(env, make, status, reason, http_status):
+    created = make(env)
+    assert created.status_code == 200, created.text
+    loc_id = created.json()["id"]
+    conn, fake = env["ctx"].conn, env["fake"]
+    before = sl.get(conn, loc_id)
+    assert before["state"] == "connected"
+    assert fake.is_mount(before["mount_point"])
+    assert any(e["target"] == before["mount_point"] for e in fake.fstab[-1])
+    fstab_before, logouts_before = list(fake.fstab), list(fake.logouts)
+    fake.umount_status, fake.umount_reason = status, reason
+
+    response = env["admin"].post(f"/api/console/storage-locations/{loc_id}/disconnect")
+
+    assert response.status_code == http_status, response.text
+    assert response.json()["detail"].startswith("הניתוק נכשל")
+    assert reason in response.json()["detail"]
+    after = sl.get(conn, loc_id)
+    for field in ("state", "state_since", "state_detail"):
+        assert after[field] == before[field]
+    assert fake.umounts[-1] == before["mount_point"]
+    assert fake.is_mount(before["mount_point"])
+    assert fake.fstab == fstab_before
+    assert fake.logouts == logouts_before
+    assert conn.execute(
+        "SELECT COUNT(*) FROM journal WHERE event = 'storage_location_disconnect'"
+    ).fetchone()[0] == 0
+    # round 20: the failure reaches the operator in Hebrew and red, never as its key
+    rows = [r for r in env["admin"].get("/api/console/journal").json()
+            if r["event"] == "storage_location_disconnect_failed"]
+    assert len(rows) == 1, rows
+    assert rows[0]["label"] == "ניתוק מיקום האחסון נכשל — המיקום נשאר מחובר", rows
+    assert rows[0]["severity"] == "err", rows
+
+
+def test_disconnect_of_a_mount_that_is_already_gone_is_not_blocked(env):
+    """umount of a mount point that is not mounted fails too ("not mounted"). Only
+    mountinfo saying it is gone at both PID 1 and the service lets it through."""
+    created = _create_nfs(env)
+    loc_id, mount = created.json()["id"], created.json()["mount_point"]
+    fake = env["fake"]
+    fake.mounted.discard(str(Path(mount)))
+    fake.umount_status, fake.umount_reason = FAILED, f"umount: {mount}: not mounted."
+
+    response = env["admin"].post(f"/api/console/storage-locations/{loc_id}/disconnect")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["state"] == "disconnected"
+    assert all(e["target"] != mount for e in fake.fstab[-1])
+
+
+@pytest.mark.parametrize("make", [_create_nfs, _connected_iscsi], ids=["nfs", "iscsi"])
+def test_disconnect_umount_success_disconnects_location(env, make):
+    created = make(env)
+    assert created.status_code == 200, created.text
+    loc_id, mount = created.json()["id"], created.json()["mount_point"]
+    fake = env["fake"]
+    logouts_before = list(fake.logouts)
+
+    response = env["admin"].post(f"/api/console/storage-locations/{loc_id}/disconnect")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["state"] == "disconnected"
+    assert sl.get(env["ctx"].conn, loc_id)["state"] == "disconnected"
+    assert fake.umounts[-1] == mount and not fake.is_mount(mount)
+    assert all(e["target"] != mount for e in fake.fstab[-1])
+    expected_logouts = [(IQN, PORTAL)] if created.json()["type"] == "iscsi" else []
+    assert fake.logouts == logouts_before + expected_logouts
+    assert env["ctx"].conn.execute(
+        "SELECT COUNT(*) FROM journal WHERE event = 'storage_location_disconnect'"
+    ).fetchone()[0] == 1
 
 
 @pytest.mark.parametrize("make", [_create_nfs, _create_smb, _connected_iscsi],

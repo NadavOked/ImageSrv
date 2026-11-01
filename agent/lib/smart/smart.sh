@@ -145,12 +145,15 @@ smart_probe() {
     # במטמון כמו כל תשובה: עוד 30 שניות על אותו דיסק תקוע לא יביאו ראיה.
     # ‏#1921 (נדב 20/10): `-x` -- היומנים, devstat וה-WCTEMP; ‏`-f old` שומר את טבלת המאפיינים
     # בצורה שכל קוראיה מכירים (‏-x לבדו מדפיס brief; ‏smartjudge.sh קורא את שתיהן).
-    capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -x -f old -n never "$_sp_dev"; _sp_rc=$?
+    capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -x -f old -n standby "$_sp_dev"; _sp_rc=$?
     [ "$CAPPED_TIMED_OUT" = 1 ] && { _smart_store "$1" unchecked timeout; echo unchecked; return; }
+    if [ "$_sp_rc" -eq 2 ] && grep -qi 'standby' "$_sp_out" 2>/dev/null; then
+        _smart_store "$1" unchecked standby; echo unchecked; return
+    fi
     # bit 1 (rc & 2) = פתיחת ההתקן נכשלה. רק אז מנסים דרך שכבת ה-SAT
     # (גשר USB-SATA); שאר הסיביות (בעיקר bit 3 = הדיסק נכשל) הן תשובה.
     if [ "$((_sp_rc / 2 % 2))" -eq 1 ]; then
-        capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -d sat -x -f old -n never "$_sp_dev"
+        capped_run "$SMARTCTL_MAX_S" "$_sp_out" "$SMARTCTL" -d sat -x -f old -n standby "$_sp_dev"
         _sp_rc=$?
         [ "$CAPPED_TIMED_OUT" = 1 ] && { _smart_store "$1" unchecked timeout; echo unchecked; return; }
         if [ "$((_sp_rc / 2 % 2))" -eq 1 ]; then
@@ -242,6 +245,7 @@ smart_reason_he() {
         program_fail) printf 'הזיכרון של ה-SSD נכשל בכתיבה או במחיקה' ;;   data_path) printf 'שגיאות בנתיב הנתונים בתוך הדיסק' ;;
         selftest_failed) printf 'הבדיקה העצמית האחרונה של הדיסק נכשלה' ;;   nvme_reliability) printf 'הבקר מדווח שהאמינות של הדיסק נפגעה (NVMe)' ;;
         media_readonly) printf 'הבקר נעל את הדיסק לקריאה בלבד (NVMe)' ;;   no_table) printf 'טבלת הידע של SMART חסרה — לא נבדק' ;;
+        standby) printf 'הדיסק במצב המתנה ולא הוער לבדיקת SMART' ;;   # #1775: smartctl -n standby
         cable) printf 'כבל/חריץ' ;;   disk) printf 'הדיסק' ;;   removed) printf 'המגירה נשלפה' ;;   write_error) printf 'שגיאת כתיבה לדיסק' ;;   unclassified) printf 'לא סווג' ;;
         *) printf 'סיבה לא מוכרת' ;;   # the word itself stays in the log and the disk_event
     esac

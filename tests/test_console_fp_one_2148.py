@@ -36,7 +36,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _identity(host: str) -> tuple[bytes, bytes]:
-    from server.interserver.interserver_auth import generate_self_signed
+    from server.interserver.auth import generate_self_signed
     return generate_self_signed("imagesrv-console", ip_sans=[host], dns_sans=["fp-2148"])
 
 
@@ -83,7 +83,7 @@ def _free_port() -> tuple[str, int]:
 def _snapshot(tmp_path: Path, monkeypatch, address, state: str):
     """collect_snapshot on an installed server whose disk holds a stale console
     identity (canonical and serving/ copy), with the console at ``address``."""
-    from server.console import console_tls
+    from server.console import tls as console_tls
     from server.dcui import data
     from server.dcui.data import CommandResult, collect_snapshot
 
@@ -116,7 +116,7 @@ def _snapshot(tmp_path: Path, monkeypatch, address, state: str):
 
 
 def test_the_dcui_shows_what_the_console_presents_not_a_stale_serving_copy(tmp_path, monkeypatch):
-    from server.console import console_tls
+    from server.console import tls as console_tls
     from server.dcui import view
     live_cert, live_key = _identity("10.68.0.84")
     with _console(live_cert, live_key, tmp_path) as address:
@@ -141,7 +141,7 @@ def test_a_console_that_does_not_answer_is_unavailable_not_the_file(tmp_path, mo
 def test_while_first_boot_runs_no_fingerprint_is_shown(tmp_path, monkeypatch):
     """First boot replaces the certificate at its end: none, rather than one
     that is about to change -- even when a console already answers."""
-    from server.console import console_tls
+    from server.console import tls as console_tls
     from server.dcui import view
     from datetime import datetime
     live_cert, live_key = _identity("127.0.0.1")

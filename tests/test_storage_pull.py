@@ -19,7 +19,7 @@ pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שר�
 from conftest import MANIFEST_256, PARTITION_BYTES, write_image
 from server import db
 from server.storage import disk_reserve
-from server.interserver import (interserver_api, interserver_auth, storage_client, storage_nodes,
+from server.interserver import (api as interserver_api, auth as interserver_auth, storage_client, storage_nodes, 
                                 storage_transfer)
 from server.library.images import ImageLibrary
 

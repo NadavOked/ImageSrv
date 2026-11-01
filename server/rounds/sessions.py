@@ -49,7 +49,7 @@ ROOM_PREFIX = "ROOM"
 NONCLASSROOM_NAME_MAX = HOSTNAME_MAX - len(ROOM_PREFIX) - 1
 
 #: מה ששם מחשב מורכב ממנו. ‏`_` **אינו** כאן, והוא בדיוק התו שנולד
-#: מ-`label.replace(" ", "_")` ב-`console_api.py` ושורד לתוך מזהה הקבוצה.
+#: מ-`label.replace(" ", "_")` ב-`console/api.py` ושורד לתוך מזהה הקבוצה.
 _PREFIX_OK = re.compile(r"[A-Z0-9-]+")
 
 

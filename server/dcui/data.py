@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from server.console import console_tls
+from server.console import tls as console_tls
 from server.net import deploy_net, ifaddr, netcfg, netcfg_host, netcfg_rollback
 from server.interserver import storage_nodes
 from server.db import connect, get_setting
@@ -304,19 +304,24 @@ def _version(runner: Runner, repo_dir: Path,
 
 def system_updates_date(data_dir: Path = DATA_DIR,
                         manifest_file: Path = ISO_MANIFEST) -> str:
-    """#1411: the day of this server's Debian packages -- the security pool the
-    update button last installed (deploy/security-upgrade.sh), else the pool the
-    ISO carried.  "" = not known: a state file that exists and cannot be read is
-    not silently replaced by the older ISO date (principle 5)."""
+    """Return the latest date from the existing security and ISO pool files.
+
+    Return "" if neither exists or any existing file cannot be read, is not a
+    JSON object, or lacks a valid YYYY-MM-DD date (principle 5).
+    """
+    dates = []
     for path, key in ((data_dir / "security-pool.json", "date"), (manifest_file, "pool_date")):
-        if not path.exists():
-            continue
         try:
+            if not path.exists():
+                continue
             value = json.loads(path.read_text(encoding="utf-8")).get(key)
+            if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+                return ""
+            datetime.strptime(value, "%Y-%m-%d")
         except (OSError, ValueError, AttributeError):
             return ""
-        return value if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) else ""
-    return ""
+        dates.append(value)
+    return max(dates, default="")
 
 
 def is_pre_install(data_dir: Path = DATA_DIR,

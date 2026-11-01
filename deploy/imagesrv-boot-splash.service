@@ -1,0 +1,21 @@
+# ImageSrv -- the server's boot screen (owner 17/10: no black screen, no
+# screen that is not the GUI; non-gui audit S1). A static ImageSrv picture on
+# the framebuffer from early boot until the DCUI's GUI takes tty1, instead of
+# a black tty1 with a cursor through network-online and imagesrv-server.
+# Display only: it starts nothing and nothing waits for it. Errors stay
+# visible -- the text console is not unbound (server/system/bootsplash.py).
+[Unit]
+Description=ImageSrv boot screen
+DefaultDependencies=no
+After=systemd-udev-trigger.service
+Before=sysinit.target imagesrv-dcui.service imagesrv-firstboot.service imagesrv-installer-gui.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I /usr/local/sbin/imagesrv-boot-splash
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=sysinit.target

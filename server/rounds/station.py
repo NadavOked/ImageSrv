@@ -22,7 +22,7 @@ from server.core import capabilities
 from server.library import minfree
 from server.net import ports
 from server.system import timezone
-from server.storage import storage_locations
+from server.storage import locations as storage_locations
 from server.agent.api import ServerContext, _error, agent_credentials, identity_gate
 from server.db import journal
 from server.agent.hello import class_deploy_enabled

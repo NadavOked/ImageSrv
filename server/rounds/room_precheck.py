@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 
 from server.disks import crcwarn, smart_history
-from server.learn import learn_ports
+from server.learn import ports as learn_ports
 
 #: ‏verdict של disk_event שבו מונה ה-CRC נקרא באמת (‏`smart.sh`). ‏`unchecked`
 #: נקרא רק כשהסיבה היא `no_health` — ‏smartctl פתח את הדיסק וקרא מאפיינים.

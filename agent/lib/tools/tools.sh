@@ -113,9 +113,11 @@ tools_core_smart_health() {
         _n=$((_n + 1))
         _model=$(sed 's/^[[:space:]]*//;s/[[:space:]]*$//' "$_p/device/model" 2>/dev/null)
         [ -n "$_model" ] || _model='דגם לא ידוע'
-        smartctl -H "/dev/$_d" >/dev/null 2>&1; _src=$?
+        _sout=$(smartctl -H -n standby "/dev/$_d" 2>&1); _src=$?
         if [ $((_src & 8)) -ne 0 ]; then
             printf '/dev/%s (%s): נכשל -- הדיסק עצמו מדווח על כשל SMART. להחליף לפני שמשתמשים בו.\n' "$_d" "$_model"; _fail=1
+        elif [ "$_src" -eq 2 ] && printf '%s' "$_sout" | grep -qi standby; then
+            printf '/dev/%s (%s): not checked (standby) -- the disk was not woken for SMART.\n' "$_d" "$_model"; _unk=1
         elif [ $((_src & 3)) -ne 0 ]; then
             printf '/dev/%s (%s): לא הצלחנו לבדוק -- smartctl לא הצליח לקרוא את הדיסק (rc %s). זה לא "תקין".\n' "$_d" "$_model" "$_src"; _unk=1
         else

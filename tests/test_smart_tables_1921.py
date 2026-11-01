@@ -314,8 +314,8 @@ def test_the_brief_attribute_format_of_x_is_read_too(tmp_path):
 
 def test_smart_probe_asks_for_x(tmp_path):
     src = (AGENT / "lib" / "smart" / "smart.sh").read_text(encoding="utf-8")
-    assert '"$SMARTCTL" -x -f old -n never "$_sp_dev"' in src
-    assert '"$SMARTCTL" -d sat -x -f old -n never "$_sp_dev"' in src
+    assert '"$SMARTCTL" -x -f old -n standby "$_sp_dev"' in src
+    assert '"$SMARTCTL" -d sat -x -f old -n standby "$_sp_dev"' in src
 
 
 def test_without_the_tables_nothing_is_judged_and_it_says_so(tmp_path):

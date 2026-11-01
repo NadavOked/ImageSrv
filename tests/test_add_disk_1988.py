@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from server.storage import storage_disks
-from server.storage import storage_locations as sl
-from server.storage.storage_locations import FAILED, OK, UNCHECKED, HookResult
+from server.storage import disks as storage_disks
+from server.storage import locations as sl
+from server.storage.locations import FAILED, OK, UNCHECKED, HookResult
 
 UUID = "0b5e2a43-6c1e-4f43-9a1c-6d2f0c7e9a11"
 BLANK = {"device": "/dev/sdb", "name": "sdb", "size_bytes": 4_000_787_030_016,

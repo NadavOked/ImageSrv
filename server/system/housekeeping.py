@@ -74,9 +74,9 @@ from typing import Callable
 from server.rounds import drive_rates, room_precheck
 from server.console import login_guard
 from server.library import work_areas
-from server.learn import learn_boot, learn_models, learn_ports, learn_wol
+from server.learn import boot as learn_boot, models as learn_models, ports as learn_ports, wol as learn_wol
 from server.net import pxe_log  # #1886, #1887
-from server.storage import storage_history  # #1886, #1887
+from server.storage import history as storage_history  # #1886, #1887
 from server.db import _write_lock, journal, writing
 
 log = logging.getLogger("imagesrv.housekeeping")

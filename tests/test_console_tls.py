@@ -37,7 +37,7 @@ from cryptography import x509
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 import server.main
-from server.console import console_tls
+from server.console import tls as console_tls
 from test_console_bind import run_main
 from tools.e2e import harness
 
@@ -125,7 +125,7 @@ def test_self_signed_cert_is_extended_when_console_address_changes(tmp_path: Pat
 
 
 def test_uploaded_self_signed_cert_is_never_regenerated_for_a_new_host(tmp_path: Path):
-    from server.interserver.interserver_auth import generate_self_signed
+    from server.interserver.auth import generate_self_signed
 
     data = tmp_path / "data"
     cert, key = generate_self_signed("operator-cert", dns_sans=["imagesrv.college.local"])

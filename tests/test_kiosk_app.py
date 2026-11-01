@@ -34,8 +34,8 @@ from fastapi.testclient import TestClient
 from server.console import users
 from server import app as server_app
 from server.app import create_agent_app, create_console_app, create_runtime
-from server.console.console_storage import create_storage_router
-from server.console.console_api import create_console_router
+from server.console.storage import create_storage_router
+from server.console.api import create_console_router
 
 from conftest import setup_classroom
 from test_server_room import cloner_hello  # noqa: E402

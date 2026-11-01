@@ -30,7 +30,7 @@ import uuid
 from pathlib import Path
 
 from server.core import hostname_rule
-from server.interserver import interserver_auth
+from server.interserver import auth as interserver_auth
 from server.core.atomicfile import write_atomic
 from server.db import (_write_lock, get_setting, journal, now_iso, set_setting, set_settings,
                        update_one, writing)

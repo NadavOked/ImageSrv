@@ -12,7 +12,7 @@
 | כלל | מה | מקור בקוד |
 |---|---|---|
 | F1 | קונסולה `8081/tcp` HTTPS, על כרטיס הניהול; השרת אינו בודק מקור | `server/main.py:153` (‏`--console-port` 8081), `server/main.py:167` (‏`--console-host`); `deploy/nftables-rules.sh:195` (פתוח על כרטיס השרתים, בלי `saddr`); `deploy/firewall-rules.md:3-7` ("אין בדיקת כתובת מקור בקוד"); `server/system/health.py:628-631` |
-| F2 | ראשי ← משני `8443/tcp` mTLS | `server/main.py:213` (‏`--interserver-port` 8443); `deploy/nftables-rules.sh:180-183` (במשני: רק `ip saddr` של הראשי); `server/interserver/storage_transfer.py:3-7` (דחיפה על הערוץ המאומת, ‏TLS 1.3); `server/interserver/storage_client.py:486` (‏TLSv1_3 מינימום); `server/interserver/interserver_api.py:1396` (המשני מתחבר ל-5900 של מכונה בשביל הראשי) |
+| F2 | ראשי ← משני `8443/tcp` mTLS | `server/main.py:213` (‏`--interserver-port` 8443); `deploy/nftables-rules.sh:180-183` (במשני: רק `ip saddr` של הראשי); `server/interserver/storage_transfer.py:3-7` (דחיפה על הערוץ המאומת, ‏TLS 1.3); `server/interserver/storage_client.py:486` (‏TLSv1_3 מינימום); `server/interserver/api.py:1396` (המשני מתחבר ל-5900 של מכונה בשביל הראשי) |
 | F3 | משני ← ראשי `8443/tcp` "אתה שם?" | `server/interserver/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `deploy/nftables-rules.sh:184-188`; `docs/server-install.md:239-248` (DNAT באתר הראשי, 8081 לא בין אתרים) |
 | F4 | ‏NTP ‏`123/udp` | `installer/lib/finish.sh:86-90` (‏`systemd-timesyncd` מופעל, בלי שרת מוגדר → ברירת המחדל של Debian); `server/system/health.py:190-197` (בדיקת "סנכרון שעון"); `deploy/firewall-rules.md` כלל L4 |
 | F5 | ‏DNS ‏`53` | `installer/lib/finish.sh:101` (‏`servers_dns` באשף); `server/update.py:55-58` ("חומת אש או DNS") |
@@ -53,9 +53,9 @@
 | ‏IGMP: פקיעה אחרי 125–260 ש'; ‏1G ≈ 110MB/s; נמדד 106MB/s; ‏Dynamic Memory | `docs/imagesrv-spec.md:109-115` |
 | ‏10GbE לשרת | `docs/imagesrv-spec.md:352` |
 | בלי `ip helper-address` לשרת | `deploy/firewall-rules.md` §3 (פסקת DHCP) |
-| אישור נוסף ל-DHCP על כרטיס trunk | `server/console/console_dhcp.py:415-418` |
+| אישור נוסף ל-DHCP על כרטיס trunk | `server/console/dhcp.py:415-418` |
 | "מי עוד עונה" / מכונה מרשת זרה — אזהרה, לא חסימה | `README.md:286-288`; `server/net/foreign_vlan.py:1-11` |
-| השרת אינו מתייג וילנים | אין יצירת ממשק VLAN ב-`server/net/netcfg.py`, ‏`server/console/console_netcfg.py`, ‏`server/net/deploy_net.py` (חיפוש `vlan` — 0 תוצאות) |
+| השרת אינו מתייג וילנים | אין יצירת ממשק VLAN ב-`server/net/netcfg.py`, ‏`server/console/netcfg.py`, ‏`server/net/deploy_net.py` (חיפוש `vlan` — 0 תוצאות) |
 | הניהול יכול להיות רשת הכיתות | הכרעת נדב 16/10 (בריף) |
 | ‏PortFast/edge | **לא מהקוד** — המלצה כללית, מסומנת במדריך |
 
@@ -76,7 +76,7 @@
 |---|---|
 | הראשי יוזם, דחיפה ומשיכה | `server/interserver/storage_transfer.py:3-7,18-19`; ‏#1070 |
 | ניתוק = כישלון גלוי ומתחילים מחדש | `server/interserver/storage_transfer.py:12-16` |
-| מקום פנוי: היום ‏2× + 256MiB | `server/interserver/interserver_api.py:304-306,514` |
+| מקום פנוי: היום ‏2× + 256MiB | `server/interserver/api.py:304-306,514` |
 | אחרי #1457: ‏1× + 256MiB | `origin/fix/1457-intersite-push` (‏`4e9d3c9f`): ‏`FREE_SPACE_FACTOR = 1` |
 | ללא תקרה כברירת מחדל; תקרה בקונסולה | בריף נדב 16/10, ענף `feat/wave-rate-by-machine` — **לא בריפו** |
 | עדכון רק בתג חתום, חזרה אוטומטית | `tools/server-upgrade.sh:162-170` (‏`verify-release-tag.py`), ‏`rollback` לאורך הסקריפט |
@@ -126,7 +126,7 @@
 | חלון הביטול בגואי: "המשך לכתוב" (Esc), "בטל את דיסק N" (Del, לא Enter), ‏X במחשב הבנייה | `native-gui/src/canceldlg.c`; הקומיט `6f940f76` |
 | כפתור "בטל…" בקונסולה, `sheet()` רגיל בלי הקלדת מילה | `server/static/console.js` (הקומיט `188d3bcf`); #1270 |
 | אזור זמן: `timedatectl`, קריאה חוזרת, ‏DB ב-UTC, שדה בהתקנה | `server/system/timezone.py`; `server/static/console.js:7145` (‏`timezoneSheet`); `installer/lib/zones.txt`; הקומיט `c3b2e8f1` (#1447) |
-| הנפקת תעודה: `POST /tls/reissue`, ‏`CN=imagesrv-console`, ‏`console.crt.prev`, התנתקות | `server/console/console_hostcfg.py:134`; `server/static/console.js:7223` (‏`tlsReissueSheet`), ‏`:7208` (‏`tlsDetailsSheet`) |
+| הנפקת תעודה: `POST /tls/reissue`, ‏`CN=imagesrv-console`, ‏`console.crt.prev`, התנתקות | `server/console/hostcfg.py:134`; `server/static/console.js:7223` (‏`tlsReissueSheet`), ‏`:7208` (‏`tlsDetailsSheet`) |
 | ספירת 20 שניות כשהכול ירוק: `END_POWEROFF_S=20`, "כבה עכשיו" (Enter); יעד עם בעיה — בלי ספירה ובלי תקרה עד "כבה" (#2024, ‏`END_HOLD_S` בוטל) | `agent/lib/core/idle.sh` (‏`end_countdown`, ‏`end_problem`); `native-gui/src/main.c` (‏`end_modal`); ‏`native-gui/src/screens_ask.c` (‏`draw_end_bar`) |
 | מחשב הבנייה שואל "כבה" / "חזרה לתפריט"; שיכפול מקומי שנעצר חוזר לבחירה | `CHANGELOG.md` סקשן `[Unreleased]` (#1560); זיכרון `no-black-screen-gui-always` (הכרעות 17/10 12:45) |
 | צבעי הדיסק: אדום SMART תקול ("כתוב בכל זאת", דלג כברירת מחדל), כתום "נכשל קודם", ירוק "עצירה" | `CHANGELOG.md` `[Unreleased]` (#1580, "צבעי הדיסק בשיכפול לפי הכרעת נדב 17/10"); `server/disks/smart_ask.py:22`; `server/disks/disk_events.py:24-26` |

@@ -6,7 +6,7 @@
 שמחזיר `idle_seconds` (‏/login, ‏/login/mfa, ‏/me) מעביר את ה-0 כמו שהוא, והטיימר של
 הקונסולה אינו רץ עליו (console_idle.test.cjs). ערך שמור (300 ב-TA) אינו משתנה בעדכון.
 
-בקרה שלילית: ‏server/console/console_api.py ו-server/console/journal_he.py מוחזרים יחד — הסירובים
+בקרה שלילית: ‏server/console/api.py ו-server/console/journal_he.py מוחזרים יחד — הסירובים
 ו"אחרי 5 דקות" ביומן נופלים.
 """
 
@@ -18,7 +18,7 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
-from server.console import console_api
+from server.console import api as console_api
 from server import db
 from server.app import create_console_app
 from server.console.journal_he import JournalTranslator

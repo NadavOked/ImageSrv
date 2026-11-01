@@ -333,36 +333,47 @@ def fake_root(tmp_path: Path, name: str, order: list[str], mtime: int) -> Path:
     return root
 
 
-def pack(tmp_path: Path, root: Path, name: str, epoch: int) -> subprocess.CompletedProcess:
+#: #1775: the first bytes of each compressor the pack may choose.
+MAGIC = {"gzip": bytes.fromhex("1f8b"), "zstd": bytes.fromhex("28b52ffd")}
+
+
+def pack(tmp_path: Path, root: Path, name: str, epoch: int,
+         comp: str = "gzip") -> subprocess.CompletedProcess:
     out = tmp_path / name
-    script = (f"export SOURCE_DATE_EPOCH={epoch}\nSCRIPT_DIR=/nonexistent\n"
+    # #1775: the compressor follows the target kernel (tools/initramfs-format.sh);
+    # pinned here so both branches of the pack are measured on any host.
+    script = (f"export SOURCE_DATE_EPOCH={epoch}\nSCRIPT_DIR=/nonexistent\nKVER=test\n"
+              f"initramfs_compressor() {{ echo {comp}; }}\n"
               f"ROOT={bash_path(root)!r}\nOUTPUT={bash_path(out)!r}\n{pack_snippet()}\n")
     done = run(tmp_path, script)
     assert done.returncode == 0, done.stderr
+    assert out.read_bytes().startswith(MAGIC[comp]), out.read_bytes()[:4].hex()
     return out
 
 
-@requires_native("cpio", "gzip", why="האריזה עצמה רצה במעבדה")
-def test_two_packs_of_the_same_tree_are_the_same_bytes(tmp_path: Path):
+@pytest.mark.parametrize("comp", ["gzip", "zstd"])
+@requires_native("cpio", "gzip", "zstd", why="האריזה עצמה רצה במעבדה")
+def test_two_packs_of_the_same_tree_are_the_same_bytes(tmp_path: Path, comp: str):
     """שני עצים זהים בתוכן, שנוצרו בסדר אחר ועם mtime אחר → אותו sha256."""
     files = ["init", "etc/passwd", "usr/bin/busybox", "usr/bin/curl"]
     a = fake_root(tmp_path, "a", files, mtime=1_700_000_000)
     b = fake_root(tmp_path, "b", list(reversed(files)), mtime=1_700_009_999)
-    out_a = pack(tmp_path, a, "a.cpio.gz", epoch=1_758_000_000)
-    out_b = pack(tmp_path, b, "b.cpio.gz", epoch=1_758_000_000)
+    out_a = pack(tmp_path, a, "a.cpio.gz", epoch=1_758_000_000, comp=comp)
+    out_b = pack(tmp_path, b, "b.cpio.gz", epoch=1_758_000_000, comp=comp)
     ha = hashlib.sha256(out_a.read_bytes()).hexdigest()
     hb = hashlib.sha256(out_b.read_bytes()).hexdigest()
     assert ha == hb, f"שתי בניות מאותו מקור נבדלות: {ha} != {hb}"
 
 
-@requires_native("cpio", "gzip", why="האריזה עצמה רצה במעבדה")
-def test_a_different_epoch_is_a_different_archive(tmp_path: Path):
+@pytest.mark.parametrize("comp", ["gzip", "zstd"])
+@requires_native("cpio", "gzip", "zstd", why="האריזה עצמה רצה במעבדה")
+def test_a_different_epoch_is_a_different_archive(tmp_path: Path, comp: str):
     """הצד השני: ה-epoch באמת נכנס לארכיון — אחרת "זהה" היה ריק מתוכן."""
     files = ["init", "usr/bin/busybox"]
     a = fake_root(tmp_path, "a", files, mtime=1_700_000_000)
     b = fake_root(tmp_path, "b", files, mtime=1_700_000_000)
-    out_a = pack(tmp_path, a, "a.cpio.gz", epoch=1_758_000_000)
-    out_b = pack(tmp_path, b, "b.cpio.gz", epoch=1_758_000_001)
+    out_a = pack(tmp_path, a, "a.cpio.gz", epoch=1_758_000_000, comp=comp)
+    out_b = pack(tmp_path, b, "b.cpio.gz", epoch=1_758_000_001, comp=comp)
     assert out_a.read_bytes() != out_b.read_bytes()
 
 

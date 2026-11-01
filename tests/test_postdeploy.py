@@ -385,7 +385,7 @@ def test_the_real_jq_filters_give_the_rows_the_stage_reads(tmp_path):
 
 pytest.importorskip("fastapi")
 
-from server.agent import reports   # noqa: E402
+from server.agent import reports# noqa: E402
 
 
 @pytest.mark.parametrize("bad", [None, "staged", {"state": "installed", "packages": []},

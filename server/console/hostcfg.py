@@ -26,7 +26,7 @@ from typing import Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from server.console import auth, console_tls
+from server.console import auth, tls as console_tls
 from server.core import hostname_rule
 from server.net import deploy_net
 from server.agent.api import ServerContext

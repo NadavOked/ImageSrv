@@ -53,6 +53,14 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     (cdrom / "imagesrv-src" / "tools" / "iso").mkdir(parents=True)
     (cdrom / "imagesrv-src" / "tools" / "iso" / "packages.txt").write_text(
         "busybox-static\n", newline="\n")
+    # #1569: the server's boot screen, from the code on the ISO and the live image
+    (cdrom / "imagesrv-src" / "server" / "system").mkdir(parents=True)
+    (cdrom / "imagesrv-src" / "server" / "system" / "bootsplash.py").write_text("# splash\n", newline="\n")
+    (cdrom / "imagesrv-src" / "deploy").mkdir()
+    (cdrom / "imagesrv-src" / "deploy" / "imagesrv-boot-splash.service").write_text("[Service]\n", newline="\n")
+    splash = tmp_path / "live-splash"
+    splash.mkdir()
+    (splash / "splash-640x240.raw").write_bytes(b"\0" * 16)
     (cdrom / "imagesrv").mkdir()
     (cdrom / "imagesrv" / "firstboot.sh").write_text("#!/bin/bash\n", newline="\n")
     (cdrom / "imagesrv" / "imagesrv-firstboot.service").write_text("[Service]\n", newline="\n")
@@ -68,6 +76,7 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
         "SYSROOT": str(root), "DEVROOT": str(dev), "PROC_MOUNTS": str(mounts),
         "CDROM": str(cdrom), "TARGET": str(target), "STATE_FILE": str(state),
         "BOOTSTRAP_LOG": str(tmp_path / "debootstrap.log"), "IMAGESRV_TEST": "1",
+        "SPLASH_SRC_DIR": str(splash),
     })
     return {"root": root, "dev": dev, "cdrom": cdrom, "target": target,
             "state": state, "mounts": mounts, "env": env}
@@ -294,6 +303,7 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "mkdir", "mount", "mkdir", "mount", "debootstrap", "mkdir",
         "mount", "mount", "mount", "mount", "write-target", "rm",
         "chroot", "chroot", "cp", "cp", "chmod", "cp", "chroot", "chroot",
+        "install", "install", "install", "chroot",   # #1569: the boot screen
         "mkdir", "cp", "cp", "verify-package-pool", "write-target",
         "write-target", "write-target", "write-target", "cp", "printf",
         "chroot", "chroot", "write-target", "write-target", "chroot", "chroot", "ln", "chroot", "blkid", "blkid",

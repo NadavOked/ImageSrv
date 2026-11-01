@@ -119,11 +119,13 @@ static double draw_header(App *a, cairo_t *cr, double W) {
     const int clone=a->force_cloner||a->force_standby||a->screen==SCREEN_CLONER||a->screen==SCREEN_STANDBY||a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL
         ||(a->screen==SCREEN_FAILURE&&a->st.fail_cloner);   /* #1569: the failure record says whose failure it is */
     const char *role=clone?"מחשב שיכפול":"מחשב בנייה";   /* #1252: the "2" was the mockup's */
-    Text rt=text_make(cr,FONT_SANS,12,400,role,0,DIR_RTL);
-    Rect pill={right-rt.w-18,(N_HEADER_H-20)/2,rt.w+18,20};
-    draw_set_a(cr,t->header_text,.14); draw_rrect_path(cr,pill,10); cairo_fill(cr);
-    text_draw_r(cr,&rt,right-9,pill.y+(pill.h-rt.h)/2,t->header_text); right=pill.x-22;
-    text_free(&rt);
+    if(strcmp(a->st.screen,"boot")){   /* #1709: before the hello the role is not known -- no pill, not a guess */
+        Text rt=text_make(cr,FONT_SANS,12,400,role,0,DIR_RTL);
+        Rect pill={right-rt.w-18,(N_HEADER_H-20)/2,rt.w+18,20};
+        draw_set_a(cr,t->header_text,.14); draw_rrect_path(cr,pill,10); cairo_fill(cr);
+        text_draw_r(cr,&rt,right-9,pill.y+(pill.h-rt.h)/2,t->header_text); right=pill.x-22;
+        text_free(&rt);
+    }
 
     /* #1252: every value from the state file; unknown is said, not invented.
      * #1257: the versions (agent · server) are drawn on their own line below. */
@@ -198,7 +200,7 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
         if(standby_conn(s)==STANDBY_OFF){*dot=a->theme->danger;return "אין קשר לשרת";}
         if(standby_conn(s)==STANDBY_UNKNOWN)*dot=a->theme->led_idle;
         return "ממתין לסבב";
-    case SCREEN_MESSAGE:*dot=a->theme->warn;return s->msg_title;
+    case SCREEN_MESSAGE:*dot=strcmp(s->screen,"boot")?a->theme->warn:a->theme->led_idle;return s->msg_title;   /* #1709: connecting is no warning */
     case SCREEN_FAILURE:return failure_status_word(a,dot);   /* #1569 */
     case SCREEN_PICK:return "בחירת דיסק";
     case SCREEN_PROGRESS:return s->task==TASK_PENDING?"ממתין לסוכן":"משימה פעילה";
@@ -560,6 +562,20 @@ static void draw_cursor(cairo_t *cr,double x,double y){
     static const double P[][2]={{0,0},{0,16},{4,12},{7,19},{9.5,18},{6.5,11},{11.5,11}};
     cairo_move_to(cr,x,y);for(int i=1;i<7;i++)cairo_line_to(cr,x+P[i][0],y+P[i][1]);cairo_close_path(cr);
     cairo_set_source_rgb(cr,1,1,1);cairo_fill_preserve(cr);cairo_set_source_rgb(cr,0,0,0);cairo_set_line_width(cr,1);cairo_stroke(cr);
+}
+
+/* #1709: a GUI started before the hello (agent/lib/guiearly.sh) runs without
+ * --screen/--mac/--ip; the role the hello named arrives in the state file and
+ * is applied here, once -- the same process goes on, no restart. "boot" is the
+ * wait for it (the boot message, no role pill). */
+void app_take_screen(App *a){
+    const State *s=&a->st;
+    if(s->ip[0])snprintf(a->ip,sizeof a->ip,"%s",s->ip);
+    if(s->mac[0])snprintf(a->mac,sizeof a->mac,"%s",s->mac);
+    if(a->screen_set||!s->screen[0]||!strcmp(s->screen,"boot"))return;
+    a->screen_set=1;
+    if(!strcmp(s->screen,"cloner"))a->force_cloner=1;
+    else if(!strcmp(s->screen,"class"))a->mode=MODE_CLASSES;
 }
 
 void app_route(App *a){

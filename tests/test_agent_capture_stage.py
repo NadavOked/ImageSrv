@@ -133,7 +133,7 @@ def test_a_failed_blkid_is_an_error_not_an_empty_list(tmp_path):
 
 def test_the_probe_carries_ntfs_and_stays_null_without_hibernation_sh(tmp_path):
     """‏`probe_json` נושא `ntfs`; ‏probe.sh לבדו (כמו בטסטים שלו) = ‏null."""
-    out = sh(f'export SYSROOT={posix(tmp_path)!r}; . {posix(LIB)}/common.sh; . {posix(LIB)}/probe.sh; '
+    out = sh(f'export SYSROOT={posix(tmp_path)!r}; . {posix(LIB)}/common.sh; . {posix(LIB)}/probe.sh; . {posix(LIB)}/probe_bg.sh; '
              r'printf "{\"x\":0%s}" "$(probe_json)"')
     assert json.loads(out)["probe"]["ntfs"] is None
 

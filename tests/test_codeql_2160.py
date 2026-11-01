@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from server.agent import agent_logs, registry
+from server.agent import logs as agent_logs, registry
 from server import db
 from server.net import deploy_net, netcfg, netcfg_host, netcfg_rollback
 

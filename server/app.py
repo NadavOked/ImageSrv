@@ -33,23 +33,23 @@ from . import auto_reboot
 from server.agent import boottrace, registry
 from server.rounds import drive_rates, pulls
 from server.net import deploy_net, dhcp
-from server.learn import learn_netloss, learn_wol   # #1846, #1847
+from server.learn import netloss as learn_netloss, wol as learn_wol   # #1846, #1847
 from server.learn import server_io   # #1884
 from server.net import pxe_log   # #1887
-from server.agent import agent_timing   # #2056
+from server.agent import timing as agent_timing   # #2056
 from server.system import timezone, timesync   # #1447, #1773
 from server.agent.api import ServerContext, boot_identity_ok, create_agent_router
-from server.console.console_api import create_console_router
-from server.console.console_data import create_console_data_router   # #1882-#1889
-from server.console.console_hostcfg import create_hostcfg_router
-from server.console.console_timezone import create_timezone_router
-from server.console.console_timesync import create_timesync_router
-from server.console.console_ups import create_ups_router
-from server.console.console_tls import ConsoleTLS
-from server.console.console_storage import create_storage_router
-from server.console.console_backup_target import create_backup_target_router
-from server.console.console_storage_locations import create_storage_locations_router
-from server.storage import storage_locations
+from server.console.api import create_console_router
+from server.console.data import create_console_data_router   # #1882-#1889
+from server.console.hostcfg import create_hostcfg_router
+from server.console.timezone import create_timezone_router
+from server.console.timesync import create_timesync_router
+from server.console.ups import create_ups_router
+from server.console.tls import ConsoleTLS
+from server.console.storage import create_storage_router
+from server.console.backup_target import create_backup_target_router
+from server.console.storage_locations import create_storage_locations_router
+from server.storage import locations as storage_locations
 from server.interserver import storage_heartbeat
 from server.system import housekeeping   # #1737
 from .db import journal
@@ -57,18 +57,18 @@ from server.net import wol
 from server.rounds import direct
 from server.disks import smart_ask
 from server.rounds.sender import SenderEngine
-from server.console.console_library import create_library_router
-from server.console.console_drivers import create_agent_drivers_router, create_drivers_router   # #720
-from server.console.console_tools import create_tools_router   # #649 שלב 1
-from server.console.console_usb import create_usb_router   # #1914: the clone stick download
+from server.console.library import create_library_router
+from server.console.drivers import create_agent_drivers_router, create_drivers_router   # #720
+from server.console.tools import create_tools_router   # #649 שלב 1
+from server.console.usb import create_usb_router   # #1914: the clone stick download
 from server.library.drivers import DriverLibrary
 from server.library.capture import (create_agent_capture_router, create_console_capture_router,
                                     start_verification)
-from server.console.console_net import create_net_router
+from server.console.net import create_net_router
 from server.net.nic_services import create_nic_services_router
-from server.console import console_dhcp
-from server.console.console_dhcp import create_dhcp_router
-from server.console.console_netcfg import create_netcfg_router, drain_crumbs
+from server.console import dhcp as console_dhcp
+from server.console.dhcp import create_dhcp_router
+from server.console.netcfg import create_netcfg_router, drain_crumbs
 from .db import connect
 from server.system.health import create_health_router
 from server.system.health import default_hooks as health_default_hooks

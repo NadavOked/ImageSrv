@@ -66,7 +66,14 @@ platform_module_expected() {
 # while the rest loads, and only the NIC/GPU drivers this hardware asks for.
 [ -f "$LIB_DIR/initmods.sh" ] || fail "initramfs without initmods.sh"
 . "$LIB_DIR/initmods.sh"
+# #1709: the GUI comes up the moment a framebuffer does -- while the modules
+# load, before DHCP and the first hello (lib/guiearly.sh, in the background).
+if [ -f "$LIB_DIR/guiearly.sh" ]; then
+    : > "$RUN_DIR/gui.early.wait"
+    ( . "$LIB_DIR/guiearly.sh"; gui_early_boot; rm -f "$RUN_DIR/gui.early.wait" ) &
+fi
 [ -f "$MOD_DIR/modules" ] && mods_load_all
+: > "$RUN_DIR/modules.done"   # the early GUI stops waiting for a framebuffer
 [ -n "$_opt_fail" ] && \
     echo "ImageSrv: platform modules absent, expected on this hardware: $_opt_fail"
 if [ -n "$_req_fail" ]; then
@@ -79,6 +86,12 @@ else
     rm -f "$RUN_DIR/modules.failed"
 fi
 boot_mark modules
+# #1709: the early GUI is settled before DHCP -- the agent adopts it or starts
+# its own after the hello, never both. A ceiling, not a bare wait (5 s).
+_ge_t=0
+while [ -e "$RUN_DIR/gui.early.wait" ] && [ "$_ge_t" -lt 50 ]; do poll_tick; _ge_t=$((_ge_t + _tk)); done
+[ ! -e "$RUN_DIR/gui.early.wait" ] || echo "ImageSrv: the early GUI start did not settle in 5s"
+[ -s "$RUN_DIR/gui.early.up" ] && _up="$_up,gui:$(cat "$RUN_DIR/gui.early.up")"
 
 # intel_pstate does not support pre-Sandy Bridge CPUs.  Debian provides the
 # fallback as a module, so try it before the agent starts doing CPU-heavy work.
@@ -188,7 +201,7 @@ while [ -z "$IFACE" ]; do
         [ "$_link_marked" = 1 ] || { boot_mark link; _link_marked=1; }
         _tried=1
         rm -f "/run/imagesrv/dhcp-probe.$_n"
-        udhcpc -i "$_n" -n -q -t 4 -T 3 -V ImageSrv-agent \
+        udhcpc -i "$_n" -n -q -t 12 -T 1 -V ImageSrv-agent \
             -s /etc/imagesrv/udhcpc.probe >/dev/null 2>&1 || continue
         _sid=$(sed -n 's/^serverid=//p' "/run/imagesrv/dhcp-probe.$_n" 2>/dev/null)
         if [ -z "$_srv" ] || [ "$_sid" != "$_srv" ]; then
@@ -199,7 +212,7 @@ while [ -z "$IFACE" ]; do
         # No -q (#1949): once bound, udhcpc backgrounds and renews the lease
         # at T1. With -q it exited, the 12h lease lapsed under a long run,
         # dnsmasq dropped it, and the identity check refused every report.
-        if udhcpc -i "$_n" -n -t 4 -T 3 -V ImageSrv-agent \
+        if udhcpc -i "$_n" -n -t 12 -T 1 -V ImageSrv-agent \
             -s /etc/imagesrv/udhcpc.script >/dev/null 2>&1; then
             IFACE="$_n"
             break

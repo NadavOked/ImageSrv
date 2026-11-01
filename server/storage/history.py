@@ -25,7 +25,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from server.storage import disk_reserve, storage_locations
+from server.storage import disk_reserve, locations as storage_locations
 from server.db import _settle, _write_lock, now_iso, writing
 
 log = logging.getLogger("imagesrv.storage_history")

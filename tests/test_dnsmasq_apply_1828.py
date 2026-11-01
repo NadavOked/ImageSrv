@@ -125,7 +125,7 @@ def test_the_private_key_writer_is_atomic(tmp_path, monkeypatch):
 
 
 def test_the_toolbox_selection_file_is_atomic(tmp_path, monkeypatch):
-    from server.console import console_tools
+    from server.console import tools as console_tools
     from test_atomic_writes_1908 import disk_fills_mid_write
 
     path = console_tools.write_selection_file(tmp_path, {"tools": ["a"]})

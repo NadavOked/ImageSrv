@@ -35,6 +35,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 AGENT_DIR="$SCRIPT_DIR/../agent"
+. "$SCRIPT_DIR/initramfs-format.sh"
 OUTPUT="$PWD/imagesrv-initramfs.cpio.gz"
 KVER="$(uname -r)"
 SKIP_APT=0
@@ -1250,8 +1251,14 @@ esac
 export SOURCE_DATE_EPOCH
 echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
 find "$ROOT" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
-(cd "$ROOT" && find . -print0 | LC_ALL=C sort -z \
-    | cpio -o -H newc --null --reproducible --quiet | gzip -9n) > "$OUTPUT"
+INITRAMFS_COMPRESSION=$(initramfs_compressor "$KVER")
+case "$INITRAMFS_COMPRESSION" in
+    zstd) (cd "$ROOT" && find . -print0 | LC_ALL=C sort -z \
+        | cpio -o -H newc --null --reproducible --quiet | zstd -19 -T0 -q) > "$OUTPUT" ;;
+    gzip) (cd "$ROOT" && find . -print0 | LC_ALL=C sort -z \
+        | cpio -o -H newc --null --reproducible --quiet | gzip -9n) > "$OUTPUT" ;;
+    *) echo "unknown initramfs compressor: $INITRAMFS_COMPRESSION" >&2; exit 1 ;;
+esac
 
 SIZE=$(du -h "$OUTPUT" | cut -f1)
 echo

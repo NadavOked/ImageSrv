@@ -29,14 +29,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.console import auth
 from server.agent import registry
-from server.storage import disk_reserve, storage_history, storage_locations
+from server.storage import disk_reserve, history as storage_history, locations as storage_locations
 from server.learn import server_io
 from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
 from server.agent.api import ServerContext, identity_gate
 from server.library.images import validate_display_name
 from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.library import capture_detail
-from server.learn import learn_eta
+from server.learn import eta as learn_eta
 from server.system import priority
 from server.agent import readbackhash
 from server.core.progress_view import capture_progress

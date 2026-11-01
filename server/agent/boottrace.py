@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from boot.trace import LOCAL_STEPS, STEP_INDEX, STEPS, is_step
 
-from server.learn import learn_boot, learn_wol
+from server.learn import boot as learn_boot, wol as learn_wol
 from server.db import _write_lock, now_iso, writing
 
 log = logging.getLogger("imagesrv.boottrace")

@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server.storage import storage_locations  # noqa: E402
+from server.storage import locations as storage_locations  # noqa: E402
 
 
 def test_nfs_keeps_soft_with_an_explicit_ceiling_and_never_hard():

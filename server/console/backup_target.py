@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.console import auth
 from server.system import backup_target
-from server.storage import storage_locations as sl
+from server.storage import locations as sl
 from server.agent.api import ServerContext
 
 

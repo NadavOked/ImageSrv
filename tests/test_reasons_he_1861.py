@@ -266,7 +266,7 @@ def journal_events() -> dict[str, str]:
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 args = node.args.args[-len(node.args.defaults):] if node.args.defaults else []
                 for arg, default in zip(args, node.args.defaults):
-                    if arg.arg == "event" and isinstance(default, ast.Constant) and isinstance(default.value, str)                             and default.value:   # "" is a query filter's default (console_api.py), not an event
+                    if arg.arg == "event" and isinstance(default, ast.Constant) and isinstance(default.value, str)                             and default.value:   # "" is a query filter's default (console/api.py), not an event
                         found[default.value] = f"{where}:{node.lineno}"
     # An f-string event is expanded over the values it can take. A new one fails
     # here until it is listed with its values -- it is not skipped.
