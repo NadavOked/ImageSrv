@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from agentlib import flat_lib
+from agentlib import agent_libs, flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 LIB = flat_lib()
@@ -58,7 +58,7 @@ pytestmark = requires_native(
 
 # expand: diskfit calls _expand_candidate since #1354 (2b195230), as imagesrv-agent sources it.
 LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "failmark", "verdict", "ntfsboot", "expand", "diskfit",
-        "bootcadb", "restore", "drawers", "drawerfeed", "clonergui", "writecheck")
+        "bootcadb", "restore", "writeback", "drawers", "drawerfeed", "clonergui", "writecheck")
 
 SETUP = r'''
 set -eu
@@ -194,7 +194,7 @@ def _agent(fx: Path, mode: str, *args: str, env: tuple[str, ...] = ()) -> dict:
     killed check must not hold a pipe this test waits on (CLAUDE.md)."""
     # Only the files that exist: the negative control takes writecheck.sh away, and
     # the tests must then fail on the behaviour, not on a `.` of a missing file.
-    sources = "\n".join(f'[ ! -f "$LIB_DIR/{n}.sh" ] || . "$LIB_DIR/{n}.sh"' for n in LIBS)
+    sources = "\n".join(f'[ ! -f "$LIB_DIR/{n}.sh" ] || . "$LIB_DIR/{n}.sh"' for n in agent_libs(*LIBS))   # #2272: imagesrv-agent's order
     script = fx / "drive.sh"
     script.write_text(DRIVER % {"lib": LIB, "sources": sources}, newline="\n")
     out = fx / "out.txt"

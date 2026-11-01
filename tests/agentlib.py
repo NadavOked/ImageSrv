@@ -1,6 +1,7 @@
 """Recursive source discovery with floors measured before the #2239 moves."""
 
 import atexit
+import re
 import shutil
 import subprocess
 import tempfile
@@ -59,3 +60,45 @@ def flat_lib() -> Path:
         shutil.copytree(AGENT_LIB / "data", dst / "data")
         _FLAT.append(dst)
     return _FLAT[0]
+
+
+AGENT_MAIN = REPO_ROOT / "agent" / "imagesrv-agent"
+#: A library whose functions call another's at run time, so a test that loads it
+#: must load that one too -- as the agent does. drawers.sh (restore_pipe) and
+#: drawerfeed.sh (_drawer_pipeline) start `writeback_watch &` (writeback.sh, #1841).
+#: Without it the job is "not found" and exits at once; its SIGCHLD lands while
+#: busybox ash is blocked opening the drawer's fifo, ash does not retry that open
+#: on EINTR (dash and bash do), and the drawer never starts (#2248, #2272).
+NEEDS = {"drawers": ("writeback",), "drawerfeed": ("writeback",)}
+_ORDER: list[str] = []
+
+
+def agent_order() -> list[str]:
+    """The libraries imagesrv-agent sources, in its own order (#2272)."""
+    if not _ORDER:
+        names = re.findall(r'\.\s+"\$LIB_DIR/([\w-]+)\.sh"', AGENT_MAIN.read_text(encoding="utf-8"))
+        assert len(names) >= MIN_AGENT_LIB_FILES, f"{AGENT_MAIN}: only {len(names)} libraries sourced"
+        assert len(set(names)) == len(names), f"{AGENT_MAIN}: a library is sourced twice"
+        _ORDER.extend(names)
+    return _ORDER
+
+
+def agent_libs(*names: str) -> list[str]:
+    """``names`` in imagesrv-agent's order. A name the agent does not source, or a
+    library without what it calls at run time (``NEEDS``), is an error -- a test
+    room that is not the agent's is how #2248 hid for weeks."""
+    order = agent_order()
+    unknown = sorted(set(names) - set(order))
+    if unknown:
+        raise ValueError(f"not sourced by {AGENT_MAIN.name}: {unknown}")
+    missing = sorted({f"{n} needs {d}" for n in names for d in NEEDS.get(n, ()) if d not in names})
+    if missing:
+        raise ValueError(f"loaded without what imagesrv-agent loads with it: {missing}")
+    return sorted(set(names), key=order.index)
+
+
+def agent_sources(*names: str) -> str:
+    """`. <lib>/<name>.sh; ` for each of ``names``, in imagesrv-agent's order, from
+    the flat layout the agent runs with (``flat_lib``)."""
+    lib = flat_lib().as_posix()
+    return "".join(f". {lib}/{n}.sh; " for n in agent_libs(*names))

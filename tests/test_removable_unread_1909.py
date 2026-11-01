@@ -18,6 +18,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import agent_sources
 from test_internal_disk_1807_1832 import _entry, _machine, _pick, _sh
 
 pytestmark = requires_native(("bash", BASH))
@@ -45,7 +46,7 @@ def test_the_picker_does_not_take_a_disk_whose_removable_did_not_read(tmp_path):
 def test_a_disk_whose_removable_did_not_read_is_not_a_drawer(tmp_path):
     box = _machine(tmp_path, {"sda": ("0", "sata"), "sdb": ("0", "sata")})
     _unread(box, "sda")
-    out = _sh(box, "list_drawers", f". {posix(AGENT)}/lib/restore/drawers.sh; ").split()
+    out = _sh(box, "list_drawers", agent_sources("writeback", "drawers")).split()
     assert out == ["sdb"], out
 
 

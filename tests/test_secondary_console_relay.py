@@ -63,7 +63,10 @@ def secondary(tmp_path, clock):
         "unit_active": lambda name: "active", "http_get": lambda url: 200,
         "http_size": lambda url: (200, 9_000_000), "http_text": lambda url: (200, ""),
         "interfaces": lambda: [NIC], "tftp_root": lambda: tftp,
-        "udp_sender_pids": lambda: [], "uptime": lambda: 600}
+        "udp_sender_pids": lambda: [], "uptime": lambda: 600,
+        # #2275: the free space under tmp_path moved between the two reads of /health
+        # ("13.8 GB" != "13.7 GB" in a loaded run) -- the machine's, so faked like the rest
+        "db_free": lambda data_dir: 50 * 1024 ** 3}
     app = create_app(tmp_path / "sec", root, "http://10.30.0.8:8080",
                      now_fn=clock, sender_runner=Recorder(block=True),
                      health_hooks=health_hooks,

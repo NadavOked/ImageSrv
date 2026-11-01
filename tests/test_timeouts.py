@@ -25,7 +25,7 @@ import pytest
 import hygiene
 from native import requires_native
 from test_agent import BASH, SH_FILES, posix
-from agentlib import lib_path
+from agentlib import agent_sources, lib_path
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
@@ -359,10 +359,8 @@ def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp
         f"DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=3 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
-        f'stream_source() {{ cat {posix(payload)!r}; }}; '
+        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; echo \"rc=$?\""
     )
@@ -472,11 +470,9 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         f"UDP_ARGV={posix(argv)!r} UDP_PAYLOAD={posix(payload)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
+        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         # ‏wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
-        "eval \"orig_$(declare -f wait_progress)\"; "
+        + "eval \"orig_$(declare -f wait_progress)\"; "
         f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
         "node_is_block() { true; }; "
         + harness
@@ -586,9 +582,7 @@ _nap() {
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=2 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_START_LATER_S=20; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
+        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + clock +
         f'stream_source() {{ if [ "$4" = p3.zst ]; then read -r send < "$RUN_DIR/test-send"; fi; cat {posix(payload)!r}; }}; '
         "target_init sda 4096; STREAMED_PARTITIONS=0; "

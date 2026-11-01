@@ -26,6 +26,7 @@ import pytest
 
 from test_agent import AGENT, BASH, posix, sh
 from test_timeouts import make_stubs, run_sh
+from agentlib import agent_sources
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 
@@ -78,10 +79,8 @@ def test_each_drawer_reports_the_bytes_that_were_written_to_it(tmp_path):
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
-        "target_init sda 131072; target_init sdb 131072; "
+        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + "target_init sda 131072; target_init sdb 131072; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; rc=$?; "
@@ -121,10 +120,8 @@ def test_the_compiled_fanout_writes_the_counter_the_agent_reads(tmp_path):
         # מאגר קטן: המכונה הזו לא צריכה 256MB למגירה כדי להעביר 64KB.
         "FANOUT_BUFFER=1048576 WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
-        "target_init sda 131072; target_init sdb 131072; "
+        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + "target_init sda 131072; target_init sdb 131072; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; rc=$?; "
@@ -147,11 +144,8 @@ def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, 
     run.mkdir()
     prelude = (
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
-        f". {posix(AGENT)}/lib/restore/writecheck.sh; "
-        "log() { :; }; disk_fits() { return 0; }; apply_gpt() { return 0; }; "
+        + agent_sources("common", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + "log() { :; }; disk_fits() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "expand_last() { return 0; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file (test_ntfs_hidden_sectors_2015.py)

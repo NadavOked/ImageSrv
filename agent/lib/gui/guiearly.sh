@@ -27,7 +27,10 @@ GUI_EARLY_STOP_WAIT_S="${GUI_EARLY_STOP_WAIT_S:-5}"
 
 gui_early_boot() {
     # init, in the background: wait for the framebuffer, then start the keeper.
-    . "$LIB_DIR/common.sh"; . "$LIB_DIR/waits.sh"; . "$LIB_DIR/splash.sh"; . "$LIB_DIR/guiparent.sh"
+    # ui.sh: the keeper's gui_beat_fresh (#1946). Without it every look was "not
+    # found" -- read as a stale beat -- and the early GUI was killed a tick after
+    # it started, and again, up to the static screen (#2275).
+    . "$LIB_DIR/common.sh"; . "$LIB_DIR/waits.sh"; . "$LIB_DIR/ui.sh"; . "$LIB_DIR/splash.sh"; . "$LIB_DIR/guiparent.sh"
     parse_cmdline
     # #1190: the installer owns the display; no server = the agent's die_local, as before
     [ "$IMAGESRV_MODE" != installer ] && [ -n "$IMAGESRV_SERVER" ] || return 0

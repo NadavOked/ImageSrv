@@ -29,12 +29,12 @@ import time
 from pathlib import Path
 
 from native import requires_native
-from test_agent import AGENT, BASH, posix
+from test_agent import BASH, posix
 from test_capture_refusals import GPT_DISK, ONE_PARTITION
 from test_directsend import CURL_RECORD, JQ_STUB, MAC, PARTCLONE, TASK, UDP_SENDER, _answer
 from test_stream_honesty import FANOUT_WITHOUT_HASH, GOOD_SHA, PAYLOAD
 from test_timeouts import STUBS, log_of, make_stubs, run_sh
-from agentlib import flat_lib
+from agentlib import agent_sources, flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -78,10 +78,8 @@ def station(tmp_path, sha: str, stubs: dict, env: str = "", setup: str = "") -> 
         + f"export TMPDIR={posix(tmp_path)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_HELPER_S=3 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20 "
         + env + "; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/ntfsboot.sh; . {posix(AGENT)}/lib/restore/drawers.sh; "   # #1487: restore_partition calls ntfs_boot_target; #1906: and restore_pipe
-        f"target_init sda {len(PAYLOAD)}; "
+        + agent_sources("common", "waits", "progress", "restore", "ntfsboot", "writeback", "drawers")   # #1487: restore_partition calls ntfs_boot_target; #1906: and restore_pipe; #2272: imagesrv-agent's order
+        + f"target_init sda {len(PAYLOAD)}; "
         + setup +
         f"stream_source() {{ cat {posix(payload)!r}; }}; "
         "node_is_block() { true; }; "

@@ -31,6 +31,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
+from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -129,7 +130,7 @@ def test_the_one_internal_disk_is_still_picked(tmp_path):
 def test_a_usb_enclosure_or_an_sd_card_is_never_a_drawer(tmp_path):
     box = _machine(tmp_path, {"mmcblk0": ("0", "mmc"), "sda": ("0", "sata"), "sdb": ("0", "usb"),
                               "sdc": ("0", "sata")})
-    out = _sh(box, "list_drawers", f'. {posix(AGENT)}/lib/restore/drawers.sh; ').split()
+    out = _sh(box, "list_drawers", agent_sources("writeback", "drawers")).split()
     assert out == ["sda", "sdc"], out
 
 

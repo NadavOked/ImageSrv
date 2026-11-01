@@ -21,14 +21,14 @@ import pytest
 import hygiene
 from native import requires_native
 from test_cloner_gui import BASH, posix
-from agentlib import flat_lib
+from agentlib import agent_sources, flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 LIB = flat_lib()
 pytestmark = requires_native(("bash", BASH))
 
 LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
-        "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
+        "writeback", "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
         "shrinkmem", "smart", "guistate", "attended", "lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "lcwait", "idle", "lcgui")   # attended, lcwait, idle: #1367
 
 
@@ -36,7 +36,7 @@ def run(tmp_path: Path, script: str, timeout: int = 60, **env) -> subprocess.Com
     run_dir = tmp_path / "run"; run_dir.mkdir(exist_ok=True)
     pre = f'export RUN_DIR={posix(run_dir)!r} IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff; '
     pre += "".join(f'export {k}={v!r}; ' for k, v in env.items())
-    pre += "".join(f'. {posix(LIB)}/{name}.sh; ' for name in LIBS)
+    pre += agent_sources(*LIBS)   # #2272: imagesrv-agent's order
     # #1736: the scripts leave background helpers behind -- a 20 s fallback that ends a
     # paused choice (test_lc_hello_1367), the kiosk's bridge (test_lc_poweroff_1483) --
     # and a subshell carries this bash -c's command line, tmp_path included. The whole

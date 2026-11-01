@@ -35,6 +35,7 @@ from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_stream_honesty import GOOD_SHA, call, drawer_run, errors_of
 from test_timeouts import make_stubs, run_sh
+from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -155,11 +156,8 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
     out = run_sh(
         make_stubs(tmp_path / "stubs", extra)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
-        f". {posix(AGENT)}/lib/restore/writecheck.sh; "
-        "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
+        + agent_sources("common", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
         "expand_last() { return 0; }; "
@@ -386,12 +384,8 @@ def _plan_drawers(tmp_path, *, plan_cmd, restore_cmd="return 0",
     out = run_sh(
         make_stubs(tmp_path / "stubs", {"ntfsfix": OK, "ntfsresize": OK, "sgdisk": OK})   # #1798: the mark's table read
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
-        f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; "
-        f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh; . {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh; "
-        f". {posix(AGENT)}/lib/restore/writecheck.sh; "
-        "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
+        + agent_sources("common", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + "disk_fits() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
         "expand_last() { return 0; }; grow_expanded() { return 0; }; "
