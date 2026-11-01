@@ -6,8 +6,9 @@
 # slow (< CABLE_TEST_MIN_MBPS, 100 on a gigabit card is the classic broken
 # pair) or that dropped since the agent started is tested anyway -- from here,
 # the cloner's idle branch (wait_poll), never with a round open or a task, and
-# once per boot. "Dropped" = carrier_changes rose over the first value this
-# boot read: the count at boot is not a drop (the link came up once).
+# once per boot. "Dropped" = /sys/class/net/<if>/carrier_changes (#2228) rose
+# over the first value this boot read: the boot count is not a drop (link came up).
+# An unread counter is logged as not checked, once per boot per interface.
 # The result waits in $RUN_DIR/cable-live.json, which netprobe serves instead
 # of {"skipped":"link up"}; the netprobe cache is aged so the next hello has it.
 
@@ -21,8 +22,12 @@ cable_live_check() {
     _cl_s=$(cat "$_cl_d/speed" 2>/dev/null)
     case "$_cl_s" in ''|*[!0-9]*) ;; *)
         [ "$_cl_s" -gt 0 ] && [ "$_cl_s" -lt "$CABLE_TEST_MIN_MBPS" ] && _cl_why="slow: ${_cl_s}Mb/s" ;; esac
-    _cl_n=$(cat "$_cl_d/statistics/carrier_changes" 2>/dev/null)
-    case "$_cl_n" in ''|*[!0-9]*) ;; *)
+    _cl_n=$(cat "$_cl_d/carrier_changes" 2>/dev/null)
+    case "$_cl_n" in ''|*[!0-9]*)
+        if [ ! -e "$RUN_DIR/carrier0.$_cl_if.unread" ]; then
+            log "carrier_changes of $_cl_if not read -- a link drop is not checked"
+            touch "$RUN_DIR/carrier0.$_cl_if.unread" 2>/dev/null || :
+        fi ;; *)
         [ -s "$RUN_DIR/carrier0.$_cl_if" ] || echo "$_cl_n" > "$RUN_DIR/carrier0.$_cl_if"
         [ "$_cl_n" -gt "$(cat "$RUN_DIR/carrier0.$_cl_if")" ] && _cl_why="${_cl_why:+$_cl_why, }the link dropped" ;; esac
     [ -n "$_cl_why" ] || return 0

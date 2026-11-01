@@ -100,6 +100,14 @@ smart_preflight() {
         case "$_pf_v" in
             ok|unchecked)
                 smart_send_event "$_pf_ses" "$_pf_d" "$_pf_v" "$_pf_r" pending ""
+                # #2168: what the server learned is orange on an unchecked disk too (ro unread, a
+                # timeout...). The event stays `unchecked <reason>`, not warn: its counters were not
+                # all read, and warn is a CRC baseline on the server (room_precheck.crc_baseline).
+                if [ "$_pf_v" = unchecked ] && command -v smart_learned_reason >/dev/null 2>&1 &&
+                        _pf_l=$(smart_learned_reason "$_pf_d"); then
+                    smart_note_he warn "$_pf_l" > "$RUN_DIR/targets/$_pf_d/smart_note"
+                    log "$(smart_disk_label "$_pf_d"): orange (unchecked $_pf_r, learned $_pf_l) -- written without asking (#2168)" >&2
+                fi
                 _pf_write="$_pf_write $_pf_d"
                 ;;
             fail)

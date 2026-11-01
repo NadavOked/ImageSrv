@@ -110,7 +110,9 @@ static int run_auth(const char *cmd, const char *user, const char *pass, char *r
     }
     close(in_p[0]); close(out_p[1]);
     FILE *w = fdopen(in_p[1], "w");
-    if (w) { fprintf(w, "%s\n%s\n", user, pass); fclose(w); } else close(in_p[1]);
+    /* #2136: input that did not reach the command is a failed login (as run_bridge, #2108) */
+    int sent = 0;
+    if (w) { sent = fprintf(w, "%s\n%s\n", user, pass) >= 0; if (fclose(w) == EOF) sent = 0; } else close(in_p[1]);
     char buf[256] = "";
     size_t got = 0;
     for (;;) {                                       /* to EOF; past a full buffer, drained */
@@ -126,7 +128,7 @@ static int run_auth(const char *cmd, const char *user, const char *pass, char *r
     int status = 0;
     waitpid(pid, &status, 0);
     theme_login_answer(buf, role, n, saved, sn);
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+    return sent && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
 static void do_login(App *a, const char *auth_cmd, int demo) {

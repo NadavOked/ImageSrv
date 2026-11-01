@@ -21,7 +21,7 @@ function ctxWith(state) {
   const ctx = vm.createContext({...state, calls, isAdmin: () => true,
     sheet: (o) => calls.push(['sheet', o]), post: async (url, body) => calls.push(['post', url, body]),
     toast: () => {}, loadSettingsData: async () => calls.push(['reload'])});
-  for (const name of ['esc', 'ltr', 'ghostBtn', 'settingRow', 'timezoneRow', 'timezoneSheet']) vm.runInContext(functionSource(name), ctx);
+  for (const name of ['esc', 'ltr', 'ghostBtn', 'settingRow', 'settingUnreadHtml', 'isRawTechnical', 'timezoneRow', 'timezoneSheet']) vm.runInContext(functionSource(name), ctx);
   vm.runInContext('const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;", "\'": "&#39;", "`": "&#96;" };', ctx);
   const rows = js.slice(js.indexOf('const SETTING_ROWS'), js.indexOf('];', js.indexOf('const SETTING_ROWS')) + 2);
   vm.runInContext(rows.replace('const SETTING_ROWS', 'var SETTING_ROWS'), ctx);
@@ -49,6 +49,15 @@ test('an OS zone that differs from the setting is said; unread differs from a va
   const [, unread] = row(ctxWith({TZ_STATUS: null, tzError: 'שגיאה 500'}));
   assert.match(unread, /לא נקרא: שגיאה 500/);
   assert.doesNotMatch(unread, /timezoneSheet/, 'nothing to change when nothing was read');
+});
+
+test('#1676: a raw Python error is behind "פרטים טכניים", not in the row', () => {
+  const err = "רשימת אזורי הזמן לא נקראה: [Errno 2] No such file or directory: '/usr/share/zoneinfo/zone.tab'";
+  const [, dd] = row(ctxWith({TZ_STATUS: null, tzError: err}));
+  const visible = dd.replace(/<details[\s\S]*<\/details>/, '');
+  assert.match(visible, /^<span class="muted">לא נקרא<\/span>$/);
+  assert.doesNotMatch(visible, /Errno|zone\.tab/);
+  assert.match(dd, /<details class="tech"><summary>פרטים טכניים<\/summary><code dir="ltr">[^<]*Errno 2[^<]*<\/code><\/details>/);
 });
 
 test('the sheet is a select of the server\'s zones and saves to POST /timezone', async () => {
