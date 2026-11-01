@@ -93,7 +93,7 @@ def prelude(box: Path, *, dd: bool = False) -> str:
         + make_stubs(box / "stubs", stubs)
         + f"export TMPDIR={posix(box)!r} RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=5 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20\n"
-        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "ata_capture() { :; }\n"
     )
 

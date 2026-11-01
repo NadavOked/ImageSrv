@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 
 import pytest
+from agentlib import agent_sources
 
 from server import db
 from server.rounds import drive_rates
@@ -413,7 +414,7 @@ needs_bash = requires_native(("bash", BASH))
 def _agent(run: Path, body: str) -> str:
     run.mkdir(parents=True, exist_ok=True)
     return sh(f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh 2>/dev/null; "
-              f". {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/core/progress.sh; {body}")
+              f". {posix(AGENT)}/lib/core/waits.sh; {agent_sources('sysinfo', 'progress')}{body}")
 
 
 @needs_bash

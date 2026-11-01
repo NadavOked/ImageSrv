@@ -23,6 +23,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import agent_sources
 from test_ntfs_backup_boot_1487 import BLOCKDEV, DD, GARBAGE, ntfs_part, sector
 from test_timeouts import make_stubs, run_sh
 
@@ -84,8 +85,9 @@ def box(tmp_path: Path, part: bytes, *, start: int | None = START, fs: str = "nt
         + make_stubs(b / "stubs", {"blockdev": BLOCKDEV, **({"dd": DD} if dd_mode else {})})
         + f"export TMPDIR={posix(b)!r} RUN_DIR={posix(b / 'run')!r} DEVROOT={posix(b / 'dev')!r} "
         f"SYSROOT={posix(b / 'sys')!r} LOG_FILE={posix(b / 'run' / 'agent.log')!r}\n"
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh\n"
-        f". {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/restore/failmark.sh\n"
+        f". {posix(AGENT)}/lib/core/common.sh; {agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/restore.sh\n"
+        f". {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/writemark.sh\n"
+        f"{agent_sources('sysinfo', 'failmark')}\n"
         f". {posix(AGENT)}/lib/restore/ntfsboot.sh\n"
         "ata_capture() { :; }\n"
         f"manifest_plan() {{ echo '3|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|windows|{fs}|{OLD}|32768|p3|y|false|u'; }}\n"

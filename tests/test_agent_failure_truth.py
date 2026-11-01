@@ -9,6 +9,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import agent_sources
 from test_captured_stdout import sh, stub
 
 pytestmark = requires_native(("bash", BASH))
@@ -26,7 +27,7 @@ def grow_box(tmp_path: Path, stubs: dict[str, str]) -> tuple[str, Path]:
     setup += (
         f'export PATH="$(cd {posix(bindir)!r} && pwd):/usr/bin" '
         f'RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "agent.log")!r}; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress")}'
         f'. {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
         'partition_node() { printf "/dev/%s%s\\n" "$1" "$2"; }; '
     )

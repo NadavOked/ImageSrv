@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from agentlib import flat_lib
+from agentlib import flat_lib, agent_sources
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
@@ -57,11 +57,9 @@ def sh(script: str) -> subprocess.CompletedProcess:
 PRELUDE = (
     f'. {posix(AGENT)}/lib/core/common.sh; '
     f'. {posix(AGENT)}/lib/core/waits.sh; '   # #1367: capped_run, the smartctl ceiling
-    f'. {posix(AGENT)}/lib/hw/sysinfo.sh; '
     f'. {posix(AGENT)}/lib/core/jsonq.sh; '
     f'. {posix(AGENT)}/lib/gui/ui.sh; '
-    f'. {posix(AGENT)}/lib/core/progress.sh; '
-    f'. {posix(AGENT)}/lib/restore/failmark.sh; '   # disk_failure_cause — זיכרון השרת בשער (#872/#874)
+    f'{agent_sources("sysinfo", "progress", "failmark")}'   # failmark: disk_failure_cause — זיכרון השרת בשער (#872/#874)
     f'. {posix(AGENT)}/lib/smart/smart.sh; '
     f'. {posix(AGENT)}/lib/smart/smartgate.sh; '   # #1211: השער (smart_preflight/smart_gate) פוצל מ-smart.sh
     f'. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '   # gui_smart_choice — כמו בסוכן האמיתי

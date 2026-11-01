@@ -83,7 +83,7 @@ def _stream(tmp_path: Path, mode: str, before: str | None, after: str | None) ->
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} SYSROOT={posix(sysroot)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ {swap}cat {posix(payload)!r}; }}; "
         f"restore_partition_drawers {mode} http://s img 3 dd part.zst "

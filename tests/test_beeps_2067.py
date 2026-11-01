@@ -26,7 +26,7 @@ import pytest
 import hygiene
 from native import requires_native
 from test_agent import AGENT, REPO, posix
-from agentlib import flat_lib
+from agentlib import flat_lib, agent_sources
 
 BUSYBOX = os.environ.get("IMAGESRV_BUSYBOX") or shutil.which("busybox")
 pytestmark = requires_native(
@@ -552,8 +552,9 @@ def test_local_copy_is_not_reported_as_a_server_outage(tmp_path):
     assert frequencies(tmp_path) == []
 
 
+#: the real target_bytes and cloner_gui_pace; #2281: progress calls disk_serial (sysinfo)
+ROOM_LIBS = ("sysinfo", "progress", "clonergui")
 ROOM = """
-        . "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/progress.sh"   # the real target_bytes and cloner_gui_pace
         for fn in gui_header_state gui_hello_state slot_names_refresh drawer_slots_refresh slot_names_records drawer_slots_records gui_ask_state; do eval "$fn() { :; }"; done
         disk_port() { echo 1; }; disk_drawer() { echo 1; }
         date() { cat "$RUN_DIR/clock"; }
@@ -584,13 +585,13 @@ def test_no_outage_between_partitions_or_while_draining(tmp_path):
     # #2067 (Grok's review): the receive of partition 1 ended; the drawer
     # drains for 40 s, then the next partition waits 60 s for the sender.
     # The cable is in all along: no "network lost", and so no "back".
-    run_ash(prelude(tmp_path) + ROOM)
+    run_ash(prelude(tmp_path) + agent_sources(*ROOM_LIBS) + ROOM)
     assert frequencies(tmp_path) == []
 
 
 def test_an_outage_mid_partition_after_a_wait_is_still_heard(tmp_path):
     # The same room, then partition 2's bytes stand 30 s mid-receive: lost; they move: back.
-    run_ash(prelude(tmp_path) + ROOM + """
+    run_ash(prelude(tmp_path) + agent_sources(*ROOM_LIBS) + ROOM + """
         tick 270 283
         echo 900 > "$T/bytes.1"; echo 900 >> "$RUN_DIR/bytes.raw"; tick 284
     """)

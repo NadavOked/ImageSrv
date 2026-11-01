@@ -114,7 +114,7 @@ def _agent_free(tmp_path, m: dict, disk: int, approved: bool = True) -> str:
     path.write_text(json.dumps(m), encoding="utf-8")
     out = sh(f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path)!r}/log SHARE_HEAD={'1' if approved else ''}; "
              + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
-                       ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
+                       ("common", "jsonq", "sysinfo", "progress", "restore", "expand", "diskfit"))
              + f'system_free_after {posix(path)!r} {disk} {required_bytes(m)} 3')
     return out.strip().splitlines()[-1]
 
@@ -261,7 +261,7 @@ def test_disk_fits_counts_c_s_share_only_when_the_split_was_approved(tmp_path, a
              + f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
              f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
              + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
-                       ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
+                       ("common", "jsonq", "sysinfo", "progress", "restore", "expand", "diskfit"))
              + "raid_member_reason() { :; }; "
              + f'disk_fits sda {posix(tmp_path / "m.json")!r}; echo "rc=$?"')
     err = run / "targets/sda/error"
