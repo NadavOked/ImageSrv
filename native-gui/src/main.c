@@ -1100,7 +1100,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         /* the folder cells and "כל התיקיות" belong to the open list too */
         if (id == HIT_PICK_FOLDERS_BACK) { a->pick_in_folder = 0; break; }
         if (id >= HIT_PICK_FOLDER_BASE && id < HIT_PICK_FOLDER_BASE + MAX_FOLDERS) { pick_open_folder(a, id - HIT_PICK_FOLDER_BASE); break; }
-        if (a->dd_open && !(id >= HIT_OPTION_BASE)) {   /* click outside the open list closes it */
+        if (a->dd_open && !(id >= HIT_OPTION_BASE && id < HIT_PLAIN_HIGH)) {   /* click outside the open list closes it (#2265: plain ids from HIT_PLAIN_HIGH are outside it) */
             a->dd_open = 0;
             break;
         }

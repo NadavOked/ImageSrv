@@ -45,6 +45,8 @@ from server.console.hostcfg import create_hostcfg_router
 from server.console.timezone import create_timezone_router
 from server.console.timesync import create_timesync_router
 from server.console.ups import create_ups_router
+from server.console.email_alerts import create_email_router   # #1751
+from server.system import email_alerts   # #1751
 from server.console.tls import ConsoleTLS
 from server.console.storage import create_storage_router
 from server.console.backup_target import create_backup_target_router
@@ -322,6 +324,11 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
             heartbeat_task = asyncio.create_task(
                 _storage_heartbeat(rt, rt.heartbeat_interval))
             live["tasks"] = (task, reboot_task, heartbeat_task)
+            # ‏#1751: התראות במייל — תהליכון משלו (SMTP איטי אינו נוגע בלולאה),
+            # וגם הדופק לדיסק שממנו "הייתי למטה מ-X עד Y" נגזר.
+            watcher = email_alerts.Watcher(rt.conn, rt.data_dir)
+            rt.ctx.email_alerts = watcher
+            watcher.start()
         try:
             yield
         finally:
@@ -333,6 +340,9 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
                     with suppress(asyncio.CancelledError):
                         await running
                 live["tasks"] = ()
+                watcher = getattr(rt.ctx, "email_alerts", None)
+                if watcher is not None:
+                    await asyncio.to_thread(watcher.stop)
                 # ‏#1426: השולח יושב על ctx; ל-ServerRuntime אין `sender`
                 await asyncio.to_thread(rt.ctx.sender.close)
 
@@ -993,6 +1003,7 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_timezone_router(ctx, rt.host_hooks))   # #1447
     include(create_timesync_router(ctx, rt.host_hooks))   # #1773
     include(create_ups_router(ctx, (rt.host_hooks or {}).get("ups")))   # #1973
+    include(create_email_router(ctx))   # #1751
     # ‏#690: admin RFB proxy + settings — ה-HTTP שלו admin_only ממילא.
     app.include_router(create_monitor_router(ctx))
     # ‏#1334: ה-HTTP דרך include (console_only: deploy מקבל את הסירוב של #1073),

@@ -8127,15 +8127,18 @@ function settingsSecondariesAllowed() {
 }
 function settings() {
   if (!SETTINGS && !settingsError) return pagePlaceholder();
-  const tabs = settingsSecondariesAllowed() ? ["כללי", "שרתי משנה"] : [];
-  const tab = tabs.length ? Math.min(currentTab, 1) : 0;
+  // ‏#1751: "התראות במייל" — admin בלבד, לא בהקשר שרת משנה (email_alerts.js; בלעדיו — בלי הלשונית)
+  const extra = [settingsSecondariesAllowed() && "שרתי משנה", typeof emailAlertsAllowed === "function" && emailAlertsAllowed() && "התראות במייל"].filter(Boolean);
+  const tabs = extra.length ? ["כללי", ...extra] : [];
+  const tab = tabs.length ? Math.min(currentTab, tabs.length - 1) : 0;
   const sub = SETTINGS ? ["הגדרות השרת", ME && ME.version ? `גרסה ${ME.version}` : "", "כל שינוי נשמר מיד ונרשם ביומן"].filter(Boolean).map(esc).join(" · ") : `‏/settings לא נקרא: ${esc(settingsError)}`;
   const pill = !SETTINGS ? UI.pill("err", "לא נקרא") : "";
   const header = UI.objHeader({ crumbs: [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "ניהול" }, { label: "הגדרות" }],
     icon: "t-sliders", name: "הגדרות", sub, pill, tabs, tab });
   const body = !SETTINGS
     ? UI.note("err", `לא הצלחתי לקרוא את ההגדרות: ${esc(settingsError)}`)
-    : tab === 1 ? settingsSecondariesTab()
+    : tabs[tab] === "שרתי משנה" ? settingsSecondariesTab()
+    : tabs[tab] === "התראות במייל" ? emailAlertsTab()
     : `<div class="set-col">${SETTING_GROUPS.map(settingsGroupHtml).join("")}</div>`;
   return `<div class="page aligned settings">${header}<div class="body">${body}</div></div>`;
 }
@@ -8147,6 +8150,7 @@ async function loadSettingsData() {
   await loadUsbClone();      // #1914: הדיסק-און-קי לשיכפול
   if (current === "settings") renderCurrent();
   if (settingsSecondariesAllowed()) loadSettingsSecondaries();   // הלשונית "שרתי משנה" — לא חוסמת את שאר העמוד
+  if (typeof emailAlertsAllowed === "function" && emailAlertsAllowed()) loadEmailAlerts();   // ‏#1751 — גם היא לא חוסמת
 }
 /* ---------- #153: תעודת TLS ושם השרת ----------
    שתיהן מסתיימות באתחול השרת (התעודה נטענת רק בעליית uvicorn; שם המארח — ‏hostnamectl) — ולכן חלון
