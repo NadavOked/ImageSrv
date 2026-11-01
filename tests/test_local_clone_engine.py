@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from agentlib import flat_lib
+from agentlib import agent_libs, flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 LIB = flat_lib()
@@ -64,7 +64,7 @@ pytestmark = requires_native(
     why="loop devices and partclone as root: the Testrunner",
 )
 
-LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writemark", "drawers",
+LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writemark", "writeback", "drawers",
         "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink", "shrinkmem", "smart",
         "lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "askgui", "readback", "readbacklc")
 
@@ -218,7 +218,7 @@ def disks(tmp_path):
 
 def _engine(tmp_path, fx: Path, fanout: Path, targets: str, shrink: int, server: str = "", stop_at: str = "",
             env: tuple[str, ...] = (), kill_at: str = "") -> dict:
-    sources = "\n".join(f'. "$LIB_DIR/{n}.sh"' for n in LIBS)
+    sources = "\n".join(f'. "$LIB_DIR/{n}.sh"' for n in agent_libs(*LIBS))   # #2272: imagesrv-agent's order
     script = tmp_path / "drive.sh"
     script.write_text(DRIVER % {"lib": LIB, "sources": sources}, newline="\n")
     # #1798: a killed run is its own session, so `kill -9 0` takes the engine and nothing else

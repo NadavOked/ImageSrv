@@ -27,19 +27,27 @@ def prelude(run_dir: Path) -> str:
 def test_first_hello_precedes_slow_probe_and_next_hello_carries_it(tmp_path):
     run_dir = tmp_path / "run"; run_dir.mkdir()
     script = prelude(run_dir) + r'''
-_probe_fresh() { sleep 2; printf ',"probe":{"probe_seconds":2}'; }
-_started=$(date +%s)
+# #2275: the probe is held until the first hello is out (5 s at most -- so a
+# probe_json that waited still ends, with the probe in its first hello), then slow.
+_probe_fresh() { _g=0; until [ -e "$RUN_DIR/go" ] || [ "$_g" -ge 50 ]; do sleep 0.1; _g=$((_g+1)); done
+                 sleep 2; printf ',"probe":{"probe_seconds":2}'; }
 printf '{"schema":2%s}\n' "$(probe_json)"
-echo "first_elapsed=$(( $(date +%s) - _started ))"
-_i=0; while [ ! -s "$RUN_DIR/probe.json" ] && [ "$_i" -lt 40 ]; do sleep 0.1; _i=$((_i+1)); done
+# The first hello came back while the probe still ran -- its marker, not `date`
+# seconds (one tick under load). A first hello that waited finds it gone.
+[ -e "$RUN_DIR/probe.json.running" ] && [ ! -e "$RUN_DIR/probe.json" ] && echo first=while-probing || echo first=after-probe
+: > "$RUN_DIR/go"
+# The probe's own end, not a 4 s guess: its job removes the marker after it wrote
+# probe.json and probe.json.at (probe_bg.sh's trap). Capped by the job's ceiling.
+_i=0; while [ -e "$RUN_DIR/probe.json.running" ] && [ "$_i" -lt $(( (PROBE_MAX_S + 5) * 10 )) ]; do sleep 0.1; _i=$((_i+1)); done
 printf '{"schema":2%s}\n' "$(probe_json)"
 '''
-    started = time.monotonic(); done = run(script); elapsed = time.monotonic() - started
+    started = time.monotonic(); done = run(script, timeout=60); elapsed = time.monotonic() - started
     assert done.returncode == 0, done.stderr
     lines = done.stdout.splitlines()
     first, second = json.loads(lines[0]), json.loads(lines[2])
     assert "probe" not in first
-    assert int(lines[1].split("=", 1)[1]) <= 1, lines
+    assert lines[1] == "first=while-probing", lines
+    assert "probe" in second, (lines, run_dir.joinpath("agent.log").read_text() if run_dir.joinpath("agent.log").exists() else "")
     assert second["probe"]["probe_seconds"] == 2
     assert elapsed >= 2, "the test must really run a slow probe"
 

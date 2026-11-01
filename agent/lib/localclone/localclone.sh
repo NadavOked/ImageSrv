@@ -89,10 +89,10 @@ lc_boot_choice() {
             pause) [ "$LC_PAUSED" = 1 ] || log "local clone: touched -- the countdown stops"
                    LC_PAUSED=1; echo "0|1" > "$LC/boot"; lc_quiet_reset ;;
         esac
-        if [ "$LC_PAUSED" != 1 ] && lc_boot_due; then
+        if [ "$LC_PAUSED" = 0 ] && lc_boot_due; then
             log "local clone: no touch for ${LC_BOOT_S}s -- from the server"; return 0
         fi
-        if [ "$LC_PAUSED" = 1 ] && lc_quiet_over; then
+        if [ "$LC_PAUSED" != 0 ] && lc_quiet_over; then
             log "local clone: no touch for ${_lq_max}s on the paused choice -- from the server"; return 0
         fi
         sleep 1

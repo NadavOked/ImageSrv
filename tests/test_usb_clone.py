@@ -27,7 +27,7 @@ import hygiene
 from shell_steps import run_steps
 from native import requires_native
 from test_cloner_gui import BASH, posix
-from agentlib import flat_lib
+from agentlib import agent_sources, flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 LIB = flat_lib()
@@ -38,7 +38,7 @@ needs_jq = requires_native(("jq", shutil.which("jq")))
 needs_usb_build = requires_native("cpio", "gzip", "zstd", "python3", "git", posix=True)
 
 LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
-        "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
+        "writeback", "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
         "shrinkmem", "smart", "smartjudge", "hwissues", "guistate", "attended", "lcinv", "lcsize", "lcplan", "lcsnap", "lctune",
         "lccopy", "lcraw", "localclone", "lcwait", "idle", "lcgui", "usbclone", "usbdiag", "usbsurvey", "usbset",
         "disklink", "slotnames", "usbmap", "usbmapwin")   # #1962: the drawer mapping by model; #2001 its window
@@ -49,7 +49,7 @@ def run(tmp_path: Path, script: str, timeout: int = 60, *, steps: list[str] | No
     run_dir = tmp_path / "run"; run_dir.mkdir(exist_ok=True)
     pre = f'export RUN_DIR={posix(run_dir)!r} IMAGESRV_TEST=1 SMART_KB={posix(LIB)!r}/data; '
     pre += "".join(f'export {k}={v!r}; ' for k, v in env.items())
-    pre += "".join(f'. {posix(LIB)}/{name}.sh; ' for name in LIBS)
+    pre += agent_sources(*LIBS)   # #2272: imagesrv-agent's order
     # The stick and its writes are files in tmp_path. Flushing every dirty
     # filesystem on the CI host is not evidence about these test files.
     pre += 'sync() { echo sync >> "$RUN_DIR/test-sync.calls"; }; '

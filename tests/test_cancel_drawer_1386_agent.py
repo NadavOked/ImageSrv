@@ -26,7 +26,7 @@ from test_agent import AGENT, BASH, posix
 from test_cloner_gui import bridge_setup, sh
 from test_drawer_pull_isolation_1598 import GOOD_SHA, PAYLOAD, fanout_dir  # noqa: F401 — fixture
 from test_timeouts import log_of, make_stubs, run_sh
-from agentlib import flat_lib
+from agentlib import agent_sources
 
 JQ = shutil.which("jq")
 requires_jq = pytest.mark.skipif(JQ is None, reason="jq אינו מותקן — הביטוי לא היה רץ בכלל")
@@ -57,7 +57,7 @@ STUBS = {
     "fanout": None,
 }
 
-LIBS = ("common", "sysinfo", "waits", "jsonq", "progress", "restore", "drawers", "drawerfeed", "verdict",
+LIBS = ("common", "sysinfo", "waits", "jsonq", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
         "cancel", "failmark", "ntfsboot")
 
 
@@ -79,7 +79,7 @@ def room(tmp_path: Path, fanout_dir: Path, ask: int, pre: str = "",  # noqa: F81
            f"RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} TMPDIR={posix(tmp_path)!r} "
            "FANOUT_BUFFER=2097152 WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=5 "
            "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=12; ")
-    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
+    libs = agent_sources(*LIBS)   # #2272: imagesrv-agent's order
     started = time.monotonic()
     out = run_sh(
         make_stubs(box / "stubs", STUBS)
@@ -153,7 +153,7 @@ def _agent(tmp_path: Path, script: str) -> subprocess.CompletedProcess:
     for d, st in (("sda", "writing"), ("sdb", "writing"), ("sdc", "done")):
         (run / "targets" / d).mkdir(parents=True, exist_ok=True)
         (run / "targets" / d / "state").write_text(st + "\n")
-    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
+    libs = agent_sources(*LIBS)   # #2272: imagesrv-agent's order
     return subprocess.run([BASH, "-c", f"export RUN_DIR={posix(run)!r}; {libs}{script}"],
                           capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
 

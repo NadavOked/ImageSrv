@@ -26,9 +26,10 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from test_agent import AGENT, BASH, posix
+from test_agent import BASH, posix
 from test_local_clone_agent import run as lc_run
 from test_timeouts import make_stubs, run_sh
+from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -92,10 +93,8 @@ def prelude(box: Path, *, dd: bool = False) -> str:
         + make_stubs(box / "stubs", stubs)
         + f"export TMPDIR={posix(box)!r} RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=5 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20\n"
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/core/progress.sh\n"
-        f". {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; . {posix(AGENT)}/lib/restore/verdict.sh\n"
-        f". {posix(AGENT)}/lib/restore/failmark.sh; . {posix(AGENT)}/lib/restore/ntfsboot.sh\n"
-        "ata_capture() { :; }\n"
+        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + "ata_capture() { :; }\n"
     )
 
 

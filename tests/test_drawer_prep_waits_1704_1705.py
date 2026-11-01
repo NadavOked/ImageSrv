@@ -33,11 +33,11 @@ from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_drawer_progress import COUNTING_FANOUT
 from test_timeouts import make_stubs, run_sh
-from agentlib import flat_lib
+from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "waits", "jsonq", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "drawers", "drawerfeed",
+LIBS = ("common", "waits", "jsonq", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writeback", "drawers", "drawerfeed",
         "verdict", "failmark", "ntfsboot", "writecheck",
         "writemark")   # #1877: finish_grow -> writemark_release (writemark.sh) -> writemark_clear (stubbed)
 
@@ -63,7 +63,7 @@ def _room(tmp_path: Path, apply_gpt: str, drawers=("sda", "sdb", "sdc"), **env) 
     exports = " ".join(f"{k}={v}" for k, v in env.items())
     prelude = (
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev {exports}; "
-        + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
+        + agent_sources(*LIBS)   # #2272: imagesrv-agent's order
         + "log() { :; }; disk_fits() { return 0; }; write_check() { return 0; }; boot_hidden_disk() { return 0; }; "   # #2015
         "write_speed_verdict() { return 0; }; readback_drawers() { :; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
         f"apply_gpt() {{ {apply_gpt} }}; "
@@ -225,8 +225,8 @@ def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
         make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in
-                  ("common", "waits", "progress", "restore", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot"))
+        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
+                        "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ cat {posix(payload)!r}; }}; "
     )

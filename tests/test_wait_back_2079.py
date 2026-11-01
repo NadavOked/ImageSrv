@@ -19,6 +19,7 @@ import test_native_local_clone as lc
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
 from test_cloner_gui import GUI
+from test_end_of_task_1560 import cloner_menu
 from test_native_local_clone import drive
 from test_usb_settings_1959_1960 import native_gui
 
@@ -54,6 +55,33 @@ def test_the_offer_takes_it_without_a_count(tmp_path):
              'log() { :; }; lc_gui_alive() { return 0; }; attended_secs() { echo 600; }; attended_stop() { :; }; '
              'lc_boot_choice() { echo "PAUSED=$LC_PAUSED"; LC_CHOICE=server; }; local_clone_offer')
     assert "PAUSED=2" in out, out
+
+
+def test_back_from_the_wait_is_not_counted_out(tmp_path):
+    """Returning from the wait ignores the first choice's expired deadline."""
+    trace, log = cloner_menu(tmp_path, "none", (
+        'echo boot > "$LC/screen"; _bc_dl=1; _bc_w0=1; LC_PAUSED=2; '
+        'lc_boot_choice; echo "LEFT $LC_CHOICE" >> "$RUN_DIR/trace"'))
+    assert trace == ["STAYED"], trace
+    assert "no touch for" not in log
+
+
+def test_back_from_the_wait_still_has_the_quiet_ceiling(tmp_path):
+    """The returned choice still leaves for the server after the quiet ceiling."""
+    trace, log = cloner_menu(tmp_path, "none", (
+        'echo boot > "$LC/screen"; _bc_dl=1; _bc_w0=1; LC_PAUSED=2; '
+        'lc_boot_choice; echo "LEFT $LC_CHOICE" >> "$RUN_DIR/trace"'), extra='_lq_max=0; ')
+    assert trace == ["LEFT server"], trace
+    assert "on the paused choice -- from the server" in log
+
+
+def test_the_first_choice_still_counts(tmp_path):
+    """The first, unpaused choice still leaves when its countdown expires."""
+    trace, log = cloner_menu(tmp_path, "none", (
+        'echo boot > "$LC/screen"; LC_PAUSED=0; '
+        'lc_boot_choice; echo "LEFT $LC_CHOICE" >> "$RUN_DIR/trace"'), extra='lc_boot_due() { return 0; }; ')
+    assert trace == ["LEFT server"], trace
+    assert "no touch for 60s -- from the server" in log
 
 
 #: the local clone's driver, with the wait's own handler first and its button among the hits

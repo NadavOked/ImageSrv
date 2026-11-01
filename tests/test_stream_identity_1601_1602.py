@@ -30,7 +30,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, posix
 from test_timeouts import log_of, make_stubs, run_sh
-from agentlib import flat_lib
+from agentlib import agent_sources, flat_lib
 
 REPO = Path(__file__).resolve().parent.parent
 pytestmark = requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc, ו-sysfs מזויף צריך symlink")
@@ -133,9 +133,8 @@ def station(tmp_path: Path, fanout_dir: Path, source: str, pcl: str) -> tuple[Pa
            f"RUN_DIR={posix(run)!r} DEVROOT={posix(box / 'dev')!r} TMPDIR={posix(tmp_path)!r} "
            "FANOUT_STALL_EVICT_MS=2000 WAIT_POLL_S=1 WAIT_DRAWER_S=4 WAIT_HELPER_S=4 "
            "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=5; ")
-    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (
-        "common", "jsonq", "sysinfo", "waits", "progress", "restore", "verdict", "failmark",
-        "drawers"))   # #1906: restore_partition's pipe is restore_pipe (drawers.sh), as in the agent
+    libs = agent_sources("common", "jsonq", "sysinfo", "waits", "progress", "restore", "verdict", "failmark",
+                         "writeback", "drawers")   # #1906: restore_partition's pipe is restore_pipe (drawers.sh); #2272
     out = run_sh(
         make_stubs(box / "stubs", STUBS)
         + f'export PATH="{posix(fanout_dir)}:$PATH"\n'

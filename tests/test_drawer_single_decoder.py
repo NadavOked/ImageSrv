@@ -43,13 +43,13 @@ import hygiene
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_timeouts import log_of, make_stubs
-from agentlib import flat_lib
+from agentlib import agent_sources
 
 REPO = Path(__file__).resolve().parent.parent
 BUSYBOX = shutil.which("busybox")
 pytestmark = [
     requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc ו-fifo"),
-    # #2118: WAIT_STREAM_STALL (20s, ערך של המוצר) נחצה תחת -n auto; סדרתי עובר ב-3s.
+    # #2118: WAIT_STREAM_STALL_S=20 (ערך הטסט; במוצר 300ש', waits.sh:46) נחצה תחת -n auto; סדרתי עובר ב-3s.
     pytest.mark.serial,
 ]
 
@@ -151,9 +151,8 @@ def room(tmp_path: Path, fanout_dir: Path, shell: str = BASH, payload: bytes = P
     # SIGCHLD then lands while busybox ash is blocked opening the drawer's
     # fifo -- ash does not retry the open on EINTR (dash and bash do), the
     # drawer never starts, and the rendezvous above waits on it for good.
-    libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (
-        "common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers",
-        "drawerfeed", "verdict", "failmark", "ntfsboot"))
+    libs = agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers",
+                         "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
     out = run_in(shell,
         make_stubs(box / "stubs", STUBS)
         + f'export PATH="{posix(fanout_dir / "ready")}:$PATH"\n'

@@ -32,7 +32,8 @@ import pytest
 
 from native import requires_native
 from server.disks import ata_cause
-from test_agent import AGENT, BASH, posix
+from test_agent import BASH, posix
+from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH), posix=True, why="fifos, #! stand-ins and kill -9")
 
@@ -64,16 +65,14 @@ def _pipe(tmp_path: Path, *, eio_after_s: float | None, shape: str | None = None
     (box / "node").write_bytes(b"")
     node = posix(box / "node")
     call = (f'restore_pipe "$T" partclone.ntfs {node!r} pipeline.rc; ' if shape is None else
-            f'. {posix(AGENT)}/lib/restore/drawerfeed.sh; DRAWER_NICE=""; DRAWER_DIRECT=""; '
+            'DRAWER_NICE=""; DRAWER_DIRECT=""; '
             f'partition_node() {{ echo {node!r}; }}; '
             f'_drawer_pipeline sdb ntfs 3 {shape}; wait "$(cat "$T/pipeline.pid")"; ')
     script = (
         f'export PATH={posix(box / "bin")!r}:"$PATH" BOX={posix(box)!r} RUN_DIR={posix(run)!r} '
         'WRITE_FSYNC_INTERVAL_S=1; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
-        f'. {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/verdict.sh; '
-        f'. {posix(AGENT)}/lib/restore/writeback.sh 2>/dev/null; '
-        f'T={posix(t)!r}; mkfifo "$T/feed"; '
+        + agent_sources("common", "restore", "writeback", "drawers", "drawerfeed", "verdict")   # #2272: imagesrv-agent's order
+        + f'T={posix(t)!r}; mkfifo "$T/feed"; '
         f'( i=0; while [ "$i" -lt {STREAM_S * 4} ]; do head -c 4096 /dev/zero; sleep 0.25; i=$((i + 1)); done ) > "$T/feed" & '
         + call
         + 'echo "RC $(cat "$T/pipeline.rc")"; '
@@ -136,9 +135,8 @@ def test_the_watcher_leaves_with_a_pipe_that_was_killed(tmp_path):
     script = (
         f'export PATH={posix(box / "bin")!r}:"$PATH" BOX={posix(box)!r} RUN_DIR={posix(box / "run")!r} '
         'WRITE_FSYNC_INTERVAL_S=0.3; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
-        f'. {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/writeback.sh 2>/dev/null; '
-        f'T={posix(t)!r}; mkfifo "$T/feed"; '
+        + agent_sources("common", "restore", "writeback", "drawers")   # #2272: imagesrv-agent's order
+        + f'T={posix(t)!r}; mkfifo "$T/feed"; '
         # every process here is stopped by its pid, and none holds this test's pipe
         '( exec 3> "$T/feed"; exec sleep 30 ) > /dev/null 2>&1 & feeder=$!; '
         f'( restore_pipe "$T" partclone.ntfs {posix(box / "node")!r} pipeline.rc ) > /dev/null 2>&1 & pipe=$!; '

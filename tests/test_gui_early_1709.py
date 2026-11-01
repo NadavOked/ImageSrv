@@ -241,7 +241,10 @@ def _agent(tmp: Path, body: str, bridge: str = KIOSK_BRIDGE) -> subprocess.Popen
     fb = tmp / "fb0"
     _write(tmp / "sysroot" / "sys" / "class" / "graphics" / "fb0" / "name", "i915drmfb\n", 0o644)
     _write(tmp / "cmdline", "imagesrv.server=127.0.0.1:9\n", 0o644)
+    # #2275: the real stat, each call recorded -- the keeper's looks at the GUI's beat (ui.sh gui_beat_fresh)
+    _write(tmp / "bin" / "stat", f'#!/bin/sh\necho "$*" >> "$RUN_DIR/stat.calls"\nexec {shutil.which("stat")} "$@"\n')
     script = (
+        f"export PATH={shlex.quote(posix(tmp / 'bin'))}:\"$PATH\"; "
         f"export RUN_DIR={shlex.quote(posix(run))} LIB_DIR={shlex.quote(posix(LIB))} IMAGESRV_TEST=1 WAIT_HELPER_S=5 "
         f"CMDLINE_FILE={shlex.quote(posix(tmp / 'cmdline'))} GUI_KIOSK={shlex.quote(posix(kiosk))} "
         f"GUI_STATION={shlex.quote(posix(station))} FB_DEV={shlex.quote(posix(fb))} "
@@ -254,6 +257,11 @@ def _agent(tmp: Path, body: str, bridge: str = KIOSK_BRIDGE) -> subprocess.Popen
     out = (tmp / "out.txt").open("w", encoding="utf-8")
     return subprocess.Popen([BASH, "-c", 'export PATH="/usr/bin:/bin:$PATH"; ' + script], stdout=out,
                             stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, cwd=str(REPO), start_new_session=True)
+
+
+def _looks(tmp: Path) -> int:
+    """How many times the keeper has read the GUI's heartbeat (gui_beat_fresh's stat)."""
+    return sum("gui/beat" in line for line in _lines(tmp / "run" / "stat.calls"))
 
 
 def _report(tmp: Path) -> str:
@@ -270,10 +278,18 @@ def test_the_agent_adopts_the_early_gui_and_hands_it_the_role_without_a_restart(
         role = tmp_path / "run" / "gui.screen"
         assert _await(role.exists, 10), _report(tmp_path)
         assert role.read_text().splitlines() == ["cloner", "aa:bb:cc:dd:ee:01", "10.0.0.9"], _report(tmp_path)
-        time.sleep(1.5)                                      # a second GUI would show up here
-        assert _lines(tmp_path / "run" / "kiosk.runs") == ["run screen=boot"], _report(tmp_path)
-        out = (tmp_path / "out.txt").read_text()
-        assert "rc1=0" in out and "rc2=0" in out, _report(tmp_path)
+        out = tmp_path / "out.txt"
+        assert _await(lambda: "rc2=" in out.read_text(), 10), _report(tmp_path)
+        assert "rc1=0" in out.read_text() and "rc2=0" in out.read_text(), _report(tmp_path)
+        # #2275: the keeper's own looks, not a clock. It restarts a GUI only after a look
+        # (gui_keep: a stale beat, then gone), and a new bridge names itself in kiosk.runs
+        # before the next look -- so three looks after the hand-over with one run are
+        # three restarts that did not happen. A wall-clock 1.5 s was one tick under load.
+        runs = tmp_path / "run" / "kiosk.runs"
+        seen = _looks(tmp_path)
+        _await(lambda: _looks(tmp_path) >= seen + 3 or len(_lines(runs)) > 1, 30)
+        assert _lines(runs) == ["run screen=boot"], _report(tmp_path)
+        assert _looks(tmp_path) >= seen + 3, _report(tmp_path)
     finally:
         _killpg(proc)
 
