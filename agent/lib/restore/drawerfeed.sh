@@ -73,12 +73,18 @@ _drawer_pipeline() {
     if [ "$4" = shared ]; then
         (
             read -r _dp_me _ < /proc/self/stat   # this shell's own pid (a subshell's: not $$), for the watcher
-            rm -f "$_tdir/writeback.failed"; writeback_watch "$_tdir" "$_node" "$_dp_me" > /dev/null 2>&1 & _dp_w=$!   # #1841: EIO mid-partition (writeback.sh)
+            # #2273: the fifo is opened HERE, before this shell has a child. busybox ash opens a
+            # command's `< fifo` in this shell, and a child's SIGCHLD in that blocking open() is
+            # EINTR, never retried: a healthy drawer out. (each, below: the pipe's `{ }` opens it,
+            # a shell with no child.) fd 3 is closed in the watcher and once partclone is done --
+            # a reader left open would keep fanout from its EPIPE when partclone dies (#1598).
+            exec 3< "$_tdir/feed"
+            rm -f "$_tdir/writeback.failed"; writeback_watch "$_tdir" "$_node" "$_dp_me" > /dev/null 2>&1 3<&- & _dp_w=$!   # #1841: EIO mid-partition (writeback.sh)
             # shellcheck disable=SC2016,SC2046,SC2086 # $$ is sh -c's own; nice and partclone_mode flags are word lists
             sh -c 'echo "$$" > "$1"; shift; exec "$@"' partclone "$_tdir/reader.pid" $DRAWER_NICE \
                 "$_pcl" $(partclone_mode "$_pcl" -r) $DRAWER_DIRECT -s - -O "$_node" -L "$_tdir/partclone.log" \
-                < "$_tdir/feed" 2>> "$LOG_FILE"
-            _dp_rc=$?; kill "$_dp_w" 2>/dev/null; wait "$_dp_w" 2>/dev/null
+                <&3 3<&- 2>> "$LOG_FILE"
+            _dp_rc=$?; exec 3<&-; kill "$_dp_w" 2>/dev/null; wait "$_dp_w" 2>/dev/null
             [ ! -f "$_tdir/writeback.failed" ] || _dp_rc=1   # a refused fsync fails it, whatever partclone said
             echo "$_dp_rc" > "$_tdir/pipeline.rc"
         ) &

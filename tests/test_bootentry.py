@@ -22,6 +22,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
+from agentlib import agent_sources
 from test_captured_stdout import stub
 
 pytestmark = requires_native(("bash", BASH))
@@ -88,7 +89,7 @@ class Box:
                        f'LIB_DIR={posix(AGENT)!r}/lib FAKE_NVRAM={posix(self.nvram)!r} '
                        f'FAKE_PARTUUID={ESP_UUID} {env}; '
                        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
-                       f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+                       f'. {posix(AGENT)}/lib/restore/restore.sh; {agent_sources("sysinfo", "progress")}'
                        f'. {posix(AGENT)}/lib/postdeploy/bootentry.sh; '
                        f'manifest_plan() {{ cat {posix(tmp_path / "plan")!r}; }}; ')
 

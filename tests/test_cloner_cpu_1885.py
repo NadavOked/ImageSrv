@@ -14,7 +14,7 @@ import pytest
 from server.agent import cloner_cpu, reports
 from server import db
 from server.rounds import drive_rates
-from agentlib import flat_lib
+from agentlib import flat_lib, agent_sources
 
 MAC = "78:ac:c0:9b:18:85"
 
@@ -125,7 +125,7 @@ def _report(tmp_path, root, state, task="") -> dict:
     (run / "targets").mkdir(parents=True, exist_ok=True)
     (run / "state").write_text(state + "\n", encoding="ascii", newline="\n")
     return json.loads(sh(f'export RUN_DIR={posix(run)!r} SYSROOT={posix(root)!r}; . {posix(LIB)}/common.sh;'
-                         f' . {posix(LIB)}/progress.sh; . {posix(LIB)}/datareport.sh;'
+                         f' {agent_sources("sysinfo", "progress")}. {posix(LIB)}/datareport.sh;'
                          f' build_progress ses_1 aa:bb:cc:dd:ee:01 {task}'))
 
 

@@ -22,7 +22,7 @@ import os
 import re
 from pathlib import Path
 
-from agentlib import lib_files
+from agentlib import lib_files, agent_sources
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
@@ -72,7 +72,7 @@ def box(tmp_path: Path, plan: str = LINUX_PLAN, **disk_kw) -> tuple[str, Path]:
     setup += (
         f'export PATH="$(cd {posix(bindir)!r} && pwd):/usr/bin:/bin" '
         f'RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "agent.log")!r}; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/progress.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress")}'
         f'. {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
         f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '
         f"manifest_plan() {{ printf '%s\\n' {' '.join(repr(ln) for ln in plan.splitlines())}; }}; "

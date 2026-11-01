@@ -133,7 +133,7 @@ def _agent_free(tmp_path, m: dict, disk: int) -> str:
     path.write_text(json.dumps(m), encoding="utf-8")
     out = sh(f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path)!r}/log; "
              + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
-                       ("common", "jsonq", "progress", "restore", "expand", "diskfit"))
+                       ("common", "jsonq", "sysinfo", "progress", "restore", "expand", "diskfit"))
              + f'system_free_after {posix(path)!r} {disk} {required_bytes(m)} 3')
     return out.strip().splitlines()[-1]
 

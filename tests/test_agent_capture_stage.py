@@ -22,7 +22,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
-from agentlib import flat_lib
+from agentlib import flat_lib, agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -34,7 +34,7 @@ def _progress(tmp_path: Path, stage: str | None, who: str = "task") -> dict:
         (run / "stage").write_text(stage + "\n", encoding="utf-8", newline="\n")
     ids = '"" b4:2e:99:07:1a:c4 tsk_4e10' if who == "task" else "ses_1 b4:2e:99:07:1a:c4"
     return json.loads(sh(
-        f'export RUN_DIR={posix(run)!r}; . {posix(LIB)}/common.sh; . {posix(LIB)}/progress.sh; '
+        f'export RUN_DIR={posix(run)!r}; . {posix(LIB)}/common.sh; {agent_sources("sysinfo", "progress")}'
         f'target_init sda 0; build_progress {ids}'))
 
 

@@ -359,7 +359,7 @@ def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp
         f"DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=3 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; echo \"rc=$?\""
@@ -394,7 +394,7 @@ def test_a_station_whose_stream_never_arrives_fails_instead_of_freezing(tmp_path
         "WAIT_POLL_S=1 WAIT_STREAM_START_S=3 WAIT_STREAM_STALL_S=3 "
         "WAIT_HELPER_S=3; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
-        f". {posix(AGENT)}/lib/core/progress.sh; . {posix(AGENT)}/lib/restore/restore.sh; "
+        f"{agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/restore.sh; "
         "stream_source() { sleep 120; }; "
         # הבדיקה הזו על התקרה של הזרם. בדיקת ההתקן שלפניה (#51) מוחלפת
         # כי אין התקן בלוקים בקופסה, ונבדקת בנפרד ב-test_restore_evidence.py.
@@ -470,7 +470,7 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         f"UDP_ARGV={posix(argv)!r} UDP_PAYLOAD={posix(payload)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         # ‏wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
         + "eval \"orig_$(declare -f wait_progress)\"; "
         f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
@@ -582,7 +582,7 @@ _nap() {
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=2 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_START_LATER_S=20; "
-        + agent_sources("common", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + clock +
         f'stream_source() {{ if [ "$4" = p3.zst ]; then read -r send < "$RUN_DIR/test-send"; fi; cat {posix(payload)!r}; }}; '
         "target_init sda 4096; STREAMED_PARTITIONS=0; "

@@ -145,7 +145,7 @@ def prelude(box: Path) -> str:
         + f"export TMPDIR={posix(box)!r} RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         f"WAIT_POLL_S=1 WAIT_READBACK_S=60 RB_LIST_PAUSE_S=0\n"   # #1907: the list's tries, no pause in tests
         + "".join(f". {posix(flat_lib())}/{n}.sh\n" for n in
-                  ("common", "jsonq", "waits", "progress", "restore", "verdict", "failmark", "readback", "readbacklc"))
+                  ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "verdict", "failmark", "readback", "readbacklc"))
         + "ata_capture() { :; }\n"
         "lc_src_node() { partition_node \"$@\"; }\n"
         'http_get() { echo "get ${1##*/api/v1/images/}" >> "$BOX/calls"; cat "$BOX/served.${1##*/}"; }\n'

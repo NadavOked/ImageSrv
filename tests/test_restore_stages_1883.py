@@ -16,7 +16,7 @@ from server import db
 from server.agent import reports, restore_stages
 from server.rounds import room
 from server.learn import eta as learn_eta
-from agentlib import flat_lib
+from agentlib import flat_lib, agent_sources
 
 MAC = "78:ac:c0:9b:18:83"
 MARKS = [["gpt", 100.0], ["expand", 103.5], ["p1", 104.0], ["p2", 110.0],
@@ -148,7 +148,7 @@ def _agent(tmp_path: Path, script: str) -> dict:
     up = proc / "uptime"
     return json.loads(sh(
         f'export RUN_DIR={posix(run)!r} SYSROOT={posix(tmp_path / "sys")!r}; . {posix(LIB)}/common.sh;'
-        f' . {posix(LIB)}/progress.sh; . {posix(LIB)}/datareport.sh;'
+        f' {agent_sources("sysinfo", "progress")}. {posix(LIB)}/datareport.sh;'
         f' t() {{ echo "$1 0.00" > {posix(up)!r}; }}; ' + script))
 
 
