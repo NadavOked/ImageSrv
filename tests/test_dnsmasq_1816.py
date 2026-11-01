@@ -10,10 +10,11 @@ import subprocess
 import pytest
 
 from native import requires_native
-from test_installer_1131 import BASH, HELPERS
+from test_installer_1131 import BASH, HELPERS, posix
 
 
 REPO = Path(__file__).resolve().parents[1]
+DROPIN = REPO / "deploy" / "dnsmasq-imagesrv-restart.conf"
 pytestmark = requires_native(("bash", BASH), why="execute dnsmasq installer section")
 
 
@@ -36,7 +37,8 @@ systemctl() {
     if [[ "$1" == daemon-reload ]]; then return "$RELOAD_RC"; fi
 }
 '''
-    script += (f"IFACE={iface!r}\nCONSOLE_DEPLOY_IF={console_iface!r}\n"
+    script += (f"APP_DIR='{posix(REPO)}'\n"
+               f"IFACE={iface!r}\nCONSOLE_DEPLOY_IF={console_iface!r}\n"
                f"DRY_RUN={dry_run}\nRELOAD_RC={reload_rc}\n")
     script += text[start:end]
     result = subprocess.run([BASH, "-c", script], cwd=tmp_path,
@@ -57,6 +59,8 @@ def test_installer_installs_unlimited_delayed_retries(tmp_path, iface, console_i
     assert policy["Unit"]["StartLimitIntervalSec"] == "0"
     assert policy["Service"]["Restart"] == "on-failure"
     assert policy["Service"]["RestartSec"] == "5s"
+    # One source with tools/server-upgrade.sh (test_dnsmasq_upgrade_1816.py).
+    assert policy_path.read_text(encoding="utf-8").strip() == DROPIN.read_text(encoding="utf-8").strip()
     written = calls.index("write /etc/systemd/system/dnsmasq.service.d/imagesrv-restart.conf")
     reloaded = calls.index("systemctl daemon-reload")
     assert written < reloaded

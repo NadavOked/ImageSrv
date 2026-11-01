@@ -210,8 +210,10 @@ _EXACT = {
     "systemctl returned no detail": "systemctl לא החזיר פירוט.",
     "ip returned no detail": "הפקודה ip לא החזירה פירוט.",
     "Restart/shutdown cancelled; nothing was done.": "בוטל — לא בוצע דבר.",
+    # #2266: "הוספת כונן" (#1988) -> Enter on "ביטול"
+    "Cancelled; nothing was erased.": "בוטל — לא נמחק דבר.",
     # F4 on a secondary (16/10)
-    "The server database is not available.": "מסד הנתונים של השרת אינו זמין.",
+    "The server database is not available.":"מסד הנתונים של השרת אינו זמין.",
     "Pairing codes are shown only on a secondary server.": "קוד צימוד מוצג רק בשרת משנה.",
     "This server is already paired; disconnect it first.":
         "השרת כבר מצומד — מנתקים אותו קודם (F4).",
