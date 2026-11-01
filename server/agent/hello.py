@@ -18,7 +18,7 @@ import sqlite3
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
-from server.agent import agent_timing, bootguard, inventory, probe, registry, unknown_screen
+from server.agent import timing as agent_timing, bootguard, inventory, probe, registry, unknown_screen
 from server.core import capabilities
 from server.rounds import direct, room, room_drivers
 from server.library import minfree

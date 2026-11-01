@@ -832,6 +832,7 @@ def default_hooks() -> dict:
         "make_fs": make_fs,
         "mount": mount,
         "umount": umount,
+        "mount_presence": mount_presence,    # #2126: a failed umount -- is it still mounted?
         "fstab_write": fstab_write,
         "creds_write": creds_write,
         "creds_remove": creds_remove,

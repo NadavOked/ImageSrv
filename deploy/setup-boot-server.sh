@@ -1031,6 +1031,23 @@ run install -m 0644 "$APP_DIR/deploy/imagesrv-dcui.service" \
     /etc/systemd/system/imagesrv-dcui.service
 run install -m 0644 "$APP_DIR/deploy/imagesrv-installer-gui.service" \
     /etc/systemd/system/imagesrv-installer-gui.service
+# נדב 17/10: "אין מסך שחור". מסך האתחול של השרת (server/system/bootsplash.py) — תמונה
+# סטטית מתחילת האתחול ועד שה-DCUI לוקח את tty1, במקום tty1 שחור עם סמן.
+# התמונה מצוירת ע"י הגואי עצמו (‏--splash-raw), כמו ב-initramfs. בלי בינארי
+# (התקנה ידנית לפני בניית ה-payload) נשארת התמונה שהמתקין החי העתיק; בלי שתיהן
+# — אזהרה בשם, והיחידה תכתוב ביומן "no prebuilt screen" (עיקרון 5).
+run install -D -m 0755 "$APP_DIR/server/system/bootsplash.py" /usr/local/sbin/imagesrv-boot-splash
+run install -m 0644 "$APP_DIR/deploy/imagesrv-boot-splash.service" \
+    /etc/systemd/system/imagesrv-boot-splash.service
+SPLASH_GUI="$APP_DIR/native-gui/imagesrv-station-gui"
+SPLASH_RAW=/usr/share/imagesrv/splash-640x240.raw
+if [[ -x "$SPLASH_GUI" ]]; then
+    run install -d /usr/share/imagesrv
+    run "$SPLASH_GUI" --splash-raw "$SPLASH_RAW" --size 640x240 \
+        || warn "מסך האתחול של השרת לא צויר ($SPLASH_GUI --splash-raw) — באתחול יוצג מסוף טקסט עד ה-DCUI"
+elif [[ ! -f "$SPLASH_RAW" ]]; then
+    warn "אין $SPLASH_GUI ואין $SPLASH_RAW — באתחול יוצג מסוף טקסט עד ה-DCUI"
+fi
 # ‏#1893: מחזירה באתחול עדכון שנקטע בהפסקת חשמל (tools/server-upgrade-recover.sh).
 run install -m 0644 "$APP_DIR/deploy/imagesrv-upgrade-recover.service" \
     /etc/systemd/system/imagesrv-upgrade-recover.service
@@ -1114,7 +1131,7 @@ if (( ! DRY_RUN )); then
     CONSOLE_FP="$(CONSOLE_HOST="${CONSOLE_TLS_HOST:-127.0.0.1}" python3 - <<TLSEOF
 import os, sys
 sys.path.insert(0, "$APP_DIR")
-from server.console.console_tls import ensure_console_cert
+from server.console.tls import ensure_console_cert
 tls = ensure_console_cert("$DATA_DIR", os.environ["CONSOLE_HOST"])
 print(tls.fingerprint_sha256)
 TLSEOF
@@ -1131,6 +1148,7 @@ run systemctl enable imagesrv-upgrade-recover.service   # #1893: after the reloa
 # WorkingDirectory האמיתי אחרי הסרת ה-drop-in הזמני. בהרצה ידנית הוא מפעיל אותו.
 run systemctl mask getty@tty1.service
 run systemctl enable imagesrv-dcui.service
+run systemctl enable imagesrv-boot-splash.service
 run systemctl restart imagesrv-dcui.service
 # האשף מחזיק את 8081 בזמן ההתקנה. ממש לפני שהקונסולה עולה הוא משחרר את
 # המאזין ומחזיר אישור על socketpair פרטי; אין סיסמה או נתון משתמש ב-FD הזה.

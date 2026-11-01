@@ -618,6 +618,9 @@ void state_parse(State *s, FILE *fp) {
         else if (KEY("machine_name")) cp(s->machine_name, sizeof s->machine_name, val);   /* #1073 */
         else if (KEY("server_name")) cp(s->server_name, sizeof s->server_name, val);         /* #1252 */
         else if (KEY("server_addr")) cp(s->server_addr, sizeof s->server_addr, val);         /* #1252 */
+        else if (KEY("screen"))      cp(s->screen, sizeof s->screen, val);                   /* #1709 */
+        else if (KEY("ip"))          cp(s->ip, sizeof s->ip, val);                           /* #1709 */
+        else if (KEY("mac"))         cp(s->mac, sizeof s->mac, val);                         /* #1709 */
         else if (KEY("server_version")) cp(s->server_version, sizeof s->server_version, val); /* #1252 */
         else if (KEY("tz")) {
             size_t n = strlen(val);

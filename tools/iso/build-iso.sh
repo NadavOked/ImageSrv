@@ -279,7 +279,8 @@ dpkg-deb -x "$kdeb" "$KTMP" || die "dpkg-deb -x $kdeb נכשל"
 kvmlinuz=$(find "$KTMP/boot" -name 'vmlinuz-*' | head -n1)
 [[ -s "$kvmlinuz" ]] || die "ב-$kdeb אין boot/vmlinuz-*"
 KVER=${kvmlinuz##*/vmlinuz-}
-ikver=$( (zstd -dc "$LIVE_INITRD" 2>/dev/null || gzip -dc "$LIVE_INITRD" 2>/dev/null || cat "$LIVE_INITRD") \
+source "$SCRIPT_DIR/../initramfs-format.sh"
+ikver=$( initramfs_decompress "$LIVE_INITRD" \
     | cpio -t 2>/dev/null | grep -m1 -o '^lib/modules/[^/]*' | cut -d/ -f3 || true)
 [[ -n "$ikver" ]] || die "ב-$LIVE_INITRD אין lib/modules/<kver> — זה לא initramfs של build_initramfs.sh?"
 lab_flag=(); if $LAB; then lab_flag=(--lab); fi   # מערך ולא $(…) לא מצוטט (SC2046)

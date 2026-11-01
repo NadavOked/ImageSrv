@@ -1351,7 +1351,8 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
 
 /* After a reload: the things station.js does on a fresh state. */
 static void after_reload(App *a) {
-    if (!a->mac[0]) {                                 /* index.html opened without ?mac= */
+    app_take_screen(a);                               /* #1709: a GUI started before the hello */
+    if (!a->mac[0] && strcmp(a->st.screen, "boot")) { /* index.html opened without ?mac= */
         snprintf(a->st.msg_title, sizeof a->st.msg_title, "חסר מזהה מכונה");
         snprintf(a->st.msg_sub, sizeof a->st.msg_sub, "הדף נפתח בלי ?mac= — הסוכן אמור לספק אותו.");
     }

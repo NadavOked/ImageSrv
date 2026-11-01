@@ -135,6 +135,33 @@ def test_a_failed_lease_moves_on_to_the_next_interface(tmp_path):
         "udhcpc eth0 probe", "udhcpc eth1 probe", "udhcpc eth1 lease"]
 
 
+def test_dhcp_retries_each_second_and_accepts_the_second_answer_quickly(tmp_path):
+    """#1775: both udhcpc calls (the #2040 probe and the bind) retry every second. The
+    fake answers on the second attempt -- one retry interval -- so -T 1 costs ~1 s per
+    call and the old -T 3 costs 3 s per call (>= 6 s for the pair)."""
+    net = tmp_path / "net"
+    _make_net(net, {"lo": 1, "eth0": 1})
+    fake = r'''
+udhcpc() {
+    echo "$*" >> "$LOG.args"
+    _timeout=0; _q=""; _if=""
+    while [ "$#" -gt 0 ]; do
+        case "$1" in -T) _timeout=$2; shift 2 ;; -i) _if=$2; shift 2 ;; -q) _q=1; shift ;; *) shift ;; esac
+    done
+    command sleep "$_timeout"       # no answer on attempt 1
+    [ -n "$_q" ] && printf 'serverid=%s\n' "$SERVER_SID" > "$RUN/dhcp-probe.$_if"
+    return 0                         # answer arrives on attempt 2
+}
+'''
+    proc, extra, log = _run(net, "eth0", f"SERVER_SID={SERVER_IP}\n" + fake)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "IFACE=eth0" in proc.stdout
+    calls = Path(str(log) + ".args").read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 2, calls
+    assert all("-t 12 -T 1" in c for c in calls), calls
+    assert extra < 4.0, f"two DHCP answers on attempt 2 took {extra:.2f}s; the 3-second retry interval is still in use"
+
+
 def test_no_carrier_anywhere_still_ends_in_fail_at_the_deadline(tmp_path):
     net = tmp_path / "net"
     _make_net(net, {"lo": 1, "eth0": 0})

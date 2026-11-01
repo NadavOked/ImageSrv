@@ -25,8 +25,8 @@ import pytest
 
 from conftest import MANIFEST_256, PARTITION_BYTES, write_image
 from server.library import archive
-from server.storage import disk_reserve, storage_locations
-from server.interserver import interserver_api
+from server.storage import disk_reserve, locations as storage_locations
+from server.interserver import api as interserver_api
 from server.library.images import ImageLibrary
 
 IMAGE = MANIFEST_256["id"]

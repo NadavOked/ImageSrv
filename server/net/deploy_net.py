@@ -289,7 +289,7 @@ def firewall_proxy_interfaces(conn) -> list[str]:
 
     Unreadable settings propagate an error; they must not look like proxy off.
     """
-    from server.console import console_dhcp
+    from server.console import dhcp as console_dhcp
     from server.net import dhcp
     configs = console_dhcp.proxy_configs(console_dhcp.load_configs(conn))
     names = []

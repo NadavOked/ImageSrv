@@ -95,6 +95,25 @@ def test_running_at_stage_restart_keeps_the_old_reading_and_the_stage_says_the_r
     assert (status["state"], status["verified"], status["stage"]) == ("done", True, "restart")
 
 
+@pytest.mark.parametrize("stage", ["install", "packages", "payload", "unknown-stage"])
+def test_running_before_restart_is_not_verified_by_a_matching_git_tag(server, stage):
+    update_mod._set_status(server["app"].state.ctx.conn,
+                           {"state": "running", "stage": stage, "tag": "v0.72.0"})
+    server["state"]["current"] = "v0.72.0"
+    response = server["admin"].get("/api/console/update/status")
+    assert response.status_code == 200
+    status = response.json()
+    assert status["state"] == "running"
+    assert status.get("verified") is not True
+
+
+def test_running_verdict_requires_restart_or_a_legacy_doc_for_a_matching_tag():
+    doc = {"state": "running", "tag": "v0.72.0"}
+    assert update_mod.running_verdict({**doc, "stage": "restart"}, "v0.72.0") is True
+    assert update_mod.running_verdict(doc, "v0.72.0") is True
+    assert update_mod.running_verdict({**doc, "stage": "payload"}, "v0.72.0") is not True
+
+
 def test_the_console_session_survives_a_server_restart(server):
     """Same data dir, new process: the signed cookie is still a session (auth.py keeps no
     in-memory sessions). This is why the screen reloads into the console after an update."""

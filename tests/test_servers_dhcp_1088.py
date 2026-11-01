@@ -810,7 +810,7 @@ def test_render_dnsmasq_pins_tftp_unless_the_unit_names_the_deploy_nic(
     """‏cli = המתקין כתב `interface=<הפצה>` ב-imagesrv.conf (המעבדה) — לא
     נוגעים בנתיב שעובד. ‏console/none = הקובץ של הקונסולה הוא היחיד, ובלי
     שם בו dnsmasq היה מגיש TFTP על כרטיס השרתים."""
-    from server.console import console_dhcp
+    from server.console import dhcp as console_dhcp
     from server.app import create_app
     from server.db import set_setting
     app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080",
@@ -1079,7 +1079,7 @@ def test_full_dhcp_on_another_nic_after_console_deploy_is_409(console, classroom
 
 def test_first_enable_lock_refuses_a_concurrent_first_enable(console, monkeypatch):
     """הנעילה סביב ההדלקה הראשונה: כשהיא תפוסה — 409, לא השלמה כפולה."""
-    from server.console import console_dhcp
+    from server.console import dhcp as console_dhcp
     build, fake = console
     client, ctx, _ = build("none")
     assert console_dhcp._first_enable_lock.acquire(blocking=False)
@@ -1384,7 +1384,7 @@ def test_server_main_accepts_an_empty_server_url_argument():
 
 
 def test_interserver_url_accepts_a_hostname_and_the_client_resolves_per_connection(monkeypatch):
-    from server.interserver import interserver_auth, storage_client
+    from server.interserver import auth as interserver_auth, storage_client
     host, port, _ = interserver_auth.parse_interserver_url("https://imagesrv.college.local:8443/")
     assert (host, port) == ("imagesrv.college.local", 8443)
     seen = []
@@ -1402,7 +1402,7 @@ def test_the_parent_is_authenticated_by_certificate_not_by_address():
     """ה-SPKI-pin אינו תלוי בכתובת: ל-`TlsPeer` אין שדה כתובת בכלל, ולכן
     חילוף כתובת של הראשי אינו נוגע בטרסט. הראיה ההתנהגותית — #740."""
     from dataclasses import fields
-    from server.interserver import interserver_api
+    from server.interserver import api as interserver_api
     assert {f.name for f in fields(interserver_api.TlsPeer)} == {"tls_version", "cert_der", "exporter"}
     from server.interserver.storage_nodes import normalize_config
     assert normalize_config("secondary", "https://imagesrv.college.local:8443")[1] == \

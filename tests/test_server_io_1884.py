@@ -13,7 +13,7 @@ import pytest
 
 from server import db
 from server.rounds import drive_rates
-from server.learn import learn_netloss, server_io
+from server.learn import netloss as learn_netloss, server_io
 
 MAC = "78:ac:c0:9b:18:84"
 SENT = 19_500_000_000

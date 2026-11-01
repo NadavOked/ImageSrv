@@ -23,8 +23,8 @@ from fastapi.routing import APIRoute
 from server.core import capabilities
 from server.agent.api import ServerContext
 from server.library.capture import create_console_capture_router
-from server.console.console_api import create_console_router
-from server.console.console_library import create_library_router
+from server.console.api import create_console_router
+from server.console.library import create_library_router
 from server.rounds.room import create_room_router
 from server.rounds.station import create_station_router
 from server.core.tasks import ORIGIN_BUILD_GUI

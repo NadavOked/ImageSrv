@@ -539,7 +539,7 @@ def test_idle_timeout_reaches_every_signed_in_user(server):
     """זמן הניתוק מוחזר ב-`/me` ובתשובת הכניסה. (עד #1073 נבדק כאן על
     deploy; מאז אין לו `/me` — הקונסולה סגורה בפניו — ולכן על מנהל שני.)"""
     from fastapi.testclient import TestClient                  # noqa: PLC0415
-    from server.console import users                                    # noqa: PLC0415
+    from server.console import users# noqa: PLC0415
     users.create(server["ctx"].conn, "noc2", "admin-pass-456", "admin",
                  by="test", is_builtin=True, check_policy=False)
     second = TestClient(server["app"])

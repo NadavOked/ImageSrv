@@ -25,7 +25,7 @@ pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שר�
 from server import db
 from server.console import monitor
 from server.agent import registry
-from server.interserver import interserver_api, interserver_auth, storage_nodes
+from server.interserver import api as interserver_api, auth as interserver_auth, storage_nodes
 from server.db import net_seen
 from test_storage_transfer import paired, secondary          # noqa: F401 — fixtures
 

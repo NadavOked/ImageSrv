@@ -347,7 +347,11 @@ void screen_message(App *a, cairo_t *cr, double W, double H, double head_h) {
     draw_fill_rrect(cr,panel,RADIUS_R,t->surface);
     draw_border_rrect(cr,panel,RADIUS_R,t->hair,N_BORDER);
     double y = panel.y + N_PAD;
-    draw_native_icon(cr,t,(Rect){(W-N_MESSAGE_ICON)/2,y,N_MESSAGE_ICON,N_MESSAGE_ICON},ICON_WARNING);
+    Rect ib = {(W-N_MESSAGE_ICON)/2,y,N_MESSAGE_ICON,N_MESSAGE_ICON};
+    if (!strcmp(a->st.screen,"boot")) {   /* #1709: connecting is no warning -- the menu's server tile */
+        draw_fill_rrect(cr,ib,6,t->indigo_soft);
+        draw_menu_icon(cr,(Rect){ib.x+ib.w/4,ib.y+ib.h/4,ib.w/2,ib.h/2},MENU_ICON_SERVER,t->action_fg);
+    } else draw_native_icon(cr,t,ib,ICON_WARNING);
     y += N_MESSAGE_ICON + N_MESSAGE_GAP;
     text_draw(cr,&title,panel.x+N_PAD,y,t->ink); y += title.h + N_TITLE_GAP;
     text_draw(cr,&sub,panel.x+N_PAD,y,t->muted);

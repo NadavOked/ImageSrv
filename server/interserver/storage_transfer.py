@@ -34,7 +34,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from server.storage import disk_reserve
-from server.interserver import interserver_auth, storage_client, storage_nodes, transfer_cap
+from server.interserver import auth as interserver_auth, storage_client, storage_nodes, transfer_cap
 from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
 from server.db import _write_lock, journal, now_iso, writing
 

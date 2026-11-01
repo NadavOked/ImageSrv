@@ -30,16 +30,16 @@ from server.rounds import drawer_cancel, drive_rates, room_drivers, room_prechec
 from server.library import drivers, minfree
 from server.agent import registry, reports
 from server.disks import disk_failures, drawer_slots, slot_names, smart_ask
-from server.storage import storage_locations
+from server.storage import locations as storage_locations
 from server.disks import model_slots   # #2001
 from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.system import clockstep
 from server.net import pxe_log
 from server.agent import readbackhash
-from server.learn import learn_eta, learn_models, learn_ports
-from server.storage import storage_history
-from server.agent import held   # #2031
-from server.agent import agent_timing   # #2056
+from server.learn import eta as learn_eta, models as learn_models, ports as learn_ports
+from server.storage import history as storage_history
+from server.agent import held# #2031
+from server.agent import timing as agent_timing   # #2056
 from server.library.images import required_bytes, restore_refusal
 from server.library.imagefit import validate_expand_choice
 from server.rounds.sessions import SessionError, SessionStore, SessionSuperseded

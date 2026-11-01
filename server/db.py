@@ -703,7 +703,7 @@ CREATE TABLE IF NOT EXISTS wave_rates (
 -- מקלט, או מגירה אבדה עם שידורים חוזרים) — נזכר גם אחרי שהגל יוצא מחלון
 -- ה-goodput, ומעליו לא מחפשים. שורה לכל (מכונה, מגירות, קצב): חסומה במספר
 -- הקצבים, ואינה נמחקת (`housekeeping` אינו נוגע בה) — לשכוח היא הבאג.
--- ‏#1844: מה שנמדד בכל חיבור SATA של מחשב שיכפול בכל גל (`server/learn/learn_ports.py`) —
+-- ‏#1844: מה שנמדד בכל חיבור SATA של מחשב שיכפול בכל גל (`server/learn/ports.py`) —
 -- ממנו השרת מבחין "כנראה כבל" (אותו חיבור, דיסקים שונים) מ"הדיסק" (אותו דיסק, חיבורים
 -- שונים). ‏NULL = לא נמדד/לא נקרא, לא 0. חומרה ומדידות בלבד (#1924).
 CREATE TABLE IF NOT EXISTS port_history (
@@ -722,7 +722,7 @@ CREATE INDEX IF NOT EXISTS port_history_port ON port_history (mac, port, at);
 CREATE INDEX IF NOT EXISTS port_history_serial ON port_history (serial, at);
 
 -- ‏#1845: ה-MB/s של בדיקת הכתיבה שלפני הזרם (`write_preflight`) לכל דיסק בכל גל, עם הדגם
--- מה-hello (`server/learn/learn_models.py`) — הבסיס של "איטי מהרגיל לדגם". חומרה ומספרים בלבד (#1924).
+-- מה-hello (`server/learn/models.py`) — הבסיס של "איטי מהרגיל לדגם". חומרה ומספרים בלבד (#1924).
 CREATE TABLE IF NOT EXISTS model_speeds (
     session_id TEXT NOT NULL,
     serial     TEXT NOT NULL,
@@ -735,7 +735,7 @@ CREATE TABLE IF NOT EXISTS model_speeds (
 CREATE INDEX IF NOT EXISTS model_speeds_model ON model_speeds (model, at);
 CREATE INDEX IF NOT EXISTS model_speeds_serial ON model_speeds (serial, at);
 
--- ‏#1847: כל הערת WoL למכונה שלא נראתה (`server/learn/learn_wol.py`), ומתי היא ענתה — הפירור
+-- ‏#1847: כל הערת WoL למכונה שלא נראתה (`server/learn/wol.py`), ומתי היא ענתה — הפירור
 -- הראשון של האתחול או hello. ‏`answered_at` NULL = עוד לא ענתה (או לא התעוררה, אחרי
 -- ‏`ANSWER_S`). ‏`early` — נשלחה שליחה חוזרת מוקדמת; ‏`alerted` — ההתראה על הרצף נרשמה.
 CREATE TABLE IF NOT EXISTS wol_wakes (
@@ -751,7 +751,7 @@ CREATE TABLE IF NOT EXISTS wol_wakes (
 );
 CREATE INDEX IF NOT EXISTS wol_wakes_mac ON wol_wakes (mac, sent_epoch);
 
--- ‏#1848: כמה זמן ארך כל מעבר בשרשרת האתחול, לכל מכונה (`server/learn/learn_boot.py`) — הבסיס
+-- ‏#1848: כמה זמן ארך כל מעבר בשרשרת האתחול, לכל מכונה (`server/learn/boot.py`) — הבסיס
 -- לזיהוי שלב שהתארך, ולהשוואה לפני/אחרי עדכון (`version` = גרסת השרת בזמן המדידה; NULL = לא נקראה).
 CREATE TABLE IF NOT EXISTS boot_step_times (
     mac     TEXT NOT NULL,
@@ -763,7 +763,7 @@ CREATE TABLE IF NOT EXISTS boot_step_times (
 CREATE INDEX IF NOT EXISTS boot_step_times_mac ON boot_step_times (mac, step);
 CREATE INDEX IF NOT EXISTS boot_step_times_version ON boot_step_times (version, step);
 
--- ‏#1882: הקטע האחרון של לוג הסוכן, פעם אחת בסוף כל סבב (`server/agent/agent_logs.py`). הטקסט
+-- ‏#1882: הקטע האחרון של לוג הסוכן, פעם אחת בסוף כל סבב (`server/agent/logs.py`). הטקסט
 -- **אחרי** סינון סודות ומידע מהדיסק (#1924), דחוס. תקרה בכל הכנסה (מכונה/סך הכול) + 90 יום.
 CREATE TABLE IF NOT EXISTS agent_logs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -806,7 +806,7 @@ CREATE TABLE IF NOT EXISTS server_io (
     PRIMARY KEY (kind, ref)
 );
 
--- ‏#1886: מקום פנוי לכל מיקום אחסון לאורך זמן (`server/storage/storage_history.py`) — יומי, ובכל קליטה/סבב.
+-- ‏#1886: מקום פנוי לכל מיקום אחסון לאורך זמן (`server/storage/history.py`) — יומי, ובכל קליטה/סבב.
 CREATE TABLE IF NOT EXISTS storage_usage (
     location_id TEXT NOT NULL,
     at          TEXT NOT NULL,

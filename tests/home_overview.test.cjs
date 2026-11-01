@@ -117,7 +117,7 @@ test('UI.objHeader: crumbs, name, sub, pill, actions and role=tab buttons with r
   const {run}=setup();
   const html=run('UI.objHeader({crumbs:[{label:"שרת"},{label:"סקירה"}],name:"שרת אימג\'ים",sub:"x",pill:UI.pill("ok","תקין"),actions:"<button>a</button>",tabs:["א","ב","ג"],tab:1})');
   // ביקורת 10/10: הפריט הראשון בשביל הוא שורש העץ = שם השרת מ-/me (כמו ב-vCenter), לא הטקסט שהוזן
-  assert.match(html,/<div class="crumbs"><span>imagesrv-srv<\/span><span>\/<\/span><span>סקירה<\/span><\/div>/);
+  assert.match(html,/<div class="crumbs"><span>imagesrv-srv<\/span><span class="sep" aria-hidden="true">›<\/span><span>סקירה<\/span><\/div>/);
   const tabs=[...html.matchAll(/<button type="button" class="tab( on)?" role="tab" aria-selected="(true|false)" tabindex="(0|-1)"/g)];
   assert.deepEqual(tabs.map(m=>[m[1]||'',m[2],m[3]]),[['','false','-1'],[' on','true','0'],['','false','-1']]);
   assert.match(html,/role="tablist"/); balanced(html);
@@ -571,7 +571,7 @@ test('Nadav 18/10: no disk information in "needs attention" — not a failed wri
   assert.doesNotMatch(html,/S6PN|S1X|נכשל בשיכפול הקודם|נקה אחרי החלפה|קריאה בלבד|NVMe/,'not a word about disks on the overview');
   assert.match(card,/<span class="cnt">1<\/span>/,'only the battery verdict -- a machine item that is not a disk stays');
   assert.match(card,/המחשב על סוללה/);
-  assert.match(run('machinesTabs().join("|")'),/דיסקים אדומים \(2\)/);
+  assert.equal(run('JSON.stringify(machinesTabs().at(-1))'),JSON.stringify(['דיסקים אדומים','2']));
   const tab=run('diskFailuresCard()');   // the body of that tab
   assert.match(tab,/clearDiskFailure\(2\)/); assert.match(tab,/clearDiskFailure\(3\)/);
   const drawer=run('machineDrawerHtml(MACHINES[0])');

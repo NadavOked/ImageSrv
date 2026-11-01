@@ -593,7 +593,15 @@ def test_the_journal_tells_the_capture_story_in_hebrew(server):
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
     do_capture(server, created["id"])
-    rows = {r["event"]: r for r in server["admin"].get("/api/console/journal").json()}
+    # The verify thread closes the task (state done) and only then journals capture_done
+    # (capture.py), so wait_verified can return between the two: KeyError under the
+    # full gate's load (round 20, 31/10). Wait for the line itself, with a ceiling.
+    deadline = time.monotonic() + 15
+    while True:
+        rows = {r["event"]: r for r in server["admin"].get("/api/console/journal").json()}
+        if "capture_done" in rows or time.monotonic() > deadline:
+            break
+        time.sleep(0.05)
     assert rows["capture_start"]["label"] == "קליטת אימג' הוזמנה"
     assert rows["capture_done"]["label"] == "אימג' נקלט"
     assert "Windows 11 Base" in rows["capture_done"]["text"]

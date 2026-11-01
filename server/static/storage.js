@@ -2,7 +2,7 @@
    docs/design/console-redesign/storage-mockup-2026-09-18.html שנדב אישר:
    רשימת מיקומים · הוסף → סוג · טופס NFS · SMB · iSCSI א' (פורטל→גילוי→
    יעד ו-CHAP→התחברות) · iSCSI ב' (מה על הדיסק, שלושה מצבים) · מגירת
-   "לא נגיש". ה-API: server/console/console_storage_locations.py (interfaces.md §24).
+   "לא נגיש". ה-API: server/console/storage_locations.py (interfaces.md §24).
    "שמור ועגן" נדלק רק אחרי POST /test מוצלח (עיקרון 5: "לא נבדק" אינו
    "תקין"); הפירמוט ומחיקת מיקום מאחורי חלון אישור (#1270); במצב
    "לא הצלחנו לקרוא" אין כפתור פירמוט כלל. ערכי הטפסים חיים ב-SV.form (לא

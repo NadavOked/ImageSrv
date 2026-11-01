@@ -15,7 +15,7 @@ import pytest
 from server import db
 from server.agent import reports, restore_stages
 from server.rounds import room
-from server.learn import learn_eta
+from server.learn import eta as learn_eta
 from agentlib import flat_lib
 
 MAC = "78:ac:c0:9b:18:83"

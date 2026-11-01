@@ -308,7 +308,7 @@ def test_an_unreadable_ups_after_apply_is_returned_not_hidden(tmp_path):
 
 
 def test_the_console_endpoint_validates_and_applies(server):
-    from server.console import console_ups
+    from server.console import ups as console_ups
 
     admin = server["admin"]
     host = Host()

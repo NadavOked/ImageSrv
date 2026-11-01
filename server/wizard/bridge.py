@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from server.console.console_tls import fingerprint_sha256
+from server.console.tls import fingerprint_sha256
 
 API_BASE = "https://127.0.0.1:8081/api/wizard"
 STATUS_FILE = Path("/etc/imagesrv/firstboot.status")

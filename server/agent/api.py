@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
-from server.agent import agent_loops, identity, inventory, probe, registry, reports
+from server.agent import loops as agent_loops, identity, inventory, probe, registry, reports
 from server.console import login_guard, users
 from server.rounds import pulls
 from server.net import foreign_vlan
@@ -29,13 +29,13 @@ from server.console.auth import COOKIE_NAME, PURPOSE_KIOSK, read_session
 from server.db import agent_seen, disk_full, journal, note_disk_full
 from server.rounds import direct, room_console
 from server.agent import gui_failure, local_clone_report, readbackhash
-from server.learn import learn_wol
+from server.learn import wol as learn_wol
 from server.disks import smart_ask
-from server.agent import agent_logs   # #1882
-from server.agent import held   # #2031
-from server.agent import agent_timing   # #2056
+from server.agent import logs as agent_logs   # #1882
+from server.agent import held# #2031
+from server.agent import timing as agent_timing   # #2056
 from server.disks import disk_sets   # #1857
-from server.agent import firmware_image   # #2080
+from server.agent import firmware_image# #2080
 from server.agent.readbackhash import mode as readback_mode
 from server.agent.hello import (build_answer, hello_payload_oversized, login_required,
                                 off_deploy_vlan, well_formed_monitor_auth,

@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from server import db
-from server.interserver import interserver_auth, storage_nodes
+from server.interserver import auth as interserver_auth, storage_nodes
 
 try:
     from fastapi.testclient import TestClient
@@ -492,7 +492,7 @@ def test_local_pairing_capability_only_on_secondary_admin(server):
 # ‏peer מזויף (TlsPeer) + conn של משני עם זהות — כדי לבדוק כל שומר בלי
 # להרים TLS חי. ה-handshake האמיתי נבדק ב-test_interserver_tls.py.
 
-from server.interserver import interserver_api                           # noqa: E402
+from server.interserver import api as interserver_api                           # noqa: E402
 
 
 def _secondary(tmp_path):

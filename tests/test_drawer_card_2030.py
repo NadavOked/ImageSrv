@@ -104,8 +104,11 @@ GB = 1_000_000_000
 
 
 def rec(disks: str) -> str:
-    """disk_used_records with the background scan stood in: it only notes that it was asked."""
-    return '( disk_used_scan() { echo spawn >> "$GUI_DIR/spawns"; }; disk_used_records "%s" )' % disks
+    """disk_used_records with the background scan stood in: it only notes that it was asked.
+    It is started with `&` (diskused.sh), so the subshell waits for it: without the
+    `wait` the shell could return before the note was written -- FileNotFoundError
+    on spawns under the full gate's load (round 20, 31/10)."""
+    return '( disk_used_scan() { echo spawn >> "$GUI_DIR/spawns"; }; disk_used_records "%s"; wait )' % disks
 
 
 def box_with_disk(tmp_path: Path) -> Box:

@@ -20,7 +20,7 @@ import socket
 from pathlib import Path
 from typing import Callable
 
-from server.learn import learn_wol
+from server.learn import wol as learn_wol
 from server.db import journal
 from server.agent.registry import CLONERS_GROUP, ROOM_GROUPS, normalize_mac
 

@@ -17,8 +17,8 @@ import select
 import socket
 import time
 
-from server.interserver import interserver_auth
-from server.interserver.interserver_auth import parse_interserver_url   # re-export לנוחות
+from server.interserver import auth as interserver_auth
+from server.interserver.auth import parse_interserver_url   # re-export לנוחות
 
 __all__ = ["parse_interserver_url", "PinnedMTLSClient", "fetch_server_spki",
            "pair_secondary", "ping_secondary", "InterserverClientError",

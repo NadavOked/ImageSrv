@@ -25,8 +25,8 @@ from server.core import hostname_rule
 from server.console import login_guard, users
 from server.net import ifaddr
 from server.core.atomicfile import write_atomic
-from server.console.console_tls import ensure_console_cert
-from server.interserver.interserver_auth import generate_self_signed
+from server.console.tls import ensure_console_cert
+from server.interserver.auth import generate_self_signed
 
 HOSTNAME_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 IFNAME_RE = re.compile(r"[A-Za-z0-9._-]+\Z")

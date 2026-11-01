@@ -373,7 +373,8 @@ def smart_setup(tmp_path: Path, disks: dict[str, int]) -> tuple[Path, str]:
     for name in disks:
         (sysroot / "sys" / "block" / name / "device").mkdir(parents=True)
         (sysroot / "sys" / "block" / name / "device" / "model").write_text(f"Model-{name}\n")
-    cases = " ".join(f"/dev/{d}) exit {rc} ;;" for d, rc in disks.items())
+    cases = " ".join(f"/dev/{d}) " + ('echo "Device is in STANDBY mode";' if rc == 2 else '')
+                     + f" exit {rc} ;;" for d, rc in disks.items())
     fake = f'for a in "$@"; do last="$a"; done\ncase "$last" in {cases} esac\nexit 2\n'
     _, run, _, pre = setup(tmp_path, fakes={"smartctl": fake})
     return run, pre + f"export SYSROOT={posix(sysroot)!r}; "
@@ -393,7 +394,7 @@ def test_a_disk_smartctl_could_not_read_is_unchecked_rc_2(tmp_path):
     out = sh(pre + "tools_run smart-health; echo rc=$?")
     assert last(out) == "rc=2"
     text = (run / "tool-smart-health.out").read_text(encoding="utf-8")
-    assert "/dev/nvme0n1 (Model-nvme0n1): לא הצלחנו לבדוק" in text
+    assert "/dev/nvme0n1 (Model-nvme0n1): not checked (standby)" in text
     assert "/dev/sda (Model-sda): תקין" in text
 
 

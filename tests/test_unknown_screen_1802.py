@@ -171,7 +171,7 @@ CLASS = dict(GOOD, range_start="10.44.20.50", range_end="10.44.20.200",
 
 
 def _rendered(tmp_path, images_root, clock, source: str, interface: str | None) -> str:
-    from server.console import console_dhcp
+    from server.console import dhcp as console_dhcp
     from server.app import create_app
     from server.db import set_setting
     app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock)

@@ -302,7 +302,7 @@ def _nic_baseline(nic, args, runtime, console_iface, console_addr, inter_iface, 
     """‏#705: על איזה כרטיס כל מאזין נקשר **היום** — אותם תנאים בדיוק כמו
     הקשירה למטה (‏#1310 ראשי על כרטיס הקונסולה, ‏#1313 משני בלי הדגל)."""
     from server.interserver import storage_nodes
-    from server.interserver.interserver_auth import is_loopback
+    from server.interserver.auth import is_loopback
     if console_iface is None and console_addr and not is_loopback(console_addr):
         nic.base.console = _owner_nic(console_addr)
     if storage_nodes.role(runtime.conn) == "secondary":
@@ -431,7 +431,7 @@ def main() -> None:
     # ‏#740: הכתובת הבין-שרתית מאומתת כאן, לפני הרמת השרת — https+פורט מפורש,
     # בלי אישורים/query/fragment (עיקרון 5: downgrade נדחה, לא "מתוקן" בשקט).
     if args.interserver_url is not None:
-        from server.interserver.interserver_auth import InterserverURLError, parse_interserver_url
+        from server.interserver.auth import InterserverURLError, parse_interserver_url
         try:
             parse_interserver_url(args.interserver_url)
         except InterserverURLError as exc:
@@ -451,7 +451,7 @@ def main() -> None:
     # אפשר לכתוב אליה עוצרים בקול, לא קונסולה שעלתה בלי TLS (עיקרון 5).
     # ‏#1088: עם שם כרטיס ה-SAN הוא הכתובת **הנוכחית** + שם המארח; בחילוף
     # כתובת התעודה אינה מתחדשת (הדפדפן כבר אישר אותה) — היא תקפה לפי השם.
-    from server.console.console_tls import ConsoleTLSError, check_tls_flag, ensure_console_cert
+    from server.console.tls import ConsoleTLSError, check_tls_flag, ensure_console_cert
     console_tls = None
     try:
         check_tls_flag(args.console_tls, args.console_host)
@@ -633,7 +633,7 @@ def main() -> None:
     # על **כל** מאזין קונסולה — ורק עליהם; הסוכן נשאר http.
     console_ssl = console_tls.uvicorn_kwargs() if console_tls else {}
     console_scheme = "https" if console_tls else "http"
-    from server.interserver.interserver_auth import is_loopback
+    from server.interserver.auth import is_loopback
 
     def console_servers(addr: str | None) -> tuple[list, list[str]]:
         """היצרנים והכתובות של מאזין הקונסולה לכתובת נתונה — פונקציה, כי
@@ -765,13 +765,13 @@ def main() -> None:
         print(f"interserver: no --interserver-host — using --console-host {inter_host} (#1313)")
     interserver_rebind = None
     if inter_host and storage_nodes.role(runtime.conn) == "secondary":
-        from server.interserver import interserver_api
+        from server.interserver import api as interserver_api
         if inter_iface:
             host_sans = [h for h in (inter_addr, machine_hostname) if h]
         else:
             host_sans = [inter_host]
         if args.interserver_url:
-            from server.interserver.interserver_auth import parse_interserver_url
+            from server.interserver.auth import parse_interserver_url
             host_sans.append(parse_interserver_url(args.interserver_url)[0])
         ident = storage_nodes.ensure_identity(runtime.conn, args.data_dir,
                                               host_sans=host_sans)

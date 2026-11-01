@@ -277,7 +277,10 @@ def test_the_refusal_is_journalled_in_hebrew(server, images_root):
 #: — שם המניפסט כבר בידיים, ושם התשובה חוזרת למי שביקש.
 #: ‏`direct.py` (‏#715) פותח גל מדיסק חי — הקשירה נבדקת כשהמניפסט מגיע
 #: (‏`put_manifest`), מול המכונות שנבחרו כיעד.
-RESTORE_OPENERS = {"api.py", "console_api.py", "direct.py", "room.py", "station.py"}
+# #2239: by path under server/, not the bare name -- api.py is now three modules
+# (agent/, console/, interserver/), and a name-only key held interserver/api.py,
+# which opens nothing, to a binding it has no reason to consult.
+RESTORE_OPENERS = {"agent/api.py", "console/api.py", "rounds/direct.py", "rounds/room.py", "rounds/station.py"}
 
 
 def test_every_module_that_opens_a_restore_consults_the_binding():
@@ -288,15 +291,14 @@ def test_every_module_that_opens_a_restore_consults_the_binding():
     server_dir = REPO / "server"
     paths = server_files(server_dir)
     opens = {
-        path.name for path in paths
+        path.relative_to(server_dir).as_posix() for path in paths
         if re.search(r"store\.open\(|pulls\.open_pull\(",
                      path.read_text(encoding="utf-8"))
-    } - {"sessions.py", "pulls.py"}
+    } - {"rounds/sessions.py", "rounds/pulls.py"}
     assert opens == RESTORE_OPENERS, (
         f"מסלול שחזור שאינו ברשימה, או שנעלם ממנה: {opens ^ RESTORE_OPENERS}")
-    missing = [str(path.relative_to(server_dir)) for path in paths if path.name in opens
-               if "restore_refusal" not in
-               path.read_text(encoding="utf-8")]
+    missing = [rel for rel in sorted(opens)
+               if "restore_refusal" not in (server_dir / rel).read_text(encoding="utf-8")]
     assert not missing, f"פותח שחזור שאינו בודק את הקשירה: {missing}"
 
 

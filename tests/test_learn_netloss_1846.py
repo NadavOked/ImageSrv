@@ -13,7 +13,7 @@ import pytest
 from server import db
 from server.rounds import drive_rates
 from server.system import health
-from server.learn import learn_netloss
+from server.learn import netloss as learn_netloss
 
 SENT = 19_500_000_000
 BLOCKS = -(-SENT // drive_rates.UDPCAST_BLOCK)

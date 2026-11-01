@@ -25,6 +25,59 @@ from server.dcui.data import (CommandResult, NicInfo, _round, collect_snapshot,
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize(("iso_date", "security_date", "expected"), [
+    ("2026-10-25", "2026-10-24", "2026-10-25"),
+    ("2026-10-20", "2026-10-24", "2026-10-24"),
+    ("2026-10-24", "2026-10-24", "2026-10-24"),
+    ("2026-10-25", None, "2026-10-25"),
+    (None, "2026-10-24", "2026-10-24"),
+    (None, None, ""),
+])
+def test_system_updates_date_latest_existing_pool(tmp_path, iso_date, security_date, expected):
+    manifest = tmp_path / "iso-release.json"
+    if iso_date is not None:
+        manifest.write_text('{"pool_date":"' + iso_date + '"}', encoding="utf-8")
+    if security_date is not None:
+        (tmp_path / "security-pool.json").write_text(
+            '{"date":"' + security_date + '"}', encoding="utf-8")
+
+    assert dcui_data.system_updates_date(tmp_path, manifest) == expected
+
+
+@pytest.mark.parametrize("invalid_file", ["iso-release.json", "security-pool.json"])
+@pytest.mark.parametrize("content", [
+    "not JSON", "[]", "null", "{}", '{"KEY":null}', '{"KEY":20261024}',
+    '{"KEY":"2026-1-24"}', '{"KEY":"2026-02-30"}',
+])
+def test_system_updates_date_invalid_pool_is_unknown(tmp_path, invalid_file, content):
+    manifest = tmp_path / "iso-release.json"
+    manifest.write_text('{"pool_date":"2026-10-25"}', encoding="utf-8")
+    (tmp_path / "security-pool.json").write_text(
+        '{"date":"2026-10-24"}', encoding="utf-8")
+    key = "pool_date" if invalid_file == manifest.name else "date"
+    (tmp_path / invalid_file).write_text(content.replace("KEY", key), encoding="utf-8")
+
+    assert dcui_data.system_updates_date(tmp_path, manifest) == ""
+
+
+@pytest.mark.parametrize("unreadable_file", ["iso-release.json", "security-pool.json"])
+def test_system_updates_date_unreadable_pool_is_unknown(tmp_path, monkeypatch, unreadable_file):
+    manifest = tmp_path / "iso-release.json"
+    manifest.write_text('{"pool_date":"2026-10-25"}', encoding="utf-8")
+    (tmp_path / "security-pool.json").write_text(
+        '{"date":"2026-10-24"}', encoding="utf-8")
+    read_text = Path.read_text
+
+    def unreadable(path, *args, **kwargs):
+        if path == tmp_path / unreadable_file:
+            raise PermissionError("Cannot read pool state")
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+
+    assert dcui_data.system_updates_date(tmp_path, manifest) == ""
+
+
 def _db(tmp_path):
     conn = connect(tmp_path / "imagesrv.db")
     users.create(conn, "admin", "before", "admin", by="test",

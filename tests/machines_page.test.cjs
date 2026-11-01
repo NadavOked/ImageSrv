@@ -1,6 +1,5 @@
-// ‏#954 גל 3: דף המחשבים שנבנה מחדש לפי docs/design/console-redesign/machines.md
-// (+ class.md, machine-drawer.md) — טבלה אחת מקובצת (בנייה, שיכפול, ואז כיתה
-// לכל קבוצה — תיקון נדב 17/09), סינון, בחירה→פס פעולות, מגירת מחשב, הכיתה
+// ‏#954 גל 3: דף המחשבים. הטבלה — לפי console-full.html P.machines (נדב 18/10: שטוחה, לא מקובצת);
+// המגירה והכיתה — לפי docs/design/console-redesign (machine-drawer.md, class.md). סינון, בחירה→פס פעולות, מגירת מחשב, הכיתה
 // כאובייקט, לשוניות "נראו ברשת"/"דיסקים אדומים". בלי דפדפן: console.js + net.js
 // רצים ב-vm מול DOM מזערי ו-fetch מזויף, והפלט נבדק כטקסט.
 // עיקרון 5: disks null/[]/רשימה הם שלושה מצבים; "לא נקרא" ≠ ריק; "לא נבדק" לא ירוק.
@@ -90,89 +89,85 @@ function balanced(html) {
 }
 const between=(html,a,b)=>html.slice(html.indexOf(a),b?html.indexOf(b,html.indexOf(a)):undefined);
 
-test('one grouped table: header counters + pills, three tabs, build → cloners → a group per class, rows joined with /net', () => {
+// ‏נדב 18/10: "גם מחשבים לא לפי המוקאפ" — הדף נבנה מחדש אחד-לאחד לפי docs/design/apple-mockups/console-full.html
+// (P.machines): כותרת "N רשומים · N מחוברים · N דיסק אדום", שלוש לשוניות עם מונה, "+ מחשב" / "התקן ידנית" / "רענון",
+// וטבלה **שטוחה**: ☐ · שם · תפקיד · קבוצה · כתובת · דיסקים · מצב · ⋯. כל מספר ותגית מה-API.
+test('console-full.html P.machines: header counts from the API, three tabs with counts, the mockup actions, one flat table with the mockup columns', () => {
   const {run}=setup(); const html=run('machines(0)'); balanced(html);
   assert.match(html,/class="page"/); assert.match(html,/obj-name">מחשבים</);
-  // "בנייה 1" נראה לפני 3 שעות: בין 00:00 ל-03:00 UTC (isToday משווה תאריך ISO) זה עוד אתמול — נפל במעבדה 18/09 02:35 UTC.
-  // ‏#1219: כל מכונה רשומה לפי הגיל שלה (180, 9, 9, 1, 1 דק׳) — התיקון הקודם כיסה רק את 180,
-  // ושתי המכונות של "לפני 9 דק׳" נפלו בין 00:00 ל-00:09 UTC (שער 0924b).
-  const seenToday = [180, 9, 9, 1, 1].filter((n) => new Date(Date.now()-n*60000).toISOString().slice(0,10)===today).length;
-  assert.match(html,new RegExp(`8 רשומים · 2 כיתות · 2 מחשבי בנייה · 2 משכפלים · ${seenToday} נראו ברשת היום`));
-  assert.match(html,/pill warn">1 דיסק נכשל בשיכפול הקודם</);   // #1580: orange assert.match(html,/pill warn">1 לא רשום</);
-  for(const t of ['כל המחשבים','נראו ברשת \\(1\\)','דיסקים אדומים \\(1\\)']) assert.match(html,new RegExp('role="tab"[^>]*>'+t+'<'));
-  assert.match(html,/onclick="openAddMachine\(\{\}\)">\+ מחשב</); assert.match(html,/addGroupSheet\(\)">\+ כיתה</); assert.match(html,/href="\/api\/console\/machines.csv" download>ייצוא CSV</);
-  assert.equal((html.match(/<table class="dg kebab-col"/g)||[]).length,1,'one table, not tabs per role');
-  const groups=[...html.matchAll(/<tr class="group" data-group="([^"]*)"/g)].map(m=>m[1]);
-  assert.deepEqual(groups,['grp_BUILD','grp_CLONERS','grp_LAB303','grp_LAB305'],'fixed groups first, then a collapsible group per class');
-  assert.match(html,/openClass\('grp_LAB303'\)">כיתה 303 — סייבר</,'the class name links to the class object');
-  assert.match(html,/כיתה · 3 מחשבים · קידומת LAB303/,'prefix only from the live session (no group field)');
-  assert.match(html,/st run">סבב פתוח — Office 2024 — סטנדרט, 2\/3</);
-  assert.match(html,/קבוצה קבועה · 2 מחשבים<\/span><span class="st ok">2 מחוברים</,'cloners: connected count from /monitor/machines');
-  assert.match(html,/openClass\('grp_LAB303'\)">פתח כיתה</); assert.match(html,/openAddMachine\(\{group:'grp_LAB303'\}\)">\+ מחשב לכיתה</); assert.match(html,/wakeRoom\(\)">WoL לחדר</);
-  for(const col of ['שם','IP אחרון','דיסקים','מצב']) assert.match(html,new RegExp('<th>'+col+'</th>'));
-  for(const col of ['MAC','נראה לאחרונה']) assert.match(html,new RegExp('<th class="c-opt">'+col+'</th>'),'stage 2: secondary columns drop out first in a narrow card');
-  assert.match(html,/<th><span class="sr">פעולות<\/span><\/th>/);
-  const row=html.slice(html.indexOf('data-mac=')); const menu=JSON.parse(row.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
-  assert.ok(menu.map(i=>i[0]).includes('פרטים')&&menu.some(i=>i[2]==='danger'&&/removeMachine/.test(i[1])),'stage 2: one ⋯ menu per machine row; removal is last, in danger, and still opens the type-the-name sheet');
+  // ‏8 רשומים; מחוברים = online ב-/monitor/machines (שני המשכפלים); דיסק אדום = /disk-failures (אחד)
+  assert.match(html,/obj-sub" title="8 רשומים · 2 מחוברים · 1 דיסק אדום">8 רשומים · 2 מחוברים · 1 דיסק אדום</);
+  assert.doesNotMatch(html,/obj-name">מחשבים<span class="pill/,'the mockup header has no pills');
+  for(const [t,n] of [['כל המחשבים','8'],['נראו ברשת','1'],['דיסקים אדומים','1']]) assert.match(html,new RegExp('role="tab"[^>]*>'+t+'<small>'+n+'</small><'));
+  const acts=between(html,'class="obj-actions"','</div>');
+  assert.deepEqual([...acts.matchAll(/<button class="btn( primary)?" onclick="([^"(]+)/g)].map(m=>m[2]),['openAddMachine','addGroupSheet','netDeviceAdd','refreshPage'],'+ מחשב (primary), + כיתה (classrooms on), התקן ידנית, רענון');
+  assert.match(acts,/netDeviceAdd\(\)">התקן ידנית</); assert.doesNotMatch(acts,/ייבוא בהדבקה|ייצוא CSV/,'paste import lives inside "+ מחשב"; not in the mockup header');
+  assert.match(html,/card-h"><span>כל המחשבים<\/span><\/div>/,'card title without a subtitle');
+  assert.match(html,/placeholder="חיפוש מחשב"/); assert.match(html,/<select aria-label="תפקיד"[^>]*><option value="" selected>כל התפקידים<\/option><option value="build">בנייה<\/option><option value="cloner">שיכפול<\/option>/);
+  assert.doesNotMatch(html,/aria-label="קבוצה"|aria-label="מצב"|id="mch-count"/,'the mockup bar is search + role only');
+  assert.equal((html.match(/<table class="dg kebab-col"/g)||[]).length,1);
+  assert.equal((html.match(/<tr class="group"/g)||[]).length,0,'flat, not grouped');
+  const head=between(html,'<thead>','</thead>');
+  assert.deepEqual([...head.matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')),['בחירה','שם','תפקיד','קבוצה','כתובת','דיסקים','מצב','פעולות']);
+  assert.deepEqual([...html.matchAll(/<tr data-mac="([^"]+)"/g)].map(m=>m[1]),
+    ['c8:d9:d2:0b:fe:32','c8:d9:d2:0b:fe:34','a0:48:1c:8a:18:40','78:ac:c0:9b:11:c2','b4:2e:99:07:1a:c1','b4:2e:99:07:1a:c2','b4:2e:99:07:1a:c3','b4:2e:99:07:1b:c1'],'build → cloners → each class in group order, by name inside each');
   const b1=between(html,'data-mac="c8:d9:d2:0b:fe:32"','data-mac="c8:d9:d2:0b:fe:34"');
-  assert.match(b1,/openMachineDetail\('c8%3Ad9%3Ad2%3A0b%3Afe%3A32'\)">בנייה 1<\/a><span class="sub">LENOVO ThinkCentre M720q · TPM 2.0</,'model from inventory.dmi');
-  assert.match(b1,/<span class="mono">c8:d9:d2:0b:fe:32<\/span>/); assert.match(b1,/<span class="mono">10.44.12.20<\/span>/); assert.match(b1,/לפני 3 שע&#39;/);
-  assert.match(b1,/st warn">ממתין למפעיל: תפריט</,'prompt beats everything');
-  assert.doesNotMatch(b1,/monitorMachine\(/,'monitor lives only on the monitor page (Nadav 17/09: "במקום החדש שביקשתי ורק שם")');
-  const c2=between(html,'data-mac="78:ac:c0:9b:11:c2"','data-mac="b4:2e:99:07:1a:c1"');
-  assert.match(c2,/3 חריצים/,'#1485: the slot count of a cloner (by its mapping)'); assert.match(c2,/3 · <bdi dir="ltr">256GB<\/bdi> <span class="pill warn">דיסק 3 נכשל בשיכפול הקודם</);   // #1580: orange
-  assert.doesNotMatch(c2,/sd[abc]/,'never sd*'); assert.match(c2,/st ok">מחובר</);
-  const l1=between(html,'data-mac="b4:2e:99:07:1a:c1"','data-mac="b4:2e:99:07:1a:c2"');
-  assert.match(l1,/st run">בסבב · ממתין להתחלה</); assert.doesNotMatch(l1,/monitorMachine/,'classroom rows: no monitor (server allows build/cloner only)');
-  const l3=between(html,'data-mac="b4:2e:99:07:1a:c3"','data-mac="b4:2e:99:07:1b:c1"');
-  assert.match(l3,/st warn">חסר בסבב</); assert.match(l3,/muted">מעולם לא</);
-});
-
-test('the three disk states stay three: null = never reported, [] = reported none, list = count · size; state is never green without evidence', () => {
-  const {run}=setup(); let html=run('machines(0)');
-  const b3=between(html,'data-mac="c8:d9:d2:0b:fe:34"','data-mac="a0:48:1c:8a:18:40"');
-  assert.match(b3,/muted">לא דיווח</); assert.match(b3,/st ">לא נראה</); assert.doesNotMatch(b3.split('</tr>')[0],/st ok/,'offline/never seen is grey');
+  assert.match(b1,/class="clk" onclick="mchRowClick\(event,'c8%3Ad9%3Ad2%3A0b%3Afe%3A32'\)"/,'the row opens the machine');
+  assert.match(b1,/openMachineDetail\('c8%3Ad9%3Ad2%3A0b%3Afe%3A32'\)">בנייה 1<\/a><\/td><td>בנייה<\/td><td class="c-opt">מחשבי בנייה<\/td><td class="c-opt"><bdi dir="ltr">10.44.12.20<\/bdi><\/td><td>1<\/td>/);
+  assert.doesNotMatch(b1,/c8:d9:d2:0b:fe:32<\/span>|<span class="sub">/,'no MAC column and no model sub-line');
+  assert.match(b1,/pill warn">ממתין למפעיל</,'prompt beats everything');
+  const menu=JSON.parse(b1.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
+  assert.ok(menu.map(i=>i[0]).includes('פרטים')&&menu.at(-1)[2]==='danger'&&/removeMachine/.test(menu.at(-1)[1]),'one ⋯ menu per row; removal last, in danger');
   const c1=between(html,'data-mac="a0:48:1c:8a:18:40"','data-mac="78:ac:c0:9b:11:c2"');
-  assert.match(c1,/st warn">דיווח 0 דיסקים</,'zero disks is a finding, not "no data"');
-  run('MONITOR_ROWS=null'); html=run('machines(0)');
-  assert.match(between(html,'data-mac="c8:d9:d2:0b:fe:34"','data-mac="a0:48:1c:8a:18:40"'),/st ">לא נקרא</,'monitor unread ≠ offline');
-  assert.doesNotMatch(html,/מחוברים</,'no connected count without /monitor/machines');
-  run('NET=null'); html=run('machines(0)');
-  assert.doesNotMatch(html,/נראו ברשת היום/); assert.match(html,/role="tab"[^>]*>נראו ברשת</,'no counter when /net was not read');
-  assert.match(between(html,'data-mac="b4:2e:99:07:1b:c1"'),/muted">לא נקרא</);
+  assert.match(c1,/<td>שיכפול<\/td>/); assert.match(c1,/pill ok">מחובר</);
+  const c2=between(html,'data-mac="78:ac:c0:9b:11:c2"','data-mac="b4:2e:99:07:1a:c1"');
+  assert.match(c2,/<td>3<\/td>/,'disks = the count'); assert.match(c2,/pill warn">נכשל בשיכפול הקודם</,'#1580: a write failure is orange'); assert.doesNotMatch(c2,/sd[abc]/);
+  const l1=between(html,'data-mac="b4:2e:99:07:1a:c1"','data-mac="b4:2e:99:07:1a:c2"');
+  assert.match(l1,/<td>כיתה<\/td><td class="c-opt">כיתה 303 — סייבר<\/td>/); assert.match(l1,/pill info">בסבב · ממתין להתחלה</);
 });
 
-test('collapse/expand per group; above 50 machines groups start folded; the filter bar narrows the table in place', () => {
-  const {run,node}=setup();
+test('red is red only on evidence: SMART fail or a read-only disk → "דיסק אדום"; the three disk states stay three; offline is grey; unread is never zero', () => {
+  const {run}=setup();
+  run("MACHINES.find(m=>m.mac==='78:ac:c0:9b:11:c2').disks[1].smart='fail'");
   let html=run('machines(0)');
-  assert.match(html,/aria-expanded="true" aria-label="קפל מחשבי שיכפול"/);
-  run("toggleMchGroup('grp_CLONERS')"); html=node('#mch-table').innerHTML;
-  assert.match(html,/aria-expanded="false" aria-label="פתח מחשבי שיכפול"/); assert.doesNotMatch(html,/data-mac="78:ac:c0:9b:11:c2"/);
-  assert.match(html,/data-mac="c8:d9:d2:0b:fe:32"/,'other groups untouched');
-  run("toggleMchGroup('grp_CLONERS')"); assert.match(node('#mch-table').innerHTML,/data-mac="78:ac:c0:9b:11:c2"/);
-  run('MACHINES=MACHINES.concat(Array.from({length:50},(_,i)=>({mac:"aa:aa:aa:aa:aa:"+String(i).padStart(2,"0"),suffix:String(i),group_id:"grp_LAB305",disks:null})))');
+  assert.match(between(html,'data-mac="78:ac:c0:9b:11:c2"','data-mac="b4:2e:99:07:1a:c1"'),/pill err">דיסק אדום</);
+  assert.match(html,/2 דיסקים אדומים/,'a SMART-failed disk with no write failure is a red disk too');
+  assert.match(html,/role="tab"[^>]*>דיסקים אדומים<small>2<\/small>/);
+  run("MACHINES.find(m=>m.mac==='78:ac:c0:9b:11:c2').disks[1].smart=undefined; DISK_FAILURES[0].cause='readonly'");
+  assert.match(between(run('machines(0)'),'data-mac="78:ac:c0:9b:11:c2"','data-mac="b4:2e:99:07:1a:c1"'),/pill err">דיסק אדום</,'#1742: read-only is red');
+  run("DISK_FAILURES[0].cause='cable'");
   html=run('machines(0)');
-  assert.equal((html.match(/<tr data-mac=/g)||[]).length,0,'58 machines: every group folded by default');
-  assert.equal((html.match(/<tr class="group"/g)||[]).length,4);
-  run("toggleMchGroup('grp_BUILD')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,2);
-  run('MCH.toggled.clear(); MACHINES=MACHINES.slice(0,8)');
-  run("mchFilter('q','10.44.12.59')"); assert.deepEqual([...node('#mch-table').innerHTML.matchAll(/data-mac="([^"]+)"/g)].map(m=>m[1]),['78:ac:c0:9b:11:c2'],'search by IP via /net');
-  assert.equal(node('#mch-count').textContent,'1 מתוך 8 מחשבים');
-  run("mchFilter('q',''); mchFilter('role','classroom')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,4);
-  run("mchFilter('role',''); mchFilter('group','grp_BUILD')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,2);
-  run("mchFilter('group',''); mchFilter('state','err')"); assert.deepEqual([...node('#mch-table').innerHTML.matchAll(/data-mac="([^"]+)"/g)].map(m=>m[1]),['78:ac:c0:9b:11:c2']);
-  run("mchFilter('state','ok')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,2,'connected = the two online cloners');
-  run("mchFilter('state','stale')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,3,'never seen = stale');
-  run("mchFilter('state','zzz'); mchFilter('q','nothing-here')"); assert.match(node('#mch-table').innerHTML,/אין מחשבים שתואמים לסינון/);
+  const b3=between(html,'data-mac="c8:d9:d2:0b:fe:34"','data-mac="a0:48:1c:8a:18:40"');
+  assert.match(b3,/muted">לא דיווח</); assert.match(b3,/pill ">לא נראה</); assert.doesNotMatch(b3.split('</tr>')[0],/pill ok/,'never seen is grey');
+  assert.match(between(html,'data-mac="a0:48:1c:8a:18:40"','data-mac="78:ac:c0:9b:11:c2"'),/st warn">דיווח 0 דיסקים</,'zero disks is a finding, not "no data"');
+  run('MONITOR_ROWS=null'); html=run('machines(0)');
+  assert.match(between(html,'data-mac="c8:d9:d2:0b:fe:34"','data-mac="a0:48:1c:8a:18:40"'),/pill ">לא נקרא</,'monitor unread ≠ offline');
+  assert.doesNotMatch(html,/מחוברים/,'no connected count without /monitor/machines');
+  run('NET=null'); html=run('machines(0)');
+  assert.match(html,/role="tab"[^>]*>נראו ברשת<\/button>/,'no counter when /net was not read');
+  assert.match(between(html,'data-mac="b4:2e:99:07:1b:c1"'),/<td class="c-opt"><span class="muted">—<\/span><\/td>/,'no address without /net');
+  run('DISK_FAILURES=null'); html=run('machines(0)');
+  assert.doesNotMatch(html,/דיסק אדום|דיסקים אדומים<small>/,'failures unread: no red count at all (not 0)');
+  run('DISK_FAILURES=[]'); assert.match(run('machines(0)'),/obj-sub" title="8 רשומים">/,'zero red disks: nothing to say');
 });
 
-test('selection → action bar; move PUTs group_id per machine; removal is one confirm sheet listing the machines (#1270)', async () => {
+test('the filter bar narrows the table in place: search by name/MAC/IP, role select', () => {
+  const {run,node}=setup(); run('machines(0)');
+  run("mchFilter('q','10.44.12.59')"); assert.deepEqual([...node('#mch-table').innerHTML.matchAll(/data-mac="([^"]+)"/g)].map(m=>m[1]),['78:ac:c0:9b:11:c2'],'search by IP via /net');
+  run("mchFilter('q','fe:34')"); assert.deepEqual([...node('#mch-table').innerHTML.matchAll(/data-mac="([^"]+)"/g)].map(m=>m[1]),['c8:d9:d2:0b:fe:34'],'by MAC (not a column, still searchable)');
+  run("mchFilter('q',''); mchFilter('role','classroom')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,4);
+  run("mchFilter('role','build')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,2);
+  run("mchFilter('q','nothing-here')"); assert.match(node('#mch-table').innerHTML,/אין מחשבים שתואמים לסינון/);
+  run("mchFilter('q',''); mchFilter('role','')"); assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac=/g)||[]).length,8);
+});
+
+test('selection → "העבר לקבוצה…" / "הסרה מהרישום…" at the end of the filter bar; move PUTs group_id per machine; removal is one confirm sheet (#1270)', async () => {
   const {run,node,requests}=setup(); run('loadMachines=async()=>{}');
-  assert.doesNotMatch(run('machines(0)'),/dg-bar foot/);
+  assert.match(run('machines(0)'),/<span class="bulk" id="mch-bulk"><\/span>/);
   run("toggleMchSel('78%3Aac%3Ac0%3A9b%3A11%3Ac2',true); toggleMchSel('a0:48:1c:8a:18:40',true)");
-  const html=node('#mch-table').innerHTML;
-  assert.match(html,/נבחרו 2 מתוך 8/); assert.match(html,/bulkMoveMachines\(\)">העבר לקבוצה…/); assert.match(html,/bulkRemoveMachines\(\)">הסרה</);
-  assert.equal((html.match(/<tr data-mac="[^"]*" class="sel"/g)||[]).length,2);
+  const bulk=node('#mch-bulk').innerHTML;
+  assert.match(bulk,/נבחרו 2/); assert.match(bulk,/bulkMoveMachines\(\)">העבר לקבוצה…/); assert.match(bulk,/bulkRemoveMachines\(\)">הסרה מהרישום…/);
+  assert.equal((node('#mch-table').innerHTML.match(/<tr data-mac="[^"]*" class="clk sel"/g)||[]).length,2);
   run('bulkMoveMachines()'); assert.equal(run('formOptions.fields[0].type'),'select');
   await run('formOptions.onSubmit({group_id:"grp_BUILD"})');
   const puts=requests.filter(r=>r.options.method==='PUT');
@@ -184,8 +179,11 @@ test('selection → action bar; move PUTs group_id per machine; removal is one c
   assert.ok(!requests.some(r=>r.options.method==='DELETE'),'nothing deleted before the sheet is confirmed');
   await run('formOptions.onSubmit({})');
   assert.deepEqual(requests.filter(r=>r.options.method==='DELETE').map(r=>r.url),['/api/console/machines/78%3Aac%3Ac0%3A9b%3A11%3Ac2','/api/console/machines/b4%3A2e%3A99%3A07%3A1a%3Ac3']);
-  run('toggleMchSelAll(true)'); assert.match(node('#mch-table').innerHTML,/נבחרו 8 מתוך 8/);
-  run('mchSelClear()'); assert.doesNotMatch(node('#mch-table').innerHTML,/dg-bar foot/);
+  run("toggleMchSel('78:ac:c0:9b:11:c2',false); toggleMchSel('b4:2e:99:07:1a:c3',false)"); assert.equal(node('#mch-bulk').innerHTML,'');
+  // ‏לחיצה על השורה פותחת את המחשב; תיבת הסימון וה-⋯ לא
+  run("globalThis.opened=[]; openMachineDetail=(m)=>opened.push(m)");
+  run("mchRowClick({target:{closest:()=>null}},'78%3Aac%3Ac0%3A9b%3A11%3Ac2')"); run("mchRowClick({target:{closest:()=>({})}},'x')");
+  assert.equal(run('JSON.stringify(opened)'),JSON.stringify(['78%3Aac%3Ac0%3A9b%3A11%3Ac2']));
 });
 
 test('the machine drawer: header line, actions (monitor, WoL for the room, "requires API" for reboot/MAC), red-disk note with clear + kernel lines, disks by slot, hardware, journal history', async () => {
@@ -306,7 +304,7 @@ test('the class as an object: crumbs, header, KPIs with meaning only, the same t
   const {run,node}=setup();
   run("openClass('grp_LAB303')"); assert.equal(run('selected'),'machines'); assert.equal(run('MACHINES_CLASS'),'grp_LAB303');
   let html=run('machines(0)'); balanced(html);
-  assert.match(html,/crumbs"><a[^>]*>srv<\/a><span>\/<\/span><span>מלאי<\/span><span>\/<\/span><a[^>]*openMachinesPage\(\)">מחשבים<\/a><span>\/<\/span><span>כיתות<\/span><span>\/<\/span><span>כיתה 303 — סייבר<\/span>/);
+  assert.match(html,/crumbs"><a[^>]*>srv<\/a><span class="sep" aria-hidden="true">›<\/span><span>מלאי<\/span><span class="sep" aria-hidden="true">›<\/span><a[^>]*openMachinesPage\(\)">מחשבים<\/a><span class="sep" aria-hidden="true">›<\/span><span>כיתות<\/span><span class="sep" aria-hidden="true">›<\/span><span>כיתה 303 — סייבר<\/span>/);
   assert.match(html,/obj-name">כיתה 303 — סייבר</); assert.match(html,/קבוצת כיתה · קידומת LAB303 · 3 מחשבים · 2 נראו היום/); assert.match(html,/pill info">סבב פתוח</);
   assert.match(html,/deployToGroup\('grp_LAB303'\)">הפץ לכיתה…</); assert.match(html,/openAddMachine\(\{group:'grp_LAB303'\}\)">\+ מחשב לכיתה</); assert.match(html,/renameGroup\(/); assert.match(html,/deleteGroup\(/);
   for(const t of ['סיכום','מחשבים','סבבים']) assert.match(html,new RegExp('role="tab"[^>]*>'+t+'<'));
@@ -329,7 +327,7 @@ test('the class as an object: crumbs, header, KPIs with meaning only, the same t
   assert.match(html,/<div class="kpi "><div class="l">דיסקים<\/div><div class="v"><bdi dir="auto">לא נקרא/,'failures unread ≠ none');
   run("openClass('grp_CLONERS')"); html=run('machines(0)');
   assert.match(html,/poweroffRoom\('grp_CLONERS'\)">כיבוי כולם…</); assert.doesNotMatch(html,/הפץ לכיתה|renameGroup|role="tab"/,'#1485: the cloners page of the mockup — no tabs');
-  assert.match(html,/crumbs">[^]*openMachinesPage\(\)">מחשבים<\/a><span>\/<\/span><span>מחשבי שיכפול<\/span><\/div>/,'the fixed group is the "מחשבי שיכפול" page of the mockup');
+  assert.match(html,/crumbs">[^]*openMachinesPage\(\)">מחשבים<\/a><span class="sep" aria-hidden="true">›<\/span><span>מחשבי שיכפול<\/span><\/div>/,'the fixed group is the "מחשבי שיכפול" page of the mockup');
 });
 
 test('tree clicks: every group opens its object (wave 3a: build/cloner too); an unknown group id filters the table with a visible, clearable strip', () => {
@@ -345,23 +343,35 @@ test('tree clicks: every group opens its object (wave 3a: build/cloner too); an 
   run('openMachinesPage()'); assert.equal(run('MACHINES_FILTER'),null); assert.equal(run('selected'),'machines');
 });
 
-test('"seen on the network" tab: /net as a datagrid with "register" as the primary action on an unregistered row; "red disks" tab with clear', async () => {
-  const {run,node,requests}=setup();
+test('"נראו ברשת" (P.machines seen): only the unregistered, MAC · IP · seen · "הוסף"; "דיסקים אדומים" (P.machines red): machine · disk · cause · SMART · ⋯', async () => {
+  const {run}=setup();
   let html=run('machines(1)'); balanced(html);
-  assert.equal((html.match(/<table class="dg"/g)||[]).length,1);
+  assert.match(html,/card-h"><span>נראו ברשת, לא רשומים<\/span><\/div>/);
+  assert.match(html,/note info">[^]*מחשבים שביקשו PXE ועדיין לא נרשמו. הוספה מעתיקה את כתובת ה-MAC לטופס./);
+  const head=between(html,'<thead>','</thead>');
+  assert.deepEqual([...head.matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1]),['כתובת MAC','IP','נראה לאחרונה','פעולה']);
+  assert.deepEqual([...html.matchAll(/<tr data-mac="([^"]+)"/g)].map(m=>m[1]),['de:ad:be:ef:00:01'],'registered machines are on the first tab, not here');
   const unreg=between(html,'data-mac="de:ad:be:ef:00:01"');
-  assert.match(unreg,/pill warn">לא רשום</); assert.match(unreg,/btn sm primary" onclick="openAddMachine\(\{mac:'de%3Aad%3Abe%3Aef%3A00%3A01'\}\)">רשום</);
-  assert.match(unreg,/netDeviceDescribe\(/); assert.match(unreg,/netDeviceForget\(/); assert.match(unreg,/st warn">תפריט האתחול נמסר \(1\/9\) · לפני 30 דק&#39;<\/span><span class="sub">נעצר לפני: GRUB נכנס לערך ImageSrv/);
-  const reg=between(html,'data-mac="c8:d9:d2:0b:fe:32"','data-mac="a0:48:1c:8a:18:40"');
-  assert.match(reg,/name">בנייה 1<\/span><span class="sub">מחשבי בנייה</); assert.match(reg,/openMachineDetail\(/); assert.doesNotMatch(reg,/>רשום</);
-  assert.match(html,/netDeviceAdd\(\)">\+ הוספה ידנית</);
-  run('netDeviceDescribe("de%3Aad%3Abe%3Aef%3A00%3A01")'); assert.equal(run('formOptions.sub'),'de:ad:be:ef:00:01');
-  run('loadMachines=async()=>{}'); await run('formOptions.onSubmit({description:"מדפסת מעבדה 2"})');
-  const put=requests.find(r=>r.options.method==='PUT'); assert.equal(put.url,'/api/console/net/de%3Aad%3Abe%3Aef%3A00%3A01');
-  run('NET=null; NET_ERR="timeout"'); assert.match(run('machines(1)'),/note warn">[^]*רשימת ההתקנים לא נקראה: timeout/); run('NET=[]'); assert.match(run('machines(1)'),/עוד לא נראו התקנים/);
+  assert.match(unreg,/<td><span class="mono">de:ad:be:ef:00:01<\/span><\/td><td><bdi dir="ltr">10.44.12.187<\/bdi><\/td><td>לפני 30 דק&#39;<\/td>/);
+  assert.match(unreg,/btn sm primary" onclick="openAddMachine\(\{mac:'de%3Aad%3Abe%3Aef%3A00%3A01'\}\)">הוסף</);
+  assert.doesNotMatch(html,/netDeviceDescribe|netDeviceForget|שלב האתחול/,'not in the mockup');
+  run('NET=null; NET_ERR="timeout"'); assert.match(run('machines(1)'),/note warn">[^]*רשימת ההתקנים לא נקראה: timeout/);
+  run('NET=[]'); assert.match(run('machines(1)'),/אין מחשבים שנראו ברשת ולא נרשמו/);
+
   html=run('machines(2)'); balanced(html);
-  assert.match(html,/דיסקים אדומים — נכשלו בכתיבה/); assert.match(html,/<td>מחשב 2 · דיסק 3 · SATA 2<\/td>/); assert.match(html,/st err">כבל\/חריץ SATA 2</); assert.match(html,/clearDiskFailure\(7\)">נקה</); assert.match(html,/<summary>3 שורות קרנל</);
-  assert.match(html,/דיסקים מכווצים/); assert.match(html,/אין דיסקים מכווצים/);
+  assert.match(html,/card-h"><span>דיסקים אדומים<\/span><\/div>/);
+  assert.deepEqual([...between(html,'<thead>','</thead>').matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')),['מחשב','דיסק','סיבה','SMART','פעולות']);
+  assert.match(html,/<tr class="clk" onclick="mchRowClick\(event,'78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)"><td><b>מחשב 2<\/b><\/td><td>דיסק 3 · <bdi dir="ltr">256GB<\/bdi><\/td><td>כבל\/חריץ SATA 2 · ATA timeout<\/td><td><span class="pill ok">תקין<\/span><\/td>/);
+  const menu=JSON.parse(html.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
+  assert.deepEqual(menu.map(i=>i[1]),["openMachineDetail('78%3Aac%3Ac0%3A9b%3A11%3Ac2')",'clearDiskFailure(7)'],'details + clear in the ⋯ (the kernel lines are in the drawer)');
+  assert.doesNotMatch(html,/דיסקים מכווצים/,'#926 card only when there is something to show');
+  run("SHRINK_RECORDS=[{id:1,mac:'78:ac:c0:9b:11:c2',port:1,serial:'X',opened_at:'2026-10-01T00:00:00Z',partitions:[{idx:3,size_sectors:1000}]}]");
+  assert.match(run('machines(2)'),/דיסקים מכווצים/);
+  run('SHRINK_RECORDS=null'); assert.match(run('machines(2)'),/רשימת הדיסקים המכווצים לא נטענה/,'unread is said, not hidden');
+  run("MACHINES.find(m=>m.mac==='78:ac:c0:9b:11:c2').disks[1].smart='fail'; MACHINES.find(m=>m.mac==='78:ac:c0:9b:11:c2').disks[1].smart_reason='pending_sectors'");
+  html=run('machines(2)');
+  assert.match(html,/<td><b>מחשב 2<\/b><\/td><td>דיסק 2 · <bdi dir="ltr">256GB<\/bdi><\/td><td>ה-BIOS יעצור ב-F1 — SMART: סקטורים ממתינים \(197\)<\/td><td><span class="pill err">נכשל<\/span><\/td>/,'a SMART-failed disk is a row too');
+  assert.equal((html.match(/clearDiskFailure/g)||[]).length,1,'no "clear" without a failure record');
   run('DISK_FAILURES=null'); assert.match(run('machines(2)'),/רשימת הכשלים לא נטענה/);
 });
 
@@ -467,8 +477,7 @@ test('#1081 v1: classrooms flag off hides classes from the machines page', () =>
   assert.doesNotMatch(html,/\+ כיתה/);
   assert.doesNotMatch(html,/addGroupSheet/);
   assert.doesNotMatch(html,/grp_LAB303|grp_LAB305/);
-  assert.match(html,/מחשבי בנייה/);
-  assert.match(html,/משכפלים/);
+  assert.match(html,/<option value="build">בנייה<\/option><option value="cloner">שיכפול<\/option><\/select>/,'the role select has no classroom');
   assert.match(html,/data-mac="c8:d9:d2:0b:fe:32"/);
   assert.doesNotMatch(html,/data-mac="b4:2e:99:07:1a:c1"/);
   run("selectMachinesRole('classroom')");

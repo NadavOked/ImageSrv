@@ -24,7 +24,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from server.console import console_tls
+from server.console import tls as console_tls
 
 try:
     from fastapi.testclient import TestClient

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -115,9 +116,86 @@ def test_failed_reboot_has_no_marker(server, tmp_path, monkeypatch):
     monkeypatch.setattr(auto_reboot, "busy_reason", lambda rt: None)
     job = scheduler(server, tmp_path, [datetime(2026, 10, 14, 3)],
                     lambda: (_ for _ in ()).throw(RuntimeError("reboot failed")))
-    with pytest.raises(RuntimeError, match="reboot failed"):
-        job.tick()
+    assert job.tick() == "failed"
     assert not (tmp_path / auto_reboot.MARKER).exists()
+    assert journal_details(server) == ["נכשל — RuntimeError: reboot failed"]
+
+
+def test_failed_reboot_waits_until_retry_time(server, tmp_path, monkeypatch):
+    set_setting(server["ctx"].conn, "auto_reboot", "daily")
+    monkeypatch.setattr(auto_reboot, "busy_reason", lambda rt: None)
+    clock = [datetime(2026, 10, 14, 3)]
+    calls = []
+
+    def reboot():
+        calls.append(clock[0])
+        raise subprocess.CalledProcessError(1, ["systemctl", "reboot"])
+
+    job = scheduler(server, tmp_path, clock, reboot)
+    assert job.tick() == "failed"
+    for _ in range(1, auto_reboot.RETRY_MINUTES):
+        clock[0] += timedelta(minutes=1)
+        assert job.tick() is None
+    assert len(calls) == 1
+    clock[0] += timedelta(minutes=1)
+    assert job.tick() == "failed"
+    assert calls[1] - calls[0] == timedelta(minutes=auto_reboot.RETRY_MINUTES)
+    assert not (tmp_path / auto_reboot.MARKER).exists()
+
+
+def test_failed_reboot_gives_up_within_shared_window(server, tmp_path, monkeypatch):
+    set_setting(server["ctx"].conn, "auto_reboot", "daily")
+    monkeypatch.setattr(auto_reboot, "busy_reason", lambda rt: None)
+    start = datetime(2026, 10, 14, 3)
+    clock = [start]
+    calls = []
+
+    def reboot():
+        calls.append(clock[0])
+        raise RuntimeError("reboot failed")
+
+    job = scheduler(server, tmp_path, clock, reboot)
+    results = []
+    for minute in range(auto_reboot.GIVE_UP_MINUTES + auto_reboot.RETRY_MINUTES + 1):
+        clock[0] = start + timedelta(minutes=minute)
+        results.append(job.tick())
+    assert results[0] == "failed"
+    assert results[auto_reboot.GIVE_UP_MINUTES] == "skipped"
+    assert results.count("skipped") == 1
+    assert 1 < len(calls) <= auto_reboot.GIVE_UP_MINUTES // auto_reboot.RETRY_MINUTES + 1
+    assert all(at - start <= timedelta(minutes=auto_reboot.GIVE_UP_MINUTES) for at in calls)
+    assert all(b - a >= timedelta(minutes=auto_reboot.RETRY_MINUTES)
+               for a, b in zip(calls, calls[1:]))
+    assert job.due == start + timedelta(days=1)
+    assert job.first_deferred is None and job.retry_at is None
+    lines = journal_details(server)
+    assert lines[-1].startswith("דולג") and "כשל" in lines[-1]
+    assert not any(line.startswith("בוצע") for line in lines)
+    assert not (tmp_path / auto_reboot.MARKER).exists()
+
+
+def test_failed_reboot_can_succeed_within_window(server, tmp_path, monkeypatch):
+    set_setting(server["ctx"].conn, "auto_reboot", "daily")
+    monkeypatch.setattr(auto_reboot, "busy_reason", lambda rt: None)
+    clock = [datetime(2026, 10, 14, 3)]
+    calls = []
+
+    def reboot():
+        calls.append(clock[0])
+        if len(calls) == 1:
+            raise RuntimeError("reboot failed")
+
+    job = scheduler(server, tmp_path, clock, reboot)
+    assert job.tick() == "failed"
+    clock[0] += timedelta(minutes=auto_reboot.RETRY_MINUTES)
+    assert job.tick() == "done"
+    assert len(calls) == 2
+    assert (tmp_path / auto_reboot.MARKER).read_text(encoding="ascii") == clock[0].isoformat()
+    assert journal_details(server)[-1].startswith("בוצע")
+    assert job.due == datetime(2026, 10, 15, 3)
+    assert job.first_deferred is None and job.retry_at is None
+    assert job.tick() is None
+    assert len(calls) == 2
 
 
 def test_failed_busy_check_defers_instead_of_rebooting(server, tmp_path, monkeypatch):

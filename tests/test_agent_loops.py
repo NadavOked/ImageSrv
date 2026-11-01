@@ -23,8 +23,8 @@ pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom              # noqa: E402
 
-from server.agent import agent_loops                                # noqa: E402
-from server.agent.agent_loops import loop_checks                    # noqa: E402
+from server.agent import loops as agent_loops   # noqa: E402
+from server.agent.loops import loop_checks                    # noqa: E402
 
 try:
     from fastapi.testclient import TestClient
@@ -51,7 +51,7 @@ def loop_server(tmp_path: Path, images_root: Path, clock):
         pytest.skip("fastapi is required")
     from test_sender import Recorder                           # noqa: PLC0415
 
-    from server.console import users                                   # noqa: PLC0415
+    from server.console import users# noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
 
     tftp = tmp_path / "tftp"
@@ -395,7 +395,7 @@ def test_a_deploy_user_cannot_read_the_health_screen(loop_server):
 @pytest.mark.parametrize("hello_before_delete", [False, True])
 def test_deleted_running_agent_has_bounded_grace(
         loop_server, monkeypatch, group, hello_before_delete):
-    from server.console import console_api
+    from server.console import api as console_api
     from server import db
 
     mac = "aa:bb:cc:00:18:73"

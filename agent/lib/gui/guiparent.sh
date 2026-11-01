@@ -156,7 +156,7 @@ gui_parent() {
             _build_standby=1
             return 0
         fi
-        if kill -0 "$_gui_pid" 2>/dev/null; then return 0; fi
+        if kill -0 "$_gui_pid" 2>/dev/null; then [ "${_gui_early:-0}" = 0 ] || gui_early_role; return 0; fi   # #1709: guiearly.sh
         # #1726: the keeper ends on the handoff (above), or after the static screen
         wait_pid "$_gui_pid" "$WAIT_HELPER_S" "native GUI keeper" || true
         _gui_pid=; _gui_disabled=1

@@ -170,7 +170,7 @@ DNS, זמן חכירה, כתובת השרת בוילן) ו-proxy (עונה על 
 המכללה, שבה יש DHCP קיים ואסור להתנגש בו). ההגדרות נשמרות ב-`settings`
 תחת `dhcp:<כרטיס>`, ואחרי כל שינוי נכתבים **שני** קבצי dnsmasq ומופעלים
 **שני** שירותים (`server/net/dhcp.py` מרנדר, `server/net/dhcp_host.py` נוגע
-במכונה, `server/console/console_dhcp.py` מארח):
+במכונה, `server/console/dhcp.py` מארח):
 
 - ‏DHCP מלא → `/etc/dnsmasq.d/imagesrv-dhcp.conf` → `systemctl restart dnsmasq`.
 - ‏proxy → `/etc/imagesrv/dnsmasq-proxy.conf` → `restart`/`stop` של

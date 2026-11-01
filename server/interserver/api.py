@@ -31,7 +31,7 @@ from typing import Iterable
 
 from server.console import auth
 from server.storage import disk_reserve
-from server.interserver import interserver_auth, storage_nodes
+from server.interserver import auth as interserver_auth, storage_nodes
 from server.db import journal, monitor_rekeyed, now_iso
 
 log = logging.getLogger("imagesrv.interserver")
@@ -523,7 +523,7 @@ def receive_image_precheck(ctx, peer: TlsPeer, *, token: str, protocol_version: 
         raise PairError(411, "נדרש Content-Length מספרי")
     if length <= 0:
         raise PairError(411, "נדרש Content-Length חיובי")
-    from server.storage import storage_locations
+    from server.storage import locations as storage_locations
     location = storage_locations.get(ctx.conn, location_id)
     if location is None and location_id == storage_locations.LOCAL_ID:
         # תאימות ל-contexts ישנים/מבודדים; בשרת מלא ensure_local יצר שורה.
@@ -559,7 +559,7 @@ def _space_refusal(ctx, library, location_id: str, *, need: int, keep: int,
     המפעיל בוחר את המיקום, ובלי הרשימה הוא רואה "אין מקום" בזמן שבדף האחסון
     של המשני יש דיסק פנוי. אין בחירה אוטומטית: היעד נשאר מה שהמפעיל בחר.
     מיקום שלא נמדד נקוב כ"לא נמדד" ואינו מוצע (עיקרון 5)."""
-    from server.storage import storage_locations as sl
+    from server.storage import locations as sl
     rows = sl.list_rows(ctx.conn) if ctx.conn is not None else []
     if not any(r["id"] == sl.LOCAL_ID for r in rows):
         # אותו מקרה כמו ב-precheck: אין שורה ל-loc_local — הוא ``--images``.

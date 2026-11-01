@@ -12,7 +12,7 @@ import sqlite3
 
 from server.agent import bootguard
 from server.disks import disk_events
-from server.learn import learn_eta
+from server.learn import eta as learn_eta
 from server.rounds.sessions import MULTICAST
 
 

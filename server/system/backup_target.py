@@ -34,7 +34,7 @@ import secrets
 from pathlib import Path
 
 from server.system import backup_job
-from server.storage import storage_locations as sl
+from server.storage import locations as sl
 from server.db import get_setting, journal, set_settings
 
 SETTING = "backup_target"

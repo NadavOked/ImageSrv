@@ -330,10 +330,11 @@ EVENTS_HE = {
     "storage_location_create": "מיקום אחסון נוצר",
     "storage_location_delete": "מיקום אחסון נמחק",
     "storage_location_disconnect": "מיקום אחסון נותק",
+    "storage_location_disconnect_failed": "ניתוק מיקום האחסון נכשל — המיקום נשאר מחובר",   # #2126
     "storage_location_format": "מיקום אחסון פורמט",
     "storage_location_mount": "מיקום אחסון עוגן",
     "storage_location_unreachable": "מיקום אחסון אינו נגיש",
-    # ‏#1988: "הוסף כונן" (server/storage/storage_disks.py)
+    # ‏#1988: "הוסף כונן" (server/storage/disks.py)
     "storage_disk_prepare_start": "הכנת כונן חדש למיקום אחסון",
     "storage_disk_prepare_failed": "הכנת הכונן החדש נכשלה",
     "storage_disk_add_failed": "הוספת הכונן נכשלה — לא נוסף מיקום",
@@ -382,7 +383,7 @@ _SEVERITY_ERR = {
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
     "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
     "room_wave_lost", "room_failed", "room_wake_failed", "send_failed", "direct_failed", "disk_failure",
-    "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "logo_refused",
+    "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "storage_location_disconnect_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
     "known_macs_apply_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
     "vmupdate_no_lease", "vmupdate_net_teardown_failed",

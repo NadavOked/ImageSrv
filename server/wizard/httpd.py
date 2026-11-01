@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from server.console.console_tls import ensure_console_cert
+from server.console.tls import ensure_console_cert
 from server.paths import STATIC_DIR
 
 from .core import WizardConfig, WizardState, check_primary, validate_config
