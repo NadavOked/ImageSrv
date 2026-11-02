@@ -4863,7 +4863,7 @@ function diskTitle(m, s, d) {
 }
 /* ‏#1269: drawer_list[].drivers — הונחו / לא הונחו (השחזור עצמו הושלם) / דולגו. ‏#1331 (מוקאפ
    מאושר 17/10, גרסה 2): אותן מילים מתחת לכל דיסק בדף החדר (roundDskHtml) וב-tooltip. */
-/* ‏#1331 T8 — לינוקס: ‏`drivers.linux` (docs/interfaces.md סעיף 4/17) — מה בדיקת ה-initramfs מצאה ביעד לינוקס.
+/* ‏#1331 T8 — לינוקס: ‏`drivers.linux` (docs/architecture/interfaces.md סעיף 4/17) — מה בדיקת ה-initramfs מצאה ביעד לינוקס.
    רק ‏generic הוא ראיה שהדיסק יעלה על בקר אחר (אפור); ‏hostonly / unsupported / failed = כתום ("לא נבדק" אינו
    "תקין", עיקרון 5); ‏skipped עם unknown_bus נאמר בגלוי. אותן מילים כמו lc_bay_linux ב-lcbay.c
    (tests/test_linux_drivers_line_1331.py שומר שהן לא נסחפות). השורה מחליפה את "האימג' אינו Windows". */
@@ -6757,7 +6757,7 @@ function openLogDetail(i) {
    "רשת" בעץ הוא דף (הכרעת נדב על העץ: קליק = הדף, דאבל = פותח/סוגר), והצמתים
    "חיבורים פיזיים / רשת הפצה" פותחים את אותו אובייקט בלשונית. "פורטים" =
    הדף הקיים של גל 5 (pages.ports) — לא נגענו, רק מקושר כלשונית.
-   מקורות (docs/interfaces.md, לא ממציאים שדות): /net/interfaces (net.js:
+   מקורות (docs/architecture/interfaces.md, לא ממציאים שדות): /net/interfaces (net.js:
    loadNet → NICS), /net/config (NETCFG), /net (NET — מי נראה ברשת), /ports
    (bind — "מה מותר על כל וילן" עד מודל וילן, #705), /monitor/machines (משכפלים/בנייה, online), /storage-nodes
    (+ …/machines.connected — שרתי משנה), /net/interfaces/{n}/probe (מי עוד עונה),
@@ -7460,7 +7460,7 @@ function healthCheckById(id) {
 
 /* ---------- #1267: רשת › פורטים — כרטיס לכל רשת ----------
    מוקאפ: docs/design/apple-mockups/console-full.html (P.network ports, W.portDrawer);
-   docs/interfaces.md §16. הכול מ-/ports: השורות, `network` (לאיזו רשת שייכת השורה)
+   docs/architecture/interfaces.md §16. הכול מ-/ports: השורות, `network` (לאיזו רשת שייכת השורה)
    ו-`firewall`/`firewall_detail` (טבלת inet imagesrv של השרת — רק לפורטים שבין רשתות).
    נדב 10/10: ברשת ההפצה השרת מנהל את הפורטים — אין עמודת חומת אש ואין פעולות;
    בניהול ובין שרתים — חומת אש (פתוח=ירוק, חסום=אדום, לא נבדק=אפור) ו"מה לפתוח

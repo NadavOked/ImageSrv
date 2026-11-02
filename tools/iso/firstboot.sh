@@ -94,6 +94,32 @@ install -d "$TMPDIR"
 if [[ -f "$STAGE_A_STAMP" ]]; then
     log "Stage A already completed; continuing to stage B"
 else
+    # Materialize the same flags that the normal builder records.  The verifier
+    # normalizes output paths before comparing them with the ISO manifest.
+    cat > "$ETC/initrd.flags.new" <<EOF
+# ImageSrv initrd builds: one build_initramfs.sh run per line.
+--skip-apt --output $HTTP_ROOT/initrd.img
+--skip-apt --with-gui --output $HTTP_ROOT/initrd.img.gui
+EOF
+    mv -f "$ETC/initrd.flags.new" "$ETC/initrd.flags"
+    KVER=$(find "${IMAGESRV_MODULES_DIR:-/lib/modules}" -mindepth 1 -maxdepth 1 -printf '%f\n' | awk '$0 !~ /cloud/' | sort -V | tail -n1) \
+        || fail payload-failed "Could not inspect installed kernels"
+    [[ -n "$KVER" ]] || fail payload-failed "No installed non-cloud kernel was found"
+    decision_out=$(python3 "$SRC/deploy/boot-payload.py" decide --source "$SRC" \
+        --kernel "$KVER" --flags "$ETC/initrd.flags" --payload-dir "$HTTP_ROOT" \
+        --manifest /var/lib/imagesrv/iso-boot-payload/boot-payload.json \
+        --prebuilt-dir /var/lib/imagesrv/iso-boot-payload 2>&1) && decision_rc=0 || decision_rc=$?
+    if [[ "$decision_rc" == 0 ]]; then
+        printf '%s\n' "$decision_out"
+        case "$decision_out" in
+            prebuilt$'\t'*) log "boot payload: prebuilt from ISO, verified" ;;
+            current$'\t'*) log "boot payload: inputs unchanged, current payload verified" ;;
+            *) fail payload-failed "Boot payload decision returned an unknown success: $decision_out" ;;
+        esac
+        touch "$STAGE_A_STAMP"
+        log "Stage A complete: $(stat -c '%n=%s' "$HTTP_ROOT"/initrd.img "$HTTP_ROOT"/initrd.img.gui "$HTTP_ROOT"/vmlinuz | tr '\n' ' ')"
+    elif [[ "$decision_rc" == 10 ]]; then
+        log "boot payload: prebuilt from ISO not used: ${decision_out#*$'\t'}"
     # ‏#1230: הבנייה עצמה — הקרנל (שאינו cloud, #904), ה-epoch (#1125) וה-
     # ‏vmlinuz — ב-tools/boot-payload-build.sh, **אותו קוד** שכפתור העדכון
     # מריץ. ‏--write-flags רושם, רק אחרי שהכול נבנה, את שתי הבניות אל
@@ -102,13 +128,16 @@ else
     payload_out=$(bash "$SRC/tools/boot-payload-build.sh" --iso-default \
         --http-root "$HTTP_ROOT" --manifest "$ETC/iso-release.json" \
         --write-flags "$ETC/initrd.flags" --build-log "$BUILD_LOG" 2>&1) \
-        || fail payload-failed "$(printf '%s\n' "$payload_out" | tail -n1) (see $BUILD_LOG)"
+        || { rm -f "$ETC/initrd.flags"; fail payload-failed "$(printf '%s\n' "$payload_out" | tail -n1) (see $BUILD_LOG)"; }
     printf '%s\n' "$payload_out"
     for f in initrd.img initrd.img.gui vmlinuz; do
         [[ -s "$HTTP_ROOT/$f" ]] || fail payload-failed "$HTTP_ROOT/$f is empty after the build"
     done
     touch "$STAGE_A_STAMP"
     log "Stage A complete: $(stat -c '%n=%s' "$HTTP_ROOT"/initrd.img "$HTTP_ROOT"/initrd.img.gui "$HTTP_ROOT"/vmlinuz | tr '\n' ' ')"
+    else
+        fail payload-failed "Boot payload decision failed: $decision_out"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

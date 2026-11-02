@@ -194,5 +194,5 @@ def test_the_drawer_flow_marks_every_stage_in_order():
 
 
 def test_the_interface_documents_the_stages():
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "restore_stages" in doc and "stages_s" in doc

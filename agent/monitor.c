@@ -626,7 +626,7 @@ static void text_event(char *str, int len, rfbClientPtr client) {
  * regular file, and --fb names it here: a 4096-byte header, then XRGB8888
  * rows of `stride` bytes. `seq` is the GUI's seqlock -- odd while a frame is
  * being copied in -- so a torn frame is skipped, never served. The layout is
- * docs/interfaces.md s15; the constants are repeated verbatim in
+ * docs/architecture/interfaces.md s15; the constants are repeated verbatim in
  * native-gui/src/backend.c and tests/test_headless_framebuffer.py pins them.
  */
 #define MEMFB_MAGIC "IMCTLFB1"

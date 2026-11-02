@@ -891,7 +891,7 @@ def test_the_capture_never_shrinks_the_source_in_place():
 
 
 def test_the_interfaces_document_carries_the_new_fields():
-    text = (REPO / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    text = (REPO / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     for field in ("shrunk_from_bytes", "source_start_sector"):
         assert f"`{field}`" in text, field
     assert "הכיווץ עצמו עדיין אינו ממומש" not in text

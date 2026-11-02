@@ -5,7 +5,7 @@
 (במחשב שלו, עם האינטרנט שלו), והשרת מקבל refresh token ושומר אותו ב-0600.
 בשליחה: refresh → access token (בזיכרון בלבד) → ‏``AUTH XOAUTH2``.
 
-**מה צריך להיות פתוח מהשרת** (docs/email-alerts.md): HTTPS יוצא לספק הזהות
+**מה צריך להיות פתוח מהשרת** (docs/guides/email-alerts.md): HTTPS יוצא לספק הזהות
 (Microsoft: ‏``login.microsoftonline.com``; ‏Google: ‏``oauth2.googleapis.com``) —
 בבקשת הקוד, בהמתנה לאישור, ובכל חידוש אסימון — ו-SMTP יוצא לשרת הדואר. בלי
 יציאה לאינטרנט מרשת הניהול, ‏"התחבר" נכשל **בצעד הראשון** (בקשת הקוד), בגלוי.
@@ -99,7 +99,7 @@ def _endpoints(acc: dict) -> dict:
         raise OAuthError("הספק של החשבון הזה אינו תומך ב-OAuth")
     if not acc.get("oauth_client_id"):
         raise OAuthError("חסר מזהה אפליקציה (client id) — המכללה צריכה לרשום אפליקציה; "
-                         "ההוראות ב-docs/email-alerts.md")
+                         "ההוראות ב-docs/guides/email-alerts.md")
     tenant = acc.get("oauth_tenant") or "organizations"
     if not email_config.valid_tenant(tenant):
         raise OAuthError(f"tenant לא תקין: {tenant!r}")

@@ -3,7 +3,7 @@
  *   drm   -- KMS dumb buffer on /dev/dri/cardN (preferred; R09 Q1)
  *   fbdev -- /dev/fb0, XRGB8888 only (fallback when KMS is unavailable)
  *   mem   -- a 1280x800 framebuffer file (#835) that imagesrv-monitor serves
- *            over RFB; docs/interfaces.md s15 has the layout
+ *            over RFB; docs/architecture/interfaces.md s15 has the layout
  * All draw into an offscreen cairo image and copy it to the scanout on
  * present(); the mapped scanout memory is uncached and slow to draw into
  * directly. There is no "png" backend: main.c renders straight to a cairo

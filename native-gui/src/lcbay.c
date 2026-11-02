@@ -74,7 +74,7 @@ void lc_bay_drivers(LcBay *y, const char *state, const char *detail, const char 
     else if (y->kind == BAY_DONE && y->drv_tone == DRV_WARN) y->pill = "הושלם בלי דרייברים";
 }
 
-/* #1331 T8: drivers.linux (docs/interfaces.md section 4/17) -- what the check of the
+/* #1331 T8: drivers.linux (docs/architecture/interfaces.md section 4/17) -- what the check of the
  * initramfs of a Linux target found. Only "generic" is evidence the disk boots on
  * another bus (grey); hostonly / unsupported / failed are orange ("not checked" is
  * not "fine", principle 5); skipped with unknown_bus is said out loud. The same words

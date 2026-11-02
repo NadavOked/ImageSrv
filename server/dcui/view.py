@@ -3,7 +3,7 @@
 Python stays the privileged backend and the only state machine: this module
 turns the same :class:`app.Runtime` the text console draws into the Hebrew
 records that ``imagesrv-station-gui --screen dcui`` paints (protocol:
-docs/interfaces.md section 31, "the graphical screen").  It reads nothing from
+docs/architecture/interfaces.md section 31, "the graphical screen").  It reads nothing from
 the host except :func:`collect_extras` -- every other fact is the
 :class:`data.Snapshot` the text console already shows.
 

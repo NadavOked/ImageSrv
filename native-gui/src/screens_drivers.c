@@ -1,7 +1,7 @@
 /* #1269: drivers per target disk, on the room / direct setup screen.
  *
  * The drawers of a cloner go to OTHER machines, so the hardware the cloner
- * detected says nothing about them (docs/interfaces.md s17): there is no
+ * detected says nothing about them (docs/architecture/interfaces.md s17): there is no
  * "automatic" here -- the operator picks a model the driver library has a
  * package for, or "בלי". The mockup is docs/design/apple-mockups/
  * native-full.html (drvBlock / dtag / dmap / drvSummary):

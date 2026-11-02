@@ -303,8 +303,8 @@ def test_every_module_that_opens_a_restore_consults_the_binding():
 
 
 def test_the_interfaces_document_declares_the_field():
-    """‏`docs/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — שדה
+    """‏`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — שדה
     חדש במניפסט שאינו רשום שם אינו קיים מבחינת הרכיב הבא."""
-    text = (REPO / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    text = (REPO / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "machine_mac" in text
     assert "#381" in text

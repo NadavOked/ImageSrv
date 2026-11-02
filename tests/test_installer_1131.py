@@ -451,6 +451,9 @@ def _fake_repo(tmp_path: Path, *, live_ok: bool, payload_ok: bool = True) -> Pat
     (repo / "deploy" / "verify-boot-payload.sh").write_text(
         '#!/usr/bin/env bash\nprintf "verify-boot-payload %s\\n" "$*" >> "$FAKE_LOG"\n'
         + ("exit 0" if payload_ok else "exit 1") + "\n", encoding="utf-8", newline="\n")
+    (repo / "deploy" / "boot-payload-release.sh").write_text(
+        '#!/usr/bin/env bash\necho "rebuild release has no signed boot-payload manifest"\nexit 10\n',
+        encoding="utf-8", newline="\n")
     # ‏#1230: הבנייה עצמה נבדקת ב-test_boot_payload_1230; כאן רק שהיא נקראה.
     (repo / "tools" / "boot-payload-build.sh").write_text(
         '#!/usr/bin/env bash\nprintf "boot-payload-build %s\\n" "$*" >> "$FAKE_LOG"\n',

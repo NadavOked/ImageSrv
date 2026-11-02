@@ -329,7 +329,7 @@ def test_the_native_side_routes_parses_and_renders_the_block():
 
 
 def test_the_records_are_documented_where_the_state_file_is():
-    for doc in (REPO / "docs" / "interfaces.md", REPO / "native-gui" / "README.md"):
+    for doc in (REPO / "docs" / "architecture" / "interfaces.md", REPO / "native-gui" / "README.md"):
         text = doc.read_text(encoding="utf-8")
         for key in ("fail=", "fail_why=", "fail_row=", "fail_code=", "fail_at="):
             assert key in text, (doc.name, key)

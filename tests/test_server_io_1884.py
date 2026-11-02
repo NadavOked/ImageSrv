@@ -185,5 +185,5 @@ def test_the_wave_and_the_capture_are_wired():
     cap = (root / "library" / "capture.py").read_text(encoding="utf-8")
     assert 'server_io.begin(ctx.conn, "capture", task_id' in cap
     assert 'server_io.end(ctx.conn, "capture", task_id' in cap
-    doc = (root.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (root.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "server_io" in doc and "server_disk" in doc

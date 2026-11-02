@@ -220,6 +220,19 @@ def test_build_iso_ships_the_live_installer_and_no_debian_installer() -> None:
     assert not (ISO_DIR / "preseed.cfg").exists() and not (ISO_DIR / "late-command.sh").exists()
 
 
+def test_iso_builds_copies_and_verifies_the_server_boot_payload() -> None:
+    build = BUILD_ISO.read_text(encoding="utf-8")
+    bootstrap = (REPO / "installer" / "lib" / "bootstrap.sh").read_text(encoding="utf-8")
+    firstboot = FIRSTBOOT.read_text(encoding="utf-8")
+    assert 'IMAGESRV_MODULES_DIR="$KTMP/lib/modules"' in build
+    assert '--write-flags "$PREBUILT/initrd.flags"' in build
+    assert 'boot-payload.json' in build and 'מטען לא מאומת' in build
+    assert 'iso-boot-payload' in bootstrap and 'payload-copy' in bootstrap
+    assert 'deploy/boot-payload.py" decide' in firstboot
+    assert 'boot payload: prebuilt from ISO, verified' in firstboot
+    assert 'boot payload: prebuilt from ISO not used:' in firstboot
+
+
 @requires_native("bash", "cpio", "gzip")
 def test_lab_initrd_requires_flag_and_is_marked(tmp_path: Path) -> None:
     root = tmp_path / "root"

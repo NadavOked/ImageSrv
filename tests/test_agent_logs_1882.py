@@ -286,6 +286,6 @@ def test_the_agent_sends_at_the_end_of_both_round_paths():
 
 
 def test_the_interface_documents_the_endpoint():
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "POST /api/v1/agent/log" in doc and "agent_logs" in doc
     assert json.dumps(sorted(agent_logs.REASONS)) == '["failed", "round_end"]'

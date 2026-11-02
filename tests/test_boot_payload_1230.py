@@ -88,6 +88,12 @@ def _with_payload_builder(tree: Path) -> None:
     (tree / "tools").mkdir(parents=True, exist_ok=True)
     shutil.copy(HELPER, tree / "tools" / "boot-payload-build.sh")
     (tree / "tools" / "build_initramfs.sh").write_text(STUB_BUILD, encoding="utf-8", newline="\n")
+    (tree / "deploy").mkdir(parents=True, exist_ok=True)
+    shutil.copy(REPO / "deploy" / "boot-payload.py", tree / "deploy" / "boot-payload.py")
+    (tree / "agent").mkdir(exist_ok=True)
+    (tree / "agent" / "init").write_text("stub agent\n", encoding="utf-8", newline="\n")
+    for name in ("agent-lib-flatten.sh", "initramfs-version.sh"):   # #1788: inputs of the payload hash
+        (tree / "tools" / name).write_text(f"# stub {name}\n", encoding="utf-8", newline="\n")
 
 
 # --- firstboot, שלב א' ------------------------------------------------------------
@@ -167,6 +173,7 @@ if [ "$1" = -C ]; then shift 2; fi
 case "$1" in
   fetch|checkout) exit 0 ;;
   describe) echo "$FAKE_TAG" ;;
+  ls-files) exit 0 ;;   # #1788: the payload input hash lists tracked files
   rev-parse) echo "commit-of-$FAKE_TAG" ;;
   rev-list) echo "commit-of-$4" ;;
   log) echo {GIT_EPOCH} ;;
@@ -234,7 +241,7 @@ def test_upgrade_rebuilds_both_initrds_against_the_kernel_installed_now(tmp_path
 def test_upgrade_without_flags_on_a_non_iso_server_builds_the_documented_default_and_records_it(tmp_path):
     """‏#1546: שרת שהותקן ב-setup-boot-server.sh (שרת חיפה, 17/10) — אין
     ‏initrd.flags ואין iso-release.json. עד #1546 כל עדכון שלו חזר אחורה.
-    ברירת המחדל מתועדת (docs/server-install.md, ‏verify-boot-payload.sh):
+    ברירת המחדל מתועדת (docs/guides/server-install.md, ‏verify-boot-payload.sh):
     ‏initrd.img + initrd.img.gui ב-HTTP_ROOT — אותן שורות של ה-ISO."""
     host = _host(tmp_path)
     bindir = tmp_path / "bin"
