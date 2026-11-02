@@ -890,7 +890,7 @@ if [ -n "$_missing" ] || [ -n "$_missing_sub" ]; then
             echo "kernel $KVER is a cloud kernel: do not build here." >&2
             echo "Copy vmlinuz, initrd.img and initrd.img.gui from the primary" >&2
             echo "server's boot dir (/srv/imagesrv/boot) instead, or install" >&2
-            echo "linux-image-amd64 and build against it (docs/server-install.md)." >&2
+            echo "linux-image-amd64 and build against it (docs/guides/server-install.md)." >&2
             ;;
     esac
     exit 1

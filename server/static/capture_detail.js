@@ -4,7 +4,7 @@
    אין מוקאפ מאושר לפאנל הזה (docs/design/apple-mockups לא מכסה קליטה בקונסולה) — הפריסה משקפת את
    מסך השיכפול-המקומי הנייטיבי (native-gui/src/screens_lcrun.c: כותרת, שורת מדדים, מחיצות) בסגנון הקונסולה.
 
-   המקור: `capture_detail` של /api/console/tasks (docs/interfaces.md). עיקרון 5: מה שלא נמדד נאמר במילים
+   המקור: `capture_detail` של /api/console/tasks (docs/architecture/interfaces.md). עיקרון 5: מה שלא נמדד נאמר במילים
    ("עוד לא נמדד", "לא נמדד"), לא 0 ולא "—" בלי הסבר. נטען אחרי console.js (esc, UI, fmtBytes, fmtSpan, Progress). */
 "use strict";
 

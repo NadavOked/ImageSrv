@@ -58,7 +58,7 @@ from .db import journal
 from server.net import wol
 from server.rounds import direct
 from server.disks import smart_ask
-from server.rounds.sender import SenderEngine
+from server.rounds.sender import QUIET_SECONDS, SenderEngine
 from server.console.library import create_library_router
 from server.console.drivers import create_agent_drivers_router, create_drivers_router   # #720
 from server.console.tools import create_tools_router   # #649 שלב 1
@@ -604,6 +604,10 @@ def create_runtime(
         live_receivers=lambda session_id: store.live_count(session_id),
         # ‏#1950: חבר `lost` שעדיין מקבל את הזרם נספר במחיצה הבאה.
         lost_receivers=lambda session_id: store.lost_ips(session_id),
+        # ‏#1430: חבר שלא דיווח מעל דקה ולא סיים את המחיצה הקודמת אינו נספר
+        # במחיצה הבאה (`--min-receivers`).
+        quiet_receivers=lambda session_id: store.quiet_ips(
+            session_id, QUIET_SECONDS),
         # ‏#2056: תקרת הנטישה של השולח גדלה עם ההמתנה למחשב שהתנתק (הגדרה בקונסולה).
         lost_wait=lambda: agent_timing.lost_seconds(conn),
         # ברזל 17/10: שאלת SMART פתוחה בגל עוצרת את שעון ה-180 של השולח.
@@ -687,7 +691,7 @@ def create_runtime(
 
     engine = vmupdate_engine or VmUpdate(
         conn, library,
-        # ‏ה-VM לעולם אינו יוצא לאינטרנט דרך כרטיס ההפצה (docs/vm-update.md).
+        # ‏ה-VM לעולם אינו יוצא לאינטרנט דרך כרטיס ההפצה (docs/guides/vm-update.md).
         deploy_interface=lambda: deploy.state.interface if deploy else None)
     host = (VmHost(engine.host_problem, repo_dir or REPO_ROOT)
             if vm_host else None)

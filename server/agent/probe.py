@@ -32,7 +32,7 @@ import sqlite3
 from server.learn import net_history
 from server.db import _settle, _write_lock, now_iso, writing
 
-#: המפתחות שהממשק מגדיר (‏docs/interfaces.md, hello → probe). מפתח אחר
+#: המפתחות שהממשק מגדיר (‏docs/architecture/interfaces.md, hello → probe). מפתח אחר
 #: ברמה העליונה נזנח; מפתח חסר נשמר כ-``None`` = לא דווח.
 KNOWN_KEYS = (
     "power", "rtc", "cpu", "memory", "thermal", "nic", "pci_without_driver",

@@ -568,7 +568,7 @@ def test_no_destructive_step_in_shrinkmem_hides_its_exit_code(name):
 
 
 def test_the_interfaces_document_describes_the_memory():
-    text = (REPO / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    text = (REPO / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     for needle in ("`shrink_open`", "/api/v1/agent/shrink-open", "/api/v1/agent/shrink-close",
                    "/api/console/shrink-records", "shrink_records"):
         assert needle in text, needle

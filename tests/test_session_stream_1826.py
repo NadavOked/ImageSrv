@@ -223,7 +223,7 @@ def test_a_cloner_whose_manifest_is_of_another_image_writes_nothing(tmp_path):
 
 
 def test_the_field_is_documented_in_the_interface():
-    text = (REPO / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    text = (REPO / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "**`session.portbase`**" in text
     example = text.split("## 3. תשובת השרת", 1)[1].split("### כללים", 1)[0]
     assert '"portbase": 9000' in example   # פורט-הפצה-מכוון: הדוגמה ב-interfaces.md

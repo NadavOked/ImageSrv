@@ -24,6 +24,11 @@
 #
 #   boot-payload-build.sh --http-root DIR (--flags-file FILE | --iso-default)
 #                         [--manifest FILE] [--write-flags FILE] [--build-log FILE]
+#                         [--version VER]
+#
+# ‏--version: המחרוזת שנחתמת ב-initrd (agent-version) במקום `git describe`. רק
+# מי שבונה מטען מוכן מראש ל-Release מעביר אותה: הוא בונה מהעץ הפרטי, שאין בו
+# עדיין התג שיתפרסם (#1788).
 #
 # משתני סביבה (לבדיקות): IMAGESRV_MODULES_DIR (/lib/modules),
 # ‏IMAGESRV_KERNEL_DIR (/boot), IMAGESRV_BUILD_TMPDIR (/var/tmp).
@@ -42,6 +47,7 @@ ISO_DEFAULT=0
 MANIFEST=/etc/imagesrv/iso-release.json
 WRITE_FLAGS=""
 BUILD_LOG=""
+VERSION=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -51,6 +57,7 @@ while [[ $# -gt 0 ]]; do
         --manifest)    MANIFEST="${2:?}"; shift 2 ;;
         --write-flags) WRITE_FLAGS="${2:?}"; shift 2 ;;
         --build-log)   BUILD_LOG="${2:?}"; shift 2 ;;
+        --version)     VERSION="${2:?}"; shift 2 ;;
         *) die "unknown option: $1" ;;
     esac
 done
@@ -135,7 +142,7 @@ build_line() {   # build_line <n>: one build_initramfs.sh run; the verdict is $L
     done
     rm -f "$out.new"
     say "building $out (${lines[$n]})"
-    if bash "$APP_DIR/tools/build_initramfs.sh" "${words[@]}" \
+    if bash "$APP_DIR/tools/build_initramfs.sh" "${words[@]}" ${VERSION:+--version "$VERSION"} \
         --kernel-version "$KVER" --source-date-epoch "$EPOCH" >"$LOGDIR/$n.log" 2>&1; then
         rc=0
     else
@@ -205,3 +212,13 @@ if [[ -n "$WRITE_FLAGS" ]]; then
     say "recorded ${#lines[@]} build line(s) in $WRITE_FLAGS"
 fi
 say "Boot payload ready for $KVER: ${outputs[*]} $HTTP_ROOT/vmlinuz"
+
+# Record both the complete input fingerprint and hashes of the installed files.
+# This is what makes a later "inputs unchanged" decision verifiable rather than
+# relying on timestamps or on the mere presence of files.
+if [[ -n "$WRITE_FLAGS" ]]; then
+    SOURCE_COMMIT=$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || printf 'iso:%s' "$EPOCH")
+    python3 "$APP_DIR/deploy/boot-payload.py" create --source "$APP_DIR" \
+        --kernel "$KVER" --flags "$WRITE_FLAGS" --payload-dir "$HTTP_ROOT" ${VERSION:+--version "$VERSION"} \
+        --source-commit "$SOURCE_COMMIT" --output "$HTTP_ROOT/boot-payload.json"
+fi

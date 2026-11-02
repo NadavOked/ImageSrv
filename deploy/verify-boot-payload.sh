@@ -164,7 +164,7 @@ cat >&2 <<EOF
 ואף מחשב לא מגיע ל-ImageSrv. מסך הבריאות אומר את אותו הדבר, בשורה
 "קבצי האתחול".
 
-מה עושים (docs/server-install.md, "שלב שני, חובה: הקרנל וה-initrd"):
+מה עושים (docs/guides/server-install.md, "שלב שני, חובה: הקרנל וה-initrd"):
 
   sudo apt-get install -y --no-install-recommends linux-image-amd64
   KVER=\$(ls /lib/modules | grep -v cloud | tail -n1)

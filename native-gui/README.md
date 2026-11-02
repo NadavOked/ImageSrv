@@ -134,7 +134,7 @@ native-gui/
 
 `--screen dcui` is a different program in the same binary: it paints the
 frames `server/dcui/gui.py` writes to its stdin and writes one token per key
-to its stdout (`dcui.h`; the records are docs/interfaces.md s31). It opens
+to its stdout (`dcui.h`; the records are docs/architecture/interfaces.md s31). It opens
 `drm`, then `fbdev`, never `mem`, and every character it sends is the US
 layout -- the fields there are English only. `--png PREFIX --state FRAME`
 renders one frame file in both themes; `python3 -m server.dcui --gui-frames DIR`
@@ -209,7 +209,7 @@ per chosen disk that has a model (a disk set to "בלי" is not there). `|` is
 safe as the separator because no state value carries one (`guistate.sh`
 replaces it with a space), and vendor/model are sent in the library's spelling
 from `driver_model=`. There is no "automatic": the hardware the cloner detected
-is not the target's (docs/interfaces.md §17). Refused locally, with the reason
+is not the target's (docs/architecture/interfaces.md §17). Refused locally, with the reason
 in `room_error`: no disk chosen, no disk with a model, or a model the library no
 longer lists; the bridge (`room_drivers_json`, `roomflow.sh`) posts nothing on
 a malformed value, and the server checks every model again.
@@ -372,7 +372,7 @@ cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawe
                                     # #1859: <cause> also carries why a `warn` disk is orange (a smart.sh
                                     # SMART_WARN_REASONS word, said by smart_reason_text)
 cused=<dev>|<size>|<used>           # #2030: size and bytes in use of a disk (diskused.sh), round or idle;
-                                    # used -1 = not measured -> "לא נמדד", never 0. See docs/interfaces.md
+                                    # used -1 = not measured -> "לא נמדד", never 0. See docs/architecture/interfaces.md
 cdrawer_slot=<drawer>|<conn>|<name> # #1495: one per drawer of the hello's drawer_slots, empty ones too. With
                                     # them the cloner screens lay out drawers 1..N of the mapping (the cage
                                     # size is no longer a guess); without them -- an older server, no answer
@@ -487,7 +487,7 @@ monitor page shows the machine anyway. `--backend mem [--fb-file PATH]`
 fbdev. The kiosk (`agent/lib/gui/guibridge.sh`) picks `mem` exactly when
 `/dev/fb0` is not a character device, and `fbdev` otherwise, as before. The
 file layout — a 4096-byte header with magic, geometry and a frame seqlock,
-then XRGB8888 rows — is the contract in `docs/interfaces.md` §15.
+then XRGB8888 rows — is the contract in `docs/architecture/interfaces.md` §15.
 
 ### `--png`: every card, for comparing with the HTML
 

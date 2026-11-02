@@ -8,7 +8,7 @@
 
 > ## 🚨 משהו נפל עכשיו, וכיתה ממתינה?
 >
-> **‏[`runbook-tekala-chaya.md`](runbook-tekala-chaya.md)** — טריאז' של
+> **‏[`runbook-tekala-chaya.md`](../lab/runbook-tekala-chaya.md)** — טריאז' של
 > ‏30 שניות, ומה עושים בכל אחד מהמצבים.
 >
 > **הדבר שהכי חשוב לדעת לפני שקוראים אותו:** ‏**שרת כבוי הוא המצב
@@ -331,14 +331,14 @@ recovery בתחנה ידרוש כניסה ברגע שתהיה; לכבות רק �
 לקוד המוצר. השרת אינו נוגע ב-`sshd`, אינו פותח 22 בחומת האש, אינו מגיש
 `imagesrv.debug` לתחנות (גם לא מ-`--extra-cmdline`) ואינו שומר מפתחות
 host. בעלייה הוא מוחק את הגדרות המתגים הישנות (‏`ssh:stations`,
-‏`ssh:iface:*`) ואת `machine_ssh_hostkey` — ‏docs/interfaces.md סעיף 8.
+‏`ssh:iface:*`) ואת `machine_ssh_hostkey` — ‏docs/architecture/interfaces.md סעיף 8.
 
 **מה לא נוקה על מכונה קיימת:** drop-in ישן ב-`/etc/ssh/sshd_config.d/
 imagesrv-ssh.conf` (אם המתקין הישן כתב אותו) ו-`<data_dir>/ssh/known_hosts`
 נשארים כמות שהם — המוצר כבר אינו קורא או כותב אותם.
 
 גישת טכנאי לתחנות במעבדה היא overlay של המעבדה, מחוץ לריפו
-(‏`IMAGESRV_EXTRA_OVERLAY`, ‏docs/agent.md).
+(‏`IMAGESRV_EXTRA_OVERLAY`, ‏docs/architecture/agent.md).
 
 ## הרשת של השרת עצמו, ומה מונע נעילה עצמית (‏#55–#57)
 
@@ -514,7 +514,7 @@ udpcast מותקן; מצב השידור מוצג בקונסולה ומדווח �
 (‏`GET /api/console/update/backup`, מנהל בלבד): עותק עקבי של ה-DB דרך
 ה-backup API (לא `cp` — ‏WAL), ‏`integrity_check` על העותק, ושאר
 `data_dir` בלי אימג'ים. הנוהל המלא — cron, ‏RPO, סדר השחזור לשרת חדש
-ותרגיל השחזור — ב-[`server-install.md`](server-install.md#גיבוי-ושחזור-1128-עיצוב-r41).
+ותרגיל השחזור — ב-[`server-install.md`](../guides/server-install.md#גיבוי-ושחזור-1128-עיצוב-r41).
 
 ## מה עוד לא כאן
 

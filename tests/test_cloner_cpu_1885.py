@@ -159,5 +159,5 @@ def test_a_capture_report_never_carries_cpu(tmp_path):
 
 
 def test_the_interface_documents_it():
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "cpu_json" in doc and "throttle_delta" in doc and "cloner_throttled" in doc

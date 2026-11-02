@@ -20,7 +20,7 @@ enum { KIND_DRM, KIND_FBDEV, KIND_MEM };
 /* ---- mem: a framebuffer file for the remote monitor (#835) -------------------
  * No display attached (every connector down, so i915 creates no /dev/fb0 --
  * cloner 2): the screens are drawn into a file that imagesrv-monitor mmaps
- * and serves over RFB. Layout, docs/interfaces.md s15: a 4096-byte header,
+ * and serves over RFB. Layout, docs/architecture/interfaces.md s15: a 4096-byte header,
  * then XRGB8888 rows of `stride` bytes. `seq` is a seqlock -- odd while a
  * frame is being copied in -- so the reader can skip a torn frame instead of
  * showing half a screen. The header's constants are repeated verbatim in

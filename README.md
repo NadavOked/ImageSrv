@@ -112,7 +112,7 @@ firmware → shim (Microsoft-signed) → GRUB (Debian-signed) → distro kernel 
 ```
 
 ה-initramfs נטען כנתון אחרי הקרנל ולכן אינו דורש חתימה. עדכון הסוכן הוא החלפת קובץ אחד.
-GRUB מושך קובץ תצורה שמיוצר בזמן אמת לפי ה-MAC. פרטי משימה אינם עוברים בשורת הפקודה של הקרנל — הכול מגיע מהשרת בערוץ מתועד ([docs/interfaces.md](docs/interfaces.md)).
+GRUB מושך קובץ תצורה שמיוצר בזמן אמת לפי ה-MAC. פרטי משימה אינם עוברים בשורת הפקודה של הקרנל — הכול מגיע מהשרת בערוץ מתועד ([docs/architecture/interfaces.md](docs/architecture/interfaces.md)).
 
 ## התקן שיכפול USB
 
@@ -125,12 +125,12 @@ GRUB מושך קובץ תצורה שמיוצר בזמן אמת לפי ה-MAC. פ
 ההתקן עצמו אינו מוצע כמקור או כיעד. הגדרות ודוחות נשמרים במחיצת הנתונים שלו.
 
 הורדה מהקונסולה וכתיבה ל-USB עם Rufus במצב DD (או `dd` בלינוקס).
-הוראות: `tools/build_usb_clone.sh` ו-[docs/local-clone.md](docs/local-clone.md).
+הוראות: `tools/build_usb_clone.sh` ו-[docs/guides/local-clone.md](docs/guides/local-clone.md).
 
 ## התקנה
 
 **התקנת שרת נתמכת מה-ISO בלבד** (אשף גרפי על מסך השרת; שרת בלי מסך — אשף דרך הדפדפן).
-המדריך המלא, כולל שרת משני: [docs/server-install.md](docs/server-install.md).
+המדריך המלא, כולל שרת משני: [docs/guides/server-install.md](docs/guides/server-install.md).
 
 רשת ההפצה מוגדרת מהקונסולה (דף הרשת).
 
@@ -149,7 +149,7 @@ python -m server.main --server-url http://127.0.0.1:8080 --data-dir <tmp> --imag
 sudo ./tools/build_initramfs.sh
 ```
 
-יחידת systemd ופריסה: [docs/server.md](docs/server.md).
+יחידת systemd ופריסה: [docs/architecture/server.md](docs/architecture/server.md).
 
 ## רשת ופורטים
 
@@ -171,7 +171,7 @@ sudo ./tools/build_initramfs.sh
 **הפרדת וילנים:** הקונסולה (8081) על וילן הניהול; ערוץ התחנות (8080, DHCP, TFTP, מולטיקאסט) על וילן ההפצה בלבד.
 
 **דרישות סוויץ' (חובה לפני פרודקשן):** וילן הפצה נפרד ללא ניתוב, Port security, IGMP snooping + querier, DHCP snooping, ללא 802.1X על פורטי ההפצה.
-פירוט מלא: [docs/server-install.md](docs/server-install.md) ו-`deploy/firewall-rules.md`.
+פירוט מלא: [docs/guides/server-install.md](docs/guides/server-install.md) ו-`deploy/firewall-rules.md`.
 
 > הערה: ערוץ התחנות (8080) הוא HTTP גלוי (כולל אימות סוכן). הקונסולה והערוץ הבין-שרתי מוצפנים. נתוני המולטיקאסט גלויים לכל מצטרף לקבוצה — בתכנון.
 
@@ -212,14 +212,14 @@ Issue בריפו הפרטי מותר; פרסום לציבור לפני תיקו�
 
 | נתיב | תפקיד |
 |---|---|
-| [docs/imagesrv-spec.md](docs/imagesrv-spec.md) | אפיון המערכת — מה, למה, ובאילו אילוצים |
-| [docs/interfaces.md](docs/interfaces.md) | חוזה בין הרכיבים — מקור האמת |
-| [docs/server.md](docs/server.md) | שרת וקונסולה, כולל פריסה כשירות |
-| [docs/agent.md](docs/agent.md) | סוכן: החלטות, שחזור, קליטה, חדר שיכפולים |
-| [docs/grub-generator.md](docs/grub-generator.md) | מחולל תפריט GRUB |
-| [docs/server-install.md](docs/server-install.md) | התקנת שרת |
-| [docs/driver-packages.md](docs/driver-packages.md) | חבילות דרייברים |
-| [docs/local-clone.md](docs/local-clone.md) | שיכפול מקומי והתקן USB |
+| [docs/architecture/imagesrv-spec.md](docs/architecture/imagesrv-spec.md) | אפיון המערכת — מה, למה, ובאילו אילוצים |
+| [docs/architecture/interfaces.md](docs/architecture/interfaces.md) | חוזה בין הרכיבים — מקור האמת |
+| [docs/architecture/server.md](docs/architecture/server.md) | שרת וקונסולה, כולל פריסה כשירות |
+| [docs/architecture/agent.md](docs/architecture/agent.md) | סוכן: החלטות, שחזור, קליטה, חדר שיכפולים |
+| [docs/architecture/grub-generator.md](docs/architecture/grub-generator.md) | מחולל תפריט GRUB |
+| [docs/guides/server-install.md](docs/guides/server-install.md) | התקנת שרת |
+| [docs/guides/driver-packages.md](docs/guides/driver-packages.md) | חבילות דרייברים |
+| [docs/guides/local-clone.md](docs/guides/local-clone.md) | שיכפול מקומי והתקן USB |
 | [SECURITY.md](SECURITY.md) | דיווח על חולשה |
 | `server/` | API, קונסולה, לוגיקה |
 | `agent/` | סוכן + סקריפטי initramfs |

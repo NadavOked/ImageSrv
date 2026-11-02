@@ -164,5 +164,5 @@ def test_the_console_refuses_before_the_task_exists(server, monkeypatch):
 
 def test_the_interface_documents_it():
     from pathlib import Path
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "storage_usage" in doc and "capture_space_refused" in doc

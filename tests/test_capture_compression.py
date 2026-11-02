@@ -141,8 +141,8 @@ def test_real_zstd_accepts_exactly_what_the_agent_will_hand_it(tmp_path):
 
 
 def test_the_interfaces_document_shows_the_level_that_ships():
-    """‏`docs/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים. דוגמה
+    """‏`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים. דוגמה
     שנשארה על `zstd-9` היא בדיוק ההפרש בין מה שכתוב למה שרץ."""
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md")
     text = doc.read_text(encoding="utf-8")
     assert '"compression": "zstd-3"' in text

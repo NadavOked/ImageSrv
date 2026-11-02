@@ -35,7 +35,9 @@
           כמות שהוא    — כל השאר, כולל "לא נמדד" (עיקרון 5)
           "הגל האחרון" — עם אותו מספר מגירות במכונה, ובלעדיו הקרוב (`_pick`);
           מהקרוב עם **פחות** מגירות — הקצב שהוכח × DOWN_FACTOR לכל הכפלה (‏#1842)
-          מכונה בלי גל כזה (חדשה / הוחלפה) — **כל הגל** בפתיחה (`_from_previous`)
+          מכונה שלא נראתה כלל (חדשה / הוחלפה) — הקצב הגבוה ביותר שהוכח בטוח
+                  באותו מספר מגירות במכונה אחרת, פחות STEP_UP (`_fleet_start`);
+                  בלי ראיית צי — **כל הגל** בפתיחה (`_from_previous`)
     קצב = min(קצב, הכונן האיטי המוכר × MARGIN)        (#447, למטה)
     קצב = בין FLOOR_RATIO × פתיחה לבין הגג
 
@@ -91,6 +93,7 @@ from pathlib import Path
 from typing import Callable
 
 from server.agent import cloner_cpu
+from server.disks import ata_cause, disk_failures
 from server.rounds import nic_speed
 from server.learn import server_io
 from server.db import _write_lock, get_setting, journal, now_iso, writing
@@ -119,7 +122,7 @@ MIN_HELD_SAMPLES = 2
 FLOOR_RATIO = 0.25
 
 #: קצב הפתיחה, בביטים לשנייה: ‏600m — נמדד על ברזל ב-06/09 (מ.19,
-#: ‏`docs/verification-register.md`): ‏61.06MB/s לשני מקבלים, ‏re-xmits=0.
+#: ‏`docs/lab/verification-register.md`): ‏61.06MB/s לשני מקבלים, ‏re-xmits=0.
 #: ⚠️ המדידה ההיא הייתה **בלי כתיבה לדיסק** — לכן הוא נקודת פתיחה, לא
 #: הבטחה; הירידה על שידורים חוזרים והכוננים האיטיים (#447) הם מה שמגן.
 START_BITRATE = 600_000_000
@@ -129,6 +132,15 @@ START_BITRATE = 600_000_000
 TOP_BITRATE = 900_000_000
 #: צעד העלייה אחרי גל נקי: ‏600→900 בשלושה גלים נקיים.
 STEP_UP = 100_000_000
+#: האצה אחרי גל נקי במיוחד: צעד גדול פי שלושה. המקור: ברזל 19/10,
+#: משכפל 2 — ‏277m→377m→477m→577m דרשו ארבעה גלים אף שה-goodput עלה.
+CLEAN_STEP_MULTIPLIER = 3
+#: "נקי במיוחד" להאצה: פחות מ-0.5% שידורים חוזרים. המקור: ברזל 19/10,
+#: משכפל 2 — הגלים שמתחת ל-577m היו תחום הטיפוס הנקי שנמדד.
+CLEAN_LOSS_MAX = 0.005
+#: "נקי במיוחד" להאצה: פחות מפקיעת sender אחת לכל GB. המקור: ברזל 19/10,
+#: משכפל 2 — מפריד את תחילת הטיפוס מ-577m (‏3.4/GB), בלי לשנות את סף העצירה.
+CLEAN_TIMEOUTS_PER_GB_MAX = 1.0
 #: הירידה אחרי גל עם שידורים חוזרים: רבע מהקצב.
 DOWN_FACTOR = 0.75
 #: מעל איזה חלק מהבלוקים שידורים חוזרים מורידים. ‏udp-sender מדפיס את
@@ -416,12 +428,20 @@ def _point(session_id: str, past: dict, rate: int, stream: dict,
             or sent < MIN_SAMPLE_BYTES or not isinstance(got, dict)):
         return None
     drawers, done, written = got.get("drawers"), got.get("done"), got.get("written_bytes")
+    disk_failed = got.get("disk_failed", 0)
+    stream_failed = got.get("stream_failed", 0)
+    unknown_failed = got.get("unknown_failed", 0)
     if not (_count(drawers) and drawers > 0 and _count(done) and done <= drawers
-            and _count(written)):
+            and _count(written) and _count(disk_failed) and _count(stream_failed)
+            and _count(unknown_failed)
+            and done + disk_failed + stream_failed + unknown_failed == drawers):
         return None
-    goodput = int(written / drawers / wall)
+    if unknown_failed or disk_failed == drawers:
+        return None
+    measured_drawers = drawers - disk_failed
+    goodput = int(written / measured_drawers / wall)
     return {**base, "goodput_bps": goodput, "eff": goodput * 8 / rate,
-            "lost": done < drawers}
+            "lost": bool(stream_failed), "disk_failed": disk_failed}
 
 
 def _unsafe(point: dict) -> bool:
@@ -447,7 +467,8 @@ def _climb(points: list[dict], unsafe: list[int] = ()) -> tuple[int, str, dict]:
         GB שנשלח (‏#1761), או שקצב לא-בטוח
         שנזכר (`unsafe`) אינו מעליו → ‏`held`
         הקצב הקרוב מעליו — בחלון או בזיכרון — לא בטוח → נשארים (‏`peak`)
-        אין מעליו קצב שנוסה → ‏+STEP_UP (‏`climb`)
+        אין מעליו קצב שנוסה → ‏+STEP_UP (‏`climb`), או פי
+        CLEAN_STEP_MULTIPLIER כשהגל נקי במיוחד וה-goodput עלה מעל הרעש
         מעליו קצב שלא היה מהיר יותר, בטוח, בפער ≥ 2×REFINE_STEP → באמצע (‏`climb`)
         אחרת → נשארים (‏`peak`)
         ‏`climb` כשיומן השולח של השיא לא נקרא → נשארים (‏`unmeasured`, עיקרון 5)
@@ -470,7 +491,7 @@ def _climb(points: list[dict], unsafe: list[int] = ()) -> tuple[int, str, dict]:
             return rate, "peak", best
         return int(rate * DOWN_FACTOR), "back", best
     timeouts = best.get("timeouts")
-    if (_unsafe(best) or best["loss"] > LOSS_CLIMB_MAX
+    if (best.get("disk_failed") or _unsafe(best) or best["loss"] > LOSS_CLIMB_MAX
             or (timeouts is not None and timeouts * 10 ** 9 / best["sent"] > TIMEOUTS_PER_GB_HELD)
             or any(r <= rate for r in unsafe)):
         return rate, "held", best
@@ -478,7 +499,20 @@ def _climb(points: list[dict], unsafe: list[int] = ()) -> tuple[int, str, dict]:
     if wall is not None and (not above or wall <= above[0]["rate"]):
         return rate, "peak", best                  # הקצב הקרוב מעליו לא בטוח
     if not above:
-        bits = rate + STEP_UP
+        lower = [p for p in tried if p["rate"] < rate]
+        rose = bool(lower) and best["goodput_bps"] > max(
+            p["goodput_bps"] for p in lower) * (1 + GOODPUT_NOISE)
+        clean_timeouts = (timeouts is not None
+                          and timeouts * 10 ** 9 / best["sent"]
+                          < CLEAN_TIMEOUTS_PER_GB_MAX)
+        clean = (best["loss"] < CLEAN_LOSS_MAX and clean_timeouts
+                 and best.get("dropped") == 0 and rose)
+        step = STEP_UP * (CLEAN_STEP_MULTIPLIER if clean else 1)
+        bits = rate + step
+        if wall is not None:
+            # לעולם לא נוחתים על קצב לא-בטוח או מעליו. צעד רגיל אחד מתחת
+            # לחומה הוא הנקודה האחרונה שאפשר לנסות בלי לחצות אותה.
+            bits = min(bits, wall - STEP_UP)
     elif not _unsafe(above[0]) and above[0]["rate"] - rate >= 2 * REFINE_STEP:
         bits = (rate + above[0]["rate"]) // 2
     else:
@@ -494,6 +528,58 @@ def _pick(counts: dict[int, tuple], want: int) -> tuple[int, tuple]:
     תחת יותר עומס בטוח לפחות עומס; ההפך מוקטן ב-`_from_previous` (‏#1842)."""
     drawers = min(counts, key=lambda c: (abs(c - want), -c))
     return drawers, counts[drawers]
+
+
+def _fleet_start(conn: sqlite3.Connection, mac: str, drawers: int) -> tuple[int, dict] | None:
+    """פתיחה למכונה שלא נראתה כלל, מהצי האחר, במספר המגירות שלה בגל.
+
+    הקצב הגבוה ביותר שמכונה אחרת הוכיחה בבטחה באותו מספר מגירות, פחות צעד
+    רגיל אחד. נקודה מוכחת היא מדידת goodput שהסתיימה בלי מגירה חסרה, בלי
+    ניתוק ובלי אבדן מעל LOSS_CLIMB_MAX. קצב שהמכונה החדשה כבר סימנה כלא
+    בטוח אינו מועמד לפתיחה שלה.
+    """
+    proven: list[tuple[int, dict]] = []
+    unsafe = {r["rate_bps"] for r in conn.execute(
+        "SELECT rate_bps FROM unsafe_rates WHERE mac = ? AND drawers <= ?",
+        (mac, drawers))}
+    for row in conn.execute(
+            "SELECT session_id, decision, stream, delivered FROM wave_rates"
+            " ORDER BY rowid DESC"):
+        try:
+            past = json.loads(row["decision"])
+            stream = json.loads(row["stream"]) if row["stream"] else {}
+            delivered = json.loads(row["delivered"]) if row["delivered"] else None
+        except (TypeError, ValueError):
+            continue
+        if past.get("direct"):
+            continue
+        # ‏#1884: גל שהשרת היה צוואר הבקבוק בו אינו ראיה על המשכפלים.
+        if server_io.bound(conn, row["session_id"]):
+            continue
+        rate = parse_bitrate(past.get("max_bitrate"))
+        roster = past.get("roster") or []
+        had = Counter(d.get("mac") for d in roster if isinstance(d, dict))
+        for other, count in had.items():
+            if not other or other == mac or count != drawers or rate is None:
+                continue
+            # ‏#1885: גל שבו המעבד של המכונה האחרת הואט אינו ראיה על הקצב.
+            if isinstance(delivered, dict) and cloner_cpu.throttled(
+                    (delivered.get(other) or {}).get("cpu")):
+                continue
+            point = _point(row["session_id"], past, rate, stream,
+                           delivered if isinstance(delivered, dict) else None, other)
+            if (point and not point["lost"] and point.get("dropped") == 0
+                    and point["loss"] <= LOSS_CLIMB_MAX):
+                proven.append((rate, point))
+    if not proven:
+        return None
+    rate, point = max(proven, key=lambda item: item[0])
+    bits = max(1, rate - STEP_UP)
+    while bits in unsafe and bits > STEP_UP:
+        bits -= STEP_UP
+    if bits in unsafe:
+        return None
+    return bits, point
 
 
 def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
@@ -577,12 +663,32 @@ def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
             if len(waves) < GOODPUT_WINDOW:
                 waves.append((row["session_id"], past, stream, rate, roster, drops,
                               delivered if isinstance(delivered, dict) else None))
-    if seen.keys() < want.keys():
-        return start, "start", None                 # מכונה שלא נראתה — פתיחה
     found: dict[str, tuple[int, str, dict]] = {}
+    # ‏#1761: מכונה שלא נראתה כלל — מראיית הצי באותו מספר מגירות. מכונה מוכרת
+    # בלי גל במספר המגירות הזה נשארת בכלל `_pick` / ‏#1842 (הכרעת נדב 20/10).
+    for mac, drawers in want.items():
+        if mac in seen:
+            continue
+        fleet = _fleet_start(conn, mac, drawers)
+        if fleet is None:
+            return start, "start", None             # מכונה חדשה בלי ראיית צי
+        bits, point = fleet
+        previous = {"session_id": point["session_id"],
+                    "max_bitrate": point["max_bitrate"], "rule": "fleet",
+                    "drawers": drawers, "mac": mac}
+        found[mac] = bits, "fleet", previous
     for mac, counts in seen.items():
+        if mac in found:
+            continue
         drawers, waves = _pick(counts, want[mac])
         session_id, past, stream, rate, roster, drops, _ = waves[0]
+        latest = waves[0][6].get(mac) if isinstance(waves[0][6], dict) else None
+        if isinstance(latest, dict) and latest.get("unknown_failed"):
+            previous = {**_summary(session_id, past, stream, roster, drops),
+                        "rule": "goodput", "wall_s": stream.get("wall_s"),
+                        "goodput_bps": None, "drawers": drawers}
+            found[mac] = rate, "unmeasured", previous
+            continue
         points = [p for w in waves if (p := _point(w[0], w[1], w[3], w[2], w[6], mac))]
         unsafe = [r["rate_bps"] for r in conn.execute(
             "SELECT rate_bps FROM unsafe_rates WHERE mac = ? AND drawers <= ?",
@@ -885,6 +991,12 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
         cap = parse_bitrate(decided.get("max_bitrate"))
         if cap is None or decided.get("direct"):
             return 0                  # אין תקרה ידועה, או מקור שאולי הוא האיטי
+        wave = conn.execute("SELECT stream FROM wave_rates WHERE session_id = ?",
+                            (session_id,)).fetchone()
+        try:
+            stream = json.loads(wave["stream"]) if wave and wave["stream"] else {}
+        except (TypeError, ValueError):
+            stream = {}
         roster = {(d.get("mac"), d.get("serial")): d.get("model")
                   for d in decided.get("roster") or [] if isinstance(d, dict)}
         # הכרעת נדב 17/10: מה שכל מקלט דיווח שהקרנל שלו זרק (‏`udp_drops` בדיווח,
@@ -899,6 +1011,7 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
         # ‏#1758: מה שכל מכונה ברשימת הגל כתבה בפועל — המונה של goodput. מכונה
         # שלא דיווחה = ‏None ("לא נמדד"); מגירה שלא `done` — אפס בייטים.
         delivered = {mac: ({"drawers": sum(m == mac for m, _ in roster), "done": 0,
+                            "disk_failed": 0, "stream_failed": 0, "unknown_failed": 0,
                             "written_bytes": 0}
                            if mac in reported else None) for mac, _ in roster}
         # ‏#1885: מעבד/throttle/טמפ' של כל מכונה בגל (‏`cpu_json`) — `_from_previous`. לא דווח —
@@ -907,6 +1020,8 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
             got, cpu = delivered.get(member["mac"]), _cpu(member)
             if got is not None and cpu is not None:
                 got["cpu"] = cpu
+        disk_failed = {(r["mac"], r["dev"]) for r in conn.execute(
+            "SELECT mac, dev FROM disk_failures WHERE session_id = ?", (session_id,))}
         rows = []
         for member in members:
             for t in json.loads(member["targets_json"] or "[]"):
@@ -918,6 +1033,18 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
                 if t.get("state") == "done" and _count(written) and got is not None:
                     got["done"] += 1
                     got["written_bytes"] += written
+                elif t.get("state") == "failed" and got is not None:
+                    key = (member["mac"], t.get("dev"))
+                    cause = ata_cause.classify(ata_cause.clean_log(t.get("ata_log")),
+                                               t.get("error") or "")
+                    if key in disk_failed:
+                        got["disk_failed"] += 1
+                    elif (stream.get("dropped_clients") or stream.get("ended") == "send_failed"
+                          or disk_failures.stream_fault(cause, t.get("error"))
+                          or disk_failures.interrupted(cause, t.get("error"))):
+                        got["stream_failed"] += 1
+                    else:
+                        got["unknown_failed"] += 1
                 seconds = _seconds(t.get("first_moved_at"), t.get("moved_at"))
                 if (t.get("state") != "done" or not serial or seconds is None
                         or seconds < MIN_SAMPLE_S or not isinstance(written, int)

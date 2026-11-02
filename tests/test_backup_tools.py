@@ -181,7 +181,7 @@ def test_restore_drill_brings_up_a_server_on_the_copy(tmp_path: Path):
 
 
 def test_the_docs_describe_backup_and_restore():
-    text = (REPO / "docs" / "server-install.md").read_text(encoding="utf-8")
+    text = (REPO / "docs" / "guides" / "server-install.md").read_text(encoding="utf-8")
     for needle in ("backup-server.sh", "verify-images.py", "restore-drill.sh",
                    "הורד גיבוי הגדרות", "RPO"):
         assert needle in text, needle

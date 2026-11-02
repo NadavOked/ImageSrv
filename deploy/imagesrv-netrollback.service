@@ -16,7 +16,7 @@
 # "the machine came back up with an unconfirmed change" is a fact we can
 # read rather than guess.
 #
-# Install (see docs/server-install.md):
+# Install (see docs/guides/server-install.md):
 #
 #   sudo install -m 0644 deploy/imagesrv-netrollback.service \
 #                        deploy/imagesrv-netrollback.timer \
@@ -30,7 +30,7 @@
 
 [Unit]
 Description=ImageSrv: restore an unconfirmed network configuration
-Documentation=https://github.com/NadavOked/ImageSrv-dev/blob/main/docs/server.md
+Documentation=https://github.com/NadavOked/ImageSrv-dev/blob/main/docs/architecture/server.md
 # Late enough that ifup works, early enough to fix the boot we came up in.
 After=network-pre.target local-fs.target
 DefaultDependencies=no

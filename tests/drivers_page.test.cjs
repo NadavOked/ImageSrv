@@ -133,7 +133,7 @@ test('an empty library says so with the build tool; a failed read is "not read" 
   await s.run('loadDrivers()');
   let html = s.run('driversPage(1)');
   assert.match(html, /class="empty">אין חבילות דרייברים — ייבוא קובץ tar שנבנה ב-tools\/drivers\/build-package\.py/);
-  assert.match(html, /docs\/driver-packages\.md/);
+  assert.match(html, /docs\/guides\/driver-packages\.md/);
   s = setup({...BASE, '/drivers': new Error('disk gone')});
   await s.run('loadDrivers()');
   html = s.run('driversPage(1)');

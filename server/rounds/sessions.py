@@ -22,6 +22,7 @@ import re
 import secrets
 import sqlite3
 import time
+from datetime import datetime, timezone
 from typing import Callable
 
 from server.db import get_setting, journal, now_iso, update_one, writing
@@ -86,6 +87,15 @@ class SessionSuperseded(SessionError):
     הקונסולה וה-API מתייחסים אליו כאל כל שגיאת סבב אחרת.
     """
 
+
+
+def _iso(ts: str | None) -> datetime | None:
+    """חותמת ISO עם אזור זמן, או None — "לא נמדד" (‏#1430)."""
+    try:
+        got = datetime.fromisoformat(ts) if ts else None
+    except (TypeError, ValueError):
+        return None
+    return got if got is not None and got.tzinfo is not None else None
 
 class SessionStore:
     def __init__(
@@ -491,6 +501,29 @@ class SessionStore:
             " AND state NOT IN ('done', 'failed', 'partial', 'lost')",
             (session_id,),
         ).fetchone()["n"]
+
+    def quiet_ips(self, session_id: str, seconds: int) -> list[str | None]:
+        """‏#1430: הכתובת האחרונה שנראתה (‏`net_devices`, מה-hello; ‏None כשאינה
+        ידועה) של כל חבר שאינו במצב סופי ולא דיווח `seconds` שניות — מהדיווח
+        האחרון (‏`updated_at`) או מתחילת הגל, המאוחר מביניהם (כמו
+        `room._mark_lost`, שנותן לכל חבר גרייס מתחילת הגל). חותמת שאינה
+        נקראת אינה "שקט" — לא נמדד; חותמת בעתיד (קפיצת שעון, #1947) — לא שקט.
+        השולח מצליב אותן מול מי שקיבל את המחיצה הקודמת עד סופה, כמו `lost_ips`."""
+        rows = self.conn.execute(
+            "SELECT m.updated_at, s.started_at, d.ip FROM session_members m"
+            " JOIN sessions s ON s.id = m.session_id"
+            " LEFT JOIN net_devices d ON d.mac = m.mac WHERE m.session_id = ?"
+            " AND m.state NOT IN ('done', 'failed', 'partial', 'lost')",
+            (session_id,),
+        ).fetchall()
+        now = datetime.now(timezone.utc)
+        quiet: list[str | None] = []
+        for row in rows:
+            refs = [t for t in (_iso(row["updated_at"]), _iso(row["started_at"]))
+                    if t is not None]
+            if refs and (now - max(refs)).total_seconds() > seconds:
+                quiet.append(row["ip"] or None)
+        return quiet
 
     def lost_ips(self, session_id: str) -> list[str | None]:
         """‏#1950: הכתובת האחרונה שנראתה (‏`net_devices`, מה-hello) של כל חבר
