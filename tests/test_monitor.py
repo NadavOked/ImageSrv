@@ -911,17 +911,21 @@ def test_power_token_over_the_websocket_is_refused_and_never_reaches_the_machine
     assert not any(w.startswith(b"\x06") for w in machine.writes)
     assert not any(b"imagesrv-power" in w for w in machine.writes)
     assert machine.closed is True
-    assert journal_rows(server, "monitor_closed") == [(f"{MAC} refused", "noc")]
+    # ‏#1855: ‏refused נושא את הסיבה
+    assert journal_rows(server, "monitor_closed") == [
+        (f"{MAC} refused — ClientCutText — {monitor.POWER_OVER_WS_REFUSED}", "noc")]
 
 
-@pytest.mark.parametrize("header, close_code, close_reason", [
+@pytest.mark.parametrize("header, close_code, close_reason, journaled", [
     (b"\x06\x00\x00\x00" + struct.pack(">I", 1 << 30),
-     monitor.WS_FORBIDDEN, monitor.POWER_OVER_WS_REFUSED),   # רגיל: 1GB "בדרך"
+     monitor.WS_FORBIDDEN, monitor.POWER_OVER_WS_REFUSED,      # רגיל: 1GB "בדרך"
+     f"refused — ClientCutText — {monitor.POWER_OVER_WS_REFUSED}"),
     (b"\x06\x00\x00\x00" + struct.pack(">i", -(1 << 30)),
-     1009, "הודעת RFB גדולה מדי"),                          # מורחב, ענק
+     1009, "הודעת RFB גדולה מדי",                             # מורחב, ענק
+     f"refused — הודעת RFB גדולה מדי: {8 + (1 << 30)} בייט, סוג 6"),
 ])
 def test_client_cut_text_is_refused_on_its_header_not_after_its_body(
-        server, header, close_code, close_reason):
+        server, header, close_code, close_reason, journaled):
     """‏#1392: ההחלטה על ClientCutText נופלת כשהאורך ידוע (8 בייטים), ולא
     אחרי שכל הגוף הגיע — אורך שמבטיח 1GB אינו משאיר את הגשר ממתין ובולע
     (רגיל → ‏4403 כמו תמיד; מורחב ענק → ‏1009 בשם)."""
@@ -940,7 +944,7 @@ def test_client_cut_text_is_refused_on_its_header_not_after_its_body(
         with pytest.raises(WebSocketDisconnect) as caught:
             websocket.receive_bytes()
     assert (caught.value.code, caught.value.reason) == (close_code, close_reason)
-    assert journal_rows(server, "monitor_closed") == [(f"{MAC} refused", "noc")]
+    assert journal_rows(server, "monitor_closed") == [(f"{MAC} {journaled}", "noc")]   # ‏#1855
     assert not any(w.startswith(b"\x06") for w in machine.writes)
 
 

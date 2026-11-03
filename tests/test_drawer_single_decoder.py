@@ -123,9 +123,20 @@ def run_in(shell: str, script: str, timeout: int = 60) -> str:
                            f"{{\n{script}\n}} > {posix(out_file)!r} 2>&1\n",
                            encoding="utf-8", newline="\n")
     argv = [shell, "sh", posix(script_file)] if shell == BUSYBOX else [shell, posix(script_file)]
-    hygiene.run_group(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                   stdin=subprocess.DEVNULL, cwd=str(REPO), timeout=timeout)
-    return out_file.read_text(encoding="utf-8", errors="replace")
+    try:   # #2180: the directory goes with the call, as in test_timeouts.run_sh
+        hygiene.run_group(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                          stdin=subprocess.DEVNULL, cwd=str(REPO), timeout=timeout)
+        return out_file.read_text(encoding="utf-8", errors="replace")
+    finally:
+        shutil.rmtree(out_file.parent, ignore_errors=True)
+
+
+def test_run_in_leaves_nothing_in_tmpdir(tmp_path, monkeypatch):
+    """#2180: every call left an imagesrv-feed-* directory in TMPDIR -- 10 to 20
+    of them in each lab gate's summary (r20-r24)."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    assert run_in(BASH, "echo hello").strip() == "hello"
+    assert list(tmp_path.iterdir()) == []
 
 
 def room(tmp_path: Path, fanout_dir: Path, shell: str = BASH, payload: bytes = PACKED,

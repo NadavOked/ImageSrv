@@ -752,8 +752,10 @@ def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
     assert out.stdout.strip() == "skip", out.stdout          # ההכרעה עצמה לא נפגעה
     lines = (run / "hellos").read_text().splitlines() if (run / "hellos").exists() else []
     hellos = [json.loads(line) for line in lines if line]
-    assert len(hellos) >= 2, hellos
-    for h in hellos:
+    assert len(hellos) >= 3, hellos
+    # ‏#2202: האחרון הוא ה-hello שמנקה את השאלה בשרת אחרי התשובה — בלי prompt.
+    assert "prompt" not in hellos[-1] and "waiting_for" not in hellos[-1], hellos
+    for h in hellos[:-1]:
         assert h["waiting_for"] == "operator"
         assert h["prompt"] == "Disk 1: SMART fail (x)"
         assert h["joining"] is False
@@ -807,7 +809,9 @@ def test_a_question_inside_a_question_beats_once_and_hands_back(tmp_path):
     assert (run / "inner-end").exists() and (run / "outer-end").exists()
     raw = (run / "hellos").read_bytes()
     lines = [ln for ln in raw.split(b"\n")[:-1] if ln]  # ignore a partial final append
-    prompts = [json.loads(line)["prompt"] for line in lines]
+    # ‏#2202: כשהחיצונית נענתה — hello אחד בלי prompt מנקה אותה בשרת; לא בין שתיהן.
+    assert "prompt" not in json.loads(lines[-1]), lines[-1]
+    prompts = [json.loads(line)["prompt"] for line in lines[:-1]]
     inner_count = prompts.count("inner")
     outer_count = prompts.count("outer")
     assert inner_count >= 2 and outer_count >= 2, prompts
@@ -829,7 +833,7 @@ def test_a_beat_that_is_not_whole_seconds_is_named_not_a_hello_storm(tmp_path, b
              + 'attended q sleep 2')
     assert out.returncode == 0, out.stderr
     hellos = (run / "hellos").read_text().splitlines()
-    assert len(hellos) == 1, len(hellos)
+    assert len(hellos) == 2, len(hellos)    # פעימה אחת, ו-hello הניקוי שאחרי התשובה (#2202)
     assert f"ATTENDED_BEAT_S='{beat}' is not a whole number of seconds" in out.stderr, out.stderr
     assert out.stdout == "", out.stdout          # stdout של העוטף נשאר נקי
 
@@ -851,7 +855,7 @@ def test_an_ask_beat_that_is_not_whole_seconds_does_not_kill_the_beat(tmp_path, 
              + 'attended q sleep 3.2')
     assert out.returncode == 0, out.stderr
     hellos = (run / "hellos").read_text().splitlines()
-    assert len(hellos) == 2, len(hellos)
+    assert len(hellos) == 3, len(hellos)    # 0 ו-2, ו-hello הניקוי שאחרי התשובה (#2202)
     assert f"ATTENDED_ASK_BEAT_S='{ask}' is not a whole number of seconds" in out.stderr, out.stderr
 
 

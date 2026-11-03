@@ -190,6 +190,10 @@ attended() {
     "$@"; _at_rc=$?
     attended_stop
     ATTENDED_STACK="${ATTENDED_STACK#*"$ATTENDED_NL"}"
-    [ -z "$ATTENDED_STACK" ] || attended_start "${ATTENDED_STACK%%"$ATTENDED_NL"*}"
+    # #2202: the last question over, one hello WITHOUT the prompt clears it on the server. Until
+    # then net_devices.prompt kept the answered question (no other hello before the stream), and
+    # it is what holds a wave's sender (server/rounds/prompt_hold.py). stdout: the caller's $( ).
+    if [ -n "$ATTENDED_STACK" ]; then attended_start "${ATTENDED_STACK%%"$ATTENDED_NL"*}"
+    else attended_hello "" > /dev/null 2>&1 || :; fi
     return "$_at_rc"
 }

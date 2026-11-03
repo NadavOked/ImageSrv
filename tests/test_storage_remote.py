@@ -463,7 +463,9 @@ def test_remote_power_verifies_the_secondarys_name_and_writes_through_the_tunnel
     assert [(r["event"], r["detail"]) for r in rows] == [
         ("monitor_connected", f"{MAC} node={paired}"),
         ("monitor_power", f"{MAC} reboot node={paired}"),
-        ("monitor_closed", f"{MAC} refused node={paired}")]
+        # ‏#1855: ‏refused נושא את הסיבה
+        ("monitor_closed",
+         f"{MAC} refused — ClientCutText — {monitor.POWER_OVER_WS_REFUSED} node={paired}")]
     assert admin.post(path, json={"action": "reboot", "confirm": "Remote"}).status_code == 409
 
 

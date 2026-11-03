@@ -281,6 +281,9 @@ STUBS = {
 #: אינו ממודל ונכשל בקול, כדי שזיוף לא יעבור בשקט על דגל שאינו מבין.
 #: כלל "זרם ריק אינו ok" אינו ממודל — הוא של test_fanout.py.
 FANOUT_OPTIONS = (
+    # #2180: a stub's `mktemp` lands next to the stub (the test's own box): a stub
+    # the room kills mid-stream never reaches its `rm`, and left a tmp.* in TMPDIR.
+    'TMPDIR=${0%/*}; export TMPDIR\n'
     '_fo_S=; _fo_P=\n'
     'if [ "$1" = --sha256 ]; then sha256sum | cut -c1-64; exit 0; fi\n'
     'while :; do case "$1" in\n'
@@ -314,6 +317,13 @@ def make_stubs(stub_dir: Path, extra: dict | None = None) -> str:
         lines.append(f"chmod 0755 {posix(stub_dir)}/{name}")
     lines.append(f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"')
     return "\n".join(lines) + "\n"
+
+
+def test_a_fanout_stub_s_scratch_file_stays_in_the_test_s_box(tmp_path):
+    """#2180: the stubs' `tmp="$(mktemp)"` went to TMPDIR, and a stub killed
+    mid-stream (a closed round, a stall) never removed it."""
+    out = run_sh(make_stubs(tmp_path / "stubs", {"fanout": "#!/bin/sh\nmktemp\n"}) + "fanout")
+    assert "/stubs/tmp." in out.strip().replace("\\", "/"), out
 
 
 #: fanout מזויף שמאכיל את המגירה הראשונה בלבד ולא פותח את השנייה כלל —

@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
-from server.console import auth, monitor
+from server.console import auth, monitor, viewer_sessions
 from server.agent import registry
 from server.interserver import (api as interserver_api, auth as interserver_auth, peer_safe, storage_client, 
                                 storage_nodes, storage_transfer)
@@ -450,6 +450,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
     #: ‏#1129: הכותב אל המנהרה של כל מוניטור-דרך-משני פתוח, לפי ``nid/mac``
     #: — הנתיב היחיד של פקודת כוח למכונה של המשני (ראו ``monitor.power``).
     tunnels: dict[str, object] = {}
+    refusals = monitor.RefusalLog()   # ‏#1855: כשלי התחברות לפני הגשר — ליומן, בצבירה
 
     @router.post("/storage-nodes/{nid}/monitor/{mac}/power")
     async def remote_power(nid: str, mac: str, body: dict,
@@ -512,50 +513,64 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         if found[1] != "admin":
             await websocket.close(code=monitor.WS_FORBIDDEN, reason="פעולה למנהל בלבד")
             return
+        canonical = registry.normalize_mac(mac)
+        where = canonical or monitor.path_word(mac)
+
+        async def refuse(code: int, reason: str) -> None:
+            """‏#1855: סגירה לפני הגשר — ליומן (בצבירה) ולדפדפן, באותה סיבה."""
+            reason = monitor.close_reason(reason)
+            refusals.record(ctx.conn, where, found[0], code, reason, monitor.path_word(nid))
+            await websocket.close(code=code, reason=reason)
+
         if storage_nodes.role(ctx.conn) != storage_nodes.ROLE_STANDALONE:
-            await websocket.close(code=4409, reason="צפייה בשרת המשנה אפשרית רק משרת ראשי")
+            await refuse(4409, "צפייה בשרת המשנה אפשרית רק משרת ראשי")
             return
         node = storage_nodes.node_row(ctx.conn, nid)
         if node is None:
-            await websocket.close(code=4404, reason="שרת משנה לא קיים")
+            await refuse(4404, "שרת משנה לא קיים")
             return
         if node["disabled_at"]:
-            await websocket.close(code=4409, reason="שרת המשנה מושבת")
+            await refuse(4409, "שרת המשנה מושבת")
             return
-        canonical = registry.normalize_mac(mac)
         if canonical is None:
-            await websocket.close(code=4404, reason="מכונה לא מוכרת")
+            await refuse(4404, "מכונה לא מוכרת")
             return
         try:
             token = interserver_auth.load_credential(node["credential_ref"])
             ident = storage_nodes.identity(ctx.conn, data_dir=data_dir)
             host, port, _ = interserver_auth.parse_interserver_url(node["base_url"])
         except Exception as exc:                             # noqa: BLE001
-            await websocket.close(code=4500, reason=monitor.close_reason(
-                interserver_auth.redact_secrets(str(exc))))
+            await refuse(4500, interserver_auth.redact_secrets(str(exc)))
             return
+        # ‏#1853: כמו המוניטור המקומי — logout/מחיקה/הורדה ל-deploy סוגרים את הגשר.
+        cookie = websocket.cookies.get(auth.COOKIE_NAME) or ""
+        task = asyncio.current_task()
+        if task is not None:
+            viewer_sessions.register(cookie, found[0], task)
         writer = None
         try:
+            if not monitor.still_admin(ctx.conn, cookie):   # ‏#1853: ביטול בין הבדיקה לרישום
+                await websocket.close(code=monitor.WS_UNAUTHENTICATED,
+                                      reason=monitor.SESSION_ENDED_REASON)
+                return
             try:
                 reader, writer = await asyncio.wait_for(storage_client.open_tunnel(
                     host, port, expected_secondary_spki=node["pinned_spki"],
                     cert_path=ident["server_cert_ref"], key_path=ident["server_key_ref"],
                     path=f"/monitor/{canonical}", token=token), timeout=15.0)
             except storage_client.InterserverTunnelRefused as exc:
-                await websocket.close(code=4000 + exc.status,
-                                      reason=monitor.close_reason(exc.detail))
+                await refuse(4000 + exc.status, exc.detail)
                 return
             except (OSError, asyncio.TimeoutError, storage_client.InterserverClientError) as exc:
-                await websocket.close(
-                    code=4502,
-                    reason=monitor.close_reason(
-                        f"השרת המשני אינו זמין: {interserver_auth.redact_secrets(str(exc))}"))
+                await refuse(4502, f"השרת המשני אינו זמין: {interserver_auth.redact_secrets(str(exc))}")
                 return
             tunnels[f"{nid}/{canonical}"] = writer
+            refusals.settle(ctx.conn, canonical, found[0], monitor.path_word(nid))   # ‏#1855
             journal(ctx.conn, "monitor_connected", f"{canonical} node={nid}", found[0])
             outcome = "error"
             try:
-                outcome = await monitor.bridge_browser(websocket, reader, writer)
+                outcome = await monitor.bridge_until_revoked(
+                    websocket, task, monitor.bridge_browser(websocket, reader, writer))
             except (WebSocketDisconnect, asyncio.CancelledError):
                 outcome = "browser"
                 raise
@@ -563,9 +578,11 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                 journal(ctx.conn, "monitor_closed",
                         f"{canonical} {outcome} node={nid}", found[0])
         except (WebSocketDisconnect, asyncio.CancelledError):
-            pass
+            await monitor.close_if_revoked(websocket, task)   # ‏#1853: ביטול לפני הגשר
         finally:
             tunnels.pop(f"{nid}/{canonical}", None)
+            if task is not None:
+                viewer_sessions.forget(cookie, task)
             if writer is not None:
                 writer.close()
                 try:

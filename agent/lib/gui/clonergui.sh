@@ -267,32 +267,3 @@ gui_smart_choice() {
     rm -f "$GUI_DIR/smart-request" "$GUI_DIR/smart-decision"
     return 1
 }
-
-# ‏#695: קובע את $_disks לרשימת המגירות שנבחרו לסבב. סבב עם בחירה
-# (‏session.target_ports הוא מערך) כותב **רק** לפורטים האלה, וכל פורט
-# חייב למפות לדיוק דיסק אחד — אחרת die_local, בלי נפילה ל"כל הדיסקים"
-# (עיקרון 4/5/7). null אינו אישור לכתוב לכל המגירות (#1410).
-# מריץ בשל המעטפת של הסוכן (לא בתת-מעטפת), כדי ש-die_local יעצור באמת.
-resolve_target_drawers() {
-    _rt_ports=$(json_get "$RESP" ".session.target_ports")
-    if [ "$_rt_ports" = "null" ]; then
-        die_local "room target selection is missing"
-    fi
-    _disks=""
-    _rt_list=$(jq -er '.session.target_ports
-        | select(type == "array" and length > 0)
-        | .[] | select(type == "number" and floor == .)' "$RESP") \
-        || die_local "room target selection is missing or malformed"
-    for _rt_port in $_rt_list; do
-        _rt_match=""
-        for _rt_dev in $(list_drawers); do
-            [ "$(disk_port "$_rt_dev")" = "$_rt_port" ] && _rt_match="$_rt_match $_rt_dev"
-        done
-        # shellcheck disable=SC2086 # word-splitting the match list is intended
-        set -- $_rt_match
-        [ "$#" -eq 1 ] \
-            || die_local "selected drawer $_rt_port does not map to exactly one disk"
-        _disks="$_disks $1"
-    done
-    [ -n "$_disks" ] || die_local "the room selected no writable drawers"
-}

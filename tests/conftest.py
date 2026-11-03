@@ -190,6 +190,7 @@ def _run_basetemp(tmp_path_factory) -> None:
     """תיקיית ה-tmp של הריצה הזאת. רק תהליכים שמזכירים אותה ייסרקו
     וייהרגו — ריצה מקבילה של מישהו אחר על אותו שרת אינה שלנו."""
     _run["basetemp"] = str(tmp_path_factory.getbasetemp())
+    hygiene.sender_log_under(tmp_path_factory.getbasetemp())   # #2180
 
 
 @pytest.fixture(autouse=True)

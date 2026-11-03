@@ -406,7 +406,7 @@ def test_only_a_revocation_is_journaled_as_a_revoked_session(server, vm, monkeyp
             assert gone.value.code == 4401
         else:
             # ביטול שאינו מ-viewer_sessions: מה שהשרת עושה בפירוק החיבור.
-            _user, loop, task = viewer_sessions._tasks[token]
+            _user, loop, task = viewer_sessions._tasks[token][0]   # ‏#1853: כמה צופים לעוגייה
             loop.call_soon_threadsafe(task.cancel)
         deadline = time.monotonic() + 5
         while not _closed_details(server) and time.monotonic() < deadline:

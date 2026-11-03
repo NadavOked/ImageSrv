@@ -47,6 +47,30 @@ test('#2050 drawer emphasis: red/orange problems and read-back green get the fra
   assert.match(cls('slotHtml',{smart:'warn'})[1],/<span class="bay-chip">אזהרה<\/span>/);
 });
 
+// #2201 (the server's half): a selected drawer with no disk is closed for the round -- the server moves its
+// port from target_slots[].ports to target_slots[].no_disk. The round card keeps its row, failed and named,
+// whether the slot is empty now or the hello still listed the disk that left before the stream.
+test('#2201 a selected drawer with no disk stays on the round card as failed: "אין דיסק במגירה N", red', () => {
+  const {run}=setup();
+  const room=(list)=>run(`ROOM=${JSON.stringify({round:{id:'r1',wave_state:'closed',target_slots:[{mac:C2,ports:[1,3],no_disk:[2]}]},
+    machines:[{mac:C2,name:'מחשב 2',drawer_count:3,drawer_list:list}]})}; 0`);
+  const rows=()=>JSON.parse(run(`JSON.stringify(roundSlots({mac:'${C2}',drawer_count:3},ROOM.round).map(s=>[s.n,roundDskHtml({mac:'${C2}',drawer_count:3},s)]))`));
+  const done=drawer('sda',1,'S5Y30',{state:'done',fresh:false,bytes_written:100,bytes_total:100});
+  const failed=drawer('sdc',3,'S5Y2NX0R12345',{state:'failed',error:'x',bytes_written:4,bytes_total:100});
+  for (const list of [[done,failed], [done,drawer('sdb',2,'S5Y31'),failed]]) {   // empty now · still in the hello
+    room(list); const got=rows();
+    assert.deepEqual(got.map(r=>r[0]),[1,2,3],'the missing drawer keeps its row');
+    assert.match(got[1][1],/^<div class="dsk bad bay-emphasis err" data-slot="2"[^>]*><span>דיסק 2<\/span><div class="bar err"><i style="--w:100%"><\/i><\/div><b>נכשל<\/b><span class="dline bad">אין דיסק במגירה 2 — לא נכתבה בסבב הזה<\/span><\/div>$/,got[1][1]);
+    assert.doesNotMatch(got[1][1],/role="progressbar"|בטל…/);
+    assert.match(got[0][1],/<b>100%<\/b>/); assert.match(got[2][1],/<b>נכשל<\/b>/); assert.doesNotMatch(got[2][1],/אין דיסק/);
+    const card=run(`roomMachHtml({mac:'${C2}',drawer_count:3},ROOM.round)`);   // the card is red and says why, as for a failed drawer
+    assert.match(card,/^<div class="mach err"/); assert.match(card,/דיסק אדום/); assert.match(card,/דיסק 2 אדום — אין דיסק במגירה/);
+  }
+  // without no_disk (a round before #2201, or nothing missing): the row of an unselected port is not drawn
+  run(`ROOM.round.target_slots[0].no_disk=undefined`);
+  assert.deepEqual(rows().map(r=>r[0]),[1,3]);
+});
+
 test('#2050 drawer emphasis CSS: a 3px frame on all four sides and the soft fill of its colour, no side stripe', () => {
   const css=fs.readFileSync(path.join(root,'console.css'),'utf8');
   const rules=[...css.matchAll(/([^{}]*bay-emphasis[^{}]*)\{([^}]*)\}/g)].map(m=>[m[1].trim(),m[2]]);

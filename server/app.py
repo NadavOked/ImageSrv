@@ -58,6 +58,7 @@ from .db import journal
 from server.net import wol
 from server.rounds import direct
 from server.disks import smart_ask
+from server.rounds import prompt_hold
 from server.rounds.sender import QUIET_SECONDS, SenderEngine
 from server.console.library import create_library_router
 from server.console.drivers import create_agent_drivers_router, create_drivers_router   # #720
@@ -613,6 +614,8 @@ def create_runtime(
         # ברזל 17/10: שאלת SMART פתוחה בגל עוצרת את שעון ה-180 של השולח.
         # מכונה שחרגה מהתקרה (‏ASK_HOLD_MAX_SECONDS) משתחררת מהגל לבדה.
         pending_asks=lambda session_id: smart_ask.waiting_in_wave(conn, session_id),
+        # ‏#2202: וכל שאלה אחרת למפעיל (‏net_devices.prompt — חלוקת המקום, RAID).
+        pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
     )
     def wake_class(group_id: str, opener_mac: str | None,
                    roster: list[str] | None = None) -> None:

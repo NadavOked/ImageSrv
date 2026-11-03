@@ -189,7 +189,7 @@ def sourced_libs() -> str:
     ליפול על ההתנהגות ולא על קובץ חסר."""
     names = ["common.sh", "waits.sh", "jsonq.sh", "progress.sh", "pull.sh",   # waits: capped_run (#1367)
              "streamid.sh",   # #1826: session_stream, between the manifest fetch and the write
-             "ui.sh", "hold.sh", "clonergui.sh",   # #708: resolve_target_drawers (#701) lives here
+             "ui.sh", "hold.sh", "clonergui.sh", "drawerselect.sh",   # #708/#2201: resolve_target_drawers (#701) lives in drawerselect.sh
              "smart.sh", "crcdelta.sh"]   # #872: crc_delta_after sits on the write line of do_restore
     names += ["attended.sh", "shrinkplan.sh"]   # attended beats; the capture's shrink plan
     names += ["captureview.sh", "hibernation.sh"]   # #2213: direct-send completion preserves the warning

@@ -953,6 +953,9 @@ function showLogin() {
   clearInterval(pollTimer);
   closeDrawer(); closeModal();
   clearInterval(idleTimer);
+  // ‏#1853: ‏#app רק מוסתר — צופה מוניטור שנשאר בו ממשיך לרוץ, מחזיק את הגשר ואת המנעול (4409).
+  document.querySelectorAll("iframe.mon-frame").forEach((frame) => frame.remove());
+  MON_SEL = ""; MON_OUT = false;
   $("#login").classList.remove("hidden");
   $("#app").classList.add("hidden");
   applyTheme("auto");   // #1093/#1499: מסך הכניסה בהיר (ברירת המחדל); המטמון נמחק
@@ -1528,7 +1531,7 @@ async function loadMonitor() {
     const [settings, machines, remote] = await Promise.all([api("/monitor/settings"), api("/monitor/machines"),
       loadMonitorRemote()]);
     MONITOR = { settings, machines, remote };
-    monitorError = "";
+    monitorError = ""; monitorPollError = ""; monitorPolledAt = Date.now();   // ‏#1851
   } catch (e) {
     MONITOR = null;
     monitorError = e.message;
@@ -1924,7 +1927,7 @@ function resetServerCaches() {
   MACHINES = null; GROUPS = null; DISK_FAILURES = null; SHRINK_RECORDS = null;
   MACHINES_FILTER = null; MACHINES_ROLE = null; MACHINES_CLASS = null;
   HEALTH = null; HEALTH_AT = ""; healthError = ""; NETCFG = null;
-  MONITOR = null; monitorError = ""; MONITOR_ROWS = null; MON_SEL = ""; MON_SETTINGS = null;
+  MONITOR = null; monitorError = ""; MONITOR_ROWS = null; MON_SEL = ""; MON_OUT = false; MON_SETTINGS = null;
   PORTS = null; portsError = ""; PORTS_NICS = null; portsNicsError = ""; PORTS_AT = "";
   USERS = null; usersError = ""; JOURNAL = null; LOG = logInit();
   HOME = homeInit(); IMG = imgInit(); NETW = netwInit(); NET = null; NET_ERR = ""; NET_DEPLOY = null;
@@ -2034,7 +2037,8 @@ function renderCurrent() {
   const scroller = document.querySelector("#content .page, #content .scroll");
   const scrollTop = scroller ? scroller.scrollTop : 0;
   const focus = focusLocator();
-  document.getElementById("content").innerHTML = layout(page, currentTab);
+  const html = layout(page, currentTab);
+  if (!(current === "monitor" && monitorKeepViewer(html))) document.getElementById("content").innerHTML = html;
   restoreFocus(focus);
   if (scrollTop) {
     const again = document.querySelector("#content .page, #content .scroll");
@@ -2853,8 +2857,12 @@ function roomDriversResults(kids) {
 function roundSlots(m, r) {
   const t = r && Array.isArray(r.target_slots) ? r.target_slots.find((x) => x.mac === m.mac) : null;
   const ports = t && Array.isArray(t.ports) ? new Set(t.ports) : null;
-  const slots = machineSlots(m).slots;
-  return ports ? slots.filter((s) => s.disk && ports.has(s.disk.port)) : slots;
+  // #2201: חריץ שנבחר ולא היה בו דיסק — השרת סגר אותו לסבב (target_slots[].no_disk) והוציא אותו מ-ports.
+  // השורה נשארת בכרטיס, כנכשלת בשמה — גם כשהחריץ ריק עכשיו (s.disk null).
+  const noDisk = new Set(t && Array.isArray(t.no_disk) ? t.no_disk.map(Number) : []);
+  const portOf = (s) => (s.disk && s.disk.port != null ? Number(s.disk.port) : /^sata:\d+$/.test(s.key || "") ? Number(s.key.slice(5)) : null);
+  const slots = machineSlots(m).slots.map((s) => (noDisk.has(portOf(s)) ? { ...s, noDisk: true } : s));
+  return ports ? slots.filter((s) => s.noDisk || (s.disk && ports.has(s.disk.port))) : slots;
 }
 /* שורת דיסק בכרטיס המשכפל — המוקאפ (P.deploy, ‏.dsk): "דיסק N" · פס · אחוז. הכול מ-drawer_list של /room:
    אחוז = bytes_written/bytes_total (‏done = 100); אין דיווח = "—", לא 0% (עיקרון 5); נכשל = "נכשל" בפס אדום
@@ -2866,7 +2874,8 @@ function roundDskHtml(m, s) {
   const live = !!(d && s.live && d.state), red = !!d && slotClass(s) === "err";
   const gone = live && d.state === "cancelled", going = live && d.state === "writing" && !!d.cancel;
   let pct = 0, bar = "", text, rc = "";
-  if (!d) { text = "ריק"; rc = " vacant"; }
+  if (s.noDisk) { text = "נכשל"; bar = "err"; pct = 100; rc = " bad"; }   // #2201: נבחר ולא היה בו דיסק — נכשל, לא "ריק"
+  else if (!d) { text = "ריק"; rc = " vacant"; }
   else if (!live && s.live && d.cancelled_round) { text = "בוטל"; rc = " cancelled"; }   // #1936: בוטל בגל קודם — סגור בסבב, לא נכתב
   else if (!live && s.live && d.fresh === false && !d.skipped_red) { text = "נכתב"; bar = "ok"; pct = 100; }   // #1790: נכתב בגל קודם בסבב — אינו יעד בגל הזה
   else if (!live) { text = red ? "דולג" : "—"; bar = red ? "err" : ""; rc = red ? " bad" : ""; }
@@ -2884,7 +2893,8 @@ function roundDskHtml(m, s) {
   const rb = live && d.state !== "failed" ? readbackLine(d) : "";   // #1805
   const tl = live ? stagesLine(d) : "";   // #1883
   const warn = live && d.state === "done" && d.error ? `<span class="dline warn">${esc(d.error)}</span>` : "";   // #2042: done with a warning (an orange disk's "SMART: …"), as the cloner screen's "הושלם — …"
-  return `<div class="dsk${rc}${bayEmphasis(s)}" data-slot="${s.n ?? ""}"${d ? ` title="${esc(diskTitle(m, s, d))}"` : ""}><span>${esc(label)}</span><div class="bar ${bar}"${meter}><i style="--w:${pct}%"></i></div><b>${esc(text)}</b>${act}${warn}${drv}${rb}${tl}</div>`;
+  const nod = s.noDisk ? `<span class="dline bad">${esc(`אין דיסק ב${s.n != null ? `מגירה ${s.n}` : label} — לא נכתבה בסבב הזה`)}</span>` : "";   // #2201
+  return `<div class="dsk${rc}${s.noDisk ? " bay-emphasis err" : bayEmphasis(s)}" data-slot="${s.n ?? ""}"${d ? ` title="${esc(diskTitle(m, s, d))}"` : ""}><span>${esc(label)}</span><div class="bar ${bar}"${meter}><i style="--w:${pct}%"></i></div><b>${esc(text)}</b>${act}${nod}${warn}${drv}${rb}${tl}</div>`;
 }
 /* ‏#1883: כמה זמן ארך כל שלב במגירה (‏drawer_list[].stages, ‏[{stage, seconds}]) — שורה מתחת לפס, אחרי
    שהמגירה הסתיימה. ‏null = לא נמדד: אין שורה (לא "0"). */
@@ -2899,13 +2909,13 @@ function stagesLine(d) {
    אדום, לא מחובר = מקווקו. WoL למשכפל כבוי (#984) — בריחוף/פוקוס. ה-MAC בריחוף על הכרטיס. */
 function roomMachHtml(m, r) {
   const st = roomCardState(m), rm = roomMachine(m.mac), slots = roundSlots(m, r), net = netFor(m.mac);
-  const failed = slots.filter((s) => s.disk && slotClass(s) === "err");
+  const failed = slots.filter((s) => s.noDisk || (s.disk && slotClass(s) === "err"));   // #2201: נבחר ולא היה בו דיסק — נכשל
   const done = slots.filter((s) => s.live && s.disk.state === "done");
   const gone = slots.filter((s) => s.live && s.live.state === "cancelled");   // #1386
   const bootRisk = slots.filter((s) => s.live && s.disk.drivers && driversTone(s.disk.drivers) === "bad");   // ‏#1331: הדיסק עלול לא לעלות
   const red = failed.length > 0 || bootRisk.length > 0;
   const name = (s) => slotLabel(m, s.n, s.disk);
-  const why = (s) => s.disk.state === "failed" ? drawerErrorText(s.disk.error) : s.fail ? failureCauseText(s.fail) : "SMART נכשל";
+  const why = (s) => s.noDisk ? "אין דיסק במגירה" : s.disk.state === "failed" ? drawerErrorText(s.disk.error) : s.fail ? failureCauseText(s.fail) : "SMART נכשל";
   let sub;
   if (failed.length) sub = esc(failed.map((s) => `${name(s)} אדום — ${why(s)}`).join("; ")) + (done.length ? `; ${esc(done.map(name).join(", "))} ${done.length === 1 ? "משוחזר" : "משוחזרים"}` : "");
   else if (st.held) sub = esc(`${HELD_HE} — ${heldLine(m, rm.held)}`);   // #2031
@@ -7620,9 +7630,61 @@ function ports() {
 /* ‏console-full.html P.monitor: רשימה + מציג בכרטיס בתוך הדף. המציג הוא monitor.html ב-iframe (אותו לקוח RFB, בלי שכתוב);
    "פתח בחלון נפרד" נשאר קישור שרת משנה. בלי מכונה נבחרת / מתג כבוי / מכונה לא מחוברת — הסבר, לא iframe ריק. */
 let MON_SEL = "";
+let MON_OUT = false;   // ‏#1851: הצפייה במכונה הנבחרת הועברה לחלון נפרד — רינדור לא מחזיר את ה-iframe
 function monitorSelect(macEnc) {
   try { MON_SEL = decodeURIComponent(macEnc); } catch (e) { MON_SEL = macEnc; }
+  MON_OUT = false;
   renderCurrent();
+}
+/* ‏#1851: רינדור של דף המוניטור ("רענון", עדכון הרשימה, בחירה חוזרת של אותה מכונה) אינו בונה מחדש את
+   ה-iframe של הצופה כשאותה מכונה עדיין מוצגת. iframe שיוצא מה-DOM נטען מחדש: WebSocket חדש, לחיצת-יד
+   RFB, ומרוץ 4409 מול החיבור הישן. לכן ה-iframe נשאר במקומו, וכל השאר מוחלף סביבו: בכל רמה ממנו ועד
+   ‎#content‎ האחים הישנים מוחלפים בחדשים. מכונה אחרת, מכונה שאינה מחוברת או מבנה אחר — false, ו-renderCurrent
+   בונה את הכול (ה-iframe הישן יוצא ומשחרר את המנעול). */
+function monitorKeepViewer(html) {
+  const content = document.getElementById("content");
+  const old = content && content.querySelector("iframe.mon-frame");
+  if (!old) return false;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  const fresh = tmp.querySelector("iframe.mon-frame");
+  if (!fresh || fresh.getAttribute("src") !== old.getAttribute("src")) return false;
+  const chain = [];
+  for (let o = old, n = fresh; o !== content || n !== tmp; o = o.parentNode, n = n.parentNode) {
+    if (!o || !n || o === content || n === tmp) return false;   // עומק שונה — לא מנחשים
+    chain.push([o, n]);
+  }
+  for (const [o, n] of chain) {
+    const op = o.parentNode;
+    for (const c of Array.from(op.childNodes)) if (c !== o) op.removeChild(c);
+    let after = false;
+    for (const c of Array.from(n.parentNode.childNodes)) {
+      if (c === n) after = true;
+      else if (after) op.appendChild(c);
+      else op.insertBefore(c, o);
+    }
+  }
+  return true;
+}
+/* ‏#1851: רשימת "מחשבים מחוברים" מתעדכנת לבד (startStatusWatch, כל MONITOR_POLL_MS; חלון ה"מחובר" בשרת
+   הוא 90 ש'), בלי לגעת בצופה (monitorKeepViewer). כשל בדגימה נשמר בשם ומוצג — הרשימה שבזיכרון אינה
+   "עדכנית" (עיקרון 5) — ואינו מוחק את הדף ואת הצופה כמו כשל של loadMonitor. */
+const MONITOR_POLL_MS = 10000;
+let monitorPollBusy = false, monitorPollError = "", monitorPolledAt = 0;
+async function pollMonitorList() {
+  if (monitorPollBusy || !MONITOR || Date.now() - monitorPolledAt < MONITOR_POLL_MS) return;
+  monitorPollBusy = true;
+  monitorPolledAt = Date.now();
+  try {
+    const [machines, remote] = await Promise.all([api("/monitor/machines"), loadMonitorRemote()]);
+    if (MONITOR) { MONITOR.machines = machines; MONITOR.remote = remote; }
+    monitorPollError = "";
+  } catch (e) {
+    monitorPollError = e.message;
+  } finally {
+    monitorPollBusy = false;
+  }
+  if (current === "monitor") renderCurrent();
 }
 function monitorViewerHtml(list, enabled) {
   const m = list.find((x) => monitorKey(x) === MON_SEL);
@@ -7632,6 +7694,7 @@ function monitorViewerHtml(list, enabled) {
   if (!enabled) body = say(["המוניטור כבוי", "הדלק את המתג בכותרת כדי לצפות במסך של תחנה. הדלקה חושפת 5900 על וילן ההפצה ותופסת באתחול הבא של כל מכונה."]);
   else if (!m) body = say(["בחר מחשב לצפייה", "המסך של התחנה יוצג כאן. אפשר לשלוח מקשים בלבד כשהתחנה מחוברת לסוכן."]);
   else if (!m.online) body = say([`${m.name || m.mac} אינה מחוברת`, "אין למה להתחבר: התחנה לא נראתה ב-90 השניות האחרונות. אפשר להעיר אותה (WoL) מהרשימה."]);
+  else if (MON_OUT) body = say(["המסך פתוח בחלון נפרד", "לחיצה על המחשב ברשימה מחזירה את הצפייה לכאן."]);   // ‏#1851
   else {
     // ‏#1179/#1008: מכונה של שרת משנה — המציג עובר דרך שרת המשנה (#1129, ‏monitor.js ‏node=).
     const node = m.node || SERVER_CTX;
@@ -7647,6 +7710,7 @@ function monitorViewerHtml(list, enabled) {
 function monitorPopOut() {
   const frame = document.querySelector("iframe.mon-frame");   // מציג אחד בדף
   if (!frame) return;
+  MON_OUT = true;   // ‏#1851: עדכון הרשימה (כל 10 ש') לא יחזיר את ה-iframe ויחטוף את הצפייה מהחלון
   const note = document.createElement("div");
   note.className = "empty mon-empty";
   note.textContent = "המסך פתוח בחלון נפרד";
@@ -7697,7 +7761,9 @@ function monitorPage() {
       : `<div class="muted">${list.length ? "אף מחשב לא מחובר עכשיו." : "אין מחשבי בנייה או שיכפול רשומים — הוסיפו אותם בדף המחשבים"}</div>`;
     const rest = offline.length || unread.length
       ? `<div class="mon-rest"><div class="grp">לא מחוברים · ${offline.length}</div>${offline.map(monitorOffRowHtml).join("")}${unread.map(monitorUnreadRow).join("")}</div>` : "";
-    body = UI.card({ title: "מחשבים מחוברים", small: "נראו ב-90 השניות האחרונות", cls: "c6", body: picks + rest }) + monitorViewerHtml(list, enabled);
+    // ‏#1851: דגימה אוטומטית שנכשלה — בשם, לא רשימה ישנה שנראית עדכנית (עיקרון 5)
+    const stale = monitorPollError ? UI.note("warn", `הרשימה לא עודכנה: ${esc(monitorPollError)}`) : "";
+    body = UI.card({ title: "מחשבים מחוברים", small: "נראו ב-90 השניות האחרונות", cls: "c6", body: stale + picks + rest }) + monitorViewerHtml(list, enabled);
   }
   return `<div class="page aligned">${header}<div class="body">${body}</div></div>`;
 }
@@ -10133,7 +10199,8 @@ function startStatusWatch() {
     refreshStatus();
     // ‏#1253: כשל בדגימה = הרשימה שבזיכרון אינה ראיה שקליטה עדיין רצה (HOME.err.tasks).
     if (isAdmin() || current === "images") loadCaptures().then(() => { delete HOME.err.tasks; }, (e) => { HOME.err.tasks = e.message; toast(e.message); });
-    if ((current === "machines" && MACHINES_CLASS) || current === "deploy") refreshGroupLive().catch(() => {});   // ‏גל 3א/4: /room חי באובייקט המשכפלים ובחדר
+    if ((current === "machines" && MACHINES_CLASS) || current === "deploy") refreshGroupLive().catch(() => {});
+    if (current === "monitor") pollMonitorList();   // ‏#1851: הרשימה מתעדכנת לבד, כל MONITOR_POLL_MS — בלי לגעת בצופה   // ‏גל 3א/4: /room חי באובייקט המשכפלים ובחדר
     refreshServerDots();   // נדב 18/10: רק שרת שהמדידה שלו ישנה מ-SERVER_DOT_TTL
     if (typeof vmuTick === "function") vmuTick();   // ‏#1334: עדכון ב-VM — הפס הגלובלי ועמוד ה-VM (vmupdate.js)
   }, 2000);

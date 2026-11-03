@@ -10,7 +10,9 @@ a hot loop that declares every command timed out.
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import time
+from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
@@ -19,17 +21,19 @@ pytestmark = requires_native(("bash", BASH))
 
 
 def _run(body: str) -> tuple[subprocess.CompletedProcess[str], float]:
-    prefix = (
-        'export PATH="/usr/bin:$PATH"; '
-        'RUN_DIR=$(mktemp -d); export RUN_DIR; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
-    )
-    started = time.monotonic()
-    proc = subprocess.run(
-        [BASH, "-c", prefix + body], capture_output=True, text=True,
-        encoding="utf-8", stdin=subprocess.DEVNULL, timeout=60,
-    )
-    return proc, time.monotonic() - started
+    # #2180: RUN_DIR goes with the call; `mktemp -d` left a tmp.* in TMPDIR per run.
+    with tempfile.TemporaryDirectory(prefix="capped-run-", ignore_cleanup_errors=True) as run_dir:
+        prefix = (
+            'export PATH="/usr/bin:$PATH"; '
+            f'RUN_DIR={posix(Path(run_dir))!r}; export RUN_DIR; '
+            f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
+        )
+        started = time.monotonic()
+        proc = subprocess.run(
+            [BASH, "-c", prefix + body], capture_output=True, text=True,
+            encoding="utf-8", stdin=subprocess.DEVNULL, timeout=60,
+        )
+        return proc, time.monotonic() - started
 
 
 def _extra(body: str) -> tuple[subprocess.CompletedProcess[str], float]:
