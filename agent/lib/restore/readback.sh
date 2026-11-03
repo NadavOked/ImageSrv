@@ -29,8 +29,8 @@
 # The outcome of a disk, never folded (principle 5):
 #   verified    every chunk of every partition matched.
 #   sampled     the drawn chunks matched -- "נבדק במדגם".
-#   unverified  nothing to compare with (no list yet, a direct send in sample
-#               mode): the disk is done and says so -- never "verified". "unfetched" (#1907): the
+#   unverified  nothing to compare with (no list yet; a direct send is served "full"
+#               since #2218): the disk is done and says so -- never "verified". "unfetched" (#1907): the
 #               same, its own reason -- the server's list did not come down (readback_why).
 #   failed     the disk gave back something else: the drawer fails, by name.
 #   unchecked   the check could not run (a flush refused, no map, a read that

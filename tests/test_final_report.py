@@ -459,7 +459,7 @@ def report_final_probe(tmp_path: Path, sender: str, *, tries: int = 2) -> dict:
         f"export RUN_DIR={shlex.quote(posix(run))} IMAGESRV_TEST=1 "
         f"FINAL_REPORT_TRIES={tries} FINAL_REPORT_GAP_S=0; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f"{agent_sources('sysinfo', 'progress')}"
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}"
         + sender
         + 'sleep 45 > /dev/null 2>&1 & _pid=$!; '
         f'if report_final "$_pid" {SESSION} {MAC} "http://x"; '

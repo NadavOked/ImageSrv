@@ -66,7 +66,7 @@ PRELUDE = (
     f'. {posix(AGENT)}/lib/core/common.sh; '
     f'. {posix(AGENT)}/lib/core/jsonq.sh; '
     f'. {posix(AGENT)}/lib/hw/disklink.sh; '   # #432: disk_link -- gui_libs loads it too
-    f'{agent_sources("sysinfo", "progress")}'   # #2281: progress calls disk_serial (sysinfo)
+    f'{agent_sources("sysinfo", "progress", "failmark")}'   # #2281: progress calls disk_serial (sysinfo)
     f'. {posix(AGENT)}/lib/gui/guistate.sh; '   # #1252: gui_server_addr -- gui_libs loads it first too
     f'. {posix(AGENT)}/lib/gui/askgui.sh; '   # 11/10: gui_ask_state, as gui_libs loads it
     f'. {posix(AGENT)}/lib/hw/slotnames.sh; '   # #704: slot names -- gui_libs loads it too
@@ -584,7 +584,7 @@ def bridge_setup(tmp_path: Path, screen: str) -> tuple[str, Path]:
              f'. {posix(AGENT)}/lib/capture/buildcapture.sh; '
              f'. {posix(AGENT)}/lib/gui/roomflow.sh; '
              f'. {posix(AGENT)}/lib/gui/guistate.sh; . {posix(AGENT)}/lib/gui/askgui.sh; '
-             f'{agent_sources("sysinfo", "progress")}. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
+             f'{agent_sources("sysinfo", "progress", "failmark")}. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
              f'. {posix(AGENT)}/lib/gui/guibridge.sh; '
              'gui_role() { echo GUI_ROLE_CALLED >&2; return 1; }; '
              'disk_slot_records() { :; }; ')   # #1495: disk numbering is test_drawer_map_gui_1495's

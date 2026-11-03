@@ -561,6 +561,28 @@ test('#1267 health page: a services card with stop/start per service — stop is
   assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/interserver',method:'PUT',body:{enabled:false}});
 });
 
+/* ‏#1780: השרת משווה את confirm לשם המארח של עכשיו. שם שנקרא לפני שינוי השם — מהשורה
+   שנטענה או מ-ME — נשלח בלי שאיש הקליד אותו, וחזר "יש להקליד בדיוק". */
+test('#1780 stopping a "confirm" service sends the server name as /ports reports it now, not the one read before a rename',async()=>{
+  const {run,requests,fixtures}=setup({'/ports':PORTS_SVC}); run('current="health"');
+  await run('loadHealth()');
+  // השם שונה אחרי טעינת /me והשורות: ME והשורה שבזיכרון עדיין "srv"
+  fixtures['/ports']=PORTS_SVC.map((p)=>p.confirm_word?{...p,confirm_word:'srv-renamed'}:p);
+  assert.equal(run('ME.server_name'),'srv');
+  run("healthSvcStop('tftp')");
+  await run('sheets.at(-1)').onSubmit();
+  assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/tftp',method:'PUT',body:{enabled:false,confirm:'srv-renamed'}});
+});
+
+test('#1780 a "confirm" row that /ports no longer reports with its word is not sent with a guessed name',async()=>{
+  const {run,requests,fixtures}=setup({'/ports':PORTS_SVC}); run('current="health"');
+  await run('loadHealth()');
+  fixtures['/ports']=PORTS_SVC.map((p)=>p.id==='tftp'?{...p,confirm_word:null}:p);
+  run("healthSvcStop('tftp')");
+  await assert.rejects(()=>run('sheets.at(-1)').onSubmit(),/מילת האישור/);
+  assert.equal(requests.filter((r)=>r.method==='PUT').length,0,'nothing is sent with ME.server_name as a guess');
+});
+
 test('#1267 health page: /ports that could not be read → services "לא נבדק", no buttons',async()=>{
   const {run}=setup({'/ports':new Error('DB down')}); run('current="health"');
   await run('loadHealth()');

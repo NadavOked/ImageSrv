@@ -6373,7 +6373,14 @@ function healthServicesCard() {
 }
 async function healthSvcSend(p, enabled) {
   const body = { enabled };
-  if (!enabled && p.toggle === "confirm") body.confirm = p.confirm_word || ME.server_name;
+  if (!enabled && p.toggle === "confirm") {
+    // ‏#1780: השרת משווה לשם המארח של עכשיו — המילה נקראת מ-/ports ברגע השליחה, לא מהשורה
+    // שבזיכרון ולא מ-ME, שנקראו לפני שינוי שם ונשלחו בלי שאיש הקליד אותם.
+    const list = await api("/ports");
+    const now = Array.isArray(list) ? list.find((x) => x.id === p.id) : null;
+    if (!now || !now.confirm_word) throw new Error(`${p.name} ${p.port} — לא נשלח: ‏/ports לא החזיר את מילת האישור של השורה`);
+    body.confirm = now.confirm_word;
+  }
   const r = await put(p.toggle_url.replace(/^\/api\/console/, ""), body);
   toast(r && r.ok ? `${p.name} ${p.port} — ${enabled ? "הופעל" : "נעצר"}, ואומת`
     : `${p.name} ${p.port} — נשמר, אבל לא אומת${r && r.detail ? `: ${r.detail}` : ""}`);

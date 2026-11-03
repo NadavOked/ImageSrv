@@ -125,7 +125,7 @@ const AGENT_REASONS=[
   ['writecheck.sh:_wc_why (fallback)','הדיסק לא מקבל כתיבה — התחלה (0 MiB): הכתיבה נכשלה'],
   ['writecheck.sh:write_check','הדיסק לא מקבל כתיבה — לא סיים לכתוב ולקרוא בחזרה תוך 120 שניות'],
   ['writecheck.sh:write_speed_verdict','איטי — 12 MB/s, מתחת לסף 30 MB/s'],
-  ['writecheck.sh:write_speed_verdict','איטי — 12 MB/s, פחות מחצי מ-80 MB/s של שאר המגירות'],
+  ['writecheck.sh:write_speed_verdict','איטי — 12 MB/s, פחות מחצי מ-80 MB/s של שאר המגירות מאותו סוג (מכני)'],
   ['diskfit.sh:disk_fits','הדיסק קטן מדי ב-12 MiB (נדרשים 256060514304 בייט, בדיסק 256000000000; חסרים 60514304 בייט)'],
   ['bootcadb.sh:boot_ca_preflight',"המחשב לא יאמין לאימג' — Secure Boot יחסום אתחול"],
   ['lccopy.sh:lc_judge','מחיצה 1: הכתיבה נכשלה אחרי 3.2 GB‏ (partclone rc=1, ממסר rc=0) · '+PCL],

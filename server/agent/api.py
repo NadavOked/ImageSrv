@@ -717,7 +717,8 @@ def create_agent_router(ctx: ServerContext,
         if refused is not None:
             return refused
         manifest = ctx.library.get(image_id)
-        if manifest is None:
+        live = manifest is None
+        if live:
             # ‏#715: מזהה חי (`live_…`) — המניפסט שמחשב הבנייה דיווח. אותו
             # נתיב בדיוק, כדי שהמקבלים לא ידעו מי משדר. לפני שהגיע: 404.
             manifest = direct.live_manifest(ctx.conn, image_id)
@@ -727,6 +728,15 @@ def create_agent_router(ctx: ServerContext,
         # ‏#1805/#1864 (נדב 20/10): האימות אחרי הכתיבה — "sample" (ברירת המחדל) או
         # "full" (`readback_full` בהגדרות). נקבע כשהסוכן מושך את המניפסט: לכל הסבב.
         public["readback_mode"] = readback_mode(ctx.conn)
+        if live and public["readback_mode"] == "sample":
+            # ‏#2218 (הכרעה 03/11): להפצה ישירה אין אימג' בספרייה, ולכן אין רשימה
+            # למדגם (`…/readback/<n>` מחזיר 404 — ברזל 30/10, כל יעד יצא כתום).
+            # עוברים לבדיקה מלאה מול ה-`readback_xxh64` שמעבר 1 שם במניפסט החי.
+            public["readback_mode"] = "full"
+            journal(ctx.conn, "readback_mode_switched",
+                    f"{image_id} sample -> full: a direct send has no list on the server;"
+                    f" every chunk is compared with the live manifest's readback_xxh64"
+                    f" ({request.client.host if request.client else '?'})")
         return JSONResponse(public)
 
     @router.get("/images/{image_id}/files/{filename}")

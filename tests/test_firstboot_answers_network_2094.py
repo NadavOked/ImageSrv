@@ -39,14 +39,18 @@ def _shim(path: Path, body: str) -> None:
     path.chmod(0o755)
 
 
-def _firstboot(tmp_path: Path, *, lease_after: int | None, ip_fails: bool = False):
+def _firstboot(tmp_path: Path, *, lease_after: int | None, ip_fails: bool = False,
+               networking_fails: bool = False):
     """``lease_after`` = how many address reads come back empty before the
-    lease; None = it never comes."""
+    lease; None = it never comes. ``networking_fails``: ``systemctl restart
+    networking.service`` exits 1 (#2149)."""
     calls, bindir = tmp_path / "calls", tmp_path / "bin"
     bindir.mkdir()
     rec = f'printf "%s %s\\n" "${{0##*/}}" "$*" >> {calls}\n'
-    for name in ("systemctl", "ifup", "hostnamectl", "sleep"):
+    for name in ("ifup", "hostnamectl", "sleep"):
         _shim(bindir / name, rec + "exit 0\n")
+    _shim(bindir / "systemctl", rec + ('[ "$*" = "restart networking.service" ] && exit 1\n'
+                                       if networking_fails else "") + "exit 0\n")
     _shim(bindir / "hostname", "echo fb-2094\n")
     reads = tmp_path / "reads"
     reads.write_text("0", encoding="ascii")
@@ -112,7 +116,7 @@ def test_the_server_issues_its_certificate_again_once_the_address_is_there(tmp_p
 def test_no_lease_in_time_is_said_and_the_certificate_is_left_alone(tmp_path):
     got, seen = _firstboot(tmp_path, lease_after=None)
     assert got.returncode == 0, got.stdout + got.stderr
-    assert "LOG nic lo: up, no IPv4 address after 5s" in got.stdout
+    assert "LOG [nic-no-address] lo: no IPv4 address after 5s" in got.stdout
     assert "systemctl restart imagesrv-server.service" not in seen
     assert (tmp_path / "stamp").exists()
 
@@ -123,6 +127,47 @@ def test_an_address_read_that_fails_is_not_no_address(tmp_path):
     assert got.returncode == 0, got.stdout + got.stderr
     assert "[nic-check-failed]" in got.stdout
     assert "no IPv4 address after" not in got.stdout
+    assert "systemctl restart imagesrv-server.service" not in seen
+
+
+# --- #2149: the NIC's outcome is a named state in firstboot.status -------------
+# First boot still completes (the DCUI it starts is where the address is fixed,
+# F2), but "no address" / "not checked" / "networking failed" is no longer
+# only a log line next to state=done.
+
+def _status(tmp_path: Path) -> dict[str, str]:
+    lines = (tmp_path / "status").read_text(encoding="utf-8").splitlines()
+    return dict(line.split("=", 1) for line in lines if "=" in line)
+
+
+def test_2149_an_address_is_recorded_as_such(tmp_path):
+    got, _seen = _firstboot(tmp_path, lease_after=1)
+    assert got.returncode == 0, got.stdout + got.stderr
+    status = _status(tmp_path)
+    assert status["state"] == "done"
+    assert status.get("nic") == "ok", status
+    assert "10.68.0.61/24" in status.get("nic_message", "")
+
+
+def test_2149_no_address_is_a_named_state_not_a_silent_done(tmp_path):
+    got, _seen = _firstboot(tmp_path, lease_after=None)
+    assert got.returncode == 0, got.stdout + got.stderr
+    status = _status(tmp_path)
+    assert status.get("nic") == "no-address", status
+    assert "lo" in status.get("nic_message", "") and "5s" in status.get("nic_message", "")
+    assert "[nic-no-address]" in got.stdout
+
+
+def test_2149_an_address_read_that_fails_is_named_not_checked(tmp_path):
+    got, _seen = _firstboot(tmp_path, lease_after=None, ip_fails=True)
+    assert got.returncode == 0, got.stdout + got.stderr
+    assert _status(tmp_path).get("nic") == "check-failed"
+
+
+def test_2149_a_failed_networking_restart_is_named(tmp_path):
+    got, seen = _firstboot(tmp_path, lease_after=0, networking_fails=True)
+    assert got.returncode == 0, got.stdout + got.stderr
+    assert _status(tmp_path).get("nic") == "up-failed"
     assert "systemctl restart imagesrv-server.service" not in seen
 
 

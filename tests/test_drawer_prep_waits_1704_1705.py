@@ -87,6 +87,10 @@ def _error(run: Path, dev: str) -> str:
 # --- #1704: the drawers' tables at once ----------------------------------------
 
 
+# #2302: a wall-clock bound of 4.5 s; in a full gate under `-n auto` it measured
+# 6.07 s (load5 4.66 -> 8.8) and passes alone (10/10, 2.06-2.21 s). Serial phase,
+# same bound -- like #2118 below.
+@pytest.mark.serial
 def test_three_drawers_write_their_tables_in_the_time_of_one(tmp_path):
     """Each drawer's table costs 2 s here (apply_gpt 1 s + expand_last 1 s, the
     stubs' sleeps). One after another that is >= 6 s; at once, ~2 s."""

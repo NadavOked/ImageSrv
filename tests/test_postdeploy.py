@@ -341,7 +341,7 @@ def test_the_progress_report_carries_drivers_only_once_it_exists(tmp_path):
         (run / "targets/sda" / name).write_text(value + "\n")
     (run / "state").write_text("done\n")
     script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; '
-              f'{agent_sources("sysinfo", "progress")}build_progress ses_1 b4:2e:99:07:1a:c4')
+              f'{agent_sources("sysinfo", "progress", "failmark")}build_progress ses_1 b4:2e:99:07:1a:c4')
     before = json.loads(subprocess.run([BASH, "-c", script], capture_output=True, text=True,
                                        stdin=subprocess.DEVNULL, cwd=str(AGENT.parent)).stdout)
     assert "drivers" not in before

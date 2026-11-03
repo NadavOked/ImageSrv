@@ -178,6 +178,12 @@ def test_while_verifying_the_image_is_out_of_the_library_and_the_console_shows_p
     assert done["verify_bytes"] == done["verify_total"] == len(PART_A) + len(PART_B)
     # רשומות ה-sha מזמן הקבלה אינן נכנסות לספרייה.
     assert not list((images_root / image_id).glob("*" + UPLOAD_SHA))
+    # The verify thread closes the task (state done) and only then journals capture_done
+    # (capture.py), so wait_verified can return between the two: public main of v0.80.4
+    # (3.13, 03/11) failed here. Wait for the line itself, with a ceiling -- as test_capture.
+    deadline = time.monotonic() + 15
+    while not _journal(server["ctx"], "capture_done") and time.monotonic() < deadline:
+        time.sleep(0.05)
     assert any("verified" in d for d in _journal(server["ctx"], "capture_done"))
 
 

@@ -222,7 +222,7 @@ def station_run(tmp_path, sha: str, stubs: dict) -> tuple[Path, str]:
         + f"export TMPDIR={posix(tmp_path)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "ntfsboot", "writeback", "drawers")   # #1906: restore_pipe; #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "failmark", "restore", "ntfsboot", "writeback", "drawers")   # #1906: restore_pipe; #2272: imagesrv-agent's order
         + f"target_init sda {len(PAYLOAD)}; "
         f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "node_is_block() { true; }; "
