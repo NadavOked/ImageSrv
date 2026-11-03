@@ -470,32 +470,41 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         if action not in monitor.POWER_ACTIONS:
             raise HTTPException(400, "פעולה לא מוכרת — reboot או poweroff")
 
-        def remote_name() -> str | None:
+        def remote_row() -> dict | None:
             client, token = storage_nodes.node_client(ctx.conn, data_dir, node)
             with client:
                 answer = client.get_json("/machines", token)
             machines = answer.get("machines") if isinstance(answer, dict) else None
             for row in machines or []:
                 if isinstance(row, dict) and row.get("mac") == canonical:
-                    return row.get("name")
+                    return row
             return None
 
         try:
-            name = await asyncio.to_thread(remote_name)
+            row = await asyncio.to_thread(remote_row)
         except Exception as exc:                             # noqa: BLE001
             raise HTTPException(502, "שרת המשנה אינו זמין: "
                                 + interserver_auth.redact_secrets(str(exc)))
+        name = row.get("name") if row else None
         if name is None:
             raise HTTPException(404, "המכונה אינה רשומה בשרת המשנה")
         if body.get("confirm") != name:
             raise HTTPException(403, monitor.POWER_NAME_STALE)   # #1850: איש אינו מקליד
+        # ‏#2240: כמו ב-`monitor.power` — באמצע שיכפול מקומי (לפי המשני) לא נשלח
+        # ‏`poweroff -f` בלי בחירה; דרך הסוכן = ‏`…/console/monitor/{mac}/agent-power`.
+        # משני ישן שאינו מדווח `local_copy` — ההתנהגות שלפני #2240.
+        copying = row.get("local_copy") is True
+        if copying and body.get("immediate") is not True:
+            return JSONResponse(status_code=409, content={
+                "detail": monitor.POWER_OVER_LOCAL_COPY, "local_copy": True})
         writer = tunnels.get(f"{nid}/{canonical}")
         if writer is None:
             raise HTTPException(
                 409, "אין מוניטור פתוח למכונה — הפקודה נוסעת דרך חיבור המוניטור")
         writer.write(monitor.power_frame(action))
         await writer.drain()
-        journal(ctx.conn, "monitor_power", f"{canonical} {action} node={nid}", user[0])
+        journal(ctx.conn, "monitor_power", f"{canonical} {action} node={nid}"
+                + (" — מיידי, באמצע שיכפול מקומי, בלי סימון היעדים" if copying else ""), user[0])
         return {"ok": True, "action": action}
 
     @router.websocket("/storage-nodes/{nid}/monitor/{mac}")

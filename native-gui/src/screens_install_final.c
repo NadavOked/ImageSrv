@@ -3,6 +3,7 @@
 #include <string.h>
 #include "screens_install.h"
 #include "install_raid.h"     /* #1989 */
+#include "screens_rounds.h"   /* bidi_isolate, RLM */
 
 /* #2097: under DHCP the address the NIC has now -- https://<name>:8081 works only
  * once the college's DNS knows the new server. The name when there is no address. */
@@ -22,16 +23,34 @@ static void summary_row(App *a,cairo_t *cr,Rect r,const char *key,const char *va
     hit_add(a,(Rect){r.x+10,r.y+5,85,r.h-10},HIT_INSTALL_SUMMARY_BASE+row);
 }
 
+/* #2129: the NIC by the name the network screen gives it, and its MAC -- eth0 is
+ * the installer's name, not the server's -- then the address, the gateway and
+ * the DNS (mockup install-5-summary). Under DHCP: what the NIC has now. */
+static void net_lines(const InstallState *s,char *one,size_t n1,char *two,size_t n2){
+    if(s->nic<0||s->nic>=s->nnics){snprintf(one,n1,"—");two[0]=0;return;}
+    const InstallNic *c=&s->nics[s->nic];char label[96],mac[48],raw[100],addr[112],gw[64],dns[112],gwl[96],dnsl[128];
+    install_nic_label(s,s->nic,label,sizeof label);bidi_isolate(c->mac,mac,sizeof mac);snprintf(one,n1,RLM "%s · %s",label,mac);
+    const char *g=s->static_mode?s->gateway:c->gateway,*d=s->static_mode?s->dns:c->dns;
+    if(s->static_mode)snprintf(raw,sizeof raw,"%s / %s",s->address,s->netmask);else snprintf(raw,sizeof raw,"%s",c->current[0]?c->current:"—");bidi_isolate(raw,addr,sizeof addr);
+    if(g[0]){bidi_isolate(g,gw,sizeof gw);snprintf(gwl,sizeof gwl,"שער %s",gw);}else snprintf(gwl,sizeof gwl,"ללא שער");
+    if(d[0]){bidi_isolate(d,dns,sizeof dns);snprintf(dnsl,sizeof dnsl,"DNS %s",dns);}else snprintf(dnsl,sizeof dnsl,"ללא DNS");
+    snprintf(two,n2,RLM "%s · %s · %s · %s",s->static_mode?"כתובת סטטית":"DHCP · עכשיו",addr,gwl,dnsl);
+}
+
 static void summary(App *a,cairo_t *cr,InstallLayout l){
-    InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;Rect card={x,y,w,290};install_card(cr,t,card);char value[400],url[192];
+    InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;char value[400],url[192];
+    /* #2129: the network row is two lines (a third when one wraps); the rows below move down by what it grew */
+    char one[200],two[512];net_lines(s,one,sizeof one,two,sizeof two);
+    Text m1=text_make(cr,FONT_SANS,13,500,one,(int)(w-282),DIR_RTL),m2=text_make(cr,FONT_SANS,13,500,two,(int)(w-282),DIR_RTL);double nh=fmax(48,12+m1.h+4+m2.h+10),dy=nh-48;
+    Rect card={x,y,w,290+dy};install_card(cr,t,card);
     InstallDisk *d=s->disk>=0&&s->disk<s->ndisks?&s->disks[s->disk]:NULL;
     if(s->raid!=RAID_NONE){char members[INSTALL_MAX_DISKS*48];install_raid_disks(s,members,sizeof members);snprintf(value,sizeof value,"%s · %d כוננים · %s",RAID_OPTS[s->raid].label,install_raid_count(s),members);}   /* #1989 */
     else{snprintf(value,sizeof value,"%s · %s",d&&d->model[0]?d->model:"—",d?d->path:"");}summary_row(a,cr,(Rect){x+1,y+1,w-2,48},"דיסק",value,0);
     if(s->secondary)snprintf(value,sizeof value,"שרת משנה · ראשי: %s",s->primary_url);else snprintf(value,sizeof value,"שרת ראשי");summary_row(a,cr,(Rect){x+1,y+49,w-2,48},"תפקיד",value,1);
-    const char *nic=s->nic>=0&&s->nic<s->nnics?s->nics[s->nic].name:"—";snprintf(value,sizeof value,s->static_mode?"%s · %s / %s":"%s · DHCP",nic,s->address,s->netmask);summary_row(a,cr,(Rect){x+1,y+97,w-2,48},"כתובת השרת",value,2);
-    snprintf(value,sizeof value,"%s · %s",s->hostname,s->timezone);summary_row(a,cr,(Rect){x+1,y+145,w-2,48},"שם השרת",value,3);snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+193,w-2,48},"משתמש הניהול",value,4);
-    summary_row(a,cr,(Rect){x+1,y+241,w-2,48},"סיסמת root","נקבעה",4);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
-    console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+306,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+306,w-210,t->indigo);y+=340;
+    summary_row(a,cr,(Rect){x+1,y+97,w-2,nh},"כתובת השרת",one,2);text_draw_r(cr,&m2,x+w-181,y+97+12+m1.h+4,t->ink);text_free(&m1);text_free(&m2);
+    snprintf(value,sizeof value,"%s · %s",s->hostname,s->timezone);summary_row(a,cr,(Rect){x+1,y+145+dy,w-2,48},"שם השרת",value,3);snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"משתמש הניהול",value,4);
+    summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"סיסמת root","נקבעה",4);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
+    console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+306+dy,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+306+dy,w-210,t->indigo);y+=340+dy;
     Rect seq={x,y,fmin(760,w),112};install_card(cr,t,seq);install_text_r(cr,t,"מה יקרה בלחיצה על \"החל התקנה\"",14,600,seq.x+seq.w-16,y+14,seq.w-32,t->ink);
     install_text_r(cr,t,"מחיקת הדיסק ← מערכת בסיס ← חבילות ImageSrv ← מנהל אתחול ← הגדרות",13,500,seq.x+seq.w-16,y+50,seq.w-32,t->ink);
     char after[192];snprintf(after,sizeof after,"בסיום תתבקש להסיר את מדיית ההתקנה; השרת יופעל מחדש אוטומטית אחרי %d שניות.",INSTALL_AUTO_REBOOT_S);install_text_r(cr,t,after,12,400,seq.x+seq.w-16,y+78,seq.w-32,t->muted);
@@ -53,6 +72,12 @@ static void phase_rows(App *a,cairo_t *cr,Rect r,int failed){
     }
 }
 
+/* #2332: the arrow is a cairo triangle, not "▲"/"▼" -- the ISO packs IBM Plex
+ * alone, and the live installer drew both as an empty box. 10px wide, 6 tall. */
+static void arrow(cairo_t *cr,double cx,double cy,int up,Rgb c){
+    double tip=up?-3:3;cairo_move_to(cr,cx-5,cy-tip);cairo_line_to(cr,cx+5,cy-tip);cairo_line_to(cr,cx,cy+tip);cairo_close_path(cr);draw_set(cr,c);cairo_fill(cr);
+}
+
 static void output_box(App *a,cairo_t *cr,Rect r){
     InstallState *s=&a->install;const Theme *t=a->theme;draw_fill_rrect(cr,r,t->radius,t->sunken);draw_border_rrect(cr,r,t->radius,t->hair,1);
     char copy[INSTALL_OUTPUT_MAX];snprintf(copy,sizeof copy,"%s",s->output);char *lines[64],*save=NULL;int n=0;
@@ -66,12 +91,13 @@ static void output_box(App *a,cairo_t *cr,Rect r){
         if(used&&used+rows>9){text_free(&q);break;}
         text_draw(cr,&q,r.x+12,r.y+10+used*20,t->ink);text_free(&q);used+=rows;
     }
-    install_text_r(cr,t,"▲",12,600,r.x+r.w-10,r.y+12,24,t->muted);install_text_r(cr,t,"▼",12,600,r.x+r.w-10,r.y+r.h-28,24,t->muted);
+    arrow(cr,r.x+r.w-16,r.y+21,1,t->muted);arrow(cr,r.x+r.w-16,r.y+r.h-19,0,t->muted);
     hit_add(a,(Rect){r.x+r.w-36,r.y,36,r.h/2},HIT_INSTALL_OUTPUT_UP);hit_add(a,(Rect){r.x+r.w-36,r.y+r.h/2,36,r.h/2},HIT_INSTALL_OUTPUT_DOWN);
 }
 
 static void details_toggle(App *a,cairo_t *cr,Rect r){
-    InstallState *s=&a->install;const Theme *t=a->theme;install_text_r(cr,t,s->technical_open?"פרטים טכניים  ▲":"פרטים טכניים  ▼",13,600,r.x+r.w,r.y,r.w,t->indigo);hit_add(a,r,HIT_INSTALL_TECHNICAL);
+    InstallState *s=&a->install;const Theme *t=a->theme;Text q=text_make(cr,FONT_SANS,13,600,"פרטים טכניים",(int)r.w,DIR_RTL);text_draw_r(cr,&q,r.x+r.w,r.y,t->indigo);
+    arrow(cr,r.x+r.w-q.w-13,r.y+q.h/2.0,s->technical_open,t->indigo);text_free(&q);hit_add(a,r,HIT_INSTALL_TECHNICAL);   /* #2332: the arrow after the words, as "  ▲" was */
 }
 
 static void progress(App *a,cairo_t *cr,InstallLayout l){

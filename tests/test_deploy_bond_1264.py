@@ -476,6 +476,10 @@ def host_lab(lab, monkeypatch, tmp_path):
     lab.fake["bond_state"] = lambda name: netcfg_host.read_bond(name, proc)
 
     def run(cmd, timeout=40):
+        if cmd[:2] == ["systemctl", "stop"]:
+            return 0, ""
+        if cmd[0] == "systemd-run":      # #2105: ifup in its own transient unit
+            cmd = cmd[-2:]
         lab.commands.append(tuple(cmd))
         if cmd == ["modprobe", "bonding"]:
             lab.module_loaded = lab.module_result[0] == 0

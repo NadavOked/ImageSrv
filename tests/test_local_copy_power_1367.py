@@ -158,7 +158,8 @@ def test_the_console_asks_over_a_local_copy_and_only_then_confirms():
     js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
     sheet_at = js.index("function localCopyPowerSheet(")
     body = js[sheet_at:js.index("\nfunction ", sheet_at + 10)]
-    assert "המחשב באמצע שיכפול מקומי — " in body and "ישאיר את דיסק היעד שבור ולא שמיש" in body
+    # ‏#2240 (נדב 31/10, המוקאפ): "דיסק יעד שעדיין לא הושלם" — יעד שהושלם נשאר שלם (#2090)
+    assert "המחשב באמצע שיכפול מקומי — " in body and "דיסק יעד שעדיין לא הושלם יישאר שבור ולא שמיש" in body
     assert "danger: true" in body                                   # the red button (#1270)
     # the confirmation is sent from the two warning paths and nowhere else
     assert js.count("confirm_local_copy: true") == 2, js.count("confirm_local_copy: true")

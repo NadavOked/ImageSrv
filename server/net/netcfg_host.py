@@ -273,6 +273,40 @@ def _run(cmd: list[str], timeout: int = 40) -> tuple[int | None, str]:
     return done.returncode, (done.stderr or done.stdout or "").strip()
 
 
+#: ‏#2105: ה-`ifup` רץ ביחידה חולפת משלו, לא בתוך מי שקרא לו. ‏``dhcpcd -b``
+#: (‏`netcfg.render`) נשאר ב-cgroup של מי שהריץ את ה-ifup; כשזה השירות
+#: (imagesrv-server, ה-DCUI, יחידת ה-oneshot של ההחזרה) — עצירה או הפעלה
+#: מחדש שלו שולחת SIGTERM ל-dhcpcd, והכתובת יורדת (#2094, ‏firstboot). היחידה
+#: החולפת היא ‏oneshot+RemainAfterExit, כמו networking.service שמחזיק אותו
+#: באתחול; ומחוץ לארגז החול של השירות — שם dhcpcd נכשל ב-"failed to drop
+#: privileges". שם קבוע לכל כרטיס: ההחלה הבאה עוצרת את הקודמת לפני שהיא עולה.
+IFUP_UNIT_PREFIX = "imagesrv-ifup-"
+#: ‏systemd הורג את ה-ifup לפני ש-`_run` מוותר (40 ש') — כך כשל מגיע כקוד, לא
+#: כ-systemd-run שנהרג ויחידה שממשיכה לרוץ בלי שאיש יודע.
+IFUP_TIMEOUT_S = 35
+
+
+def ifup_unit(name: str) -> str:
+    return f"{IFUP_UNIT_PREFIX}{name}.service"
+
+
+def _ifup_detached(name: str) -> tuple[int | None, str, str]:
+    """‏`ifup <name>` ביחידה חולפת. ‏(קוד, טקסט, הערת ה-stop).
+
+    ‏`systemctl stop` של היחידה מההחלה הקודמת — אחרי ה-ifdown, שכבר שחרר את
+    ה-lease. קוד היציאה שלו אינו קובע (יחידה שאינה קיימת היא המקרה הרגיל),
+    אבל הוא נשמר: אם היחידה לא נעצרה, ה-systemd-run נכשל עליה בשם, וההערה
+    אומרת למה."""
+    unit = ifup_unit(name)
+    stop_code, stop_text = _run(["systemctl", "stop", unit])
+    stop_note = "" if stop_code == 0 else f"systemctl stop {unit}: {stop_code}: {stop_text[:120]}"
+    code, text = _run(["systemd-run", f"--unit={unit}", "--collect", "--quiet",
+                       "-p", "Type=oneshot", "-p", "RemainAfterExit=yes",
+                       "-p", f"TimeoutStartSec={IFUP_TIMEOUT_S}",
+                       "ifup", name])
+    return code, text, stop_note
+
+
 def apply_interface(name: str) -> str | None:
     """‏`ifdown` ואז `ifup`. מחזיר הודעת שגיאה או None.
 
@@ -299,14 +333,16 @@ def apply_interface(name: str) -> str | None:
         if link_code != 0:
             return f"{name}: הפעלת הכרטיס נכשלה (ip link rc={link_code}: {link_text[:200]})"
     down_code, down_text = _run(["ifdown", "--force", name])
-    up_code, up_text = _run(["ifup", name])
+    up_code, up_text, stop_note = _ifup_detached(name)
     if up_code is None:
-        return f"{name}: לא ניתן להריץ ifup ({up_text})"
+        return f"{name}: לא ניתן להריץ ifup דרך systemd-run ({up_text})"
     if up_code != 0:
-        note = ""
+        notes = [stop_note] if stop_note else []
         if down_code not in (0, None):
-            note = f" (ה-ifdown שלפניו החזיר {down_code}: {down_text[:120]})"
-        return f"{name}: ifup החזיר {up_code}: {up_text[:200]}{note}"
+            notes.append(f"ה-ifdown שלפניו החזיר {down_code}: {down_text[:120]}")
+        note = f" ({' · '.join(notes)})" if notes else ""
+        return (f"{name}: ifup נכשל ביחידה {ifup_unit(name)} (קוד {up_code}): "
+                f"{up_text[:200]} — הפלט שלו: journalctl -u {ifup_unit(name)}{note}")
     return None
 
 

@@ -11,7 +11,7 @@
 
 LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/common.sh"
-. "$LIB_DIR/hello.sh"
+. "$LIB_DIR/hello.sh"; . "$LIB_DIR/timing.sh"   # #2056/#2059: before waits/restore/idle -- it reads which ceilings the environment set
 # waits.sh לפני כל מי שמזרים: התקרות שלו נקראות כבר בטעינה של restore.sh.
 . "$LIB_DIR/waits.sh"
 . "$LIB_DIR/jsonq.sh"
@@ -86,7 +86,7 @@ read_answer() {
     D_MODE="$IMAGESRV_MODE"
     D_SESSION_ID=$(json_get "$RESP" ".session.id")     # for poll.sh (#136)
     D_REQUIRE_LOGIN=$(json_get "$RESP" ".ui.require_login")
-    min_free_take "$RESP"   # #1354: the console's minimum free space; the local clone keeps the last one
+    min_free_take "$RESP"; timing_take "$RESP"   # #1354: the console's minimum free space (the local clone keeps the last one); #2056/#2059 waits, power-off
 }
 
 build_console_screen() {

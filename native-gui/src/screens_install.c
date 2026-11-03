@@ -8,6 +8,9 @@ static const char *STEP_NAMES[]={"דיסק","תפקיד השרת","כתובת ה
 
 void install_text_r(cairo_t *cr,const Theme *t,const char *v,double px,int weight,double right,double y,double width,Rgb color){(void)t;Text x=text_make(cr,FONT_SANS,px,weight,v,(int)width,DIR_RTL);text_draw_r(cr,&x,right,y,color);text_free(&x);}
 void install_text_ltr(cairo_t *cr,const char *v,double px,int weight,double x,double y,double width,Rgb color){Text q=text_make(cr,FONT_MONO,px,weight,v,(int)width,DIR_LTR);text_draw(cr,&q,x,y,color);text_free(&q);}
+/* #2096, #2129: a NIC by the name a person reads -- its model, or "כרטיס רשת N" -- on the
+ * network screen and in the summary alike; never "VMware 0x07b0" and never eth0 */
+void install_nic_label(const InstallState *s,int i,char *out,size_t n){if(s->nics[i].model[0])snprintf(out,n,"%s",s->nics[i].model);else snprintf(out,n,"כרטיס רשת %d",i+1);}
 void install_card(cairo_t *cr,const Theme *t,Rect r){draw_fill_rrect(cr,r,t->radius,t->surface);draw_border_rrect(cr,r,t->radius,t->hair,1);}
 
 static int current_step(const InstallState *s){if(s->view==INSTALL_PROGRESS||s->view==INSTALL_FAILED)return 6;if(s->view==INSTALL_DONE)return 7;return s->view;}

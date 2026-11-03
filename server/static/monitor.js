@@ -367,22 +367,57 @@ function powerUrl() {
     : `/api/console/monitor/${mac}/power`;
 }
 
-async function sendPower(action, confirm) {
+/* ‏#2240: "כבה/אתחל בכל זאת" באמצע שיכפול מקומי — בקשה דרך הסוכן (ערוץ ה-hello), לא
+   `poweroff -f`. דרך שרת משנה: ה-relay הכללי (`CONSOLE_WRITES`); ה-MAC במקפים, כי `:` אינו
+   עובר את בדיקת הנתיב של הערוץ הבין-שרתי. */
+function agentPowerUrl() {
+  const mac = encodeURIComponent(MAC.replace(/:/g, "-"));
+  return NODE
+    ? `/api/console/storage-nodes/${encodeURIComponent(NODE)}/console/monitor/${mac}/agent-power`
+    : `/api/console/monitor/${mac}/agent-power`;
+}
+
+async function sendPower(action, confirm, extra, url) {
   let response;
   try {
-    response = await fetch(powerUrl(), {
+    response = await fetch(url || powerUrl(), {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, confirm }),
+      body: JSON.stringify(Object.assign({ action, confirm }, extra || {})),
     });
   } catch (e) {
     /* ‏#1850: "Failed to fetch" של הדפדפן, באנגלית, אינו אומר למפעיל דבר. */
     throw new Error("אין חיבור לשרת — הפקודה לא נשלחה");
   }
   if (response.ok) return;
-  let detail = "שגיאה " + response.status;
-  try { const body = await response.json(); detail = body.detail || detail; } catch (e) {}
-  throw new Error(detail);
+  let detail = "שגיאה " + response.status, localCopy = false;
+  try {
+    const body = await response.json();
+    detail = body.detail || detail;
+    localCopy = body.local_copy === true;   /* #2240: השרת סירב — באמצע שיכפול מקומי */
+  } catch (e) {}
+  const error = new Error(detail);
+  error.localCopy = localCopy;
+  throw error;
+}
+
+/* ‏#2240: האם המחשב באמצע שיכפול מקומי — מאותה רשימה שהשרת מחשב (`local_copy`). זו נוחות
+   בלבד, כדי שהאזהרה תופיע בלחיצה הראשונה: מה שמחליט הוא השרת, ש-`…/power` שלו מסרב (409,
+   `local_copy`) — ואז החלון עובר לאזהרה. רשימה שלא נקראה = החלון הרגיל, והשרת יכריע. */
+async function machineInLocalCopy() {
+  try {
+    const response = await fetch(NODE
+      ? `/api/console/storage-nodes/${encodeURIComponent(NODE)}/machines`
+      : "/api/console/monitor/machines", { credentials: "same-origin" });
+    if (!response.ok) return false;
+    const body = await response.json();
+    const rows = NODE ? body && body.machines : body;
+    const mac = MAC.toLowerCase().replace(/-/g, ":");
+    const row = Array.isArray(rows) ? rows.find((m) => m && m.mac === mac) : null;
+    return !!(row && row.local_copy === true);
+  } catch (e) {
+    return false;
+  }
 }
 
 /* --- חיבור וניתוק -------------------------------------------------------- */
@@ -645,38 +680,92 @@ function noteMonitorActivity() {
   document.addEventListener(type, noteMonitorActivity, { passive: true, capture: true }));
 
 /* מודאל אישור לפעולת כוח (#1270): שאלה, השלכה וכפתור אדום — בלי הקלדה,
-   במקום prompt/confirm החסומים. משתמש ב-DOM ובמחלקות של console.css. */
-function powerModal(action, label) {
-  const modal = document.getElementById("pmodal");
+   במקום prompt/confirm החסומים. משתמש ב-DOM ובמחלקות של console.css.
+   ‏#2240: אותו מודאל נושא שלושה חלונות — הרגיל, אזהרת השיכפול המקומי, והכיבוי המיידי. */
+let pmodalKey = null;
+function closePowerModal() {
+  document.getElementById("pmodal").style.display = "none";
+  if (pmodalKey) document.removeEventListener("keydown", pmodalKey);
+  pmodalKey = null;
+}
+function openPowerModal(o) {
   const error = document.getElementById("pmodal-error");
-  document.getElementById("pmodal-title").textContent = label + " — אישור";
-  document.getElementById("pmodal-msg").textContent =
-    `הפעולה "${label}" תתבצע על המחשב המנוטר עכשיו.`;
+  document.getElementById("pmodal-title").textContent = o.title;
+  document.getElementById("pmodal-msg").textContent = o.msg;
   document.getElementById("pmodal-name").textContent = NAME;
-  document.getElementById("pmodal-ok").textContent = label;
+  document.getElementById("pmodal-danger").style.display = o.notes ? "none" : "";
+  const box = document.getElementById("pmodal-notes");
+  box.textContent = "";
+  for (const [cls, text] of o.notes || []) {
+    const note = document.createElement("div");
+    note.className = cls;
+    note.textContent = text;
+    box.appendChild(note);
+  }
+  document.getElementById("pmodal-alt").style.display = o.alt ? "" : "none";
+  if (o.alt) {
+    const link = document.getElementById("pmodal-alt-btn");
+    link.textContent = o.alt.label;
+    link.onclick = o.alt.onClick;
+  }
+  document.getElementById("pmodal-ok").textContent = o.okLabel;
+  document.getElementById("pmodal-cancel").textContent = o.cancelLabel || "ביטול";
   error.textContent = "";
-  modal.style.display = "flex";
+  document.getElementById("pmodal").style.display = "flex";
   document.getElementById("pmodal-cancel").focus();
-
-  const close = () => {
-    modal.style.display = "none";
-    document.removeEventListener("keydown", onKey);
-  };
-  const onKey = (event) => { if (event.key === "Escape") close(); };
-  document.addEventListener("keydown", onKey);
-  document.getElementById("pmodal-cancel").onclick = close;
+  if (!pmodalKey) {
+    pmodalKey = (event) => { if (event.key === "Escape") closePowerModal(); };
+    document.addEventListener("keydown", pmodalKey);
+  }
+  document.getElementById("pmodal-cancel").onclick = o.onCancel || closePowerModal;
   document.getElementById("pmodal-ok").onclick = () => {
-    /* ‏#1129: ההשוואה בשרת. השם הידוע (NAME) נשלח כ-confirm; 403 = לא זהה. */
     error.textContent = "";
-    sendPower(action, NAME).then(() => { close(); awaitPower(action, label); },
-      (e) => { error.textContent = e.message; });
+    o.onOk().then(() => { closePowerModal(); awaitPower(o.action, o.label); },
+      (e) => { if (!(o.onError && o.onError(e))) error.textContent = e.message; });
   };
 }
 
+function powerModal(action, label) {
+  openPowerModal({ action, label, title: label + " — אישור", okLabel: label,
+    msg: `הפעולה "${label}" תתבצע על המחשב המנוטר עכשיו.`,
+    /* ‏#1129: ההשוואה בשרת. השם הידוע (NAME) נשלח כ-confirm; 403 = לא זהה. */
+    onOk: () => sendPower(action, NAME),
+    /* ‏#2240: השרת אומר שהמחשב באמצע שיכפול מקומי — החלון עובר לאזהרה, שום דבר לא נשלח. */
+    onError: (e) => { if (e.localCopy) localCopyModal(action, label); return e.localCopy; } });
+}
+
+/* ‏#2240 (הכרעה 03/11, אפשרות ב׳): כמו `localCopyPowerSheet` בחלון המחשב (#1367). "בכל זאת"
+   = בקשה דרך הסוכן (`confirm_local_copy`), שמסמן את היעדים לפי מצבם ומדווח ליומן לפני
+   הכיבוי; כפתור החירום נשאר בקישור "המחשב לא עונה?", מאחורי אזהרה חמורה נוספת. */
+function localCopyModal(action, label) {
+  const off = action === "poweroff";
+  openPowerModal({ action, label, title: off ? `לכבות את ${NAME}?` : `לאתחל את ${NAME}?`,
+    msg: "המחשב באמצע שיכפול מקומי",
+    notes: [["notice warn", `המחשב באמצע שיכפול מקומי — ${off ? "כיבוי" : "אתחול"} עכשיו — דיסק יעד שעדיין לא הושלם יישאר שבור ולא שמיש. ${off ? "לכבות" : "לאתחל"} בכל זאת?`],
+      ["notice", "הסוכן מסמן את היעדים כנכשלו ומדווח ליומן לפני ש" + (off ? "הוא נכבה" : "הוא מאותחל")]],
+    okLabel: off ? "כבה בכל זאת" : "אתחל בכל זאת",
+    alt: { label: off ? "כיבוי מיידי" : "אתחול מיידי", onClick: () => immediateModal(action, label) },
+    onOk: () => sendPower(action, NAME, { confirm_local_copy: true }, agentPowerUrl()) });
+}
+
+function immediateModal(action, label) {
+  const off = action === "poweroff";
+  openPowerModal({ action, label, title: `${off ? "כיבוי" : "אתחול"} מיידי של ${NAME}`,
+    msg: "עוקף את הסוכן. רק למחשב שלא עונה",
+    notes: [["danger-confirm", `זה ${off ? "כיבוי" : "אתחול"} חשמלי. הסוכן לא יסמן את היעדים ולא ייכתב דבר ליומן במחשב. דיסק יעד שלא הושלם עלול להיראות תקין אחרי העלייה למרות שהאימות לא הסתיים.`],
+      ["notice warn", "אחרי העלייה יש לבדוק ידנית את דיסקי היעד שלא הושלמו, או לשכפל אותם מחדש."]],
+    okLabel: off ? "כבה מיד, בלי סימון" : "אתחל מיד, בלי סימון", cancelLabel: "חזרה",
+    onCancel: () => localCopyModal(action, label),
+    onOk: () => sendPower(action, NAME, { immediate: true }) });
+}
+
+async function onPowerButton(action, label) {
+  (await machineInLocalCopy() ? localCopyModal : powerModal)(action, label);
+}
 document.getElementById("reboot-btn").addEventListener(
-  "click", () => powerModal("reboot", "הפעלה מחדש"));
+  "click", () => onPowerButton("reboot", "הפעלה מחדש"));
 document.getElementById("poweroff-btn").addEventListener(
-  "click", () => powerModal("poweroff", "כיבוי"));
+  "click", () => onPowerButton("poweroff", "כיבוי"));
 document.getElementById("reconnect").addEventListener("click", () => {
   retries = 0; connect();                      // connect() מנתק את הקודם
 });

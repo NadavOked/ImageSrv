@@ -8,6 +8,7 @@ typedef struct { Rect content, body, footer, rail; double right; } InstallLayout
 
 InstallLayout install_frame(App *a, cairo_t *cr, double W, double H);
 void install_card(cairo_t *cr, const Theme *t, Rect r);
+void install_nic_label(const InstallState *s, int i, char *out, size_t n);   /* #2129 */
 void install_text_r(cairo_t *cr, const Theme *t, const char *value, double size,
                     int weight, double right, double y, double width, Rgb color);
 void install_text_ltr(cairo_t *cr, const char *value, double size, int weight,

@@ -392,7 +392,8 @@ def test_monitor_machines_list_is_admin_only_and_server_decides_online(server):
     by_mac = {m["mac"]: m for m in fresh}
     assert set(by_mac) == {MAC, "aa:bb:cc:dd:ee:01"}, "רק build/cloner"
     assert by_mac[MAC] == {"mac": MAC, "name": "Monitor", "role": "build",
-                           "ip": IP, "online": True, "prompt": None}   # #906
+                           "ip": IP, "online": True, "prompt": None,   # #906
+                           "local_copy": False}                        # #2240
     assert by_mac["aa:bb:cc:dd:ee:01"]["online"] is False
     assert by_mac["aa:bb:cc:dd:ee:01"]["ip"] is None
 
