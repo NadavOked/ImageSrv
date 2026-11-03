@@ -37,7 +37,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/hold.sh"; . "$LIB_DIR/task.sh"   # #1217: do_task, split from this file
 . "$LIB_DIR/poll.sh"; . "$LIB_DIR/idle.sh"; . "$LIB_DIR/roundbeep.sh"   # #434/#1967: idle power-off and audible result
 . "$LIB_DIR/guiparent.sh"; . "$LIB_DIR/localboot.sh"; . "$LIB_DIR/splash.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: no GUI -> BootNext to the local disk + told to the server; 17/10: the static screen; #1709: the GUI init started
-. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"   # #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
+. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drawerselect.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"   # #2201: resolve_target_drawers; #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
 . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcsize.sh"; . "$LIB_DIR/lcplan.sh"; . "$LIB_DIR/lcsnap.sh"; . "$LIB_DIR/lctune.sh"; . "$LIB_DIR/lccopy.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/localclone.sh"; . "$LIB_DIR/lcwait.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/syspartgui.sh"   # #1896: C: from the screen; #1322: local clone (lcgui.sh runs in the kiosk); 16/10: restore from the server
 . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/drawergate.sh"   # #928: the shrink question; 11/10: grow-back / end-of-capture dialogs
 . "$LIB_DIR/guibridge.sh"   # run in imagesrv-kiosk; sourced here for the load gate
@@ -101,7 +101,7 @@ do_restore_drawers() {
     # $1 = image id, $2 = session id. Cloning room: 2-3 drawers at once.
     identify_watch_stop            # #1966: no identification read may overlap this round
     smart_selftest_cancel           # #1970: background diagnostics never overlap a round
-    resolve_target_drawers          # #695: sets $_disks; die_local on a bad mapping
+    resolve_target_drawers          # #695: sets $_disks; die_local on a bad mapping (drawerselect.sh)
     rm -f "$RUN_DIR/server-restarted-wave" "$RUN_DIR/session-closed" "$RUN_DIR/session-closed.why"   # 17/10: progress_loop's mark (verdict.sh)
     [ -n "$_disks" ] || { log "no drawers detected -- waiting"; sleep 5; return 0; }
 

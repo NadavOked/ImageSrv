@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
-from server.console import auth
+from server.console import auth, viewer_sessions
 from server.agent import registry
 from server.agent.api import ServerContext
 from server.db import get_setting, journal, monitor_rekeyed, set_setting
@@ -37,6 +37,9 @@ MONITOR_CONFIRM = "imagesrv.monitor"
 #: הרשאה לעולם אינו נוגע בשירות ה-RFB — הבקרה השלילית מוכיחה בדיוק זאת.
 WS_UNAUTHENTICATED = 4401
 WS_FORBIDDEN = 4403
+#: ‏#1853: ההתחברות לקונסולה בוטלה בזמן צפייה (יציאה, מחיקה, הורדה ל-deploy, השבתה,
+#: החלפת סיסמה) — אותו 4401, והדף אינו מנסה שוב.
+SESSION_ENDED_REASON = "נותקת מהקונסולה"
 
 #: ‏#839: הפרוקסי לא הצליח להזדהות מול המוניטור **במכונה** — המכונה לא
 #: דיווחה סוד (סוכן ישן), המוניטור לא הציע את סוג-האבטחה שלנו (מוניטור
@@ -108,6 +111,12 @@ def origin_allowed(headers) -> bool:
         return True
     host = headers.get("host", "")
     return bool(host) and urlsplit(origin).netloc.lower() == host.lower()
+
+
+def refused_because(reason: str) -> str:
+    """‏#1855: ‏``refused`` ביומן נושא את הסיבה — ``refused — <סיבה>`` (עד כאן "refused" לבד,
+    ואי אפשר היה לדעת מה נדחה)."""
+    return f"refused — {reason}"
 
 
 def client_message_length(buf: bytes) -> int | None:
@@ -530,7 +539,7 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
         return outcome
     if choice != b"\x01":
         await websocket.close(code=1002, reason="סוג אבטחה לא צפוי")
-        return "refused"
+        return refused_because("סוג אבטחה לא צפוי")
     await websocket.send_bytes(b"\x00\x00\x00\x00")
     # ‏ClientInit (בייט shared יחיד) הוא ההודעה היחידה בלי סוג — עובר כמו
     # שהוא; מכאן כל הודעה מהדפדפן נושאת סוג.
@@ -551,7 +560,7 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
                 except ValueError as exc:
                     await websocket.close(code=1002,
                                           reason=f"הודעת RFB לא מוכרת: {exc}")
-                    outcome = "refused"
+                    outcome = refused_because(f"הודעת RFB לא מוכרת: סוג {exc}")
                     return
                 if length is None:
                     break
@@ -562,11 +571,11 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
                         and not cut_text_extended(buf)):
                     await websocket.close(code=WS_FORBIDDEN,
                                           reason=POWER_OVER_WS_REFUSED)
-                    outcome = "refused"
+                    outcome = refused_because("ClientCutText — " + POWER_OVER_WS_REFUSED)
                     return
                 if length > RFB_CLIENT_MESSAGE_MAX:
                     await websocket.close(code=1009, reason="הודעת RFB גדולה מדי")
-                    outcome = "refused"
+                    outcome = refused_because(f"הודעת RFB גדולה מדי: {length} בייט, סוג {buf[0]}")
                     return
                 if len(buf) < length:
                     break
@@ -644,6 +653,94 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
     return outcome
 
 
+async def bridge_until_revoked(websocket: WebSocket, task: asyncio.Task | None,
+                               bridge: Awaitable[str]) -> str:
+    """‏#1853: הגשר של צופה שנרשם ב-`viewer_sessions` (כמו ה-VM, #1394). ביטול
+    ש-`viewer_sessions` עשה — ‏logout, מחיקה, הורדה ל-deploy — נסגר 4401 בשמו
+    ונרשם ``session_revoked``. כל ביטול אחר (פירוק החיבור, #725) ממשיך החוצה."""
+    try:
+        return await bridge
+    except asyncio.CancelledError:
+        if task is None or not viewer_sessions.was_revoked(task):
+            raise
+        await websocket.close(code=WS_UNAUTHENTICATED, reason=SESSION_ENDED_REASON)
+        return "session_revoked"
+
+
+def still_admin(conn, token: str) -> bool:
+    """‏#1853: בדיקה שנייה **אחרי** `viewer_sessions.register`. בין הבדיקה הראשונה לרישום
+    יש await-ים (השער, `reserve`), ו-logout רץ בתהליכון אחר — ביטול שקרה בחלון הזה לא
+    מצא את הגשר ברישום. הסדר בצד המבטל (המסד, ואז `viewer_sessions`) מבטיח שכל ביטול
+    נתפס באחת משתיהן: לפני הבדיקה הזו — היא נכשלת; אחריה — הוא מבטל את המשימה."""
+    found = auth.check(conn, token)
+    return found is not None and found[1] == "admin"
+
+
+async def close_if_revoked(websocket: WebSocket, task: asyncio.Task | None) -> None:
+    """‏#1853: ביטול ש-`viewer_sessions` עשה לפני שהגשר נפתח (בזמן החיבור למכונה
+    ואימותה) — 4401 בשמו, ולא סגירה עלומה שהדף מנסה שוב."""
+    if task is None or not viewer_sessions.was_revoked(task):
+        return
+    try:
+        await websocket.close(code=WS_UNAUTHENTICATED, reason=SESSION_ENDED_REASON)
+    except (RuntimeError, WebSocketDisconnect, OSError):
+        pass   # כבר נסגר — אין מה להודיע
+
+
+#: ‏#1855: חלון הצבירה של כשלי התחברות זהים — הדפדפן מנסה שוב עד 20 פעמים
+#: (2/4/8/15/30 ש', ~8.5 דק'), וסדרה כזו היא שורה אחת ביומן.
+REFUSAL_WINDOW_SECONDS = 600
+
+
+def path_word(text: str) -> str:
+    """מילה אחת ליומן מתוך נתיב שהדפדפן שלח (MAC/מזהה שלא זוהו): בלי רווחים ותווי בקרה."""
+    return "".join(c for c in text[:40] if c.isprintable() and not c.isspace()) or "?"
+
+
+class RefusalLog:
+    """‏#1855: כל סגירה של `/monitor/{mac}` ושל `/storage-nodes/{nid}/monitor/{mac}`
+    שקודמת לגשר נרשמת ביומן (`monitor_refused`, ‏``<mac> <קוד> <סיבה>[ ×N נוספים][ node=<nid>]``)
+    — עד כאן רק `monitor_connected` נרשם, וכשל לא השאיר עקבות בשרת (#1837 נמצא ביומן
+    הסוכן). **בצבירה:** אותו כשל לאותו משתמש ולאותה מכונה תוך `REFUSAL_WINDOW_SECONDS`
+    נספר ואינו שורה; הספירה נכתבת בשורה הבאה של אותו כשל, או כשהחיבור הצליח
+    (`settle`). הסיבה היא מה שהדפדפן רואה — בלי challenge ובלי תשובה (#839)."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic,
+                 window: float = REFUSAL_WINDOW_SECONDS):
+        self._clock, self._window = clock, window
+        self._lock = threading.Lock()
+        #: ‏(mac, node, user, code, reason) → [מתי נכתבה השורה האחרונה, כמה נספרו מאז]
+        self._seen: dict[tuple[str, str, str, int, str], list] = {}
+
+    @staticmethod
+    def _write(conn, key: tuple[str, str, str, int, str], more: int) -> None:
+        mac, node, user, code, reason = key
+        detail = f"{mac} {code} {reason}" + (f" ×{more} נוספים" if more else "")
+        journal(conn, "monitor_refused", detail + (f" node={node}" if node else ""), user)
+
+    def record(self, conn, mac: str, user: str, code: int, reason: str, node: str = "") -> None:
+        key = (mac, node, user, code, reason)
+        now = self._clock()
+        with self._lock:
+            seen = self._seen.get(key)
+            if seen is not None and now - seen[0] < self._window:
+                seen[1] += 1
+                return
+            more = seen[1] if seen is not None else 0
+            self._seen[key] = [now, 0]
+        self._write(conn, key, more)
+
+    def settle(self, conn, mac: str, user: str, node: str = "") -> None:
+        """החיבור הצליח: הספירות שעוד לא נכתבו נכתבות, והסדרה נסגרת."""
+        with self._lock:
+            done = [(k, v[1]) for k, v in self._seen.items() if k[:3] == (mac, node, user)]
+            for k, _ in done:
+                del self._seen[k]
+        for key, more in done:
+            if more:
+                self._write(conn, key, more)
+
+
 class _Holder:
     """‏#1852: מי מחזיק מכונה — ומאיזה event loop אפשר לסגור את הגשר שלו."""
 
@@ -683,6 +780,7 @@ def create_monitor_router(
     bridges: dict[str, asyncio.StreamWriter] = {}
     lock = threading.Lock()
     clock = clock or time.monotonic
+    refusals = RefusalLog(clock)   # ‏#1855
 
     @router.get("/monitor/settings")
     def read_settings(user=Depends(admin_only)):
@@ -905,6 +1003,13 @@ def create_monitor_router(
         if found[1] != "admin":
             await websocket.close(code=WS_FORBIDDEN, reason="פעולה למנהל בלבד")
             return
+
+        async def refuse(where: str, code: int, reason: str) -> None:
+            """‏#1855: סגירה לפני הגשר — ליומן (בצבירה) ולדפדפן, באותה סיבה."""
+            reason = close_reason(reason)
+            refusals.record(ctx.conn, where, found[0], code, reason)
+            await websocket.close(code=code, reason=reason)
+
         # ‏#705: המוניטור עובר בפורט הקונסולה — אין לו מאזין לסגור, ולכן "כבוי
         # בכרטיס" נאכף כאן, לפי הכתובת המקומית של החיבור, **לפני** כל TCP למכונה.
         gate = getattr(ctx, "nic_services", None)
@@ -912,12 +1017,12 @@ def create_monitor_router(
             local = (websocket.scope.get("server") or ("", 0))[0]
             why = await asyncio.to_thread(gate.refused, "monitor", local)
             if why:
-                await websocket.close(code=WS_FORBIDDEN, reason=close_reason(why))
+                await refuse(registry.normalize_mac(mac) or path_word(mac), WS_FORBIDDEN, why)
                 return
 
         canonical = registry.normalize_mac(mac)
         if canonical is None:
-            await websocket.close(code=4404, reason="מכונה לא מוכרת")
+            await refuse(path_word(mac), 4404, "מכונה לא מוכרת")
             return
 
         # ‏אחרי השער: אי-זמינות המכונה נסגרת גם היא כ-WebSocket, ולא
@@ -927,39 +1032,41 @@ def create_monitor_router(
             ip, _role, secret, machine_auth = _target(ctx, canonical,
                                               now_fn() if now_fn else None)
         except HTTPException as exc:
-            await websocket.close(code=4000 + exc.status_code,
-                                  reason=close_reason(str(exc.detail)))
+            await refuse(canonical, 4000 + exc.status_code, str(exc.detail))
             return
         if secret is None:
             # ‏#839: בלי סוד אין עם מה להזדהות — ולכן גם אין TCP. מוניטור
             # שהיה נפתח כאן "כמו פעם" הוא בדיוק המסלול הלא-מאומת שנסגר.
-            await websocket.close(
-                code=WS_MACHINE_AUTH,
-                reason="המכונה לא דיווחה סוד מוניטור — סוכן ישן?")
+            await refuse(canonical, WS_MACHINE_AUTH, "המכונה לא דיווחה סוד מוניטור — סוכן ישן?")
             return
         if machine_auth != MONITOR_AUTH_HMAC:
             # ‏#1077: סוכן ישן ששולח סוד גולמי. לא נופלים לגולמי בשקט —
             # "לא הצלחנו לאמת" אינו "אימתנו" (עיקרון 5). אתחול מספיק.
-            await websocket.close(
-                code=WS_MACHINE_AUTH,
-                reason="המכונה אינה תומכת באתגר-תגובה (HMAC) — סוכן ישן? אתחל מחדש")
+            await refuse(canonical, WS_MACHINE_AUTH,
+                         "המכונה אינה תומכת באתגר-תגובה (HMAC) — סוכן ישן? אתחל מחדש")
             return
         holder, refused = reserve(canonical, found[0])
         if holder is None:
             # ‏#1852: מי מחזיק — וב-`…/control` אפשר לבקש ממנו שליטה.
-            await websocket.close(code=4409, reason=close_reason(refused))
+            await refuse(canonical, 4409, refused)
             return
 
+        # ‏#1853: הגשר נושא מקלדת ועכבר — logout/מחיקה/הורדה ל-deploy סוגרים אותו.
+        token = websocket.cookies.get(auth.COOKIE_NAME) or ""
+        task = asyncio.current_task()
+        if task is not None:
+            viewer_sessions.register(token, found[0], task)
         writer: asyncio.StreamWriter | None = None
         try:
+            if not still_admin(ctx.conn, token):
+                await websocket.close(code=WS_UNAUTHENTICATED, reason=SESSION_ENDED_REASON)
+                return
             try:
                 reader, writer = await connect_machine(open_connection, ip)
             except (OSError, asyncio.TimeoutError) as exc:
                 # ‏`finally` משחרר את ההזמנה; כאן רק סוגרים את החיבור.
-                await websocket.close(
-                    code=4502, reason=close_reason(
-                        "שירות המוניטור במכונה אינו זמין לאחר 15 שניות: "
-                        f"{connect_error_reason(exc)}"))
+                await refuse(canonical, 4502, "שירות המוניטור במכונה אינו זמין לאחר 15 שניות: "
+                             f"{connect_error_reason(exc)}")
                 return
             # ‏#1850: מכונה שנעלמה בלי FIN נסגרת 4513 תוך ~25 ש', לא idle אחרי 10 דק'.
             # (מכונה מזויפת בבדיקות אינה StreamWriter ואין לה socket.)
@@ -972,27 +1079,25 @@ def create_monitor_router(
                 rekeyed = await asyncio.wait_for(
                     authenticate_machine(reader, writer, secret), timeout=5.0)
             except MachineAuthError as exc:
-                await websocket.close(code=WS_MACHINE_AUTH,
-                                      reason=close_reason(str(exc)))
+                await refuse(canonical, WS_MACHINE_AUTH, str(exc))
                 return
             except asyncio.TimeoutError:
-                await websocket.close(
-                    code=WS_MACHINE_AUTH,
-                    reason="המוניטור לא השלים את לחיצת-היד תוך 5 שניות")
+                await refuse(canonical, WS_MACHINE_AUTH, "המוניטור לא השלים את לחיצת-היד תוך 5 שניות")
                 return
             # ‏#1837: המכונה כבר עברה לסוד הבא — שומרים אותו לפני כל דבר
             # אחר, כדי שהחיבור הבא יצליח בלי לחכות ל-hello.
             monitor_rekeyed(ctx.conn, canonical, secret, rekeyed)
 
             bridges[canonical] = writer
+            refusals.settle(ctx.conn, canonical, found[0])   # ‏#1855: הספירה של הסדרה שקדמה
             journal(ctx.conn, "monitor_connected", canonical, found[0])
             # ניתוק/ביטול תוך כדי הגשר (ה-runner מבטל את ה-endpoint כשהדפדפן
             # הלך — ראו למטה) = "הדפדפן סגר"; חריגה אחרת = "כשל".
             outcome = "error"
             try:
-                outcome = await bridge_browser(websocket, reader, writer,
-                                               idle_seconds=IDLE_SECONDS,
-                                               evicted=holder.evicted)
+                outcome = await bridge_until_revoked(websocket, task, bridge_browser(
+                    websocket, reader, writer, idle_seconds=IDLE_SECONDS,
+                    evicted=holder.evicted))
             except (WebSocketDisconnect, asyncio.CancelledError):
                 outcome = "browser"
                 raise
@@ -1008,7 +1113,7 @@ def create_monitor_router(
             # אותה החוצה (#725). מגיעים לכאן רק אחרי שאחת ממשימות הממסר כבר
             # הסתיימה — סגירה רגילה, לא כשל — ואסור שהביטול יצא מה-endpoint:
             # יציאה כזו מסמנת את ה-future של ה-runner כמבוטל ו-result() זורק.
-            pass
+            await close_if_revoked(websocket, task)   # ‏#1853: ביטול לפני הגשר
         finally:
             # ‏#1860: ביטול שנופל בתוך `wait_closed` (ה-runner מבטל בפירוק,
             # #725) — או `wait_closed` שזורק, בדיוק כשהמכונה נעלמה (#1850) —
@@ -1024,5 +1129,7 @@ def create_monitor_router(
                         pass
             finally:
                 release(canonical, holder, writer)
+                if task is not None:
+                    viewer_sessions.forget(token, task)
 
     return router

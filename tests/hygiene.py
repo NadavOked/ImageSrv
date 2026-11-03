@@ -122,6 +122,19 @@ def isolate_sender_log(worker: str | None):
     return sender.SENDER_LOG
 
 
+def sender_log_under(basetemp: Path):
+    """‏#2180: הלוגים של השולח (`SENDER_LOG` ולוגי המחיצות שנגזרים ממנו) תחת
+    ה-basetemp של הריצה, לא ב-`$TMPDIR` עצמו — שם הם נשארו אחרי כל ריצה
+    (‏`imagesrv-sender-gw*-img_7f3a91-p*.log` בסיכומי השער). השם נשמר, כולל
+    הסיומת של ה-worker. מחזיר את הנתיב, או `None`."""
+    try:
+        from server.rounds import sender
+    except ImportError:                        # pragma: no cover — עמדה חסרה
+        return None
+    sender.SENDER_LOG = Path(basetemp) / sender.SENDER_LOG.name
+    return sender.SENDER_LOG
+
+
 def scan_supported() -> bool:
     """אפשר בכלל לבדוק? בלי `/proc` אין ראיה — ואומרים זאת, לא מניחים."""
     return Path("/proc").is_dir()

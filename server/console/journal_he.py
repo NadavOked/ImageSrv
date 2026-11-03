@@ -92,6 +92,7 @@ EVENTS_HE = {
     # ‏#105: כונן בלי serial שסיים — לא הוחלף, פשוט אין זהות לספור.
     "room_drawer_unidentified": "לא ניתן לזהות את הכונן (אין serial) — הכתיבה לא נספרה",
     "room_drawer_wake_mismatch": "המשכפל עלה ובחריץ שנבחר אין את הדיסק שנבחר — המגירה דולגה ולא נכתבה",   # #1954
+    "room_drawer_no_disk": "בחריץ שנבחר לסבב אין דיסק — המגירה נכשלה ולא נכתבה, שאר המגירות נכתבו",   # #2201
     "room_done": "סבב חדר השיכפולים הושלם",
     "room_failed": "סבב חדר השיכפולים נכשל — אף מגירה לא נכתבה בגל",   # 17/10
     # ‏#1721: ה-WoL של הגל נבלע (המשכפל עוד היה בספירת הכיבוי) — נשלח שוב, עם תקרה.
@@ -113,6 +114,10 @@ EVENTS_HE = {
     # ברזל 17/10: מחשב שיכפול בגל עומד על שאלת SMART — השולח לא מתחיל עד התשובה.
     "send_held_smart": "השידור ממתין לתשובה על דיסק (SMART) — הזמן לא נספר",
     "send_hold_released": "אין עוד שאלה פתוחה על דיסק — השידור ממשיך",
+    # ‏#2202: וכל שאלה אחרת למפעיל (חלוקת המקום, RAID) — אותה עצירה, בשם משלה.
+    "send_held_prompt": "השידור ממתין לתשובת מפעיל — הזמן לא נספר",
+    "send_prompt_released": "אין עוד שאלה פתוחה למפעיל — השידור ממשיך",
+    "prompt_hold_expired": "שאלה למפעיל לא נענתה בזמן — המכונה שוחררה מהגל, השאר ממשיכים",
     # ‏#1950: חבר שסומן "אבד" קיבל את המחיצה הקודמת עד סופה — השולח ממתין גם לו.
     "send_counts_lost": "מחשב שסומן כאבוד עדיין מקבל את הזרם — השידור ממתין גם לו",
     # ‏#1430: חבר בגל לא דיווח מעל דקה — המחיצה הבאה אינה סופרת אותו ויוצאת כשהשאר מוכנים.
@@ -162,6 +167,7 @@ EVENTS_HE = {
     "storage_monitor_tunnel": "מוניטור למכונה נפתח מהשרת הראשי",
     "monitor_connected": "מוניטור נפתח למכונה",
     "monitor_closed": "מוניטור נסגר",
+    "monitor_refused": "מוניטור לא נפתח",   # ‏#1855: "<mac> <קוד> <סיבה>"
     "monitor_power": "פקודת כוח דרך המוניטור",
     "monitor_control_request": "בקשת שליטה במכונה במוניטור",
     "monitor_control_approved": "שליטה במוניטור הועברה באישור",
@@ -401,7 +407,7 @@ _SEVERITY_ERR = {
     "login_failed", "login_refused_console", "login_lockout",
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
     "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
-    "room_wave_lost", "room_failed", "room_wake_failed", "send_failed", "direct_failed", "disk_failure",
+    "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure",
     "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "storage_location_disconnect_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
     "known_macs_apply_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
@@ -575,7 +581,8 @@ class JournalTranslator:
             text = _SES.sub(lambda m: self._sessions.get(m.group(1), m.group(1)), detail)
         elif event in ("client_done", "client_failed", "client_partial", "report_from_nonmember", "room_rejoin"):
             text = self._names(_SES.sub("הסבב", detail)).replace(" in ", " בתוך ")
-        elif event in ("send_held_smart", "send_hold_released", "smart_ask_expired"):
+        elif event in ("send_held_smart", "send_hold_released", "smart_ask_expired",
+                       "send_held_prompt", "send_prompt_released", "prompt_hold_expired"):
             text = self._names(_SES.sub(lambda m: self._sessions.get(m.group(1), m.group(1)),
                                         detail))
         elif event in ("session_start_auto", "session_start_manual", "session_close",
@@ -669,17 +676,19 @@ class JournalTranslator:
             if m:
                 action = {"poweroff": "כיבוי", "reboot": "אתחול"}.get(m.group(2), m.group(2))
                 text = f"{self._machines.get(m.group(1), m.group(1))} · {action}"
-        elif event in ("monitor_closed", "monitor_power"):
+        elif event in ("monitor_closed", "monitor_power", "monitor_refused"):
+            # ‏#1855: ‏monitor_refused — "<mac> <קוד> <סיבה>"; ‏refused — "refused — <סיבה>".
             # ‏#1129: "<mac> <סיבה/פעולה>[ node=<nid>]" — המילה השנייה מתורגמת.
             words = {"browser": "הדפדפן סגר", "machine": "המכונה סגרה",
                      "idle": "נסגר אחרי 10 דק' בלי תעבורה",
                      "refused": "נסגר — הודעה אסורה מהדפדפן", "error": "כשל",
+                     "session_revoked": "נסגר — ההתחברות לקונסולה הסתיימה",   # ‏#1853
                      "reboot": "הפעלה מחדש", "poweroff": "כיבוי"}
             m = re.match(r"(\S+) (\S+)(.*)$", detail)
             text = self._names(detail) if m is None else " · ".join(
                 part for part in (self._machines.get(m.group(1), m.group(1)),
                                   words.get(m.group(2), m.group(2)),
-                                  m.group(3).strip()) if part)
+                                  m.group(3).strip().removeprefix("— ")) if part)
         elif event == "machine_mac_edit":
             # ‏#977 §5: "<ישן> -> <חדש>" — שתי הכתובות, כי הישנה היא שההיסטוריה עליה.
             m = re.search(r"([0-9a-f:]{17}) -> ([0-9a-f:]{17})", detail)

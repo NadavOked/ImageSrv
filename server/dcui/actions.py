@@ -117,7 +117,7 @@ def physical_reset_admin_password(conn, new_password: str) -> ActionResult:
         conn.execute("DELETE FROM mfa_backup_codes WHERE username = ?", (stored,))
         conn.execute("DELETE FROM login_attempts WHERE key LIKE ?",
                      (stored.lower() + "|%",))
-    users.bump_auth_epoch(conn, stored)
+    # ‏#1853: ‏`users.update(password=…)` כבר מבטל את כל ה-sessions והצופים (`bump_auth_epoch`).
     info = users.flags(conn, stored)
     verified = (users.verify(conn, stored, new_password) == "admin"
                 and not info["mfa_enabled"] and not info["must_change_password"])

@@ -181,6 +181,27 @@ drawer_watch() {
     rm -f "$_dw_k"
 }
 
+# --- #2200: a drawer fanout evicted is out at the stream's end, not 300s later ---
+# fanout drops a drawer that held the stream (45s, #1796; no write progress 150s, #674)
+# and never feeds it again, so it cannot end `done`. Waiting WAIT_DRAWER_S on its stuck
+# partclone held the machine's next partition 5 minutes (metal 25/10, cloner 2).
+
+drawer_stop() {   # $1 = disk. Its fifo's reader too: killing the pipeline's shell left partclone (#2200)
+    kill -9 "$(cat "$RUN_DIR/targets/$1/reader.pid" 2>/dev/null)" 2>/dev/null
+    unblock_fifo "$RUN_DIR/targets/$1/feed"
+}
+
+drawer_evicted_out() {
+    # $1 = disk, $2 = partition index. 0 = fanout's report says it evicted this drawer: its
+    # reader is stopped and it is failed by name. 1 = no such line (or no report): waited for as before.
+    _de_l=$(grep -F "$RUN_DIR/targets/$1/feed failed stalled" "$RUN_DIR/fanout.out" 2>/dev/null) || return 1
+    _de_p=$(cat "$RUN_DIR/targets/$1/pipeline.pid" 2>/dev/null)
+    log "$1: evicted by fanout (${_de_l#* failed }) -- failed now, not waited for"
+    ! kill -0 "$_de_p" 2>/dev/null || drawer_stop "$1"
+    wait_pid "$_de_p" "$WAIT_HELPER_S" "המגירה $1 (הוצאה, מחיצה $2)" || :
+    fail_written_target "$1" "מחיצה $2: הוצאה מהזרם -- המגירה הפסיקה לקבל נתונים ועיכבה את השאר (fanout: ${_de_l#* failed })"
+}
+
 # ברזל 17/10: progress_loop (progress.sh) משאיר את הסמן כשהשרת עונה not_open --
 # הסבב נסגר והשולח כבר איננו. עד אז המסלול הראשי המשיך לטבלה ולזרם מול
 # שולח שיצא, והמכונה נשארה "כותבת" עם דיסק חצי-מוכן.
