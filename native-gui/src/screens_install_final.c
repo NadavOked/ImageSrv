@@ -4,9 +4,12 @@
 #include "screens_install.h"
 #include "install_raid.h"     /* #1989 */
 
+/* #2097: under DHCP the address the NIC has now -- https://<name>:8081 works only
+ * once the college's DNS knows the new server. The name when there is no address. */
 static void console_guess(const InstallState *s,char *out,size_t n){
-    const char *host=s->static_mode&&s->address[0]?s->address:s->hostname;char clean[96];
-    if(!host[0]&&s->nic>=0&&s->nic<s->nnics)host=s->nics[s->nic].current;
+    const char *now=s->nic>=0&&s->nic<s->nnics?s->nics[s->nic].address:"";
+    const char *host=s->static_mode?s->address:now;char clean[96];
+    if(!host[0])host=s->hostname;
     snprintf(clean,sizeof clean,"%s",host[0]?host:"imagesrv-server");char *slash=strchr(clean,'/');if(slash)*slash=0;
     snprintf(out,n,"https://%s:8081",clean);
 }
@@ -55,7 +58,14 @@ static void output_box(App *a,cairo_t *cr,Rect r){
     char copy[INSTALL_OUTPUT_MAX];snprintf(copy,sizeof copy,"%s",s->output);char *lines[64],*save=NULL;int n=0;
     for(char *p=strtok_r(copy,"\n",&save);p&&n<64;p=strtok_r(NULL,"\n",&save))lines[n++]=p;
     int start=s->output_scroll;if(start>n-1)start=n?n-1:0;
-    for(int i=start;i<n&&i<start+9;i++)install_text_ltr(cr,lines[i],11,400,r.x+12,r.y+10+(i-start)*20,r.w-48,t->ink);
+    /* #2097: a long line wraps; the next one starts below all of it (it was drawn
+     * 20px down, on top of the wrapped part). Still 9 rows of 20px in the box. */
+    int used=0;
+    for(int i=start;i<n&&used<9;i++){
+        Text q=text_make(cr,FONT_MONO,11,400,lines[i],(int)(r.w-48),DIR_LTR);int rows=pango_layout_get_line_count(q.layout);
+        if(used&&used+rows>9){text_free(&q);break;}
+        text_draw(cr,&q,r.x+12,r.y+10+used*20,t->ink);text_free(&q);used+=rows;
+    }
     install_text_r(cr,t,"▲",12,600,r.x+r.w-10,r.y+12,24,t->muted);install_text_r(cr,t,"▼",12,600,r.x+r.w-10,r.y+r.h-28,24,t->muted);
     hit_add(a,(Rect){r.x+r.w-36,r.y,36,r.h/2},HIT_INSTALL_OUTPUT_UP);hit_add(a,(Rect){r.x+r.w-36,r.y+r.h/2,36,r.h/2},HIT_INSTALL_OUTPUT_DOWN);
 }
@@ -82,7 +92,8 @@ static int failure_he(const InstallState *s,char *out,size_t n){
         {"partition","חלוקת הדיסק נכשלה."},{"bootstrap","התקנת מערכת הבסיס נכשלה."},
         {"packages","התקנת חבילות ImageSrv נכשלה."},{"bootloader","התקנת מנהל האתחול נכשלה."},
         {"finishing","כתיבת ההגדרות נכשלה."},{"hostname","קביעת שם השרת נכשלה."},
-        {"verify","אימות ההתקנה נכשל."},{"validation","ההגדרות לא עברו בדיקה."}};
+        {"verify","אימות ההתקנה נכשל."},{"validation","ההגדרות לא עברו בדיקה."},
+        {"unmount","שחרור דיסק היעד בסוף ההתקנה נכשל."}};   /* #2097: unmount-failed/-unchecked */
     const char *e=s->error;
     if(!e[0]){snprintf(out,n,"ההתקנה נכשלה.");return 0;}
     if((unsigned char)e[0]>=0x80){snprintf(out,n,"%s",e);return 0;}      /* already in Hebrew */

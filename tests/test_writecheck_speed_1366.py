@@ -11,6 +11,8 @@ real disk) is in test_writecheck_1366.py; this is the rule over the numbers.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from test_smart import AGENT, BASH, posix, sh  # noqa: F401 -- the same bash, declared skip without it
 
@@ -23,11 +25,17 @@ LIBS = ("common", "waits", "sysinfo", "progress", "failmark", "writecheck")
 
 
 def verdict(tmp_path, disks: dict[str, int | str | None], states: dict[str, str] | None = None,
-            env: str = "", rot: dict[str, str | None] | None = None) -> dict:
+            env: str = "", rot: dict[str, str | None] | None = None,
+            manifest: dict | str | None = None) -> dict:
     """disks: name -> MB/s measured (None = no number; "x" = junk in the file).
     rot: name -> /sys/block/<d>/queue/rotational ("0" SSD, "1" HDD, None = no
-    file); a disk not named there is an SSD."""
+    file); a disk not named there is an SSD. manifest (#2338): the one the
+    verdict takes its floor from -- a dict as JSON, a str as raw text, None =
+    ``{}`` (no floor in it: the agent's own)."""
     run = tmp_path / "run"
+    man = tmp_path / "manifest.json"
+    man.write_text(manifest if isinstance(manifest, str) else json.dumps(manifest or {}), encoding="utf-8")
+    agent_log = run / "agent.log"   # common.sh: LOG_FILE="$RUN_DIR/agent.log"
     for name, mbps in disks.items():
         r = (rot or {}).get(name, "0")
         if r is not None:
@@ -42,9 +50,10 @@ def verdict(tmp_path, disks: dict[str, int | str | None], states: dict[str, str]
             (t / "write_check_mbps").write_text(str(mbps))
     prelude = "".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh; " for n in LIBS)
     out = sh(f"export RUN_DIR={posix(run)!r} SYSROOT={posix(tmp_path / 'sysroot')!r} {env}; {prelude}"
-             f"write_speed_verdict {' '.join(disks)}; echo \"RC $?\"")
+             f"write_speed_verdict {posix(man)!r} {' '.join(disks)}; echo \"RC $?\"")
     assert out.returncode == 0, out.stderr
-    res = {"rc": int(out.stdout.split("RC ")[-1].split()[0])}
+    res = {"rc": int(out.stdout.split("RC ")[-1].split()[0]),
+           "log": agent_log.read_text(encoding="utf-8") if agent_log.exists() else ""}
     for name in disks:
         t = run / "targets" / name
         res[name] = ((t / "state").read_text().strip(), (t / "write_check_state").read_text(),

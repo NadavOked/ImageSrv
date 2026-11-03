@@ -124,7 +124,12 @@ end_tally() {
     done
 }
 
-_end_why() { _ep_r="${_ep_r:+$_ep_r · }$2"; [ "$1" = o ] || _ep_c=r; }
+# #2339: a reason already said is not said again (a slow disk's verdict is both its
+# error and its write_check_reason); its tone still counts -- red stays red.
+_end_why() {
+    case " · $_ep_r · " in *" · $2 · "*) ;; *) _ep_r="${_ep_r:+$_ep_r · }$2" ;; esac
+    [ "$1" = o ] || _ep_c=r
+}
 end_problem() {
     # $1 = a target disk. Prints "ok" -- a clean done, read -- or "<r|o>|<reason>".
     # Clean = done, no warning (error), read back verified|sampled (#1805), not a
