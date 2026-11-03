@@ -497,6 +497,7 @@ class SenderEngine:
         live_receivers: Callable[[str], int] | None = None,
         link_speed: Callable[[str | None], dict] | None = None,
         pending_asks: Callable[[str], list[str]] | None = None,
+        pending_prompts: Callable[[str], list[str]] | None = None,
         lost_receivers: Callable[[str], list[str | None]] | None = None,
         lost_wait: Callable[[], int] | None = None,
         quiet_receivers: Callable[[str], list[str | None]] | None = None,
@@ -554,6 +555,9 @@ class SenderEngine:
         # שלו נספר מההפעלה, ושלוש דקות מול חלון SMART פתוח נגמרו בשולח שיצא
         # עשר שניות אחרי התשובה. ‏None = לא מחובר: ההתנהגות של לפני.
         self.pending_asks = pending_asks
+        # ‏#2202: מי בגל עומד על שאלה **אחרת** למפעיל (‏`net_devices.prompt` —
+        # חלוקת המקום, RAID). אותה עצירה, ביומן משלה. ‏None = לא מחובר.
+        self.pending_prompts = pending_prompts
         self.on_event = on_event or (lambda event, detail: None)
         #: ‏#705: ‏`gate(interface)` → סיבת סירוב או None — השידור כבוי בכרטיס
         #: (רשת ← חיבורים פיזיים ← שירותים). ‏`create_runtime` מתקין.
@@ -739,8 +743,9 @@ class SenderEngine:
             if asks_of is not None and time.monotonic() >= next_ask:
                 next_ask = time.monotonic() + ASK_HOLD_POLL_S
                 if (transfer_started_in_log(log_path) is False
-                        and self._asks_waiting(asks_of) and process.poll() is None):
-                    log.info("sender: a SMART question arrived before the first byte -- "
+                        and (self._asks_waiting(asks_of) or self._prompts_waiting(asks_of))
+                        and process.poll() is None):
+                    log.info("sender: a question to the operator arrived before the first byte -- "
                              "rewinding partition 1 of %s", asks_of)
                     self._reap(process)
                     return None
@@ -974,6 +979,17 @@ class SenderEngine:
                         " sending without waiting", session_id, exc)
             return []
 
+    def _prompts_waiting(self, session_id: str) -> list[str]:
+        """‏#2202: מי בגל עומד עכשיו על שאלה למפעיל שאינה SMART. קריאה שנכשלה = אין (נרשם)."""
+        if self.pending_prompts is None:
+            return []
+        try:
+            return list(self.pending_prompts(session_id))
+        except Exception as exc:      # noqa: BLE001 — חריגה כאן הורגת את התהליכון
+            log.warning("sender: operator questions of %s unreadable (%s);"
+                        " sending without waiting", session_id, exc)
+            return []
+
     @staticmethod
     def _reap(process) -> None:
         """udp-sender שעוד לא שידר: TERM, ואם לא מת — KILL, ותמיד wait."""
@@ -998,20 +1014,30 @@ class SenderEngine:
         שכבר קיבל את המחיצה הראשונה עבר אותה. ההמתנה נגמרת כשאין שאלה
         פתוחה של מכונה חיה (‏`open_in_wave` משחרר מכונה שנעלמה), או בעצירה
         — ‏False. קריאה שנכשלה אינה "יש שאלה" לנצח: יומן, ומשדרים כמו לפני.
+
+        ‏#2202: גם כל שאלה אחרת למפעיל (‏`pending_prompts` — חלוקת המקום,
+        RAID), ביומן משלה: ‏`send_held_prompt`, ובשחרור `send_prompt_released`
+        כשלא הייתה שאלת SMART — ‏`send_hold_released` נספר כזמן SMART (#1889).
         """
-        if self.pending_asks is None:
+        if self.pending_asks is None and self.pending_prompts is None:
             return True
-        held_since = None
+        held_since, smart, prompt = None, False, False
         while not self._stop.is_set():
             waiting = self._asks_waiting(session_id)
-            if not waiting:
+            asked = self._prompts_waiting(session_id)
+            if not waiting and not asked:
                 if held_since is not None:
-                    self.on_event("send_hold_released",
+                    self.on_event("send_hold_released" if smart else "send_prompt_released",
                                   f"{session_id} {int(time.monotonic() - held_since)}s")
                 return True
             if held_since is None:
                 held_since = time.monotonic()
+            if waiting and not smart:
+                smart = True
                 self.on_event("send_held_smart", f"{session_id} {' '.join(waiting)}")
+            if asked and not prompt:
+                prompt = True
+                self.on_event("send_held_prompt", f"{session_id} {' '.join(asked)}")
             self._stop.wait(ASK_HOLD_POLL_S)
         return False
 
@@ -1158,6 +1184,14 @@ class SenderEngine:
                 self._fail(
                     f"לא הצלחנו לקרוא את יומן השידור אחרי {part['file']},"
                     " ולכן אין לדעת אם מישהו הצטרף — השידור לא נחשב תקין"
+                )
+                return
+            if not started and number == 1 and (
+                    asking := self._asks_waiting(session["id"]) + self._prompts_waiting(session["id"])):
+                # ‏#2202: "יש לבדוק כבל רשת" שלח את המפעיל לחפש תקלה במכונה שחיכתה לו.
+                self._fail(
+                    f"udp-sender סיים בלי לשדר את {part['file']}: מחשב בגל עדיין ממתין"
+                    f" לתשובת מפעיל ({' '.join(asking)}) — זה אינו כבל רשת או PXE"
                 )
                 return
             if not started:

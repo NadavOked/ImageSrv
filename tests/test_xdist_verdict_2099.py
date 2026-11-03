@@ -68,6 +68,15 @@ def test_each_worker_writes_its_own_sender_logs(monkeypatch):
     assert all(p.parent == shared.parent for p in seen), seen
 
 
+def test_the_sender_logs_are_under_the_run_s_basetemp(tmp_path_factory):
+    """#2180: `$TMPDIR/imagesrv-sender*.log` outlived every run (the lab gate's
+    TMPDIR summary). The run's own basetemp holds them -- worker or serial."""
+    from server.rounds import sender
+    base = tmp_path_factory.getbasetemp()
+    assert sender.SENDER_LOG.parent == base, sender.SENDER_LOG
+    assert sender.partition_log("/x/images/img_7f3a91/p1.esp.pcl.zst").parent == base
+
+
 def test_a_serial_run_keeps_the_sender_log_where_it_was(monkeypatch):
     from server.rounds import sender
     monkeypatch.setattr(sender, "SENDER_LOG", sender.SENDER_LOG)

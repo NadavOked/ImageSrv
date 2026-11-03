@@ -164,12 +164,19 @@ def _closed(round_row: sqlite3.Row) -> set[str]:
     return _written(round_row) | _skipped(round_row) | _cancelled(round_row)
 
 
+def _no_disk_count(round_row: sqlite3.Row) -> int:
+    """‏#2201: כמה חריצים נסגרו בסבב כי לא היה בהם דיסק (`target_slots[].no_disk`)."""
+    return sum(len(item.get("no_disk") or [])
+               for item in json.loads(round_row["target_slots_json"] or "[]"))
+
+
 def _remaining(round_row: sqlite3.Row) -> int:
     """כמה מגירות הסבב עוד צריך לכתוב: היעד פחות מה שנכתב, פחות מה שדולג כאדום
-    (#1760) ופחות מה שמפעיל ביטל (#1936) — שתיהן סוגרות את המקום שלהן ביעד, הן אינן
-    ממתינות להחלפה."""
+    (#1760), פחות מה שמפעיל ביטל (#1936), ופחות חריץ שנבחר ולא היה בו דיסק (#2201) —
+    שלושתן סוגרות את המקום שלהן ביעד, הן אינן ממתינות להחלפה."""
     return (round_row["target_drives"] - round_row["written_drives"]
-            - len(_skipped(round_row)) - len(_cancelled(round_row)))
+            - len(_skipped(round_row)) - len(_cancelled(round_row))
+            - _no_disk_count(round_row))
 
 
 def _red(disk: dict) -> bool:
@@ -1388,6 +1395,76 @@ def _tally(conn: sqlite3.Connection, round_row: sqlite3.Row,
             cancelled - written)
 
 
+def _port(value) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _reported_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
+                      member: sqlite3.Row) -> set[int]:
+    """‏#2201: החריצים שהמשכפל קיבל לגל הזה (`target_ports`) ואין להם יעד בדיווח שלו.
+
+    מאז #2312 הסוכן כותב את המגירות שיש, ועל חריץ שנבחר ואין בו דיסק — רק רושם
+    ביומן; יעד (`target_init`) יש לכל מגירה שהוא כתב או דילג עליה. ולכן דיווח **עם**
+    יעדים, שכל אחד מהם ממוקם בחריץ, הוא הראיה: חריץ שנשלח ואין עליו יעד — אין בו דיסק.
+    ‏**אין הכרעה** (עיקרון 5) כשאין יעדים בכלל (סוכן ישן שעצר על המגירה החסרה, מכונה
+    שאבדה לפני הדיווח הראשון), או כשיעד אחד אינו ממוקם — ‏`port` בדיווח, ובלעדיו לפי
+    ה-`dev` במלאי של ה-hello: בלי לדעת מה נכתב, אי-אפשר לדעת מה חסר."""
+    targets = [t for t in json.loads(member["targets_json"] or "[]") if isinstance(t, dict)]
+    if not targets:
+        return set()
+    disks = [d for d in _disks(conn, member["mac"]) if isinstance(d, dict)]
+    port_of = {d.get("dev"): _port(d.get("port")) for d in disks if d.get("dev")}
+    covered = set()
+    for target in targets:
+        port = _port(target.get("port"))
+        if port is None:
+            port = port_of.get(target.get("dev"))
+        if port is None:
+            return set()
+        covered.add(port)
+    sent = target_ports(round_row, member["mac"], disks)
+    return set(sent or []) - covered
+
+
+def _close_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
+                   members: list[sqlite3.Row]) -> tuple[str | None, list[tuple[str, int]]]:
+    """‏#2201 (הכרעה 03/11): חריץ שנבחר ואין בו דיסק **נסגר לסבב** כמו אדום (#1760) או
+    מבוטל (#1936) — יוצא מ-`ports` (לא נשלח שוב, הגל הבא אינו ממתין לו) ונרשם
+    ב-`no_disk` של הפריט, והיעד **אינו** יורד: הוא נספר כנכשל (‏`written=1/2`), לא
+    כ"דולג" כמו `wake_skipped` (#1954). מחזיר את `target_slots_json` אחרי הסגירה ואת
+    החריצים שנסגרו עכשיו. חוזר על עצמו בבטחה: חריץ שכבר יצא מ-`ports` אינו נשלח עוד."""
+    raw = round_row["target_slots_json"]
+    if raw is None:
+        return raw, []
+    slots = json.loads(raw)
+    closed: list[tuple[str, int]] = []
+    for member in members:
+        item = next((x for x in slots if x.get("mac") == member["mac"]), None)
+        gone = _reported_no_disk(conn, round_row, member) & set(item["ports"] if item else [])
+        if not gone:
+            continue
+        item["ports"] = [p for p in item["ports"] if p not in gone]
+        item["no_disk"] = sorted(set(item.get("no_disk") or []) | gone)
+        closed += [(member["mac"], p) for p in sorted(gone)]
+    return (json.dumps(slots) if closed else raw), closed
+
+
+def _slots_claim(round_row: sqlite3.Row, slots_raw: str | None) -> tuple[str, tuple, str, tuple]:
+    """‏#2201: סגירת החריצים נכתבת באותה תביעה כמו הספירה — ורק על ה-`target_slots_json`
+    שנקרא (‏`wake_check`, ‏#1954, כותב אותו גם). בלי סגירה — העדכון כמו קודם."""
+    if slots_raw == round_row["target_slots_json"]:
+        return "", (), "", ()
+    return (", target_slots_json = ?", (slots_raw,),
+            " AND target_slots_json = ?", (round_row["target_slots_json"],))
+
+
+def _journal_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
+                     closed: list[tuple[str, int]]) -> None:
+    for mac, port in closed:
+        journal(conn, "room_drawer_no_disk",
+                f'{round_row["id"]} {_machine_name(conn, mac)} port={port}')
+
+
 def _clear_written_failures(conn: sqlite3.Connection, round_row: sqlite3.Row,
                             written: set[str]) -> None:
     """‏#1792: מה שהגל הזה הוסיף ל-`written_serials` סוגר את רשומת הכשל הכתומה שלו.
@@ -1397,11 +1474,13 @@ def _clear_written_failures(conn: sqlite3.Connection, round_row: sqlite3.Row,
     disk_failures.clear_written(conn, written - _written(round_row), round_row["id"])
 
 
-def _skipped_note(skipped: set[str], cancelled: set[str]) -> str:
+def _skipped_note(skipped: set[str], cancelled: set[str], no_disk: int = 0) -> str:
     """‏#1760: שורת היומן אומרת כמה דולגו כאדומות — "1/2" לבדו נקרא כמו כשל.
-    ‏#1936: וכמה בוטלו בידי מפעיל — `written=1/2 cancelled=1`."""
+    ‏#1936: וכמה בוטלו בידי מפעיל — `written=1/2 cancelled=1`.
+    ‏#2201: וכמה חריצים נבחרו ולא היה בהם דיסק — `written=1/2 no_disk=1`."""
     return ((f" skipped_red={len(skipped)}" if skipped else "")
-            + (f" cancelled={len(cancelled)}" if cancelled else ""))
+            + (f" cancelled={len(cancelled)}" if cancelled else "")
+            + (f" no_disk={no_disk}" if no_disk else ""))
 
 
 def _red_skip(conn: sqlite3.Connection, member: sqlite3.Row, dev: str | None,
@@ -1436,34 +1515,40 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
     """
     total, written = round_row["written_drives"], _written(round_row)
     skipped, cancelled = _skipped(round_row), _cancelled(round_row)
+    no_disk = _no_disk_count(round_row)
     if wave is not None:
         members = store.members(wave["id"])
         drive_rates.record_wave(conn, wave["id"], members)      # ‏#447
         total, written, skipped, cancelled = _tally(conn, round_row, members)
+        slots_raw, closed = _close_no_disk(conn, round_row, members)   # #2201
+        no_disk += len(closed)
+        set_sql, set_args, where_sql, where_args = _slots_claim(round_row, slots_raw)
         _clear_written_failures(conn, round_row, written)          # #1792
         if not update_one(
             conn,
             "UPDATE room_rounds SET written_drives = ?, written_serials = ?,"
-            " skipped_serials = ?, cancelled_serials = ?, wave_session_id = NULL"
-            " WHERE id = ? AND state = 'active' AND wave_session_id = ?",
+            " skipped_serials = ?, cancelled_serials = ?" + set_sql + ", wave_session_id = NULL"
+            " WHERE id = ? AND state = 'active' AND wave_session_id = ?" + where_sql,
             (total, json.dumps(sorted(written)), json.dumps(sorted(skipped)),
-             json.dumps(sorted(cancelled)), round_row["id"], wave["id"]),
+             json.dumps(sorted(cancelled)), *set_args, round_row["id"], wave["id"], *where_args),
         ):
             return
         conn.commit()
+        _journal_no_disk(conn, round_row, closed)
 
     target = round_row["target_drives"]
     # ‏#715: סבב מדיסק חי הוא סבב **יחיד** — הגל שנגמר הוא הסבב, גם כשמגירה
     # נכשלה; אין גל נוסף לפתוח בלי שמחשב הבנייה ישדר שוב, וזו החלטה של אדם.
     from server.rounds import direct                 # noqa: PLC0415
-    if total + len(skipped) + len(cancelled) >= target or direct.is_build_disk(round_row):
+    if (total + len(skipped) + len(cancelled) + no_disk >= target
+            or direct.is_build_disk(round_row)):
         conn.execute(
             "UPDATE room_rounds SET state = 'closed', closed_at = ? WHERE id = ?",
             (now_iso(), round_row["id"]),
         )
         conn.commit()
         journal(conn, "room_done", f'{round_row["id"]} written={total}/{target}'
-                + _skipped_note(skipped, cancelled))
+                + _skipped_note(skipped, cancelled, no_disk))
         direct.cancel_source_task(conn, round_row, "")
         return
     if wave is not None:
@@ -1587,14 +1672,19 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
     # ‏#1845: ה-MB/s של בדיקת הכתיבה לכל דיסק — הבסיס של "איטי מהרגיל לדגם".
     learn_models.record_wave(conn, round_row["wave_session_id"], members)
     total, written, skipped, cancelled = _tally(conn, round_row, members)
+    slots_raw, closed = _close_no_disk(conn, round_row, members)   # #2201
+    no_disk = _no_disk_count(round_row) + len(closed)
+    set_sql, set_args, where_sql, where_args = _slots_claim(round_row, slots_raw)
     _clear_written_failures(conn, round_row, written)              # #1792
 
     # ‏#715: מדיסק חי הגל היחיד הוא הסבב כולו (ראו `_resume`).
     # ‏#1760: מגירה שדולגה כאדומה סוגרת את המקום שלה — 1/2 עם אחת אדומה הוא הסוף.
     # ‏#1936 (FI O2): וכך גם מגירה שמפעיל ביטל — 1/2 עם אחת שבוטלה הוא `room_done`,
     # לא גל 2 שמעיר את המשכפל ולא `room_failed`.
+    # ‏#2201 (ברזל 25/10, ‏room_edc35340): וכך גם חריץ שנבחר ולא היה בו דיסק — נכשל
+    # בשמו (`no_disk`), ואין גל 2 שממתין לו.
     from server.rounds import direct                 # noqa: PLC0415
-    if (total + len(skipped) + len(cancelled) >= round_row["target_drives"]
+    if (total + len(skipped) + len(cancelled) + no_disk >= round_row["target_drives"]
             or direct.is_build_disk(round_row)):
         # הסגירה היא התביעה: שני תהליכונים שהגיעו לכאן עם אותו גל —
         # רק זה שסגר אותו בפועל כותב את השורה התחתונה של הסבב (#177).
@@ -1603,17 +1693,19 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
         if not update_one(
             conn,
             "UPDATE room_rounds SET written_drives = ?, written_serials = ?,"
-            " skipped_serials = ?, cancelled_serials = ?, state = 'closed', closed_at = ?"
-            " WHERE id = ? AND state = 'active' AND wave_session_id = ?",
+            " skipped_serials = ?, cancelled_serials = ?" + set_sql
+            + ", state = 'closed', closed_at = ?"
+            " WHERE id = ? AND state = 'active' AND wave_session_id = ?" + where_sql,
             (total, json.dumps(sorted(written)), json.dumps(sorted(skipped)),
-             json.dumps(sorted(cancelled)), now_iso(),
-             round_row["id"], round_row["wave_session_id"]),
+             json.dumps(sorted(cancelled)), *set_args, now_iso(),
+             round_row["id"], round_row["wave_session_id"], *where_args),
         ):
             return
         conn.commit()
+        _journal_no_disk(conn, round_row, closed)
         journal(conn, "room_done",
                 f'{round_row["id"]} written={total}/{round_row["target_drives"]}'
-                + _skipped_note(skipped, cancelled))
+                + _skipped_note(skipped, cancelled, no_disk))
         return
 
     # ‏#1728: משכפל שאותחל באמצע הזרם וחזר — הגל הבא, לא סבב שנכשל.
@@ -1654,12 +1746,12 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
     if not update_one(
         conn,
         "UPDATE room_rounds SET written_drives = ?, written_serials = ?,"
-        " skipped_serials = ?, cancelled_serials = ?, wave_session_id = ?,"
+        " skipped_serials = ?, cancelled_serials = ?" + set_sql + ", wave_session_id = ?,"
         " wave_number = wave_number + 1"
-        " WHERE id = ? AND state = 'active' AND wave_session_id = ?",
+        " WHERE id = ? AND state = 'active' AND wave_session_id = ?" + where_sql,
         (total, json.dumps(sorted(written)), json.dumps(sorted(skipped)),
-         json.dumps(sorted(cancelled)), wave_id,
-         round_row["id"], round_row["wave_session_id"]),
+         json.dumps(sorted(cancelled)), *set_args, wave_id,
+         round_row["id"], round_row["wave_session_id"], *where_args),
     ):
         if conn.execute(
             "SELECT 1 FROM room_rounds WHERE id = ? AND wave_session_id = ?",
@@ -1668,6 +1760,7 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
             store.close(wave_id, "")
         return
     conn.commit()
+    _journal_no_disk(conn, round_row, closed)
     journal(conn, "room_wave",
             f'{round_row["id"]} wave={round_row["wave_number"] + 1}'
             f' written={total}/{round_row["target_drives"]}')

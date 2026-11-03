@@ -194,6 +194,29 @@ static Rgb on_tint(const Theme *t, Rgb c) {
     return same_rgb(c, t->danger) ? t->danger_fg : same_rgb(c, t->warn) ? t->warning_ink : same_rgb(c, t->led_ok) ? t->success_ink : c;
 }
 
+/* #2205: the lines under the name stay inside <room> px (3px above each). A short drawer (960x540,
+ * a full cage) is not tall enough for them: the line with the most lines gives one up (an ellipsis,
+ * the later line first on a tie) until they fit; one-line rows that still do not fit give way from
+ * the last -- lcbay.c's rule (#2030: drop it rather than overlap). Never drawn over the card's edge. */
+static void fit_rows(Text *r[3], double room) {
+    int cap[3];
+    for (int k = 0; k < 3; k++) cap[k] = r[k]->layout ? pango_layout_get_line_count(r[k]->layout) : 0;
+    for (;;) {
+        double h = 0; int big = -1, last = -1;
+        for (int k = 0; k < 3; k++) {
+            if (!cap[k]) continue;
+            h += 3 + r[k]->h; last = k;
+            if (cap[k] > 1 && (big < 0 || cap[k] >= cap[big])) big = k;
+        }
+        if (last < 0 || h <= room) return;
+        if (big >= 0) {
+            cap[big]--; pango_layout_set_ellipsize(r[big]->layout, PANGO_ELLIPSIZE_END);
+            pango_layout_set_height(r[big]->layout, -cap[big]);
+            pango_layout_get_pixel_size(r[big]->layout, NULL, &r[big]->h);
+        } else { text_free(r[last]); r[last]->h = 0; cap[last] = 0; }
+    }
+}
+
 static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     const Theme *t = a->theme; const LcDisk *d = &a->st.lc.disks[i];
     int role = lc_role_of(a, d->dev), blk = blocked(a, i), lvl = smart_level(d->smart), isrc = role == LCR_SOURCE;
@@ -269,7 +292,8 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
         t2 = text_make_markup(cr, FONT_SANS, 12, 400, mk, (int)ww, DIR_RTL); }
     else t2 = text_make(cr, FONT_SANS, 12, blk ? 600 : 400, l2, (int)ww, DIR_RTL);
     Text t3 = l3[0] ? text_make(cr, FONT_SANS, 12, 500, l3, (int)ww, DIR_RTL) : (Text){ NULL, 0, 0 };
-    double bh = tn.h + 3 + (t1.layout ? t1.h + 3 : 0) + t2.h + (l3[0] ? 3 + t3.h : 0), by = cy - bh / 2;
+    fit_rows((Text *[3]){ &t1, &t2, &t3 }, b.h - 12 - tn.h);   /* #2205: 6px clear of the edge (the 3px frame) */
+    double bh = tn.h + (t1.layout ? 3 + t1.h : 0) + (t2.layout ? 3 + t2.h : 0) + (t3.layout ? 3 + t3.h : 0), by = cy - bh / 2;
     text_draw_r(cr, &tn, fr, by, t->ink);
     if (tag) {
         Text tg = text_make(cr, FONT_SANS, 12, 700, tag, 0, DIR_RTL);
@@ -278,8 +302,8 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
         text_draw(cr, &tg, tr.x + 9, tr.y + (22 - tg.h) / 2, isrc ? (Rgb){ 1, 1, 1 } : t->ink); text_free(&tg);
     }
     by += tn.h + 3; if (t1.layout) { text_draw_r(cr, &t1, fr, by, t->muted); by += t1.h + 3; }
-    text_draw_r(cr, &t2, fr, by, blk ? c3 : inc ? t->warning_ink : t->muted); by += t2.h + 3;
-    if (l3[0]) { text_draw_r(cr, &t3, fr, by, c3); text_free(&t3); }
+    if (t2.layout) { text_draw_r(cr, &t2, fr, by, blk ? c3 : inc ? t->warning_ink : t->muted); by += t2.h + 3; }
+    if (t3.layout) { text_draw_r(cr, &t3, fr, by, c3); text_free(&t3); }
     text_free(&tn); text_free(&t1); text_free(&t2);
     /* .grip */
     double gx = b.x + LS_GRIP / 2;

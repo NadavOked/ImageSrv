@@ -60,6 +60,7 @@ local_clone_offer() {
         LC_PAUSED=1      # back from the source screen: the choice, not counting
     done
     attended_stop
+    for _lo_t in $(cat "$LC/written" 2>/dev/null); do rm -rf "${RUN_DIR:?}/targets/$_lo_t"; done; rm -f "$LC/written"   # #2229: the copy's targets are no round -- the standby screen draws each targets/<dev> as one
     rm -f "$LC/screen" "$LC/boot" "$RUN_DIR/attended.round"
     log "local clone: going on from the server"
 }
@@ -171,7 +172,7 @@ lc_run() {
     ( while :; do if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi; sleep 20; done ) < /dev/null > /dev/null 2>&1 &
     _lr_beat=$!
     echo copying > "$LC/phase"; date +%s > "$_lr_r/started"; echo "$_lr_src" > "$_lr_r/src"
-    for _lr_t in $2; do target_init "$_lr_t" 0; rm -f "$RUN_DIR/targets/$_lr_t/lc_ok" "$RUN_DIR/targets/$_lr_t/lc_table" "$RUN_DIR/targets/$_lr_t/lc_part" "$RUN_DIR/targets/$_lr_t/ntfs_note" "$RUN_DIR/targets/$_lr_t/rescued"; echo "$_lr_t" >> "$_lr_r/targets"; done
+    for _lr_t in $2; do target_init "$_lr_t" 0; rm -f "$RUN_DIR/targets/$_lr_t/lc_ok" "$RUN_DIR/targets/$_lr_t/lc_table" "$RUN_DIR/targets/$_lr_t/lc_part" "$RUN_DIR/targets/$_lr_t/ntfs_note" "$RUN_DIR/targets/$_lr_t/rescued"; echo "$_lr_t" >> "$_lr_r/targets"; echo "$_lr_t" >> "$LC/written"; done
     _lr_all=$(tr '\n' ' ' < "$_lr_r/targets"); _lr_small=""
     # shellcheck disable=SC2086 # #1914: the clone stick snapshots its disks' serials (RAM, usbdiag.sh)
     log "local clone: $_lr_src -> $_lr_all"; [ "${IMAGESRV_MODE:-}" != usbclone ] || usb_serials_snap "$_lr_src" $_lr_all   # #1914 (RAM)

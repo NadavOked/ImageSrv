@@ -134,17 +134,17 @@ restore_partition_drawers() {
     # ממתינים לצינור לפי PID: בלי זה pipeline.rc עוד לא קיים (#20),
     # ו-wait ריק תופס גם את דמון ההתקדמות (#12). תקרה: fifo שלא נפתח
     # (#49) לא ייגמר מעצמו; אחרי פקיעת הזרם התקרה הקצרה.
-    # ‏#1598: פקיעת זרם = stream (בלי ראיית ATA → בלי disk_failure); מגירה dead לא ממתינים לה.
+    # ‏#1598: פקיעת זרם = stream (בלי ראיית ATA → בלי disk_failure); מגירה dead לא ממתינים לה, וגם לא לזו ש-fanout הוציא (#2200).
     _dwait="$WAIT_DRAWER_S"; _blame=""
     [ "$_fanout_rc" = "$WAIT_TIMED_OUT" ] && { _dwait="$WAIT_HELPER_S"; _blame=stream; }
     for _d in $_disks; do
         _pidf="$RUN_DIR/targets/$_d/pipeline.pid"
         [ -f "$_pidf" ] && [ ! -f "$RUN_DIR/targets/$_d/dead" ] || continue
+        drawer_evicted_out "$_d" "$_idx" && continue   # verdict.sh
         wait_pid "$(cat "$_pidf")" "$_dwait" "המגירה $_d (מחיצה $_idx)" && continue
         # בידוד: המגירה הזו לבדה נכשלת, הלולאה ממשיכה לשכנות.
-        unblock_fifo "$RUN_DIR/targets/$_d/feed"
-        fail_written_target "$_d" \
-            "מחיצה $_idx: פג הזמן — המגירה לא סיימה לכתוב" "$_blame"
+        drawer_stop "$_d"   # #2200: its fifo's reader too, not only the pipeline's shell
+        fail_written_target "$_d" "מחיצה $_idx: פג הזמן — המגירה לא סיימה לכתוב" "$_blame"
     done
 
     # ה-sha התואם הוא הראיה החיובית שהזרם הגיע שלם, ולכן הוא נשאל לפני השאר -- אחרי פקיעה:

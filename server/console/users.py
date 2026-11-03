@@ -263,6 +263,14 @@ def update(
             changed.append("mfa_required=true" if mfa_required else "mfa_required=false")
     if changed:
         journal(conn, "user_edit", f"{username} " + ", ".join(changed), by)
+    if "password" in changed:
+        # ‏#1853 (סקירת אבטחה): סיסמה חדשה מכאן = כמו `reset_password` (#1120) — כל
+        # session ישנה וכל צופה פתוח (מוניטור/VM) מתבטלים. אחרי הכתיבה: ‏`still_admin`.
+        bump_auth_epoch(conn, username)
+    elif f"role={role}" in changed and role == "deploy":
+        # ‏#1853: מי שהורד ל-deploy אינו מנהל — גשר מוניטור/VM פתוח שלו נסגר עכשיו.
+        from server.console import viewer_sessions
+        viewer_sessions.revoke_user(username)
 
 
 def set_disabled(conn: sqlite3.Connection, username: str, disabled: bool,
@@ -286,6 +294,11 @@ def set_disabled(conn: sqlite3.Connection, username: str, disabled: bool,
         conn.execute("UPDATE users SET disabled_at = ? WHERE username = ?",
                      (now_iso() if disabled else None, username))
     journal(conn, "user_disabled" if disabled else "user_enabled", username, by)
+    if disabled:
+        # ‏#1853 (סקירת אבטחה): מי שנחסם — גשר מוניטור/VM פתוח שלו נסגר עכשיו. אחרי
+        # הכתיבה, כדי ש-`still_admin` (שקורא את החסימה) יסגור את המרוץ מול גשר שנפתח.
+        from server.console import viewer_sessions
+        viewer_sessions.revoke_user(username)
 
 
 def active_admin_count(conn: sqlite3.Connection) -> int:
@@ -340,6 +353,9 @@ def delete(conn: sqlite3.Connection, username: str, by: str) -> None:
             raise BuiltinProtected("המנהל שנוצר בהתקנה אינו ניתן למחיקה")
         raise ValueError("זה המנהל האחרון — מחיקתו תנעל את הקונסולה")
     journal(conn, "user_delete", username, by)
+    # ‏#1853: גשר מוניטור/VM פתוח של מי שנמחק — נסגר עכשיו, לא ב-idle.
+    from server.console import viewer_sessions
+    viewer_sessions.revoke_user(username)
 
 
 def list_users(conn: sqlite3.Connection) -> list[dict]:

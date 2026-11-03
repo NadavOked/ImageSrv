@@ -599,7 +599,7 @@ def posix(p: Path) -> str:
 
 
 @requires_bash
-def test_a_dead_step_endpoint_does_not_stop_the_agent():
+def test_a_dead_step_endpoint_does_not_stop_the_agent(tmp_path):
     """הבקרה השלילית של "האתחול ממשיך", בצד הסוכן.
 
     ‏127.0.0.1:9 הוא discard — אין שם מאזין. ‏`trace_step` נכשל, אומר
@@ -607,7 +607,7 @@ def test_a_dead_step_endpoint_does_not_stop_the_agent():
     בדיוק מה ש-#400 אוסר.
     """
     result = sh(
-        f'set -e; RUN_DIR=$(mktemp -d); export RUN_DIR; '
+        f'set -e; RUN_DIR={posix(tmp_path)!r}; export RUN_DIR; '   # #2180: not mktemp -d in TMPDIR
         f'. {posix(AGENT)}/lib/core/common.sh; '
         f'SERVER="http://127.0.0.1:9"; MAC="{MAC}"; TRACE_TIMEOUT=2; '
         f'trace_step entry; echo "STILL-BOOTING"'
@@ -618,9 +618,9 @@ def test_a_dead_step_endpoint_does_not_stop_the_agent():
 
 
 @requires_bash
-def test_trace_step_is_a_no_op_without_a_server_or_a_mac():
+def test_trace_step_is_a_no_op_without_a_server_or_a_mac(tmp_path):
     result = sh(
-        f'set -e; RUN_DIR=$(mktemp -d); export RUN_DIR; '
+        f'set -e; RUN_DIR={posix(tmp_path)!r}; export RUN_DIR; '   # #2180: not mktemp -d in TMPDIR
         f'. {posix(AGENT)}/lib/core/common.sh; '
         f'SERVER=""; MAC=""; trace_step entry; echo "STILL-BOOTING"'
     )
@@ -698,9 +698,9 @@ def test_a_step_without_marks_logs_no_marks(caplog):
 
 
 @requires_bash
-def test_trace_step_carries_the_marks_in_the_url():
+def test_trace_step_carries_the_marks_in_the_url(tmp_path):
     result = sh(
-        f'set -e; RUN_DIR=$(mktemp -d); export RUN_DIR; '
+        f'set -e; RUN_DIR={posix(tmp_path)!r}; export RUN_DIR; '   # #2180: not mktemp -d in TMPDIR
         f'. {posix(AGENT)}/lib/core/common.sh; '
         'curl() { for a in "$@"; do echo "$a"; done > "$RUN_DIR/url"; return 0; }; '
         f'SERVER=http://s; MAC={MAC}; '
