@@ -239,7 +239,7 @@ run_restore() {
         return 1
     fi
     # #1366: a disk that does not take a write, or writes below the floor, fails here by name.
-    { write_check "$2" && write_speed_verdict "$2"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }
+    { write_check "$2" && write_speed_verdict "$5" "$2"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }
     discard_before_restore "$2"; [ $? != 2 ] || { target_set "$2" failed "ה-TRIM לא הסתיים תוך $DISCARD_MAX_S שניות"; echo "failed" > "$RUN_DIR/state"; return 1; }   # #1969
 
     # הטבלה נקבעת עד תומה לפני שהנתונים מגיעים — כולל ההרחבה, כי היא זו

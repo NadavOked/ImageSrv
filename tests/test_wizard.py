@@ -111,15 +111,23 @@ def _rerun_over_http(tmp_path: Path, admin_name: str = "admin"):
     return state, apply, close
 
 
-def test_rerun_guesses_go_through_login_guard(tmp_path: Path) -> None:
+def test_rerun_guesses_go_through_login_guard(tmp_path: Path, monkeypatch) -> None:
     """‏#1631: בהרצה החוזרת `_verify_current_admin` בדק את סיסמת admin בלי
     `login_guard` — ערוץ ניחוש בלי השהיה ובלי נעילה. אחרי חמישה כשלונות
-    מאותה כתובת גם הסיסמה הנכונה נדחית עד תום ההשהיה, וההתקנה לא רצה."""
+    מאותה כתובת גם הסיסמה הנכונה נדחית עד תום ההשהיה, וההתקנה לא רצה.
+
+    ‏#2326: ההשהיה אחרי חמישה כשלונות היא שנייה אחת (`2**0`). בשעון אמיתי
+    ריצה מלאה תחת עומס עברה אותה, והשומר שחרר בצדק. השעון מוזז ביד."""
+    from server.console import login_guard
+
+    t = {"now": 1_000_000.0}
+    monkeypatch.setattr(login_guard, "now", lambda: t["now"])
     _state, apply, close = _rerun_over_http(tmp_path)
     try:
-        for _ in range(5):
+        for _ in range(login_guard.DELAY_AFTER):
             got = apply("wrong-guess")
             assert got["state"] == "validation-failed", got
+        t["now"] += 0.999           # just inside the first delay
         got = apply("Curr3nt!admin")
         assert got["state"] == "validation-failed", "הסיסמה הנכונה התקבלה מיד אחרי חמישה ניחושים"
         assert "נסה שוב" in got["error"], got

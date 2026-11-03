@@ -36,7 +36,9 @@ WRITECHECK_MIB="${WRITECHECK_MIB:-4}"          # MiB in each of the three places
 # The floor: below it a disk holds the whole wave back. Source: Nadav 13/10
 # (#1366), "under the wave's pace" -- the wave's ceiling is 900 Mbit/s =
 # 112 MB/s (IMAGESRV_MAX_BITRATE, server/app.py), measured 106 MB/s on
-# 17/09 (500->146GB round); 50 is under half of it.
+# 17/09 (500->146GB round); 50 is under half of it. #2338: the console's
+# setting (writecheck_min_mbps, 10-500) comes in the manifest; this is the
+# floor when it does not (writecheck_floor below).
 WRITECHECK_MIN_MBPS="${WRITECHECK_MIN_MBPS:-50}"
 
 _wc_place() { case "$1" in 1) printf 'התחלה' ;; 2) printf 'אמצע' ;; *) printf 'סוף' ;; esac; }
@@ -170,9 +172,22 @@ _wc_kind() { # $1 = disk: its kind in Hebrew by /sys rotational (0 = SSD, 1 = HD
         0) printf 'מוצק' ;; 1) printf 'מכני' ;; *) printf '?' ;; esac
 }
 
+writecheck_floor() {
+    # $1 = the manifest the server served. #2338: sets WC_FLOOR to its
+    # writecheck_min_mbps (the console's setting, 10-500). Missing or bad (an old
+    # server, a manifest that did not read) = WRITECHECK_MIN_MBPS and a log line:
+    # never 0 and never no floor.
+    _wf_v=$(jq -c '.writecheck_min_mbps' "$1" 2>/dev/null)
+    case "$_wf_v" in [1-9][0-9]|[1-9][0-9][0-9]) if [ "$_wf_v" -le 500 ]; then
+        WC_FLOOR=$_wf_v; log "write check floor: $WC_FLOOR MB/s (writecheck_min_mbps)"; return 0; fi ;; esac
+    WC_FLOOR=$WRITECHECK_MIN_MBPS
+    log "write check floor: writecheck_min_mbps ${_wf_v:-unread} in the manifest is not 10-500 -- $WC_FLOOR MB/s"
+}
+
 write_speed_verdict() {
-    # $@ = the round's disks on this machine. A disk that wrote below
-    # WRITECHECK_MIN_MBPS, or below half the median of the **other** measured
+    # $1 = the manifest (its floor: writecheck_floor), $2.. = the round's disks
+    # on this machine. A disk that wrote below the floor, or below half the
+    # median of the **other** measured
     # disks here **of its own kind** (two at least: a median of one is one
     # disk's mood), is **red** (Nadav 13/10): it holds the whole wave back, and
     # red skips when nobody answers -- failed by name, before its table. Not
@@ -183,6 +198,7 @@ write_speed_verdict() {
     # every number is taken **before** any disk is failed: failing one here
     # used to drop it from the next one's comparison, so the order of the
     # drawers decided (57 failed and 54 passed; the next round, the reverse).
+    writecheck_floor "$1"; shift
     _sv_rc=0; _sv_all=""
     for _sv_d in "$@"; do
         _sv_m=$(_wc_mbps "$_sv_d"); [ -n "$_sv_m" ] || continue
@@ -195,8 +211,8 @@ write_speed_verdict() {
         _sv_m=$(echo "$_sv_l" | cut -d' ' -f2); _sv_k=$(echo "$_sv_l" | cut -d' ' -f3)
         _sv_med=$(printf '%s' "$_sv_all" | awk -v d="$_sv_d" -v k="$_sv_k" 'k != "?" && $1 != d && $3 == k { print $2 }' \
             | sort -n | awk '/^[0-9]+$/ { v[++n] = $1 } END { if (n >= 2) print (n % 2) ? v[(n + 1) / 2] : int((v[n / 2] + v[n / 2 + 1]) / 2) }')
-        if [ "$_sv_m" -lt "$WRITECHECK_MIN_MBPS" ]; then
-            _sv_why="איטי — $_sv_m MB/s, מתחת לסף $WRITECHECK_MIN_MBPS MB/s"
+        if [ "$_sv_m" -lt "$WC_FLOOR" ]; then
+            _sv_why="איטי — $_sv_m MB/s, מתחת לסף $WC_FLOOR MB/s"
         elif [ -n "$_sv_med" ] && [ $((_sv_m * 2)) -lt "$_sv_med" ]; then
             _sv_why="איטי — $_sv_m MB/s, פחות מחצי מ-$_sv_med MB/s של שאר המגירות מאותו סוג ($_sv_k)"
         else
@@ -219,5 +235,5 @@ write_check_round() {
         target_set "$_wr_d" writing
         disk_fits "$_wr_d" "$_wr_m" && { [ ! -s "$RUN_DIR/targets/$_wr_d/raid_wipe" ] || raid_wipe "$_wr_d"; } && write_check "$_wr_d"   # #1808: the old RAID metadata the operator let go, before the first test write
     done
-    write_speed_verdict "$@" || :
+    write_speed_verdict "$_wr_m" "$@" || :
 }

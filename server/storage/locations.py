@@ -1004,7 +1004,9 @@ def subtitle_of(row: dict) -> str:
         return "דיסק השרת · ברירת המחדל לקליטה"
     params = params_of(row)
     if is_disk(row):
-        bits = [params.get("model") or "", params.get("serial") or params.get("device") or ""]
+        # #2146: not params["device"] -- /dev/sdX as it was when the disk was
+        # added; kernel names move between boots (#2137). The mount is by UUID.
+        bits = [params.get("model") or "", params.get("serial") or ""]
         return " · ".join(bit for bit in bits if bit) or f"UUID={params['uuid']}"
     if row["type"] == "iscsi":
         bits = []

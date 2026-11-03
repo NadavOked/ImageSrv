@@ -257,6 +257,9 @@ _PATTERNS = (
 )
 
 
+_HEBREW = re.compile("[֐-׿]")
+
+
 def he(message: str) -> str:
     """The Hebrew for a backend message; an unknown one is shown as it is
     (in English) rather than dropped."""
@@ -994,7 +997,10 @@ def _result_dialog(frame: Frame, runtime) -> None:
     frame.add("dlg", "plain", 560, "הפעולה הושלמה" if result.ok else "הפעולה לא הצליחה",
               result.he or he(result.message))
     for detail in result.details[:8]:
-        frame.add("d.kv", "", he(detail), 1)
+        text = he(detail)
+        # #2097: a Hebrew sentence is laid out right-to-left; as a mono LTR
+        # value its final period jumped to the start of the line
+        frame.add("d.kv", "", text, 0 if _HEBREW.search(text) else 1)
     frame.add("d.btn", "חזרה להגדרות", "Enter", "pri", 1)
 
 

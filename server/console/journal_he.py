@@ -474,6 +474,7 @@ SETTINGS_HE = {
     "mfa_required_for_admins": "חיוב אימות דו-שלבי למנהלים",   # נדב 18/10
     "crc_warn_threshold": "סף שגיאות CRC לאזהרה",   # #1366
     "min_free_gb": "מינימום מקום פנוי אחרי שחזור (GB)",   # #1354
+    "writecheck_min_mbps": "סף מהירות כתיבה לדיסק (MB/s)",   # #2338
     "intersite_rate_cap_mbps": "הגבלת קצב בין אתרים (Mb/s)",   # #1473
     "igmp_querier": "IGMP querier ברשת ההפצה",   # #1972
     # ‏#2056/#2059 (מוקאפ 05): אותן תוויות כמו בהגדרות הקונסולה; הערך בשניות
@@ -683,6 +684,8 @@ class JournalTranslator:
                      "idle": "נסגר אחרי 10 דק' בלי תעבורה",
                      "refused": "נסגר — הודעה אסורה מהדפדפן", "error": "כשל",
                      "session_revoked": "נסגר — ההתחברות לקונסולה הסתיימה",   # ‏#1853
+                     # ‏#2325: ‏4410 (אותו מנהל, חלון אחר) או 4411 (השליטה הועברה) — #1852
+                     "moved": "נסגר — הצפייה עברה לחלון אחר או למנהל אחר",
                      "reboot": "הפעלה מחדש", "poweroff": "כיבוי"}
             m = re.match(r"(\S+) (\S+)(.*)$", detail)
             text = self._names(detail) if m is None else " · ".join(

@@ -158,3 +158,17 @@ def test_the_new_rows_are_translated_to_hebrew(server):
         EVENTS_HE["monitor_refused"], f"{who} · 4512 · {REJECTED}")
     assert tr.translate("monitor_closed", f"{MAC} refused — סוג אבטחה לא צפוי")[1] == (
         f"{who} · נסגר — הודעה אסורה מהדפדפן · סוג אבטחה לא צפוי")
+
+
+def test_a_view_that_moved_is_translated_to_hebrew(server):
+    """‏#2325: ‏`monitor_closed … moved` (‏4410 חלון אחר / 4411 השליטה הועברה, #1852)
+    הגיע ליומן כמילה האנגלית. גם עם `node=` של משני."""
+    from test_monitor import prepare_build_machine
+    prepare_build_machine(server)
+    tr = JournalTranslator(server["ctx"].conn, server["ctx"].library)
+    who = tr._machines[MAC]
+    moved = "נסגר — הצפייה עברה לחלון אחר או למנהל אחר"
+    assert tr.translate("monitor_closed", f"{MAC} moved") == (
+        EVENTS_HE["monitor_closed"], f"{who} · {moved}")
+    assert tr.translate("monitor_closed", f"{MAC} moved node=n2")[1] == (
+        f"{who} · {moved} · node=n2")

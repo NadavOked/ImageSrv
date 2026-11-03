@@ -744,6 +744,7 @@ REQUIRED_MODULES=(hv_netvsc   hv_storvsc      # Hyper-V
                   virtio_net  virtio_blk      # KVM / Proxmox
                   xen-netfront xen-blkfront   # Xen
                   dm-mod dm-snapshot dm-bufio brd   # #1466: local clone, read-only source
+                  ata_piix ata_generic vmd   # #1825/#1809: IDE-mode SATA, Intel VMD -- loaded by #1914
                   af_alg algif_hash sha256-ssse3 pcspkr)   # #1596/#1967: hash and speaker
 
 # מערכות הקבצים שהמערכת נשענת עליהן — מוצהרות, ולא נוכחות במקרה. עד

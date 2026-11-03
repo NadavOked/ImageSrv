@@ -30,7 +30,7 @@
 
 [Unit]
 Description=ImageSrv: restore an unconfirmed network configuration
-Documentation=https://github.com/NadavOked/ImageSrv-dev/blob/main/docs/architecture/server.md
+Documentation=https://github.com/NadavOked/ImageSrv/blob/main/docs/architecture/server.md
 # Late enough that ifup works, early enough to fix the boot we came up in.
 After=network-pre.target local-fs.target
 DefaultDependencies=no

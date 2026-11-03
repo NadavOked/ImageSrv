@@ -6,7 +6,7 @@
 
 [Unit]
 Description=ImageSrv: back up the database every hour
-Documentation=https://github.com/NadavOked/ImageSrv-dev/blob/main/docs/architecture/server.md
+Documentation=https://github.com/NadavOked/ImageSrv/blob/main/docs/architecture/server.md
 
 [Timer]
 OnCalendar=hourly

@@ -35,6 +35,7 @@ from server.agent import logs as agent_logs   # #1882
 from server.agent import held# #2031
 from server.agent import timing as agent_timing   # #2056
 from server.disks import disk_sets   # #1857
+from server.disks import writefloor   # #2338
 from server.agent import firmware_image# #2080
 from server.agent.readbackhash import mode as readback_mode
 from server.agent.hello import (build_answer, hello_payload_oversized, login_required,
@@ -737,6 +738,9 @@ def create_agent_router(ctx: ServerContext,
                     f"{image_id} sample -> full: a direct send has no list on the server;"
                     f" every chunk is compared with the live manifest's readback_xxh64"
                     f" ({request.client.host if request.client else '?'})")
+        # ‏#2338 (נדב 03/11): סף המהירות של בדיקת הכתיבה לפני הזרם (‏writecheck.sh),
+        # ההגדרה `writecheck_min_mbps`. נקבע כשהסוכן מושך את המניפסט: לכל הסבב.
+        public[writefloor.SETTING] = writefloor.mbps(ctx.conn)
         return JSONResponse(public)
 
     @router.get("/images/{image_id}/files/{filename}")

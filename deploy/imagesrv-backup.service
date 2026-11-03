@@ -17,7 +17,7 @@
 
 [Unit]
 Description=ImageSrv: back up the database to the chosen destination
-Documentation=https://github.com/NadavOked/ImageSrv-dev/blob/main/docs/architecture/server.md
+Documentation=https://github.com/NadavOked/ImageSrv/blob/main/docs/architecture/server.md
 After=local-fs.target remote-fs.target
 
 [Service]

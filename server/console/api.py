@@ -43,6 +43,7 @@ from server.net import igmp_querier
 from server.console import disk_sets as console_disk_sets   # #1857
 from server.agent import firmware_image# #2080
 from server.disks import model_slots   # #2001
+from server.disks import writefloor   # #2338
 from server.agent import held# #2031
 
 #: נדב 18/10: ניתוק אוטומטי בחוסר פעילות. השדה נשאר בשניות (‏#1243, ברירת מחדל 600);
@@ -82,6 +83,8 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   crcwarn.SETTING,
                   # ‏#1354: מינימום GB פנויים במחיצת המערכת אחרי שחזור (0–500).
                   minfree.SETTING,
+                  # ‏#2338: סף מהירות הכתיבה לפני הזרם, MB/s (10–500; ברירת המחדל 50).
+                  writefloor.SETTING,
                   # ‏#1473: תקרת קצב להעברות בין אתרים, Mb/s (0 = ללא הגבלה).
                   transfer_cap.SETTING,
                   # ‏#1864 (נדב 20/10): אימות מלא אחרי הכתיבה; כבוי = מדגם.
@@ -148,6 +151,12 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
                 raise HTTPException(
                     400, f"מינימום מקום פנוי: מספר שלם 0–{minfree.MIN_FREE_GB_MAX}")
             normalized[key] = str(gb)
+        elif key == writefloor.SETTING:
+            floor = writefloor.parse(value)
+            if floor is None:
+                raise HTTPException(
+                    400, f"סף מהירות כתיבה לדיסק: מספר שלם {writefloor.MINIMUM}–{writefloor.MAXIMUM} (MB/s)")
+            normalized[key] = str(floor)
         elif key == transfer_cap.SETTING:
             mbps = transfer_cap.parse(value)
             if mbps is None:
@@ -1339,6 +1348,8 @@ def create_console_router(
         values[crcwarn.SETTING] = str(crcwarn.threshold(ctx.conn))
         # ‏#1354: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
         values[minfree.SETTING] = str(minfree.min_free_gb(ctx.conn))
+        # ‏#2338: הערך שבתוקף — "50" כשלא נקבע או כשהשמור פגום.
+        values[writefloor.SETTING] = str(writefloor.mbps(ctx.conn))
         # ‏#1473: הערך שבתוקף — "0" (ללא הגבלה) כשלא נקבע או כשהשמור פגום.
         values[transfer_cap.SETTING] = str(transfer_cap.cap_mbps(ctx.conn))
         # ‏#1864: הערך שבתוקף — "false" (מדגם) כשלא נקבע.

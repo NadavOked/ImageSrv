@@ -114,6 +114,15 @@ _machine_state() {
 
 DRAWER_GONE_WHY="הכונן נעלם מהמערכת (נשלף או נותק)"   # #2045: also `pulled` -- the local clone's card says so
 
+drawer_lpm_hint() {
+    # #1827: a gone drawer on a cloner whose SATA links did not read back
+    # max_performance (satalpm.sh) -- the slumber is a suspect, said as one.
+    # No record (not a cloner, not set yet) = nothing said, not "fine".
+    _lh=$(cat "$RUN_DIR/sata_lpm" 2>/dev/null) || return 0
+    case "$_lh" in max_performance|none|'') return 0 ;; esac
+    printf ' (מדיניות החשמל של SATA: %s, לא max_performance -- ייתכן שהכונן נרדם)' "$_lh"
+}
+
 drawer_dead_reason() {
     # $1 = disk, $2 = 1 if /sys/block/$1 existed when the stream began,
     # $3 = this tick's dmesg. Prints the reason; 1 = no evidence of death.
@@ -172,6 +181,7 @@ drawer_watch() {
             _dw_why=$(drawer_dead_reason "$_dw_d" "$_dw_s" "$_dw_k") || continue
             echo "$_dw_why" > "$_dw_t/dead"; [ "$_dw_why" != "$DRAWER_GONE_WHY" ] || : > "$_dw_t/pulled"
             if [ "$_dw_why" = "$DRAWER_GONE_WHY" ]; then event_beep pulled; else event_beep failure; fi
+            [ "$_dw_why" != "$DRAWER_GONE_WHY" ] || _dw_why="$_dw_why$(drawer_lpm_hint)"   # #1827
             log "$_dw_d: $_dw_why -- out of the stream now, the other drawers carry on"
             kill -9 "$(cat "$_dw_t/reader.pid" 2>/dev/null)" 2>/dev/null \
                 || log "WARNING: $_dw_d: its fifo's reader was not stopped -- fanout drops it on its own stall ceiling"

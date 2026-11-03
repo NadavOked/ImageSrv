@@ -20,7 +20,7 @@
 
 [Unit]
 Description=ImageSrv PXE proxy (isolated dnsmasq instance)
-Documentation=https://github.com/NadavOked/ImageSrv-dev
+Documentation=https://github.com/NadavOked/ImageSrv
 After=network-online.target
 Wants=network-online.target
 # האינסטנס הראשי מגיש TFTP לוילן ההפצה; זה כאן עצמאי ממנו לגמרי.

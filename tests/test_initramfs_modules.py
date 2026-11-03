@@ -448,7 +448,16 @@ BUTTON_LAYOUT = {"button": "kernel/drivers/acpi"}
 #: #1967: the cloner's audible round result -- the PC speaker, declared required.
 BEEP_LAYOUT = {"pcspkr": "kernel/drivers/input/misc"}
 
-LAYOUT = {**PLATFORM_LAYOUT, **FS_LAYOUT, **LC_LAYOUT, **SHA_LAYOUT, **BUTTON_LAYOUT, **BEEP_LAYOUT}
+#: #1825/#1809: the disk controllers #1914 loads by name -- SATA in IDE mode
+#: (ata_piix, ata_generic) and Intel VMD (vmd, which sits outside drivers/ata).
+STORAGE_LAYOUT = {
+    "ata_piix": "kernel/drivers/ata",
+    "ata_generic": "kernel/drivers/ata",
+    "vmd": "kernel/drivers/pci/controller",
+}
+
+LAYOUT = {**PLATFORM_LAYOUT, **FS_LAYOUT, **LC_LAYOUT, **SHA_LAYOUT, **BUTTON_LAYOUT, **BEEP_LAYOUT,
+          **STORAGE_LAYOUT}
 
 
 def declared(array: str) -> list[str]:
@@ -538,6 +547,26 @@ def test_the_build_stops_when_a_local_clone_view_module_is_missing(tmp_path: Pat
     done, _ = run_required(tmp_path, [m for m in LAYOUT if m != absent])
     assert done.returncode != 0, f"{absent} missing and the build passed"
     assert absent in done.stderr, done.stderr
+
+
+@requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
+@pytest.mark.parametrize("absent", sorted(STORAGE_LAYOUT))
+def test_the_build_stops_when_a_disk_controller_driver_is_missing(tmp_path: Path, absent: str):
+    """#1825/#1809: #1914 loads these by name and by modalias, but a kernel without
+    one of them built an initramfs that exited 0 -- and the machine in IDE mode, or
+    with VMD on, said "no disks" in front of a person (#78's pattern). Now the build
+    stops and names it."""
+    done, _ = run_required(tmp_path, [m for m in LAYOUT if m != absent])
+    assert done.returncode != 0, f"{absent} missing and the build passed"
+    assert absent in done.stderr, done.stderr
+
+
+@requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
+def test_the_disk_controller_drivers_are_packed_by_name(tmp_path: Path):
+    done, packed = run_required(tmp_path, list(LAYOUT))
+    assert done.returncode == 0, done.stderr
+    for mod, where in STORAGE_LAYOUT.items():
+        assert (packed / where / f"{mod}.ko.xz").is_file(), f"{mod} not packed"
 
 
 @requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
