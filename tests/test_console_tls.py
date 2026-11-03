@@ -431,6 +431,8 @@ def test_the_dcui_shows_the_served_certificate_and_never_reissues_it(tmp_path: P
     snapshot = collect_snapshot(data, runner=runner, sys_net=tmp_path / "net",
                                 status_file=status, override_file=tmp_path / "none",
                                 repo_dir=tmp_path / "src", manifest_file=tmp_path / "none.json")
-    assert snapshot.fingerprint.startswith("unavailable"), snapshot.fingerprint
+    # #2155: "starting" within the start-up grace, "unavailable" after it --
+    # either way not the file's fingerprint (test_console_fp_one_2148.py times it)
+    assert snapshot.fingerprint.startswith(("unavailable", "starting")), snapshot.fingerprint
     assert tls.cert_path.read_bytes() == canonical
     assert not tls.cert_path.with_name("console.crt.prev").exists()

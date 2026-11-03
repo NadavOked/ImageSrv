@@ -165,22 +165,40 @@ _wc_mbps() { # $1 = disk: the measured MB/s of a disk that passed, or nothing
     case "$_wm_v" in ''|*[!0-9]*) ;; *) printf '%s' "$_wm_v" ;; esac   # a number, or nothing
 }
 
+_wc_kind() { # $1 = disk: its kind in Hebrew by /sys rotational (0 = SSD, 1 = HDD), or ? -- not read, no kind to compare to
+    case "$(cat "$SYSROOT/sys/block/$1/queue/rotational" 2>/dev/null)" in
+        0) printf 'מוצק' ;; 1) printf 'מכני' ;; *) printf '?' ;; esac
+}
+
 write_speed_verdict() {
     # $@ = the round's disks on this machine. A disk that wrote below
     # WRITECHECK_MIN_MBPS, or below half the median of the **other** measured
-    # disks here (two at least: a median of one is one disk's mood), is
-    # **red** (Nadav 13/10): it holds the whole wave back, and red skips when
-    # nobody answers -- failed by name, before its table. Not measured = no
-    # verdict at all (5b). 1 = a disk was failed here.
-    _sv_rc=0
+    # disks here **of its own kind** (two at least: a median of one is one
+    # disk's mood), is **red** (Nadav 13/10): it holds the whole wave back, and
+    # red skips when nobody answers -- failed by name, before its table. Not
+    # measured = no verdict at all (5b). 1 = a disk was failed here.
+    # #2037 (decided 03/11): SSD against SSD, HDD against HDD -- an SSD beside
+    # two HDDs pulled their "median" up and failed a 57 MB/s HDD. A disk alone
+    # of its kind (or whose kind was not read) meets the fixed floor only. And
+    # every number is taken **before** any disk is failed: failing one here
+    # used to drop it from the next one's comparison, so the order of the
+    # drawers decided (57 failed and 54 passed; the next round, the reverse).
+    _sv_rc=0; _sv_all=""
     for _sv_d in "$@"; do
         _sv_m=$(_wc_mbps "$_sv_d"); [ -n "$_sv_m" ] || continue
-        _sv_med=$(for _sv_o in "$@"; do [ "$_sv_o" = "$_sv_d" ] || _wc_mbps "$_sv_o"; echo; done \
+        _sv_all="$_sv_all$_sv_d $_sv_m $(_wc_kind "$_sv_d")
+"
+    done
+    for _sv_d in "$@"; do
+        _sv_l=$(printf '%s' "$_sv_all" | awk -v d="$_sv_d" '$1 == d')
+        [ -n "$_sv_l" ] || continue
+        _sv_m=$(echo "$_sv_l" | cut -d' ' -f2); _sv_k=$(echo "$_sv_l" | cut -d' ' -f3)
+        _sv_med=$(printf '%s' "$_sv_all" | awk -v d="$_sv_d" -v k="$_sv_k" 'k != "?" && $1 != d && $3 == k { print $2 }' \
             | sort -n | awk '/^[0-9]+$/ { v[++n] = $1 } END { if (n >= 2) print (n % 2) ? v[(n + 1) / 2] : int((v[n / 2] + v[n / 2 + 1]) / 2) }')
         if [ "$_sv_m" -lt "$WRITECHECK_MIN_MBPS" ]; then
             _sv_why="איטי — $_sv_m MB/s, מתחת לסף $WRITECHECK_MIN_MBPS MB/s"
         elif [ -n "$_sv_med" ] && [ $((_sv_m * 2)) -lt "$_sv_med" ]; then
-            _sv_why="איטי — $_sv_m MB/s, פחות מחצי מ-$_sv_med MB/s של שאר המגירות"
+            _sv_why="איטי — $_sv_m MB/s, פחות מחצי מ-$_sv_med MB/s של שאר המגירות מאותו סוג ($_sv_k)"
         else
             continue
         fi

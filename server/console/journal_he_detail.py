@@ -101,6 +101,11 @@ RULES: dict[str, list[tuple[str, str]]] = {
     # ‏#1848 / #1846: הלמידה — מזהים ומספרים נשארים, המילים בעברית
     "boot_step_slow": [(r" baseline=", " (רגיל: "), (r"s \((\d+) boots\)$", r"s, לפי \1 אתחולים)")],
     "net_loss_jump": [(r" baseline=", " (רגיל: "), (r"% \((\d+) waves\)", r"%, לפי \1 גלים)")],
+    # ‏#2218: "<אימג'> sample -> full: … (<כתובת המשכפל>)"
+    "readback_mode_switched": [(r" sample -> full: a direct send has no list on the server;"
+                                r" every chunk is compared with the live manifest's readback_xxh64",
+                                " ממדגם למלא: בהפצה ישירה אין לשרת רשימת בדיקה;"
+                                " כל חתיכה מושווית ל-readback_xxh64 של המניפסט החי")],
 }
 
 

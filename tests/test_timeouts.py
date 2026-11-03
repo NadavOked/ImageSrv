@@ -394,7 +394,7 @@ def test_a_station_whose_stream_never_arrives_fails_instead_of_freezing(tmp_path
         "WAIT_POLL_S=1 WAIT_STREAM_START_S=3 WAIT_STREAM_STALL_S=3 "
         "WAIT_HELPER_S=3; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(WAITS)}; "
-        f"{agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/restore.sh; "
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/restore.sh; "
         "stream_source() { sleep 120; }; "
         # הבדיקה הזו על התקרה של הזרם. בדיקת ההתקן שלפניה (#51) מוחלפת
         # כי אין התקן בלוקים בקופסה, ונבדקת בנפרד ב-test_restore_evidence.py.

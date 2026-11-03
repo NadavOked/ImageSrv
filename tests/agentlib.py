@@ -72,8 +72,11 @@ AGENT_MAIN = REPO_ROOT / "agent" / "imagesrv-agent"
 #: failmark.sh and progress.sh call disk_serial (sysinfo.sh) -- on the failure path
 #: (target_ident_keep, wipe_written_gpt, target_write_started), so a room without it
 #: shows "disk_serial: not found" exactly where the evidence is written (#2281).
+#: progress.sh's target_init calls target_ident_keep (failmark.sh): without it the
+#: drawer's `seen` (serial|port|ata, #1602) is never written (#2289). The agent
+#: loads failmark after progress; the call is at run time, so presence is the rule.
 NEEDS = {"drawers": ("writeback",), "drawerfeed": ("writeback",),
-         "failmark": ("sysinfo",), "progress": ("sysinfo",)}
+         "failmark": ("sysinfo",), "progress": ("sysinfo", "failmark")}
 _ORDER: list[str] = []
 
 

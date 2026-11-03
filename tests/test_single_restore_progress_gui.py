@@ -160,7 +160,7 @@ def restore(tmp_path: Path, run_restore: str, *, gui: str | None = "live", manif
         "AFTER_TASK_FILE=/nonexistent/after-task D_ROLE=build "
         f"IMAGESRV_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1 {env}; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f"{agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/pull.sh; "
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/pull.sh; "
         f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "
         f". {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/hw/slotnames.sh; "
         f". {posix(AGENT)}/lib/restore/single_restore.sh; . {posix(AGENT)}/lib/gui/srgui.sh; "
@@ -370,7 +370,7 @@ def agent_state(tmp_path: Path, stage: str = "writing") -> Path:
     out = tmp_path / f"{stage}.state"
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))}; "
-        f". {posix(AGENT)}/lib/core/common.sh; {agent_sources('sysinfo', 'progress')}"
+        f". {posix(AGENT)}/lib/core/common.sh; {agent_sources('sysinfo', 'progress', 'failmark')}"
         f". {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/gui/srgui.sh; "
         f'target_init sda {TOTAL}; target_set sda writing; echo writing > "$RUN_DIR/state"; '
         'echo 2 > "$RUN_DIR/targets/sda/partition"; echo 18000000000 >> "$RUN_DIR/targets/sda/bytes.raw"; '

@@ -470,7 +470,7 @@ def test_progress_matches_the_interface(tmp_path):
 
     out = sh(
         f'export RUN_DIR={posix(run)!r}; '
-        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress")}'
+        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress", "failmark")}'
         f'build_progress ses_a91f b4:2e:99:07:1a:c4'
     )
     report = json.loads(out)
@@ -1544,7 +1544,7 @@ def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_pat
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r} WAIT_POLL_S=1; '
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers")   # #1906: restore_pipe; #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "waits", "progress", "failmark", "restore", "writeback", "drawers")   # #1906: restore_pipe; #2272: imagesrv-agent's order
         + "stream_source() { printf 'recovery-bytes'; }; "
         # ‏/dev/sda4 אינו קיים בסביבת הבדיקה, ובדיקת ההתקן היא הבדיקה
         # הראשונה בצינור (#51). היא מוחלפת כאן ונבדקת בנפרד.

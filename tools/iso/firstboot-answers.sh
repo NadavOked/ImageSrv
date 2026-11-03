@@ -49,7 +49,7 @@ wait_servers_address() {
 }
 
 firstboot_from_answers() {
-    local role primary mode host servers_if argv rc
+    local role primary mode host servers_if argv rc nic nic_message
     [[ -s "$ANSWERS_SECRET" ]] || fail answers-secret-missing "$ANSWERS exists but $ANSWERS_SECRET is missing or empty"
     role=$(answers_get role); mode=$(answers_get servers_mode); host=$(answers_get hostname); primary=$(answers_get primary_url)
     [[ "$role" == standalone || "$role" == secondary ]] || fail answers-invalid "role in $ANSWERS is '$role'"
@@ -103,16 +103,27 @@ firstboot_from_answers() {
     # removed the address ("received SIGTERM ... ens33: removing interface",
     # ESXi 24/10). networking.service stays active (RemainAfterExit), as on
     # every later boot -- where the address was always there.
+    # #2149: the outcome is a named state in firstboot.status (nic=), not only
+    # a log line beside state=done. First boot still completes: the DCUI it
+    # starts is where the address is fixed (F2), and it shows "no address" red.
     addr=
     if systemctl restart networking.service >>"$BUILD_LOG" 2>&1; then
         if addr=$(wait_servers_address "$servers_if" 2>>"$BUILD_LOG"); then
-            log "nic $servers_if: ${addr:-up, no IPv4 address after ${FIRSTBOOT_ADDR_WAIT_S:-30}s}"
+            if [[ -n "$addr" ]]; then
+                nic=ok; nic_message="$servers_if: $addr"
+                log "nic $nic_message"
+            else
+                nic=no-address; nic_message="$servers_if: no IPv4 address after ${FIRSTBOOT_ADDR_WAIT_S:-30}s"
+                log "[nic-no-address] $nic_message"
+            fi
         else
             addr=
-            log "[nic-check-failed] could not read the addresses of $servers_if (see $BUILD_LOG)"
+            nic=check-failed; nic_message="could not read the addresses of $servers_if (see $BUILD_LOG)"
+            log "[nic-check-failed] $nic_message"
         fi
     else
-        log "[nic-up-failed] networking.service restart for $servers_if failed (see $BUILD_LOG); the console is reachable after a restart"
+        nic=up-failed; nic_message="networking.service restart for $servers_if failed (see $BUILD_LOG); the console is reachable after a restart"
+        log "[nic-up-failed] $nic_message"
     fi
     # #2095: setup-boot-server issued the console certificate before the NIC
     # had an address (loopback + name only). With the address on the NIC the
@@ -127,7 +138,8 @@ firstboot_from_answers() {
     bash "$APP_DIR/deploy/verify-boot-payload.sh" --app-dir "$APP_DIR" --http-root "$HTTP_ROOT" \
         --server-url http://127.0.0.1:8080 >>"$BUILD_LOG" 2>&1 \
         || fail verify-failed "verify-boot-payload.sh failed; the installation is not marked complete (see $BUILD_LOG)"
-    printf 'state=done\ntimestamp=%s\nservers_if=%s\nrole=%s\nsource=answers\n' "$(date -u +%FT%TZ)" "$servers_if" "$role" > "$STATUS"
+    printf 'state=done\ntimestamp=%s\nservers_if=%s\nrole=%s\nsource=answers\nnic=%s\nnic_message=%s\n' \
+        "$(date -u +%FT%TZ)" "$servers_if" "$role" "$nic" "$nic_message" > "$STATUS"
     touch "$STAMP"
     log "stage B complete from answers: console on $servers_if, role $role"
 }

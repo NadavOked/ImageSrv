@@ -122,7 +122,7 @@ def open_pull(tmp_path: Path, server: str, *, user: str = "labtech",
         f"export RUN_DIR={shlex.quote(posix(run))} HTTP_RETRIES=0 "
         f"HTTP_TIMEOUT=4 IMAGESRV_TEST=1; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f"{agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/pull.sh; "
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/pull.sh; "
         f"if pull_open {args}; "
         f'then echo "OPENED=[$PULL_SESSION]"; '
         f'else echo "NOT-OPENED=[$PULL_SESSION]"; fi'
@@ -380,7 +380,7 @@ def station(tmp_path, *, pull_code: str = "200",
         f"AWAIT_FILE={shlex.quote(await_file)} "
         f"AWAIT_TEXT={shlex.quote(await_text)}; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f"{agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/pull.sh; "
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/pull.sh; "
         f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "   # #1545: gui_backend_args
         f". {posix(AGENT)}/lib/restore/single_restore.sh; "   # #706: the GUI restore's write
         f". {posix(AGENT)}/lib/gui/srgui.sh; . {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; "   # #1561: its progress on the GUI
@@ -544,7 +544,7 @@ def test_the_closing_report_that_did_not_arrive_is_not_silence(tmp_path):
     script = (
         f"export RUN_DIR={shlex.quote(posix(run))} IMAGESRV_TEST=1; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f"{agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/pull.sh; "
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/pull.sh; "
         'http_post_json() { return 7; }; '
         'sleep 30 > /dev/null 2>&1 & '
         'pull_close "$!" ses_pull01 aa:bb "http://x"'

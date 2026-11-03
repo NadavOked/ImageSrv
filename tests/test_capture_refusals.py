@@ -229,7 +229,7 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         f"SYSROOT={posix(box)!r} SERVER=http://s; " + extra_env
         # ‏#926: jsonq.sh — shrink_open_record קורא את תשובת השרת (ok/id) ב-json_get.
         + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f". {posix(AGENT)}/lib/core/waits.sh; {agent_sources('sysinfo', 'progress')}"
+        f". {posix(AGENT)}/lib/core/waits.sh; {agent_sources('sysinfo', 'progress', 'failmark')}"
         # ‏manifest.sh (#338) ואז bootca.sh, בדיוק כסדר של
         # `imagesrv-agent`: ‏`capture_disk` קורא לשניהם בשורת המניפסט,
         # ופונקציה שאינה טעונה היא מניפסט פגום — לא שגיאה.

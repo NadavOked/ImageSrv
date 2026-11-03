@@ -148,7 +148,7 @@ def _agent(tmp_path: Path, script: str) -> dict:
     up = proc / "uptime"
     return json.loads(sh(
         f'export RUN_DIR={posix(run)!r} SYSROOT={posix(tmp_path / "sys")!r}; . {posix(LIB)}/common.sh;'
-        f' {agent_sources("sysinfo", "progress")}. {posix(LIB)}/datareport.sh;'
+        f' {agent_sources("sysinfo", "progress", "failmark")}. {posix(LIB)}/datareport.sh;'
         f' t() {{ echo "$1 0.00" > {posix(up)!r}; }}; ' + script))
 
 

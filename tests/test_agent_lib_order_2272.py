@@ -14,6 +14,10 @@ without what it calls. This file holds every test file to that.
 #2281: the same family on the failure path -- failmark.sh and progress.sh call
 disk_serial (sysinfo.sh), and rooms that loaded them without it marked a failed
 drawer with "disk_serial: not found": not the evidence the agent would write.
+
+#2289: progress.sh's target_init calls target_ident_keep (failmark.sh). Rooms
+that loaded progress without failmark never wrote the drawer's `seen`
+(serial|port|ata, #1602) -- "target_ident_keep: not found", rc 0.
 """
 
 from __future__ import annotations
@@ -25,7 +29,10 @@ from pathlib import Path
 
 import pytest
 
-from agentlib import NEEDS, agent_libs, agent_order
+from agentlib import NEEDS, agent_libs, agent_order, agent_sources
+from native import requires_native
+from test_agent import BASH, posix
+from test_timeouts import run_sh
 
 TESTS = Path(__file__).resolve().parent
 
@@ -87,27 +94,45 @@ def test_the_scan_sees_both_shapes(tmp_path):
     (tmp_path / "test_failpath.py").write_text(   # #2281: the failure path's own room
         'R = ("common", "progress", "failmark")\n'
         'X = f". {posix(AGENT)}/lib/core/progress.sh; "\n'
-        'Y = agent_sources("common", "waits", "progress")\n')   # a room as call arguments
+        'Y = agent_sources("common", "waits", "progress")\n'   # a room as call arguments
+        'Z = agent_sources("common", "sysinfo", "progress")\n')   # #2289: target_init without failmark
     (tmp_path / "test_ok.py").write_text('LIBS = ("common", "restore", "writeback", "drawers")\n'
                                          'R = ("common", "sysinfo", "progress", "failmark")\n'
-                                         'Y = agent_sources("common", "sysinfo", "progress")\n'
+                                         'Y = agent_sources("common", "sysinfo", "progress", "failmark")\n'
                                          'D = ("drawers", "2", "2", "0")   # a progress row, not a room\n')
     got = offenders(tmp_path)
     assert got == ["test_failpath.py:2: sources progress.sh by path -- use agent_sources",
                    "test_failpath.py:1: loads failmark without sysinfo",
                    "test_failpath.py:1: loads progress without sysinfo",
-                   "test_failpath.py:3: loads progress without sysinfo",
+                   "test_failpath.py:3: loads progress without sysinfo, failmark",
+                   "test_failpath.py:4: loads progress without failmark",
                    "test_names.py:1: loads drawers without writeback",
                    "test_names.py:1: loads drawerfeed without writeback",
                    "test_path.py:1: sources drawers.sh by path -- use agent_sources",
                    "test_path.py:1: sources drawerfeed.sh by path -- use agent_sources"], got
 
 
-def test_the_agent_loads_writeback_before_the_drawers():
-    """NEEDS is the agent's own shape, not a test's idea of it."""
+def test_the_agent_loads_what_needs_says():
+    """NEEDS is the agent's own shape, not a test's idea of it: every library it
+    names is one the agent sources. The calls are at run time, so the order is not
+    the rule -- the agent loads failmark after progress (#2289)."""
     order = agent_order()
     for lib, needs in NEEDS.items():
-        assert all(order.index(d) < order.index(lib) for d in needs), (lib, needs)
+        assert lib in order and all(d in order for d in needs), (lib, needs)
+
+
+@requires_native(("bash", BASH))
+def test_target_init_in_a_room_writes_the_drawer_s_seen(tmp_path):
+    """#2289: the room the agent runs keeps the drawer's identity at target_init;
+    a room of progress without failmark is refused before it runs."""
+    run = tmp_path / "run"
+    out = run_sh(f"export RUN_DIR={posix(run)!r} SYSROOT={posix(tmp_path)!r}; "
+                 + agent_sources("common", "sysinfo", "progress", "failmark")
+                 + "target_init sda 100; echo finished")
+    assert out.strip().endswith("finished") and "not found" not in out, out
+    assert (run / "targets" / "sda" / "seen").read_text(encoding="utf-8") == "||\n"
+    with pytest.raises(ValueError, match="progress needs failmark"):
+        agent_libs("common", "sysinfo", "progress")
 
 
 def test_agent_libs_keeps_the_agent_order_and_refuses_a_lone_drawer():
