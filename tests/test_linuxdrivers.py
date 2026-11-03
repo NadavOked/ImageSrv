@@ -283,7 +283,7 @@ def test_the_journal_event_has_a_hebrew_label_and_is_a_warning():
 
 
 def test_interfaces_documents_the_field():
-    doc = (AGENT.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (AGENT.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "drivers.linux" in doc
     for state in ("generic", "hostonly", "unsupported"):
         assert f"`{state}`" in doc

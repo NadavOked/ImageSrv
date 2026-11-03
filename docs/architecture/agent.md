@@ -66,7 +66,7 @@ imagesrv-agent
 (dual-boot) → שני הצדדים, וכל צד מדווח בנפרד (#107). שורש btrfs שאינו
 ב-subvolume ברירת המחדל נמצא ב-top level — הילד היחיד שיש בו `etc/`, בלי
 לנחש שם (#89).
-את הרג'יסטרי עורך [`agent/hivewrite.c`](../agent/hivewrite.c) — עוזר
+את הרג'יסטרי עורך [`agent/hivewrite.c`](../../agent/hivewrite.c) — עוזר
 libhivex שכותב ערך בודד ומשמר את שאר ערכי המפתח (`setval` של hivexsh
 מחליף את *כל* הרשימה — ב-`Tcpip\Parameters` זה היה מוחק את הגדרות
 ה-TCP/IP, ‏#33). שלושה ערכים נכתבים: `ComputerName`, ‏`Hostname`
@@ -198,7 +198,7 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 **כשל צריך לדווח, לא להיתלות.** קפיאה אילמת היא הפרה של אותו עיקרון 4
 כמו זריקת בלוק בשקט: במעבדה היא נראית כמו מכונה תקועה בלי סיבה, ובלוג
 אין שורה שמסבירה על מה חיכינו. לכן לכל המתנה בסוכן יש תקרה, וכולן
-יושבות ב-[`agent/lib/core/waits.sh`](../agent/lib/core/waits.sh) עם הנימוק לכל ערך.
+יושבות ב-[`agent/lib/core/waits.sh`](../../agent/lib/core/waits.sh) עם הנימוק לכל ערך.
 
 המדד הוא **חוסר התקדמות, לא משך כולל** — שחזור מחיצה של 100GB על כונן
 איטי לוקח דקות ארוכות וזה תקין; מונה שנעצר אינו. ‏`wait_progress` צופה
@@ -239,7 +239,7 @@ sudo env IMAGESRV_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
   שלהם בדיוק כמו `BINARIES` בבנאי (חסר = הבנייה נעצרת). הקובץ עצמו אינו
   נכנס לאימג'.
 - ‏`<dir>/etc/imagesrv/hooks.d/*.sh` — ‏hooks שרצים אחרי DHCP
-  (‏[`agent/lib/core/sitehooks.sh`](../agent/lib/core/sitehooks.sh)), בסוכן ובמתקין
+  (‏[`agent/lib/core/sitehooks.sh`](../../agent/lib/core/sitehooks.sh)), בסוכן ובמתקין
   החי, כל אחד ב-subshell, עם `$IFACE`/`$IP`/`$RUN_DIR`/`$LOG_FILE` ו-`log()`.
   קוד יציאה ≠ 0 נרשם ביומן בשמו ואינו עוצר את הסוכן.
 - משתנה שהוגדר ואינו תיקייה = שגיאה **לפני apt**, לא "בלי overlay".
@@ -262,7 +262,7 @@ sudo env IMAGESRV_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 | נושא | איך זה עובד |
 |---|---|
 | כניסה במסך recovery | בגואי בלבד (מסך הכניסה של `imagesrv-station-gui`, ‏`gui_auth` → ‏`POST /api/console/login`). הכניסה בטקסט מול `POST /api/v1/agent/login` הוסרה ב-11/10 עם שאר מסכי הטקסט |
-| קליטת אימג' | משימת `capture` מגיעה בשדה `task` של תשובת ה-hello; הסוכן קורא עם partclone ומעלה בזרימה — פרטים ב-docs/server.md |
+| קליטת אימג' | משימת `capture` מגיעה בשדה `task` של תשובת ה-hello; הסוכן קורא עם partclone ומעלה בזרימה — פרטים ב-docs/architecture/server.md |
 | קונסולת מחשב הבנייה | הגואי הנייטיב (`native-gui/`, התהליך `imagesrv-kiosk`), עברית ו-RTL; הוא מדבר עם השרת דרך פורט הסוכן (8080). בלי `--with-gui` בבנאי אין גואי, ולכן מסך שצריך אדם מסתיים בדיסק המקומי (`gui_unavailable_local`) — אין מסך טקסט חלופי (11/10). (#1247: דף ה-web `/console/station` והפורט 8082 הוסרו.) |
 
 ## חדר השיכפולים — הכותב המקבילי
@@ -271,7 +271,7 @@ sudo env IMAGESRV_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 מתאים כאן: הוא כותב לכל היעדים בצעד אחד, ולכן הכונן האיטי מכתיב את
 הקצב וכונן תקוע עוצר את כל המכונה. עם 36 כוננים בסבב זה לא מקרה קצה.
 
-לכן [`agent/fanout.c`](../agent/fanout.c) — החלק המקומפל הגדול בפרויקט
+לכן [`agent/fanout.c`](../../agent/fanout.c) — החלק המקומפל הגדול בפרויקט
 (לצדו רק `hivewrite.c` הקטן של עריכת הרג'יסטרי).
 לכל מגירה תור משלה וכתיבה לא-חוסמת; מגירה שלא עומדת בקצב ממלאת את
 התור, מדווחת כ-`failed` בשמה, והשאר ממשיכות במלוא המהירות.
@@ -343,7 +343,7 @@ device-mapper או מקום בזיכרון, היעד הקטן **מסורב** ב�
 במקום בשיכפול המקומי (אפשרות B), ונאמר ביומן ובדיווח (`shrink_path=refused`). ההעתקה (‏`lccopy.sh`) קוראת כל מחיצה פעם אחת ומפצלת ב-`fanout` לכל
 היעדים; יעד נחשב רק כש-fanout, ‏partclone, ‏tee וה-sha256 של מה שלקח מסכימים
 עם מה שנקרא מהמקור. הסוף: הטבלה נקראת בחזרה שדה-שדה. המדריך לטכנאי:
-[local-clone.md](local-clone.md); הממשקים: סעיף 34 ב-[interfaces.md](interfaces.md).
+[local-clone.md](../guides/local-clone.md); הממשקים: סעיף 34 ב-[interfaces.md](interfaces.md).
 
 > נבדק על loop devices במכונת הבדיקות (`tests/test_local_clone_engine.py`,
 > root): העתקה זהה, יעד גדול שמחיצתו האחרונה גדלה, יעד קטן שמסורב כשאין זיכרון

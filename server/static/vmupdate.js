@@ -1,6 +1,6 @@
 /* ‏#1334: עדכון אימג' ב-VM — הממשק. לפי המוקאפ שנדב אישר 13/10
-   (C:\ImageCtl-Lab\design-approved\vmupdate) ו-docs/vm-update.md. החוזה:
-   docs/interfaces.md סעיף 33. admin בלבד.
+   (C:\ImageCtl-Lab\design-approved\vmupdate) ו-docs/guides/vm-update.md. החוזה:
+   docs/architecture/interfaces.md סעיף 33. admin בלבד.
 
    מבנה: עמוד אחד (`pages.vmupdate` — "אימג'ים › <אימג'> › עדכון ב-VM"), פס
    גלובלי "VM רץ" בכל עמוד אחר, חלון התחלה (בחירת גרסה), וחלונות הכרעה (שמירה —
@@ -810,7 +810,7 @@ if (typeof document !== "undefined" && typeof document.addEventListener === "fun
 /* ---------- ‏#1468: "כרטיס לעדכוני VM" (לשונית כרטיסי רשת) ----------
    ל-VM זהות משלו: macvtap על הכרטיס שנבחר, עם MAC שהשרת ייצר פעם אחת. כאן:
    הבחירה (sheet), ה-MAC עם ההנחיה לכתובת שמורה, והכתובת שה-VM קיבל בפועל.
-   ‏GET/PUT ‏/vmupdate/network (docs/interfaces.md סעיף 33). לא נקרא = "לא נקרא". */
+   ‏GET/PUT ‏/vmupdate/network (docs/architecture/interfaces.md סעיף 33). לא נקרא = "לא נקרא". */
 let VMNET = null, VMNET_ERR = "";
 
 async function vmnetLoad() {

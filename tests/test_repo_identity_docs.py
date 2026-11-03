@@ -1,8 +1,8 @@
 """‏#1246 — `NadavOked/ImageSrv` הוא הריפו הציבורי שלנו, לא "פרויקט אחר".
 
-המשפט השגוי הופיע ב-CLAUDE.md, ב-README, ב-docs/server.md ובהערות של
+המשפט השגוי הופיע ב-CLAUDE.md, ב-README, ב-docs/architecture/server.md ובהערות של
 כלים, ושכפל את עצמו מהעתקה להעתקה. הטסט סורק את הטקסט שנשלח בפועל
-(‏md/sh/ps1/py) ונופל על הביטוי. היסטוריה (docs/handoff-*, logs/) מוחרגת
+(‏md/sh/ps1/py) ונופל על הביטוי. היסטוריה (docs/handoffs/handoff-*, logs/) מוחרגת
 במכוון: היא מתעדת מה היה נכון ביומה.
 """
 

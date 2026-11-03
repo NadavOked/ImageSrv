@@ -5,7 +5,7 @@
  * process (server/dcui/gui.py) that started it:
  *
  *   stdin   frames of records, one record per line "type<TAB>field...", a
- *           frame ends with an empty line (docs/interfaces.md s31,
+ *           frame ends with an empty line (docs/architecture/interfaces.md s31,
  *           server/dcui/view.py). Fields named *_m there are Pango markup.
  *   stdout  "READY WxH" once the screen is open, then one token per key:
  *           "KEY F2|F4|F5|F9|F12|ENTER|ESC|TAB|BACKTAB|BACKSPACE|UP|DOWN|LEFT|RIGHT",

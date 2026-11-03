@@ -191,7 +191,7 @@ function driversPage(tab = 0) {
   else if (tab === 2) body = driversCoverageCard();
   else {
     const table = UI.datagrid({ cls: "acts-on", columns: ["חבילה", "התאמה", "קבצים", "מתאים ל-", "אומת", ""], rows: list.map((p) => driverRowHtml(p, admin)),
-      empty: "אין חבילות דרייברים — ייבוא קובץ tar שנבנה ב-tools/drivers/build-package.py (manifest.json + sha256 לכל קובץ; docs/driver-packages.md)" });
+      empty: "אין חבילות דרייברים — ייבוא קובץ tar שנבנה ב-tools/drivers/build-package.py (manifest.json + sha256 לכל קובץ; docs/guides/driver-packages.md)" });
     body = `<div class="c12 card"><div class="card-b${list.length ? " flush" : ""}">${table}${!list.length && admin ? `<div style="text-align:center;padding-top:10px"><button class="btn primary" onclick="openDriverImport()">ייבוא חבילה (tar)</button></div>` : ""}</div></div>`
       + `<div class="c12">${UI.note("info", `"הונח" אינו "הותקן": הסוכן מניח את החבילות התואמות ב-<span dir="ltr">\\ImageSrv\\Drivers</span> ורושם אותן ב-DevicePath — Windows סורק אותן בעלייה הראשונה. בקר אחסון שבלעדיו Windows לא עולה אינו מכוסה (v2). הלשונית "כיסוי לפי מכונה" הופכת את הטבלה — לכל מכונה, אילו חבילות יונחו ואילו בקרים בלי כיסוי.`)}</div>`;
   }
@@ -219,7 +219,7 @@ function openDriverImport() {
   if (!isAdmin()) { toast("אין הרשאה"); return; }
   openModalContent(
     "ייבוא חבילת דרייברים",
-    `<div class="form"><div class="field full">${dropzoneHtml({ id: "driverFile", accept: ".tar,application/x-tar", aria: "בחירת קובץ tar של חבילת דרייברים" })}</div><div class="field full"><div class="form-note">חבילה שנבנתה ב-<span dir="ltr" class="mono">tools/drivers/build-package.py</span> (‏<span dir="ltr" class="mono">docs/driver-packages.md</span>): תיקייה אחת עם manifest.json והקבצים. כל קובץ מאומת מול ה-sha256 שבמניפסט; חבילה עם קובץ חסר, עודף או שונה לא תיכנס.</div></div></div>`,
+    `<div class="form"><div class="field full">${dropzoneHtml({ id: "driverFile", accept: ".tar,application/x-tar", aria: "בחירת קובץ tar של חבילת דרייברים" })}</div><div class="field full"><div class="form-note">חבילה שנבנתה ב-<span dir="ltr" class="mono">tools/drivers/build-package.py</span> (‏<span dir="ltr" class="mono">docs/guides/driver-packages.md</span>): תיקייה אחת עם manifest.json והקבצים. כל קובץ מאומת מול ה-sha256 שבמניפסט; חבילה עם קובץ חסר, עודף או שונה לא תיכנס.</div></div></div>`,
     "ייבוא",
     startDriverUpload
   );

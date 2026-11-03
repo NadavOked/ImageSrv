@@ -1,7 +1,7 @@
 """Render a Hebrew (RTL) Markdown document to HTML and, optionally, to PDF (#1474).
 
 Stdlib only -- the station has no `markdown` package, and the subset used by
-docs/admin-guide-he.md is small: headings, paragraphs, tables, lists,
+docs/guides/admin-guide-he.md is small: headings, paragraphs, tables, lists,
 blockquotes, fenced code, `code`, **bold**, [links](url), [[badge]], ---,
 and `<!-- pagebreak -->`.
 
@@ -10,8 +10,8 @@ addresses and ranges such as `8081/tcp` or `9000-9001` keep their order inside
 right-to-left sentences.
 
 Usage:
-    python tools/docs/md2pdf_he.py docs/admin-guide-he.md --pdf      # -> docs/admin-guide-he.pdf
-    python tools/docs/md2pdf_he.py docs/admin-guide-he.md --html x.html   # HTML only, to look at
+    python tools/docs/md2pdf_he.py docs/guides/admin-guide-he.md --pdf      # -> docs/guides/admin-guide-he.pdf
+    python tools/docs/md2pdf_he.py docs/guides/admin-guide-he.md --html x.html   # HTML only, to look at
 """
 
 from __future__ import annotations

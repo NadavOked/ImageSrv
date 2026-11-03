@@ -47,7 +47,7 @@ def test_rufus_dd_is_the_way_and_etcher_is_not_recommended():
     build = _src("tools/build_usb_clone.sh")
     assert "'To write a new version: Rufus, \"DD Image\" mode (balenaEtcher failed in the field" in build
     assert "with dd, balenaEtcher or Rufus" not in build
-    doc = _src("docs/local-clone.md")
+    doc = _src("docs/guides/local-clone.md")
     assert "**צורבים ב-Rufus במצב DD**" in doc and "balenaEtcher נכשל בשטח" in doc
 
 

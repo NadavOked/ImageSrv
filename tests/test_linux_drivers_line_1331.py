@@ -1,6 +1,6 @@
 """‏#1331 T8 — שורת `drivers.linux` בגואי הנייטיב ובקונסולה.
 
-`drivers.linux` (בדיקת ה-initramfs ביעד לינוקס, docs/interfaces.md סעיף 4/17)
+`drivers.linux` (בדיקת ה-initramfs ביעד לינוקס, docs/architecture/interfaces.md סעיף 4/17)
 נכנס ל-rc6 ב-#1688 ולא הוצג באף מסך. עכשיו הוא שורה מתחת לפס של המגירה, באותו
 מקום ובאותו סגנון כמו שורת ה-Windows של #1710:
 

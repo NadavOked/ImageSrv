@@ -155,6 +155,8 @@ install_target_packages() {
     must_run apt-install "offline package installation failed" chroot "$TARGET" apt-get install -y --no-install-recommends \
         $PACKAGE_WORDS linux-image-amd64 grub-efi-amd64-signed shim-signed grub-pc-bin
     must_run source-copy "could not copy imagesrv-src" cp -a "$CDROM/imagesrv-src" "$TARGET/opt/imagesrv-src"
+    must_run payload-dir "could not create the boot payload directory" mkdir -p "$TARGET/var/lib/imagesrv"
+    must_run payload-copy "could not copy prebuilt boot payload" cp -a "$CDROM/imagesrv/boot-payload" "$TARGET/var/lib/imagesrv/iso-boot-payload"
     # .git is what the update button works on (#1185). An ISO from the public
     # clone always carries it; a lab ISO (build-iso --source) says so in its
     # manifest (source_git=false) and is allowed through, named on screen.

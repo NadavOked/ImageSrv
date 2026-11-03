@@ -88,5 +88,5 @@ def test_the_console_shows_it(server):
     got = server["admin"].get(f"/api/console/machines/{MAC}/data").json()
     assert got["ip_history"][0]["ip"] == "10.1.1.1"
     assert got["nic_history"][0]["speed_mbps"] == 1000 and got["wave_drops"] == []
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "ip_history" in doc and "nic_history" in doc

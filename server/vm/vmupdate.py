@@ -2,7 +2,7 @@
 
 מחזור החיים של VM **אחד**: אימג' → דיסק עבודה (`vmdisk.build_disk`) →
 ‏QEMU/KVM → כיבוי → שמירה כגרסה חדשה (`vmdisk.capture_disk`) או ביטול.
-העיצוב, ולמה כך: `docs/vm-update.md`. החוזה: `docs/interfaces.md` סעיף 33.
+העיצוב, ולמה כך: `docs/guides/vm-update.md`. החוזה: `docs/architecture/interfaces.md` סעיף 33.
 
 **הדיסק הוא מקור האמת** (עיקרון 3): כל מה שצריך כדי להמשיך אחרי אתחול
 השרת יושב ב-`<ספרייה>/.vmupdate/` — ‏`state.json`, ‏`source-manifest.json`,

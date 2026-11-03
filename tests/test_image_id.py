@@ -22,8 +22,8 @@ from server.library.images import inside, valid_image_id
 
 from test_capture import make_task, setup_build_machine
 
-#: ארבעת האימג'ים שמונחים בספרייה של שרת המעבדה (‏docs/lab-test-plan.md,
-#: ‏docs/handoff-2026-08-29.md) נכון ל-2026-08-29.
+#: ארבעת האימג'ים שמונחים בספרייה של שרת המעבדה (‏docs/lab/lab-test-plan.md,
+#: ‏docs/handoffs/handoff-2026-08-29.md) נכון ל-2026-08-29.
 LAB_LIBRARY = ("img_6f28b0", "img_9c0b87", "img_b6bfd4", "img_f9879d")
 
 

@@ -4,7 +4,7 @@
 # server's settings screen (native-gui/src/screens_dcui.c settings_body and
 # dialog); only the data differs. This file is that data: the four items the
 # server would have sent (usbclone.sh), as DCUI frame records
-# (docs/interfaces.md s31) in $GUI_DIR/usbset.frame, and the DCUI's own key
+# (docs/architecture/interfaces.md s31) in $GUI_DIR/usbset.frame, and the DCUI's own key
 # tokens ("KEY ENTER", "CHAR 35"...) coming back as lc-usbset|<token>.
 #
 # A value that is not valid is refused on the dialog (d.error) and is not

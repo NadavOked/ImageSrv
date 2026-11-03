@@ -1,6 +1,6 @@
 """תשתית הסימולציה: לקוח HTTP, בדיקות, המתנות, והקמת השרת.
 
-הסימולציה מדברת עם השרת אך ורק בממשקים המתועדים (docs/interfaces.md):
+הסימולציה מדברת עם השרת אך ורק בממשקים המתועדים (docs/architecture/interfaces.md):
 ממשק 2 (hello), 3 (התשובה), 4 (התקדמות) ו-7 (זרם הקבצים). אין כאן
 ייבוא של קוד השרת מלבד יצירת משתמש ההתחלה — כמו בהתקנה אמיתית.
 """
@@ -175,7 +175,10 @@ def hello(client: Client, mac: str, disks: list[dict]):
 
 
 def make_manifest(source_bytes: int, files: dict[str, bytes]) -> dict:
-    """מניפסט ממשק 1 לשני קבצים — ESP קטן ומחיצת windows מתרחבת."""
+    """מניפסט ממשק 1 לשני קבצים — ESP קטן ומחיצת windows מתרחבת.
+
+    ‏`used_bytes` פי 50 מהקובץ (2%): השרת דוחה זרם קטן מ-1% ממה שתפוס
+    במחיצה (‏#1830, ‏`capture.MIN_STREAM_TO_USED`)."""
     esp_name, win_name = sorted(files)          # p1 לפני p3
     return {
         "schema": 1, "family": 256 if source_bytes == GB256 else 500,
@@ -185,11 +188,11 @@ def make_manifest(source_bytes: int, files: dict[str, bytes]) -> dict:
         "partitions": [
             {"index": 1, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
              "start_sector": 2048, "size_bytes": 104857600,
-             "used_bytes": 31457280, "file": esp_name,
+             "used_bytes": 50 * len(files[esp_name]), "file": esp_name,
              "sha256": sha(files[esp_name]), "expandable": False},
             {"index": 3, "type_guid": WINDOWS_GUID, "role": "windows", "fs": "ntfs",
              "start_sector": 1085440, "size_bytes": source_bytes - 1085440 * 512,
-             "used_bytes": 84509376512, "file": win_name,
+             "used_bytes": 50 * len(files[win_name]), "file": win_name,
              "sha256": sha(files[win_name]), "expandable": True},
         ],
         "total_compressed_bytes": sum(len(v) for v in files.values()),

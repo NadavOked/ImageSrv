@@ -12,7 +12,7 @@
 **מה זה לא מוכיח:** Windows. האימג' כאן הוא ESP עם `startup.nsh` ש-UEFI
 Shell של OVMF מריץ (כותב קובץ ומכבה), ומחיצת NTFS ריקה. ‏Windows אמיתי,
 ‏Secure Boot, ‏KVM על ברזל, הפעלת רישיון ו-Windows Update — ראו
-`docs/vm-update.md` סעיף 7.
+`docs/guides/vm-update.md` סעיף 7.
 
 **הרצה:** root (‏losetup, ‏mount), ‏Linux, והכלים של השרת. ‏opt-in במפורש —
 ‏`IMAGESRV_VM_IT=1` — כי ריצת המעבדה הרגילה אינה root, ודילוג שקט על "אין

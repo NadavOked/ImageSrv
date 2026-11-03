@@ -115,6 +115,8 @@ EVENTS_HE = {
     "send_hold_released": "אין עוד שאלה פתוחה על דיסק — השידור ממשיך",
     # ‏#1950: חבר שסומן "אבד" קיבל את המחיצה הקודמת עד סופה — השולח ממתין גם לו.
     "send_counts_lost": "מחשב שסומן כאבוד עדיין מקבל את הזרם — השידור ממתין גם לו",
+    # ‏#1430: חבר בגל לא דיווח מעל דקה — המחיצה הבאה אינה סופרת אותו ויוצאת כשהשאר מוכנים.
+    "send_quiet_wait": "מחשב בגל לא דיווח מעל דקה — המחיצה הבאה יוצאת בלי להמתין לו",
     "smart_ask_expired": "שאלת SMART לא נענתה בזמן — המכונה שוחררה מהגל, השאר ממשיכים",
     "wave_rate": "נקבע קצב לגל",
     "machine_nic_speed": "מהירות כרטיס הרשת של מכונה נקבעה ידנית",
@@ -417,7 +419,7 @@ _SEVERITY_WARN = {
     "room_drawer_changed", "room_drawer_unidentified", "room_drawer_wake_mismatch", "room_rewake", "clock_jump",
     "power_expired", "gui_failed", "wol_arm_failed", "net_loss_jump", "wol_no_wake", "wol_resent", "boot_step_slow", "server_disk_slow", "capture_space_refused", "capture_space_unchecked", "cloner_throttled", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
     "vmupdate_mac_created", "vmupdate_leftover_failed", "linux_initramfs_warning",
-    "send_counts_lost",
+    "send_counts_lost", "send_quiet_wait",   # #1430
     "readback_list_not_fetched",   # #1907
     "local_clone_note",   # #2049: a local clone done with a note (ntfs_note) -- orange, not "succeeded"
     "ups_on_battery", "ups_work_stopped",

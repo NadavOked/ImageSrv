@@ -62,6 +62,18 @@ log = logging.getLogger("imagesrv.capture")
 
 SAFE_FILE = re.compile(r"^p\d+\.[a-z]+\.pcl\.zst$")
 CHUNK = 1024 * 1024
+#: ‏#1830 (הכרעת נדב 01/11): קובץ זרם של מחיצה שנמדד בה `used_bytes` חיובי
+#: חייב להיות לפחות החלק הזה ממנו — אחרת הזרם נקטע, והגיבוב "תואם" רק כי
+#: הסוכן גיבב את מה שנשלח. **נגזר ממדידה:** כל המניפסטים בספריית TA
+#: ‏(`/srv/imagectl/images`, ‏v0.77.1, נקרא ב-01/11/2026) — 7 אימג'ים שנקלטו
+#: ‏10/10–30/10 (5 תכנים שונים; שלושה עותקים של אותו אימג'), כולם zstd-3;
+#: ‏22 מחיצות עם `used_bytes` חיובי (‏vfat/ntfs; ה-MSR בלי מערכת קבצים
+#: ו-`used_bytes` ‏null). היחס דחוס/used: מינימום 0.221 (‏img_6061b7 p3, ‏NTFS
+#: של Windows, ‏16.7GB מ-75.7GB), ‏ESP ‏0.43–0.46, ‏recovery ‏0.96, מקסימום
+#: ‏0.97. ‏1% הוא פי 22 מתחת למינימום: מערכת קבצים שרובה אפסים (pagefile)
+#: דוחסת חזק, רמת zstd גבוהה מ-3 לא נמדדה, והמדגם קטן — ולכן המרווח רחב.
+#: הסף תופס זרם שנקטע בתחילתו (כותרת ומעט בלוקים), לא זרם שחסר בו חצי.
+MIN_STREAM_TO_USED = 0.01
 
 #: ‏#1470: ה-sha256 שהשרת חישב **בזמן הקבלה** של כל קובץ מחיצה, ליד הקובץ
 #: באזור הביניים (`p3.windows.pcl.zst.upload-sha256`). הדיסק הוא מקור האמת
@@ -580,8 +592,17 @@ def manifest_problem(manifest: object, folder: Path) -> str | None:
         # ‏#1830: קובץ קיים אינו ראיה שהבייטים הגיעו. זרם של partclone (גם
         # של מערכת קבצים ריקה — כותרת ומפת סיביות) או של partclone.dd אינו
         # ריק לעולם, ו-sha256 של קובץ ריק "תואם" כשהסוכן גיבב את מה שלא נשלח.
-        if path.stat().st_size == 0:
+        size = path.stat().st_size
+        if size == 0:
             return f"partition file is empty: {name} -- no bytes arrived"
+        # ‏#1830: ראיה חיובית לנפח מול מה שתפוס במחיצה. ‏`used_bytes` ‏null
+        # (לא נמדד — partclone.dd, מחיצה שלא נעגנה) או 0 (נמדד וריק) אינם
+        # נותנים מכנה, ושם נשארת רק הבדיקה של אפס בייט למעלה.
+        used = part.get("used_bytes")
+        if type(used) is int and used > 0 and size < used * MIN_STREAM_TO_USED:
+            return (f"partition file is too small for what the partition holds: {name}"
+                    f" is {size} bytes, under {MIN_STREAM_TO_USED:.0%} of its"
+                    f" {used} used bytes -- the stream was cut short")
     return None
 
 def _sha256(path: Path, on_bytes=None) -> str:

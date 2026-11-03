@@ -23,6 +23,9 @@ from conftest import (
 
 PART_A = b"partition-one-bytes"
 PART_B = b"partition-three-bytes"
+#: ‏#1830: מה שהקבצים המזויפים "מכסים" — השרת דוחה זרם קטן מ-1% מ-`used_bytes`
+#: של המחיצה (`capture.MIN_STREAM_TO_USED`), ולכן הערכים כאן הם פי 50 מהקובץ (2%).
+USED_A, USED_B = 50 * len(PART_A), 50 * len(PART_B)
 
 #: ‏GUID דיסק אמיתי מהמעבדה — הצורה, לא הזהות, היא מה שנבדק. אימג'
 #: ‏Windows אמיתי נושא אותו תמיד; הסוכן גוזר אותו מ-`sgdisk -p` בקליטה.
@@ -54,11 +57,11 @@ def manifest_for(parts=None):
         "scheme": "gpt", "sector_size": 512, "disk_guid": DISK_GUID,
         "partitions": parts if parts is not None else [
             {"index": 1, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
-             "start_sector": 2048, "size_bytes": 104857600, "used_bytes": 31457280,
+             "start_sector": 2048, "size_bytes": 104857600, "used_bytes": USED_A,
              "file": "p1.esp.pcl.zst", "sha256": sha(PART_A), "expandable": False},
             {"index": 3, "type_guid": WINDOWS_GUID, "role": "windows", "fs": "ntfs",
              "start_sector": 1085440, "size_bytes": 254803968000,
-             "used_bytes": 84509376512,
+             "used_bytes": USED_B,
              "file": "p3.windows.pcl.zst", "sha256": sha(PART_B), "expandable": True},
         ],
         "total_compressed_bytes": len(PART_A) + len(PART_B),
@@ -220,7 +223,7 @@ def test_a_full_capture_lands_in_the_library(server, images_root):
 
 @pytest.mark.parametrize("action", ["unhibernated", "unhibernated_logfile"])
 def test_a_manifest_that_records_a_dropped_fast_startup_is_accepted_and_kept(server, images_root, action):
-    """#2213: the agent adds `src_unhib` (docs/interfaces.md) when it read a
+    """#2213: the agent adds `src_unhib` (docs/architecture/interfaces.md) when it read a
     RAM view whose hibernation it dropped. The server takes the manifest and
     the field reaches the library manifest -- the image does not lie."""
     mac = setup_build_machine(server)
@@ -350,14 +353,14 @@ def test_a_windows_image_with_a_malformed_disk_guid_is_refused(server, images_ro
 
 def test_a_linux_image_without_disk_guid_is_accepted(server):
     """הצד השני של ההבחנה: לינוקס אינו קשור ל-`disk_guid` — ‏GRUB מאתר
-    לפי UUID של מערכת הקבצים (`docs/interfaces.md`). אימג' לינוקס בלי
+    לפי UUID של מערכת הקבצים (`docs/architecture/interfaces.md`). אימג' לינוקס בלי
     ‏disk_guid תקין, והשער של #571 חל על Windows בלבד. בלי ההבחנה הזאת
     היינו חוסמים בקליטה אימג' תקין לגמרי — ‏#571 מהצד השני."""
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
     parts = [
         {"index": 1, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
-         "start_sector": 2048, "size_bytes": 104857600, "used_bytes": 31457280,
+         "start_sector": 2048, "size_bytes": 104857600, "used_bytes": USED_A,
          "file": "p1.esp.pcl.zst", "sha256": sha(PART_A), "expandable": False},
         {"index": 2, "type_guid": LINUX_GUID, "role": "linux", "fs": "ext4",
          "start_sector": 206848, "size_bytes": 254803968000, "used_bytes": 1,
@@ -380,7 +383,7 @@ def test_a_tampered_partition_never_enters_the_library(server, images_root):
 
     response = do_capture(server, created["id"],
                           files={"p1.esp.pcl.zst": PART_A,
-                                 "p3.windows.pcl.zst": b"corrupted"})
+                                 "p3.windows.pcl.zst": b"corrupted-partition-3"})
     assert response.status_code == 400
     assert "sha256" in response.json()["detail"]
     assert not (images_root / created["image_id"]).exists()
@@ -477,7 +480,7 @@ def test_a_recovery_partition_after_the_expandable_one_is_accepted(server):
     parts = manifest_for()["partitions"]
     parts.append({"index": 4, "type_guid": RECOVERY_GUID, "role": "recovery",
                   "fs": "ntfs", "start_sector": 498888704,
-                  "size_bytes": 536870912, "used_bytes": 524288000,
+                  "size_bytes": 536870912, "used_bytes": USED_A,
                   "file": "p4.recovery.pcl.zst", "sha256": sha(PART_A),
                   "expandable": False})
     response = do_capture(
@@ -513,10 +516,10 @@ def test_the_line_is_drawn_by_start_sector_not_by_list_order(server):
     parts = [
         {"index": 1, "type_guid": LINUX_GUID, "role": "linux", "fs": "ext4",
          "start_sector": 2099200, "size_bytes": 45000687616,
-         "used_bytes": 2147483648, "file": "p1.linux.pcl.zst",
+         "used_bytes": USED_A, "file": "p1.linux.pcl.zst",
          "sha256": sha(PART_A), "expandable": True},
         {"index": 15, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
-         "start_sector": 10240, "size_bytes": 111149056, "used_bytes": 8388608,
+         "start_sector": 10240, "size_bytes": 111149056, "used_bytes": USED_B,
          "file": "p15.esp.pcl.zst", "sha256": sha(PART_B), "expandable": False},
     ]
     response = do_capture(

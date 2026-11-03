@@ -535,12 +535,12 @@ def test_a_boot_ca_failure_never_fails_a_capture():
 
 
 def test_the_interfaces_document_says_why_boot_ca_is_a_list():
-    """‏`docs/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — וכאן
+    """‏`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — וכאן
     הוא צריך לשאת גם את **הנימוק**, לא רק את המבנה. בלי הנימוק השדה
     נראה כמו רשימה מיותרת, ומישהו יחזיר אותו למחרוזת: קובץ PE נושא
     יותר מחתימה אחת, והקושחה מקבלת אותו אם אחת מהן מתחברת ל-`db`.
     """
-    doc = (REPO / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (REPO / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert '"boot_ca"' in doc, "השדה עצמו אינו מתועד"
     assert '"boot_ca_error"' in doc, "שדה הסיבה אינו מתועד"
     assert "#85" in doc, "השינוי אינו מקושר ל-Issue"

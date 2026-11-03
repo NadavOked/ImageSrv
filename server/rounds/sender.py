@@ -63,6 +63,16 @@ DEFAULT_START_TIMEOUT = 180
 #: ‏start-timeout של 180 היה מת. לכן למחיצות 2+ הוא `max_wait_later +
 #: start_timeout`: עד 180 שניות למקבל הראשון, ואז עד 600 לשאר.
 LATER_MAX_WAIT = 600
+#: ‏#1430 (הכרעת נדב 02/11): חבר שלא דיווח (‏hello/progress) יותר מזה נחשב
+#: "שקט", ומחיצה 2+ אינה סופרת אותו ב-`--min-receivers`: השולח יוצא ברגע
+#: שכל החברים שמדווחים מחוברים. ‏`LATER_MAX_WAIT` **אינו** מתקצר — מגירה
+#: איטית ותקינה (#957) מדווחת progress כל ~2 שניות (#449,
+#: ‏`PROGRESS_INTERVAL_S`), ולכן אינה שקטה, נספרת, ומחכים לה עד 600ש'.
+#: מכונה שמתה בשקט נספרת עד `client_lost` (‏`room.LOST_SECONDS`), ובלי זה
+#: מחיצה שנפתחה בינתיים ממתינה לה 600ש'. חבר שחזר לדווח — נספר שוב: הספירה
+#: נעשית מחדש לפני כל מחיצה. וחבר שקט שקיבל את המחיצה הקודמת עד סופה (לוג
+#: udp-sender) — נספר: המקלט שלו חי, כמו `lost` ב-#1950.
+QUIET_SECONDS = 60
 #: ‏ברזל 17/10: כל כמה זמן השולח שואל אם מחשב שיכפול בגל עוד ממתין לתשובת
 #: אדם על דיסק (‏`smart_ask.open_in_wave`). קריאה אחת מה-DB, בלי תעבורה.
 ASK_HOLD_POLL_S = 1.0
@@ -489,6 +499,7 @@ class SenderEngine:
         pending_asks: Callable[[str], list[str]] | None = None,
         lost_receivers: Callable[[str], list[str | None]] | None = None,
         lost_wait: Callable[[], int] | None = None,
+        quiet_receivers: Callable[[str], list[str | None]] | None = None,
     ):
         self.library = library
         self.runner = runner
@@ -530,6 +541,10 @@ class SenderEngine:
         # לספור אותה היא "ממלאת" את `--min-receivers` והמחיצה יוצאת בלי
         # החבר החי. ‏None = לא מחובר: ההתנהגות של #1430.
         self.lost_receivers = lost_receivers
+        # ‏#1430: הכתובות (‏None = לא ידועה) של החברים שאינם במצב סופי ולא
+        # דיווחו `QUIET_SECONDS`. נשאל לפני מחיצה 2+; מי שלא סיים את הקודמת
+        # מופחת מ-`--min-receivers`. ‏None = לא מחובר: כולם נספרים.
+        self.quiet_receivers = quiet_receivers
         # הכרעת נדב 15/10: מהירות הקישור של `interface` (‏`drive_rates.read_link`)
         # — הגג והפתיחה של הקצב לפיה. ‏None = לא מחובר (בדיקות; ‏`server.main`
         # מחבר תמיד): "לא נקרא", וההתנהגות של היום — לא ניחוש של 1GbE.
@@ -1013,7 +1028,15 @@ class SenderEngine:
         יצא לדרך בלי משכפל 2, שהצטרף 4 שניות אחריו וקיבל זרם ריק (R2,
         ‏22/10). חבר שנזרק או שלא התחבר — אינו נספר, כמו ב-#1430. לוג שלא
         נקרא או כתובת לא ידועה — נספר: המחיר הוא המתנה של `--max-wait`, לא
-        מגירה חיה שנכשלת."""
+        מגירה חיה שנכשלת.
+
+        ‏#1430 (הכרעת נדב 02/11): במחיצה 2+ (`previous_log`) חבר שקט מעל
+        `QUIET_SECONDS` אינו נספר — השולח יוצא כשכל המדווחים מחוברים, ולא
+        ממתין `--max-wait` למכונה שמתה בשקט. ההמתנה עצמה אינה מתקצרת.
+        אבל כמו `lost` ב-#1950: חבר שקט שקיבל את הקודמת עד סופה — המקלט שלו
+        חי, והוא יתחבר גם לזו — **נספר**; בלי זה הוא ממלא את הספירה והמגירה
+        האיטית והתקינה (#957) מפספסת את המחיצה. לוג שלא נקרא או כתובת לא
+        ידועה — נספר."""
         if self.live_receivers is None:
             return joined
         try:
@@ -1024,14 +1047,34 @@ class SenderEngine:
             log.warning("sender: live receivers of %s unreadable (%s);"
                         " keeping the wave's %s", session_id, exc, joined)
             return joined
-        if not lost:
-            return max(1, live)
-        finished = finished_receivers(previous_log)
-        still = [ip for ip in lost if finished is None or ip is None or ip in finished]
-        if still:
-            self.on_event("send_counts_lost",
-                          f"{session_id} {' '.join(ip or '?' for ip in still)}")
-        return max(1, live + len(still))
+        quiet = self._quiet(session_id) if previous_log is not None else []
+        finished = finished_receivers(previous_log) if lost or quiet else None
+        if lost:
+            still = [ip for ip in lost if finished is None or ip is None or ip in finished]
+            if still:
+                self.on_event("send_counts_lost",
+                              f"{session_id} {' '.join(ip or '?' for ip in still)}")
+            live += len(still)
+        gone = [ip for ip in quiet
+                if finished is not None and ip is not None and ip not in finished]
+        live -= len(gone)
+        if gone:
+            self.on_event("send_quiet_wait",
+                          f"{session_id} {' '.join(gone)} min-receivers {max(1, live)}")
+        return max(1, live)
+
+    def _quiet(self, session_id: str) -> list[str | None]:
+        """‏#1430: הכתובות של החברים בגל שקטים מעל `QUIET_SECONDS`. בדיקה
+        שנכשלה אינה "יש חבר מת" (עיקרון 5): ‏[] — כולם נספרים, והשולח ממתין
+        להם כמו לפני #1430. המחיר הוא זמן, לא מגירה חיה שמפספסת מחיצה."""
+        if self.quiet_receivers is None:
+            return []
+        try:
+            return list(self.quiet_receivers(session_id))
+        except Exception as exc:          # noqa: BLE001 — חריגה כאן הורגת את התהליכון
+            log.warning("sender: quiet members of %s unreadable (%s);"
+                        " counting every member", session_id, exc)
+            return []
 
     def _run(self, session: dict) -> None:
         if self.gate is not None:

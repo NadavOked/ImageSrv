@@ -375,7 +375,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                     409, f"השינוי הזה יכול לנתק את הקונסולה, וההחזרה "
                     f"האוטומטית ({netcfg_host.ROLLBACK_TIMER}) אינה פעילה: "
                     f"{detail}. בלי הזרוע הזו אין דרך חזרה — התקינו אותה "
-                    "לפי docs/server-install.md.")
+                    "לפי docs/guides/server-install.md.")
             error = _arm(name, before, cfg, now)
             if error:
                 raise HTTPException(409, error)
