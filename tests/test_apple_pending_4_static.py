@@ -179,7 +179,7 @@ def test_task_panel_has_no_hardcoded_dash_cells():
 
 
 def test_new_server_fields_are_documented_in_interfaces_md():
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "`created_by`, `created_by_role`" in doc and "`opened_by`, `opened_by_role`, `created_at`, `started_at`, `closed_at`" in doc
 
 

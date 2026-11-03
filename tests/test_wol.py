@@ -1,4 +1,4 @@
-"""‏Wake-on-LAN — קבוצה 7 בתוכנית הבדיקות (`docs/lab-test-plan.md`).
+"""‏Wake-on-LAN — קבוצה 7 בתוכנית הבדיקות (`docs/lab/lab-test-plan.md`).
 
 עד כאן ל-`server/net/wol.py` לא היה קובץ טסטים משלו: מה שנבדק (חבילת
 הקסם, ההחרגה של הפותח) נבדק דרך `test_station.py`, כלומר דרך פתיחת

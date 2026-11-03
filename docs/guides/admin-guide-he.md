@@ -6,7 +6,7 @@
 
 > **למי המדריך:** איש IT שמקים את השרת במכללה ומגדיר את מה שמסביבו. לא צריך
 > לקרוא קוד. כל פורט וכל כלל כאן נלקחו מהקוד עצמו — המיפוי לקובץ ולשורה
-> נמצא ב-`docs/admin-guide-sources.md`.
+> נמצא ב-`docs/guides/admin-guide-sources.md`.
 >
 > **סימונים במסמך:**
 > [[לפי עיצוב v1]] — הוחלט, והקוד עדיין בדרך (לא נמצא בגרסה שמותקנת היום).
@@ -279,7 +279,7 @@ end
 | WoL | UDP ‏9, ‏broadcast `255.255.255.255`, נשלח מהכרטיס של וילן ההפצה בלבד (`SO_BINDTODEVICE`) | `server/net/wol.py` |
 | HTTP | GRUB, kernel ו-initrd | `CLAUDE.md` |
 
-**דרישות שכבר רשומות באפיון** (`docs/imagesrv-spec.md` סעיף 6): ‏IGMP snooping
+**דרישות שכבר רשומות באפיון** (`docs/architecture/imagesrv-spec.md` סעיף 6): ‏IGMP snooping
 על כל סוויץ' בנתיב, ‏querier אחד לוילן, ו-IGMP בגרסה עקבית. המדריך הזה
 מפרט איך עושים את זה על Cisco.
 
@@ -359,9 +359,9 @@ effect when the interface is in a non-trunking mode". זו אזהרה רגילה
   משתתפת מקבלת ~110MB/s (כמעט כל רוחב הפס של Gigabit) לשווא.
 - **עם snooping ובלי querier:** הסוויץ' לומד חברות מדוחות IGMP של
   המשכפלים, אבל החברות **פוקעת** אחרי כ-2-4 דקות אם אף אחד לא שולח
-  General Query. ‏`docs/imagesrv-spec.md` סעיף 6 מתאר את זה בדיוק: "הזרם
+  General Query. ‏`docs/architecture/imagesrv-spec.md` סעיף 6 מתאר את זה בדיוק: "הזרם
   נופל באמצע" אחרי 125-260 שניות. **שני המצבים נראים כמו באג בקוד**
-  (`docs/lab-test-plan.md` שורה 763).
+  (`docs/lab/lab-test-plan.md` שורה 763).
 
 **מי עושה querier?** יש שתי אפשרויות, ו**רק אחת** צריכה להיות פעילה בכל
 וילן:
@@ -559,7 +559,7 @@ end
   חיתוך (תוצאות חיפוש: Cisco Community, Meraki
   <https://documentation.meraki.com/Switching/MS_-_Switches/Operate_and_Maintain/How-Tos/Storm_Control_for_MS>).
 - **הסקה:** שהמולטיקאסט של ImageSrv יחצה סף כזה (110MB/s מול ~125MB/s קו;
-  מספר מ-`docs/imagesrv-spec.md`, מעבדה 17/09 ‏106MB/s).
+  מספר מ-`docs/architecture/imagesrv-spec.md`, מעבדה 17/09 ‏106MB/s).
 
 
 ### 4.7 EEE (Energy Efficient Ethernet)
@@ -1018,12 +1018,12 @@ end
   שהזרם יורד רק ל-uplink-ים שמאחוריהם יש חברים (סעיף 4.12).
 - **שרת אחד, זרם אחד:** בפרויקט יש מולטיקאסט יחיד בכל המערכת
   (`server/rounds/sessions.py`, שורה 54), כך ש-uplink נושא זרם אחד.
-- **הגודל:** הזרם נמדד במעבדה ב-**~106MB/s ≈ 850Mbps** (`docs/imagesrv-spec.md`
+- **הגודל:** הזרם נמדד במעבדה ב-**~106MB/s ≈ 850Mbps** (`docs/architecture/imagesrv-spec.md`
   סעיף 6, 17/09). ‏**uplink של 1Gb נתפס כמעט לגמרי** על ידי הזרם, ללא מרווח
   לתעבורה אחרת (PXE, ‏HTTP של קבצי אתחול, ניהול). זה עובד אבל על הקצה.
 - **המלצה (הסקה):** ‏uplinks של **10Gb** בין ליבה לקומות, ו-1Gb לפחות
   בין קומה לכיתה (קטע שנושא זרם אחד פלוס אתחול של הכיתה). ‏10GbE בשרת מוזכר
-  בפרויקט כיעד בחדר השיכפולים (`docs/imagesrv-spec.md` סעיף 6 ושורה 351).
+  בפרויקט כיעד בחדר השיכפולים (`docs/architecture/imagesrv-spec.md` סעיף 6 ושורה 351).
 - **EtherChannel בין סוויצ'ים (אם יש):** המולטיקאסט לקבוצה אחת הוא יעד
   אחד, ולכן hash של port-channel שולח אותו על קישור **אחד**. שני קישורי 1Gb
   לא נותנים 2Gb לזרם (אותו עיקרון כמו בסעיף 4.9; **הסקה**).
@@ -1197,7 +1197,7 @@ show vlan id 44
 - Red Hat, 802.3ad ושליחה בקישור אחד: <https://access.redhat.com/solutions/372813>
 - Meraki, storm control (השוואה ל-Catalyst): <https://documentation.meraki.com/Switching/MS_-_Switches/Operate_and_Maintain/How-Tos/Storm_Control_for_MS>
 - ליבה/trunks/VTP: שרשורי Cisco Community על VTP revision (<https://community.cisco.com/t5/switching/vtp-question/m-p/1270818>, <https://community.cisco.com/t5/other-network-architecture-subjects/vtp-client-and-revision-numbers/td-p/4139867>); למידת mrouter מ-General Query (<https://community.cisco.com/t5/switching/igmp-snooping-querier-switch-w-o-receivers-receiving-multicast/td-p/3067622>, <https://www.cisco.com/c/fr_ca/support/docs/switches/catalyst-9300-switch/222250-troubleshoot-igmp-snooping-on-cisco-swit.html>).
-- בפרויקט: `docs/imagesrv-spec.md` סעיף 6, ‏`docs/lab-test-plan.md` שורות 79 ו-763,
+- בפרויקט: `docs/architecture/imagesrv-spec.md` סעיף 6, ‏`docs/lab/lab-test-plan.md` שורות 79 ו-763,
   ‏`server/rounds/sender.py`, ‏`server/net/wol.py`, ‏`C:\ImageCtl-Lab\evening-1015\research-new-failures-1022.md`
   (N01, N02, N05, N06, N07, N09, N28), ‏`research-multicast.md`, ‏`research-boot.md`.
 
@@ -1528,7 +1528,7 @@ show vlan id 44
 
 הפרקים הקודמים עוסקים במה שמחוץ למוצר. הפרק הזה מתאר מה שבתוכו: הדברים
 החדשים שמנהל המערכת (`admin`) פוגש בקונסולה ובמסכי המכונות בגרסה `v0.76.0`.
-כל תיאור נלקח מקוד הענף `integration/v0760-rc6`; המיפוי לקבצים — ב-`docs/admin-guide-sources.md`.
+כל תיאור נלקח מקוד הענף `integration/v0760-rc6`; המיפוי לקבצים — ב-`docs/guides/admin-guide-sources.md`.
 
 > **סטטוס אימות, בקצרה:** כל מה שבפרק הזה נבדק בטסטים אוטומטיים. **לא נבדק
 > מול שרת מעבדה בדפדפן ולא על ברזל** אלא אם כתוב אחרת (ראו פרק 11).
@@ -1706,7 +1706,7 @@ show vlan id 44
 
 **דרייברים** הוא עמוד בתפריט הניהול (`admin`): לשוניות **דגמים**, **חבילות**,
 **כיסוי לפי מכונה**. החבילה היא קובץ `tar` שנבנה בכלי הבנייה של הפרויקט
-(`tools/drivers/build-package.py`, ראו `docs/driver-packages.md`); השרת מאמת את
+(`tools/drivers/build-package.py`, ראו `docs/guides/driver-packages.md`); השרת מאמת את
 ה-sha256 של **כל קובץ** לפני שהחבילה נכנסת, ולכן חבילה בספרייה היא חבילה שאומתה.
 מחיקה — מאחורי חלון אישור.
 

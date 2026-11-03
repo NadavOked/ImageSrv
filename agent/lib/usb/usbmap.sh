@@ -1,7 +1,7 @@
 # usbmap.sh -- #1962/#2001: the connections of the clone stick, by machine model. POSIX sh.
 #
 # The server's #1485 (drawer_slots): drawer k -> the connection it is wired to,
-# "sata:<ataN>" or "nvme:<PCI>" (docs/interfaces.md s2). The stick has no server,
+# "sata:<ataN>" or "nvme:<PCI>" (docs/architecture/interfaces.md s2). The stick has no server,
 # so the mapping lives in the stick's settings.json, BY MACHINE MODEL (Nadav
 # 22/10) -- {"drawer_slots": {"<DMI product_name>": ["sata:2", "sata:1"]}} --
 # never by a disk's serial: the stick keeps nothing about disks. usb_answer

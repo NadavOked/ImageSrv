@@ -1,11 +1,11 @@
 <div dir="rtl">
 
-# מקורות למדריך מנהל ה-IT (`docs/admin-guide-he.md`, ‏#1474)
+# מקורות למדריך מנהל ה-IT (`docs/guides/admin-guide-he.md`, ‏#1474)
 
 כל כלל בחומת האש ובטבלאות הרשת שבמדריך — ומאיפה בקוד הוא נלקח. שורות נכונות
 לענף `integration/v0743-speed` (‏`cbad065c`, ‏16/10/2026). כשמשנים פורט או זרימה
 בקוד — מעדכנים כאן ובמדריך, ומריצים מחדש:
-`python tools/docs/md2pdf_he.py docs/admin-guide-he.md --pdf`.
+`python tools/docs/md2pdf_he.py docs/guides/admin-guide-he.md --pdf`.
 
 ## כללים שנפתחים (פרק 3.1)
 
@@ -13,7 +13,7 @@
 |---|---|---|
 | F1 | קונסולה `8081/tcp` HTTPS, על כרטיס הניהול; השרת אינו בודק מקור | `server/main.py:153` (‏`--console-port` 8081), `server/main.py:167` (‏`--console-host`); `deploy/nftables-rules.sh:195` (פתוח על כרטיס השרתים, בלי `saddr`); `deploy/firewall-rules.md:3-7` ("אין בדיקת כתובת מקור בקוד"); `server/system/health.py:628-631` |
 | F2 | ראשי ← משני `8443/tcp` mTLS | `server/main.py:213` (‏`--interserver-port` 8443); `deploy/nftables-rules.sh:180-183` (במשני: רק `ip saddr` של הראשי); `server/interserver/storage_transfer.py:3-7` (דחיפה על הערוץ המאומת, ‏TLS 1.3); `server/interserver/storage_client.py:486` (‏TLSv1_3 מינימום); `server/interserver/api.py:1396` (המשני מתחבר ל-5900 של מכונה בשביל הראשי) |
-| F3 | משני ← ראשי `8443/tcp` "אתה שם?" | `server/interserver/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `deploy/nftables-rules.sh:184-188`; `docs/server-install.md:239-248` (DNAT באתר הראשי, 8081 לא בין אתרים) |
+| F3 | משני ← ראשי `8443/tcp` "אתה שם?" | `server/interserver/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `deploy/nftables-rules.sh:184-188`; `docs/guides/server-install.md:239-248` (DNAT באתר הראשי, 8081 לא בין אתרים) |
 | F4 | ‏NTP ‏`123/udp` | `installer/lib/finish.sh:86-90` (‏`systemd-timesyncd` מופעל, בלי שרת מוגדר → ברירת המחדל של Debian); `server/system/health.py:190-197` (בדיקת "סנכרון שעון"); `deploy/firewall-rules.md` כלל L4 |
 | F5 | ‏DNS ‏`53` | `installer/lib/finish.sh:101` (‏`servers_dns` באשף); `server/update.py:55-58` ("חומת אש או DNS") |
 | F6 | ‏`github.com:443` לעדכון | `server/update.py:54` (‏`PUBLIC_UPDATE_URL = https://github.com/NadavOked/ImageSrv.git`), `server/update.py:191` (‏`git ls-remote --tags`); `tools/server-upgrade.sh:152` (‏`git fetch --tags`), `tools/server-upgrade.sh:162-164` (אימות חתימה מול `deploy/release-signers`); `deploy/firewall-rules.md` כלל L5 |
@@ -35,7 +35,7 @@
 
 | מה | מקור |
 |---|---|
-| DHCP ‏`67/68` | `deploy/nftables-rules.sh:162-163`; `server/system/health.py:592-612`; כבוי בהתקנה: `docs/server-install.md:313-320` |
+| DHCP ‏`67/68` | `deploy/nftables-rules.sh:162-163`; `server/system/health.py:592-612`; כבוי בהתקנה: `docs/guides/server-install.md:313-320` |
 | TFTP ‏`69` + conntrack helper | `deploy/nftables-rules.sh:164-165`; `deploy/firewall-rules.md` §3 (אזהרת `nf_conntrack_tftp`); `server/system/health.py:574` |
 | HTTP ‏`8080` לתחנות, לא מוצפן | `server/main.py:149`; `deploy/nftables-rules.sh:166-167`; `README.md:290-296` (סיסמת משתמש ההפצה גלויה) |
 | מולטיקאסט `9000-9001/udp`, ‏TTL 1 | `server/rounds/sender.py:37,41` (‏`PRODUCTION_PORTBASE = 9000`, ‏portbase ו-portbase+1); `server/rounds/sender.py:659-685` (‏`udp-sender` בלי `--ttl`); `deploy/nftables-rules.sh:35,168-169`; `README.md:248-249`; מחשב הבנייה כמקור: `agent/lib/capture/directsend.sh:36` |
@@ -50,8 +50,8 @@
 | טענה | מקור |
 |---|---|
 | הגדרות מתג ההפצה (וילן, port security, ‏IGMP, ‏DHCP snooping, בלי 802.1X, תיוג) | `README.md:268-284` |
-| ‏IGMP: פקיעה אחרי 125–260 ש'; ‏1G ≈ 110MB/s; נמדד 106MB/s; ‏Dynamic Memory | `docs/imagesrv-spec.md:109-115` |
-| ‏10GbE לשרת | `docs/imagesrv-spec.md:352` |
+| ‏IGMP: פקיעה אחרי 125–260 ש'; ‏1G ≈ 110MB/s; נמדד 106MB/s; ‏Dynamic Memory | `docs/architecture/imagesrv-spec.md:109-115` |
+| ‏10GbE לשרת | `docs/architecture/imagesrv-spec.md:352` |
 | בלי `ip helper-address` לשרת | `deploy/firewall-rules.md` §3 (פסקת DHCP) |
 | אישור נוסף ל-DHCP על כרטיס trunk | `server/console/dhcp.py:415-418` |
 | "מי עוד עונה" / מכונה מרשת זרה — אזהרה, לא חסימה | `README.md:286-288`; `server/net/foreign_vlan.py:1-11` |
@@ -64,9 +64,9 @@
 | טענה | מקור |
 |---|---|
 | ‏MAC משלו, כרטיס לבחירה, DHCP reservation, ‏ESXi/Hyper-V | בריף נדב 16/10, ענף `feat/vm-own-mac` — **לא בריפו** |
-| היום: NAT דרך כרטיס הניהול, בלי כתובות פרטיות | `server/vm/vmnet.py:1-30`; `docs/vm-update.md` §3 |
+| היום: NAT דרך כרטיס הניהול, בלי כתובות פרטיות | `server/vm/vmnet.py:1-30`; `docs/guides/vm-update.md` §3 |
 | ‏`/dev/kvm` חובה, סירוב `no_kvm` | `server/vm/vmupdate.py:104-110,662` |
-| השרת על ברזל (13/10) | `docs/vm-update.md:9-10` |
+| השרת על ברזל (13/10) | `docs/guides/vm-update.md:9-10` |
 | דומיינים של Windows Update, ‏KMS ‏1688 | **לא מהקוד** — ידע כללי על Microsoft; מסומן "להשלים מול הרשימה הרשמית" |
 | וירטואליזציה מקוננת, Promiscuous | **לא מהקוד** — נגזר מדרישת `/dev/kvm`; Promiscuous הוא שאלה פתוחה |
 
@@ -99,7 +99,7 @@
 | ה-watchdog: רק במחשב שיכפול, 600ש' בלי התקדמות → אתחול | `agent/lib/core/watchdog.sh:35,50,103` |
 | ה-watchdog לא מכסה כיבוי שנתקע | קרנל v6.12: ‏`drivers/watchdog/iTCO_wdt.c:592` (‏`watchdog_stop_on_reboot`), ‏`drivers/watchdog/watchdog_core.c:158-176` (‏`watchdog_reboot_notifier` עוצר על `SYS_POWER_OFF` לפני `device_shutdown()`); ‏`metal-1017-poweroff.md` ס' "למה ה-watchdog לא אתחל"; הערה ב-`agent/lib/core/watchdog.sh:4-6` |
 | מסלול הכיבוי 4/4 על ברזל; תקיעה אחת לא שוחזרה | ‏`metal-1017-poweroff.md`, הרצות 1–4 וס' "ניתוח" 1 (הכרעה: ‏`poweroff -f` נשאר, הצעה א') |
-| ‏1Gb ≈ ‏110MB/s; נמדד 106MB/s (17/09) | `docs/imagesrv-spec.md:113-115` |
+| ‏1Gb ≈ ‏110MB/s; נמדד 106MB/s (17/09) | `docs/architecture/imagesrv-spec.md:113-115` |
 | קליטה: ‏74MB/s ל-NVMe מול 54MB/s ל-HDD, אותו מקור, אימג' וקו | `docs/research/R10-server-storage-and-capacity.md:22,38-42` (ברזל, 05/09) |
 | סבב למגירה אחת: רשת 75MB/s (תקרה 600m), דיסק 202MB/s, 19.5GB | ‏`metal-1017-results.md` (בדיקה 8, ‏17/10, ‏08:24–08:30 UTC) |
 | 202MB/s = ‏97% מ-209MB/s של בדיקת הכתיבה; המעבד 67% עסוק (usr+sys+sirq) ועוד 17% iowait; הדיסק הוא הגבול | ‏`C:\ImageCtl-Lab\evening-1015\cloner-pipeline-perf.md` ס' 0 ו-1.1 (‏@מנהל-ביצועים, ‏17/10; ‏#1571). מעבד i5-650, שתי ליבות פיזיות |
@@ -136,7 +136,7 @@
 | שליפת מגירה = `removed` = ירוק | `CHANGELOG.md` `[Unreleased]` ("מגירה שנשלפה באמצע הכתיבה אינה צובעת את הדיסק כתום") |
 | השאלה בלי תשובה נסגרת אחרי חצי שעה; "השידור ממתין לתשובה על דיסק" | `CHANGELOG.md` `[Unreleased]` ("השידור נכשל אחרי 180 שניות…", #1581) |
 | שורת הדרייברים: מצבים, צבעים, `BOOT_RISK_HE` | `server/static/console.js:4496-4530` (‏`driversOutcomeText`, ‏`driversTone`, ‏`bootStorageText`) |
-| עמוד הדרייברים: לשוניות, ייבוא `tar`, אימות sha256, מחיקה | `server/static/drivers.js:1-8`; `server/static/console.js:7461`; `docs/driver-packages.md` |
+| עמוד הדרייברים: לשוניות, ייבוא `tar`, אימות sha256, מחיקה | `server/static/drivers.js:1-8`; `server/static/console.js:7461`; `docs/guides/driver-packages.md` |
 | `drivers.linux`: בודק ולא משנה | הקומיט `886a6628` (#1331 T8); `agent/lib/postdeploy/linuxdrivers.sh` |
 | `Start=0`/`StartOverride=0` רק כשחבילה הונחה (הכרעת נדב 17/10) | זיכרון `night-1017-autonomous` (הכרעות ~21:00); `agent/lib/postdeploy/bootstorage.sh`; #1711 (ניסוי ה-VM) |
 | הספירה במשכפל נראתה על ברזל (rc2, שיכפול מקומי, 17/10); אחרי כשל — כיבוי תוך <80ש', הספירה לא נצפתה | ‏`C:\ImageCtl-Lab\evening-1015\metal-1017-results.md`, ס' "rc2" |
@@ -151,6 +151,6 @@
 | אין IGMP querier בשרת (Issues #1543, #1972) | חיפוש `querier` ב-`server/`, `agent/` — אין תוצאות |
 | ערוץ הבקרה של udpcast ו-כתובת הקבוצה הנגזרת | דף man של `udp-sender` (Debian); לא נקבע בקוד |
 | TCN, תקלות DHCP snooping, EEE, duplex, LACP | `C:\ImageCtl-Lab\evening-1015esearch-new-failures-1022.md` (N01, N02, N05, N07, N09, N28) |
-| ~106MB/s, 1G, 10GbE בחדר השיכפולים | `docs/imagesrv-spec.md` סעיף 6 ושורה 351 |
+| ~106MB/s, 1G, 10GbE בחדר השיכפולים | `docs/architecture/imagesrv-spec.md` סעיף 6 ושורה 351 |
 
 </div>

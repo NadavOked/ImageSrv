@@ -1,6 +1,6 @@
 """#1203: the server screen in Hebrew, drawn by the native GUI.
 
-Two halves, one contract (docs/interfaces.md s31, "the graphical screen"):
+Two halves, one contract (docs/architecture/interfaces.md s31, "the graphical screen"):
 
 * ``server/dcui/view.py`` + ``gui.py`` -- Python stays root and the only state
   machine; it turns the Runtime into frames and the GUI's tokens into keys.

@@ -44,7 +44,7 @@ def _drives(session: str, drawers: int = 2, mac: str = CLONER2) -> list[dict]:
 
 
 def _finish(conn, session, drives, *, loss, wall, lost=0, ended="send_done", rcvbuf=0,
-            dropped=0, timeouts=0):
+            dropped=0, timeouts=0, failure="stream"):
     """סוף גל, כפי שהשרת רושם אותו: המונה של השולח (`record_stream`) ומה
     שכל מגירה כתבה (`record_wave`). ‏`lost` — כמה מגירות של כל מכונה נכשלו.
     ‏`dropped` / ‏`timeouts` (‏#1761) — שורות `Dropping client` / ‏`Timeout
@@ -60,10 +60,22 @@ def _finish(conn, session, drives, *, loss, wall, lost=0, ended="send_done", rcv
         mine = [d for d in drives if d["mac"] == mac]
         for k, d in enumerate(mine):
             failed = k < lost
-            targets.append({"dev": f"sd{k}", "serial": d["serial"],
-                            "state": "failed" if failed else "done",
-                            "bytes_written": SENT // 4 if failed else SENT,
-                            "bytes_total": SENT})
+            target = {"dev": f"sd{k}", "serial": d["serial"],
+                      "state": "failed" if failed else "done",
+                      "bytes_written": SENT // 4 if failed else SENT,
+                      "bytes_total": SENT}
+            if failed and failure == "stream":
+                target.update(error="fanout: short stream", ata_log=[])
+            targets.append(target)
+            if failed and failure == "disk":
+                conn.execute(
+                    "INSERT INTO disk_failures"
+                    " (session_id, mac, dev, serial, at, cause, error, ata_log)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
+                    (session, mac, target["dev"], d["serial"],
+                     "2026-10-19T10:00:00+00:00", "unclassified",
+                     "could not write the partition table", "[]"))
+    conn.commit()
     drive_rates.record_wave(conn, session, [
         {"mac": mac, "targets_json": json.dumps(targets),
          "udp_drops_json": json.dumps({"rcvbuf": rcvbuf, "inerrors": rcvbuf})}
@@ -71,7 +83,7 @@ def _finish(conn, session, drives, *, loss, wall, lost=0, ended="send_done", rcv
 
 
 def _seed(conn, rate, *, loss, wall, rcvbuf=0, drawers=2, lost=0, ended="send_done",
-          mac=CLONER2, dropped=0, timeouts=0):
+          mac=CLONER2, dropped=0, timeouts=0, failure="stream"):
     """גל שהיה — בקצב `rate` שנשמר כפי שהוא (ההחלטה של אז), ואז סופו."""
     session = f"ses_{next(_seq):04d}"
     drives = _drives(session, drawers, mac)
@@ -81,7 +93,7 @@ def _seed(conn, rate, *, loss, wall, rcvbuf=0, drawers=2, lost=0, ended="send_do
                   "2026-10-18T10:00:00+00:00"))
     conn.commit()
     _finish(conn, session, drives, loss=loss, wall=wall, lost=lost, ended=ended,
-            rcvbuf=rcvbuf, dropped=dropped, timeouts=timeouts)
+            rcvbuf=rcvbuf, dropped=dropped, timeouts=timeouts, failure=failure)
     return session
 
 
@@ -163,6 +175,83 @@ def test_goodput_that_keeps_rising_climbs_to_the_ceiling(conn):
     assert rates == ["600m", "700m", "800m", "900m", "900m", "900m"]
 
 
+def test_a_clean_rising_peak_takes_the_large_step(conn):
+    _seed(conn, "400m", loss=0.001, wall=_fast(400e6), timeouts=0)
+    _seed(conn, "500m", loss=0.004, wall=_fast(500e6), timeouts=_per_gb(0.9))
+    got = _next(conn)
+    assert got["max_bitrate"] == "800m" and got["basis"] == "climb", got
+
+
+def test_a_borderline_rising_peak_keeps_the_normal_step(conn):
+    _seed(conn, "400m", loss=0.001, wall=_fast(400e6), timeouts=0)
+    _seed(conn, "500m", loss=0.006, wall=_fast(500e6), timeouts=0)
+    got = _next(conn)
+    assert got["max_bitrate"] == "600m" and got["basis"] == "climb", got
+
+
+def test_the_large_step_crosses_neither_an_unsafe_rate_nor_the_ceiling(conn):
+    _seed(conn, "400m", loss=0.001, wall=_fast(400e6), timeouts=0)
+    _seed(conn, "500m", loss=0.004, wall=_fast(500e6), timeouts=0)
+    ceiling_capped = _next(conn, ceiling="625m")
+    assert ceiling_capped["max_bitrate"] == "625m", ceiling_capped
+    assert ceiling_capped["basis"] == "ceiling"
+    _seed(conn, "750m", loss=0.003, wall=_fast(750e6), dropped=1)
+    unsafe_capped = _next(conn)
+    assert unsafe_capped["max_bitrate"] == "500m", unsafe_capped
+    assert _bits(unsafe_capped["max_bitrate"]) < _bits("750m")
+
+
+def test_a_new_machine_starts_one_step_below_the_fleets_proven_rate(conn):
+    _seed(conn, "800m", loss=0.01, wall=_fast(800e6), mac=OTHER)
+    got = _next(conn, mac=CLONER2)
+    assert got["max_bitrate"] == "700m" and got["basis"] == "fleet", got
+    assert got["previous"]["rule"] == "fleet"
+
+
+def test_fleet_start_skips_a_rate_that_was_unsafe_for_this_machine(conn):
+    """קצב לא-בטוח נזכר גם כשהגל שרשם אותו אינו בזיכרון הגלים (`unsafe_rates`
+    אינו נשכח, ‏#1761) — המכונה "לא נראתה", ובכל זאת 700m אינו פתיחה שלה."""
+    conn.execute("INSERT INTO unsafe_rates (mac, drawers, rate_bps, session_id, at)"
+                 " VALUES (?,?,?,?,?)", (CLONER2, 1, 700_000_000, "ses_gone",
+                                        "2026-10-18T10:00:00+00:00"))
+    conn.commit()
+    _seed(conn, "800m", loss=0.01, wall=_fast(800e6), mac=OTHER, drawers=2)
+    got = _next(conn, mac=CLONER2, drawers=2)
+    assert got["max_bitrate"] == "600m" and got["basis"] == "fleet", got
+
+
+def test_a_known_machine_on_a_new_drawer_count_keeps_the_1842_rule_not_fleet(conn):
+    """הכרעת נדב 20/10 (‏#1842): מכונה מוכרת בלי גל במספר המגירות הזה — ‏×0.75
+    לכל הכפלה מהגל שלה, לא פתיחת צי. כאן 2→4: ‏432m × 0.75 = 324m, אף שמכונה
+    אחרת הוכיחה 800m בארבע מגירות."""
+    _seed(conn, "432m", loss=0.003, wall=_fast(432e6), drawers=2)
+    _seed(conn, "800m", loss=0.001, wall=_fast(800e6), mac=OTHER, drawers=4)
+    got = _next(conn, mac=CLONER2, drawers=4)
+    assert got["basis"] != "fleet", got
+    assert got["max_bitrate"] == "324m" and got["basis"] == "drawers", got
+
+
+def test_a_new_machine_without_fleet_data_uses_the_old_start(conn):
+    got = _next(conn, mac=CLONER2)
+    assert got["max_bitrate"] == "600m" and got["basis"] == "start", got
+
+
+def test_the_19_10_metal_sequence_reaches_577m_in_two_waves(conn):
+    """ברזל 19/10, משכפל 2: במקום ‏277→377→477→577, גל נקי קופץ 300m."""
+    _seed(conn, "177m", loss=0.0002, wall=_fast(177e6), timeouts=0)
+
+    rates = []
+    for rate, loss, timeouts in (("277m", 0.0002, 1), ("577m", 0.038, 67)):
+        got = _next(conn)
+        assert got["max_bitrate"] == rate, got
+        rates.append(rate)
+        _seed(conn, rate, loss=loss, wall=_fast(_bits(rate)), timeouts=timeouts)
+
+    assert rates == ["277m", "577m"]
+    held = _next(conn)
+    assert held["max_bitrate"] == "577m" and held["basis"] == "held", held
+
+
 def _peaked(bits: int):
     """‏goodput עולה עם הקצב עד 650m, ומעליו האבדן אוכל יותר ממה שהקצב נותן."""
     top = 650_000_000
@@ -237,6 +326,36 @@ def test_a_stream_that_did_not_run_at_its_rate_goes_back(conn):
     _seed(conn, "600m", loss=0.0005, wall=SENT / (0.5 * 600e6 / 8))
     got = _next(conn)
     assert got["max_bitrate"] == "450m" and got["basis"] == "back"
+
+
+def test_a_disk_failure_is_excluded_from_goodput_and_holds_the_rate(conn):
+    """A disk_failure row is a disk verdict: the surviving drawer measures the stream,
+    but a hardware casualty neither backs off nor authorizes a climb."""
+    _seed(conn, "577m", loss=0.003, wall=_fast(577e6), lost=1, failure="disk")
+    got = _next(conn)
+    assert got["max_bitrate"] == "577m" and got["basis"] == "held", got
+    assert got["previous"]["goodput_bps"] == int(SENT / _fast(577e6))
+
+
+def test_a_stream_failure_still_counts_as_zero_goodput_and_goes_back(conn):
+    _seed(conn, "577m", loss=0.003, wall=_fast(577e6), lost=1, failure="stream")
+    got = _next(conn)
+    assert got["max_bitrate"] == "432m" and got["basis"] == "back", got
+
+
+def test_an_unclassified_failed_drawer_makes_the_wave_unmeasured(conn):
+    _seed(conn, "577m", loss=0.003, wall=_fast(577e6), lost=1, failure="unknown")
+    got = _next(conn)
+    assert got["max_bitrate"] == "577m" and got["basis"] == "unmeasured", got
+    assert got["previous"]["goodput_bps"] is None
+
+
+def test_metal_19_10_disk_failure_at_577m_does_not_slow_the_class(conn):
+    """Metal 19/10: two drawers, one disk_failure, 3.7% re-xmits, no sender drop."""
+    _seed(conn, "577m", loss=0.037, wall=_fast(577e6, 0.92), lost=1,
+          failure="disk", dropped=0)
+    got = _next(conn)
+    assert got["max_bitrate"] == "577m" and got["basis"] == "held", got
 
 
 def test_a_higher_rate_within_the_noise_is_not_the_peak(conn):
@@ -334,7 +453,8 @@ def test_timeouts_below_the_peak_do_not_hold_it(conn):
     _seed(conn, "500m", loss=0.003, wall=_fast(500e6), timeouts=4)
     _seed(conn, "600m", loss=0.003, wall=_fast(600e6))
     got = _next(conn)
-    assert got["max_bitrate"] == "700m" and got["basis"] == "climb", got
+    # השיא נקי (0.3% < 0.5%, בלי פקיעות) -- צעד גדול (‏#1761 המשך): ‏600m+300m.
+    assert got["max_bitrate"] == "900m" and got["basis"] == "climb", got
 
 
 def test_an_unread_sender_log_is_not_a_clean_one(conn):
@@ -422,7 +542,8 @@ def test_record_wave_stores_what_each_machine_delivered(conn):
     row = dict(conn.execute("SELECT * FROM wave_rates WHERE session_id = ?",
                             (session,)).fetchone())
     assert json.loads(row.get("delivered") or "null") == {
-        CLONER2: {"drawers": 2, "done": 1, "written_bytes": SENT}}
+        CLONER2: {"drawers": 2, "done": 1, "disk_failed": 0, "stream_failed": 1,
+                  "unknown_failed": 0, "written_bytes": SENT}}
 
 
 # --- 5. השולח: משך הזרם בשעון ---------------------------------------------------

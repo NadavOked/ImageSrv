@@ -221,7 +221,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     [[ "$line" =~ ^[[:space:]]*(#|$) ]] || signer_keys=$((signer_keys + 1))
 done < "$ISO_TREE/imagesrv-src/deploy/release-signers" \
     || die "imagesrv-src/deploy/release-signers לא נקרא — שרת מה-ISO לא יוכל לאמת אף עדכון"
-((signer_keys > 0)) || die "אין מפתח ב-deploy/release-signers של $TAG — שרת מה-ISO היה מסרב לכל עדכון (docs/server-install.md, חתימה על גרסאות)"
+((signer_keys > 0)) || die "אין מפתח ב-deploy/release-signers של $TAG — שרת מה-ISO היה מסרב לכל עדכון (docs/guides/server-install.md, חתימה על גרסאות)"
 say "release-signers: $signer_keys מפתחות חתימה — כפתור העדכון יאמת מולם"
 # ‏#1185: כפתור העדכון (server/update.py) הוא `git describe` / `git fetch --tags`
 # / `git checkout <tag>` על /opt/imagesrv. עץ מ-`git archive` הוא עץ בלי
@@ -290,6 +290,32 @@ lab_overlay=$(bash "$SCRIPT_DIR/initrd-lab-gate.sh" "$LIVE_INITRD" "${lab_flag[@
 install -m 0644 "$kvmlinuz" "$ISO_TREE/live/vmlinuz"
 install -m 0644 "$LIVE_INITRD" "$ISO_TREE/live/initrd.img"
 say "live: vmlinuz-$KVER + initrd.img ($(du -h "$LIVE_INITRD" | cut -f1)) — מודולים תואמים"
+
+# Build the server's PXE payload now, against the exact kernel that the ISO
+# installs.  firstboot will use it only after kernel/flags/version/input/hash
+# checks.  --version: the string the installed tree resolves to -- git describe
+# of the packed .git (the tag, without -lab), or with --source (no .git on the
+# target) imagesrv_tag of the ISO manifest, which is $TAG.
+payload_version=$TAG
+[[ -n "$SOURCE" ]] || payload_version=$(git -C "$REPO" describe --tags --always "$COMMIT")
+PREBUILT="$ISO_TREE/imagesrv/boot-payload"
+install -d "$PREBUILT"
+# Debian 13 (merged /usr) ships the modules under usr/lib/modules; older
+# packages under lib/modules.  Neither = the payload kernel cannot be named.
+kmodules="$KTMP/usr/lib/modules"
+[[ -d "$kmodules" ]] || kmodules="$KTMP/lib/modules"
+[[ -d "$kmodules/$KVER" ]] || die "ב-$kdeb אין lib/modules/$KVER (גם לא תחת usr/) — מטען השרת לא ייבנה"
+IMAGESRV_MODULES_DIR="$kmodules" IMAGESRV_KERNEL_DIR="$KTMP/boot" \
+    IMAGESRV_BUILD_TMPDIR="$WORK" bash "$REPO/tools/boot-payload-build.sh" \
+    --iso-default --http-root "$PREBUILT" --manifest "$ISO_TREE/imagesrv-iso.json" \
+    --write-flags "$PREBUILT/initrd.flags" --build-log "$WORK/server-payload-build.log" \
+    --version "$payload_version" \
+    || die "בניית מטען השרת המוכן מראש נכשלה — ה-ISO לא ייבנה עם מטען לא מאומת"
+for payload_file in initrd.img initrd.img.gui vmlinuz boot-payload.json; do
+    [[ -s "$PREBUILT/$payload_file" ]] || die "מטען השרת חסר: $payload_file"
+done
+rm -f "$PREBUILT/initrd.flags"
+say "server boot payload: vmlinuz-$KVER + two verified initrds"
 # מתקין דביאן יורד מהעץ: לא מוצע בתפריט, ולא תופס 100MB.
 rm -rf "$ISO_TREE/install.amd" "$ISO_TREE/preseed.cfg"
 

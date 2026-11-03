@@ -62,6 +62,9 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     splash.mkdir()
     (splash / "splash-640x240.raw").write_bytes(b"\0" * 16)
     (cdrom / "imagesrv").mkdir()
+    (cdrom / "imagesrv" / "boot-payload").mkdir()
+    for name in ("initrd.img", "initrd.img.gui", "vmlinuz", "boot-payload.json"):
+        (cdrom / "imagesrv" / "boot-payload" / name).write_text(name + "\n", newline="\n")
     (cdrom / "imagesrv" / "firstboot.sh").write_text("#!/bin/bash\n", newline="\n")
     (cdrom / "imagesrv" / "imagesrv-firstboot.service").write_text("[Service]\n", newline="\n")
     (cdrom / "imagesrv-iso.json").write_text('{"tag":"test"}\n', newline="\n")
@@ -302,7 +305,7 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "sgdisk", "sgdisk", "blockdev", "mkfs.vfat", "mkfs.ext4",
         "mkdir", "mount", "mkdir", "mount", "debootstrap", "mkdir",
         "mount", "mount", "mount", "mount", "write-target", "rm",
-        "chroot", "chroot", "cp", "cp", "chmod", "cp", "chroot", "chroot",
+        "chroot", "chroot", "cp", "mkdir", "cp", "cp", "chmod", "cp", "chroot", "chroot",
         "install", "install", "install", "chroot",   # #1569: the boot screen
         "mkdir", "cp", "cp", "verify-package-pool", "write-target",
         "write-target", "write-target", "write-target", "cp", "printf",

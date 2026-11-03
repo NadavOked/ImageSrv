@@ -19,7 +19,8 @@ import shutil
 import pytest
 
 from server.core.tasks import TOKEN_HEADER
-from test_capture import do_capture, make_task, manifest_for, setup_build_machine, task_token
+from test_capture import (USED_A, USED_B, do_capture, make_task, manifest_for,
+                          setup_build_machine, task_token)
 
 pytest.importorskip("fastapi")
 
@@ -109,7 +110,7 @@ def test_the_last_finished_capture_brings_its_used_bytes(server):
     row = server["ctx"].conn.execute("SELECT image_id, updated_at FROM tasks WHERE id = ?", (tid,)).fetchone()
     assert last == {"task_id": tid, "image_id": row["image_id"], "name": "Windows 11 Base",
                     "at": row["updated_at"], "in_library": True,
-                    "used_bytes": 31457280 + 84509376512}
+                    "used_bytes": USED_A + USED_B}
 
 
 def test_an_image_no_longer_in_the_library_says_so(server):

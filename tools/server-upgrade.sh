@@ -514,7 +514,7 @@ fi
 #   * חסר, בשרת שהותקן מה-ISO (יש $ISO_MANIFEST) — firstboot של לפני #1230
 #     בנה בדיוק את ברירת המחדל של ה-ISO ולא רשם אותה. בונים אותה ורושמים.
 #   * חסר, בשרת שהותקן ב-setup-boot-server.sh (‏#1546, שרת חיפה) — ברירת המחדל
-#     **המתועדת** (docs/server-install.md, ‏deploy/verify-boot-payload.sh):
+#     **המתועדת** (docs/guides/server-install.md, ‏deploy/verify-boot-payload.sh):
 #     ‏initrd.img + initrd.img.gui ב-$HTTP_ROOT — אותן שורות. זה לא ניחוש
 #     דגלים: אלה הקבצים שהשרת מגיש. בנייה שנכשלת חוזרת לתג הקודם, בשם.
 if [[ -e "$FLAGS_FILE" ]]; then
@@ -526,14 +526,45 @@ else
         echo "$FLAGS_FILE חסר ואין $ISO_MANIFEST — בונה את ברירת המחדל המתועדת (initrd.img + initrd.img.gui ב-$HTTP_ROOT) ורושם אותה"
     fi
     payload_args=(--iso-default --write-flags "$FLAGS_FILE")
+    install -d "$(dirname "$FLAGS_FILE")"
+    cat > "$FLAGS_FILE.new" <<EOF
+# ImageSrv initrd builds (#1230): one build_initramfs.sh run per line.
+--skip-apt --output $HTTP_ROOT/initrd.img
+--skip-apt --with-gui --output $HTTP_ROOT/initrd.img.gui
+EOF
+    mv -f "$FLAGS_FILE.new" "$FLAGS_FILE"
 fi
 # ‏#1463: שלב משלו — הבנייה היא ~90% מהעדכון (498 ש' בשרת המעבדה, 16/10), ומסך העדכון
 # נותן לו תקרה משלו. בלי זה `install` היה 8:43 מול תקרה של 10 דקות בלי מעבר שלב.
 stage payload
 save_payload || rollback "שמירת עותק של המטען הקודם ב-$PAYLOAD_SAVE נכשלה — לא בונים בלי דרך חזרה"
 write_recovery_marker   # #1893: from here a cut power restores this run's saved payload
-bash tools/boot-payload-build.sh --http-root "$HTTP_ROOT" --manifest "$ISO_MANIFEST" "${payload_args[@]}" \
-    || rollback "בניית ה-initrd נכשלה (הפירוט ב-$LOG)"
+# A verified prebuilt payload (the signed release's, or the current one when its
+# inputs did not change) skips the ~8 min build. Every refusal is named here and
+# rebuilds; a decision that could not be made rolls back (principle 5). A kernel
+# that cannot be found here is not a decision: it rebuilds, named, and the build
+# itself (same detection) fails by name as it always did.
+KVER=$(find "${IMAGESRV_MODULES_DIR:-/lib/modules}" -mindepth 1 -maxdepth 1 -printf '%f\n' \
+    | awk '$0 !~ /cloud/' | sort -V | tail -n1) || KVER=""
+if [[ -z "$KVER" ]]; then
+    payload_decision="rebuild"$'\t'"no installed non-cloud kernel found to match a prebuilt payload against"
+    payload_rc=10
+elif [[ -f deploy/boot-payload-release.sh ]]; then
+    payload_decision=$(bash deploy/boot-payload-release.sh "$TAG" "$REPO_DIR" "$FLAGS_FILE" "$HTTP_ROOT" "$KVER" 2>&1) \
+        && payload_rc=0 || payload_rc=$?
+else
+    payload_decision="rebuild"$'\t'"deploy/boot-payload-release.sh is not in $TAG (a version without a prebuilt payload)"
+    payload_rc=10
+fi
+if [[ "$payload_rc" == 0 ]]; then
+    echo "$payload_decision"
+elif [[ "$payload_rc" == 10 ]]; then
+    echo "server-upgrade: ${payload_decision#*$'\t'}; rebuilding boot payload"
+    bash tools/boot-payload-build.sh --http-root "$HTTP_ROOT" --manifest "$ISO_MANIFEST" "${payload_args[@]}" \
+        --write-flags "$FLAGS_FILE" || rollback "בניית ה-initrd נכשלה (הפירוט ב-$LOG)"
+else
+    rollback "החלטת מטען האתחול נכשלה: $payload_decision"
+fi
 
 # 5. restart + ראיה חיובית
 stage restart

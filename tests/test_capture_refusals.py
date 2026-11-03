@@ -295,7 +295,7 @@ def test_a_disk_that_is_not_there_says_so(tmp_path):
 def test_a_source_disk_that_is_not_gpt_names_what_was_found(tmp_path, scheme):
     """הגדרת ה"גמור" של #106 מילה במילה: לא "capture failed" אלא
     "הכונן אינו GPT (נמצא: mbr)". המגבלה עצמה נשארת — ‏GPT בלבד היא
-    החלטת אפיון (‏`docs/imagesrv-spec.md:52`) — הבאג הוא שהיא הגיעה
+    החלטת אפיון (‏`docs/architecture/imagesrv-spec.md:52`) — הבאג הוא שהיא הגיעה
     ליעד בלי סיבה."""
     box, run, out = capture_run(
         tmp_path, image={"mbr": MBR_DISK, "none": BLANK_DISK}[scheme])
@@ -424,10 +424,10 @@ def test_the_target_is_registered_before_the_first_check():
 
 
 def test_the_interfaces_document_says_when_the_capture_target_appears():
-    """‏`docs/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים. השדה
+    """‏`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים. השדה
     `error` לא השתנה — אבל הוא מתמלא עכשיו במצבים חדשים, לפני שנשלח
     בייט אחד, וזה בדיוק מה שהמסמך צריך לומר."""
-    doc = Path(__file__).resolve().parent.parent / "docs" / "interfaces.md"
+    doc = Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md"
     text = doc.read_text(encoding="utf-8")
     assert "#106" in text, "השינוי בהתנהגות השדה אינו מתועד"
 

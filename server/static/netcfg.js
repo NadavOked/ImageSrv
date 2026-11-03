@@ -40,7 +40,7 @@ function rollbackBanner(rb) {
   if (!rb.armed) {
     // ‏apple-pending-4: אותו רכיב אזהרה כמו שאר הדף; שגיאת המערכת הגולמית — מאחורי "פרטים טכניים"
     return UI.noteTech("err", `ההחזרה האוטומטית (${esc(rb.unit)}) אינה פעילה`, rb.armed_detail,
-      ". עד שתותקן, כל שינוי שיכול לנתק את הקונסולה ייחסם — ראו docs/server-install.md.");
+      ". עד שתותקן, כל שינוי שיכול לנתק את הקונסולה ייחסם — ראו docs/guides/server-install.md.");
   }
   return "";
 }

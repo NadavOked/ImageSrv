@@ -98,5 +98,5 @@ def test_the_room_history_carries_the_waits(server):
     assert h["waits"]["smart_hold_s"] == 960 and h["waits"]["open_wait_s"] == 360
     js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
     assert "roomRoundWaits(h)" in js
-    doc = (Path(__file__).resolve().parent.parent / "docs" / "interfaces.md").read_text(encoding="utf-8")
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "smart_hold_s" in doc

@@ -195,7 +195,7 @@ fail_image_name() {
 
 fail_records() {
     # $1 = case, $2 = the English line, $3 = tone (bad|warn), $4 = hold (0|1),
-    # $5 = the Hebrew reason. Prints the fail* records (docs/interfaces.md).
+    # $5 = the Hebrew reason. Prints the fail* records (docs/architecture/interfaces.md).
     _fx_img=$(fail_image_name); _fx_reason=""
     [ "$1" != capture ] || _fx_reason=$(cat "$RUN_DIR/capture.reason" 2>/dev/null)
     fail_texts "$1" "$5" "$_fx_img" "$_fx_reason"

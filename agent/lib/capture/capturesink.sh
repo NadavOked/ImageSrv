@@ -6,7 +6,7 @@
 # capture_disk, שקורא את הדיסק. שני הקבצים נטענים יחד ב-imagesrv-agent.
 
 _capture_failed() {
-    # $1 = disk, $2 = reason, $3 = optional recovery code (docs/interfaces.md).
+    # $1 = disk, $2 = reason, $3 = optional recovery code (docs/architecture/interfaces.md).
     # Persist the reason in the target's error field, like partition failures (#106).
     log "capture failed on $1: $2"
     # ‏#87: המקור חוזר לגודלו קודם. החזרה שנכשלה מצטרפת לסיבה — היומן

@@ -8,7 +8,7 @@
 
 מה נבדק כאן, ואיפה:
 
-* **החוזה בין הרכיבים** (‏`docs/interfaces.md` סעיף 15) — כותרת של 4096
+* **החוזה בין הרכיבים** (‏`docs/architecture/interfaces.md` סעיף 15) — כותרת של 4096
   בייטים ואז פיקסלים. הקסם, גודל הכותרת והנתיב מופיעים בשני קובצי ה-C
   ובשני קובצי ה-sh; הטסטים **נועלים אותם זהים**, כי סטייה של אחד
   מהם היא מוניטור שקורא זבל ולא נופל.
@@ -49,7 +49,7 @@ HMAC_C = AGENT / "hmac_sha256.c"
 BACKEND_C = GUI / "src" / "backend.c"
 MONITOR_SH = AGENT / "lib" / "core" / "monitor.sh"
 GUIBRIDGE_SH = AGENT / "lib" / "gui" / "guibridge.sh"
-INTERFACES = REPO / "docs" / "interfaces.md"
+INTERFACES = REPO / "docs" / "architecture" / "interfaces.md"
 
 #: החוזה (‏interfaces.md סעיף 15). מקור יחיד לצורה בטסט — שני צידי ה-C
 #: חייבים להסכים עליו בדיוק.

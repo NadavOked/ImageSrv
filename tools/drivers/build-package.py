@@ -14,7 +14,7 @@
 `--vendor` ו-`--model` הם מה שהמכונה מדווחת ב-hello (‏`dmi.sys_vendor`,
 ‏`dmi.product_name`/`product_version`) — מוצגים בכרטיס המכונה בקונסולה.
 
-**כללי ההתאמה שנכתבים** (‏`docs/interfaces.md` §17):
+**כללי ההתאמה שנכתבים** (‏`docs/architecture/interfaces.md` §17):
 
 1. ‏`{"vendor", "model"}` — כשניתן `--vendor`. בלעדיו הכלל אינו נכתב
    (השרת דורש את שניהם) והסיכום אומר זאת במפורש.

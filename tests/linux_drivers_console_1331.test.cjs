@@ -1,4 +1,4 @@
-// #1331 T8: drivers.linux (the check of the initramfs of a Linux target, docs/interfaces.md
+// #1331 T8: drivers.linux (the check of the initramfs of a Linux target, docs/architecture/interfaces.md
 // section 4/17) was in the contract and in the report but on no screen. The console says it now,
 // in the same two renderers as drivers.boot: driversHtml (member row) and driversOutcomeText +
 // driversTone (the drawer line). Only `generic` is evidence the disk boots on another bus.

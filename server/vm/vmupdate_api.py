@@ -7,7 +7,7 @@
 עצמו: הדפדפן רואה אותה לחיצת-יד, אותה תקרת חוסר-פעילות, ואותו סירוב
 ל-ClientCutText.
 
-החוזה: `docs/interfaces.md` סעיף 33.
+החוזה: `docs/architecture/interfaces.md` סעיף 33.
 """
 
 from __future__ import annotations

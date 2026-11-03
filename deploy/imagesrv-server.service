@@ -1,6 +1,6 @@
 # ImageSrv — יחידת systemd לשרת ולקונסולה.
 #
-# התקנה (אחרי clone ל-/opt/imagesrv והתקנת התלויות — ראו docs/server.md):
+# התקנה (אחרי clone ל-/opt/imagesrv והתקנת התלויות — ראו docs/architecture/server.md):
 #
 #   sudo cp deploy/imagesrv-server.service /etc/systemd/system/
 #   sudo systemctl edit imagesrv-server     # קובעים את IMAGESRV_URL

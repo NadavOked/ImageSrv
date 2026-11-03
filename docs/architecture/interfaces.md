@@ -11,6 +11,14 @@
 > versions reserve the same 64MiB tail. The older note below saying that the VM
 > path has no tail reservation is superseded by this change.
 
+> **Goodput failure rule (#1793).** A failed drawer with a matching
+> `disk_failures` row for the same wave, machine, and device is excluded from
+> both the byte total and drawer count; the learned rate is held, never lowered
+> or climbed. A stream loss (sender `Dropping client`, `send_failed`, or the
+> existing stream interruption/length evidence) still contributes zero
+> goodput. A failed drawer with neither disk nor stream evidence makes the wave
+> `unmeasured`: unknown is neither `back` nor clean.
+
 ## 1. מניפסט אימג'
 
 נוצר בקליטה, נקרא בשחזור. נשמר לצד קובץ האימג' באותה תיקייה.
@@ -3857,7 +3865,7 @@ Windows, ו-Windows סורק אותה **בעלייה הראשונה** כשהוא
     ולרווחים בקצוות) — כי Lenovo שם את השם הידידותי ב-`product_version`
     ו-Dell ב-`product_name`.
 - **הכלי שכותב את המניפסט** — `tools/drivers/build-package.py <cab|תיקייה>
-  --vendor <sys_vendor> --model <product_name>` (‏#959, ‏`docs/driver-packages.md`):
+  --vendor <sys_vendor> --model <product_name>` (‏#959, ‏`docs/guides/driver-packages.md`):
   פורש CAB, סורק INF של רשת/אחסון למזהי PCI, כותב כלל דגם + `pci_any`,
   ‏sha256 לכל קובץ, ו-tar. המניפסט עובר את אותה `validate_manifest` של
   השרת לפני שה-tar נכתב.
@@ -4635,7 +4643,7 @@ restart. ‏`revert` עובר את אותה בדיקה (חזרה לגרסה לא
 נבנה ל-`<output>.new` ומוחלף רק כשכולם נבנו — בנייה שנכשלה משאירה את המטען
 הקודם שלם. **קובץ חסר בעדכון:** נבנית ברירת המחדל ונרשמת — שתי השורות שלמעלה
 (‏`--iso-default`). בשרת מה-ISO שלפני #1230 זה מה ש-firstboot בנה; בשרת שהותקן
-ב-`setup-boot-server.sh` (‏#1546) אלה הקבצים ש-`docs/server-install.md`
+ב-`setup-boot-server.sh` (‏#1546) אלה הקבצים ש-`docs/guides/server-install.md`
 ו-`verify-boot-payload.sh` מורים לבנות. בנייה שנכשלת → חזרה עם `failed` בשם.
 "העדכון עבר והמכונות על initrd ישן" אינו מצב.
 
@@ -6711,7 +6719,7 @@ error=named-code: message
 
 ## 33. עדכון אימג' בתוך VM על השרת (‏#1334)
 
-העיצוב והסיבות: `docs/vm-update.md`. המנוע: `server/vm/vmupdate.py` (מחזור
+העיצוב והסיבות: `docs/guides/vm-update.md`. המנוע: `server/vm/vmupdate.py` (מחזור
 החיים), `server/vm/vmdisk.py` (אימג' ↔ דיסק), `server/vm/vmnet.py` (הרשת של ה-VM — macvtap, MAC, בידוד),
 `server/library/image_versions.py` (גרסאות וברירת מחדל), `server/vm/vmupdate_api.py`.
 **כל הנתיבים admin בלבד**: לא מחובר → ‏401, ‏`deploy` → ‏403.
@@ -7793,13 +7801,33 @@ array=/dev/md0
 `gap_below_populated` — חיבור SATA ריק בזמן שגבוה ממנו מאוכלס (הדוגמה של #1858; **הכלל עצמו עוד לא נמדד על ה-8100**, ולכן הקונסולה מציגה אותו רק כהערה ליד שינוי).
 **לא בגרסה הזו:** (1) הגואי של המשכפל (אזהרת "החיבורים השתנו" במסך ההמתנה) — שינוי בסוכן/בגואי; (2) **התאמה לאימג׳** ("בקר IDE, האימג׳ נקלט ב-AHCI: Windows לא יעלה" לפני סבב) — דורשת שהקליטה תרשום את `sata_mode` של מכונת המקור במניפסט; (3) שליחת `sata_mode`/`bios` בפועל — הסוכן.
 
+### האצת הקצב הלומד ופתיחת צי (#1758)
+
+צעד הטיפוס הרגיל נשאר 100m. רק כשהשיא הנוכחי נמדד עם פחות מ-0.5%
+שידורים חוזרים, פחות מ-1.0 פקיעות sender לכל GB, אפס `Dropping client`,
+ו-goodput גבוה ביותר מ-`GOODPUT_NOISE` ‏(3%) מקצב נמוך שנוסה, הצעד הבא
+הוא 300m (`CLEAN_STEP_MULTIPLIER = 3`). הצעד נעצר בגג ולעולם אינו נוחת
+על קצב ב-`unsafe_rates` או עובר אותו. כשהגל אינו נקי במיוחד אבל עדיין
+מתחת לספי ה-`held`, נשאר צעד 100m. מקור המספרים: ברזל 19/10, משכפל 2.
+
+מכונה שלא נראתה כלל (אין לה גל באף מספר מגירות) מתחילה ב-`fleet`: הקצב הגבוה ביותר
+שמכונה אחרת הוכיחה באותו מספר מגירות בנקודת goodput מלאה, בלי מגירה חסרה,
+בלי ניתוק ובלי אבדן מעל `LOSS_CLIMB_MAX`, פחות צעד רגיל אחד. קצב לא-בטוח
+של המכונה החדשה אינו פתיחה. בלי ראיית צי כזאת נשאר `start` הישן. כללי
+`LOSS_CLIMB_MAX`, ‏`TIMEOUTS_PER_GB_HELD`, הירידה, זיכרון `unsafe_rates`,
+ו-`unmeasured` כשיומן השולח לא נקרא אינם משתנים.
+
+מכונה מוכרת בלי גל במספר המגירות הזה נשארת בכלל `_pick` ו-‏#1842 (‏×0.75 לכל
+הכפלה, הכרעת נדב 20/10). גל שהשרת היה צוואר הבקבוק בו (‏#1884) או שהמעבד של
+המכונה האחרת הואט בו (‏#1885) אינו ראיה לפתיחת צי.
+
 ## 42. התראות במייל מהשרת (‏#1751)
 
 כמו ה-Notification Center של QNAP (נדב 18/10), בשלושה חלקים: **חשבונות שליחה**, **כללים**, **היסטוריה**.
 הקוד: `server/system/email_config.py` (המבנה, האימות, הסודות), `server/system/email_oauth.py` (device code ו-XOAUTH2),
 `server/system/email_alerts.py` (התור, השליחה, מקורות האירועים, תהליכון הרקע), `server/system/email_text.py` (הטקסט,
 he/en), `server/console/email_alerts.py` (ה-API). נכנס כ-v1.0.x, אחרי v0.76.0. ההגדרות וה-OAuth למפעיל:
-`docs/email-alerts.md`.
+`docs/guides/email-alerts.md`.
 
 **המסלול הקצר של המסך** ("אני לא זוכר שהגדרתי הרבה ב-QNAP"):
 1. איך שולחים: `POST /accounts` עם `provider`. אם הספק תומך ב-OAuth, אחריו `oauth/start` ו-`oauth/poll`
