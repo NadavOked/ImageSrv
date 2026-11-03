@@ -24,7 +24,7 @@ pytestmark = requires_native(("bash", BASH))
 PRELUDE = (
     f'. {posix(AGENT)}/lib/core/common.sh; '
     f'. {posix(AGENT)}/lib/core/waits.sh; '   # #1367: capped_run, the smartctl ceiling
-    f'{agent_sources("sysinfo", "progress")}'
+    f'{agent_sources("sysinfo", "progress", "failmark")}'
     f'. {posix(AGENT)}/lib/smart/smart.sh; '
     # #1921: the knowledge tables judge the disk -- without them smart_probe says no_table
     f'export SMART_KB={posix(flat_lib())}/data; . {posix(AGENT)}/lib/smart/smartjudge.sh; . {posix(AGENT)}/lib/smart/hwissues.sh; '
@@ -137,7 +137,7 @@ def test_the_report_carries_the_delta_only_when_it_was_measured(tmp_path):
         (t / "total").write_text("1000")
     (run / "targets" / "sda" / "crc_delta").write_text("5\n")
     out = sh(f'export RUN_DIR={posix(run)!r}; '
-             f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress")}'
+             f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress", "failmark")}'
              'build_progress ses_1 aa:bb:cc:dd:ee:ff')
     report = json.loads(out.stdout)
     by_dev = {t["dev"]: t for t in report["targets"]}

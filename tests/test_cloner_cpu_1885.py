@@ -125,7 +125,7 @@ def _report(tmp_path, root, state, task="") -> dict:
     (run / "targets").mkdir(parents=True, exist_ok=True)
     (run / "state").write_text(state + "\n", encoding="ascii", newline="\n")
     return json.loads(sh(f'export RUN_DIR={posix(run)!r} SYSROOT={posix(root)!r}; . {posix(LIB)}/common.sh;'
-                         f' {agent_sources("sysinfo", "progress")}. {posix(LIB)}/datareport.sh;'
+                         f' {agent_sources("sysinfo", "progress", "failmark")}. {posix(LIB)}/datareport.sh;'
                          f' build_progress ses_1 aa:bb:cc:dd:ee:01 {task}'))
 
 

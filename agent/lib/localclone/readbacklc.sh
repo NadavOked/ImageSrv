@@ -71,8 +71,8 @@ rb_capture_json() {
     # $1 = node, $2 = fs, $3 = the partition's bytes. A direct send (#715) never
     # puts an image on the server, so nothing there could make the list: pass 1
     # reads the partition back (every chunk) and the manifest carries the XXH64 of
-    # the list -- enough for a full read-back on the cloners; in sample mode they
-    # have no list and say "not verified". Elsewhere nothing (the server makes it).
+    # the list -- enough for a full read-back on the cloners, and the server serves
+    # a live manifest "full" (#2218). Elsewhere nothing (the server makes it).
     # No digest = no fields, said in the log. stdout is the JSON only.
     [ "${CAPTURE_SINK:-upload}" = discard ] || return 0
     _rc_w="$RUN_DIR/readback/capture"; rm -rf "$_rc_w"; mkdir -p "$_rc_w"

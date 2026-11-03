@@ -180,7 +180,7 @@ def test_a_partial_dual_boot_name_reaches_the_report_as_a_warning(tmp_path):
     script, run = box(tmp_path, [WIN_PLAN, LINUX_PLAN], mount="exit 1")
     (run / "response.json").write_text("{}", encoding="utf-8")
     out = sh(script
-             + f'{agent_sources("sysinfo", "progress")}RESP={posix(run / "response.json")!r}; '
+             + f'{agent_sources("sysinfo", "progress", "failmark")}RESP={posix(run / "response.json")!r}; '
              'json_get() { case "$2" in *prefix) echo lab1;; *suffix) echo 05;; '
              '  .error) sed -n \'s/.*"error":"\\([^"]*\\)".*/\\1/p\' "$1";; *) echo null;; esac; }; '
              'target_init sda 4096; target_set sda done; name_this_machine sda sess1')

@@ -47,7 +47,7 @@ def test_the_reporter_tells_the_main_path_that_the_session_closed(tmp_path):
     out = run_sh(
         f"export RUN_DIR={posix(run)!r}; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f"{agent_sources('sysinfo', 'progress')}"
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}"
         "build_progress() { echo '{}'; }; "
         "http_post_json() { echo '{\"ok\":false,\"code\":\"not_open\"}'; return 22; }; "
         'progress_loop ses_d6e79f65 78:ac:c0:9b:11:c2 http://s; echo "rc=$?"')
@@ -64,7 +64,7 @@ def test_a_reply_that_is_not_not_open_leaves_no_mark(tmp_path):
     run_sh(
         f"export RUN_DIR={posix(run)!r} PROGRESS_INTERVAL_S=0.2; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
-        f"{agent_sources('sysinfo', 'progress')}"
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}"
         "build_progress() { echo '{}'; }; "
         "http_post_json() { return 7; }; "
         "progress_loop ses_1 m http://s & p=$!; sleep 2; kill $p; wait $p 2>/dev/null; :")

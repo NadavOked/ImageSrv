@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import actions
-from .data import FIRST_BOOT_PENDING, NicInfo, ServiceState, Snapshot
+from .data import CONSOLE_STARTING, FIRST_BOOT_PENDING, NicInfo, ServiceState, Snapshot
 
 #: A certificate this close to its end is "פגה בקרוב" (orange).  Not a project
 #: constant elsewhere: the console certificate is self-signed for ten years,
@@ -404,6 +404,8 @@ def cert_status(snapshot: Snapshot, today: datetime) -> tuple[str, str, str, str
     """(pill kind, pill, sub, tone, days left)."""
     if snapshot.fingerprint == FIRST_BOOT_PENDING:   # #2148: none yet, not a wrong one
         return "warn", "ממתינה", "האתחול הראשון עדיין רץ — הטביעה תוצג בסופו", "warn", None
+    if snapshot.fingerprint == CONSOLE_STARTING:     # #2155: the listener is still coming up
+        return "info", "עולה", "הקונסולה עדיין עולה — הטביעה תוצג כשתענה", "", None
     if not snapshot.fingerprint or snapshot.fingerprint.startswith("unavailable"):
         return "bad", "לא נקראה", "לא הצלחנו לקרוא את התעודה", "bad", None
     end = parse_not_after(snapshot.certificate_not_after)

@@ -184,7 +184,7 @@ def grow_station(tmp_path, *, fs="ntfs", stubs=None, mark=True) -> tuple[Path, s
         make_stubs(tmp_path / "stubs", extra)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-        f"{agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/restore.sh; "
+        f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/restore.sh; "
         f". {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; "
         "disk_fits() { return 0; }; boot_ca_preflight() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "

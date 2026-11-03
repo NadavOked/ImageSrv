@@ -128,14 +128,68 @@ def test_the_dcui_shows_what_the_console_presents_not_a_stale_serving_copy(tmp_p
     assert view.parse_not_after(snap.certificate_not_after) is not None, snap.certificate_not_after
 
 
+def _clock(monkeypatch, start: float = 1000.0) -> dict:
+    """#2155: the DCUI's monotonic clock, moved by hand; the grace starts clean."""
+    from server.dcui import data
+    clock = {"now": start}
+    monkeypatch.setattr(data, "_monotonic", lambda: clock["now"], raising=False)
+    monkeypatch.setattr(data, "_cert_unread_since", [], raising=False)
+    return clock
+
+
 def test_a_console_that_does_not_answer_is_unavailable_not_the_file(tmp_path, monkeypatch):
-    """The window between restart and the new listener (ESXi: 22:37:53 -> 22:38:04)."""
-    from server.dcui import view
+    """The window between restart and the new listener (ESXi: 22:37:53 -> 22:38:04)
+    -- once it has lasted past the start-up grace (#2155)."""
+    from server.dcui import data, view
     from datetime import datetime
-    snap, stale = _snapshot(tmp_path, monkeypatch, _free_port(), state="done")
+    clock = _clock(monkeypatch)
+    port = _free_port()
+    _snapshot(tmp_path / "a", monkeypatch, port, state="done")
+    clock["now"] += getattr(data, "CONSOLE_START_GRACE_S", 0)
+    snap, stale = _snapshot(tmp_path / "b", monkeypatch, port, state="done")
     assert snap.fingerprint != stale, "a copy on disk was shown as the console's fingerprint"
     assert snap.fingerprint.startswith("unavailable")
     assert view.cert_status(snap, datetime.now())[0] == "bad"
+
+
+# --- #2155: rc5 (25/10), every boot: red "could not read the certificate" for ~5 s
+
+def test_2155_a_console_still_coming_up_is_neutral_not_a_red_problem(tmp_path, monkeypatch):
+    """The listener answers seconds after systemd says active; until then the
+    DCUI says "starting" -- not a red problem with "restart the services"."""
+    from server.dcui import view
+    from server.dcui.view import Extras
+    from datetime import datetime
+    clock = _clock(monkeypatch)
+    port = _free_port()
+    for _ in range(3):                      # 0 s, 5 s, 10 s: three DCUI refreshes
+        snap, _stale = _snapshot(tmp_path / str(clock["now"]), monkeypatch, port, state="done")
+        kind, pill = view.cert_status(snap, datetime.now())[:2]
+        assert (kind, pill) == ("info", "עולה"), (snap.fingerprint, kind, pill)
+        titles = [p.title for p in view.problems(snap, Extras(), datetime.now())]
+        assert "לא הצלחנו לקרוא את תעודת האבטחה" not in titles, titles
+        clock["now"] += 5
+
+
+def test_2155_a_console_that_answers_resets_the_grace(tmp_path, monkeypatch):
+    """A listener that answered and then stopped gets its own grace, measured
+    from its own first failure -- not from a failure an hour ago."""
+    from server.dcui import data, view
+    from datetime import datetime
+    clock = _clock(monkeypatch)
+    port = _free_port()
+    _snapshot(tmp_path / "a", monkeypatch, port, state="done")             # fails: grace starts
+    clock["now"] += 3600
+    live_cert, live_key = _identity("10.68.0.84")
+    with _console(live_cert, live_key, tmp_path) as address:
+        ok, _stale = _snapshot(tmp_path / "b", monkeypatch, address, state="done")
+    assert ":" in ok.fingerprint
+    clock["now"] += 5
+    again, _stale = _snapshot(tmp_path / "c", monkeypatch, port, state="done")
+    assert view.cert_status(again, datetime.now())[0] == "info", again.fingerprint
+    clock["now"] += data.CONSOLE_START_GRACE_S
+    late, _stale = _snapshot(tmp_path / "d", monkeypatch, port, state="done")
+    assert view.cert_status(late, datetime.now())[0] == "bad", late.fingerprint
 
 
 def test_while_first_boot_runs_no_fingerprint_is_shown(tmp_path, monkeypatch):

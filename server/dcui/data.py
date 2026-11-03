@@ -12,6 +12,7 @@ import re
 import socket
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -364,6 +365,15 @@ CONSOLE_LOCAL = ("127.0.0.1", 8081)
 #: the fingerprint while first boot still runs: none, rather than one that the
 #: end of first boot replaces (the server is restarted there, #2095).
 FIRST_BOOT_PENDING = "pending (first boot still running)"
+#: #2155: the console's listener comes up seconds after systemd reports the
+#: server active -- every boot of rc5 (Hyper-V, 25/10) showed "could not read
+#: the certificate" in red for ~5 s. A read that fails within this window of
+#: the first failed one is "starting" (neutral); only after it is it red.
+CONSOLE_START_GRACE_S = 60
+CONSOLE_STARTING = "starting (the console is not answering yet)"
+_monotonic = time.monotonic
+#: monotonic time of the first failed read since the last one that worked.
+_cert_unread_since: list[float] = []
 
 
 def _console_certificate(status_file: Path) -> tuple[str, tuple[str, ...], str]:
@@ -379,8 +389,14 @@ def _console_certificate(status_file: Path) -> tuple[str, tuple[str, ...], str]:
     except (console_tls.ConsoleTLSError, OSError, ValueError, ImportError):
         # A broken certificate is shown as unavailable; it must not remove the
         # physical password-reset/reboot recovery path along with the web UI.
+        now = _monotonic()
+        if not _cert_unread_since:
+            _cert_unread_since.append(now)
+        if now - _cert_unread_since[0] < CONSOLE_START_GRACE_S:
+            return CONSOLE_STARTING, (), "unknown (the console is not answering yet)"
         return ("unavailable (the console did not present a certificate)", (),
                 "unknown (certificate read failed)")
+    _cert_unread_since.clear()
     not_after = datetime.fromisoformat(details["not_after"]).strftime("%b %d %H:%M:%S %Y GMT")
     return details["fingerprint_sha256"], tuple(details["sans"]), not_after
 

@@ -85,7 +85,7 @@ def box(tmp_path: Path, part: bytes, *, start: int | None = START, fs: str = "nt
         + make_stubs(b / "stubs", {"blockdev": BLOCKDEV, **({"dd": DD} if dd_mode else {})})
         + f"export TMPDIR={posix(b)!r} RUN_DIR={posix(b / 'run')!r} DEVROOT={posix(b / 'dev')!r} "
         f"SYSROOT={posix(b / 'sys')!r} LOG_FILE={posix(b / 'run' / 'agent.log')!r}\n"
-        f". {posix(AGENT)}/lib/core/common.sh; {agent_sources('sysinfo', 'progress')}. {posix(AGENT)}/lib/restore/restore.sh\n"
+        f". {posix(AGENT)}/lib/core/common.sh; {agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/restore.sh\n"
         f". {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/writemark.sh\n"
         f"{agent_sources('sysinfo', 'failmark')}\n"
         f". {posix(AGENT)}/lib/restore/ntfsboot.sh\n"

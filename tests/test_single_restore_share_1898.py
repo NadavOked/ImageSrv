@@ -39,7 +39,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 pytestmark = requires_native(("bash", BASH), "jq")
 
-LIBS = ("common", "waits", "jsonq", "sysinfo", "progress", "pull", "ui", "guibridge", "clonergui",
+LIBS = ("common", "waits", "jsonq", "sysinfo", "progress", "failmark", "pull", "ui", "guibridge", "clonergui",
         "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "slotnames", "diskfit", "askgui",
         "drawergate", "single_restore", "srgui", "guistate")
 
