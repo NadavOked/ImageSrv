@@ -79,9 +79,13 @@ def find_event_device(name: str, timeout: float = 5.0) -> Path:
                 continue
         if matches:
             node = Path(f"/dev/input/event{max(matches)}")
-            if node.exists():
+            # ‏#1659: devtmpfs יוצר את הצומת root ‏0600, ורק אחר כך udev נותן
+            # אותו לקבוצה input (‏66–97ms, מכונת הטסטים 04/11). פתיחה בחלון
+            # הזה היא EACCES, והדרייבר נכשל ב-"probe … failed" בלי קשר לקוד.
+            if node.exists() and os.access(node, os.R_OK):
                 return node
-        assert time.monotonic() < deadline, f"no /dev/input/event* named {name!r}"
+        assert time.monotonic() < deadline, \
+            f"no readable /dev/input/event* named {name!r} (exists but not readable = not in group input?)"
         time.sleep(0.05)
 
 

@@ -373,13 +373,21 @@ def apply_network(conn, form: dict[str, str], data_dir: Path,
     error = next((item for item in apply_errors if item), None)
     if error is None:
         error = active_hooks["netcfg_apply"](cfg.name)
-    live = active_hooks["netcfg_state"]()
-    gaps = netcfg_host.mismatches(cfg, live)
+    # #2349: a DHCP read-back waits for the lease (dhcpcd -b returns at once),
+    # as the restart does (#2094). The DCUI is its own process; nothing else
+    # waits on it, and the confirm dialog counts down from the marker itself.
+    waited = not error and cfg.mode == netcfg.MODE_DHCP
+    gaps = (netcfg_host.mismatches(cfg, active_hooks["netcfg_state"]()) if error else
+            netcfg_host.settled_mismatches(
+                cfg, active_hooks["netcfg_state"], sleep=active_hooks.get("sleep", time.sleep),
+                clock=active_hooks.get("monotonic", time.monotonic)))
     if error or gaps:
         journal(conn, "net_config_unverified",
                 f"{cfg.name} {error or 'live state mismatch'}", "dcui")
         detail_lines = (["Apply failed; automatic rollback remains armed."] if error else [])
         detail_lines += ["Live read-back did not match the requested configuration."] if gaps else []
+        detail_lines += ([f"Still no match after waiting {netcfg_host.DHCP_LEASE_WAIT_S} "
+                          "seconds for DHCP."] if waited and gaps else [])
         return ActionResult(False, "Network change was not verified.", tuple(detail_lines))
     return ActionResult(True, "Network change applied; confirm within 60 seconds.")
 

@@ -1,0 +1,98 @@
+{
+  "_doc": [
+    "#2064: הממצאים המוכרים של Impeccable ב-server/static (tests/test_impeccable_gate.py).",
+    "ממצא שאינו כאן מכשיל את השער; ממצא שכאן ואינו נמצא עוד מכשיל גם הוא, עד שמוחקים",
+    "את הרשומה — ממצא שתוקן אינו חוזר. הזהות: קובץ + כלל + snippet. 'line' הוא מהריצה",
+    "שכתבה את הרשומה ואינו מושווה. רשומות זהות נספרות.",
+    "לעולם לא מוסיפים רשומה כדי שממצא חדש יעבור — מתקנים את העיצוב. 'dump' כותב את",
+    "הקובץ מחדש רק בהצמדת engine חדשה (engine/sha256 חייבים להתאים ל-impeccable_gate.py)."
+  ],
+  "engine": "0.1.16",
+  "sha256": "a890a5b4b7d9d79ec54aa74612b5e924e5f5b422600a25fde8bcbda11b031787",
+  "findings": [
+    {
+      "file": "server/static/console.css",
+      "rule": "border-accent-on-rounded",
+      "snippet": "border-top:3px solid",
+      "line": 633
+    },
+    {
+      "file": "server/static/console.css",
+      "rule": "border-accent-on-rounded",
+      "snippet": "border-top:4px solid",
+      "line": 840
+    },
+    {
+      "file": "server/static/console.css",
+      "rule": "side-tab",
+      "snippet": "border-inline-end:3px solid",
+      "line": 219
+    },
+    {
+      "file": "server/static/console.css",
+      "rule": "side-tab",
+      "snippet": "border-inline-start:4px solid",
+      "line": 440
+    },
+    {
+      "file": "server/static/console.css",
+      "rule": "side-tab",
+      "snippet": "border-inline-start:3px solid",
+      "line": 1908
+    },
+    {
+      "file": "server/static/index.html",
+      "rule": "cramped-padding",
+      "snippet": "<div> \"statusbar\": children flush against border-top on top (no inset)",
+      "line": 0
+    },
+    {
+      "file": "server/static/index.html",
+      "rule": "cramped-padding",
+      "snippet": "<div> \"task-panel-head\": children flush against border-bottom on bottom (no inset)",
+      "line": 0
+    },
+    {
+      "file": "server/static/index.html",
+      "rule": "dark-glow",
+      "snippet": "Zero-offset box-shadow glow (#318700)",
+      "line": 0
+    },
+    {
+      "file": "server/static/index.html",
+      "rule": "marquee",
+      "snippet": "/* Unknown totals must remain distinct even when animation is disabled. */ .bar.indeterminate > i, .bar > i.indeterminate — infinite horizontal loop animation \"progress-unknown\"",
+      "line": 0
+    },
+    {
+      "file": "server/static/index.html",
+      "rule": "repeating-stripes-gradient",
+      "snippet": "repeating-gradient decorative stripes",
+      "line": 0
+    },
+    {
+      "file": "server/static/monitor.html",
+      "rule": "cramped-padding",
+      "snippet": "<div> \"mon-bar\": children flush against bg on top/bottom (no inset)",
+      "line": 0
+    },
+    {
+      "file": "server/static/monitor.html",
+      "rule": "dark-glow",
+      "snippet": "Zero-offset box-shadow glow (#318700)",
+      "line": 0
+    },
+    {
+      "file": "server/static/monitor.html",
+      "rule": "repeating-stripes-gradient",
+      "snippet": "repeating-gradient decorative stripes",
+      "line": 0
+    },
+    {
+      "file": "server/static/vmupdate.css",
+      "rule": "side-tab",
+      "snippet": "border-inline-start: 3px solid",
+      "line": 130
+    }
+  ]
+}

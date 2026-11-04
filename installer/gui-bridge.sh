@@ -37,6 +37,8 @@ MEDIA_FILE="${MEDIA_FILE:-$RUN_DIR/install-media}"
 # #1310: the last GREEN check (url/name/version/fingerprint). Only this file
 # puts primary_fingerprint into the answers -- never the form the GUI sent.
 PRIMARY_CHECK="${PRIMARY_CHECK:-$RUN_DIR/primary-check}"
+# #2144: the engine's clock check (installer/lib/clock.sh); no file = not checked.
+CLOCK_FILE="${CLOCK_FILE:-$RUN_DIR/clock-check}"
 PRIMARY_ALIVE_PATH=/api/interserver/v1/alive
 # shellcheck source=installer/lib/answers.sh
 . "$BRIDGE_DIR/lib/answers.sh"   # normalize_primary_url -- one rule, engine and GUI
@@ -44,6 +46,8 @@ PRIMARY_ALIVE_PATH=/api/interserver/v1/alive
 . "$BRIDGE_DIR/lib/fielderrors.sh"   # field_for_code, he_for_code (#1503)
 # shellcheck source=installer/lib/raid.sh
 . "$BRIDGE_DIR/lib/raid.sh"          # virt_kind, raid_default, raid_eligible_count (#1989)
+# shellcheck source=installer/lib/nics.sh
+. "$BRIDGE_DIR/lib/nics.sh"          # nic_rows, nic_model (#2096) -- the inventory's nic= lines
 
 ACTION=${1:-}; [ -n "$ACTION" ] || { echo 'usage: gui-bridge.sh <action> < form.json' >&2; exit 2; }
 INPUT=$(cat)
@@ -53,51 +57,6 @@ command -v jq >/dev/null 2>&1 || { echo 'gui-bridge: jq is missing from this ima
 field() { printf '%s' "$INPUT" | jq -r --arg k "$1" '.[$k] // "" | tostring' 2>/dev/null; }
 # One line per key, always: a value never carries a line break to the GUI (#1310).
 emit() { printf '%s=%s\n' "$1" "$(printf '%s' "$2" | tr '\r\n' '  ')"; }
-
-# --- NIC rows: name|model|mac|link|current|source|address|netmask|gateway|dns --
-nic_model() {   # #2096: a readable name, never "VMware 0x07b0"; unknown = empty -> "כרטיס רשת N" on screen
-    _nm_dev="$SYSROOT/sys/class/net/$1/device"
-    [ -r "$_nm_dev/vendor" ] && [ -r "$_nm_dev/device" ] || return 0
-    _nm_v=$(cat "$_nm_dev/vendor"); _nm_d=$(cat "$_nm_dev/device")
-    case "$_nm_v:$_nm_d" in
-        0x15ad:0x07b0) printf 'VMware VMXNET3' ;; 0x15ad:*) printf 'VMware' ;; 0x1414:*) printf 'Hyper-V' ;;
-        0x8086:0x100e|0x8086:0x100f) printf 'Intel E1000' ;; 0x8086:0x10d3) printf 'Intel 82574L' ;; 0x8086:*) printf 'Intel' ;;
-        0x10ec:0x8168) printf 'Realtek RTL8111' ;; 0x10ec:0x8125) printf 'Realtek RTL8125' ;; 0x10ec:*) printf 'Realtek' ;;
-        0x14e4:*) printf 'Broadcom' ;; 0x1af4:*) printf 'virtio' ;;
-    esac
-}
-
-nic_rows() {
-    for _d in "$SYSROOT"/sys/class/net/*; do
-        _n=${_d##*/}; [ "$_n" = lo ] && continue
-        _mac=$(cat "$_d/address" 2>/dev/null || printf '')
-        _oper=$(cat "$_d/operstate" 2>/dev/null || printf 'unknown')
-        _carrier=$(cat "$_d/carrier" 2>/dev/null || printf '')
-        # #1183 wording: down = not brought up, no carrier = no cable, else connected
-        if [ "$_oper" = down ]; then _link='לא מודלק'
-        elif [ "$_carrier" = 1 ]; then _link='מחובר'
-        else _link='אין קישור'; fi
-        _addr=; _gw=; _dns=; _state=
-        if [ -r "$DHCP_DIR/$_n" ]; then
-            _state=$(sed -n 's/^state=//p' "$DHCP_DIR/$_n" | head -n1)
-            _addr=$(sed -n 's/^address=//p' "$DHCP_DIR/$_n" | head -n1)
-            _gw=$(sed -n 's/^gateway=//p' "$DHCP_DIR/$_n" | head -n1)
-            _dns=$(sed -n 's/^dns=//p' "$DHCP_DIR/$_n" | head -n1)
-        fi
-        if [ -z "$_addr" ]; then
-            _addr=$(ip -o -4 addr show dev "$_n" scope global 2>/dev/null | sed -n 's/.* inet \([0-9./]*\).*/\1/p' | head -n1)
-        fi
-        case "$_state" in
-            lease) _current=$_addr; _source="DHCP · שער $_gw" ;;
-            no-offer) _current='—'; _source='אין כתובת (אין DHCP ברשת הזו)' ;;
-            no-carrier) _current='—'; _source='—' ;;
-            *) if [ -n "$_addr" ]; then _current=$_addr; _source='כתובת קיימת'; else _current='—'; _source='—'; fi ;;
-        esac
-        _ip=${_addr%%/*}; _mask=
-        case "$_addr" in */24) _mask=255.255.255.0 ;; */16) _mask=255.255.0.0 ;; */8) _mask=255.0.0.0 ;; */22) _mask=255.255.252.0 ;; */23) _mask=255.255.254.0 ;; */25) _mask=255.255.255.128 ;; esac
-        emit nic "$_n|$(nic_model "$_n")|$_mac|$_link|$_current|$_source|$_ip|$_mask|$_gw|$_dns"
-    done
-}
 
 # --- the form -> an answers file (never printed; the password stays in the file) --
 write_answers() {
@@ -131,6 +90,7 @@ write_answers() {
         fi
         emit hostname "$(field hostname)"
         emit timezone "$(field timezone)"
+        emit ntp_servers "$(field ntp_servers)"   # #2144: empty = automatic
         emit admin_user "$_wa_user"
         # Before the admin screen the password is legitimately empty; the engine's
         # own check ("admin_pass must not be empty") belongs to step 4+, not to
@@ -206,7 +166,8 @@ do_apply() {
     password_errors || return 0
     mkdir -p "$RUN_DIR" && write_answers "$ANSWERS" || { echo 'gui-bridge: cannot write the answers' >&2; return 4; }
     printf 'state=partitioning\npct=0\ntitle=starting\n' > "$STATE_FILE"
-    ( "$ENGINE" "$ANSWERS" --state "$STATE_FILE" > "$ENGINE_LOG" 2>&1 ) &
+    rm -f "$CLOCK_FILE"   # #2144: a previous attempt's answer is not this one's
+    ( CLOCK_FILE="$CLOCK_FILE" "$ENGINE" "$ANSWERS" --state "$STATE_FILE" > "$ENGINE_LOG" 2>&1 ) &
     emit job "$!"
 }
 
@@ -277,6 +238,14 @@ do_finish() {
     [ -n "$_df_addr" ] || _df_addr=$(sed -n 's/^address=//p' "$DHCP_DIR/$_df_if" 2>/dev/null | head -n1)
     [ -n "$_df_addr" ] && emit console_url "https://${_df_addr%%/*}:8081"
     emit user "$(sed -n 's/^admin_user=//p' "$ANSWERS" 2>/dev/null | head -n1)"
+    # #2144: the engine's clock record, or "unchecked" -- a missing or
+    # unreadable record is never "synced" (principle 5)
+    _df_clock=$(sed -n 's/^clock=//p' "$CLOCK_FILE" 2>/dev/null | head -n1)
+    case "$_df_clock" in synced|unsynced|unchecked) ;; *) _df_clock=unchecked ;; esac
+    emit clock "$_df_clock"
+    emit clock_server "$(sed -n 's/^clock_server=//p' "$CLOCK_FILE" 2>/dev/null | head -n1)"
+    [ "$_df_clock" = synced ] && emit clock_offset_ms "$(sed -n 's/^clock_offset_ms=\([0-9]*\)$/\1/p' "$CLOCK_FILE" 2>/dev/null | head -n1)"
+    return 0
 }
 
 do_eject() {

@@ -3,7 +3,7 @@
 
 המוקאפ המאושר: ‏`docs/design/native/room-screen-1017/mockup.html` (#1578). שורת
 היעד של השיכפול המקומי (‏`tbay`) היא עכשיו רכיב משותף (‏`lcbay.c`), ושני המסכים
-מציירים בה כל דיסק: כותב, ממתין להכרעת SMART, דולג, נכשל, הושלם — במילים, לא
+מציירים בה כל דיסק: כותב, ממתין להכרעה, דולג, נכשל, הושלם — במילים, לא
 רק בצבע. ביום הברזל המסך הראה "ממתינה לשידור" בזמן שהמכונה חיכתה לתשובה, וסבב
 שנכשל אמר רק "אין פעולה במסך הזה".
 
@@ -42,7 +42,8 @@ def _drawer(port: int, dev: str, state: str, done: float, error: str = "") -> st
 
 CLONER = {
     "writing": _drawer(1, "sda", "writing", .63) + _drawer(3, "sdc", "writing", .41),
-    "smart": _drawer(1, "sda", "waiting", 0) + "smart_prompt=7-2|2|fail|pending_sectors|WDC WD5000AAKX|WD-1\n",
+    # #2347: the SMART prompt is gone (#2044); a drawer's own question (#1808/#1898) keeps the orange row
+    "asking": _drawer(1, "sda", "waiting", 0) + _drawer(2, "sdb", "asking", 0, "מטא-נתוני RAID ישנים על הדיסק"),
     "skipped": _drawer(1, "sda", "writing", .48) + _drawer(2, "sdb", "skipped", 0, "המפעיל דילג"),
     "failed": _drawer(1, "sda", "done", 1) + _drawer(2, "sdb", "failed", .15, "queue overflow: target lost bytes"),
     "done": _drawer(1, "sda", "done", 1) + _drawer(3, "sdc", "done", 1),
@@ -68,9 +69,9 @@ def test_the_cloner_rows_say_each_state(tmp_path):
     # two disks writing draw two blue bars; one writing and one skipped -- one,
     # and the skipped row has no bar fill at all
     assert blue["writing"] > blue["skipped"] + 1000, blue
-    # the SMART question: the row is outlined orange and says so in a pill --
+    # a drawer's question: the row is outlined orange and says so in a pill --
     # not "ממתינה לשידור" in grey (metal 17/10)
-    assert _count(png["smart"], "--clr-warning") > _count(png["writing"], "--clr-warning") + 1000
+    assert _count(png["asking"], "--clr-warning") > _count(png["writing"], "--clr-warning") + 1000
     # failed: a red bar, LED, edge, pill; done: green bars and no red
     assert red["failed"] > 1000 and red["done"] < 100, red
     assert _count(png["done"], "--clr-success") > _count(png["writing"], "--clr-success") + 1000

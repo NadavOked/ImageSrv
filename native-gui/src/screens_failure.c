@@ -68,6 +68,7 @@ const char *failure_status_word(const App *a, Rgb *dot) {
     const State *s = &a->st; const Theme *t = a->theme;
     if (standby_conn(s) == STANDBY_OFF) { *dot = t->warn; return "אין קשר עם השרת"; }   /* the hold's heartbeat is not heard */
     if (s->fail_at > 0) { *dot = t->indigo; return s->fail_info ? "עולה מהדיסק המקומי" : "מאתחל"; }
+    if (s->fail_info) { *dot = t->indigo; return "לא רשום בשרת"; }   /* #1802: it stays on the screen */
     if (s->fail_warn) { *dot = t->warn; return "ממתין לאישור השרת"; }
     *dot = t->danger; return "נכשל · המחשב נשאר דלוק";   /* #2068 */
 }
@@ -89,7 +90,7 @@ static void hold_pill(App *a, cairo_t *cr, double left, double y) {
  * rest are plain. Returns the width; draws only when draw. */
 static double fail_button(App *a, cairo_t *cr, double x, double y, const char *label, int primary, int i, int draw) {
     Text l;
-    if (primary) {
+    if (primary && strncmp(a->st.fail_btns[i].label, "F2 ", 3)) {   /* #1802: F2 is in its label, Enter is not its key */
         char e[160], mk[400], bg[8], fg[8]; Rgb b = a->theme->porcelain, f = a->theme->ink;
         snprintf(bg, sizeof bg, "#%02X%02X%02X", (int)(b.r * 255 + .5), (int)(b.g * 255 + .5), (int)(b.b * 255 + .5));
         snprintf(fg, sizeof fg, "#%02X%02X%02X", (int)(f.r * 255 + .5), (int)(f.g * 255 + .5), (int)(f.b * 255 + .5));

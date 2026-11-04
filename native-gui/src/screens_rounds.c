@@ -196,20 +196,6 @@ void cloner_slot_label(const State *s, int bay, char *out, size_t n) {
         snprintf(out, n, "דיסק %d", bay);
 }
 
-void cloner_port_label(const State *s, int port, char *out, size_t n) {
-    const Drawer *d = NULL;
-    const IdleDisk *id = idle_for_port(s, port);
-    for (int i = 0; i < s->ndrawers; i++) if (s->drawers[i].port == port) { d = &s->drawers[i]; break; }
-    int drawer = d ? eff_drawer(d->drawer, port) : id ? eff_drawer(id->drawer, port) : 0;
-    if (drawer > 0) { cloner_slot_label(s, drawer, out, n); return; }
-    if (d || id) {
-        const char *name = port >= 1 && port <= MAX_DRAWERS ? s->cslot_names[port - 1] : "";
-        unmapped_label(name, d ? d->conn : id->conn, port, d ? d->dev : id->dev, out, n);
-        return;
-    }
-    cloner_slot_label(s, port, out, n);
-}
-
 int room_selectable(const RoomDrawer *d) {
     return d->present && d->port >= 1 && eff_drawer(d->drawer, d->port) > 0;
 }

@@ -432,9 +432,9 @@ def _hex(value: int) -> tuple[int, int, int]:
 
 
 LIGHT = {"porcelain": 0xEEF1F5, "ok": 0x318700, "danger": 0xE12200, "info": 0x0079B8,
-         "indigo": 0x0079B8, "header": 0x25333D}
+         "indigo": 0x0079B8, "header": 0x25333D, "warn": 0xC25400}
 DARK = {"porcelain": 0x151A1F, "ok": 0x5FBD7A, "danger": 0xDC6B6B, "info": 0x61B5B8,
-        "header": 0x26343F}
+        "header": 0x26343F, "warn": 0xE1B34F}
 
 
 @pytest.fixture(scope="module")
@@ -472,13 +472,38 @@ def test_the_hero_glyph_colour_follows_the_state(renders):
     """The disc right of the title: green ok, red needs-attention, blue waiting
     -- sampled inside the disc, above the glyph's stroke."""
     cases = {"1-primary-ok": "ok", "2-primary-problem": "danger", "3-secondary-waiting": "info",
-             "3b-secondary-connected": "ok"}
+             "3b-secondary-connected": "ok",
+             "16-clock-unsynced": "warn", "16b-clock-unchecked": "warn"}   # #2144: orange, not blocking
     for name, token in cases.items():
         for theme, tokens in (("light", LIGHT), ("dark", DARK)):
             _w, _h, px = _png(renders[(name, "1280x800", theme)], rows=130)
-            bad = name.startswith("2")
+            bad = name.startswith(("2", "16"))   # the alert layout: red, or orange with problems
             cx, cy = (1196, 118) if bad else (1195, 121)
             assert px(cx, cy - 20) == _hex(tokens[token]), (name, theme, px(cx, cy - 20))
+
+
+@NATIVE
+def test_the_clock_tag_is_drawn_in_the_header_only_when_the_clock_is_not_synced(renders):
+    """#2144: an orange (--clr-warning) pill in the header row, beside the clock;
+    the healthy frame has no orange there at all.
+
+    Measured as the longest unbroken orange stretch on any header row: a pill at
+    least 40px wide. Row 24 alone is the middle of the pill's own text, where
+    only the gaps between the glyphs are orange -- 33 pixels on ubuntu-24.04
+    (public run 41803234842, 04/11), a count of the font and not of the pill."""
+    def orange(name, theme, tokens):
+        width, _h, px = _png(renders[(name, "1280x800", theme)], rows=48)
+        warn, best = _hex(tokens["warn"]), 0
+        for y in range(48):
+            run = 0
+            for x in range(width // 2):
+                run = run + 1 if px(x, y) == warn else 0
+                best = max(best, run)
+        return best
+    for theme, tokens in (("light", LIGHT), ("dark", DARK)):
+        assert orange("16-clock-unsynced", theme, tokens) > 40, theme
+        assert orange("16b-clock-unchecked", theme, tokens) > 40, theme
+        assert orange("1-primary-ok", theme, tokens) == 0, theme
 
 
 @NATIVE

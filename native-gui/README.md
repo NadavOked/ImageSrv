@@ -252,7 +252,8 @@ fail_ctx=<label>|<value>            # 4: machine · disk/drawers · image · sta
 fail_row=<label>|<sub>|<ok|wn|bad|off>|<pill>   # up to 8, one per target
 fail_step=<text>                    # up to 4: the sentence, then muted lines; fail_code=<line> up to 12 (not drawn, #2068)
 fail_btn=<action>|<label>            # up to 3 (#2068): the first is Enter; a press writes fail.action (hold.sh)
-fail_at=<epoch>                     # die_local and ui_unknown: the reboot moment (the pill counts)
+                                    # a label that starts "F2 " (#1802): F2 presses it (not the theme), Enter does not
+fail_at=<epoch>                     # die_local, and ui_unknown when its setting is on (UEFI only): the reboot moment
 
 # #st-menu: the "הפצה לכיתות" card only when the edition flag AND the
 # operator switch are on (#1081 classrooms + #880 class_deploy_enabled

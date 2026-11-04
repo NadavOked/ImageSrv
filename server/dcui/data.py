@@ -112,6 +112,12 @@ class Snapshot:
     rollback_seconds: int = 0
     pre_install: bool = False
     system_updates: str = ""      # #1411: YYYY-MM-DD of the Debian packages; "" = not known
+    first_boot_running: bool = False   # #2155: state=installing, within FIRST_BOOT_GRACE_S
+    #: #2144: chrony's answer -- CLOCK_SYNCED / CLOCK_UNSYNCED / CLOCK_UNCHECKED.
+    #: "" only on a frame that carries no clock (pre-install, hand-made samples):
+    #: collect_snapshot always sets one of the three.
+    clock: str = ""
+    clock_server: str = ""        # the configured source, as the operator chose it
 
 
 def _command_text(result: CommandResult) -> str:
@@ -325,6 +331,37 @@ def system_updates_date(data_dir: Path = DATA_DIR,
     return max(dates, default="")
 
 
+CLOCK_SYNCED, CLOCK_UNSYNCED, CLOCK_UNCHECKED = "synced", "unsynced", "unchecked"
+#: what chrony uses when the setting is empty ("automatic", timesync.DEBIAN_POOLS)
+AUTO_TIME_SOURCE = "debian.pool.ntp.org"
+
+
+def clock_state(runner: Runner, conn) -> tuple[str, str]:
+    """#2144: (state, source). The console's own verdict (timesync.status:
+    "Leap status: Normal" and a selected ``^*`` source) through this
+    screen's runner. chronyc that does not answer is "unchecked", never
+    "synced" (principle 5); an unreadable setting is shown as "unknown"."""
+    from server.system import timesync
+
+    def read(argv: list[str]) -> str:
+        result = runner(argv)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr or f"exit {result.returncode}")
+        return result.stdout
+
+    hooks = {"tracking": lambda: read(["chronyc", "-n", "tracking"]),
+             "sources": lambda: read(["chronyc", "-n", "sources"]),
+             "now": lambda: ""}
+    answer = timesync.status(hooks)["synchronized"]
+    state = (CLOCK_UNCHECKED if answer is None
+             else CLOCK_SYNCED if answer else CLOCK_UNSYNCED)
+    try:
+        source = timesync.configured(conn) or AUTO_TIME_SOURCE
+    except Exception:  # noqa: BLE001 -- an invalid or unreadable setting
+        source = "unknown"
+    return state, source
+
+
 def is_pre_install(data_dir: Path = DATA_DIR,
                    status_file: Path = STATUS_FILE) -> bool:
     """The wizard status alone is insufficient once the real DB exists."""
@@ -374,6 +411,24 @@ CONSOLE_STARTING = "starting (the console is not answering yet)"
 _monotonic = time.monotonic
 #: monotonic time of the first failed read since the last one that worked.
 _cert_unread_since: list[float] = []
+#: #2155 (2): setup-boot-server starts the DCUI before the management NIC is up
+#: and before the firewall; rc5's first frame showed both red, the next one
+#: green (Hyper-V 01:09:06 -> 01:09:11, 25/10). While first boot runs they are
+#: "starting" -- for this long from the first time the DCUI saw it running.
+#: A first boot that systemd killed never writes `fail`, and stays "installing".
+FIRST_BOOT_GRACE_S = 300
+_installing_since: list[float] = []
+
+
+def first_boot_running(status_file: Path = STATUS_FILE) -> bool:
+    """firstboot.status says installing, and the cap has not passed."""
+    if _read_key_values(status_file).get("state") != "installing":
+        _installing_since.clear()
+        return False
+    now = _monotonic()
+    if not _installing_since:
+        _installing_since.append(now)
+    return now - _installing_since[0] < FIRST_BOOT_GRACE_S
 
 
 def _console_certificate(status_file: Path) -> tuple[str, tuple[str, ...], str]:
@@ -433,6 +488,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
     services = {name: service_state(name, runner) for name in (
         "imagesrv-server", "dnsmasq", "nftables")}
     version, version_verified = _version(runner, repo_dir)
+    clock, clock_server = clock_state(runner, conn)
     return Snapshot(
         hostname=socket.gethostname(), version=version,
         version_verified=version_verified,
@@ -448,6 +504,8 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
         rollback_interface=marker.interface if marker else "",
         rollback_seconds=seconds,
         system_updates=system_updates_date(data_dir, manifest_file),
+        first_boot_running=first_boot_running(status_file),
+        clock=clock, clock_server=clock_server,
     )
 
 

@@ -568,8 +568,8 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
                         "deployment vlan — served, not counted", mac, client_ip)
             return answer
         if answer.get("known") is not True:
-            # ‏#1802: מכונה לא רשומה בווילן ההפצה — המסך פעם אחת בחלון, ואז
-            # הדיסק (`unknown_screen`). ‏`bootguard` אינו רלוונטי: אין לה
+            # ‏#1802: מכונה לא רשומה בווילן ההפצה — המסך (`unknown_screen`); כשההגדרה
+            # דלוקה, בחלון — ‏UEFI לדיסק, ‏BIOS שוב המסך. ‏`bootguard` אינו רלוונטי: אין לה
             # סבב ואין לה משימה, ולכן אין לה הקשר לספור בו.
             if on_deploy_vlan(scope, server_base):
                 return unknown_screen.offer(conn, mac, answer)

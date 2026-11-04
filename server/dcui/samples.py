@@ -92,6 +92,9 @@ def runtimes() -> dict[str, Runtime]:
                             "00:50:56:aa:44:37")))
     restarted = actions.ActionResult(True, "Services restarted.",
                                      ("imagesrv-server: active", "dnsmasq: active"))
+    # #2144 (mockup 2144-time): four minutes after the first boot, NTP blocked
+    unsynced = replace(PRIMARY, clock="unsynced", clock_server="10.44.0.250")
+    four_minutes = view.Extras(uptime_seconds=240, secondaries=("HAIFA",))
     return {
         "1-primary-ok": _runtime(PRIMARY, PRIMARY_EXTRAS),
         "2-primary-problem": _runtime(problem, PRIMARY_EXTRAS),
@@ -135,6 +138,8 @@ def runtimes() -> dict[str, Runtime]:
         "14-unpair": _runtime(connected, paired, screen="unpair"),
         "15-advertised": _runtime(SECONDARY, waiting_nat, screen="advertised", menu_index=4,
                                   advert="203.0.113.40:8443"),
+        "16-clock-unsynced": _runtime(unsynced, four_minutes),
+        "16b-clock-unchecked": _runtime(replace(unsynced, clock="unchecked"), four_minutes),
     }
 
 

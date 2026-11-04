@@ -36,7 +36,9 @@ from native import requires_native
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native-gui" / "src"
 
-ROLE, NETWORK, ADMIN, DISK, SUMMARY = 2, 3, 5, 1, 6
+#: the views as install_state.h numbers them -- #2144 put the server clock at
+#: step 5, after the name (eight steps), so the admin screen is 6 and the summary 7
+ROLE, NETWORK, ADMIN, DISK, SUMMARY = 2, 3, 6, 1, 7
 
 
 def _pkgconfig(*pkgs: str) -> bool:

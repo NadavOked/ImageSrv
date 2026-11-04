@@ -310,8 +310,11 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "mkdir", "cp", "cp", "verify-package-pool", "write-target",
         "write-target", "write-target", "write-target", "cp", "printf",
         "chroot", "chroot", "write-target", "write-target", "chroot", "chroot", "ln", "chroot", "blkid", "blkid",
-        "write-target", "write-target", "write-target", "chroot", "chroot", "write-target", "chroot", "write-target",
-        "write-target-secret", "umount", "umount", "umount", "umount",
+        "write-target", "write-target", "write-target", "chroot", "chroot", "write-target", "chroot",
+        "write-target",   # #2144: /etc/chrony/conf.d/imagesrv.conf
+        "write-target", "write-target-secret",
+        "chroot",         # #2144: the clock check (chronyd -Q), before the target is released
+        "umount", "umount", "umount", "umount",
         "umount", "umount", "sync",
     ]
     assert "+ chroot <target> apt-get install -y --no-install-recommends busybox-static linux-image-amd64 grub-efi-amd64-signed shim-signed grub-pc-bin" in lines
@@ -321,7 +324,8 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
     assert "+ chroot <target> grub-install --target=i386-pc /dev/sda" in lines
     time_sync = "+ chroot <target> systemctl enable chrony.service"
     answers = "+ write-target mode=0600 <target>/etc/imagesrv/answers"
-    assert lines.index(time_sync) + 1 == lines.index(answers)
+    chrony_source = "+ write-target mode=0644 <target>/etc/chrony/conf.d/imagesrv.conf"   # #2144
+    assert lines.index(time_sync) + 1 == lines.index(chrony_source) == lines.index(answers) - 1
     grub_cfg = "+ write-target mode=0644 <target>/etc/default/grub.d/imagesrv.cfg"
     recovery = "+ write-target mode=0755 <target>/etc/grub.d/41_imagesrv_recovery"
     assert lines.index(grub_cfg) < lines.index(recovery) < lines.index("+ chroot <target> update-grub")

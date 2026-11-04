@@ -59,7 +59,7 @@ void sdlg_open(App *a, int kind, int ref, const char *dev, const char *label, co
 
 /* #1732: a write onto a red disk (SMART fail) -- refused, not asked. */
 static int red_write(const SmartDlg *d) {
-    return d->level == 2 && (d->kind == SDLG_CLONER || d->kind == SDLG_RESTORE || d->kind == SDLG_LC_TARGET);
+    return d->level == 2 && (d->kind == SDLG_RESTORE || d->kind == SDLG_LC_TARGET);
 }
 
 int sdlg_notice(const SmartDlg *d) { return d->kind == SDLG_LC_SOURCE && d->level == 1; }   /* #2017 */

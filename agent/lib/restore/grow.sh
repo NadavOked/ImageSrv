@@ -19,7 +19,7 @@ grow_expanded() {
     _idx=$(cut -d'|' -f1 "$_mark")
     _fs=$(cut -d'|' -f2 "$_mark")
     grow_filesystem "$_fs" "$(partition_node "$1" "$_idx")" || return 1
-    # ‏#1897: המחיצות המכווצות שקיבלו את חלקן במקום (expandshare.sh) — גם הן גדלות.
+    # ‏#1897: המחיצות המכווצות שחזרו לגודלן במקור (expandshare.sh) — גם הן גדלות.
     [ -f "$_mark.more" ] || return 0
     while IFS='|' read -r _gi _gf; do
         [ -n "$_gi" ] || continue

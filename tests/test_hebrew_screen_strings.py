@@ -94,7 +94,8 @@ SH_SINKS = {
 
 def sh_files() -> list[Path]:
     files = [p for p in (REPO / "agent").rglob("*") if p.is_file() and p.suffix not in {".c", ".h"}]
-    files += [REPO / "installer" / "gui-bridge.sh", REPO / "installer" / "lib" / "fielderrors.sh"]
+    files += [REPO / "installer" / "gui-bridge.sh", REPO / "installer" / "lib" / "fielderrors.sh",
+              REPO / "installer" / "lib" / "nics.sh"]   # the bridge's NIC rows, split out (#2144)
     return sorted(files)
 
 
@@ -471,7 +472,8 @@ def _shell_scripts() -> list[Path]:
     agent = REPO / "agent"
     return sorted(lib_files(agent / "lib") + [agent / "init", agent / "imagesrv-agent",
                                                          REPO / "installer" / "gui-bridge.sh",
-                                                         REPO / "installer" / "lib" / "fielderrors.sh"])
+                                                         REPO / "installer" / "lib" / "fielderrors.sh",
+                                                         REPO / "installer" / "lib" / "nics.sh"])
 
 
 def test_no_ascii_apostrophe_sits_inside_a_hebrew_word_in_shell():

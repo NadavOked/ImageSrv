@@ -1,6 +1,6 @@
 /* 16/10 (Nadav): the SMART warning window -- SmartDlg in ui.h says what it
  * holds. One window for every place that writes to, or reads from, a disk
- * with a SMART warning: the cloner's prompt, the restore onto this machine's
+ * with a SMART warning: the restore onto this machine's
  * disk, the capture, and the local clone's target and source. */
 #ifndef IMAGESRV_SMARTDLG_H
 #define IMAGESRV_SMARTDLG_H

@@ -222,6 +222,16 @@ sata_ports_implemented() {
     '
 }
 
+# ‏#2334: בקר PCI במחלקה 01 בלי `driver`. sysfs בלבד; עץ שלא נקרא = 1 (עיקרון 5).
+storage_unbound() {
+    for _d in "$SYSROOT"/sys/bus/pci/devices/*; do
+        [ -r "$_d/class" ] || continue
+        read -r _c < "$_d/class"
+        case "$_c" in 0x01*) [ -e "$_d/driver" ] || return 0 ;; esac
+    done
+    return 1
+}
+
 disk_probe() {
     # ‏#402: `מגירות=0` אסור שיאמר שני דברים הפוכים. מכונה בלי דיסקים
     # היא או "חברו כונן" או "אף פורט SATA אינו מופעל בקושחה — כבל לא
@@ -229,6 +239,7 @@ disk_probe() {
     # מחושבת רק כשאין דיסק: מכונה עם כונן היא הנתיב החם, ואינה משלמת
     # קריאת dmesg על כל hello.
     [ -n "$(list_disks)" ] && { echo drives; return; }
+    storage_unbound && { echo no_driver; return; }   # גובר על no_ports: בקר שלא רואים דרכו
     _impl=$(sata_ports_implemented)
     case "$_impl" in
         '') echo unchecked ;;   # אין שורת ahci — לא נספר

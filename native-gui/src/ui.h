@@ -95,10 +95,6 @@ enum {
     /* #st-class (classes.js) */
     HIT_CLASS_START,    /* #cls-start */
     HIT_CLASS_CLOSE,    /* #cls-close */
-    /* the cloner's SMART choice (no HTML id: this screen is native-only) */
-    HIT_SMART_REPLACE,
-    HIT_SMART_RESCUE,
-    HIT_SMART_SKIP,
     /* #928: the capture's shrink question (a modal over the build screens) */
     HIT_SHRINK_CONTINUE,
     HIT_SHRINK_PLAIN,
@@ -241,7 +237,7 @@ enum { CONFIRM_NONE, CONFIRM_RESTORE, CONFIRM_ROOM_STOP, CONFIRM_CLASS_STOP, CON
  * and why, model and serial; "דלג" (the default: the focus, Esc) and the red
  * "כתוב בכל זאת" (no typed word). Only its OK carries the action out
  * (smartdlg.c); the screen behind it gets nothing while it is open. */
-enum { SDLG_NONE, SDLG_CLONER, SDLG_RESTORE, SDLG_CAPTURE, SDLG_LC_TARGET, SDLG_LC_SOURCE };
+enum { SDLG_NONE, SDLG_RESTORE, SDLG_CAPTURE, SDLG_LC_TARGET, SDLG_LC_SOURCE };
 typedef struct {
     int kind;                   /* SDLG_*; SDLG_NONE = closed */
     int go;                     /* the focus: 0 = "דלג" (the default), 1 = the red button */
@@ -250,7 +246,6 @@ typedef struct {
     int readonly;               /* #1742: the reason is "readonly" -- the refusal says so, not "SMART נכשל" */
     int ref;                    /* the disk: an index into st.disks / st.lc.disks */
     char dev[32];               /* ... and its device: a reload that moves it closes the window */
-    char nonce[32];             /* SDLG_CLONER: the request it answers -- a new request closes it */
     char disk[SLOT_NAME_MAX + 64], model[80], serial[80], reason[200];   /* disk: #1495 label, "(לא ממופה)" too */
 } SmartDlg;
 
@@ -451,16 +446,12 @@ typedef struct State {
     DriverModel driver_models[MAX_DRIVER_MODELS]; int ndriver_models;
     int driver_models_read, hidden_models;
 
-    /* the cloner screen (clonergui.sh): image name + a pending SMART choice.
-     * smart_nonce is the request's identity, drawn with the prompt and echoed
-     * back on the click so the bridge binds it to the exact request. */
+    /* the cloner screen (clonergui.sh): the image name. #2347: no SMART
+     * question any more -- the agent asks none since #2044. */
     char cloner_image[96];
     int server_restarted_wave;       /* #1377: closed report after server restart */
     /* #704: cslot_name=<port>|<name> -- [port-1], "" = "דיסק N" */
     char cslot_names[MAX_DRAWERS][SLOT_NAME_MAX];
-    int smart_pending, smart_port;
-    char smart_nonce[32], smart_verdict[16], smart_reason[96];
-    char smart_model[80], smart_serial[80];   /* 16/10: fields 5-6, "" = not reported */
 
     /* #928: the capture's shrink question (shrinkgui.sh via guistate.sh):
      * shrink_prompt=<nonce>|<count> and one shrink_partition=<idx>|<old

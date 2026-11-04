@@ -42,15 +42,17 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
     /* #2129: the network row is two lines (a third when one wraps); the rows below move down by what it grew */
     char one[200],two[512];net_lines(s,one,sizeof one,two,sizeof two);
     Text m1=text_make(cr,FONT_SANS,13,500,one,(int)(w-282),DIR_RTL),m2=text_make(cr,FONT_SANS,13,500,two,(int)(w-282),DIR_RTL);double nh=fmax(48,12+m1.h+4+m2.h+10),dy=nh-48;
-    Rect card={x,y,w,290+dy};install_card(cr,t,card);
+    Rect card={x,y,w,338+dy};install_card(cr,t,card);
     InstallDisk *d=s->disk>=0&&s->disk<s->ndisks?&s->disks[s->disk]:NULL;
     if(s->raid!=RAID_NONE){char members[INSTALL_MAX_DISKS*48];install_raid_disks(s,members,sizeof members);snprintf(value,sizeof value,"%s · %d כוננים · %s",RAID_OPTS[s->raid].label,install_raid_count(s),members);}   /* #1989 */
     else{snprintf(value,sizeof value,"%s · %s",d&&d->model[0]?d->model:"—",d?d->path:"");}summary_row(a,cr,(Rect){x+1,y+1,w-2,48},"דיסק",value,0);
     if(s->secondary)snprintf(value,sizeof value,"שרת משנה · ראשי: %s",s->primary_url);else snprintf(value,sizeof value,"שרת ראשי");summary_row(a,cr,(Rect){x+1,y+49,w-2,48},"תפקיד",value,1);
     summary_row(a,cr,(Rect){x+1,y+97,w-2,nh},"כתובת השרת",one,2);text_draw_r(cr,&m2,x+w-181,y+97+12+m1.h+4,t->ink);text_free(&m1);text_free(&m2);
-    snprintf(value,sizeof value,"%s · %s",s->hostname,s->timezone);summary_row(a,cr,(Rect){x+1,y+145+dy,w-2,48},"שם השרת",value,3);snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"משתמש הניהול",value,4);
-    summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"סיסמת root","נקבעה",4);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
-    console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+306+dy,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+306+dy,w-210,t->indigo);y+=340+dy;
+    snprintf(value,sizeof value,"%s · %s",s->hostname,s->timezone);summary_row(a,cr,(Rect){x+1,y+145+dy,w-2,48},"שם השרת",value,3);
+    summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"שעון השרת",s->ntp_org?s->ntp_servers:"אוטומטי",4);   /* #2144: "שינוי" -> step 5 */
+    snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"משתמש הניהול",value,5);
+    summary_row(a,cr,(Rect){x+1,y+289+dy,w-2,48},"סיסמת root","נקבעה",5);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
+    console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+354+dy,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+354+dy,w-210,t->indigo);y+=388+dy;
     Rect seq={x,y,fmin(760,w),112};install_card(cr,t,seq);install_text_r(cr,t,"מה יקרה בלחיצה על \"החל התקנה\"",14,600,seq.x+seq.w-16,y+14,seq.w-32,t->ink);
     install_text_r(cr,t,"מחיקת הדיסק ← מערכת בסיס ← חבילות ImageSrv ← מנהל אתחול ← הגדרות",13,500,seq.x+seq.w-16,y+50,seq.w-32,t->ink);
     char after[192];snprintf(after,sizeof after,"בסיום תתבקש להסיר את מדיית ההתקנה; השרת יופעל מחדש אוטומטית אחרי %d שניות.",INSTALL_AUTO_REBOOT_S);install_text_r(cr,t,after,12,400,seq.x+seq.w-16,y+78,seq.w-32,t->muted);
@@ -150,15 +152,52 @@ static void reboot_countdown(App *a,cairo_t *cr,Rect r){
     Text c=btn_label(cr,"בטל");double cw=btn_width(&c);draw_btn(a,cr,(Rect){r.x+10,r.y+10,cw,N_BUTTON_H},&c,BTN_PLAIN,HIT_INSTALL_CANCEL_REBOOT);text_free(&c);
 }
 
+/* #2144 (mockup 2144-time, Nadav 04/11): what the engine's clock check found
+ * -- green with its evidence, orange when the time server did not answer,
+ * orange in other words when the check itself gave no answer (principle 5).
+ * The automatic restart goes on in all three. Returns the hero's height. */
+static double clock_hero(App *a,cairo_t *cr,double x,double y,double w){
+    const InstallState *s=&a->install;const Theme *t=a->theme;
+    if(s->clock==INSTALL_CLOCK_SYNCED){Rect hero={x,y,w,92};draw_fill_rrect(cr,hero,t->radius,t->success_soft);
+        install_text_r(cr,t,"✓",42,600,x+w-24,y+18,54,t->success_ink);install_text_r(cr,t,"ההתקנה הושלמה.",22,600,x+w-90,y+28,w-115,t->ink);return 92;}
+    char server[300],line[700];bidi_isolate(s->clock_server[0]?s->clock_server:"—",server,sizeof server);
+    const char *h2,*one,*two;
+    if(s->clock==INSTALL_CLOCK_UNSYNCED){h2="ההתקנה הושלמה — השעון לא סונכרן";
+        snprintf(line,sizeof line,"שרת הזמן (%s) לא ענה עד סוף ההתקנה. עד שיענה, השעה בשרת עלולה להיות שגויה, ואיתה הזמנים ביומן, בסבבים ובבדיקת תוקף התעודה.",server);one=line;
+        two="אחרי ההפעלה מחדש: לבדוק שהרשת מאפשרת NTP (UDP 123) אל שרת הזמן, או לשנות בקונסולה: הגדרות ← מקור השעה. עד אז מסך השרת יציג \"השעון לא מסונכרן\".";}
+    else{h2="ההתקנה הושלמה — לא הצלחנו לבדוק את השעון";one="chrony לא החזיר תשובה, ולכן לא ידוע אם השעון מסונכרן.";
+        two="אחרי ההפעלה מחדש: בקונסולה, הגדרות ← מצב השעון ← \"בדוק עכשיו\".";}
+    double tw=w-24-42-18-24;
+    Text th=text_make(cr,FONT_SANS,22,600,h2,(int)tw,DIR_RTL),t1=text_make(cr,FONT_SANS,13.5,400,one,(int)tw,DIR_RTL),t2=text_make(cr,FONT_SANS,13.5,400,two,(int)tw,DIR_RTL);
+    double h=18+th.h+6+t1.h+6+t2.h+18;Rect hero={x,y,w,h};
+    draw_fill_rrect(cr,hero,t->radius,t->warning_soft);draw_border_rrect(cr,hero,t->radius,t->warn,1);
+    cairo_arc(cr,x+w-24-21,y+18+21,21,0,2*M_PI);draw_set(cr,t->warn);cairo_fill(cr);
+    Text g=text_make(cr,FONT_SANS,24,700,"!",0,DIR_RTL);text_draw(cr,&g,x+w-24-21-g.w/2.0,y+18+21-g.h/2.0,t->on_ink);text_free(&g);
+    double right=x+w-24-42-18,ty=y+18;text_draw_r(cr,&th,right,ty,t->warning_ink);ty+=th.h+6;text_draw_r(cr,&t1,right,ty,t->ink);ty+=t1.h+6;text_draw_r(cr,&t2,right,ty,t->muted);
+    text_free(&th);text_free(&t1);text_free(&t2);return h;
+}
+
+/* the card's "שעון השרת" row: a chip, and when synced the evidence beside it */
+static void clock_row(App *a,cairo_t *cr,double x,double y,double w){
+    const InstallState *s=&a->install;const Theme *t=a->theme;int ok=s->clock==INSTALL_CLOCK_SYNCED;
+    install_text_r(cr,t,"שעון השרת",12,500,x+w-20,y,150,t->muted);
+    const char *word=ok?"מסונכרן":s->clock==INSTALL_CLOCK_UNSYNCED?"לא מסונכרן":"לא נבדק";
+    Text c=text_make(cr,FONT_SANS,12,600,word,0,DIR_RTL);double cx=x+w-190;Rect chip={cx-c.w-20,y-3,c.w+20,22};
+    draw_fill_rrect(cr,chip,11,ok?t->success_soft:t->warning_soft);text_draw_r(cr,&c,cx-10,y-3+(22-c.h)/2.0,ok?t->success_ink:t->warning_ink);text_free(&c);
+    if(ok){char server[300],proof[400];bidi_isolate(s->clock_server[0]?s->clock_server:"—",server,sizeof server);
+        snprintf(proof,sizeof proof,"%s · סטייה %s ms",server,s->clock_offset[0]?s->clock_offset:"?");install_text_r(cr,t,proof,12,400,chip.x-12,y,chip.x-12-x-20,t->ink);}
+}
+
 static void done(App *a,cairo_t *cr,InstallLayout l){
-    InstallState *s=&a->install;const Theme *t=a->theme;double w=fmin(760,l.body.w),x=l.body.x+l.body.w-w,y=l.body.y;Rect hero={x,y,w,92};draw_fill_rrect(cr,hero,t->radius,t->success_soft);
-    install_text_r(cr,t,"✓",42,600,x+w-24,y+18,54,t->success_ink);install_text_r(cr,t,"ההתקנה הושלמה.",22,600,x+w-90,y+28,w-115,t->ink);y+=112;
-    Rect card={x,y,w,230};install_card(cr,t,card);install_text_r(cr,t,"הסר את מדיית ההתקנה (ISO / כונן USB) ולחץ 'הפעל מחדש'",15,600,x+w-20,y+20,w-40,t->ink);
+    InstallState *s=&a->install;const Theme *t=a->theme;double w=fmin(760,l.body.w),x=l.body.x+l.body.w-w,y=l.body.y;
+    y+=clock_hero(a,cr,x,y,w)+20;
+    Rect card={x,y,w,262};install_card(cr,t,card);install_text_r(cr,t,"הסר את מדיית ההתקנה (ISO / כונן USB) ולחץ 'הפעל מחדש'",15,600,x+w-20,y+20,w-40,t->ink);
     install_text_r(cr,t,"כתובת הקונסולה",12,500,x+w-20,y+72,190,t->muted);
     if(s->console_url[0])install_text_ltr(cr,s->console_url,18,600,x+20,y+100,w-40,t->indigo);else install_text_r(cr,t,"הכתובת תוצג במסך השרת אחרי האתחול",14,500,x+w-20,y+100,w-40,t->ink);
     install_text_r(cr,t,"משתמש",12,500,x+w-20,y+148,150,t->muted);install_text_ltr(cr,s->user[0]?s->user:s->admin_user,13,500,x+20,y+148,w-190,t->ink);
-    if(s->error[0])install_text_r(cr,t,s->error,12,600,x+w-20,y+188,w-40,t->danger_fg);
-    reboot_countdown(a,cr,(Rect){x,y+246,w,58});
+    clock_row(a,cr,x,y+184,w);   /* #2144 */
+    if(s->error[0])install_text_r(cr,t,s->error,12,600,x+w-20,y+222,w-40,t->danger_fg);
+    reboot_countdown(a,cr,(Rect){x,y+278,w,58});
     install_footer(a,cr,l,"הפעל מחדש",HIT_INSTALL_NEXT,0,1);
 }
 

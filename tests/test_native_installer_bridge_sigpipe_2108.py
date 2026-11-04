@@ -31,7 +31,6 @@ from native import requires_native
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native-gui" / "src"
 BIG = 256 * 1024
-SIGPIPE_BIT = 1 << (signal.SIGPIPE - 1)
 
 
 def _pkgconfig(*pkgs: str) -> bool:
@@ -119,7 +118,9 @@ def test_the_bridge_does_not_inherit_the_gui_ignoring_sigpipe(driver, tmp_path):
     out = _call(driver, f'cat >/dev/null; grep SigIgn /proc/$$/status >"{log}"; :', 10, "gui")
     assert out["rc"] == "0", out
     mask = int(log.read_text().split()[1], 16)
-    assert not mask & SIGPIPE_BIT, f"the bridge started with SIGPIPE ignored (SigIgn {mask:#x})"
+    # signal.SIGPIPE does not exist on Windows: at module level it broke collection (#2358)
+    sigpipe_bit = 1 << (signal.SIGPIPE - 1)
+    assert not mask & sigpipe_bit, f"the bridge started with SIGPIPE ignored (SigIgn {mask:#x})"
 
 
 def test_main_ignores_sigpipe_before_the_first_bridge_call():

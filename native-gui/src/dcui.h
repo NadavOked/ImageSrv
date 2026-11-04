@@ -75,6 +75,7 @@ typedef struct {
     int valid;                          /* a complete frame has arrived */
     char screen[16];                    /* "main" | "settings" */
     char role[64], host[96], url[160], version[64], clock[16], admin[128];
+    char clock_chip[64];                /* #2144: beside the clock; empty = a synced clock */
     char hero_kind[8], hero_title[256], hero_sub_m[DCUI_FIELD], meta_label[64], meta_value[64];
     int nprobs; DcuiProb probs[DCUI_MAX_PROBS];
     int ntiles; DcuiTile tiles[DCUI_MAX_TILES];

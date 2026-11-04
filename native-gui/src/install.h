@@ -23,6 +23,9 @@ typedef struct {
 #define HIT_INSTALL_ROOT_CONFIRM   1109
 #define HIT_INSTALL_SHOW_ROOT      1110
 #define HIT_INSTALL_SHOW_ROOT_CONFIRM 1111
+#define HIT_INSTALL_NTP_AUTO       1112   /* #2144 */
+#define HIT_INSTALL_NTP_ORG        1113
+#define HIT_INSTALL_NTP_SERVERS    1114
 #define HIT_INSTALL_DISK_BASE      1120
 #define HIT_INSTALL_RAID_BASE      1140   /* #1989: + RAID_* */
 
@@ -38,6 +41,12 @@ int install_password_ready(const InstallState *s);
 void install_password_rules(const char *pw, int *letter, int *digit, int *special);
 /* #1310: "next" on the role screen -- a secondary only after a GREEN check */
 int install_role_ready(const InstallState *s);
+/* #2144: "next" on the clock step -- the organisation's server needs an address */
+int install_time_ready(const InstallState *s);
+/* #2144: the time step's "now": HH:MM · DD/MM/YYYY in the chosen zone when its
+ * TZif is on this system, else in UTC and the label says "UTC" -- never another
+ * zone's time under the chosen name. Returns the minute drawn. */
+int install_clock_now(const InstallState *s, char *when, size_t n, char *zone, size_t zn);
 const char *install_phase_label(const char *phase);
 void screen_install(App *a, cairo_t *cr, double W, double H);
 int install_render_png(App *a, const char *prefix, int w, int h);

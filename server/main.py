@@ -389,17 +389,18 @@ def _start_ups_monitor(runtime) -> None:
 
 
 def _host_config_writes() -> dict:
-    """‏#2267: שני הכותבים ל-/etc בעלייה — ‏known-macs (‏#141) והקובץ הראשי של
-    ‏dnsmasq (‏#1013) — רק על לינוקס, מערכת ההפעלה של השרת (דביאן 13). שם הם
-    בדיוק כמו קודם, כולל כשל גלוי ביומן (עיקרון 5). על תחנת פיתוח (ווינדוס)
-    אין /etc, אין systemctl ואין dnsmasq: הכתיבה רק יצרה ‏`C:\\etc\\imagesrv`
+    """‏#2267: הכותבים ל-/etc בעלייה — ‏known-macs (‏#141), הקובץ הראשי של
+    ‏dnsmasq (‏#1013) והניסיון החוזר שלו ב-dnsmasq.service.d (‏#2174) — רק על
+    לינוקס, מערכת ההפעלה של השרת (דביאן 13). שם הם בדיוק כמו קודם, כולל
+    כשל גלוי ביומן (עיקרון 5). על תחנת פיתוח (ווינדוס) אין /etc, אין systemctl ואין dnsmasq: הכתיבה רק יצרה ‏`C:\\etc\\imagesrv`
     ו-`C:\\etc\\dnsmasq.d` מחוץ ל-data-dir — ולכן לא מדליקים אותם, ואומרים זאת."""
     from server.net import dhcp_host
     if not sys.platform.startswith("linux"):
         print(f"dev station ({sys.platform}): /etc/imagesrv/known-macs and "
               "/etc/dnsmasq.d are not written (#2267)")
-        return {"known_macs_hooks": None, "sync_dnsmasq": False}
-    return {"known_macs_hooks": {"apply": dhcp_host.apply_known_macs}, "sync_dnsmasq": True}
+        return {"known_macs_hooks": None, "sync_dnsmasq": False, "dnsmasq_dropin": False}
+    return {"known_macs_hooks": {"apply": dhcp_host.apply_known_macs}, "sync_dnsmasq": True,
+            "dnsmasq_dropin": True}
 
 
 def main() -> None:

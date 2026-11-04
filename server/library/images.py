@@ -760,6 +760,9 @@ class ImageLibrary:
                     "lineage": lineage_of(manifest),
                     "version": version_of(manifest),
                     "is_default": manifest["id"] in chosen,
+                    # ‏#2053: התג "מצב שינה" נגזר מהשדה הקיים (#2213) — כמו שהוא;
+                    # ‏None = השדה חסר, ואז אין תג (לא טענה שהמקור לא היה מושהה).
+                    "src_unhib": manifest.get("src_unhib"),
                 }
             )
         return sorted(result, key=lambda m: (m["folder"], m["sort"], m["name"]))

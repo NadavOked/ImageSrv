@@ -77,6 +77,10 @@ firstboot_from_answers() {
     # the server's start would bring the OS back to the default. An answers
     # file from an older ISO has none: the default, as before.
     if [[ -n "$(answers_get timezone)" ]]; then argv+=(--timezone "$(answers_get timezone)"); fi
+    # #2144: the time source chosen on the "שעון השרת" step becomes the console's
+    # setting (#1773) -- else the server's start rewrites chrony with "automatic".
+    # Empty (automatic) or an older ISO's answers: the setting stays unset.
+    if [[ -n "$(answers_get ntp_servers)" ]]; then argv+=(--ntp-servers "$(answers_get ntp_servers)"); fi
     # answers.secret is `admin_pass=<value>` (interfaces.md); setup-boot-server
     # reads fd 3 as the bare password. Feeding it the whole file made the
     # admin password literally "admin_pass=..." (ESXi, 21/09) -- the value
@@ -129,7 +133,8 @@ firstboot_from_answers() {
     # had an address (loopback + name only). With the address on the NIC the
     # server starts again and issues it for that address -- here, before the
     # DCUI shows a fingerprint to photograph -- not on the second boot, after
-    # the operator already trusted the first one.
+    # the operator already trusted the first one. #2155: a static NIC's
+    # certificate is already issued for its address; this start keeps it.
     if [[ -n "$addr" ]]; then
         systemctl restart imagesrv-server.service >>"$BUILD_LOG" 2>&1 \
             || fail installer-failed "imagesrv-server did not restart after $servers_if got $addr"
