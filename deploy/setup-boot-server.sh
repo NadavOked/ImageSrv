@@ -1120,6 +1120,13 @@ say "מייצר/מוודא את תעודת ה-TLS של הקונסולה"
 CONSOLE_TLS_HOST="$CONSOLE_HOST"
 if [[ -n "$CONSOLE_TLS_HOST" && ! "$CONSOLE_TLS_HOST" =~ ^[0-9a-fA-F.:]+$ ]]; then
     CONSOLE_TLS_HOST="$(iface_ip "$CONSOLE_TLS_HOST")"
+    # #2155: first boot restarts networking only after this script, so a static
+    # servers NIC has no address yet. Its configured address is the one it is
+    # about to get: one certificate for it, not one for loopback that the next
+    # start replaces (journal + console.crt.prev). DHCP: not known -- loopback.
+    if [[ -z "$CONSOLE_TLS_HOST" && "$CONSOLE_HOST" == "$SERVERS_IF" && "$SERVERS_MODE" == static ]]; then
+        CONSOLE_TLS_HOST="$SERVERS_ADDR"
+    fi
 fi
 CONSOLE_FP="(dry-run)"
 if (( ! DRY_RUN )); then

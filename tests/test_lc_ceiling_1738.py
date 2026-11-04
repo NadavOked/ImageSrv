@@ -15,7 +15,6 @@ Two changes in the product, and the knobs the metal measurement turns:
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import os
 import re
@@ -94,6 +93,7 @@ def test_a_target_that_falls_behind_queues_and_keeps_every_byte_in_order(fanout,
 @needs_fanout
 @pytest.mark.parametrize("env,want", [({}, 1 << 20), ({"FANOUT_PIPE_BYTES": str(4 << 20)}, 4 << 20)])
 def test_the_pipe_size_is_the_knob_or_the_measured_default(fanout, tmp_path, env, want):
+    import fcntl   # POSIX only; at module level it broke collection on Windows (#2358)
     data = os.urandom(2 * 1024 * 1024)
     fifo = make_fifo(tmp_path, "sdc"); seen: list[int] = []
 

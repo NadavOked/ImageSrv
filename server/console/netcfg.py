@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
 import time
 from pathlib import Path
@@ -74,6 +75,10 @@ def default_hooks() -> Hooks:
         # כרטיס חייבים להסכים מי קיים במכונה.
         "interfaces": dhcp.list_interfaces,
         "netcfg_now": time.time,
+        # ‏#2349: ההמתנה ל-lease אחרי החלת DHCP — ‏async, כדי שהסוכנים, ‏GRUB
+        # והקונסולה (אותו event loop) ייענו בזמן שהיא ממתינה.
+        "netcfg_sleep": asyncio.sleep,
+        "netcfg_monotonic": time.monotonic,
         "netcfg_boot_id": netcfg_rollback.boot_id,
         # ‏#1088: השם שלקוח DHCP שולח (אופציה 12) — כדי שה-DNS של המכללה
         # יפתור `imagesrv` לכתובת שהתקבלה.
@@ -129,6 +134,10 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
     router = APIRouter(prefix="/api/console/net/config")
     _current_user, admin_only = auth.dependencies(ctx.conn)
     hooks = {**default_hooks(), **(hooks or {})}
+    #: ‏#2349: כרטיסים שהחלתם ממתינה עכשיו ל-lease. ההמתנה משחררת את ה-loop,
+    #: ולכן בקשה שנייה (לחיצה כפולה) הייתה מריצה ifdown/ifup באמצע הקריאה
+    #: החוזרת של הראשונה — היא מסורבת בשם, ולא נשפטת מול מצב של אחרת.
+    applying: set[str] = set()
 
     def load(name: str) -> netcfg.NetConfig:
         return netcfg.NetConfig.from_json(
@@ -186,9 +195,10 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         return next((c for c in all_configs() if name in c.slaves), None)
 
     def gaps_of(cfg: netcfg.NetConfig, state: netcfg_host.LiveState,
-                bond: netcfg_host.BondState | None = None) -> list[str]:
+                bond: netcfg_host.BondState | None = None, *,
+                waited_s: float = 0) -> list[str]:
         """הקריאה החוזרת: הכתובת, ול-bond (‏#1264) גם מה שהקרנל מדווח עליו."""
-        gaps = netcfg_host.mismatches(cfg, state)
+        gaps = netcfg_host.mismatches(cfg, state, waited_s=waited_s)
         if cfg.slaves:
             bond = bond if bond is not None else hooks["netcfg_bond_state"](cfg.name)
             gaps += netcfg_host.bond_mismatches(cfg, bond, state)
@@ -343,9 +353,9 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         found = check(cfg)
         if found:
             raise HTTPException(400, " · ".join(found))
-        return _configure(name, before, cfg, body, request, user, live)
+        return await _configure(name, before, cfg, body, request, user, live)
 
-    def _configure(name: str, before: netcfg.NetConfig, cfg: netcfg.NetConfig,
+    async def _configure(name: str, before: netcfg.NetConfig, cfg: netcfg.NetConfig,
                    body: dict, request: Request, user, live: dict) -> dict:
         """מכאן — אחרי שהקלט נבדק: הקלדת השם, זרוע ההחזרה, כתיבה, קריאה חוזרת."""
         # ‏#1558: הקונסולה כותבת ל-ifupdown. כשמשהו אחר מנהל את הרשת (שרת
@@ -362,6 +372,10 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         if body.get("confirm") != name:
             raise HTTPException(
                 409, f"לשינוי הגדרות הרשת יש להקליד את שם הכרטיס בדיוק: {name}")
+        if applying:
+            raise HTTPException(
+                409, f"החלת רשת קודמת ({', '.join(sorted(applying))}) עדיין ממתינה "
+                     "לכתובת מ-DHCP — המתינו לתוצאה שלה, ורק אז שינוי נוסף")
         now = hooks["netcfg_now"]()
         if netcfg_rollback.read_pending(state_dir) is not None:
             raise HTTPException(
@@ -383,7 +397,11 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         journal(ctx.conn, "net_config",
                 f"{netcfg.summary(cfg)} changed={','.join(netcfg.changed(before, cfg))}",
                 user[0])
-        return _apply(name, cfg, arm, now, user[0], live.get(name))
+        applying.add(name)
+        try:
+            return await _apply(name, cfg, arm, now, user[0], live.get(name))
+        finally:
+            applying.discard(name)
 
     def _arm(name: str, before: netcfg.NetConfig, after: netcfg.NetConfig,
              now: float) -> str | None:
@@ -419,8 +437,27 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         except OSError:
             return None
 
-    def _apply(name: str, cfg: netcfg.NetConfig, armed: bool, now: float,
-               who: str, live: dict | None) -> dict:
+    async def _settled(cfg: netcfg.NetConfig) -> tuple[netcfg_host.LiveState, list[str]]:
+        """‏#2349: הקריאה החוזרת, ובכרטיס DHCP — שוב כל `DHCP_POLL_S` עד שה-lease
+        מגיע או עד `DHCP_LEASE_WAIT_S`. ‏`dhcpcd -b` חוזר מיד, וה-lease מגיע
+        שניות אחריו; קריאה מיידית אמרה "אין כתובת" על החלה שהצליחה.
+
+        ההמתנה היא `await` — ה-loop פנוי לסוכנים (8080) ולקונסולה (8081)
+        בינתיים. כל קריאה עצמה (`ip addr`/`ip route`) סינכרונית וקצרה, כמו
+        בכל נתיב אחר בראוטר הזה. סטטי נקרא פעם אחת ואינו ממתין כלל. תום
+        הזמן אינו "בסדר": הפער האחרון חוזר, עם מספר השניות (עיקרון 5)."""
+        wait_s = netcfg_host.DHCP_LEASE_WAIT_S if cfg.mode == netcfg.MODE_DHCP else 0
+        deadline = hooks["netcfg_monotonic"]() + wait_s
+        while True:
+            state = hooks["netcfg_state"]()
+            timed_out = hooks["netcfg_monotonic"]() >= deadline
+            gaps = gaps_of(cfg, state, waited_s=wait_s if timed_out else 0)
+            if not gaps or timed_out:
+                return state, gaps
+            await hooks["netcfg_sleep"](netcfg_host.DHCP_POLL_S)
+
+    async def _apply(name: str, cfg: netcfg.NetConfig, armed: bool, now: float,
+                     who: str, live: dict | None) -> dict:
         """כותב, מחיל, ואז **קורא בחזרה**. ‏ok נקבע רק מהקריאה."""
         configs = sorted([c for c in all_configs() if c.name != name] + [cfg],
                          key=lambda c: c.name)
@@ -432,8 +469,11 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         error = " · ".join(e for e in errors if e) or None
         if error is None:
             error = hooks["netcfg_apply"](name)
-        state = hooks["netcfg_state"]()
-        gaps = gaps_of(cfg, state)
+        if error is None:
+            state, gaps = await _settled(cfg)
+        else:
+            state = hooks["netcfg_state"]()
+            gaps = gaps_of(cfg, state)
         verified = not gaps
         if error or not verified:
             journal(ctx.conn, "net_config_unverified",
@@ -452,7 +492,8 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         return {"ok": error is None and verified, "verified": verified,
                 "apply_error": error, "mismatches": gaps,
                 "interface": state_view(cfg, live, state),
-                "rollback": rollback_view(now)}
+                # ‏#2349: אחרי ההמתנה ל-lease — כמה נשאר לאשר **עכשיו**.
+                "rollback": rollback_view(hooks["netcfg_now"]())}
 
     @router.put("/{name}/deploy")
     async def configure_deploy(name: str, request: Request, user=Depends(admin_only)):
@@ -519,7 +560,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         risky = dhcp_steps["gates"](name, dhcp_cfg, dhcp_before, dhcp_body)
         address_result = None
         if netcfg.changed(before, cfg):
-            address_result = _configure(name, before, cfg, body, request, user, live)
+            address_result = await _configure(name, before, cfg, body, request, user, live)
             if not address_result["ok"] or address_result["rollback"]["pending"]:
                 why = ("ממתינה לאישור שהקונסולה עדיין נגישה — אשרו, ואז שמרו "
                        "שוב את רשת ההפצה" if address_result["ok"] else

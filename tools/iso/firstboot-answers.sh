@@ -129,7 +129,8 @@ firstboot_from_answers() {
     # had an address (loopback + name only). With the address on the NIC the
     # server starts again and issues it for that address -- here, before the
     # DCUI shows a fingerprint to photograph -- not on the second boot, after
-    # the operator already trusted the first one.
+    # the operator already trusted the first one. #2155: a static NIC's
+    # certificate is already issued for its address; this start keeps it.
     if [[ -n "$addr" ]]; then
         systemctl restart imagesrv-server.service >>"$BUILD_LOG" 2>&1 \
             || fail installer-failed "imagesrv-server did not restart after $servers_if got $addr"

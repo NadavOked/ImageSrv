@@ -112,6 +112,7 @@ class Snapshot:
     rollback_seconds: int = 0
     pre_install: bool = False
     system_updates: str = ""      # #1411: YYYY-MM-DD of the Debian packages; "" = not known
+    first_boot_running: bool = False   # #2155: state=installing, within FIRST_BOOT_GRACE_S
 
 
 def _command_text(result: CommandResult) -> str:
@@ -374,6 +375,24 @@ CONSOLE_STARTING = "starting (the console is not answering yet)"
 _monotonic = time.monotonic
 #: monotonic time of the first failed read since the last one that worked.
 _cert_unread_since: list[float] = []
+#: #2155 (2): setup-boot-server starts the DCUI before the management NIC is up
+#: and before the firewall; rc5's first frame showed both red, the next one
+#: green (Hyper-V 01:09:06 -> 01:09:11, 25/10). While first boot runs they are
+#: "starting" -- for this long from the first time the DCUI saw it running.
+#: A first boot that systemd killed never writes `fail`, and stays "installing".
+FIRST_BOOT_GRACE_S = 300
+_installing_since: list[float] = []
+
+
+def first_boot_running(status_file: Path = STATUS_FILE) -> bool:
+    """firstboot.status says installing, and the cap has not passed."""
+    if _read_key_values(status_file).get("state") != "installing":
+        _installing_since.clear()
+        return False
+    now = _monotonic()
+    if not _installing_since:
+        _installing_since.append(now)
+    return now - _installing_since[0] < FIRST_BOOT_GRACE_S
 
 
 def _console_certificate(status_file: Path) -> tuple[str, tuple[str, ...], str]:
@@ -448,6 +467,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
         rollback_interface=marker.interface if marker else "",
         rollback_seconds=seconds,
         system_updates=system_updates_date(data_dir, manifest_file),
+        first_boot_running=first_boot_running(status_file),
     )
 
 

@@ -3106,13 +3106,12 @@ proxy ישנה מה-DB (‏`console_dhcp.proxy_configs`), ו-`GET /net/proxy-sup
   (‏`console.css` / `console.js:slotClass`):** 🔴 `fail` אדום (SMART תקול) ·
   🟠 `failed_last` כתום (וגם `warn` מסוכן ישן) · 🟢 `ok` **ו-`unchecked`** ירוק —
   ‏`unchecked` אומר זאת במילים ("לא נבדק") ליד הנקודה, לא בצבע, ובדיווח הוא
-  נשאר `unchecked` (עיקרון 5: לא-נבדק אינו `ok`, רק צבעו כזה). המסך הגרפי
-  מציע על כל צבע שלושה כפתורים — "החלף דיסק" / "דלג" / "כתוב בכל זאת…" (על
-  כתום שנכשל בפעם הקודמת: "נסה שוב…") — והשלישי פותח את חלון ה-SMART.
-  (‏#1732: על אדום הסוכן אינו שואל, ולכן השאלה הזו אינה מופיעה עליו. ‏#2042, נדב 23/10:
-  גם על כתום שער ה-SMART אינו שואל עוד — הכתום נכתב עם הערה, סעיף 12.)
+  נשאר `unchecked` (עיקרון 5: לא-נבדק אינו `ok`, רק צבעו כזה). מסך המשכפל
+  **אינו שואל** על אף צבע: ‏#1732 — אדום מדולג; ‏#2042 (נדב 23/10) — כתום נכתב עם
+  הערה (סעיף 12); ‏#2044 הסיר את השאלה מהסוכן, ו-#2347 את פס השאלה ("החלף דיסק" /
+  "דלג" / "כתוב בכל זאת…") מהגואי.
 - **חלון אזהרת SMART (הכרעת נדב 16/10; ‏#1732 על אדום)** — **‏#1732:** חלון שנפתח
-  על **כתיבה** לדיסק אדום (‏`SDLG_CLONER` / ‏`SDLG_RESTORE` / ‏`SDLG_LC_TARGET`) הוא
+  על **כתיבה** לדיסק אדום (‏`SDLG_RESTORE` / ‏`SDLG_LC_TARGET`) הוא
   סירוב: הכותרת "לא כותבים על <דיסק>", המשפט "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת", וכפתור
   אחד — "סגור" (‏Esc/Enter); אין `HIT_SDLG_GO`, ‏Tab אינו מעביר פוקוס, ו-`sdlg_handle`
   לעולם אינו מחזיר `go=1` עליו. בשיכפול מקומי "יעד" של דיסק אדום אפור ואינו
@@ -3125,16 +3124,15 @@ proxy ישנה מה-DB (‏`console_dhcp.proxy_configs`), ו-`GET /net/proxy-sup
   הדגם והמספר הסידורי, ושני כפתורים: "דלג" (ברירת המחדל — הפוקוס עליו,
   ‏Esc) ו"כתוב בכל זאת" אדום, בלי הקלדת מילה (‏#1270). ‏Enter/קליק על
   "כתוב בכל זאת…" **פותח** את החלון ואינו כותב; רק הכפתור האדום שבחלון
-  מבצע (‏`native-gui/src/smartdlg.c`). המקומות: שאלת ה-SMART של מחשב
-  השיכפול (סבב/שחזור למגירות — "דלג" בחלון = `smart-skip|<nonce>`, האדום =
-  `smart-rescue|<nonce>`, ורק לבקשה שהחלון נפתח עליה); שיכפול מקומי — דיסק
+  מבצע (‏`native-gui/src/smartdlg.c`). המקומות (‏#2347: שאלת ה-SMART של מחשב
+  השיכפול, ‏`SDLG_CLONER`, הוסרה עם הפס): שיכפול מקומי — דיסק
   כתום נעשה **יעד** רק דרך החלון (אדום — לעולם לא), ו**מקור** עם אזהרה עובר את החלון
   ב"המשך לאישור" (פעם אחת לכל מקור); שחזור לדיסק של מחשב הבנייה (אחרי
   "מחק ושחזר" של ‏#1270); וקליטה מדיסק עם אזהרה (‏"התחל קליטה"). לשם כך:
-  - **`smart_prompt=<nonce>|<port>|<verdict>|<reason>|<model>|<serial>`** —
-    **הסוכן אינו כותב אותו עוד** (#2044: ‏`gui_smart_choice` ו-`smart-request`/`smart-decision`
-    הוסרו, והגשר אינו מקבל `smart-<action>|<nonce>`). הגואי עדיין מפרק אותו ומצייר את פס
-    השאלה כשהוא מופיע — הסרת הצד של ה-C היא #2347 (תת-משימה של #2044).
+  - **`smart_prompt=`** — **הוסר משני הצדדים.** הסוכן אינו כותב אותו (#2044: ‏`gui_smart_choice`
+    ו-`smart-request`/`smart-decision` הוסרו, והגשר אינו מקבל `smart-<action>|<nonce>`), והגואי
+    אינו קורא אותו (#2347): שורה כזו מסוכן ישן היא מפתח לא מוכר — ‏`state.c` מדפיס
+    "unknown key 'smart_prompt' ignored" ל-stderr, ושום פס אינו מצויר.
   - **`dsmart=<dev>|<verdict>|<reason>|<serial>|<port>`** — מחשב הבנייה,
     במסכי הקליטה והשחזור בלבד (‏`guistate.sh:gui_disk_smart`): ה-SMART של
     כל דיסק `disk=` שאינו נשלף, מ-probe מקומי אחד לדיסק (‏`smart_probe`,
@@ -4638,7 +4636,7 @@ deploy (403) ושרת משני (409) — אין צמתים, לא שגיאה. מ�
 | `/me` | GET | (‏#915, **לכל משתמש מחובר**, לא רק admin) מחזיר גם `server_name` (‏#936, סעיף 18), ‏`version` ו-`version_verified`. ‏`version` הוא אותו ערך כמו `current` למעלה; `version_verified:false` אומר שזה fallback של `git describe`, והקונסולה וה-DCUI מציגים לידו "לא מאומת". `null` נשאר רק כשגם `git describe` אינו מחזיר גרסה. גם `theme` (‏#1093, סעיף 24), ו-`uptime_seconds`/`deploy_ip` (‏#968, סעיף 29) |
 | `/update/status` | GET | מצב ההרצה האחרונה + `verified` + `now` (ראו למטה; השדות של #1301 — "מסמך הסטטוס") |
 | `/update/check` | POST | `{at, current, latest, available, reason, message?, detail?, signature?}` — נשמר ב-`settings.update_last_check` (‏#1000). בכשל רשת `reason="no_network"`, ‏`message` הוא הנחיית חומת-האש בעברית ו-`detail` הוא פלט git/החריגה; בכשל אחר `reason="failed"`, והטקסט הקודם נשמר ב-`message` לצד `detail`. כשל תמיד מחזיר `available=false` ו-`latest=null`. ‏**`signature`** (‏#1277) — רק כש-`available=true`: `{state, detail}` על התג `latest`, ‏`state` ∈ `signed` (‏`detail` = `<principal> SHA256:<טביעה>`) · ‏`unsigned` (נבדק ואינו חתום במפתח מ-`deploy/release-signers`; ‏`detail` = הסיבה) · ‏`unchecked` (הבדיקה לא רצה — הורדת התג, המאמת, או תשובה לא מוכרת; ‏`detail` = הסיבה). ‏`signature` חסר ב-`available=true` (בדיקה שנשמרה לפני #1277) = "לא נבדק", **לא** "חתום". **404** אם `update_enabled` כבוי |
-| `/update/apply` | POST | `{tag, force?}` (בלי הקלדת שם — עדכון הפיך, ‏#1192); **400** תג לא תקין · **404** כבוי · **409** `{detail, code: "update_busy", busy}` כשהשרת עסוק לפי `auto_reboot.busy_reason` (סבב, סבב חדר גם בין גלים, קליטה רצה, עדכון VM, שיכפול מקומי שמחשב **רשום** דיווח בחלון הטרי; DB שלא נקרא = עסוק) — ‏#1891. ‏`force: true` = "עדכן בכל זאת" של המנהל: עובר, נרשם ביומן `update_forced`, והסקריפט אינו מסרב שוב; האתחול המתוזמן אינו עוקף |
+| `/update/apply` | POST | `{tag, force?}` (בלי הקלדת שם — עדכון הפיך, ‏#1192); **400** תג לא תקין · **404** כבוי · **409** `{detail, code: "update_busy", busy}` כשהשרת עסוק לפי `auto_reboot.busy_reason` (סבב, סבב חדר גם בין גלים, קליטה רצה, העברה בין אתרים (`storage_transfers` ‏queued/sending/verifying), העלאת אימג' מהקונסולה, קבלת אימג' משרת אחר, עדכון VM, שיכפול מקומי שמחשב **רשום** דיווח בחלון הטרי; DB שלא נקרא = עסוק) — ‏#1891. ‏`force: true` = "עדכן בכל זאת" של המנהל: עובר, נרשם ביומן `update_forced`, והסקריפט אינו מסרב שוב; האתחול המתוזמן אינו עוקף |
 | `/update/revert` | POST | בלי גוף — לגרסה ב-`update_previous` (בלי הקלדת שם — ‏#1778, הכרעת #1270; ‏`confirm_name` שנשלח מקונסולה ישנה מתעלמים ממנו). אותו מסלול כמו `apply`, ולכן הפיך: `update_previous` מקבל את הגרסה שממנה חזרנו. **404** אם אין גרסה קודמת או כבוי · **409** עסוק (`update_busy`, כמו `apply`; גוף אופציונלי `{force: true}`) או עדכון שכבר רץ |
 | `/update/backup` | GET | (‏#1128) `application/gzip`, ‏`Content-Disposition: attachment; filename="imagesrv-settings-<ts>.tar.gz"`, ‏`Cache-Control: no-store`. תוכן: `data/imagesrv.db` (עותק עקבי דרך backup API, ‏`integrity_check`=ok, ‏journal_mode=DELETE), שאר `data_dir` תחת `data/` (בלי `imagesrv.db*`, ‏`storage/`, ‏`storage-test/`), ‏`MANIFEST.txt` (‏`version=`, ‏`created=`, ‏`warning=`), ‏`SHA256SUMS`. **בלי אימג'ים.** **לא תלוי** ב-`update_enabled`. יומן: `settings_backup_downloaded`. **503** כשלשרת אין `data_dir` (בדיקות בלבד) |
 
@@ -7456,6 +7454,12 @@ best-effort מצד הסוכן, אחרי כל ריצה. גוף:
 (‏USB, ‏VLAN) מחזיר את dnsmasq בלי לוותר על `bind-interfaces` (‏#1078). מקור אחד לשניים:
 ‏`setup-boot-server.sh` (שרת חדש) ו-`tools/server-upgrade.sh` (שרת שהותקן לפני #1816,
 לפני ה-`daemon-reload` של שלב 3). כשל בהתקנה בעדכון — `warning` בסטטוס, לא חזרה.
+‏**‏#2174: וגם בכל עליית `imagesrv-server`** (‏`server/system/dnsmasq_dropin.py`, לינוקס
+בלבד): עדכון מהכפתור מריץ את הסקריפט של התג הישן (‏#2350), והקוד הוא מה שמתחלף תמיד.
+זהה **ו**-`systemctl show dnsmasq -p DropInPaths` מכיל אותו = כלום; חסר/שונה/לא נטען =
+כתיבה אטומית + `daemon-reload` (לא restart ל-dnsmasq) + בדיקה חוזרת של `DropInPaths`.
+יומן: `dnsmasq_dropin_applied` (נוסף/עודכן/נטען) או `dnsmasq_dropin_failed` עם הסיבה
+(השרת עולה בכל זאת). ‏`IMAGESRV_UNIT_DIR` לבדיקות, כמו בעדכון.
 
 **‏apt — אין שינוי, ונמדד למה:** ‏`apt-repo` הוא מאגר ה-ISO שהועתק פעם אחת
 בהתקנה (‏`bootstrap.sh`) ואינו גדל עם עדכונים; עדכוני האבטחה (‏#1411) נפרסים

@@ -38,6 +38,7 @@ from server.learn import server_io   # #1884
 from server.net import pxe_log   # #1887
 from server.agent import timing as agent_timing   # #2056
 from server.system import timezone, timesync   # #1447, #1773
+from server.system import dnsmasq_dropin as dnsmasq_dropin_mod   # #2174
 from server.agent.api import ServerContext, boot_identity_ok, create_agent_router
 from server.console.api import create_console_router
 from server.console.data import create_console_data_router   # #1882-#1889
@@ -442,6 +443,10 @@ def create_runtime(
     # טעם כמו ``known_macs_hooks``: רק ``main`` מדליק; בדיקות לא נוגעות
     # ב-dnsmasq של המכונה שהן רצות עליה.
     sync_dnsmasq: bool = False,
+    # ‏#2174: בעלייה, הניסיון החוזר של dnsmasq (‏#1816) ב-dnsmasq.service.d מותאם
+    # למקור שבעץ, ו-daemon-reload כשצריך. ‏False כברירת מחדל מאותו טעם כמו
+    # ``sync_dnsmasq``: רק ``main`` מדליק, ורק על לינוקס.
+    dnsmasq_dropin: bool = False,
     # ‏#705: שלבי האכיפה של השירותים לכל כרטיס (‏`nic_services.NicServices`)
     # ועוד hooks שלו — בדיקות מזריקות; ‏`main` מוסיף את המאזינים אחרי שהם קיימים.
     nic_hooks: dict | None = None,
@@ -689,6 +694,9 @@ def create_runtime(
     if sync_dnsmasq:
         console_dhcp.sync_main_conf(
             ctx, {**console_dhcp.default_hooks(), **(dhcp_hooks or {})}, deploy)
+    if dnsmasq_dropin:
+        dnsmasq_dropin_mod.apply_on_start(
+            conn, {**dnsmasq_dropin_mod.default_hooks(), **(host_hooks or {})}, repo_dir)
 
     engine = vmupdate_engine or VmUpdate(
         conn, library,

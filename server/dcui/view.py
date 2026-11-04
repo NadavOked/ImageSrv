@@ -248,6 +248,9 @@ _PATTERNS = (
     (r"Temporary address applied to ([A-Za-z0-9._-]+)\.", "הכתובת הזמנית הוחלה על {0}."),
     (r"Temporary network command failed: (.+)\.", "פקודת הרשת הזמנית נכשלה: {0}."),
     (r"Conflict (\d+)", "התנגשות {0}"),
+    # ‏#2349: apply_network על DHCP, אחרי ההמתנה ל-lease
+    (r"Still no match after waiting (\d+) seconds for DHCP\.",
+     "גם אחרי {0} שניות של המתנה ל-DHCP, המצב החי אינו מה שביקשנו."),
     (r"([A-Za-z0-9@._-]+): restart failed", "{0}: ההפעלה מחדש נכשלה"),
     (r"([A-Za-z0-9@._-]+) did not read back active", "{0} לא חזר למצב פעיל"),
     # ‏#1988: "הוסף כונן" (actions.py)
@@ -333,13 +336,15 @@ def _link_text(link: str) -> str:
     return "מצב הקישור לא ידוע"
 
 
-def nic_row(label: str, nic: NicInfo) -> Row:
+def nic_row(label: str, nic: NicInfo, starting: bool = False) -> Row:
     mode = {"dhcp": "DHCP", "static": "קבוע"}.get(nic.mode, "")
     speed = speed_text(nic.speed)
     sub = " · ".join(part for part in (mode, _link_text(nic.link), iso(speed) if speed else "") if part)
     value = f"{nic.name} · {nic.address or 'אין כתובת'}"
     if not nic.address_checked:
         return Row(label, value, sub, "warn", "לא נבדק", "", "", "mono")
+    if starting and (nic.link != "up" or not nic.address):   # #2155: first boot brings it up
+        return Row(label, value, sub, "info", "עולה", "", "", "mono")
     if nic.link in ("down", "no carrier"):
         return Row(label, value, sub, "bad", "מנותק", "bad", "", "mono")
     if not nic.address:
@@ -376,6 +381,8 @@ def service_row(name: str, state: ServiceState | None, snapshot: Snapshot,
                    "bad", "mono")
     if active == "failed":
         return Row(name, label, "נכשל (systemd: failed)", "bad", "נכשל", "bad", "mono")
+    if snapshot.first_boot_running:   # #2155: first boot starts and restarts it
+        return Row(name, label, f"systemd: {active}", "info", "עולה", "", "mono")
     if active in ("activating", "reloading"):
         return Row(name, label, f"systemd: {active}", "warn", "עולה", "warn", "mono")
     return Row(name, label, f"לא פועל (systemd: {active})", "bad", "לא פועל", "bad", "mono")
@@ -432,8 +439,9 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
     found: list[Problem] = []
     services = snapshot.services
     server = services.get("imagesrv-server")
-    if server is None or server.active != "active":
-        state = server.active if server else "unknown"
+    starting = snapshot.first_boot_running   # #2155: what first boot is still bringing up
+    state = server.active if server else "unknown"
+    if state != "active" and not (starting and state not in ("", "unknown", "failed")):
         if state in ("", "unknown"):
             found.append(Problem(
                 "warn", "לא הצלחנו לבדוק את שרת ImageSrv (imagesrv-server)",
@@ -448,7 +456,8 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
                 "הקונסולה <b>לא תיפתח</b> עד שהבעיה הראשונה תתוקן."))
     dns = services.get("dnsmasq")
     dns_state = dns.active if dns else "unknown"
-    if snapshot.deploy is not None and dns_state != "active":
+    if snapshot.deploy is not None and dns_state != "active" \
+            and not (starting and dns_state not in ("", "unknown", "failed")):
         if dns_state in ("", "unknown"):
             found.append(Problem(
                 "warn", "לא הצלחנו לבדוק את שירות ה־DHCP של רשת ההפצה (dnsmasq)",
@@ -476,6 +485,8 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
             "הכתובת שמוצגת לקונסולה אינה בהכרח הכתובת האמיתית.",
             "<b>מה לעשות:</b> רענון (F5); אם זה חוזר — הגדרות ← הפעלה מחדש של רשת הניהול.",
             ("F2", "הגדרות")))
+    elif starting:
+        pass   # #2155: first boot restarts networking after the DCUI is up
     elif mgmt.link in ("down", "no carrier"):
         found.append(Problem(
             "bad", f"כבל רשת הניהול ({iso(mgmt.name)}) מנותק",
@@ -669,6 +680,8 @@ def _main_state(snapshot: Snapshot, extras: Extras, found: list[Problem], today:
     """(dot, word) for the status line."""
     if found:
         return "bad", f"דורש טיפול · {len(found)}"
+    if snapshot.first_boot_running:   # #2155: neither a problem nor "fine" yet
+        return "info", "התקנה בתהליך"
     if snapshot.storage_role == "secondary":
         if not extras.has_parent:
             return "info", "ממתין לחיבור מהראשי"
@@ -688,6 +701,9 @@ def _hero(frame: Frame, snapshot: Snapshot, extras: Extras, found: list[Problem]
         frame.add("hero", "bad", f"השרת דורש טיפול · {many}", first, "", "")
         for index, item in enumerate(found[:MAX_PROBLEMS_SHOWN], start=1):
             frame.add("prob", item.sev, index, item.title, item.what, item.todo_m, *item.key)
+        return
+    if snapshot.first_boot_running:   # #2155: not "השרת תקין" while it still comes up
+        frame.add("hero", "wait", "ההתקנה עדיין לא הסתיימה", "", *uptime)
         return
     if snapshot.storage_role == "secondary" and not extras.has_parent:
         frame.add("hero", "wait", "ממתין לחיבור מהשרת הראשי",
@@ -719,7 +735,8 @@ def _tiles(frame: Frame, snapshot: Snapshot, extras: Extras, today: datetime) ->
     for row in rows:
         frame.add(*row.record())
     frame.add("tile", "רשת", "", "")
-    frame.add(*nic_row("רשת ניהול", snapshot.management).record())
+    frame.add(*nic_row("רשת ניהול", snapshot.management,
+                       starting=snapshot.first_boot_running).record())
     frame.add(*deploy_row(snapshot, extras).record())
     frame.add("tile", "שרתים והפצה", "", "")
     frame.add(*_peer_row(snapshot, extras, today).record())

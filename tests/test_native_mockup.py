@@ -245,34 +245,29 @@ def test_cloner_draws_a_card_per_disk_it_found_not_three():
     src = code(_src("screens_cloner.c"))
     assert "port <= 3" not in src and "שלושה דיסקים" not in src
     # #1495: one card per drawer record (or idle disk), ordered by the drawer of
-    # the mapping, plus the disk a SMART question is about -- not ports 1..3.
+    # the mapping -- not ports 1..3. #2347: no extra card for a SMART question (#2044).
     entries = body(src, "cloner_entries")
     assert "for (int i = 0; i < s->ndrawers; i++)" in entries and "for (int i = 0; i < s->nidisks; i++)" in entries
-    assert "s->smart_pending" in entries and "out[i].port == s->smart_port" in entries
+    assert "smart" not in entries
     cloner = body(src, "screen_cloner")
     assert "int n = cloner_entries(s, entries);" in cloner   # 17/10: a row per entry (lcbay.c)
 
 
-def test_cloner_smart_answers_are_ordered_by_risk():
-    """'דלג' was BTN_DANGER (red) and 'כתוב בכל זאת' BTN_PRIMARY -- the
-    inviting colour on the risky choice. Now: replace, skip (plain), and
-    write-anyway as a warning outline, laid from the inline end."""
+def test_cloner_has_no_smart_answers_and_one_primary_button():
+    """#2347: the SMART question's bar is gone (#2044) -- no answer buttons.
+    #2081 (mockup 03): the held end's own "כבה את המחשב" is the screen's only
+    primary button, and nothing on it is red."""
     cloner = code(body(_src("screens_cloner.c"), "screen_cloner"))
-    # no red and no inviting colour on a SMART answer. #2081 (mockup 03) adds the held
-    # end's own "כבה את המחשב" as the screen's primary button -- that one only.
     styled = re.findall(r"(BTN_DANGER|BTN_PRIMARY),\s*(HIT_\w+)", cloner)
     assert styled == [("BTN_PRIMARY", "HIT_END_NOW")], styled
-    draws = re.findall(r'key_button\(a, cr, x, by, ([^,]+(?:, [^,]+)?), "?[^,]*"?, (BTN_\w+), (HIT_SMART_\w+), 1\)', cloner)
-    assert [d[2] for d in draws] == ["HIT_SMART_REPLACE", "HIT_SMART_SKIP", "HIT_SMART_RESCUE"], draws
-    assert [d[1] for d in draws] == ["BTN_PLAIN", "BTN_PLAIN", "BTN_WARN"], draws
-    assert "BTN_WARN" in _src("widgets.h") and "kind == BTN_WARN" in body(_src("widgets.c"), "draw_btn")
+    assert "HIT_SMART_" not in cloner and "smart_pending" not in cloner
 
 
 def test_cloner_and_standby_status_bars_list_only_working_keys():
     keys = code(body(_src("screens.c"), "status_keys"))
     cloner = keys[keys.index("case SCREEN_CLONER:"):keys.index("case SCREEN_RESTORE:")]
-    assert "if(!a->st.smart_pending)" in cloner
-    # no SMART question, no keys -- but Enter on a held end (#2081: its own "כבה את המחשב")
+    assert "smart_pending" not in cloner and "החלף דיסק" not in cloner   # #2347: no SMART keys
+    # no keys but the drawers' -- and Enter on a held end (#2081: its own "כבה את המחשב")
     assert 'a->st.end_kind!=END_NONE&&a->st.end_held?"Enter  כיבוי":"אין פעולה במסך הזה"' in cloner
     assert "דיסקים: 1 · 2 · 3" not in keys
 
@@ -340,28 +335,7 @@ def test_a_two_disk_cloner_shows_two_cards(tmp_path):
     assert _track_runs(tmp_path / "two-cloner-light.png") == 2      # two rows, not three
 
 
-@GUI_BUILD
-def test_the_smart_bar_has_no_red_and_puts_write_anyway_at_the_end(tmp_path):
-    """Sample data: disk 2 has an open SMART question (verdict fail). In the
-    bar above the status line: no danger red (skip is no longer red), and
-    the warning-outlined "write anyway" is in the left half."""
-    binary = _build_gui(tmp_path)
-    _render_all(binary, tmp_path, "1280x800")
-    w, h, ch, px = _png_rgb(tmp_path / "card-cloner-light.png")
-    warn, red = _token("--clr-warning"), _token("--clr-danger")
-    y0, y1 = h - 36 - 74 + 5, h - 36 - 4
-    warn_x, reds = [], 0
-    for y in range(y0, y1):
-        for x in range(w):
-            i = (y * w + x) * ch
-            p = px[i:i + 3]
-            if all(abs(p[k] - warn[k]) <= 12 for k in range(3)):
-                warn_x.append(x)
-            if all(abs(p[k] - red[k]) <= 12 for k in range(3)):
-                reds += 1
-    assert reds == 0, f"{reds} red pixels in the SMART bar"
-    assert len(warn_x) > 100, len(warn_x)
-    assert max(warn_x) < w / 2, "the warning button is not at the inline end"
+# ‏#2347: פס שאלת ה-SMART הוסר מגואי המשכפל — הטסט שבדק את הצבעים שלו הוסר איתו.
 
 
 def _theme_hex(field: str) -> tuple[int, int, int]:

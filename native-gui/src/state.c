@@ -497,17 +497,6 @@ void state_parse(State *s, FILE *fp) {
                 s->drawer_count = (int)count;
         } else if (KEY("server_restarted_wave")) {
             s->server_restarted_wave = !strcmp(val, "1");
-        } else if (KEY("smart_prompt")) {
-            if (split(val, f, 6) < 4) continue;       /* nonce|port|verdict|reason[|model|serial] (16/10) */
-            unsigned long long port;
-            if (!parse_uint(f[1], &port) || port > INT_MAX) continue;
-            s->smart_pending = 1;
-            cp(s->smart_nonce, sizeof s->smart_nonce, f[0]);   /* string, echoed back */
-            s->smart_port = (int)port;
-            cp(s->smart_verdict, sizeof s->smart_verdict, f[2]);
-            cp(s->smart_reason, sizeof s->smart_reason, f[3]);
-            cp(s->smart_model, sizeof s->smart_model, f[4]);
-            cp(s->smart_serial, sizeof s->smart_serial, f[5]);
         } else if (KEY("shrink_prompt")) {
             /* nonce|count. The nonce is echoed back on the answer, so it is
              * kept only in the shape the bridge accepts: digits and '-'. */
