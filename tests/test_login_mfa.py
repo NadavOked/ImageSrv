@@ -723,3 +723,51 @@ def test_1243_idle_default_is_600_on_every_login_path(server):
         "username": "idlebuiltin", "password": "x",
     })
     assert plain.json()["idle_seconds"] == 600, plain.text
+
+
+# ---------- #326 — ההגבלה של session מוגבלת אינה נשענת על כותרת Host ----------
+
+#: ‏CVE-2026-48710: ‏starlette (‏<1.0.1, כולל 0.46.2 שה-CI מתקין מ-PyPI) בונה
+#: את ``request.url`` מכותרת ``Host`` בלי לאמת אותה, בזמן שהניתוב הולך לפי
+#: ‏``scope["path"]``. ‏Host כזה מזיז את ``request.url.path`` לנתיב המותר,
+#: והבקשה מגיעה לנתיב אחר לגמרי.
+_POISONED_MFA_HOST = "testserver/api/console/me/mfa/x?"
+_POISONED_PWCHANGE_HOST = "testserver/api/console/me/password?"
+
+
+def test_326_mfa_enrollment_session_ignores_a_poisoned_host(server):
+    """session שחייבת להירשם ל-MFA אינה עוקפת את ההרשמה בכותרת ``Host``."""
+    assert server["admin"].post("/api/console/users", json={
+        "username": "hosty", "password": "Aa12345!", "role": "admin",
+    }).status_code == 200
+    c = _console_client(server)
+    r = c.post("/api/console/login", json={"username": "hosty", "password": "Aa12345!"})
+    assert r.json() == {"mfa_enrollment_required": True}
+    poisoned = c.get("/api/console/users", headers={"host": _POISONED_MFA_HOST})
+    assert poisoned.status_code == 403, poisoned.text
+    assert poisoned.json()["detail"] == "mfa_enrollment_required"
+
+
+@pytest.mark.parametrize("purpose,host,method,path,detail", [
+    ("mfaenroll", _POISONED_MFA_HOST, "GET", "/api/console/users",
+     "mfa_enrollment_required"),
+    ("pwchange", _POISONED_PWCHANGE_HOST, "POST", "/api/console/users",
+     "password_change_required"),
+])
+def test_326_enforce_purpose_reads_the_routed_path(purpose, host, method, path, detail):
+    """ההכרעה נעשית על הנתיב שהניתוב הולך לפיו, לא על ``request.url``.
+
+    ‏starlette מוטלא (‏Debian ‏0.46.1-3+deb13u2 ומעלה) כבר מאמת את ``Host``, ולכן
+    הטסט שלמעלה עובר שם גם בלי התיקון. כאן ``request.url.path`` משקר במפורש —
+    כך הבדיקה תלויה בקוד שלנו בלבד, בכל גרסת starlette."""
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from server.console import auth
+    request = SimpleNamespace(
+        method=method, scope={"type": "http", "path": path},
+        url=SimpleNamespace(path=host.split("testserver", 1)[1].rstrip("?")),
+        app=SimpleNamespace(state=SimpleNamespace()))
+    with pytest.raises(HTTPException) as refused:
+        auth._enforce_purpose(request, auth.Session("u", "admin", purpose))
+    assert refused.value.status_code == 403
+    assert refused.value.detail == detail

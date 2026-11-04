@@ -67,7 +67,9 @@ class Session(NamedTuple):
 
 def _enforce_purpose(request, session: Session) -> None:
     from fastapi import HTTPException
-    path = request.url.path
+    # ‏#326: הנתיב שהניתוב הולך לפיו, לא ``request.url.path`` — זה נבנה מכותרת
+    # ‏Host, ו-starlette לא מוטלא (‏CVE-2026-48710) נותן ל-Host לשקר בו.
+    path = request.scope["path"]
     method = request.method
     # ‏#1127: משתמש שמתחרט באמצע החלפת סיסמה/רישום MFA חייב לוכל להתנתק —
     # ‏403 על logout השאיר אותו כלוא במצב הביניים.

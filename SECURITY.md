@@ -161,6 +161,14 @@ python tools/security-recheck.py --dependabot-only
 עם נתיב בקוד שלנו, שתיהן Low: ‏busybox ‏udhcpc ‏CVE-2026-88833 (‏DoS מוילן
 ההפצה, #1980) ו-open-iscsi ‏CVE-2026-44943 (‏discovery מול יעד מתחזה, #1983).
 
+**‏starlette (‏#326).** ‏`pip-audit` על ה-CI מדווח שבע חולשות ב-`starlette
+0.46.2` מ-PyPI. השרת אינו מריץ אותה: ה-ISO אורז את `python3-starlette
+0.46.1-3+deb13u3`, ו-Debian הטליא בה את כל השבע (‏CVE-2026-48818 —
+‏Windows בלבד, "not-affected"). אחת נגעה בקוד שלנו: ‏`_enforce_purpose`
+הכריע לפי `request.url.path`, ועל starlette לא מוטלא כותרת `Host` עקפה
+את הרשמת ה-MFA (‏CVE-2026-48710). ההכרעה עברה ל-`scope["path"]`, ו-
+‏`.url.path`/`.url.hostname`/`.url.netloc` ו-`HTTPEndpoint` נעולים בטסט.
+
 ---
 
 ## מה קורה אחרי הדיווח

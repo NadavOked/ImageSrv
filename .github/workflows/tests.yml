@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11 והפיל טסטים; נעול עד שנתמוך ב-26.04
     # 17/09: 4,200 טסטים = ~18 דק' על runner; 15 ביטל בשקט ארבע ריצות (לא אדום — "cancelled").
     timeout-minutes: 150
     # שתי גרסאות פייתון, כי לפרויקט יש שתיים ולא אחת: דביאן 13 — הייצור

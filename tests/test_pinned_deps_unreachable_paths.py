@@ -27,6 +27,15 @@
 | python3-anyio 4.8.0 | CVE-2026-63349, ‏63374, ‏64847 | ייבוא ישיר של ``anyio`` (‏run_process/to_process/connect_tcp) |
 | python3.13 | CVE-2026-19445, ‏19553, ‏15308, ‏18503, ‏15806 | ‏``sni_callback``, ‏``wrap_bio``, ‏``HTMLParser``, ‏``Sniffer``, ‏``HTTPPasswordMgr*`` |
 
+#326: ‏starlette — שבע החולשות שה-CI (‏PyPI 0.46.2) מדווח מוטלאות ב-Debian
+(‏0.46.1-3+deb13u3, מה שה-ISO אורז). שתיים מהן נוגעות לתכונה שקל להכניס
+"כי זה נוח", ולכן גם הן נעולות כאן:
+
+| חולשה | נתיב פגיע | מה נאסר כאן |
+|---|---|---|
+| CVE-2026-48710 / 54282 | ‏``request.url`` נבנה מכותרת ``Host`` ומהנתיב בלי אימות | ‏``.url.path``/``.url.hostname``/``.url.netloc`` — ``scope["path"]`` במקום |
+| CVE-2026-48817 | ‏``HTTPEndpoint`` מפעיל כל מתודה ששמה תואם פועל HTTP | ‏``HTTPEndpoint`` |
+
 התראות ה-OpenSSL שבתוך ה-wheels (‏GHSA-537c, ‏CVE-2024-12797 ועוד) אינן כאן:
 הן לא עניין של קוד אלא של **מאיפה הספרייה מגיעה** — בשרת היא ``apt``
 שמקשר ל-libssl של המערכת (‏``Depends: libssl3t64``).
@@ -63,7 +72,11 @@ FORBIDDEN_NAMES = {
     "HTTPPasswordMgrWithDefaultRealm": "python3.13 CVE-2026-15806 (urllib HTTPPasswordMgr)",
     "HTTPPasswordMgrWithPriorAuth": "python3.13 CVE-2026-15806 (urllib HTTPPasswordMgr)",
     "UploadFile": "python-multipart CVE-2026-40347/42561/5353x (multipart parser)",
+    # #326
+    "HTTPEndpoint": "starlette CVE-2026-48817 (HTTPEndpoint method dispatch)",
 }
+#: ‏#326: חלקי ``request.url`` ש-starlette לא מוטלא בונה מ-Host/מהנתיב בלי אימות.
+POISONED_URL_PARTS = {"path", "hostname", "netloc"}
 #: ‏#1975: מודולים שאסור לייבא — אין לנו שימוש בהם, וחולשותיהם פתוחות ב-Debian 13.
 FORBIDDEN_MODULES = {
     "multipart": "python-multipart CVE-2026-40347/42561/5353x",
@@ -106,6 +119,9 @@ def find_forbidden(source: str) -> list[str]:
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                 and node.func.attr == "form"):
             hits.append(f"{line}: .form() — python-multipart (Starlette Request.form)")
+        if (isinstance(node, ast.Attribute) and node.attr in POISONED_URL_PARTS
+                and isinstance(node.value, ast.Attribute) and node.value.attr == "url"):
+            hits.append(f"{line}: .url.{node.attr} — starlette CVE-2026-48710/54282 (Host)")
         if (isinstance(node, ast.Attribute) and node.attr in FASTAPI_FORM_PARAMS
                 and isinstance(node.value, ast.Name) and node.value.id == "fastapi"):
             hits.append(f"{line}: fastapi.{node.attr} — python-multipart (form parsing)")
@@ -184,6 +200,10 @@ def test_scanner_catches_each_forbidden_path() -> None:
         "from html.parser import HTMLParser": "HTMLParser",
         "csv.Sniffer().sniff(sample)": "Sniffer",
         "urllib.request.HTTPPasswordMgrWithDefaultRealm()": "HTTPPasswordMgr",
+        # #326
+        "path = request.url.path": ".url.path",
+        "if request.url.hostname == 'x': ...": ".url.hostname",
+        "from starlette.endpoints import HTTPEndpoint": "HTTPEndpoint",
     }
     for source, needle in cases.items():
         hits = find_forbidden(source)
@@ -205,6 +225,11 @@ def test_scanner_is_quiet_on_what_we_do_use() -> None:
         "x = runtime.form['interface']\n"
         "def run_process(cmd): ...\n"
         "from .multipart_helpers import x\n"
+        # #326: what the server does read off the request.
+        "path = request.scope['path']\n"
+        "query = request.url.query\n"
+        "scheme = request.url.scheme\n"
+        "host = urlsplit(base).hostname\n"
     )
     assert find_forbidden(clean) == []
 
