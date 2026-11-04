@@ -37,6 +37,8 @@ MEDIA_FILE="${MEDIA_FILE:-$RUN_DIR/install-media}"
 # #1310: the last GREEN check (url/name/version/fingerprint). Only this file
 # puts primary_fingerprint into the answers -- never the form the GUI sent.
 PRIMARY_CHECK="${PRIMARY_CHECK:-$RUN_DIR/primary-check}"
+# #2144: the engine's clock check (installer/lib/clock.sh); no file = not checked.
+CLOCK_FILE="${CLOCK_FILE:-$RUN_DIR/clock-check}"
 PRIMARY_ALIVE_PATH=/api/interserver/v1/alive
 # shellcheck source=installer/lib/answers.sh
 . "$BRIDGE_DIR/lib/answers.sh"   # normalize_primary_url -- one rule, engine and GUI
@@ -131,6 +133,7 @@ write_answers() {
         fi
         emit hostname "$(field hostname)"
         emit timezone "$(field timezone)"
+        emit ntp_servers "$(field ntp_servers)"   # #2144: empty = automatic
         emit admin_user "$_wa_user"
         # Before the admin screen the password is legitimately empty; the engine's
         # own check ("admin_pass must not be empty") belongs to step 4+, not to
@@ -206,7 +209,8 @@ do_apply() {
     password_errors || return 0
     mkdir -p "$RUN_DIR" && write_answers "$ANSWERS" || { echo 'gui-bridge: cannot write the answers' >&2; return 4; }
     printf 'state=partitioning\npct=0\ntitle=starting\n' > "$STATE_FILE"
-    ( "$ENGINE" "$ANSWERS" --state "$STATE_FILE" > "$ENGINE_LOG" 2>&1 ) &
+    rm -f "$CLOCK_FILE"   # #2144: a previous attempt's answer is not this one's
+    ( CLOCK_FILE="$CLOCK_FILE" "$ENGINE" "$ANSWERS" --state "$STATE_FILE" > "$ENGINE_LOG" 2>&1 ) &
     emit job "$!"
 }
 
@@ -277,6 +281,14 @@ do_finish() {
     [ -n "$_df_addr" ] || _df_addr=$(sed -n 's/^address=//p' "$DHCP_DIR/$_df_if" 2>/dev/null | head -n1)
     [ -n "$_df_addr" ] && emit console_url "https://${_df_addr%%/*}:8081"
     emit user "$(sed -n 's/^admin_user=//p' "$ANSWERS" 2>/dev/null | head -n1)"
+    # #2144: the engine's clock record, or "unchecked" -- a missing or
+    # unreadable record is never "synced" (principle 5)
+    _df_clock=$(sed -n 's/^clock=//p' "$CLOCK_FILE" 2>/dev/null | head -n1)
+    case "$_df_clock" in synced|unsynced|unchecked) ;; *) _df_clock=unchecked ;; esac
+    emit clock "$_df_clock"
+    emit clock_server "$(sed -n 's/^clock_server=//p' "$CLOCK_FILE" 2>/dev/null | head -n1)"
+    [ "$_df_clock" = synced ] && emit clock_offset_ms "$(sed -n 's/^clock_offset_ms=\([0-9]*\)$/\1/p' "$CLOCK_FILE" 2>/dev/null | head -n1)"
+    return 0
 }
 
 do_eject() {

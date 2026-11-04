@@ -477,11 +477,13 @@ def _same_address(wanted: str, seen: str) -> bool:
         return wanted.strip() == seen.strip()
 
 
-def mismatches(cfg: netcfg.NetConfig, state: LiveState) -> list[str]:
+def mismatches(cfg: netcfg.NetConfig, state: LiveState, *,
+               waited_s: float = 0) -> list[str]:
     """מה שביקשנו ולא נמצא בקריאה החוזרת. רשימה ריקה = ראיה חיובית.
 
     ‏`checked=False` מחזיר סיבה אחת ולא רשימה ריקה — "לא ידוע" נופל
-    לצד הכושל, תמיד.
+    לצד הכושל, תמיד. ‏`waited_s` (‏#2349): כמה זמן כבר חיכינו ל-lease —
+    "לא התקבלה כתובת אחרי N שניות" ולא "אין כתובת" כאילו לא חיכינו.
     """
     if not state.checked:
         return [f"המצב בפועל לא נקרא ({state.reason}) — אי אפשר לאשר שהשינוי תפס"]
@@ -499,6 +501,8 @@ def mismatches(cfg: netcfg.NetConfig, state: LiveState) -> list[str]:
             if f"{route.cidr} via {route.gateway}" not in state.routes:
                 found.append(f"הנתיב {route.cidr} דרך {route.gateway} "
                              "אינו בטבלת הניתוב")
+    elif not live and waited_s:
+        found.append(f"‏{cfg.name}: לא התקבלה כתובת מ-DHCP אחרי {waited_s:g} שניות")
     elif not live:
         found.append(f"‏{cfg.name} לא קיבל שום כתובת מ-DHCP")
     for server in cfg.dns:
@@ -511,6 +515,10 @@ def mismatches(cfg: netcfg.NetConfig, state: LiveState) -> list[str]:
 #: (‏render), וה-lease הגיע ~7 שניות אחר כך (הצעה + 5 שניות של בדיקת ARP,
 #: ESXi 24/10) — קריאה מיידית אמרה "לא אומת" על הפעלה מחדש שהצליחה.
 DHCP_LEASE_WAIT_S = 30
+#: ‏#2349: כל כמה זמן הקונסולה קוראת שוב בזמן ההמתנה ל-lease. ‏≥0.1 (‏CLAUDE.md:
+#: polling צפוף ממצה פורטים בווינדוס); כל קריאה היא `ip addr`+`ip route` מקומיים,
+#: ‏60 לכל היותר בהחלה אחת — לא עומס על השרת ולא על הרשת.
+DHCP_POLL_S = 0.5
 
 
 def settled_mismatches(cfg: netcfg.NetConfig, read_state, *,
@@ -518,11 +526,16 @@ def settled_mismatches(cfg: netcfg.NetConfig, read_state, *,
                        sleep=time.sleep, clock=time.monotonic) -> list[str]:
     """``mismatches`` — ובכרטיס DHCP נקרא שוב כל שנייה עד שה-lease מגיע או
     עד ``wait_s``. סטטי נקרא פעם אחת: כתובת סטטית יושבת כשה-ifup חוזר.
-    הפסקה בזמן היא עדיין הפער האחרון שנקרא, לא "בסדר" (עיקרון 5)."""
-    deadline = clock() + (wait_s if cfg.mode == netcfg.MODE_DHCP else 0)
+    הפסקה בזמן היא עדיין הפער האחרון שנקרא, לא "בסדר" (עיקרון 5).
+    סינכרוני — למסך השרת (DCUI), תהליך משלו; הקונסולה ממתינה ב-async
+    (‏`console/netcfg.py`, ‏#2349)."""
+    wait_s = wait_s if cfg.mode == netcfg.MODE_DHCP else 0
+    deadline = clock() + wait_s
     while True:
-        gaps = mismatches(cfg, read_state())
-        if not gaps or clock() >= deadline:
+        state = read_state()
+        timed_out = clock() >= deadline
+        gaps = mismatches(cfg, state, waited_s=wait_s if timed_out else 0)
+        if not gaps or timed_out:
             return gaps
         sleep(1)
 

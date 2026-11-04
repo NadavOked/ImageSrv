@@ -42,54 +42,99 @@ ui_waiting_draw() {
     echo "  turn the computer off."
 }
 
-UNKNOWN_SHOW_S="${UNKNOWN_SHOW_S:-10}"   # #1802: how long "not registered" stays up
+UNKNOWN_POLL_S="${UNKNOWN_POLL_S:-1}"   # #1802: how often the screen's F2 is looked for
+
+unknown_autoboot_s() {
+    # The console's "מחשב לא רשום: עלייה אוטומטית מהדיסק" (the hello answer's
+    # unregistered_autoboot_seconds, 0-600; 0 = off, the default). UEFI ONLY
+    # (Nadav 04/11): on the deploy network a BIOS machine is a cloner, and its
+    # disk is a drawer of payload (#323, #345) -- never an automatic boot there.
+    # Missing (an old server) or bad = 0 and a log line: doubt does not boot a disk.
+    _ua=$(json_get "${RESP:-/nonexistent}" ".unregistered_autoboot_seconds" 2>/dev/null)
+    case "$_ua" in
+        0|[1-9]|[1-9][0-9]|[1-5][0-9][0-9]|600) ;;
+        *) log "unknown: unregistered_autoboot_seconds '${_ua:-unread}' is not 0-600 -- off" >&2; echo 0; return ;;
+    esac
+    if [ "$_ua" -gt 0 ] && [ "$(detect_firmware)" != uefi ]; then
+        log "unknown: Legacy BIOS -- never an automatic boot (#345); the setting ${_ua}s is for UEFI" >&2
+        _ua=0
+    fi
+    echo "$_ua"
+}
 
 ui_unknown_records() {
-    # $1 = mac. The mockup's case 8 (failure-screen.html, "unknown"): not a
-    # failure -- tone inf, no hold, the reboot counted down (fail_at). The MAC
-    # in capitals: the GUI draws a value of capitals and digits mono, LTR.
+    # $1 = mac, $2 = seconds to the automatic boot (0 = none). The mockup's
+    # case 8 (failure-screen.html, "unknown"): not a failure -- tone inf, no
+    # hold. #1802 (Nadav 04/11): it stays; its one button is F2 = restart
+    # (fail_btn reboot), and fail_at only when the setting counts down (UEFI).
+    # The MAC in capitals: the GUI draws a value of capitals and digits mono, LTR.
     _uu_mac=$(printf '%s' "$1" | tr 'a-f' 'A-F')
     printf 'fail=inf|0|המחשב הזה לא רשום|הקונסולה קיבלה התראה על מחשב חדש|\n'
-    printf 'fail_why=השרת לא מכיר את המחשב הזה, ולכן אין לו משימה. הוא יעלה כרגיל מהדיסק המקומי.\n'
-    printf 'fail_step=אין צורך לעשות דבר — האתחול ימשיך בעוד %s שניות.\n' "$UNKNOWN_SHOW_S"
+    if [ "$2" -gt 0 ]; then
+        printf 'fail_why=השרת לא מכיר את המחשב הזה, ולכן אין לו משימה. הוא יעלה כרגיל מהדיסק המקומי.\n'
+        printf 'fail_step=אין צורך לעשות דבר — האתחול ימשיך בעוד %s שניות.\n' "$2"
+    else
+        printf 'fail_why=השרת לא מכיר את המחשב הזה, ולכן אין לו משימה.\n'
+    fi
     printf 'fail_step=כדי לצרף את המחשב לשרת: רשמו אותו בקונסולה לפי כתובת ה-MAC.\n'
-    printf 'fail_ctx=כתובת MAC|%s\nfail_ctx=כתובת IP|%s\n' "$_uu_mac" "${IP:-?}"
-    printf 'fail_ctx=מצב|לא רשום בשרת\nfail_ctx=אתחול|מהדיסק המקומי\n'
+    printf 'fail_btn=reboot|F2 — הפעלה מחדש\n'
+    printf 'fail_ctx=כתובת MAC|%s\nfail_ctx=כתובת IP|%s\nfail_ctx=מצב|לא רשום בשרת\n' "$_uu_mac" "${IP:-?}"
+    [ "$2" -gt 0 ] && printf 'fail_ctx=אתחול|מהדיסק המקומי\n'
     printf 'fail_code=[agent] decide=unknown mac=%s\n' "$1"
     printf 'fail_code=[agent] ui_unknown: MAC not registered\n'
     printf 'fail_code=mac %s · agent %s\n' "$1" "${AGENT_VERSION:-unknown}"
-    printf 'fail_at=%s\n' "$(( $(date +%s) + UNKNOWN_SHOW_S ))"
+    [ "$2" -gt 0 ] && printf 'fail_at=%s\n' "$(( $(date +%s) + $2 ))"
+    return 0
 }
 
 ui_unknown() {
-    # $1 = mac. #1802 (owner 19/10): an unregistered machine on the deploy
-    # network reaches the agent only to be told so -- the screen, then the
-    # local disk. Not die_local: this is not a failure, and its red screen
-    # would replace this one. The reboot lands on the disk because the server
-    # served this screen once (server/unknown_screen.py) and the next menu for
-    # this MAC is the local disk. Nothing here writes the firmware of a
-    # machine we do not know (no BootNext). Returns only if reboot failed.
-    case "$UNKNOWN_SHOW_S" in ''|*[!0-9]*) UNKNOWN_SHOW_S=10 ;; esac
-    [ "$UNKNOWN_SHOW_S" -le 60 ] || UNKNOWN_SHOW_S=10   # a cap: never held here
+    # $1 = mac. #1802: an unregistered machine on the deploy network reaches
+    # the agent only to be told so. Nadav 04/11: it stays on the screen. F2
+    # (the GUI's fail.action "reboot") only restarts it: the firmware boots
+    # from the network again and the machine is back on this screen -- that is
+    # the intent; we do not own the boot order and write no firmware (no
+    # BootNext). The one way to the disk is the console's setting, UEFI only
+    # (unknown_autoboot_s): after N s a reboot, and the server, which served
+    # this screen inside its window, answers UEFI with the local disk
+    # (server/agent/unknown_screen.py). Not die_local: this is not a failure.
+    # Returns only if reboot failed.
+    _uu_auto=$(unknown_autoboot_s); _uu_end=0
+    [ "$_uu_auto" -gt 0 ] && _uu_end=$(( $(date +%s) + _uu_auto ))
+    _uu_act="${GUI_DIR:-$RUN_DIR/gui}/fail.action"
+    rm -f "$_uu_act"
     if command -v fail_show >/dev/null 2>&1 && mkdir -p "$RUN_DIR/gui" &&
-        ui_unknown_records "$1" > "$RUN_DIR/fail.state.next" &&
+        ui_unknown_records "$1" "$_uu_auto" > "$RUN_DIR/fail.state.next" &&
         mv "$RUN_DIR/fail.state.next" "$RUN_DIR/fail.state"; then
-        fail_show || :   # no GUI binary: the tty lines below are the screen
+        fail_show || :   # no GUI binary: the tty lines are the screen
     fi
     ui_clear
     ui_header
     echo "  This computer is not registered ($1)."
     echo "  The console has been notified."
     echo
-    echo "  Booting from the local disk in ${UNKNOWN_SHOW_S}s."
-    log "unknown: $1 is not registered -- ${UNKNOWN_SHOW_S}s on screen, then the local disk"
-    sleep "$UNKNOWN_SHOW_S"
-    if [ "${IMAGESRV_TEST:-0}" = "1" ]; then
-        echo "TEST-REBOOT: MAC not registered"
-        exit 86
-    fi
-    sync
-    reboot -f
+    [ "$_uu_auto" -gt 0 ] && echo "  Booting from the local disk in ${_uu_auto}s."
+    log "unknown: $1 is not registered -- on the screen; F2 restarts (automatic boot: ${_uu_auto}s, 0 = off)"
+    while :; do
+        _uu_why=""
+        if mv "$_uu_act" "$RUN_DIR/fail.action.taken" 2>/dev/null; then
+            case "$(head -n 1 "$RUN_DIR/fail.action.taken" | tr -d '\r')" in
+                reboot) _uu_why="F2" ;;
+                *) log "unknown: '$(head -n 1 "$RUN_DIR/fail.action.taken")' is not this screen's" ;;
+            esac
+        fi
+        [ -z "$_uu_why" ] && [ "$_uu_end" -gt 0 ] && [ "$(date +%s)" -ge "$_uu_end" ] && _uu_why="${_uu_auto}s"
+        if [ -n "$_uu_why" ]; then
+            log "unknown: $_uu_why -- restarting; the server decides where the next boot goes"
+            if [ "${IMAGESRV_TEST:-0}" = "1" ]; then
+                echo "TEST-REBOOT: MAC not registered ($_uu_why)"
+                exit 86
+            fi
+            sync
+            reboot -f
+            return 1
+        fi
+        sleep "$UNKNOWN_POLL_S"
+    done
 }
 
 ui_error_hold() {

@@ -182,6 +182,9 @@ UUID=$_wh_esp_uuid /boot/efi vfat umask=0077 0 1
     # synchronization start on the first installed-system boot.
     must_run time-sync "could not enable chrony" \
         chroot "$TARGET" systemctl enable chrony.service
+    # #2144: the source chosen on the "שעון השרת" step, in the file the server
+    # rewrites from its setting on every start (clock.sh, timesync.py).
+    write_chrony_source
     write_target 0600 /etc/imagesrv/answers "disk=$ANSWER_DISK
 role=$ANSWER_ROLE
 primary_url=$ANSWER_PRIMARY_URL
@@ -195,6 +198,7 @@ servers_gw=$ANSWER_SERVERS_GW
 servers_dns=$ANSWER_SERVERS_DNS
 hostname=$ANSWER_HOSTNAME
 timezone=$ANSWER_TIMEZONE
+ntp_servers=$ANSWER_NTP_SERVERS
 admin_user=$ANSWER_ADMIN_USER
 raid_level=${RAID_LEVEL:-none}
 raid_disks=${ANSWER_RAID_DISKS:-}

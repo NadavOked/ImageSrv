@@ -26,6 +26,7 @@ from server.library.library_scrub import forget_scrub, last_scrubs, scrub_librar
 from server.library.archive import ArchiveError, import_tar, tar_stream, unreadable_message
 from server.db import get_setting, journal, set_setting
 from server.rounds.sessions import ROOM_PREFIX
+from server.system import inflight
 
 FOLDERS_KEY = "image_folders"
 #: ‏#1737: הקובץ הזמני של העלאה — בשורש הספרייה, בשם שמתחיל בנקודה
@@ -207,7 +208,14 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
 
         נכתב לדיסק תוך כדי קבלה — אימג' שוקל עשרות ג'יגה ואסור שייכנס
         לזיכרון.
+
+        ‏#1891: כל ההעלאה — הזרם, החילוץ והאימות — היא "עסוק" ל"החל עדכון"
+        ולאתחול המתוזמן (‏`inflight`), כי restart באמצע חותך אותה.
         """
+        with inflight.holding("העלאת אימג'"):
+            return await _upload_image(request, user)
+
+    async def _upload_image(request: Request, user):
         root = ctx.library.root
         root.mkdir(parents=True, exist_ok=True)
         # ‏#1737: הרזרבה למערכת. השיא הוא פעמיים הארכיון — הקובץ הזמני והחילוץ

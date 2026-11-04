@@ -1873,6 +1873,11 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
 .rnew .rn-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
 .rnew .rn-floor{font-size:var(--t-md);font-weight:700}
 .rnew .n-help{font-size:var(--t-xs);color:var(--clr-muted);margin:0}
+/* #2053: "מצב שינה" — כתום, רק מודיע (מוקאפ 2053-hibernated). טוקנים קיימים בלבד. */
+.rnew .rn-hib{display:flex;gap:8px;align-items:center;padding:9px 12px;border:1px solid color-mix(in srgb,var(--clr-warning-fg) 40%,var(--surface));border-radius:var(--rp);background:var(--clr-warning-soft);color:var(--ink);font-size:var(--t-base)}
+.rnew .rn-hib[hidden]{display:none}
+.rnew .rn-hib .n-chip{flex:none}
+.hib-src{color:var(--clr-warning-fg);font-weight:600}
 .rnew label .n-help{display:block;margin-top:6px;font-weight:400}
 .rnew .dk .n-chip{margin-inline-start:auto}
 #modalHint.rn-sum.need{color:var(--warn-ink)}

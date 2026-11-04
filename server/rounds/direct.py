@@ -30,7 +30,7 @@ import sqlite3
 
 from fastapi import APIRouter, HTTPException, Request
 
-from server.rounds import drive_rates, room, room_drivers, sender as sender_module
+from server.rounds import drive_rates, prompt_hold, room, room_drivers, sender as sender_module
 from server.agent import registry
 from server.db import _write_lock, journal, now_iso, writing
 from server.library.images import restore_refusal
@@ -325,10 +325,16 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
     # קצב אוטומטי: מה שנבחר לגל כשיצא, ולפני כן קצב הפתיחה — לא "בלי תקרה".
     params["max_bitrate"] = drive_rates.direct_bitrate(
         conn, wave["id"] if wave is not None else None, params.get("max_bitrate"))
+    # ‏#1581: מה ש-`SenderEngine._hold_for_asks` שואל — חברי הגל שעומדים עכשיו על
+    # שאלה למפעיל (‏`prompt_hold`, אותן תקרות). המקור אינו מפעיל את udp-sender של
+    # המחיצה הראשונה כל עוד המספר אינו 0, ועוצר אותו אם הוא עולה לפני הבייט הראשון.
+    held = (len(prompt_hold.waiting_in_wave(conn, wave["id"]))
+            if wave is not None and wave["state"] == "running" else 0)
     return {
         "session_id": wave["id"] if wave is not None else None,
         "session_state": wave["state"] if wave is not None else "closed",
         "receivers": receivers,
+        "operator_wait": held,
         "multicast": params,
     }
 

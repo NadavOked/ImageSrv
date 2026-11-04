@@ -192,3 +192,76 @@ def test_the_upgrade_script_honours_the_admin_override(tmp_path):
     seen = calls(tmp_path)
     assert any(c.startswith("git") and "checkout --detach v0.49.0" in c for c in seen), (
         seen, proc.stderr[-2000:])
+
+
+# --- הכרעת נדב 01/11: העברה בין אתרים, העלאה וקבלה מהראשי גם הן "עסוק" ----------
+
+def _transfer(conn, state: str) -> None:
+    conn.execute(
+        "INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
+        " VALUES ('n1', 'חיפה', 'https://10.0.0.2:8443', 'x', ?)", (NOW,))
+    conn.execute(
+        "INSERT INTO storage_transfers (id, node_id, image_id, image_name, state,"
+        " bytes_sent, bytes_total, started_by, created_at, updated_at)"
+        " VALUES ('t1', 'n1', 'img_1', 'x', ?, 0, 100, 'noc', ?, ?)", (state, NOW, NOW))
+    conn.commit()
+
+
+@pytest.mark.parametrize("state", ["queued", "sending", "verifying"])
+def test_apply_during_a_transfer_to_another_site_is_409(update_server, state):
+    _transfer(update_server["app"].state.ctx.conn, state)
+    r = _apply(update_server)
+    assert r.status_code == 409, r.text
+    assert "העברת אימג' בין אתרים" in r.json()["busy"]
+    assert update_server["calls"]["run"] == 0
+
+
+@pytest.mark.parametrize("state", ["done", "failed"])
+def test_a_finished_transfer_does_not_block(update_server, state):
+    _transfer(update_server["app"].state.ctx.conn, state)
+    assert _apply(update_server).status_code == 200
+
+
+def test_apply_during_an_upload_from_the_console_is_refused(update_server, monkeypatch):
+    """ההעלאה אינה שורה ב-DB — היא זרם בתוך תהליך השרת. מה ש"החל עדכון" שואל
+    (‏`restart_blocker`) נקרא כאן **באמצע** ההעלאה, ושוב אחריה."""
+    from server import update
+    from server.console import library as console_library
+    seen = {}
+
+    def import_tar(*_a, **_k):
+        seen["during"] = update.restart_blocker(update_server["app"].state.ctx)
+        raise console_library.ArchiveError("stop here")
+
+    monkeypatch.setattr(console_library, "import_tar", import_tar)
+    r = update_server["admin"].post("/api/console/images/upload", content=b"x" * 4096)
+    assert r.status_code == 400, r.text
+    assert seen["during"] and "העלאת אימג'" in seen["during"], seen
+    assert update.restart_blocker(update_server["app"].state.ctx) is None   # שוחרר גם בכישלון
+    assert _apply(update_server).status_code == 200
+
+
+def test_receiving_an_image_from_the_primary_is_busy(tmp_path):
+    """המשני: ‏`receive_image` (‏PUT מהראשי) — עדכון באמצע חותך את ההעברה."""
+    from types import SimpleNamespace
+
+    from server import auto_reboot
+    from server.db import connect
+    from server.interserver import api as interserver_api
+    from server.library.images import ImageLibrary
+
+    conn = connect(tmp_path / "s.db")
+    root = tmp_path / "lib"
+    root.mkdir()
+    seen = {}
+
+    def chunks():
+        seen["during"] = auto_reboot.busy_reason(SimpleNamespace(conn=conn))
+        yield b"not a tar"
+
+    plan = interserver_api.ReceivePlan(image_id="img_x", content_length=9, root=root)
+    ctx = SimpleNamespace(conn=conn, library=ImageLibrary(root))
+    with pytest.raises(interserver_api.PairError):
+        interserver_api.receive_image(ctx, plan, chunks())
+    assert seen["during"] and "קבלת אימג'" in seen["during"], seen
+    assert auto_reboot.busy_reason(SimpleNamespace(conn=conn)) is None

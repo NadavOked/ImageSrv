@@ -921,8 +921,17 @@ def test_only_detected_virtual_platform_failures_are_warned(tmp_path: Path):
     assert "xen-blkfront" not in out and "vmxnet3" not in out
 
 
+#: ‏#1379: הקידומת הישנה שעל המסך. מפוצלת בכוונה: שינוי השם המכני ctl→srv
+#: ‏(#1699) שכתב את השומר ל-"imagesrv init:" — מחרוזת שהבאג מעולם לא הדפיס —
+#: והשומר עבר גם כשהבאג הוחזר (בקרה שלילית, #1912).
+OLD_INIT_PREFIX = "image" + "ctl init:"
+
+
 def test_init_has_no_old_user_visible_prefix():
-    assert "imagesrv init:" not in INIT.read_text(encoding="utf-8")
+    text = INIT.read_text(encoding="utf-8")
+    for old in (OLD_INIT_PREFIX, "imagesrv init:"):
+        assert old not in text.lower(), f"קידומת ישנה על מסך העלייה: {old!r}"
+    assert 'echo "ImageSrv: $1 -- rebooting in 5s"' in text, "fail() אינו נוקב בשם המוצר"
 
 
 def test_a_required_module_failure_is_named_not_a_silent_count(tmp_path: Path):

@@ -47,4 +47,23 @@ static void admin_screen(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a-
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_password_ready(s)&&(!s->rerun||s->current_password[0]));
 }
 
+/* #2144 (mockup 2144-time, Nadav 04/11): step 5, the console's choice (#1773,
+ * הגדרות ← מקור השעה) -- automatic or the organisation's server -- and the time
+ * the server has now, from its hardware clock; the sync is checked at the end. */
+void install_draw_time(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y;
+    install_text_r(cr,t,"שרת זמן (NTP)",12,500,x+w,y,w,t->ink);y+=24;
+    install_radio(a,cr,(Rect){x,y,w,74},"אוטומטי (שרתי זמן באינטרנט)","שרתי הזמן של Debian. צריך גישה לאינטרנט ב-UDP 123.",!s->ntp_org,HIT_INSTALL_NTP_AUTO);y+=86;
+    install_radio(a,cr,(Rect){x,y,w,74},"שרת זמן של הארגון","כשרשת המכללה חוסמת NTP לאינטרנט.",s->ntp_org,HIT_INSTALL_NTP_ORG);y+=90;
+    if(s->ntp_org){install_field_draw(a,cr,(Rect){x,y,w,56},"כתובות (IP או שם, מופרדות ברווח)",s->ntp_servers,0,HIT_INSTALL_NTP_SERVERS,1);y+=62;
+        if(s->field_error[17][0]){install_text_r(cr,t,s->field_error[17],12,600,x+w,y,w,t->danger_fg);y+=30;}else y+=8;}
+    char when[64],zone[64];install_clock_now(s,when,sizeof when,zone,sizeof zone);
+    Rect card={x,y,w,92};install_card(cr,t,card);
+    Text lab=text_make(cr,FONT_SANS,12.5,400,"השעה עכשיו בשרת",0,DIR_RTL);text_draw_r(cr,&lab,x+w-16,y+18,t->muted);
+    double right=x+w-16-lab.w-12;text_free(&lab);
+    Text tm=text_make(cr,FONT_MONO,15,600,when,0,DIR_LTR);text_draw(cr,&tm,right-tm.w,y+15,t->ink);right-=tm.w+12;text_free(&tm);
+    Text zn=text_make(cr,FONT_SANS,12.5,400,zone,0,DIR_LTR);text_draw(cr,&zn,fmax(x+16,right-zn.w),y+18,t->muted);text_free(&zn);
+    install_text_r(cr,t,"לפי שעון החומרה, עוד בלי סנכרון. הסנכרון נבדק בסוף ההתקנה.",12,400,x+w-16,y+54,w-32,t->muted);
+    install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_time_ready(s));
+}
+
 void install_draw_forms(App *a,cairo_t *cr,InstallLayout l){if(a->install.view==INSTALL_HOSTNAME)hostname(a,cr,l);else admin_screen(a,cr,l);}

@@ -14,15 +14,15 @@
 בקליטה, אחרת מחיצת ה-`windows` הגדולה ביותר, ואם אין — ה-`linux` הראשונה.
 אותו כלל בסוכן (`system_part`, ‏diskfit.sh) וב-hostname.sh. היא גדלה על היעד רק כשהיא
 המחיצה שהשחזור מותח (‏`expandable_candidate`) ורק מעבר לסף של 1GiB של
-`expand_last` — ובחלקה בלבד: ‏#1897 מחלק את המקום הנוסף בינה לבין המחיצות
-המכווצות שאחריה לפי היחס במקור (`grow_share`). ‏`used_bytes` חסר = **לא נבדק**,
-לא "נכנס" (עיקרון 5).
+`expand_last`. ‏#1897 (הכרעת נדב 04/11): כל מחיצה אחרת שהקליטה כיווצה (‏D:, ‏E:)
+חוזרת לגודלה במקור (`returning`), והמועמד לוקח את מה שנשאר (`cand_room`) — כל
+המקום הנוסף בדיסק גדול, ובדיסק קטן רק הוא מתפשר. ‏`used_bytes` חסר = **לא
+נבדק**, לא "נכנס" (עיקרון 5).
 """
 
 from __future__ import annotations
 
 import logging
-import math
 import sqlite3
 
 from server.db import get_setting
@@ -149,38 +149,74 @@ def candidates_view(manifest: dict) -> list[dict]:
             for p in system_candidates(manifest)]
 
 
-def grow_share(manifest: dict, cand: dict, part: dict | None = None) -> tuple[int, int]:
-    """‏#1897 (הכרעת נדב 22/10): (גודל המקור של `part` — ברירת המחדל: המועמד —
-    סכום גודלי המקור של כל מי שחולק במקום שהשחזור מוסיף). חולקים: המועמד, וכל
-    מחיצה על הדיסק שהקליטה כיווצה (`shrunk_from_bytes`) — ‏#1898: גם **לפניו**
-    (‏C: לפני שורש הלינוקס). כל אחת מקבלת `share(grow, own, total)`. התאום של
-    `share_tail`/`share_head` (‏agent/lib/restore/expandshare.sh) ושל `system_free_after`
-    (‏diskfit.sh)."""
-    c_own = _whole(cand.get("shrunk_from_bytes")) or _whole(cand.get("size_bytes")) or 0
-    others = sum(_whole(p.get("shrunk_from_bytes")) or 0
-                 for p in manifest.get("partitions") or []
-                 if isinstance(p, dict) and p.get("index") != cand.get("index"))
-    if part is None or part.get("index") == cand.get("index"):
-        return c_own, c_own + others
-    return _whole(part.get("shrunk_from_bytes")) or 0, c_own + others
+def returning(manifest: dict, cand: dict | None) -> list[dict]:
+    """‏#1897 (הכרעת נדב 04/11): המחיצות שהשחזור מחזיר לגודלן במקור — כל מחיצה
+    שהקליטה כיווצה (`shrunk_from_bytes` גדול מ-`size_bytes`), חוץ מהמועמד, שלוקח
+    את מה שנשאר. ‏#1898: גם **לפני** המועמד (‏C: לפני שורש הלינוקס) — השרת מחשב
+    כמו הסבב המאושר. אין מועמד — אין הרחבה, ואף אחת אינה חוזרת. התאום של `back`
+    (‏RETURN_JQ, ‏agent/lib/restore/diskfit.sh)."""
+    if cand is None:
+        return []
+    return [p for p in manifest.get("partitions") or []
+            if isinstance(p, dict) and p.get("index") != cand.get("index")
+            and _whole(p.get("start_sector")) is not None and p["start_sector"] != cand.get("start_sector")
+            and _whole(p.get("size_bytes")) is not None and _whole(p.get("shrunk_from_bytes")) is not None
+            and p["shrunk_from_bytes"] > p["size_bytes"]]
 
 
-def shares_room(cand: dict | None, part: dict) -> bool:
-    """‏#1898: האם `part` גדלה בשחזור — המועמד עצמו, או מחיצה שהקליטה כיווצה."""
-    return cand is not None and (cand.get("index") == part.get("index")
-                                 or _whole(part.get("shrunk_from_bytes")) is not None)
+def _mib_up(sector: int) -> int:
+    return (sector + 2047) // 2048 * 2048
 
 
-def share(grow: int, own: int, total: int) -> int:
-    """החלק של המועמד ב-`grow` — ‏floor(grow × (own / total)), בדיוק סדר הפעולות
-    של jq בסוכן (שני כפל/חילוק IEEE), כדי שהתאומים יאמרו אותו בייט."""
-    return math.floor(grow * (own / total)) if total > 0 else grow
+def cand_room(manifest: dict, cand: dict, disk_sectors: int) -> int:
+    """‏#1897: כמה סקטורים המועמד מקבל על דיסק בן `disk_sectors`, כשכל מחיצה
+    ב-`returning` חוזרת לגודלה במקור — בדיוק מה ש-`expand_last` כותב: הראש גדל
+    במקומו ומה שאחריו זז קדימה ומיושר ל-MiB (‏`share_head`), המועמד מתחיל על MiB
+    (‏#2016), והזנב נארז מסוף הדיסק פנימה, כל התחלה מיושרת מטה (‏`_move_to_tail`).
+    יכול לצאת קטן מגודל המועמד באימג' — אז הדיסק אינו נכנס. התאום של
+    `cand_room` (‏RETURN_JQ, ‏diskfit.sh)."""
+    back = {p["index"] for p in returning(manifest, cand)}
+    parts = [p for p in manifest.get("partitions") or []
+             if isinstance(p, dict) and _whole(p.get("start_sector")) is not None]
+    start = cand["start_sector"]
+    off = 0
+    for p in sorted((p for p in parts if p["start_sector"] < start), key=lambda p: p["start_sector"]):
+        if off > 0:
+            off = _mib_up(p["start_sector"] + off) - p["start_sector"]
+        if p.get("index") in back:
+            off += (p["shrunk_from_bytes"] - p["size_bytes"]) // 512
+    end = disk_sectors - 34
+    for p in sorted((p for p in parts if p["start_sector"] > start), key=lambda p: -p["start_sector"]):
+        size = p["shrunk_from_bytes"] if p.get("index") in back else p["size_bytes"]
+        end = (end - size // 512 + 1) // 2048 * 2048 - 1
+    return end - _mib_up(start + off) + 1
+
+
+def _smallest_disk(manifest: dict, cand: dict, want_bytes: int) -> int:
+    """הדיסק הקטן ביותר (בבייטים, כפולה של סקטור) שבו המועמד מקבל `want_bytes`.
+    ‏`cand_room` עולה עם הדיסק (היישור מטה רק מתעכב), ולכן חיפוש בינארי."""
+    want = -(-want_bytes // 512)
+    hi = 1 << 21
+    while cand_room(manifest, cand, hi) < want:
+        hi *= 2
+    lo = 0
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if cand_room(manifest, cand, mid) >= want:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo * 512
 
 
 def free_after(manifest: dict, disk_bytes: int) -> tuple[int | None, str] | None:
     """(בייטים פנויים במחיצת המערכת אחרי שחזור לדיסק בגודל `disk_bytes`,
     התפקיד שלה). ‏`(None, role)` = ‏`used_bytes` לא נמדד. ‏`None` = אין מחיצת
-    מערכת, והכלל אינו חל. התאום של `system_free_after` בסוכן."""
+    מערכת, והכלל אינו חל. התאום של `system_free_after` בסוכן.
+
+    ‏#1897: כשמחיצות מכווצות חוזרות לגודלן במקור, מחיצת המערכת היא המועמד —
+    והיא מקבלת את `cand_room` — או אחת מהן, בגודלה במקור. אחרת היא גדלה רק
+    כשהיא המועמד, ומעבר לסף של 1GiB, כמו קודם."""
     sys_part = system_partition(manifest)
     if sys_part is None:
         return None
@@ -189,22 +225,44 @@ def free_after(manifest: dict, disk_bytes: int) -> tuple[int | None, str] | None
     if used is None or size is None or need is None:
         return None, sys_part["role"]
     cand = expandable_candidate(manifest)
-    grow = disk_bytes - need
-    grows = shares_room(cand, sys_part) and grow > EXPAND_THRESHOLD
-    if not grows:
+    back = returning(manifest, cand)
+    is_cand = cand is not None and cand.get("index") == sys_part.get("index")
+    if back:
+        if is_cand:
+            return cand_room(manifest, cand, disk_bytes // 512) * 512 - used, sys_part["role"]
+        if any(p.get("index") == sys_part.get("index") for p in back):
+            return sys_part["shrunk_from_bytes"] - used, sys_part["role"]
         return size - used, sys_part["role"]
-    own, total = grow_share(manifest, cand, sys_part)
-    return size - used + share(grow, own, total), sys_part["role"]
+    if is_cand and disk_bytes - need > EXPAND_THRESHOLD:
+        return size - used + disk_bytes - need, sys_part["role"]
+    return size - used, sys_part["role"]
 
 
 def min_disk_bytes(manifest: dict, gb: int) -> int | None:
     """הדיסק הקטן ביותר שהאימג' נכנס אליו **כולל** `gb` פנויים במחיצת
     המערכת — מה שהקונסולה מציגה כ"נכנס לדיסק מ-X". ‏`None` = לא ניתן לקבוע
-    (גיאומטריה חסרה, או `used_bytes` שלא נמדד כשהכלל דלוק)."""
+    (גיאומטריה חסרה, או `used_bytes` שלא נמדד כשהכלל דלוק).
+
+    ‏#1897: כשמחיצות מכווצות חוזרות לגודלן במקור, הדיסק צריך להכיל אותן
+    בגודלן במקור ואת המועמד בגודלו באימג' (‏`volumes_fit` בסוכן) — וגם את
+    `gb` במחיצת המערכת: כשהיא המועמד, היא לבדה מתפשרת; כשהיא אחת מהחוזרות,
+    המקום שבה קבוע, ואם הוא קטן מ-`gb` — אין דיסק שבו האימג' נכנס."""
     need = required_bytes(manifest)
     if need is None:
         return None
     sys_part = system_partition(manifest)
+    cand = expandable_candidate(manifest)
+    if returning(manifest, cand):
+        want = _whole(cand.get("size_bytes")) or 0
+        if gb > 0 and sys_part is not None:
+            fixed = free_after(manifest, need)
+            if fixed is None or fixed[0] is None:
+                return None
+            if cand.get("index") == sys_part.get("index"):
+                want = max(want, gb * GIB + sys_part["used_bytes"])
+            elif fixed[0] < gb * GIB:
+                return None    # מקומה קבוע בכל דיסק — אין גודל שבו הוא נכנס
+        return max(need, _smallest_disk(manifest, cand, want))
     if gb <= 0 or sys_part is None:
         return need
     at_need = free_after(manifest, need)
@@ -213,14 +271,9 @@ def min_disk_bytes(manifest: dict, gb: int) -> int | None:
     short = gb * GIB - at_need[0]
     if short <= 0:
         return need
-    cand = expandable_candidate(manifest)
-    if not shares_room(cand, sys_part):
+    if cand is None or cand.get("index") != sys_part.get("index"):
         return None    # המחיצה לא תגדל באף דיסק — אין גודל שבו הוא נכנס
-    own, total = grow_share(manifest, cand, sys_part)   # ‏#1897/#1898: היא מקבלת רק את חלקה
-    room = -(-short * total // own) if own > 0 and total > 0 else short
-    while share(room, own, total) < short:   # עיגול ה-float — לכל היותר צעד או שניים
-        room += 1
-    return need + max(room, EXPAND_THRESHOLD + 1)
+    return need + max(short, EXPAND_THRESHOLD + 1)
 
 
 def where(role: str) -> str:

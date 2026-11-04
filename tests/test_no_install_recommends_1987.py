@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -28,9 +29,15 @@ KNOWN_SITES = {
     "deploy/setup-boot-server.sh": 2,     # PKGS + nftables
     "deploy/vmupdate-host.sh": 1,         # חבילות עדכון ה-VM (גם מכפתור העדכון)
     "deploy/security-upgrade.sh": 1,      # כפתור העדכון: המפגרות + החדשות (#1803)
+    "deploy/timesync-swap.sh": 2,         # כפתור העדכון: chrony, ודרך החזרה ל-systemd-timesyncd (#1773)
     "installer/lib/bootstrap.sh": 1,       # המתקין החי של ה-ISO
     "tools/build_initramfs.sh": 5,         # בסיס, ארגז כלים, GUI, ‏firmware-amd, כלי בנייה
 }
+
+#: קוד Python שמריץ apt ‏(רשימת argv) — אותו כלל, **כולל סימולציה**. היום יש רק אחת:
+#: הסגירה של בדיקת האבטחה, שחייבת לחשב את מה שהשרת באמת מתקין (בלי Recommends).
+PY_SCAN_ROOTS = ("server", "deploy", "installer", "tools")
+KNOWN_PY_SITES = {"tools/security-recheck.py": 1}
 
 _APT = re.compile(r"(?<![\w./$-])(apt-get|apt|\$APT|\$\{APT\})(?=\s)")
 #: מה שאינו מתקין דבר: הורדה ל-pool וסימולציה (tools/iso/make-pool.sh).
@@ -198,6 +205,54 @@ def test_no_apt_install_brings_recommends() -> None:
     bad = [f"{f}:{n}: apt-get {' '.join(t)}" for f, sites in scan().items()
            for n, t in sites if not compliant(t)]
     assert not bad, ("התקנת apt בלי --no-install-recommends (#1987) — Recommends חוזרים לשרת:\n"
+                     + "\n".join(bad))
+
+
+def py_apt_calls(text: str) -> list[tuple[int, list[str]]]:
+    """כל רשימת/tuple argv בקוד Python שיש בה `apt-get`/`apt` ו-`install`:
+    השורה והמחרוזות הקבועות שבה (‏`*pkgs` ושמות משתנים אינם נספרים)."""
+    found = []
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, (ast.List, ast.Tuple)):
+            words = [e.value for e in node.elts
+                     if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+            if {"apt-get", "apt"} & set(words) and "install" in words:
+                found.append((node.lineno, words))
+    return found
+
+
+def py_scan() -> dict[str, list[tuple[int, list[str]]]]:
+    result = {}
+    for root in PY_SCAN_ROOTS:
+        for path in sorted((REPO / root).rglob("*.py")):
+            sites = py_apt_calls(path.read_text(encoding="utf-8"))
+            if sites:
+                result[path.relative_to(REPO).as_posix()] = sites
+    return result
+
+
+def test_the_python_scanner_finds_an_argv_install() -> None:
+    text = "\n".join([
+        'subprocess.run(["apt-get", "install", "-y", *pkgs])',
+        'run(("env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "-y",',
+        '     "--no-install-recommends", "install", "nftables"))',
+        'log.info("apt-get install failed")',
+        'subprocess.run(["apt-get", "update"])',
+    ])
+    sites = py_apt_calls(text)
+    assert [n for n, _ in sites] == [1, 2], sites
+    assert [compliant(t) for _, t in sites] == [False, True]
+
+
+def test_no_python_apt_install_brings_recommends() -> None:
+    found = py_scan()
+    short = {f: (len(found.get(f, [])), want) for f, want in KNOWN_PY_SITES.items()
+             if len(found.get(f, [])) < want}
+    assert not short, f"סריקת ה-Python מצאה פחות הפעלות apt מהידוע (נמצאו, נדרש): {short}"
+    # גם סימולציה: סגירה שמחושבת עם Recommends אינה מה שהשרת מתקין.
+    bad = [f"{f}:{n}: {' '.join(t)}" for f, sites in found.items()
+           for n, t in sites if not compliant(t)]
+    assert not bad, ("apt install מ-Python בלי --no-install-recommends (#1987):\n"
                      + "\n".join(bad))
 
 

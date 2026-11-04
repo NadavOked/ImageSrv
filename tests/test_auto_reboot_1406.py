@@ -230,8 +230,10 @@ def test_run_journals_an_exception_and_keeps_scheduling(server, tmp_path, monkey
 
 def test_marker_is_consumed_and_post_boot_event_is_journalled(server, tmp_path):
     marker = tmp_path / auto_reboot.MARKER
-    marker.write_text("scheduled", encoding="ascii")
-    assert auto_reboot.consume_marker(server["ctx"].conn, tmp_path) is True
+    # ‏#2407: הסימן נושא את זמן הביצוע, ו-consume_marker מחזיר אותו (סימן פגום —
+    # test_auto_reboot_loop_2407).
+    marker.write_text("2026-10-14T03:00:00", encoding="ascii")
+    assert auto_reboot.consume_marker(server["ctx"].conn, tmp_path) == datetime(2026, 10, 14, 3)
     assert not marker.exists()
     assert journal_details(server)[-1] == "השרת אותחל לפי לוח הזמנים"
 

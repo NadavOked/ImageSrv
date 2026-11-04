@@ -5,10 +5,11 @@ dual-boot שנקלט עם כיווץ: ‏C: מכווצת (‏60→20GiB), ואח
 ללינוקס, ‏C: נשארה עם ~5GiB פנויים לתמיד, ו-`min_disk_bytes` החזיר `None`: האימג'
 לא הוצע לשום דיסק, בלי אזהרה.
 
-עכשיו C: מקבלת את חלקה לפי היחס במקור **במקומה**, והלינוקס (וכל מה שבין
-השתיים) זז קדימה — בטוח, כי הטבלה נכתבת לפני הבייט הראשון והזרם כותב לפי
-אינדקס. ‏min-free רואה את החלק של C: בשני התאומים. **והמשכפל שואל לפני**:
-`share_plan` מחשב את החלוקה שתיכתב, והשאלה (`share`) מציגה אותה.
+עכשיו C: חוזרת **במקומה** לגודלה במקור (‏#1897, הכרעת נדב 04/11 — עד אז: חלקה
+לפי היחס במקור), והלינוקס (וכל מה שבין השתיים) זז קדימה — בטוח, כי הטבלה
+נכתבת לפני הבייט הראשון והזרם כותב לפי אינדקס. ‏min-free רואה את C: בגודלה
+במקור בשני התאומים. **והמשכפל שואל לפני**: `share_plan` מחשב את החלוקה
+שתיכתב, והשאלה (`share`) מציגה אותה.
 """
 
 from __future__ import annotations
@@ -71,9 +72,8 @@ def plan_of(m: dict) -> list[str]:
             for p in m["partitions"]]
 
 
-def _room() -> int:
-    table_end = L_START + 30 * GIB // 512
-    return DISK - 34 - table_end - 2 * GIB // 512
+#: ‏#1897 (04/11): what C: takes back -- its source size, not a share of the room.
+BACK = 40 * GIB // 512
 
 
 @needs_shell
@@ -82,7 +82,7 @@ def test_c_before_the_root_grows_in_place_and_the_root_moves_forward(tmp_path):
     rc, calls, marker = run_expand(tmp_path, plan_of(m), disk_sectors=DISK, manifest=m, share_ok=True)
     assert rc == "rc=0", (rc, calls)
     assert marker == "3|ext4"
-    g = _room() * 60 // 90 // 2048 * 2048       # C: 60 of (30 own + 60) GiB
+    g = BACK                                    # C: 20 -> 60 GiB, its source size
     swap_n, _ = tail_n(4, 2 * GIB // 512)
     call = calls[0]
     assert f" {swap_n} " in f" {call} ", call
@@ -121,12 +121,11 @@ def _agent_free(tmp_path, m: dict, disk: int, approved: bool = True) -> str:
 
 @needs_shell
 @pytest.mark.parametrize("disk", [DISK * 512, 256060514304, 128 * GIB])
-def test_the_agent_and_the_server_give_c_before_the_root_the_same_share(tmp_path, disk):
+def test_the_agent_and_the_server_give_c_before_the_root_its_source_size(tmp_path, disk):
+    """‏#1897 (04/11): C: חוזרת ל-60GiB בכל דיסק שהאימג' נכנס אליו — 45 פנויים."""
     m = dual_boot()
     free, role = minfree.free_after(m, disk)
-    grow = disk - required_bytes(m)
-    expect = 5 * GIB + (int(grow * (60 / 90)) if grow > minfree.EXPAND_THRESHOLD else 0)
-    assert role == "windows" and abs(free - expect) <= 1, (free, expect)
+    assert role == "windows" and free == 45 * GIB, free
     assert _agent_free(tmp_path / str(disk), m, disk) == f"{free}|windows"
 
 
@@ -137,15 +136,16 @@ def test_without_the_approval_the_agent_counts_no_growth_for_c(tmp_path):
     assert _agent_free(tmp_path, m, DISK * 512, approved=False) == f"{5 * GIB}|windows"
 
 
-def test_the_image_is_offered_from_the_disk_where_c_gets_enough():
-    """‏C: צריכה עוד 15GiB; היא מקבלת 60/90 מהמקום — 22.5GiB מעל הפריסה."""
+def test_the_image_is_offered_from_the_disk_where_c_is_back_at_its_source_size():
+    """‏#1897 (04/11): ‏C: חוזרת ל-60GiB (‏45 פנויים, מעל 20) — הדיסק צריך את 40GiB
+    שהיא לוקחת בחזרה ועוד השורש בגודלו באימג'; ה-min-free אינו מוסיף דבר."""
     m = dual_boot()
     need = required_bytes(m)
     smallest = minfree.min_disk_bytes(m, 20)
     assert smallest is not None, "‏#1898: האימג' לא הוצע לשום דיסק"
-    assert abs(smallest - (need + -(-15 * GIB * 90 // 60))) <= 2
+    assert abs(smallest - (need + BACK * 512)) <= 2 * (1 << 20), smallest - need   # the GPT and a MiB's alignment
+    assert smallest == minfree.min_disk_bytes(m, 0)
     assert minfree.refusal(m, smallest, 20) is None
-    assert minfree.refusal(m, smallest - 1, 20) is not None
 
 
 # --- the question: share_plan says what expand_last will write ----------------------
@@ -171,8 +171,8 @@ def _plan(tmp_path, m: dict, disk_sectors: int) -> list[str]:
 def test_the_plan_shown_is_the_split_expand_writes(tmp_path):
     m = dual_boot()
     rows = _plan(tmp_path, m, DISK)
-    g = _room() * 60 // 90 // 2048 * 2048
-    assert rows[0] == f"2|{20 * GIB}|{20 * GIB + g * 512}", rows
+    g = BACK
+    assert rows[0] == f"2|{20 * GIB}|{60 * GIB}", rows
     idx, now, after = rows[-1].split("|")
     assert (idx, int(now)) == ("3", 30 * GIB)
     # the root: from its new start to the swap at the end
@@ -183,7 +183,7 @@ def test_the_plan_shown_is_the_split_expand_writes(tmp_path):
 @needs_shell
 def test_no_question_when_nothing_before_the_candidate_grows(tmp_path):
     assert _plan(tmp_path / "a", dual_boot(shrunk=False), DISK) == []
-    assert _plan(tmp_path / "b", dual_boot(), FITS_EXACTLY) == []   # no room to share
+    assert _plan(tmp_path / "b", dual_boot(), FITS_EXACTLY) == []   # no room to give C: back its source size
 
 
 def _gate(tmp_path, answer: str | None):

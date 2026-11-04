@@ -428,9 +428,12 @@ def _pkgconfig(*pkgs: str) -> bool:
 def test_native_gui_builds_and_routes_the_cloner_screen(tmp_path):
     """בונה את הבינארי ומריץ `--png` עם קובץ מצב של cloner. בדיקת הניתוב
     המובנית של `render_png` (ה-`want[]`) מאמתת ש-`--screen cloner` הגיע
-    ל-`SCREEN_CLONER` ושהרשומות `drawer=`/`smart_prompt=` נפרסו — היא
+    ל-`SCREEN_CLONER` ושהרשומות `drawer=` נפרסו — היא
     יוצאת ב-rc≠0 אם לא. זו הבקרה השלילית של הצד הגרפי: קוד ישן בלי
-    ה-screen/הפרסר נכשל כאן."""
+    ה-screen/הפרסר נכשל כאן.
+
+    ‏#2347: ‏`smart_prompt=` (סוכן ישן) כבר אינו נקרא — הפרסר אומר שהתעלם
+    ממנו (על הקוד הישן אין שורת "ignored"). המקשים — ב-test_smart_warning_window."""
     binary = tmp_path / "gui-bin"
     build = subprocess.run(
         [BASH, "-c",
@@ -470,6 +473,7 @@ def test_native_gui_builds_and_routes_the_cloner_screen(tmp_path):
     )
     assert run.returncode == 0, run.stderr           # הניתוב נכשל => rc≠0
     assert "unknown key 'drawer_count'" not in run.stderr
+    assert "unknown key 'smart_prompt' ignored" in run.stderr, run.stderr   # #2347
     assert (tmp_path / "card-cloner-light.png").exists()
     assert (tmp_path / "card-cloner-dark.png").exists()
 
@@ -1286,21 +1290,6 @@ def test_the_gui_says_unchecked_in_words_next_to_a_green_dot():
     assert '!strcmp(smart, "unchecked")) return "לא נבדק"' in he
     assert "smart_he(idle->smart)" in cloner                 # תא הבריאות מציג את המילה
     assert "unchecked" not in _c_function(rounds, "smart_level")   # נופל ל-return 0 = ירוק
-
-
-def test_the_gui_panel_offers_the_write_through_the_window_on_every_colour():
-    """‏#1580 (נדב 17/10, "כמו Clonezilla"): גם אדום (SMART תקול) מקבל
-    "כתוב בכל זאת…" — הכפתור **פותח** את חלון ה-SMART, והכפתור האדום שבו הוא
-    האישור (main.c: ‏`cloner_smart_ask`); כתום שנכשל בפעם הקודמת — "נסה שוב…".
-    החלף / דלג / כתיבה — שלושה כפתורים. ‏#1090: בשורה מתחת לכרטיסים."""
-    src = (GUI_SRC / "screens_cloner.c").read_text(encoding="utf-8")
-    fn = _c_function(src, "screen_cloner")
-    assert 'const char *go = !strcmp(a->st.smart_verdict, "failed_last") ? "נסה שוב…" : "כתוב בכל זאת…";' in fn
-    assert "int red" not in fn
-    assert fn.count("HIT_SMART_RESCUE") == 1 and "HIT_SMART_SKIP" in fn and "HIT_SMART_REPLACE" in fn
-    main = (GUI_SRC / "main.c").read_text(encoding="utf-8")
-    ask = _c_function(main, "cloner_smart_ask")
-    assert "if (!a->st.smart_pending) return;" in ask and '"fail"' not in ask and '"failed_last"' not in ask
 
 
 def test_the_console_paints_fail_red_and_failed_last_orange():

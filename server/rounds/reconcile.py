@@ -11,7 +11,8 @@
 למולטיקאסט שלעולם לא יצא** — המסך אמר "הסבב פעיל", השרת הסכים, ואיש
 לא טעה: פשוט לא היה משדר. ומשימות קליטה `running` נשארו כך לנצח.
 
-שני מעברים, שניהם **מצב + יומן בלבד — לא מוחקים דבר**:
+המעברים כאן הם כולם **מצב + יומן בלבד — לא מוחקים דבר**. ‏(שלישי, ‏#2373:
+העברה בין אתרים פעילה → ‏`failed` בשם; ראו בגוף הפונקציה.)
 
 * **משימת קליטה `running`** — ההעלאה היא בקשת HTTP אחת שמתה עם
   התהליך, ולכן אין "staging חי" אחרי עלייה. אבל `capture.py` עושה
@@ -53,13 +54,15 @@ from server.core.tasks import staging_dir
 RESTARTED_TASK = "השרת עלה מחדש — הקליטה אבדה"
 RESTARTED_VERIFY = "השרת עלה מחדש — קבצי הקליטה לא נמצאו לאימות; האימג' לא נכנס לספרייה"
 RESTARTED_SESSION = "השרת עלה מחדש — המשדר אבד"
+RESTARTED_TRANSFER = "נקטעה בהפעלה מחדש של השרת"
 
 
 def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
                        sending: dict | None = None) -> dict:
     """מסמן את מה שנשאר `running` מהריצה הקודמת. מחזיר מה סומן, ליומן
     ולבדיקות: ``{"tasks_done": [...], "tasks_failed": [...],
-    "tasks_reverify": [...], "sessions_closed": [...]}``. ‏``tasks_reverify``
+    "tasks_reverify": [...], "sessions_closed": [...], "transfers_failed": [...]}``
+    (‏#2373). ‏``tasks_reverify``
     (‏#1470) — קליטות `verifying` שהאימות שלהן צריך לרוץ מחדש; מי שקורא
     (‏`create_runtime`) מפעיל אותו.
 
@@ -68,7 +71,7 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
     """
     root = Path(library_root)
     out: dict = {"tasks_done": [], "tasks_failed": [], "tasks_reverify": [],
-                 "sessions_closed": []}
+                 "sessions_closed": [], "transfers_failed": []}
 
     for row in conn.execute(
         "SELECT id, image_id, name, created_by FROM tasks"
@@ -144,6 +147,29 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
         else:
             out["tasks_failed"].append(row["id"])
             journal(conn, "capture_failed", f'{row["id"]} {RESTARTED_VERIFY}')
+
+    # ‏#2373: העברה בין אתרים רצה בתהליכון של התהליך שמת (‏`start_transfer` /
+    # ‏`start_pull`), ואחרי עלייה אין תהליכון לאף שורה. ‏`failed` בשם, עם
+    # ‏`bytes_sent` כפי שהיה — לא `done` (אין ראיה שהמשני קיבל) ולא מחיקה
+    # (ההיסטוריה שהקונסולה מציגה). אחרת השורה "רצה" לנצח, חוסמת שליחה חוזרת
+    # של אותו אימג', ומאז #1891 גם עדכון ואתחול מתוזמן.
+    for row in conn.execute(
+        "SELECT id, image_id, bytes_sent, bytes_total FROM storage_transfers"
+        " WHERE state IN ('queued', 'sending', 'verifying')"
+    ).fetchall():
+        with _write_lock, writing(conn):
+            changed = update_one(
+                conn,
+                "UPDATE storage_transfers SET state = 'failed', error = ?, updated_at = ?"
+                " WHERE id = ? AND state IN ('queued', 'sending', 'verifying')",
+                (RESTARTED_TRANSFER, now_iso(), row["id"]),
+            )
+        if not changed:
+            continue
+        out["transfers_failed"].append(row["id"])
+        journal(conn, "storage_transfer_failed",
+                f'{row["id"]} {row["image_id"]}: {RESTARTED_TRANSFER}'
+                f' ({row["bytes_sent"]} מתוך {row["bytes_total"]} בייטים)')
 
     live = sending["session_id"] if sending else None
     for row in conn.execute(

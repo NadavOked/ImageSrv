@@ -151,7 +151,7 @@ expand_last() {
     # את השאר, ולכן גם השלב השני של ההרחבה נשאל לכל אחת לחוד.
     _mark="$RUN_DIR/targets/$1/expanded"
     mkdir -p "$RUN_DIR/targets/$1"
-    rm -f "$_mark" "$_mark.more"   # #1897: .more = the shrunk partitions that share the room
+    rm -f "$_mark" "$_mark.more"   # #1897: .more = the shrunk partitions that go back to their source size
     # תוכנית חלקית כאן אינה "אין מועמד" אלא מועמד **שגוי**, ואיתו הזזה של
     # מחיצות שאיש לא ספר. כל הקוראים למטה מריצים את manifest_plan בתוך
     # החלפת פקודה או צינור, ושם קוד היציאה שלו אינו נראה — ולכן הוא נבדק
@@ -181,20 +181,26 @@ expand_last() {
 
     _disk_sectors=$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null || echo 0)
     _table_end=$((_start + _size / 512))
-    # הסף נמדד על מה שבאמת יתווסף למחיצה: הזנב, פחות **כל** מה שיחזור אליו.
-    [ $((_disk_sectors - _table_end - _tailsec)) -gt 2097152 ] || return 0
-    _add=$((_disk_sectors - 34 - _table_end - _tailsec)); _sh=""; [ ! -e "$RUN_DIR/targets/$1/share.ok" ] || _sh=1
-    _tail=$(SHARE_HEAD=$_sh share_tail "$1" "$2" "$_line" "$_tail" "$_add") || return 1   # #1897: the room, by the source ratio (expandshare.sh)
-    _head=$_start; [ -z "$_sh" ] || _head=$(share_head "$1" "$2" "$_line" "$_add") || return 1   # #1898: approved (drawergate.sh) -- a shrunk one before it too
+    # #1897 (Nadav 04/11): each partition capture shrank goes back to its source size
+    # (expandshare.sh) and the candidate takes the rest, under 1GiB too. The threshold
+    # guards only an image where nothing returns, measured on what the candidate gains.
+    _sh=""; [ ! -e "$RUN_DIR/targets/$1/share.ok" ] || _sh=1
+    _tail=$(share_tail "$1" "$2" "$_line" "$_tail") || return 1
+    _head=$_start; [ -z "$_sh" ] || _head=$(share_head "$1" "$2" "$_line") || return 1   # #1898: approved (drawergate.sh) -- a shrunk one before it too
+    _back=$(printf '%s\n' "$_tail" | awk -F'|' -v t="$_tailsec" '{ n += int($6 / 512) } END { print n - t }')
+    [ "$_back" -gt 0 ] || [ "$(printf '%s\n' "$_head" | wc -l)" -gt 1 ] \
+        || [ $((_disk_sectors - _table_end - _tailsec)) -gt 2097152 ] || return 0
     _start=$(printf '%s\n' "$_head" | sed -n 1p); _head=$(printf '%s\n' "$_head" | sed 1d)
-    # #2016: rebuilt here anyway -- an odd source start (58653315, field 22/10) is aligned UP to 1MiB.
-    _start=$(( (_start + 2047) / 2048 * 2048 ))
+    _start=$(( (_start + 2047) / 2048 * 2048 ))   # #2016: rebuilt anyway -- an odd source start (58653315, field 22/10) aligned UP to 1MiB
+    _mv=$(_move_to_tail "$_tail" "$_disk_sectors"); _end=$(_cand_end "$_mv" "$_disk_sectors")   # never under its image: disk_fits refused that disk first
+    [ $((_end - _start + 1)) -ge $((_size / 512)) ] \
+        || { log "$1: partition $_idx would get $((_end - _start + 1)) of its $((_size / 512)) sectors with the shrunk ones back at their source size (#1897)"; return 1; }
 
     log "expanding partition $_idx to fill the disk"
     # #1714: the tail's move and the candidate's rebuild are ONE sgdisk call, in
     # the order the separate calls ran. The unique GUID survives the rebuild,
     # or the BCD loses the system partition just restored (#26).
-    _gpt="-a 1$(_move_to_tail "$_tail" "$_disk_sectors") -d $_idx$(_head_args "$_head") -n $_idx:$_start:0 -t $_idx:$_guid"
+    _gpt="-a 1$_mv -d $_idx$(_head_args "$_head") -n $_idx:$_start:0 -t $_idx:$_guid"
     [ -z "$_uguid" ] || _gpt="$_gpt -u $_idx:$_uguid"
     [ -z "$_attrs" ] || _gpt="$_gpt -A $_idx:=:0x$_attrs"
     _gpt="$_gpt$(printf '%s\n%s\n%s\n' "$_line" "$_tail" "$_head" | writemark_args -)"   # #1798: -d/-n rebuilt them unnamed

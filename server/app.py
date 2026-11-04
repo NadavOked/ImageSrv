@@ -18,6 +18,7 @@ import logging
 import threading
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from sqlite3 import Connection
 
@@ -38,6 +39,7 @@ from server.learn import server_io   # #1884
 from server.net import pxe_log   # #1887
 from server.agent import timing as agent_timing   # #2056
 from server.system import timezone, timesync   # #1447, #1773
+from server.system import dnsmasq_dropin as dnsmasq_dropin_mod   # #2174
 from server.agent.api import ServerContext, boot_identity_ok, create_agent_router
 from server.console.api import create_console_router
 from server.console.data import create_console_data_router   # #1882-#1889
@@ -215,6 +217,9 @@ class ServerRuntime:
     vm_host: "VmHost | None" = None
     auto_reboot_hook: object = auto_reboot.default_reboot
     auto_reboot_interval: float = auto_reboot.CHECK_SECONDS
+    #: ‏#2407: זמן ההפעלה מחדש המתוזמנת שהעלייה הזו באה ממנה (``consume_marker``);
+    #: המתזמן קורא אותו כדי לא לבצע את אותו מופע שוב. ‏None = עלייה רגילה.
+    auto_reboot_last: "datetime | None" = None
     #: ‏#1737: הסיבוב היומי (‏`housekeeping`) — מתי הראשון ובאיזה קצב. בדיקות מקצרות.
     housekeeping_first: float = housekeeping.FIRST_RUN_S
     housekeeping_every: float = housekeeping.EVERY_S
@@ -442,6 +447,10 @@ def create_runtime(
     # טעם כמו ``known_macs_hooks``: רק ``main`` מדליק; בדיקות לא נוגעות
     # ב-dnsmasq של המכונה שהן רצות עליה.
     sync_dnsmasq: bool = False,
+    # ‏#2174: בעלייה, הניסיון החוזר של dnsmasq (‏#1816) ב-dnsmasq.service.d מותאם
+    # למקור שבעץ, ו-daemon-reload כשצריך. ‏False כברירת מחדל מאותו טעם כמו
+    # ``sync_dnsmasq``: רק ``main`` מדליק, ורק על לינוקס.
+    dnsmasq_dropin: bool = False,
     # ‏#705: שלבי האכיפה של השירותים לכל כרטיס (‏`nic_services.NicServices`)
     # ועוד hooks שלו — בדיקות מזריקות; ‏`main` מוסיף את המאזינים אחרי שהם קיימים.
     nic_hooks: dict | None = None,
@@ -478,7 +487,7 @@ def create_runtime(
     data_dir.mkdir(parents=True, exist_ok=True)
 
     conn = connect(data_dir / "imagesrv.db")
-    auto_reboot.consume_marker(conn, data_dir)
+    auto_reboot_last = auto_reboot.consume_marker(conn, data_dir)
 
     # ‏#655/#723: תצורת ה-Storage Node נכתבת בהפעלה כשהיא הועברה (main).
     # ‏None = לא הועבר — משאירים את ההגדרה הקיימת; התפקיד נקרא ממילא
@@ -689,6 +698,9 @@ def create_runtime(
     if sync_dnsmasq:
         console_dhcp.sync_main_conf(
             ctx, {**console_dhcp.default_hooks(), **(dhcp_hooks or {})}, deploy)
+    if dnsmasq_dropin:
+        dnsmasq_dropin_mod.apply_on_start(
+            conn, {**dnsmasq_dropin_mod.default_hooks(), **(host_hooks or {})}, repo_dir)
 
     engine = vmupdate_engine or VmUpdate(
         conn, library,
@@ -723,6 +735,7 @@ def create_runtime(
         vmupdate=engine, vm_host=host,
         auto_reboot_hook=auto_reboot_hook or auto_reboot.default_reboot,
         auto_reboot_interval=auto_reboot_interval,
+        auto_reboot_last=auto_reboot_last,
     )
 
 

@@ -83,6 +83,23 @@ jobs:
           # איזה busybox רץ כאן -- ‏gsub שלו נבדל בין בניות, וה-runner אינו
           # בהכרח מה שנארז ב-initrd. בלי השורה הזאת אין דרך לדעת בדיעבד.
           busybox | head -1
+      # ‏#2064: גלאי Impeccable בגרסה הנעולה, לשער tests/test_impeccable_gate.py.
+      # ה-sha וה-URL נקראים מ-tests/impeccable_gate.py (מקור יחיד) ומפתחים את
+      # המטמון — הורדה אחת לכל הצמדה, לא בכל ריצה. ‏`fetch` מאמת sha גם על
+      # מה שעלה מהמטמון, והטסט מאמת שוב לפני ההרצה. הורדה שנכשלה או sha שאינו
+      # תואם — השלב אדום; בלעדיו ‏REQUIRE_NATIVE מכשיל את השער בשמו.
+      - name: Impeccable pin (#2064)
+        id: impeccable
+        run: python tests/impeccable_gate.py pin >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/impeccable
+          key: impeccable-${{ steps.impeccable.outputs.sha256 }}
+      - name: Fetch the pinned Impeccable detector (#2064)
+        run: |
+          dest="$HOME/.cache/impeccable/imp"
+          python tests/impeccable_gate.py fetch "$dest"
+          echo "IMAGESRV_IMPECCABLE_BIN=$dest" >> "$GITHUB_ENV"
       # ‏`set -o pipefail` אינו קישוט: ברירת המחדל של Actions היא
       # ‏`bash -e`, **בלי pipefail**, ולכן `pytest | tee` היה מחזיר את
       # קוד היציאה של `tee` — כלומר 0 תמיד. זה בדיוק הדפוס שעיקרון 5

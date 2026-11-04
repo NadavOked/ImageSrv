@@ -36,6 +36,7 @@ from server.agent import timing as agent_timing   # #2056
 from server.disks import disk_sets   # #1857
 from server.disks import writefloor   # #2338
 from server.agent import firmware_image# #2080
+from server.agent import unknown_screen   # #1802
 from server.agent.readbackhash import mode as readback_mode
 from server.agent.hello import (build_answer, hello_payload_oversized, login_required,
                                 off_deploy_vlan, well_formed_monitor_auth,
@@ -51,8 +52,9 @@ log = logging.getLogger("imagesrv.api")
 PROMPT_MAX_CHARS = 200
 
 #: ‏#402: הערכים של `disk_probe` בממשק 2. `unchecked` ≠ `no_disks`
-#: (עיקרון 5): "לא הצלחנו לספור פורטים" אינו "אפס פורטים".
-DISK_PROBE_VALUES = frozenset({"drives", "no_disks", "no_ports", "unchecked"})
+#: (עיקרון 5): "לא הצלחנו לספור פורטים" אינו "אפס פורטים". ‏#2334: `no_driver`
+#: = בקר אחסון בלי מנהל התקן.
+DISK_PROBE_VALUES = frozenset({"drives", "no_disks", "no_ports", "unchecked", "no_driver"})
 
 
 @dataclass
@@ -375,6 +377,10 @@ def create_agent_router(ctx: ServerContext,
                 # ‏#1367: רק בקשה שאושרה מעל אזהרת השיכפול המקומי מכבה מכונה שכותבת
                 if power_confirmed:
                     answer["power_confirmed"] = True
+        else:
+            # ‏#1802 (נדב 04/11): המסך "המחשב הזה לא רשום" נשאר. כמה שניות עד עלייה
+            # אוטומטית מהדיסק (0 = כבוי) — הסוכן מחיל אותה ב-UEFI בלבד, לעולם לא ב-BIOS.
+            answer[unknown_screen.SETTING] = unknown_screen.autoboot_seconds(ctx.conn)
         log.info("hello from %s (%s): known=%s off_vlan=%s",
                  # codeql[py/log-injection] false positive: MAC מנורמל, client_ip מה-socket, והשאר bool (#291)
                  mac, client_ip, answer["known"], off_vlan)

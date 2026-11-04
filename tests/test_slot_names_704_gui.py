@@ -207,7 +207,7 @@ def test_buffers_are_sized_for_the_longest_name():
     # 17/10: the live rows (both screens) name the disk in LcBay.name
     assert "char name[SLOT_NAME_MAX + 64], sub[200];" in _src("lcui.h")
     cloner = _src("screens_cloner.c")
-    assert "pdisk[SLOT_NAME_MAX + 16]" in cloner and "head[SLOT_NAME_MAX + 16 + 160]" in cloner
+    assert "pdisk[SLOT_NAME_MAX + 64]" in cloner   # #2347: the asking row's own label (entry_label); the SMART bar's head[] is gone
     standby = _src("screens_standby.c")   # #1304: the standby moved out of screens.c
     assert "name[SLOT_NAME_MAX + 16], sub[SLOT_NAME_MAX + 48]" in standby
     assert "label[SLOT_NAME_MAX + 16], msg[SLOT_NAME_MAX + 120]" in standby

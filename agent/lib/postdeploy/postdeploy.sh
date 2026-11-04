@@ -203,6 +203,9 @@ EOF
     }
     _hive="$_dr_mnt/Windows/System32/config/SOFTWARE"
     [ -f "$_hive" ] || { _drivers_fail "כוורת SOFTWARE לא נמצאה"; return 0; }
+    # #2363: before the first change to the disk (bootstorage.sh has the why).
+    _dr_why=$(hive_unsynced_reason "$_hive" SOFTWARE "הדרייברים לא הונחו")
+    [ -z "$_dr_why" ] || { _drivers_fail "$_dr_why"; return 0; }
     for _n in $_names; do rm -rf "${_dr_mnt:?}/${DRIVERS_WIN_DIR:?}/$_n"; done   # SC2115: לעולם לא "/"
     _drivers_copy "$_dr_mnt" "$_rows" || { _drivers_fail "$_dr_why"; return 0; }
     _device_path_add "$_hive" || { _drivers_fail "$_dr_why"; return 0; }

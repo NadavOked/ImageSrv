@@ -11,6 +11,7 @@ from pathlib import Path
 from server.paths import REPO_ROOT
 
 from server.rounds import room
+from server.system import inflight
 from . import update
 from server.core.atomicfile import write_atomic
 from .db import get_setting, journal
@@ -115,6 +116,14 @@ def busy_reason(rt, now: datetime | None = None, *, include_update: bool = True)
         return "יש סבב חדר פתוח או רץ"
     if conn.execute("SELECT 1 FROM tasks WHERE type = 'capture' AND state = 'running' LIMIT 1").fetchone():
         return "קליטת אימג' רצה"
+    # ‏#1891 (הכרעת נדב 01/11): שרת שמעביר לשרת אחר — עסוק. ‏queued כלול: התהליכון
+    # שלה כבר הופעל (‏start_transfer/start_pull), ו-restart מפיל אותו.
+    if conn.execute("SELECT 1 FROM storage_transfers WHERE state IN ('queued','sending','verifying')"
+                    " LIMIT 1").fetchone():
+        return "העברת אימג' בין אתרים רצה"
+    streams = inflight.running()
+    if streams:
+        return " ו".join(streams) + " רצה"
     if include_update and update_verdict(rt, now)[0]:
         return "עדכון שרת רץ"
     vm = getattr(rt, "vmupdate", None)
@@ -140,13 +149,27 @@ def default_reboot() -> None:
     subprocess.run(["systemctl", "reboot"], check=True)
 
 
-def consume_marker(conn, data_dir: str | Path) -> bool:
+def consume_marker(conn, data_dir: str | Path) -> datetime | None:
+    """זמן ההפעלה מחדש המתוזמנת שהעלייה הזו היא תוצאתה, או None כשאין סימן.
+
+    ‏#2407: המתזמן מקבל את הזמן (``ServerRuntime.auto_reboot_last``) כדי לא לבצע
+    את אותו מופע שוב — שרת שעולה תוך פחות מדקה הופעל מחדש כשש פעמים ב-TA.
+    סימן שלא נקרא (פגום, ריק, עם אזור זמן) **אינו** "אין סימן" (עיקרון 5): הוא
+    נחשב כמופע שבוצע עכשיו, כדי שספק לא יפעיל מחדש באותה דקה — ונרשם ביומן."""
     marker = Path(data_dir) / MARKER
     if not marker.exists():
-        return False
+        return None
+    try:
+        done = datetime.fromisoformat(marker.read_text(encoding="ascii").strip())
+        if done.tzinfo is not None:  # Scheduler writes naive server-local time
+            raise ValueError(f"חותמת עם אזור זמן: {done.isoformat()}")
+        note = ""
+    except (OSError, ValueError) as exc:
+        done = datetime.now()
+        note = f" — הסימן לא נקרא ({type(exc).__name__}: {exc}); המופע הנוכחי נחשב כבוצע"
     marker.unlink()
-    journal(conn, "auto_reboot", "השרת אותחל לפי לוח הזמנים")
-    return True
+    journal(conn, "auto_reboot", f"השרת אותחל לפי לוח הזמנים{note}")
+    return done
 
 
 @dataclass
@@ -165,8 +188,13 @@ class Scheduler:
             self.due = self.first_deferred = self.retry_at = None
             return None
         if self.due is None:
-            # Include the current scheduled minute on startup/tick.
-            self.due = next_occurrence(mode, at, weekday, current - timedelta(minutes=1))
+            # Include the current scheduled minute on startup/tick — unless this boot is
+            # that occurrence's own reboot (#2407): a server up in <1 min re-ran it.
+            since = current - timedelta(minutes=1)
+            last_done = getattr(self.rt, "auto_reboot_last", None)
+            if last_done is not None:
+                since = max(since, last_done)
+            self.due = next_occurrence(mode, at, weekday, since)
         if current < self.due or (self.retry_at is not None and current < self.retry_at):
             return None
         try:

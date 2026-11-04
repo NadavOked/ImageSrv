@@ -38,6 +38,7 @@ SERVERS_DNS=""
 NO_FIREWALL=0
 ADMIN_USER=""
 TIMEZONE=""            # #1447: --timezone; ריק = ההגדרה לא נכתבת (ברירת המחדל של השרת)
+NTP_SERVERS=""         # #2144: --ntp-servers; ריק = אוטומטי (ההגדרה לא נכתבת)
 ADMIN_PASS=""
 ADMIN_PASS_FD=""
 # Storage Nodes (#655/#723): תפקיד ההתקנה. standalone (ברירת מחדל) או
@@ -303,6 +304,7 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
   --admin-pass PASS    מדלג על שאלות הסיסמה (נשאר ברשימת התהליכים — לדיבאג בלבד)
   --admin-pass-fd FD   קורא את הסיסמה מ-FD שכבר פתוח (האשף משתמש ב-3; אינו argv/env/log)
   --timezone ZONE      אזור הזמן של השרת (tzdata, למשל Asia/Jerusalem) — נכתב להגדרה (#1447)
+  --ntp-servers "A B"  שרת הזמן של הארגון (עד 4, ברווח) — ההגדרה של הקונסולה, מקור השעה (#2144)
   --tftp-root PATH     ברירת מחדל /srv/tftp
   --http-root PATH     ברירת מחדל /srv/imagesrv/boot; מועבר לשרת כ---boot-dir
   --storage-role ROLE  standalone (ברירת מחדל) או secondary (#655/#723)
@@ -334,6 +336,7 @@ while [[ $# -gt 0 ]]; do
         --admin-pass)  ADMIN_PASS="${2:?}"; shift 2 ;;
         --admin-pass-fd) ADMIN_PASS_FD="${2:?}"; shift 2 ;;
         --timezone)    TIMEZONE="${2:?}"; shift 2 ;;
+        --ntp-servers) NTP_SERVERS="${2:?}"; shift 2 ;;
         --tftp-root)   TFTP_ROOT="${2:?}"; shift 2 ;;
         --http-root)   HTTP_ROOT="${2:?}"; shift 2 ;;
         --storage-role) STORAGE_ROLE="${2:?}"; shift 2 ;;
@@ -935,6 +938,27 @@ set_setting(connect("$DATA_DIR/imagesrv.db"), timezone.SETTING, zone)
 PYEOF
 fi
 
+# ‏#2144: שרת הזמן שנבחר במתקין הוא ההגדרה של הקונסולה (#1773, "מקור השעה") —
+# בלעדיה עליית השרת (timesync.apply_on_start) הייתה כותבת ל-chrony "אוטומטי".
+# אותו כלל בדיקה של הקונסולה (timesync.validate); ערך שנדחה נכשל כאן בשמו.
+if [[ -n "$NTP_SERVERS" ]] && (( ! DRY_RUN )); then
+    say "שרת הזמן של השרת: $NTP_SERVERS"
+    NTP_SERVERS="$NTP_SERVERS" python3 - <<PYEOF
+import os, sys
+sys.path.insert(0, "$APP_DIR")
+from server.system import timesync
+from server.db import connect, get_setting, set_setting
+try:
+    value = timesync.validate(os.environ["NTP_SERVERS"])
+except ValueError as exc:
+    sys.exit(str(exc))
+conn = connect("$DATA_DIR/imagesrv.db")
+set_setting(conn, timesync.SETTING, value)
+if get_setting(conn, timesync.SETTING) != value:
+    sys.exit("ההגדרה ntp_servers לא נקראה בחזרה כפי שנכתבה")
+PYEOF
+fi
+
 # ---------------------------------------------------------------------------
 # ‏#1088: כרטיס השרתים — לקוח DHCP (ברירת מחדל) או סטטי, בקובץ שהקונסולה
 # יודעת לקרוא ולשנות (`interfaces.d/imagesrv-<if>`, server/net/netcfg.py),
@@ -1120,6 +1144,13 @@ say "מייצר/מוודא את תעודת ה-TLS של הקונסולה"
 CONSOLE_TLS_HOST="$CONSOLE_HOST"
 if [[ -n "$CONSOLE_TLS_HOST" && ! "$CONSOLE_TLS_HOST" =~ ^[0-9a-fA-F.:]+$ ]]; then
     CONSOLE_TLS_HOST="$(iface_ip "$CONSOLE_TLS_HOST")"
+    # #2155: first boot restarts networking only after this script, so a static
+    # servers NIC has no address yet. Its configured address is the one it is
+    # about to get: one certificate for it, not one for loopback that the next
+    # start replaces (journal + console.crt.prev). DHCP: not known -- loopback.
+    if [[ -z "$CONSOLE_TLS_HOST" && "$CONSOLE_HOST" == "$SERVERS_IF" && "$SERVERS_MODE" == static ]]; then
+        CONSOLE_TLS_HOST="$SERVERS_ADDR"
+    fi
 fi
 CONSOLE_FP="(dry-run)"
 if (( ! DRY_RUN )); then
