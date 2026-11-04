@@ -50,6 +50,10 @@ B="{box}"
 case "$*" in
     *min_target_bytes*)       cat "$B/needs" ;;
     *"partitions | length"*)  cat "$B/count" ;;
+    # #1897: volumes_fit (diskfit.sh). Nothing in this plan was shrunk, and on
+    # that manifest real jq says ok (test_expand_share_1897.py). Before
+    # .partitions[]: the query holds it, and the plan rows are not an answer.
+    *'"short|'*)              echo ok ;;
     *".partitions[]"*)
         if [ -f "$B/plan_cut" ]; then
             head -n "$(cat "$B/plan_cut")" "$B/plan"

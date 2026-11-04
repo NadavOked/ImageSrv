@@ -61,9 +61,49 @@ disk_fits() {
  (נדרשים $_n בייט, בדיסק $_h; חסרים $((_n - _h)) בייט)"
         return 1
     fi
+    # #1897 (נדב 04/11): כל מחיצה שכווצה בקליטה חוזרת לגודלה במקור, ורק C: מתפשרת.
+    # דיסק שקטן מזה נדחה כאן, בשם, לפני הטבלה. ‏#1898: הראש רק בחלוקה שהמפעיל אישר.
+    _sh=$([ ! -e "$RUN_DIR/targets/$1/share.ok" ] || echo 1)
+    _vf=$(SHARE_HEAD=$_sh volumes_fit "$2" "$_h" "$(_expand_candidate "$2" | cut -d'|' -f1)")
+    case "$_vf" in ok) ;; short\|*) target_set "$1" "failed" "${_vf#*|}"; return 1 ;;
+        *) target_set "$1" "failed" "לא הצלחנו לבדוק אם המחיצות המכווצות יחזרו לגודלן במקור — לא נכתב"; return 1 ;; esac
     # #1354: נכנס = גם נשאר מקום לעבוד. אותו יעד, אותו רגע, לפני שנגענו בו.
-    _mf=$(SHARE_HEAD=$([ ! -e "$RUN_DIR/targets/$1/share.ok" ] || echo 1) min_free_check "$2" "$_h" "$_n")   # #1898: the split the operator approved
+    _mf=$(SHARE_HEAD=$_sh min_free_check "$2" "$_h" "$_n")
     [ "$_mf" = ok ] || { target_set "$1" "failed" "${_mf#*|}"; return 1; }
+}
+
+# --- #1897 (Nadav 04/11): the plan expand_last writes when the shrunk partitions
+# go back to their source size -- the twin of share_tail/share_head/_move_to_tail
+# (expandshare.sh; a test compares it with the sgdisk call) and of
+# server/library/minfree.py:cand_room. returns: a partition capture shrank,
+# after the candidate, or before it when the split was approved ($head 1, #1898).
+# cand_room: the sectors the candidate gets on a disk of $d bytes.
+RETURN_JQ='def returns($cp; $head): (.shrunk_from_bytes | type) == "number" and .shrunk_from_bytes > .size_bytes
+    and .index != $cp.index and (.start_sector > $cp.start_sector or ($head == "1" and .start_sector < $cp.start_sector));
+  def back($cp; $head): [.partitions[] | select(returns($cp; $head))];
+  def mib_up: ((. + 2047) / 2048 | floor) * 2048;
+  def cand_room($d; $cp; $head):
+    (if $head != "1" then 0 else reduce ([.partitions[] | select(.start_sector < $cp.start_sector)] | sort_by(.start_sector))[] as $p
+       (0; (if . > 0 then (($p.start_sector + .) | mib_up) - $p.start_sector else . end)
+           + (if ($p | returns($cp; $head)) then ($p.shrunk_from_bytes - $p.size_bytes) / 512 | floor else 0 end)) end) as $off
+    | (reduce ([.partitions[] | select(.start_sector > $cp.start_sector)] | sort_by(.start_sector) | reverse)[] as $p
+        (($d / 512 | floor) - 34; ((if ($p | returns($cp; $head)) then $p.shrunk_from_bytes else $p.size_bytes end) / 512 | floor) as $z
+         | ((. - $z + 1) / 2048 | floor) * 2048 - 1))
+      - (($cp.start_sector + $off) | mib_up) + 1;'
+
+volumes_fit() {
+    # $1 manifest, $2 disk bytes, $3 the index expand_last stretches. stdout: ok |
+    # short|<words: each partition that goes back, by name and size>. Only the
+    # candidate gives way, down to its size in the image. jq failing prints
+    # nothing -- the caller refuses (principle 5).
+    jq -r --argjson d "$2" --arg c "$3" --arg head "${SHARE_HEAD:-}" "$RETURN_JQ"'
+      def gb: . / 1e8 | floor / 10;
+      ([.partitions[] | select((.index | tostring) == $c)] | .[0]) as $cp
+      | if $cp == null then "ok" else back($cp; $head) as $b | (cand_room($d; $cp; $head) * 512) as $r
+        | if ($b | length) == 0 or $r >= $cp.size_bytes then "ok"
+          else "short|הדיסק קטן מדי ב-\(($cp.size_bytes - $r + 1048575) / 1048576 | floor) MiB: "
+               + ([$b[] | "מחיצה \(.index) חוזרת לגודלה במקור, \(.shrunk_from_bytes | gb) GB"] | join("; "))
+               + " — ולמחיצה \($cp.index) נשארים \([$r, 0] | max | gb) GB, והיא צריכה \($cp.size_bytes | gb) GB" end end' "$1" 2>> "$LOG_FILE"
 }
 
 # --- #1354: מינימום מקום פנוי במחיצת המערכת אחרי השחזור ----------------------
@@ -132,25 +172,23 @@ system_free_after() {
     # stretches ("" = none). stdout: free|role -- the bytes left free in the
     # system partition (system_part above) after the restore; unknown|role when
     # its used_bytes was not measured; ambiguous|windows when it cannot be told;
-    # none| when there is no windows/linux partition at all. It grows only when
-    # it is the one expand_last stretches or one capture shrank (#1898: C:
-    # before the linux root), only past expand_last's own 1 GiB threshold --
-    # and then by its share of the room (#1897, expandshare.sh). Twin:
-    # server/minfree.py:free_after.
-    jq -r --argjson d "$2" --argjson n "$3" --arg c "$4" --arg head "${SHARE_HEAD:-}" "$SYSTEM_PART_JQ"'
+    # none| when there is no windows/linux partition at all. #1897 (Nadav 04/11):
+    # when shrunk partitions go back to their source size (back, RETURN_JQ), it
+    # is the candidate -- it gets cand_room -- or one of them, at its source
+    # size. Otherwise it grows only when it is the one expand_last stretches,
+    # past its 1 GiB threshold, as before. Twin: server/library/minfree.py:free_after.
+    jq -r --argjson d "$2" --argjson n "$3" --arg c "$4" --arg head "${SHARE_HEAD:-}" "$SYSTEM_PART_JQ$RETURN_JQ"'
       system_part as $s
       | if $s == null then "none|"
         elif $s.ambiguous then "ambiguous|" + $s.role
         elif ($s.used_bytes | type) != "number" or $s.used_bytes < 0
              or ($s.size_bytes | type) != "number" then "unknown|" + $s.role
-        else (($d - $n) as $g | ([.partitions[] | select((.index | tostring) == $c)] | .[0]) as $cp
-              | if $cp != null and $g > 1073741824 and (($s.index | tostring) == $c
-                     or (($s.shrunk_from_bytes | type) == "number"   # #1898: a shrunk C: before it, when approved
-                         and ($head == "1" or $s.start_sector > $cp.start_sector)))
-                then ($s.shrunk_from_bytes // $s.size_bytes) as $own   # #1897: its share only (expandshare.sh)
-                     | (($cp.shrunk_from_bytes // $cp.size_bytes) + ([.partitions[] | select((.index | tostring) != $c
-                                 and ($head == "1" or (.start_sector // 0) > $cp.start_sector)) | .shrunk_from_bytes | numbers] | add // 0)) as $all
-                     | if $all > 0 then ($g * ($own / $all) | floor) else $g end
+        else ([.partitions[] | select((.index | tostring) == $c)] | .[0]) as $cp
+             | (if $cp == null then 0
+                elif (back($cp; $head) | length) > 0 then
+                  if $s.index == $cp.index then cand_room($d; $cp; $head) * 512 - $s.size_bytes
+                  elif ($s | returns($cp; $head)) then $s.shrunk_from_bytes - $s.size_bytes else 0 end
+                elif ($s.index | tostring) == $c and $d - $n > 1073741824 then $d - $n
                 else 0 end) as $grow
              | "\($s.size_bytes - $s.used_bytes + $grow | floor)|" + $s.role end' "$1" 2>> "$LOG_FILE"
 }

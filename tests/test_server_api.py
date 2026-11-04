@@ -44,6 +44,8 @@ def test_unknown_mac_gets_nothing_and_raises_an_alert(server):
     assert "tz" in answer
     answer.pop("tz")
     assert isinstance(answer.pop("now"), int)
+    # #1802: the screen's autoboot setting rides on known: false only -- 0 = off, the default
+    assert answer.pop("unregistered_autoboot_seconds") == 0
     assert answer == {
         "schema": 1, "known": False, "role": "unknown", "group": None,
         "task": None, "session": None, "allowed_images": [],

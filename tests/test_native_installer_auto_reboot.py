@@ -180,8 +180,9 @@ def test_failed_eject_is_logged_and_the_restart_still_goes_out(driver, tmp_path)
 def test_done_card_draws_the_countdown(tmp_path) -> None:
     """ב-1280x800 (קנה מידה 1; 1280x1024 מוגדל פי 1.25 מאז מוקאפ 10/10): העמודה
     האחת (760 ממורכזת) מתחילה ב-(135,105),
-    הכרטיס נגמר ב-447, ושורת הספירה ב-463–521; הטקסט נגמר ב-875 ו"בטל"
-    ב-145. לפני #1250 האזור הזה היה רקע בלבד — צבע אחד."""
+    הכרטיס נגמר ב-479 (‏#2144: שורת "שעון השרת" הוסיפה לו 32), ושורת הספירה
+    ב-495–553; הטקסט נגמר ב-875 ו"בטל" ב-145. לפני #1250 האזור הזה היה רקע
+    בלבד — צבע אחד."""
     binary = _build(tmp_path)
     prefix = tmp_path / "reboot"
     env = dict(os.environ)
@@ -193,9 +194,9 @@ def test_done_card_draws_the_countdown(tmp_path) -> None:
     assert proc.returncode == 0, proc.stderr
     for theme in ("light", "dark"):
         path = tmp_path / f"reboot-install-6-done-{theme}.png"
-        _, _, text = _size_and_ink(path, (700, 470, 870, 515))
+        _, _, text = _size_and_ink(path, (700, 502, 870, 547))
         assert text >= 8, f"{theme}: no countdown text in the done card ({text} colors)"
-        _, _, cancel = _size_and_ink(path, (150, 478, 190, 508))
+        _, _, cancel = _size_and_ink(path, (150, 510, 190, 540))
         assert cancel > 1, f"{theme}: no Cancel button next to the countdown"
 
 

@@ -85,8 +85,8 @@ single_restore_run() {
 
 sr_share_gate() {
     # $1 = disk, $2 = manifest. #1898 (Nadav 22/10): a shrunk partition BEFORE
-    # the one that grows (C: before the linux root) takes its share of the
-    # room only when the operator approved the split -- here as on the cloner
+    # the one that grows (C: before the linux root) goes back to its source
+    # size only when the operator approved the split -- here as on the cloner
     # (drawergate.sh drawer_share_gate): share_plan says what expand_last will
     # write, the question (kind share) shows it on the progress GUI, and
     # "split" writes targets/<disk>/share.ok, which expand_last and disk_fits

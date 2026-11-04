@@ -163,8 +163,7 @@ def test_a_head_partition_that_moves_forward_starts_on_a_mib_and_so_does_the_roo
     starts = {int(i): int(s) for i, s in re.findall(r" -n (\d+):(-?\d+):", " " + calls[0])}
     assert all(s % 2048 == 0 for i, s in starts.items() if i != 2), (starts, calls[0])   # C: stays put
     assert starts[2] == c["start_sector"], calls[0]
-    room = DISK - 34 - (root["start_sector"] + root["size_bytes"] // 512) - swap["size_bytes"] // 512
-    g = room * 60 // 90 // 2048 * 2048
+    g = 40 * GIB // 512   # #1897 (04/11): C: 20 -> 60GiB, its source size -- not 60/90 of the room
     b = (boot["start_sector"] + 2047) // 2048 * 2048 + g
     assert starts[5] == b, (starts, g)
     off = b - boot["start_sector"]

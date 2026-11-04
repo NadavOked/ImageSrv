@@ -65,7 +65,7 @@ static void gui_heartbeat(void) {
 #include "ui.h"
 #include "utf8.h"
 #include "lcui.h"   /* #1322 */
-#include "screens_rounds.h"   /* 16/10: smart_level, cloner_port_label, idle_for_port */
+#include "screens_rounds.h"   /* 16/10: smart_level; eff_drawer, unmapped_label */
 #include "smartdlg.h"        /* 16/10: the SMART warning window */
 #include "splash.h"         /* 17/10: the last-resort screen */
 #include "canceldlg.h"       /* #1386: "בטל דיסק זה" */
@@ -206,18 +206,8 @@ static void emit_kv(const char *k, const char *v) { printf("%s=%s\n", k, v); }
 static void emit_end(void) { printf("\n"); fflush(stdout); }
 static void emit1(const char *token) { emit(token); emit_end(); }
 
-/* A SMART choice echoes the nonce of the request it was drawn for, so the
- * bridge binds the click to that exact request. The port alone cannot: the
- * same disk can be prompted again (a new request, a new nonce), and a stale
- * click would still match the port. The nonce is unique per request. */
-static void emit_smart(const App *a, const char *action) {
-    char line[64];
-    snprintf(line, sizeof line, "%s|%s", action, a->st.smart_nonce);
-    emit1(line);
-}
-
 /* #928: the shrink answer echoes the question's nonce, as the SMART choice
- * does. One answer per question: a double click would only reach a bridge
+ * did (#2044). One answer per question: a double click would only reach a bridge
  * whose request is already gone. */
 static void emit_shrink(App *a, const char *action) {
     if (!a->st.shrink_pending || !strcmp(a->shrink_sent, a->st.shrink_nonce)) return;
@@ -653,26 +643,12 @@ static void restore_confirmed(App *a) {
     start_restore(a);
 }
 
-/* 16/10: "כתוב בכל זאת" on the cloner's SMART prompt opens the window; the
- * window answers the request it was opened for (the nonce), or nothing. */
-static void cloner_smart_ask(App *a) {
-    if (!a->st.smart_pending) return;   /* #1580: red too -- the window and its red button are the confirmation */
-    char label[SLOT_NAME_MAX + 64];
-    cloner_port_label(&a->st, a->st.smart_port, label, sizeof label);   /* #1495: by the drawer mapping */
-    const IdleDisk *id = idle_for_port(&a->st, a->st.smart_port);
-    sdlg_open(a, SDLG_CLONER, a->st.smart_port, "", label, a->st.smart_verdict, a->st.smart_reason,
-              a->st.smart_model[0] ? a->st.smart_model : id ? id->model : "", a->st.smart_serial);
-    snprintf(a->sdlg.nonce, sizeof a->sdlg.nonce, "%s", a->st.smart_nonce);
-}
-
-/* The window's answer. "דלג" on the cloner is the prompt's own skip; on this
- * machine's disk it only closes the window -- nothing was sent. */
+/* The window's answer. "דלג" on this machine's disk only closes the window --
+ * nothing was sent. #2347: the cloner's SMART prompt is gone (#2044). */
 static int smart_modal(App *a, const Event *e) {
     SmartDlg d;
     if (!sdlg_handle(a, e, &d)) return 0;
-    if (d.kind == SDLG_CLONER) {
-        if (a->st.smart_pending && !strcmp(a->st.smart_nonce, d.nonce)) emit_smart(a, d.go ? "smart-rescue" : "smart-skip");
-    } else if (d.kind == SDLG_RESTORE && d.go) start_restore(a);
+    if (d.kind == SDLG_RESTORE && d.go) start_restore(a);
     else if (d.kind == SDLG_CAPTURE && d.go) start_capture(a, 1);
     if (e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
     return 1;
@@ -1048,9 +1024,25 @@ static int idle_modal(App *a, const Event *e, int demo) {
     return 1;
 }
 
+/* #1802 (Nadav 04/11): "המחשב הזה לא רשום" stays; its button is
+ * fail_btn=reboot|F2 — הפעלה מחדש (ui.sh). A failure button whose label starts
+ * with "F2 " is pressed by F2, not by Enter -- the label names its key. The
+ * index of that button on the failure screen, or -1. */
+static int fail_f2_btn(const App *a) {
+    if (a->screen != SCREEN_FAILURE) return -1;
+    for (int i = 0; i < a->st.nfail_btns; i++) if (!strncmp(a->st.fail_btns[i].label, "F2 ", 3)) return i;
+    return -1;
+}
+
 static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     if (idle_modal(a, e, demo)) return 0;          /* mockup 10: before the touch that would cancel it */
     if (e->type == UIEV_CLICK || e->type == UIEV_CHAR || e->type == UIEV_KEY) emit_touch(a, demo);
+    /* #1802: on that screen F2 is the local disk, not the theme (as F2 saves in #2001's window) */
+    if (e->type == UIEV_KEY && e->key == KEYSYM_F2 && fail_f2_btn(a) >= 0) {
+        if (!demo) toast(a, power_drop(a, "fail.action", a->st.fail_btns[fail_f2_btn(a)].action)
+                            ? "בוצע — המחשב מטפל בבקשה" : "הבקשה לא נמסרה למחשב — נסו שוב");
+        return 0;
+    }
     /* #1499: the theme switch first -- every screen has it, modals and the
      * local clone's own key handling included. */
     if ((e->type == UIEV_KEY && e->key == KEYSYM_F2 && !app_usbset_window(a)) ||   /* #2001: F2 saves there */
@@ -1072,7 +1064,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
         if (e->type == UIEV_MOVE) a->ptr_visible = !e->is_touch;
         int b = -1, h = e->type == UIEV_CLICK ? app_hit(a, e->x, e->y) : -1;
-        if (e->type == UIEV_KEY && e->key == KEYSYM_ENTER) b = 0;
+        if (e->type == UIEV_KEY && e->key == KEYSYM_ENTER && fail_f2_btn(a) != 0) b = 0;   /* #1802: F2 presses it, Enter does not */
         else if (h >= HIT_FAIL_BTN && h <= HIT_FAIL_BTN_LAST) b = h - HIT_FAIL_BTN;   /* HIT_FAIL_BTN_LAST - HIT_FAIL_BTN + 1 == MAX_FAIL_BTNS */
         if (b >= 0 && b < a->st.nfail_btns && !demo) {
             if (power_drop(a, "fail.action", a->st.fail_btns[b].action)) toast(a, "בוצע — המחשב מטפל בבקשה");
@@ -1214,9 +1206,6 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         case HIT_ROOM_POWEROFF_ALL: if (a->admin && a->st.room_label[0]) a->confirm = CONFIRM_ROOM_POWEROFF_ALL; break;
         case HIT_CLASS_START: if (class_gate(a)) emit1("class-start"); break;
         case HIT_CLASS_CLOSE: if (class_gate(a)) a->confirm = CONFIRM_CLASS_STOP; break;   /* #1270 */
-        case HIT_SMART_REPLACE: emit_smart(a, "smart-replace"); break;
-        case HIT_SMART_RESCUE:  cloner_smart_ask(a); break;   /* 16/10: the window first */
-        case HIT_SMART_SKIP:    emit_smart(a, "smart-skip");    break;
         /* #649 */
         case HIT_TOOL_LIST:  if (!a->tool_running) { a->tools_view = TOOLS_LIST; a->tool_error[0] = 0; } break;
         case HIT_TOOL_RUN:   tool_go(a); break;
@@ -1272,14 +1261,10 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         /* #1386: X on the build machine -- the drawer numbers repeat between cloners, so one key
          * and a choice; on the cloner the drawer's own number opens it on that drawer */
         if (a->screen == SCREEN_ROOM && (e->ch == 'x' || e->ch == 'X')) { if (a->st.has_round) cdlg_open(a, 1, 0, 1); break; }
-        if (a->screen == SCREEN_CLONER && !a->st.smart_pending && e->ch >= '1' && e->ch <= '9') {
+        if (a->screen == SCREEN_CLONER && e->ch >= '1' && e->ch <= '9') {
             CancelPick p[MAX_CANCEL_PICKS]; int n = cloner_cancel_picks(a, p, MAX_CANCEL_PICKS);
             for (int i = 0; i < n; i++) if (p[i].drawer == e->ch - '0') { cdlg_open(a, 0, i, 0); break; }
             break;
-        }
-        if (a->screen == SCREEN_CLONER && a->st.smart_pending) {
-            if (e->ch == 's' || e->ch == 'S') { emit_smart(a, "smart-skip"); break; }
-            if (e->ch == 'r' || e->ch == 'R') { emit_smart(a, "smart-replace"); break; }
         }
         size_t n; char *buf = field_buf(a, a->focus, &n);
         if (!buf || !field_visible(a, a->focus)) break;
@@ -1328,9 +1313,6 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             else if (a->screen == SCREEN_RESTORE && a->restore_image_sel > 0) {
                 if (restore_ready(a)) a->confirm = CONFIRM_RESTORE;    /* #1270: Enter asks, Enter again erases */
             }
-            else if (a->screen == SCREEN_CLONER && a->st.smart_pending) {
-                cloner_smart_ask(a);                          /* 16/10: Enter opens the window, it never writes */
-            }
             else if (a->screen == SCREEN_PICK) start_capture(a, 0);
             else if (a->screen == SCREEN_DONE) { a->showing_done = 0; go_menu(a); emit1("again"); }
             else if (a->screen == SCREEN_CLASS && a->st.has_session) { if (class_gate(a)) emit1("class-start"); }
@@ -1369,8 +1351,7 @@ static void after_reload(App *a) {
         (a->confirm == CONFIRM_ROOM_START_WARN && (!a->st.has_round || !a->st.wave_open)) ||   /* #432 */
         (a->confirm == CONFIRM_ROOM_POWEROFF && !poweroff_target_live(a)) ||   /* #65 */
         (a->confirm == CONFIRM_RESTORE_CANCEL && !a->st.can_cancel)) a->confirm = CONFIRM_NONE;   /* #1561: the write ended */
-    /* 16/10: the SMART window about a request that is gone, or a disk that moved, is closed */
-    if (a->sdlg.kind == SDLG_CLONER && (!a->st.smart_pending || strcmp(a->st.smart_nonce, a->sdlg.nonce))) a->sdlg.kind = SDLG_NONE;
+    /* 16/10: the SMART window about a disk that moved is closed */
     if ((a->sdlg.kind == SDLG_RESTORE || a->sdlg.kind == SDLG_CAPTURE) &&
         (a->sdlg.ref >= a->st.ndisks || strcmp(a->st.disks[a->sdlg.ref].dev, a->sdlg.dev))) a->sdlg.kind = SDLG_NONE;
     cdlg_after_reload(a);                                 /* #1386: a drawer that stopped writing closes it */
@@ -1480,12 +1461,6 @@ static void sample_state(State *s) {
     s->cuseds[2] = (CUsed){ "sdc", 240057409536ULL, 61234567890LL };
     s->ncuseds = 3;
     snprintf(s->cloner_image, sizeof s->cloner_image, "Office 2024 — סטנדרט");
-    s->smart_pending = 1; s->smart_port = 2;
-    snprintf(s->smart_nonce, sizeof s->smart_nonce, "1-2");
-    snprintf(s->smart_verdict, sizeof s->smart_verdict, "fail");
-    snprintf(s->smart_reason, sizeof s->smart_reason, "health_failed");   /* smart.sh vocabulary */
-    snprintf(s->smart_model, sizeof s->smart_model, "WDC WD5000AAKX-08U6AA0");   /* 16/10: the window's details */
-    snprintf(s->smart_serial, sizeof s->smart_serial, "WD-WCC2EVC71234");
     /* #928: the capture's shrink question -- drawn on the "shrink" card only */
     s->shrink_pending = 1; s->nshrink = 2;
     snprintf(s->shrink_nonce, sizeof s->shrink_nonce, "3-0");
@@ -1517,7 +1492,7 @@ static const char *PNG_CARDS[] = { "login", "menu", "pick", "progress", "done", 
                                    "room-poweroff-all",
                                    "growback", "capture-end", "send-end", "round-end", "end-countdown",   /* #1560 */
                                    "cloner-end",   /* #2024 */
-                                   "cloner-smart", "restore-smart", "pick-smart",   /* 16/10 */
+                                   "restore-smart", "pick-smart",   /* 16/10 */
                                    "failure",   /* #1569; #2068: no technical lines, buttons */
                                    "cloner-cancel", "cloner-canceled", "room-cancel", "room-canceled",   /* #1386 */
                                    "cloner-raid", "cloner-share", "cloner-badsect",   /* #1808/#1898; #2017 */
@@ -1530,7 +1505,7 @@ static int png_builtin;   /* #1386: --png on the built-in sample, not a --state 
  * of a dual-boot image whose C: comes before the linux root. */
 static void png_drawer_ask(App *a, const State *base, const char *card) {
     const int kind = !strcmp(card, "cloner-raid") ? ASK_RAID : !strcmp(card, "cloner-badsect") ? ASK_BADSECT : ASK_SHARE;
-    a->force_cloner = 1; a->st.smart_pending = 0;
+    a->force_cloner = 1;
     if (!base->ndrawers && !base->cloner_image[0])
         snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט");
     if (base->ask_pending && base->ask_kind == kind) { a->st.ask_pending = 1; return; }
@@ -1563,7 +1538,6 @@ static void png_drawer_ask(App *a, const State *base, const char *card) {
 static void png_cancel_sample(App *a, const char *card) {
     CancelPick p[MAX_CANCEL_PICKS];
     int room = !strncmp(card, "room-", 5);
-    a->st.smart_pending = 0;
     if (room) {
         a->mode = MODE_ROOM; a->st.has_round = 1; a->st.wave_open = 0; a->st.wave_number = 1;
         if (png_builtin || !room_cancel_picks(a, p, MAX_CANCEL_PICKS))   /* a state without a live round: the sample's */
@@ -1649,7 +1623,7 @@ static void png_setup(App *a, const State *base, const char *card) {
     }
     if (!strcmp(card, "cloner-end")) {
         a->force_cloner = 1;   /* no cloner data in the state file: the "cloner" card's sample (#1090) */
-        if (!base->ndrawers && !base->cloner_image[0] && !base->smart_pending)
+        if (!base->ndrawers && !base->cloner_image[0])
             snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט");
         if (!base->end_kind) {
             a->st.end_kind = END_PARTIAL; a->st.end_held = 1; a->st.end_poweroff_at = 0;
@@ -1697,9 +1671,9 @@ static void png_setup(App *a, const State *base, const char *card) {
                                           /* #1090: an idle cloner routes to SCREEN_STANDBY (app_route), so
                                            * a state file with no cloner data -- a build machine's -- gets
                                            * sample cloner data here: the mirror of "standby" clearing it. */
-                                          if (!base->ndrawers && !base->cloner_image[0] && !base->smart_pending)
+                                          if (!base->ndrawers && !base->cloner_image[0])
                                               snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט"); }
-    else if (!strcmp(card, "standby"))  { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; a->st.smart_pending = 0; }
+    else if (!strcmp(card, "standby"))  { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; }
     else if (!strcmp(card, "message"))  { snprintf(a->st.msg_title, sizeof a->st.msg_title, "%s", base->msg_title);
                                           snprintf(a->st.msg_sub, sizeof a->st.msg_sub, "%s", base->msg_sub); }
     else if (!strcmp(card, "failure")) {   /* #1569: the state file's block, or the sample */
@@ -1732,16 +1706,6 @@ static void png_setup(App *a, const State *base, const char *card) {
     else if (!strcmp(card, "room-images")) { a->mode = MODE_ROOM; a->room_target_set = 0; a->nroom_selection = 0; a->nroom_pick = 0;
                                              a->dd_open = HIT_ROOM_IMAGE; }   /* the picker, on the folders */
     else if (!strcmp(card, "restore"))  { a->mode = MODE_RESTORE; if (base->nimages) a->restore_image_sel = 1; }
-    else if (!strcmp(card, "cloner-smart")) {                                    /* 16/10: Enter on "כתוב בכל זאת" */
-        a->force_cloner = 1;
-        if (!a->st.smart_pending) {
-            a->st.smart_pending = 1; a->st.smart_port = 2;
-            snprintf(a->st.smart_nonce, sizeof a->st.smart_nonce, "1-2");
-            snprintf(a->st.smart_verdict, sizeof a->st.smart_verdict, "fail");
-            snprintf(a->st.smart_reason, sizeof a->st.smart_reason, "pending_sectors");
-        }
-        cloner_smart_ask(a);
-    }
     else if (!strcmp(card, "restore-smart") || !strcmp(card, "pick-smart")) {    /* 16/10: this machine's disk */
         int pick = !strcmp(card, "pick-smart");
         if (!a->st.ndisks) { a->st.ndisks = 1; a->st.disks[0] = (Disk){ .dev = "sda", .model = "Samsung SSD 870 EVO 500GB", .size_bytes = 500107862016ULL, .has_data = 1 }; }
@@ -1831,7 +1795,6 @@ static int render_png(App *a, const State *base, const char *prefix, int w, int 
                                        SCREEN_MENU, SCREEN_MENU, /* "send-end", "round-end" (#1560): the same question */
                                        SCREEN_MENU, /* "end-countdown" (#1560): the count to power-off, over any screen */
                                        SCREEN_CLONER, /* "cloner-end" (#2024): the held end, problem drawers highlighted */
-                                       SCREEN_CLONER,  /* "cloner-smart" (16/10): the SMART warning window */
                                        SCREEN_RESTORE, /* "restore-smart" (16/10): the same, before a restore */
                                        SCREEN_PICK,    /* "pick-smart" (16/10): the same, before a capture */
                                        SCREEN_FAILURE, /* "failure" (#1569) */

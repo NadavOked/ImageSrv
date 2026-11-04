@@ -140,7 +140,7 @@ def note(conn: sqlite3.Connection, store: SessionStore, mac: str, answer: dict,
             return None
         if answer.get("known") is not True and unknown_screen.served_recently(conn, mac, now):
             # ‏#1802: השרת עצמו שלח אותה לסוכן — למסך "המחשב הזה לא רשום"
-            # בווילן ההפצה. ההגעה מוסברת, והאתחול הבא ממילא לדיסק.
+            # בווילן ההפצה, בחלון של `unknown_screen.window_seconds`. ההגעה מוסברת.
             return None
         verdict = unexplained(conn, store, answer, off_vlan=off_vlan)
         if verdict is None:

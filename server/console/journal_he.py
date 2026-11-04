@@ -264,6 +264,8 @@ EVENTS_HE = {
     "nic_forget": "הגדרות כרטיס רשת הוסרו",
     "dhcp_apply_failed": "החלת הגדרת DHCP נכשלה",
     "known_macs_apply_failed": "עדכון רשימת המכונות הרשומות ל-dnsmasq נכשל",
+    "dnsmasq_dropin_applied": "הניסיון החוזר של dnsmasq הותקן ונטען בעליית השרת",   # #2174
+    "dnsmasq_dropin_failed": "התקנת הניסיון החוזר של dnsmasq בעליית השרת נכשלה",   # #2174
     "net_config": "הגדרת הרשת של כרטיס בשרת שונתה",
     "net_config_unverified": "שינוי הרשת לא אומת מול המצב בפועל",
     "net_rollback_armed": "שינוי רשת ממתין לאישור — בלעדיו יוחזר",
@@ -410,7 +412,7 @@ _SEVERITY_ERR = {
     "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure",
     "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "storage_location_disconnect_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
-    "known_macs_apply_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
+    "known_macs_apply_failed", "dnsmasq_dropin_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
     "vmupdate_no_lease", "vmupdate_net_teardown_failed",
     "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
     "peer_unreachable", "email_alert_gave_up", "email_alerts_step_failed", "email_oauth_failed",   # #1751
@@ -439,6 +441,7 @@ _SEVERITY_OK = {
     "disk_failure_cleared", "drivers_staged", "storage_image_received",
     "wol_sent", "vmupdate_saved", "vmupdate_lease",
     "ups_power_restored", "ups_reachable",
+    "dnsmasq_dropin_applied",   # #2174
     "email_alert_sent", "peer_back", "email_oauth_connected",   # #1751
 }
 
@@ -475,6 +478,7 @@ SETTINGS_HE = {
     "crc_warn_threshold": "סף שגיאות CRC לאזהרה",   # #1366
     "min_free_gb": "מינימום מקום פנוי אחרי שחזור (GB)",   # #1354
     "writecheck_min_mbps": "סף מהירות כתיבה לדיסק (MB/s)",   # #2338
+    "unregistered_autoboot_seconds": "מחשב לא רשום: עלייה אוטומטית מהדיסק (שניות)",   # #1802
     "intersite_rate_cap_mbps": "הגבלת קצב בין אתרים (Mb/s)",   # #1473
     "igmp_querier": "IGMP querier ברשת ההפצה",   # #1972
     # ‏#2056/#2059 (מוקאפ 05): אותן תוויות כמו בהגדרות הקונסולה; הערך בשניות

@@ -231,7 +231,7 @@ while :; do
             die_local "no work for this machine"
             ;;
         unknown)
-            ui_unknown "$MAC"   # #1802: the screen, then a reboot to the local disk
+            ui_unknown "$MAC"   # #1802: the screen until F2, then a reboot to the local disk
             die_local "MAC not registered"   # only if that reboot did not happen
             ;;
         task)

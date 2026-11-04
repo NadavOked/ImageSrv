@@ -51,7 +51,6 @@ void cloner_bay_conn(const State *s, int bay, char *out, size_t n);
 /* #704: the cloner's label of SATA slot <port> -- its cslot_name, else
  * "דיסק N". <out> >= SLOT_NAME_MAX + 16 bytes, or a long name is cut. */
 void cloner_slot_label(const State *s, int bay, char *out, size_t n);
-void cloner_port_label(const State *s, int port, char *out, size_t n);
 int room_selectable(const RoomDrawer *d);
 int room_pickable(const RoomDrawer *d);   /* #1732: selectable and not red */
 /* Nadav 17/10: is this cloner picked as a whole machine (a->room_pick)? */

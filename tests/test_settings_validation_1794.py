@@ -17,6 +17,7 @@ CASES = [
     ("crc_warn_threshold", "1000001", "1000000", "סף CRC"),
     ("min_free_gb", "501", "500", "מינימום מקום פנוי"),
     ("writecheck_min_mbps", "9", "10", "סף מהירות כתיבה לדיסק"),   # #2338
+    ("unregistered_autoboot_seconds", "601", "600", "הערך חייב להיות בין 0 ל-600 שניות"),   # #1802
     ("cloner_beep", "yes", "true", "צליל בסיום סבב שיכפול"),
     ("readback_full", "yes", "true", "אימות מלא אחרי הכתיבה"),
     ("igmp_querier", "yes", "true", "IGMP querier"),

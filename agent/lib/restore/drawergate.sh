@@ -10,8 +10,8 @@
 #   the write check). A capture from a RAID member stays refused (capturegate.sh).
 #
 #   #1898 (Nadav 22/10): a shrunk partition BEFORE the one that grows (C:
-#   before the linux root) takes its share of the room -- the cloner shows the
-#   split it will write (share_plan) and asks first.
+#   before the linux root) goes back to its source size (#1897, 04/11) -- the
+#   cloner shows the split it will write (share_plan) and asks first.
 
 drawer_gates() {
     # $1.. = the drawers the SMART gate left. PRINTS the ones to write (log on
@@ -80,20 +80,20 @@ raid_wipe() {
 
 share_plan() {
     # $1 = disk, $2 = manifest. #1898: what expand_last WILL give each partition
-    # that shares the room on this disk -- the same steps (twins; a test
-    # compares). PRINTS idx|now bytes|after bytes per partition that grows, the
-    # candidate last; nothing when no partition BEFORE the candidate grows.
+    # that changes on this disk -- the same steps (twins; a test compares).
+    # PRINTS idx|now bytes|after bytes per partition that grows, the candidate
+    # last; nothing when no partition BEFORE the candidate grows, or when this
+    # disk is too small to give it back its source size (#1897, volumes_fit:
+    # then the head stays as captured, and disk_fits decides without it).
     _sp_line=$(_expand_candidate "$2"); [ -n "$_sp_line" ] || return 0
-    _sp_start=$(echo "$_sp_line" | cut -d'|' -f5); _sp_size=$(echo "$_sp_line" | cut -d'|' -f6)
+    _sp_start=$(echo "$_sp_line" | cut -d'|' -f5)
     _sp_tail=$(manifest_plan "$2" | awk -F'|' -v s="$_sp_start" '$5 + 0 > s + 0')
-    _sp_tsec=$(printf '%s\n' "$_sp_tail" | awk -F'|' '{ n += int($6 / 512) } END { print n + 0 }')
     _sp_disk=$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null)
     case "$_sp_disk" in ''|*[!0-9]*) return 1 ;; esac
-    _sp_end=$((_sp_start + _sp_size / 512))
-    [ $((_sp_disk - _sp_end - _sp_tsec)) -gt 2097152 ] || return 0
-    _sp_add=$((_sp_disk - 34 - _sp_end - _sp_tsec))
-    _sp_head=$(SHARE_MORE=/dev/null share_head "$1" "$2" "$_sp_line" "$_sp_add") || return 1
-    _sp_tail2=$(SHARE_MORE=/dev/null SHARE_HEAD=1 share_tail "$1" "$2" "$_sp_line" "$_sp_tail" "$_sp_add") || return 1
+    _sp_fit=$(SHARE_HEAD=1 volumes_fit "$2" "$((_sp_disk * 512))" "$(echo "$_sp_line" | cut -d'|' -f1)")
+    case "$_sp_fit" in ok) ;; short\|*) return 0 ;; *) return 1 ;; esac
+    _sp_head=$(SHARE_MORE=/dev/null share_head "$1" "$2" "$_sp_line") || return 1
+    _sp_tail2=$(SHARE_MORE=/dev/null share_tail "$1" "$2" "$_sp_line" "$_sp_tail") || return 1
     manifest_plan "$2" | SP_HEAD="$_sp_head" SP_TAIL="$_sp_tail2" awk -F'|' -v cand="$_sp_line" -v disk="$_sp_disk" '
         { size[$1] = $6 }
         END { nh = split(ENVIRON["SP_HEAD"], h, "\n"); split(h[1], s0, "|"); cstart = s0[1]

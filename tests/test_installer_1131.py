@@ -305,6 +305,31 @@ def test_failed_install_firewall_leaves_tmpdir_empty(tmp_path, bindir):
     assert list(temp.iterdir()) == []
 
 
+def test_successful_install_firewall_leaves_tmpdir_empty(tmp_path, bindir):
+    """#1912 / #1285: גם המסלול **המוצלח** מוחק את שני קובצי ה-mktemp (ה-ruleset
+    שנוצר ועותק ה-ruleset הקודם). ‏215 קבצי tmp.* מילאו את /tmp של ה-Testrunner."""
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    (tmp_path / "nftables.conf").write_text("# debian default\n", encoding="utf-8")
+    _firewall_fakes(bindir, enable_fails=False)
+    proc = run_bash(_firewall_script(tmp_path), tmp_path, bindir,
+                    env={"TMPDIR": posix(temp)})
+    assert proc.returncode == 0 and "FIREWALL_DONE" in proc.stdout, proc.stderr
+    assert list(temp.iterdir()) == []
+
+
+def test_a_firewall_syntax_failure_leaves_tmpdir_empty(tmp_path, bindir):
+    """#1912 / #1285: ‏`nft -c` דוחה — המתקין עוצר, וה-ruleset שנוצר אינו נשאר ב-/tmp."""
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    _firewall_fakes(bindir, enable_fails=False)
+    fake_tool(bindir, "nft", 'case "$1" in -c) exit 1 ;; list) printf "table inet old {}\\n" ;; esac')
+    proc = run_bash(_firewall_script(tmp_path), tmp_path, bindir,
+                    env={"TMPDIR": posix(temp)})
+    assert proc.returncode != 0 and "nft -c" in proc.stderr, proc.stderr
+    assert list(temp.iterdir()) == []
+
+
 def test_install_firewall_failure_restores_the_previous_ruleset_and_file(tmp_path, bindir):
     """‏`systemctl enable --now nftables` נכשל → ה-ruleset הקודם נטען חזרה,
     הקובץ הקודם חוזר מהגיבוי, והשגיאה נאמרת בלי `|| true` שמסתיר."""

@@ -828,8 +828,9 @@ def test_the_old_refusal_is_unchanged_when_the_last_partition_is_the_big_one(tmp
 
 def test_on_the_target_c_is_stretched_and_d_moves_to_the_tail(tmp_path):
     """הצד השני, על היעד: ‏apply_gpt/expand_last על המניפסט המצומצם —
-    ‏D: (‏data מאז #1369) עוברת לסוף הכונן בגודלה המכווץ, ו-C: נמתחת
-    במקומה עד תחילתה. עד #1369 ‏D: נמתחה ו-C: נשארה מכווצת."""
+    ‏D: (‏data מאז #1369) עוברת לסוף הכונן **בגודלה במקור** (‏#1897, הכרעת נדב
+    04/11 — עד אז בגודלה המכווץ, עם כ-2GB פנויים), ו-C: נמתחת במקומה עד
+    תחילתה. עד #1369 ‏D: נמתחה ו-C: נשארה מכווצת."""
     from test_agent import run_expand
     box, run, out = capture_run(tmp_path, stubs=two_stubs(), shell_pre=FS_MAP_C_D + SAY_YES)
     assert out.strip().endswith("rc=0"), out
@@ -837,13 +838,13 @@ def test_on_the_target_c_is_stretched_and_d_moves_to_the_tail(tmp_path):
     plan = ["|".join(str(p.get(k, "")) for k in ("index", "type_guid", "role", "fs", "start_sector", "size_bytes",
                                                    "file", "sha256")) + f"|{str(p['expandable']).lower()}|{p['unique_guid']}"
             for p in m["partitions"]]
-    rc, calls, marker = run_expand(tmp_path / "target", plan, disk_sectors=976773168)
+    rc, calls, marker = run_expand(tmp_path / "target", plan, disk_sectors=976773168, manifest=m)
     assert rc == "rc=0", (rc, calls)
     assert marker == "3|ntfs", marker
-    d_sectors = part(m, 4)["size_bytes"] // 512
+    assert part(m, 4)["shrunk_from_bytes"] == DATA_SECTORS * 512
     call = __import__("test_agent").one_call(calls)   # #1714: one sgdisk call
-    assert call.startswith("-a 1 -d 4 " + __import__("test_agent").tail_n(4, d_sectors)[0] + " "), \
-        "‏D: נבראת בזנב, בגודל שהמניפסט מצהיר"
+    assert call.startswith("-a 1 -d 4 " + __import__("test_agent").tail_n(4, DATA_SECTORS)[0] + " "), \
+        "‏D: נבראת בזנב בגודלה במקור (shrunk_from_bytes), לא בגודל המכווץ"
     assert f" -d 3 -n 3:{WIN_START}:0 " in call, "‏C: נשארת בתחילתה ונמתחת"
 
 

@@ -699,7 +699,7 @@ def fit_refusal(manifest: dict, floor: dict | None, min_free_gb: int = 0) -> str
         return None
     slot = (f"דיסק {floor['port']}" if floor["port"] is not None
             else f"דיסק {floor['dev'] or '?'}")
-    layout = required_bytes(manifest)
+    layout = minfree.min_disk_bytes(manifest, 0)   # ‏#1897: כולל D:/E: בגודלן במקור — לא "הפנויים" הוסיפו אותן
     extra = (f" (כולל {min_free_gb}GB פנויים במחיצת המערכת)"
              if layout is not None and need > layout else "")
     return (f"{slot} במחשב {floor['name']} הוא {round(floor['size_bytes'] / GB)}GB, "

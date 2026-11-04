@@ -46,6 +46,7 @@ SYSROOT="${SYSROOT:-}"; DEVROOT="${DEVROOT:-/dev}"
 . "$INSTALLER_DIR/lib/bootstrap.sh"
 . "$INSTALLER_DIR/lib/finish.sh"
 . "$INSTALLER_DIR/lib/raid.sh"
+. "$INSTALLER_DIR/lib/clock.sh"   # #2144
 
 DRY_RUN=0
 
@@ -130,6 +131,8 @@ progress bootloader 72 "Installing boot loader" "Configuring UEFI and BIOS boot"
 install_bootloader
 progress finishing 88 "Finishing installation" "Writing host and firstboot settings"
 write_host_configuration
+progress finishing 94 "Checking the clock" "Asking the chosen time source (chronyd -Q)"
+check_clock   # #2144: never fails the install; the done screen says what it found
 if [ "$DRY_RUN" -eq 1 ]; then
     print_command umount "$TARGET/cdrom"; print_command umount "$TARGET/sys"
     print_command umount "$TARGET/proc"; print_command umount "$TARGET/dev"

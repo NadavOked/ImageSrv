@@ -22,7 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import actions
-from .data import CONSOLE_STARTING, FIRST_BOOT_PENDING, NicInfo, ServiceState, Snapshot
+from .data import (CLOCK_UNCHECKED, CLOCK_UNSYNCED, CONSOLE_STARTING, FIRST_BOOT_PENDING,
+                   NicInfo, ServiceState, Snapshot)
 
 #: A certificate this close to its end is "פגה בקרוב" (orange).  Not a project
 #: constant elsewhere: the console certificate is self-signed for ten years,
@@ -33,6 +34,11 @@ MAX_PROBLEMS_SHOWN = 3
 #: The primary pings every paired secondary every 150 seconds (#1564,
 #: ``storage_heartbeat``); ten minutes tolerates three missed beats.
 PARENT_CONTACT_FRESH_SECONDS = 10 * 60
+#: #2144: chrony needs a few seconds after boot (iburst: ~10 s to a source
+#: that answers). Before this much uptime an unsynced or unanswered clock is
+#: not yet a problem -- the #2155 precedent: no orange flash on every boot.
+#: Unknown uptime gets no grace.
+CLOCK_SYNC_GRACE_S = 120
 
 SERVICE_LABELS = {
     "imagesrv-server": "שרת ImageSrv והקונסולה",
@@ -248,6 +254,9 @@ _PATTERNS = (
     (r"Temporary address applied to ([A-Za-z0-9._-]+)\.", "הכתובת הזמנית הוחלה על {0}."),
     (r"Temporary network command failed: (.+)\.", "פקודת הרשת הזמנית נכשלה: {0}."),
     (r"Conflict (\d+)", "התנגשות {0}"),
+    # ‏#2349: apply_network על DHCP, אחרי ההמתנה ל-lease
+    (r"Still no match after waiting (\d+) seconds for DHCP\.",
+     "גם אחרי {0} שניות של המתנה ל-DHCP, המצב החי אינו מה שביקשנו."),
     (r"([A-Za-z0-9@._-]+): restart failed", "{0}: ההפעלה מחדש נכשלה"),
     (r"([A-Za-z0-9@._-]+) did not read back active", "{0} לא חזר למצב פעיל"),
     # ‏#1988: "הוסף כונן" (actions.py)
@@ -333,13 +342,15 @@ def _link_text(link: str) -> str:
     return "מצב הקישור לא ידוע"
 
 
-def nic_row(label: str, nic: NicInfo) -> Row:
+def nic_row(label: str, nic: NicInfo, starting: bool = False) -> Row:
     mode = {"dhcp": "DHCP", "static": "קבוע"}.get(nic.mode, "")
     speed = speed_text(nic.speed)
     sub = " · ".join(part for part in (mode, _link_text(nic.link), iso(speed) if speed else "") if part)
     value = f"{nic.name} · {nic.address or 'אין כתובת'}"
     if not nic.address_checked:
         return Row(label, value, sub, "warn", "לא נבדק", "", "", "mono")
+    if starting and (nic.link != "up" or not nic.address):   # #2155: first boot brings it up
+        return Row(label, value, sub, "info", "עולה", "", "", "mono")
     if nic.link in ("down", "no carrier"):
         return Row(label, value, sub, "bad", "מנותק", "bad", "", "mono")
     if not nic.address:
@@ -376,6 +387,8 @@ def service_row(name: str, state: ServiceState | None, snapshot: Snapshot,
                    "bad", "mono")
     if active == "failed":
         return Row(name, label, "נכשל (systemd: failed)", "bad", "נכשל", "bad", "mono")
+    if snapshot.first_boot_running:   # #2155: first boot starts and restarts it
+        return Row(name, label, f"systemd: {active}", "info", "עולה", "", "mono")
     if active in ("activating", "reloading"):
         return Row(name, label, f"systemd: {active}", "warn", "עולה", "warn", "mono")
     return Row(name, label, f"לא פועל (systemd: {active})", "bad", "לא פועל", "bad", "mono")
@@ -426,14 +439,67 @@ def cert_status(snapshot: Snapshot, today: datetime) -> tuple[str, str, str, str
 _SVC_TODO = "<b>מה לעשות:</b> הגדרות ← הפעלה מחדש של השירותים."
 
 
+def _clock_due(snapshot: Snapshot, extras: Extras) -> str:
+    """#2144: the clock state that is a problem now -- unsynced or unchecked,
+    once the boot grace is over -- or "" (synced, no clock on this frame,
+    or still within CLOCK_SYNC_GRACE_S of boot)."""
+    if snapshot.clock not in (CLOCK_UNSYNCED, CLOCK_UNCHECKED):
+        return ""
+    if snapshot.first_boot_running:   # #2155: on first boot nothing is a problem yet
+        return ""
+    up = extras.uptime_seconds
+    if up is not None and up < CLOCK_SYNC_GRACE_S:
+        return ""
+    return snapshot.clock
+
+
+def clock_chip(snapshot: Snapshot, extras: Extras) -> str:
+    """#2144: the orange tag beside the header clock -- that clock is exactly
+    what cannot be trusted. None on a synced clock."""
+    return {CLOCK_UNSYNCED: "השעון לא מסונכרן",
+            CLOCK_UNCHECKED: "השעון לא נבדק"}.get(_clock_due(snapshot, extras), "")
+
+
+def clock_problem(snapshot: Snapshot, extras: Extras) -> Problem | None:
+    """#2144 (mockup 2144-time, Nadav 04/11): orange, never blocking -- the
+    server serves while its clock is wrong; what is wrong is every time it
+    writes (the journal, rounds, the certificate check)."""
+    due = _clock_due(snapshot, extras)
+    if due == CLOCK_UNSYNCED:
+        return Problem(
+            "warn", "השעון של השרת לא מסונכרן",
+            f"שרת הזמן ({iso(snapshot.clock_server)}) לא ענה מאז האתחול. השעה עלולה להיות "
+            "שגויה ביומן, בזמני הסבבים ובבדיקת תוקף התעודה.",
+            "<b>מה לעשות:</b> לבדוק שהרשת מאפשרת NTP (UDP 123) אל שרת הזמן, או לשנות "
+            "בקונסולה: הגדרות ← מקור השעה.", ("", ""),
+            "השעה בשרת <b>עלולה להיות שגויה</b> עד שהשעון יסתנכרן.")
+    if due == CLOCK_UNCHECKED:
+        return Problem(
+            "warn", "לא הצלחנו לבדוק את סנכרון השעון",
+            "chrony לא החזיר תשובה — לא ידוע אם השעה בשרת נכונה.",
+            "<b>מה לעשות:</b> רענון (F5); אם זה חוזר — בקונסולה: הגדרות ← מצב השעון ← בדוק עכשיו.",
+            ("", ""))
+    return None
+
+
+def blocking(found: list[Problem]) -> bool:
+    """#2144 (Nadav 04/11): the header is red only for a problem that stops
+    the server's work -- a red card ("bad": the console cannot be reached,
+    cloning cannot run, the browser refuses the certificate, or it could not
+    be read). Orange cards (warnings, and "could not check") leave it orange:
+    the server still serves, and someone should look."""
+    return any(item.sev == "bad" for item in found)
+
+
 def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Problem]:
     """Every problem the snapshot can prove, worst first.  Nothing is
     guessed: a cause the snapshot does not carry is not named."""
     found: list[Problem] = []
     services = snapshot.services
     server = services.get("imagesrv-server")
-    if server is None or server.active != "active":
-        state = server.active if server else "unknown"
+    starting = snapshot.first_boot_running   # #2155: what first boot is still bringing up
+    state = server.active if server else "unknown"
+    if state != "active" and not (starting and state not in ("", "unknown", "failed")):
         if state in ("", "unknown"):
             found.append(Problem(
                 "warn", "לא הצלחנו לבדוק את שרת ImageSrv (imagesrv-server)",
@@ -448,7 +514,8 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
                 "הקונסולה <b>לא תיפתח</b> עד שהבעיה הראשונה תתוקן."))
     dns = services.get("dnsmasq")
     dns_state = dns.active if dns else "unknown"
-    if snapshot.deploy is not None and dns_state != "active":
+    if snapshot.deploy is not None and dns_state != "active" \
+            and not (starting and dns_state not in ("", "unknown", "failed")):
         if dns_state in ("", "unknown"):
             found.append(Problem(
                 "warn", "לא הצלחנו לבדוק את שירות ה־DHCP של רשת ההפצה (dnsmasq)",
@@ -476,6 +543,8 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
             "הכתובת שמוצגת לקונסולה אינה בהכרח הכתובת האמיתית.",
             "<b>מה לעשות:</b> רענון (F5); אם זה חוזר — הגדרות ← הפעלה מחדש של רשת הניהול.",
             ("F2", "הגדרות")))
+    elif starting:
+        pass   # #2155: first boot restarts networking after the DCUI is up
     elif mgmt.link in ("down", "no carrier"):
         found.append(Problem(
             "bad", f"כבל רשת הניהול ({iso(mgmt.name)}) מנותק",
@@ -524,6 +593,9 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
             "warn", f"שינוי ברשת הניהול ({iso(snapshot.rollback_interface)}) ממתין לאישור",
             f"אם לא יאושר, ההגדרה הקודמת תחזור בעוד {snapshot.rollback_seconds} שניות.",
             "<b>מה לעשות:</b> הגדרות ← רשת ניהול, ולאשר או להחזיר.", ("F2", "הגדרות")))
+    clock = clock_problem(snapshot, extras)
+    if clock is not None:
+        found.append(clock)
     order = {"bad": 0, "warn": 1}
     return sorted(found, key=lambda item: order[item.sev])
 
@@ -644,13 +716,14 @@ class Frame:
         return "".join("\t".join(line) + "\n" for line in self.lines) + "\n"
 
 
-def _header(frame: Frame, snapshot: Snapshot, clock: str, admin_seconds: int | None) -> None:
+def _header(frame: Frame, snapshot: Snapshot, clock: str, admin_seconds: int | None,
+            extras: Extras | None = None) -> None:
     admin = (f"מנהל · יציאה אוטומטית בעוד {admin_seconds} שנ׳"
              if admin_seconds is not None else "")
     url = snapshot.console_url if not snapshot.no_address else ""
     shown_version = snapshot.version + (" · לא מאומת" if not snapshot.version_verified else "")
     frame.add("hdr", role_label(snapshot), snapshot.hostname, url, shown_version,
-              clock, admin)
+              clock, admin, clock_chip(snapshot, extras or Extras()))
 
 
 MAIN_KEYS = (("F2", "הגדרות", 1), ("F9", "איפוס סיסמה", 0),
@@ -667,8 +740,10 @@ def main_keys(snapshot: Snapshot, extras: Extras) -> tuple:
 
 def _main_state(snapshot: Snapshot, extras: Extras, found: list[Problem], today: datetime) -> tuple[str, str]:
     """(dot, word) for the status line."""
-    if found:
-        return "bad", f"דורש טיפול · {len(found)}"
+    if found:   # #2144: red only for a blocking problem
+        return "bad" if blocking(found) else "warn", f"דורש טיפול · {len(found)}"
+    if snapshot.first_boot_running:   # #2155: neither a problem nor "fine" yet
+        return "info", "התקנה בתהליך"
     if snapshot.storage_role == "secondary":
         if not extras.has_parent:
             return "info", "ממתין לחיבור מהראשי"
@@ -685,9 +760,13 @@ def _hero(frame: Frame, snapshot: Snapshot, extras: Extras, found: list[Problem]
     if found:
         many = "בעיה אחת" if len(found) == 1 else f"{len(found)} בעיות"
         first = found[0].consequence_m or "הבעיות מסודרות לפי חומרה — מתחילים מהראשונה."
-        frame.add("hero", "bad", f"השרת דורש טיפול · {many}", first, "", "")
+        frame.add("hero", "bad" if blocking(found) else "warn", f"השרת דורש טיפול · {many}",
+                  first, "", "")
         for index, item in enumerate(found[:MAX_PROBLEMS_SHOWN], start=1):
             frame.add("prob", item.sev, index, item.title, item.what, item.todo_m, *item.key)
+        return
+    if snapshot.first_boot_running:   # #2155: not "השרת תקין" while it still comes up
+        frame.add("hero", "wait", "ההתקנה עדיין לא הסתיימה", "", *uptime)
         return
     if snapshot.storage_role == "secondary" and not extras.has_parent:
         frame.add("hero", "wait", "ממתין לחיבור מהשרת הראשי",
@@ -719,7 +798,8 @@ def _tiles(frame: Frame, snapshot: Snapshot, extras: Extras, today: datetime) ->
     for row in rows:
         frame.add(*row.record())
     frame.add("tile", "רשת", "", "")
-    frame.add(*nic_row("רשת ניהול", snapshot.management).record())
+    frame.add(*nic_row("רשת ניהול", snapshot.management,
+                       starting=snapshot.first_boot_running).record())
     frame.add(*deploy_row(snapshot, extras).record())
     frame.add("tile", "שרתים והפצה", "", "")
     frame.add(*_peer_row(snapshot, extras, today).record())
@@ -1177,7 +1257,7 @@ def render(runtime, now: float, wall: float, clock: str, today: datetime,
     settings = screen in SETTINGS_SCREENS
     frame = Frame("settings" if settings else "main")
     admin = screen in SETTINGS_SCREENS or screen == "power"
-    _header(frame, snapshot, clock, runtime.seconds(now) if admin else None)
+    _header(frame, snapshot, clock, runtime.seconds(now) if admin else None, extras)
     if settings:
         _settings_body(frame, runtime, today)
     else:

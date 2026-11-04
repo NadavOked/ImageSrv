@@ -38,6 +38,20 @@ boot_storage_service() {
     esac
 }
 
+hive_unsynced_reason() {
+    # $1 = hive file, $2 = its name, $3 = what is therefore not done. #2363, the gate #1821
+    # put in hostname.sh: regf primary sequence (offset 4) != secondary (8) = Windows did not
+    # finish a write, replays $2.LOG1/2 over ours at boot, and hivex's commit sets the two
+    # equal and hides it. Prints the refusal, or nothing for a synced hive; a header that
+    # does not read is a refusal (עיקרון 5). Logs beside a synced hive are ignored by Windows.
+    _hu=$(od -An -tu4 -j4 -N8 "$1" 2>> "$LOG_FILE" | awk 'NF == 2 { if ($1 == $2) print "clean"; else print $1 "/" $2 }')
+    case "$_hu" in
+        clean) ;;
+        '') echo "לא הצלחנו לקרוא את מספרי הרצף של כוורת $2 — $3" ;;
+        *)  echo "כוורת $2 באימג' לא סונכרנה (רצף $_hu) — $3. הפעילו את Windows במחשב הבנייה, כבו כרגיל, וקלטו מחדש" ;;
+    esac
+}
+
 _boot_result() {
     # $1 = state, $2 = service ("" = none), $3 = error/reason (optional).
     _br="{\"state\":\"$1\""
@@ -74,6 +88,8 @@ boot_storage_enable() {
     _bs_svc=$(boot_storage_service "$1") || { _boot_result skipped "" "unknown_bus"; return 0; }
     _bs_hive="$2/Windows/System32/config/SYSTEM"
     [ -f "$_bs_hive" ] || { _boot_result failed "$_bs_svc" "כוורת SYSTEM לא נמצאה"; return 0; }
+    _bs_why=$(hive_unsynced_reason "$_bs_hive" SYSTEM "$_bs_svc לא הוגדר לעלייה")
+    [ -z "$_bs_why" ] || { _boot_result failed "$_bs_svc" "$_bs_why"; return 0; }
     _bs_cs=$(_control_set "$_bs_hive" 2>> "$LOG_FILE") || {
         _boot_result failed "$_bs_svc" "לא הצלחנו לקרוא את Select\\Current"; return 0; }
     _bs_key="$_bs_cs\\Services\\$_bs_svc"

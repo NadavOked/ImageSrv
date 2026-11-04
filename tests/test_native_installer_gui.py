@@ -93,9 +93,10 @@ def _colors(path: Path, box: tuple[int, int, int, int] | None = None) -> tuple[i
 def test_every_installer_screen_renders_with_visible_ink_at_both_target_sizes(tmp_path) -> None:
     binary = _build(tmp_path)
     names = ("install-0-disk", "install-0b-disk-unchosen", "install-1-role", "install-1b-role-unchecked", "install-1c-role-failed",
-             "install-2-servers-net", "install-3-hostname",
+             "install-2-servers-net", "install-3-hostname", "install-3b-time", "install-3c-time-org",
              "install-4-admin", "install-5-summary", "install-5c-progress",
-             "install-5b-apply-failed", "install-6-done")
+             "install-5b-apply-failed", "install-6-done", "install-6b-done-unsynced",
+             "install-6c-done-unchecked")
     env = dict(os.environ)
     if (GUI / "fonts.conf").exists():
         env["FONTCONFIG_FILE"] = str(GUI / "fonts.conf")
@@ -225,7 +226,7 @@ def test_back_button_is_drawn_on_every_screen_where_escape_goes_back(tmp_path) -
                           text=True, timeout=120, env=env, stdin=subprocess.DEVNULL)
     assert proc.returncode == 0, proc.stderr
     box = (850, 744, 866, 791)
-    with_back = ("install-1-role", "install-2-servers-net", "install-3-hostname",
+    with_back = ("install-1-role", "install-2-servers-net", "install-3-hostname", "install-3b-time",
                  "install-4-admin", "install-5-summary")
     without = ("install-0-disk", "install-5c-progress", "install-6-done")
     for name in with_back + without:
@@ -288,7 +289,7 @@ def test_disk_admin_and_seven_step_controls_are_wired_into_the_live_form() -> No
     assert "HIT_INSTALL_SHOW_PASSWORD" in forms and "HIT_INSTALL_SHOW_CONFIRM" in forms
     assert 'shown?"הסתר":"הצג"' in forms
     # mockup 10/10: the footer carries the working keys; "שלב N מתוך 7" repeated the rail
-    assert "for(int i=0;i<7;i++" in frame and "install_keys_draw(a,cr,l);" in frame
+    assert "for(int i=0;i<INSTALL_STEPS;i++" in frame and "install_keys_draw(a,cr,l);" in frame   # #2144: eight
     assert "שלב %d מתוך 7" not in frame
 
 

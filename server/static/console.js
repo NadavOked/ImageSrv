@@ -3092,7 +3092,7 @@ function roomNewWindow(kids) {
     `<option value="${esc(fo || "-")}"${folder === fo ? " selected" : ""}>${esc(fo || "ללא תיקייה")} (${images.filter((i) => (i.folder || "") === fo).length})</option>`).join("");
   const opts = `<option value="">${folder == null ? "— בחר קודם תיקייה —" : "— בחר אימג' —"}</option>` + (folder == null ? [] : images.filter((i) => (i.folder || "") === folder)).map((img) => {
     const blocked = imageDeployBlock(img), reason = blocked ? null : imageFitReason(img, floor), g = gbCeil(img.min_target_bytes);
-    return `<option value="${esc(img.id)}"${blocked || reason ? " disabled" : ""}${img.id === f.image ? " selected" : ""}>${esc(img.name)}${g != null ? ` · נכנס לדיסק מ-${g} GB` : " · גודל נדרש לא ידוע"}${blocked ? " — לא ניתן לפרוס: " + esc(blocked) : reason ? " — לא נכנס: " + esc(reason) : ""}</option>`;
+    return `<option value="${esc(img.id)}"${blocked || reason ? " disabled" : ""}${img.id === f.image ? " selected" : ""}>${esc(img.name)}${g != null ? ` · נכנס לדיסק מ-${g} GB` : " · גודל נדרש לא ידוע"}${imageHibernated(img) ? " · " + HIB_TAG : ""}${blocked ? " — לא ניתן לפרוס: " + esc(blocked) : reason ? " — לא נכנס: " + esc(reason) : ""}</option>`;
   }).join("");
   const floorNote = floor ? `המגירה הקטנה ביותר בחדר: ${marketedDiskSize(floor.size_bytes)} (${esc(floor.port != null ? portLabel(findMachine(floor.mac), floor.port) : `דיסק ${floor.dev}`)} במחשב ${esc(floor.name)}).` : "גודל הדיסקים לא ידוע — יסורב במכונה אם לא ייכנס.";
   const builders = (MACHINES || []).filter((m) => machineRole(m) === "build" && Array.isArray(m.disks) && m.disks.length);
@@ -3106,9 +3106,10 @@ function roomNewWindow(kids) {
        <label>דיסק המקור<select id="rn-disk" onchange="roomFormSet('disk',this.value)">${builder.disks.map((d, i) => `<option value="${esc(d.dev)}"${(f.disk || builder.disks[0].dev) === d.dev ? " selected" : ""}>${esc(diskLabel(builder, d))} · ${marketedDiskSize(d.size_bytes)} · ${esc(d.model || "")}</option>`).join("")}</select></label>
        <div class="full muted">היעד: הדיסקים שסומנו בגריד למטה — הפצה ישירה דורשת בחירה מפורשת. סבב יחיד, לא מצטבר.</div>`
     : `<h3 class="n-sec-h full">אימג'</h3><label>תיקייה<select id="rn-folder" onchange="roomFormSet('folder',this.value)">${folderOpts}</select></label>
-       <label>אימג'<select id="rn-image" onchange="roomFormSet('image',this.value)"${folder == null ? " disabled" : ""}>${opts}</select></label>
-       <label>גרסה<select id="rn-version"><option>הנוכחית (ברירת מחדל)</option></select></label>
+       <label class="full">אימג'<select id="rn-image" onchange="roomFormSet('image',this.value)"${folder == null ? " disabled" : ""}>${opts}</select></label>
+       ${roomHibNote(chosen)}
        <div class="full n-help">${chosen && gbCeil(chosen.min_target_bytes) != null ? `האימג' נכנס לדיסק מ-<b>${ltr(gbCeil(chosen.min_target_bytes) + " GB")}</b>. ` : ""}אימג' שלא נכנס למגירה הקטנה ביותר בחדר מושבת ברשימה, עם הסיבה.</div>
+       <label>גרסה<select id="rn-version"><option>הנוכחית (ברירת מחדל)</option></select></label>
        <h3 class="n-sec-h full">יעד</h3>
        <div class="full rn-2"><label>כמה דיסקים בסך הכול (בכל הגלים)<input type="number" id="rn-target" min="1" value="${esc(target)}" oninput="roomFormSet('target',this.value)"><span class="n-help">ברירת המחדל = ${dflt.n} ${dflt.why}.</span></label>
        <div><span class="n-lbl">המגירה הקטנה ביותר בחדר</span><div class="rn-floor">${floor ? ltr(marketedDiskSize(floor.size_bytes)) : "לא ידוע"}</div><div class="n-help">${floorNote}</div></div></div>`;
@@ -3186,9 +3187,22 @@ function roomDriverChoice(kids) {
   }
   return { slots: [...by].map(([mac, ports]) => ({ mac, ports })), models };
 }
+/* ‏#2053: השורה הכתומה מתחת לבחירת האימג' — רק מודיעה: "פתח סבב" לא נחסם ואין שאלה. המיכל תמיד
+   קיים (מוסתר כשאין מה לומר), כדי שבחירה ברשימה תעדכן אותו במקום — בלי לבנות את החלון מחדש. */
+function roomHibBody(img) { return imageHibernated(img) ? `<span class="n-chip w">${esc(HIB_TAG)}</span><span>${esc(HIB_ROUND)}</span>` : ""; }
+function roomHibNote(img) {
+  return `<div class="full rn-hib" id="rn-hib" aria-live="polite"${imageHibernated(img) ? "" : " hidden"}>${roomHibBody(img)}</div>`;
+}
+function roomHibSync() {
+  const box = document.getElementById("rn-hib"), img = (IMAGES || []).find((i) => i.id === DEPLOY.form.image) || null;
+  if (!box) return;
+  box.hidden = !imageHibernated(img);
+  box.innerHTML = roomHibBody(img);
+}
 function roomFormSet(key, value) {
   if (key === "folder") { DEPLOY.form.image = ""; value = value === "" ? null : value === "-" ? "" : value; }   // ‏תיקייה אחרת = אימג' חדש
   DEPLOY.form[key] = value;
+  if (key === "image") roomHibSync();   // ‏#2053
   if (key === "src" || key === "builder" || key === "drv" || key === "folder") roomRoundRender();
 }
 function roomRoundRender() {
@@ -3429,6 +3443,20 @@ function imagesTree() {
     + (admin ? `<div class="muted" style="margin-top:14px;font-size:12px">גרירת אימג' על תיקייה = העברה. סדר התיקיות והאימג'ים נקבע בגרירה (סדר התצוגה בתחנה).</div>` : "");
 }
 
+/* #2053 (מוקאפ docs/design/mockups-1104/2053-hibernated.html, נדב 04/11): תג "מצב שינה" לאימג' שנקלט
+   ממקור מושהה — נגזר מ-`src_unhib` הקיים במניפסט (#2213, interfaces.md). בלי השדה אין תג, ואין
+   גם טענה הפוכה: אימג' שנקלט לפני #2213 פשוט לא נבדק (עיקרון 5). כתום, לא חוסם ולא שואל. */
+const HIB_TAG = "מצב שינה";
+const HIB_TIP = "המקור היה במצב שינה של Windows (Fast Startup). ההשהיה בוטלה בעותק בזמן הקליטה; המקור לא נכתב.";
+const HIB_ROUND = "האימג' נקלט ממקור שהיה במצב שינה של Windows (Fast Startup). ההשהיה בוטלה בעותק בזמן הקליטה, והאימג' אומת.";
+const HIB_SRC = "Windows במקור לא כובה עד הסוף (Fast Startup). בעותק בוטלה ההשהיה (עלייה מלאה)";   // ‏LC_NTFS_UNHIB, agent/lib/capture/hibernation.sh
+function imageHibernated(img) { const v = img && img.src_unhib; return v === "unhibernated" || v === "unhibernated_logfile"; }
+/* שורת "המקור בקליטה" בלשונית "סקירה" של המגירה; ‏null = אין שורה */
+function imageHibSourceRow(img) {
+  if (!imageHibernated(img)) return null;
+  const log = img.src_unhib === "unhibernated_logfile" ? " גם יומן ה-NTFS ($LogFile) נוקה בעותק." : "";
+  return ["המקור בקליטה", `<span class="hib-src">${esc(HIB_SRC + log)}</span><br><span class="muted">המקור עצמו לא נכתב.</span>`];
+}
 function imageRow(r) {
   const idEnc = encodeId(r.id), admin = isAdmin(), sel = IMG.sel.has(r.id);
   const drag = admin ? ` draggable="true" ondragstart="imgDragStart(event,'${idEnc}')" ondragover="imgDragOver(event)" ondragleave="this.classList.remove('over')" ondrop="imgDropOnRow(event,'${idEnc}')"` : "";
@@ -3436,7 +3464,7 @@ function imageRow(r) {
     attrs: `class="${sel ? "sel" : ""}" data-id="${esc(r.id)}"${drag}`,
     cells: [
       `<input type="checkbox" aria-label="בחירת ${esc(r.name)}" ${sel ? "checked" : ""} onchange="toggleImgSel('${idEnc}',this.checked)">`,
-      `<span class="dskico">${uiIcon("storage")}</span><a role="link" tabindex="0" class="name" onclick="openImageDetail('${idEnc}')">${esc(r.name)}</a>${r.available === false ? ` ${UI.pill("err", "לא זמין")}` : ""}`,   // ‏#1066: המיקום לא נגיש — רשום, לא נמחק. ‏#1300: בלי תיאור מתחת לשם (הוא במגירה)
+      `<span class="dskico">${uiIcon("storage")}</span><a role="link" tabindex="0" class="name" onclick="openImageDetail('${idEnc}')">${esc(r.name)}</a>${r.available === false ? ` ${UI.pill("err", "לא זמין")}` : ""}${imageHibernated(r) ? ` <span title="${esc(HIB_TIP)}">${UI.pill("warn", HIB_TAG)}</span>` : ""}`,   // ‏#1066: המיקום לא נגיש — רשום, לא נמחק. ‏#1300: בלי תיאור מתחת לשם (הוא במגירה)
       esc(imageOsLabel(r.os)), ltr(fmtBytes(r.total_compressed_bytes)), r.system_unmarked ? sysUncheckedCell(r) : imgFits(r), r.folder ? esc(r.folder) : `<span class="muted">ללא תיקייה</span>`, imgVerify(r), ltr(fmtDate(r.created)),
       UI.rowMenu(r.name, [["פרטים", `openImageDetail('${idEnc}')`], ["הפץ", `deployImage('${idEnc}')`]]
         .concat((r.system_candidates || []).length ? [["סימון מחיצת המערכת (C:)…", `markSystemPartition('${idEnc}')`]] : [])   // ‏#1896
@@ -3814,7 +3842,7 @@ function imageChips(img, s, use) {
   const saved = img.last_scrub;
   const sha = s ? (s.state === "intact" ? ["", "sha256 אומת"] : s.state === "unavailable" ? ["w", "sha256 לא נבדק"] : ["d", "sha256 לא תואם"])
     : saved && saved.state !== "intact" ? ["d", "sha256 לא תואם"] : ["", "sha256 אומת"];
-  return `<span class="n-meta"><span class="n-chip ${sha[0]}">${esc(sha[1])}</span><span class="n-chip n">${esc(use.length ? "בשימוש: " + use.join(" · ") : "לא בסבב פעיל")}</span></span>`;
+  return `<span class="n-meta"><span class="n-chip ${sha[0]}">${esc(sha[1])}</span><span class="n-chip n">${esc(use.length ? "בשימוש: " + use.join(" · ") : "לא בסבב פעיל")}</span>${imageHibernated(img) ? `<span class="n-chip w" title="${esc(HIB_TIP)}">${esc(HIB_TAG)}</span>` : ""}</span>`;
 }
 /* --- מגירת אימג' (#1300, console-full.html W.imgDrawer): ראש — שם, משנה קצרה ותגיות; לשוניות
    עם מונים; "סקירה" = פרטים (~5 שורות + "כונן מינימלי") והודעת sha256 בתחתית; "מחיצות" =
@@ -3847,7 +3875,8 @@ function imageDrawerHtml(img) {
     ["דיסק מקור", img.source_disk_bytes == null ? `<span class="muted">לא ידוע</span>` : ltr(marketedDiskSize(img.source_disk_bytes))],   /* ‏#1016: בלי "family N" — מונח פנימי */
     ["כונן מינימלי", imgFits(img, true)],
     ["גודל בשרת", `${ltr(fmtBytes(img.total_compressed_bytes))} דחוס <a href="/api/console/images/${idEnc}/download">הורדה</a>`],
-  ]);
+    imageHibSourceRow(img),   // ‏#2053
+  ].filter(Boolean));
   const tech = UI.kv([
     ["בשימוש במקור", img.used_bytes == null ? `<span class="muted">לא ידוע</span>` : ltr(fmtBytes(img.used_bytes))],
     ...(mOk ? imageManifestKv(m).filter(([k]) => k !== "נקלט על ידי") : []),
@@ -7775,6 +7804,9 @@ const SETTING_ROWS = [
   // ‏#2338 (נדב 03/11): דיסק שכותב לאט מזה בבדיקה שלפני הזרם נפסל באדום. השרת מאמת 10–500; הסוכן מקבל במניפסט.
   { key: "writecheck_min_mbps", card: "deploy", label: "סף מהירות כתיבה לדיסק", type: "number", min: 10, max: 500, unit: "MB/s",
     more: "דיסק שכותב לאט מזה בבדיקה שלפני הזרם נפסל באדום, כי דיסק איטי מעכב את כל הגל. ברירת המחדל 50. בנוסף, דיסק שכותב פחות מחצי מהמגירות האחרות מאותו סוג נפסל בכל מקרה" },
+  // ‏#1802 (נדב 04/11): מחשב לא רשום ברשת ההפצה נשאר על המסך (F2 = הפעלה מחדש). ‏UEFI בלבד — ב-BIOS לעולם אין עלייה אוטומטית (משכפלים, #345). ‏0 (ברירת המחדל) = כבוי; השרת מאמת 0–600; הסוכן מקבל ב-hello.
+  { key: "unregistered_autoboot_seconds", card: "deploy", label: "מחשב לא רשום: עלייה אוטומטית מהדיסק", type: "number", min: 0, max: 600, unit: "שניות", prefix: "אחרי", zeroText: "כבויה",
+    rangeText: "הערך חייב להיות בין 0 ל-600 שניות" },
   // ‏#1864 (נדב 20/10): כבוי (ברירת המחדל) = מדגם של ~5% מהבלוקים; דלוק = כולם. השרת מאמת true/false.
   { key: "readback_full", card: "deploy", label: "אימות מלא אחרי הכתיבה", type: "switch",
     more: "אימות מלא מוסיף כ-5 דק' לסבב של 4 מגירות. כבוי (ברירת המחדל): נבדק במדגם — כ-5% מהבלוקים בשימוש, מפוזרים על כל המחיצה (התחלה, אמצע, סוף ואקראי)" },
@@ -8011,7 +8043,7 @@ function settingsValueSheet(key) {
     onSubmit: async (v) => {
       const value = String(v.v == null ? "" : v.v).trim();
       const n = Number(value);
-      if (value === "" || !Number.isInteger(n) || n < r.min || (r.max != null && n > r.max)) throw new Error(`${r.label}: מספר שלם, ${r.max != null ? `${r.min}–${r.max}` : `${r.min} לפחות`}`);
+      if (value === "" || !Number.isInteger(n) || n < r.min || (r.max != null && n > r.max)) throw new Error(r.rangeText || `${r.label}: מספר שלם, ${r.max != null ? `${r.min}–${r.max}` : `${r.min} לפחות`}`);   // #1802: rangeText = נוסח שנדב אישר
       await post("/settings", { [key]: String(n) });
       toast("נשמר — נרשם ביומן");
       await loadSettingsData();

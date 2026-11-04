@@ -65,6 +65,7 @@ int dcui_feed(DcuiFrame *f, char *line) {
     if (!strcmp(k, "hdr")) {
         COPY(f->role, c[1]); COPY(f->host, c[2]); COPY(f->url, c[3]);
         COPY(f->version, c[4]); COPY(f->clock, c[5]); COPY(f->admin, c[6]);
+        COPY(f->clock_chip, c[7]);              /* #2144 */
     } else if (!strcmp(k, "hero")) {
         COPY(f->hero_kind, c[1]); COPY(f->hero_title, c[2]); COPY(f->hero_sub_m, c[3]);
         COPY(f->meta_label, c[4]); COPY(f->meta_value, c[5]);

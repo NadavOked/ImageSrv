@@ -1,91 +1,86 @@
-# expandshare.sh -- where the room a restore adds goes, before the first byte:
-# the partitions after the one that grows move to the tail (_move_to_tail),
-# and the room is shared with the partitions capture shrank (#1897), also one
-# before it (#1898). POSIX sh (busybox ash).
+# expandshare.sh -- where the partitions go when a restore rewrites the table,
+# before the first byte: the ones after the one that grows move to the tail
+# (_move_to_tail), and every partition capture shrank goes back to its source
+# size (#1897), also one before it (#1898). POSIX sh (busybox ash).
 #
 # Split from expand.sh and grow.sh (#1898) before the 300-line wall, without
 # a change of behaviour: expand_last (expand.sh) calls everything here; the
 # grow after the stream (grow_expanded, grow.sh) reads the expanded.more it
 # writes. Loaded right after grow.sh; needs manifest_plan (restore.sh) and jq.
 
-# --- #1897 (Nadav, 22/10): a shrunk image with more than one
-# data partition (C: + D:) restored to a larger disk. The room the restore
-# adds is shared between them in the ratio of their sizes on the SOURCE --
-# 60/40 there, 60/40 here -- and not all of it to the one expand_last
-# stretches, with D: arriving shrunk (~2GB free) and never growing.
-# expand_last (expand.sh) calls share_tail and share_head before the stream;
-# grow_expanded (grow.sh) grows what they marked after it. Twins of the share:
-# system_free_after (diskfit.sh) and server/minfree.py:grow_share.
+# --- #1897 (Nadav 04/11, replaces the 22/10 source ratio): a shrunk image with
+# more than one data partition (C: + D: + E:). Capture shrinks them all; the
+# restore gives EVERY shrunk partition back its source size (shrunk_from_bytes,
+# #87/#929) -- D: and E: exactly as they were -- and the one expand_last
+# stretches (C:) takes whatever is left: all the extra room on a larger disk;
+# on a smaller one it is the only one that gives way, down to its own size in
+# the image. Too small even for that, or for C:'s min-free, is refused before
+# the first byte (volumes_fit, min_free_check: diskfit.sh). Until 04/11 the
+# room was shared in the source ratio; until 22/10 D: arrived shrunk (~2GB
+# free) and never grew. expand_last (expand.sh) calls share_tail and
+# share_head before the stream; grow_expanded (grow.sh) grows what they
+# marked after it. Twins of the plan: cand_room (RETURN_JQ, diskfit.sh) and
+# server/library/minfree.py:cand_room.
 #
-# Who shares: the candidate, and every partition on the disk that capture
-# shrank (`shrunk_from_bytes`, #87/#929) -- exactly the ones that lost room.
-# #1898 (Nadav 22/10): also one BEFORE the candidate (dual-boot: C: before the
+# Who returns: every partition after the candidate that capture shrank, and
+# (#1898, Nadav 22/10) one BEFORE the candidate (dual-boot: C: before the
 # linux root) -- it grows in place and what follows it moves forward
 # (share_head) -- ONLY when the operator approved the split on the cloner
 # (SHARE_HEAD=1, targets/<disk>/share.ok, drawergate.sh). A path that does not
-# ask (a station, the local clone) keeps the head as it was, and so does the
-# agent's min-free (system_free_after) -- never a share nobody approved.
-# A partition that was not shrunk (recovery, swap) keeps its size, as before.
-# The candidate's source size is its shrunk_from_bytes, or its size.
+# ask (a station, the local clone) keeps the head as it was. A partition that
+# was not shrunk (recovery, swap) keeps its size, as before.
 
-#: The BEGIN of both shares: from[index] = shrunk_from_bytes, the candidate's
-#: line in c[], and ONE total of every sharer's source size -- the head (when
-#: approved), the tail and the candidate split the same room (twin: minfree.grow_share).
-SHARE_TOTAL_AWK='BEGIN { while ((getline l < src) > 0) { split(l, f, "|"); from[f[1]] = f[2]; at[f[1]] = f[3] }
-        split(cand, c, "|"); total = (from[c[1]] != "" ? from[c[1]] : c[6]) + 0
-        for (k in from) if (k != c[1] && from[k] != "" && (withhead == "1" || at[k] + 0 > c[5] + 0)) total += from[k] }'
+#: from[index] = shrunk_from_bytes ("" = not shrunk); the candidate's plan line in c[].
+SHARE_FROM_AWK='BEGIN { while ((getline l < src) > 0) { split(l, f, "|"); from[f[1]] = f[2] }
+        split(cand, c, "|") }'
 
 _share_src() {
-    # $1 disk, $2 manifest. PRINTS the path of index|shrunk_from_bytes|start per
+    # $1 disk, $2 manifest. PRINTS the path of index|shrunk_from_bytes per
     # partition -- one file per drawer (PREP_TAG: the tables run at once, #1704).
     _ss="$RUN_DIR/share${PREP_TAG:-}.src"
-    jq -r '.partitions[] | "\(.index)|\(.shrunk_from_bytes // "")|\(.start_sector)"' "$2" > "$_ss" 2>> "$LOG_FILE" \
+    jq -r '.partitions[] | "\(.index)|\(.shrunk_from_bytes // "")"' "$2" > "$_ss" 2>> "$LOG_FILE" \
         || { log "$1: the source sizes of the partitions did not read (#1897)" >&2; return 1; }
     echo "$_ss"
 }
 
 share_tail() {
     # $1 disk, $2 manifest, $3 the candidate's plan line, $4 the tail plan
-    # lines, $5 the sectors expand_last adds. PRINTS the tail with each sharer's
-    # size (field 6) grown by its share, aligned down to 2048 sectors; the
-    # candidate takes the rest (`-n i:start:0`). Writes targets/<disk>/
-    # expanded.more (idx|fs per grown partition). rc 1 = the sizes did not read.
+    # lines. PRINTS the tail with each shrunk partition's size (field 6) back
+    # at its source size, exactly; the candidate takes the rest (`-n i:start:0`).
+    # Writes targets/<disk>/expanded.more (idx|fs per partition that grows;
+    # SHARE_MORE overrides the path). rc 1 = the sizes did not read.
     _st_src=$(_share_src "$1" "$2") || return 1
-    printf '%s\n' "$4" | awk -F'|' -v OFS='|' -v cand="$3" -v add="$5" -v withhead="${SHARE_HEAD:-}" \
-        -v more="${SHARE_MORE:-$RUN_DIR/targets/$1/expanded.more}" -v src="$_st_src" "$SHARE_TOTAL_AWK"'
+    printf '%s\n' "$4" | awk -F'|' -v OFS='|' -v cand="$3" \
+        -v more="${SHARE_MORE:-$RUN_DIR/targets/$1/expanded.more}" -v src="$_st_src" "$SHARE_FROM_AWK"'
         $1 != "" { line[NR] = $0 }
         END { printf "" > more
               for (i = 1; i <= NR; i++) {
                   if (!(i in line)) continue
                   n = split(line[i], p, "|")
-                  if (from[p[1]] != "" && total > 0) {
-                      g = int(add * from[p[1]] / total / 2048) * 2048
-                      if (g > 0) { p[6] = sprintf("%.0f", p[6] + g * 512); print p[1] "|" p[4] > more }
-                  }
+                  if (from[p[1]] + 0 > p[6] + 0) { p[6] = from[p[1]]; print p[1] "|" p[4] > more }
                   out = p[1]; for (j = 2; j <= n; j++) out = out OFS p[j]; print out
               } }'
 }
 
 share_head() {
-    # $1 disk, $2 manifest, $3 the candidate's plan line, $4 the sectors
-    # expand_last adds (share_tail's, with SHARE_HEAD=1). #1898: a shrunk partition BEFORE the
-    # candidate grows in place by its share; every partition after it up to
-    # the candidate moves forward by what grew before it -- safe: the table is
-    # written before the first byte, and the stream writes by index. PRINTS
-    # the candidate's new start, then each head line that moves or grows, with
-    # its new start (field 5) and size (field 6). Appends what grew to
-    # expanded.more, after share_tail wrote it.
+    # $1 disk, $2 manifest, $3 the candidate's plan line (SHARE_HEAD=1 only).
+    # #1898: a shrunk partition BEFORE the candidate grows in place back to its
+    # source size; every partition after it up to the candidate moves forward
+    # by what grew before it -- safe: the table is written before the first
+    # byte, and the stream writes by index. PRINTS the candidate's new start,
+    # then each head line that moves or grows, with its new start (field 5) and
+    # size (field 6). Appends what grew to expanded.more, after share_tail wrote it.
     _sh_src=$(_share_src "$1" "$2") || return 1
     _sh_plan=$(manifest_plan "$2") || return 1
-    printf '%s\n' "$_sh_plan" | awk -F'|' -v OFS='|' -v cand="$3" -v add="$4" -v withhead=1 \
-        -v more="${SHARE_MORE:-$RUN_DIR/targets/$1/expanded.more}" -v src="$_sh_src" "$SHARE_TOTAL_AWK"'
+    printf '%s\n' "$_sh_plan" | awk -F'|' -v OFS='|' -v cand="$3" \
+        -v more="${SHARE_MORE:-$RUN_DIR/targets/$1/expanded.more}" -v src="$_sh_src" "$SHARE_FROM_AWK"'
         $1 != "" && $5 + 0 < c[5] + 0 { n++; ln[n] = $0; st[n] = $5 + 0 }
         END { for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++)
                   if (st[j] < st[i]) { t = st[i]; st[i] = st[j]; st[j] = t; t = ln[i]; ln[i] = ln[j]; ln[j] = t }
               off = 0
               for (i = 1; i <= n; i++) {
                   k = split(ln[i], p, "|"); g = 0
-                  if (from[p[1]] != "" && total > 0) g = int(add * from[p[1]] / total / 2048) * 2048
+                  if (from[p[1]] + 0 > p[6] + 0) g = int((from[p[1]] - p[6]) / 512)
                   if (off > 0 || g > 0) {
                       # #2016: one that moves starts on a MiB; what follows moves by that too
                       ns = p[5] + off; if (off > 0) { ns = int((ns + 2047) / 2048) * 2048; off = ns - p[5] }
@@ -137,4 +132,14 @@ _move_to_tail() {
         [ -z "$_sa" ] || printf ' -A %s:=:0x%s' "$_si" "$_sa"
         _sx_end=$((_sx - 1))
     done
+}
+
+_cand_end() {
+    # $1 = _move_to_tail's options, $2 = disk sectors. PRINTS the last sector the
+    # candidate gets: one before the lowest start the tail moves to -- read from
+    # what will be written, not computed again -- or the last usable one (no
+    # tail). #1897: with the shrunk ones back at their source size it can be
+    # smaller than the candidate's image; expand_last refuses that table.
+    printf '%s\n' "$1" | awk -v e=$(($2 - 34)) '{ for (i = 1; i < NF; i++) if ($i == "-n") {
+        split($(i + 1), a, ":"); if (a[2] - 1 < e) e = a[2] - 1 } } END { printf "%.0f\n", e }'
 }

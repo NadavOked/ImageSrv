@@ -22,7 +22,7 @@ import pytest
 from agentlib import agent_sources
 
 from native import requires_native
-from test_agent import AGENT, BASH, posix
+from test_agent import AGENT, BASH, CLEAN_HIVE, posix
 from test_captured_stdout import stub
 
 pytestmark = requires_native(("bash", BASH))
@@ -49,7 +49,8 @@ case "$url" in
 esac
 '''
 
-#: ‏hivewrite מזויף: ה-"hive" הוא קובץ טקסט שמחזיק את DevicePath. ‏-g
+#: ‏hivewrite מזויף: DevicePath יושב ב-`SOFTWARE.d/DevicePath` — קובץ ה-hive
+#: עצמו הוא כותרת regf, שממנה ‏#2363 קורא את מספרי הרצף. ‏-g
 #: מדפיס אותו; כתיבה עם -x מחליפה אותו ורושמת את הקריאה; כתיבה **בלי** -x
 #: יוצאת 9 — ‏REG_SZ היה שובר את %SystemRoot%, ולכן הזיוף מסרב לה.
 HIVEWRITE = r'''
@@ -70,12 +71,12 @@ case "$2" in */SYSTEM)
 esac
 if [ "$1" = "-g" ]; then
   [ "$4" = "DevicePath" ] || exit 3
-  cat "$2"; exit 0
+  cat "$2.d/DevicePath"; exit 0
 fi
 [ "$1" = "-x" ] || { echo "REG_SZ write refused" >&2; exit 9; }
 [ "${FAKE_HIVE_RC:-0}" = 0 ] || exit "$FAKE_HIVE_RC"
 [ "$4" = "DevicePath" ] || exit 3
-printf '%s\n' "$5" > "$2"
+printf '%s\n' "$5" > "$2.d/DevicePath"
 '''
 
 
@@ -110,17 +111,21 @@ class Box:
     def __init__(self, tmp_path: Path, packages=FILES, *, answer: dict | None = None,
                  plan: str = WIN_PLAN, device_path: str | None = STOCK,
                  stubs: dict[str, str] | None = None, env: str = "", plan_rc: int = 0,
-                 system: dict[str, str] | None = SYSTEM_RAID):
+                 system: dict[str, str] | None = SYSTEM_RAID,
+                 software_head: bytes = CLEAN_HIVE, system_head: bytes = CLEAN_HIVE):
         self.run = tmp_path / "run"
         self.win = self.run / "win"
         self.server = tmp_path / "server"
         (self.win / "Windows/System32/config").mkdir(parents=True)
         self.hive = self.win / "Windows/System32/config/SOFTWARE"
         if device_path is not None:
-            self.hive.write_text(device_path + "\n", encoding="utf-8")
+            self.hive.write_bytes(software_head)
+            (self.win / "Windows/System32/config/SOFTWARE.d").mkdir()
+            (self.win / "Windows/System32/config/SOFTWARE.d/DevicePath").write_text(
+                device_path + "\n", newline="\n")
         self.system = self.win / "Windows/System32/config/SYSTEM"
         if system is not None:
-            self.system.write_text("fake SYSTEM hive\n", encoding="utf-8")
+            self.system.write_bytes(system_head)
             for key, value in system.items():
                 target = self.win / "Windows/System32/config/SYSTEM.d" / key
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -183,6 +188,9 @@ class Box:
         path = self.server / "hivewrite.calls"
         return path.read_text().splitlines() if path.exists() else []
 
+    def device_path(self) -> str:
+        return (self.win / "Windows/System32/config/SOFTWARE.d/DevicePath").read_text().strip()
+
     def sysval(self, key: str) -> str | None:
         path = self.win / "Windows/System32/config/SYSTEM.d" / key
         return path.read_text().strip() if path.exists() else None
@@ -200,7 +208,7 @@ def test_matched_packages_land_on_the_disk_and_device_path_keeps_the_stock_entry
                       "boot": {"state": "enabled", "service": "storahci"}}
     assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
     assert box.staged_files() == {f"{n}/{p}": d for n, fs in FILES.items() for p, d in fs.items()}
-    assert box.hive.read_text().strip() == f"{STOCK};{ENTRY}"
+    assert box.device_path() == f"{STOCK};{ENTRY}"
     writes = [c for c in box.calls() if c.startswith("-x ")]
     assert len(writes) == 1 and "DevicePath" in writes[0], box.calls()
     log = (box.run / "agent.log").read_text(encoding="utf-8")
@@ -213,7 +221,7 @@ def test_a_download_whose_sha256_differs_stops_before_the_disk_is_touched(tmp_pa
     assert result["state"] == "failed" and "אי-התאמת sha256: intel-nic/x64/e1d68x64.sys" in result["error"]
     assert result["packages"] == []
     assert box.staged_files() == {}, "בייט אחד לא הועתק לדיסק"
-    assert box.hive.read_text().strip() == STOCK, "DevicePath לא נגע"
+    assert box.device_path() == STOCK, "DevicePath לא נגע"
     assert box.calls() == [], "המחיצה לא עוגנה כלל"
     assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
@@ -232,7 +240,7 @@ def test_a_copy_that_does_not_read_back_is_a_failure(tmp_path):
                                "umount": 'echo umount "$@" >> "$FAKE_SERVER/umounts"; exit 0'})
     _, result = box.stage()
     assert result["state"] == "failed" and "אי-התאמה בקריאה חזרה מהדיסק" in result["error"]
-    assert box.hive.read_text().strip() == STOCK
+    assert box.device_path() == STOCK
     assert box.calls() == [], "לא הגענו לרג'יסטרי"
     assert (box.server / "umounts").read_text().count("umount") == 1, "הכשל משחרר את המאונט"
 
@@ -282,7 +290,7 @@ def test_device_path_is_idempotent(tmp_path):
     box = Box(tmp_path, device_path=f"{STOCK};{ENTRY}")
     _, result = box.stage()
     assert result["state"] == "staged"
-    assert box.hive.read_text().strip() == f"{STOCK};{ENTRY}"
+    assert box.device_path() == f"{STOCK};{ENTRY}"
     assert not [c for c in box.calls() if c.startswith("-x ")], "לא נכתב שוב"
 
 
@@ -290,7 +298,7 @@ def test_an_empty_device_path_gets_only_our_entry(tmp_path):
     box = Box(tmp_path, device_path="")
     _, result = box.stage()
     assert result["state"] == "staged"
-    assert box.hive.read_text().strip() == ENTRY
+    assert box.device_path() == ENTRY
 
 
 def test_a_registry_write_that_fails_is_reported_and_the_disk_is_released(tmp_path):
@@ -298,7 +306,7 @@ def test_a_registry_write_that_fails_is_reported_and_the_disk_is_released(tmp_pa
               stubs={"umount": 'echo umount "$@" >> "$FAKE_SERVER/umounts"; exit 0'})
     _, result = box.stage()
     assert result["state"] == "failed" and "כתיבת DevicePath לא אומתה" in result["error"]
-    assert box.hive.read_text().strip() == STOCK
+    assert box.device_path() == STOCK
     assert (box.server / "umounts").read_text().count("umount") == 1
     assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 

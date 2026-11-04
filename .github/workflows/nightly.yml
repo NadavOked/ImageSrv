@@ -51,6 +51,28 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libhivex-dev libhivex-bin dash busybox nodejs libpango1.0-dev libcairo2-dev libdrm-dev libharfbuzz-dev libfribidi-dev fonts-ibm-plex fontconfig libvncserver-dev             partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl mtools grub-pc-bin syslinux syslinux-common cpio zstd >/dev/null
           busybox | head -1
+      # ‏#2064: גלאי Impeccable בגרסה הנעולה, לשער tests/test_impeccable_gate.py.
+      # ה-sha וה-URL נקראים מ-tests/impeccable_gate.py (מקור יחיד) ומפתחים את
+      # המטמון — הורדה אחת לכל הצמדה, לא בכל ריצה. ‏`fetch` מאמת sha גם על
+      # מה שעלה מהמטמון, והטסט מאמת שוב לפני ההרצה. הורדה שנכשלה או sha שאינו
+      # תואם — השלב אדום; בלעדיו ‏REQUIRE_NATIVE מכשיל את השער בשמו.
+      - name: Impeccable pin (#2064)
+        id: impeccable
+        # sha256 by name, so tools/agents/doctor.py sees who writes the output
+        # the cache key reads; no sha (pin failed: no pipefail here) = red
+        run: |
+          sha=$(python tests/impeccable_gate.py pin | sed -n 's/^sha256=//p')
+          [ -n "$sha" ] || { echo "impeccable_gate.py pin: no sha256" >&2; exit 1; }
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/impeccable
+          key: impeccable-${{ steps.impeccable.outputs.sha256 }}
+      - name: Fetch the pinned Impeccable detector (#2064)
+        run: |
+          dest="$HOME/.cache/impeccable/imp"
+          python tests/impeccable_gate.py fetch "$dest"
+          echo "IMAGESRV_IMPECCABLE_BIN=$dest" >> "$GITHUB_ENV"
 
       # מה שהותקן בפועל, לא מה שביקשנו. כשריצה לילית נכשלת בלי שהקוד
       # זז, זו השורה הראשונה שמסבירה למה.

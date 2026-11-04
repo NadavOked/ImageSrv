@@ -57,7 +57,8 @@ def _room_machine(server) -> dict:
                 if m["mac"] == CLONER)
 
 
-@pytest.mark.parametrize("probe", ["no_disks", "no_ports", "unchecked"])
+# ‏#2334: `no_driver` — בקר אחסון בלי מנהל התקן; בלי `DISK_PROBE_VALUES` הוא נזרק ל-None.
+@pytest.mark.parametrize("probe", ["no_disks", "no_ports", "unchecked", "no_driver"])
 def test_zero_disks_carries_why_to_all_three_console_views(server, probe):
     """שלושה ממצאים שונים על אותו `0` — כל אחד מגיע כמות שהוא לשלושת
     המסכים שמציגים מגירות. ‏`unchecked` חייב להישאר `unchecked`."""

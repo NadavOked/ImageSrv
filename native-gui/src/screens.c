@@ -211,7 +211,6 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
             s->wave_state[0]&&strcmp(s->wave_state,"running")&&strcmp(s->wave_state,"failed")?"הסתיים":"משדר");return buf;}
         {int awake=0;for(int i=0;i<s->nmachines;i++)awake+=s->machines[i].awake;snprintf(buf,n,"%d יעדים מחוברים",awake);return buf;}
     case SCREEN_CLONER:
-        if(s->smart_pending){*dot=a->theme->warn;return "ממתין להכרעת SMART";}
         {int w=0,e=0;for(int i=0;i<s->ndrawers;i++){w+=!strcmp(s->drawers[i].state,"writing");
             e+=!strcmp(s->drawers[i].state,"done")||!strcmp(s->drawers[i].state,"failed")||!strcmp(s->drawers[i].state,"skipped");}
          if(s->ndrawers&&e==s->ndrawers)return "שיכפול במקביל · הסתיים";   /* #1331 mockup v2 */
@@ -255,18 +254,15 @@ static const char *status_keys(const App *a,char *buf,size_t n){
         if(a->st.wave_open)return "W  העֵר שוב    N  התחל עכשיו    Esc  עצור סבב…";
         { CancelPick p[MAX_CANCEL_PICKS];   /* #1386 */
           return room_cancel_picks(a,p,MAX_CANCEL_PICKS)?"X  בטל דיסק…    W  העֵר שוב    Esc  עצור סבב…":"W  העֵר שוב    Esc  עצור סבב…"; }
-    case SCREEN_CLONER:   /* mockup 10/10: the SMART keys only while a question is open */
+    case SCREEN_CLONER:   /* #2347: no SMART keys -- the question is gone (#2044) */
         if(a->st.server_restarted_wave)return "השרת אותחל באמצע הגל — המחשב יצטרף לבד לגל הבא";
-        if(!a->st.smart_pending){   /* #1386: the drawers' own numbers cancel them */
+        {   /* #1386: the drawers' own numbers cancel them */
             CancelPick p[MAX_CANCEL_PICKS]; int k=cloner_cancel_picks(a,p,MAX_CANCEL_PICKS); size_t u=0; buf[0]=0;
             for(int i=0;i<k&&u+8<n;i++)if(p[i].drawer>0&&p[i].drawer<10)u+=snprintf(buf+u,n-u,"%s%d",u?" / ":"",p[i].drawer);
             if(!u)return a->st.end_kind!=END_NONE&&a->st.end_held?"Enter  כיבוי":"אין פעולה במסך הזה";   /* #2081: the held end's button */
             snprintf(buf+u,n-u,"  בטל דיסק…");
             return buf;
         }
-        return !strcmp(a->st.smart_verdict,"failed_last")   /* #1580: orange, retry */
-        ? "R  החלף דיסק    S  דלג על הדיסק    Enter  נסה שוב…"
-        : "R  החלף דיסק    S  דלג על הדיסק    Enter  כתוב בכל זאת…";   /* 16/10: "…" -- the SMART window asks first */
     case SCREEN_RESTORE:
         if(lc_pull_active(a)){   /* 16/10: the drawers by keyboard too */
             if(a->pull_focus)return "→ ←  מגירה    רווח  סימון    A  כל התקינות    Tab  לאימג'ים    Enter  מחק ושחזר…    Esc  חזרה";
@@ -284,7 +280,7 @@ static const char *status_keys(const App *a,char *buf,size_t n){
     case SCREEN_PROGRESS:return "אין פעולה במסך הזה";   /* mockup 10/10: it said "Esc חזרה" and Esc did nothing */
     case SCREEN_TOOLS:return a->tools_view==TOOLS_CONFIRM?"Tab / Shift-Tab  מעבר    Esc  חזרה":"Esc  חזרה";
     case SCREEN_INSTALL:return "Tab / Shift-Tab  מעבר    Enter  אישור    Esc  חזרה";
-    case SCREEN_FAILURE:{static char k[96];if(!a->st.nfail_btns)return "";snprintf(k,sizeof k,"Enter  %s",a->st.fail_btns[0].label);return k;}   /* #2068: the first button */
+    case SCREEN_FAILURE:{static char k[96];if(!a->st.nfail_btns)return "";if(!strncmp(a->st.fail_btns[0].label,"F2 ",3))return a->st.fail_btns[0].label;snprintf(k,sizeof k,"Enter  %s",a->st.fail_btns[0].label);return k;}   /* #2068: the first button; #1802: "F2 — הפעלה מחדש" names its own key */
     default:return "אין פעולה במסך הזה";   /* message: there is no way out to offer */
     }
 }
@@ -587,7 +583,7 @@ void app_route(App *a){
     if((a->force_cloner||a->force_standby)&&s->lc.screen==LC_SCREEN_PULL){a->mode=MODE_RESTORE;a->screen=SCREEN_RESTORE;return;}
     if((a->force_cloner||a->force_standby)&&s->lc.screen){a->screen=s->lc.screen==LC_SCREEN_BOOT?SCREEN_LCBOOT:SCREEN_LOCAL;return;}
     if(a->force_standby){a->screen=SCREEN_STANDBY;return;}
-    if(a->force_cloner){a->screen=(s->ndrawers||s->cloner_image[0]||s->smart_pending)?SCREEN_CLONER:SCREEN_STANDBY;return;}
+    if(a->force_cloner){a->screen=(s->ndrawers||s->cloner_image[0])?SCREEN_CLONER:SCREEN_STANDBY;return;}
     if(s->msg_title[0]){a->screen=SCREEN_MESSAGE;return;}
     if(a->force_progress||s->task==TASK_PENDING||s->task==TASK_RUNNING){a->screen=SCREEN_PROGRESS;a->watching=1;return;}
     if(a->watching&&(s->task==TASK_DONE||s->task==TASK_FAILED)){

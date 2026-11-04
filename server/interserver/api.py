@@ -637,7 +637,16 @@ class _BodyReader:
 def receive_image(ctx, plan: ReceivePlan, chunks: Iterable[bytes]) -> dict:
     """מחלץ את הזרם ישר לאזור ביניים **בתוך** הספרייה (אותה מערכת קבצים),
     עם sha256 תוך כדי כתיבה (``import_tar_stream``, ‏#1457), ומכניס רק אחרי
-    שכל מחיצה תאמה למניפסט. מחזיר את המניפסט שנקלט."""
+    שכל מחיצה תאמה למניפסט. מחזיר את המניפסט שנקלט.
+
+    ‏#1891: כל הקבלה היא "עסוק" ל"החל עדכון" במשני (‏`inflight`) — restart
+    באמצע חותך את ההעברה מהראשי."""
+    from server.system import inflight
+    with inflight.holding("קבלת אימג' משרת אחר"):
+        return _receive_image(ctx, plan, chunks)
+
+
+def _receive_image(ctx, plan: ReceivePlan, chunks: Iterable[bytes]) -> dict:
     from server.library.archive import ArchiveError, import_tar_stream, unreadable_message
     from server.library.images import validate_display_name
     library = _library(ctx)

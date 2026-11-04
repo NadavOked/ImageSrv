@@ -72,7 +72,7 @@ direct_wait_running() {
             [ "$(json_get "$RESP" ".task.id")" = "$1" ] \
                 || { log "direct: task $1 is no longer ours -- not sending"; return 1; }
             case "$(json_get "$RESP" ".task.direct.session_state")" in
-                running) return 0 ;;
+                running) direct_operator_wait "$RESP" || return 0 ;;   # #1581: not while a cloner waits for a person
                 closed)  log "direct: the wave closed before it started"; return 1 ;;
             esac
             ui_clear; ui_header
@@ -103,7 +103,7 @@ direct_send_one() {
     # (receivers joined); the bounded start ceiling covers its wait (#1497).
     next_stream_ceiling
     rm -f "$_do_log" "$_do_fifo" "$RUN_DIR/dsha.$2" "$RUN_DIR/dsend.$2.rc" \
-        "$RUN_DIR/dpcl.$2.rc" "$RUN_DIR/dzstd.$2.rc" "$RUN_DIR/dfanout.$2.rc"
+        "$RUN_DIR/dpcl.$2.rc" "$RUN_DIR/dzstd.$2.rc" "$RUN_DIR/dfanout.$2.rc" "$RUN_DIR/dsend.$2.rewound"
     mkfifo "$_do_fifo"
     log "partition $2 ($3): sending"
     # Each stage's rc is captured by name (no pipefail in busybox ash), and
@@ -135,7 +135,9 @@ direct_send_one() {
         grep -qx 0 "$RUN_DIR/dfanout.$2.rc" || unblock_fifo "$_do_fifo"
         wait_pid "$_do_spid" "$WAIT_DRAWER_S" "udp-sender of partition $2"
     ) &
-    _do_pid=$!
+    _do_pid=$!; _do_wpid=""
+    # #1581: the first stream is stopped, and sent again, if a cloner is asked before its first byte.
+    [ "$STREAMED_PARTITIONS" -ne 1 ] || { direct_ask_watch "$_do_log" "$5" "$2" < /dev/null > /dev/null 2>&1 & _do_wpid=$!; }
     WAIT_STARTED_LOG="$_do_log" WAIT_STARTED_TEXT="$DIRECT_TRANSFER_STARTED"
     if wait_progress "$_do_pid" "$RUN_DIR/targets/$1/bytes.raw" \
             "$STREAM_START_CEILING" "$WAIT_STREAM_STALL_S" "שידור מחיצה $2 מ-$1" "$_do_fifo"; then
@@ -147,7 +149,10 @@ direct_send_one() {
     else
         _do_rc="$WAIT_TIMED_OUT"; _do_stage=timeout
     fi
-    rm -f "$_do_fifo" "$_do_fifo.bytes"
+    rm -f "$_do_fifo" "$_do_fifo.bytes"; [ -z "$_do_wpid" ] || { kill "$_do_wpid"; wait "$_do_wpid"; } 2>/dev/null
+    if [ -e "$RUN_DIR/dsend.$2.rewound" ] && ! grep -qF "$DIRECT_TRANSFER_STARTED" "$_do_log" 2>/dev/null; then
+        STREAMED_PARTITIONS=$((STREAMED_PARTITIONS - 1)); return 3   # nothing went out: not a stream
+    fi
     if [ "$_do_rc" -ne 0 ]; then
         log "direct send tool said: $(tail -n 1 "$_do_log" 2>/dev/null | tr -d '\r')"
         _direct_failed "$1" "מחיצה $2: השליחה נכשלה (שלב=$_do_stage rc=$_do_rc)"
@@ -213,6 +218,7 @@ direct_send_run() {
     _dr_sent=0; _dr_prev=""; STREAMED_PARTITIONS=0
     while IFS='|' read -r _dr_idx _dr_g _dr_role _dr_fs _dr_st _dr_sz _dr_f _dr_sha _dr_e _dr_ug _dr_uu _dr_attrs <&3; do
         case "$_dr_f" in ''|null) continue ;; esac
+        _dr_rc=3; while [ "$_dr_rc" = 3 ]; do   # #1581: 3 = partition 1 stopped for a question; sent again after it
         # #1432: the hello that opened the wave is only a snapshot. A drawer
         # that failed on partition 1 must not remain in partition 2's
         # --min-receivers. Ask the server immediately before every stream;
@@ -234,7 +240,9 @@ direct_send_run() {
         _dr_w="$_dr_maxw"; _dr_t="$_dr_startt"
         [ "$_dr_sent" -gt 0 ] && { _dr_w="$_dr_maxw_l"; _dr_t="$_dr_startt_l"; }
         direct_send_one "$2" "$_dr_idx" "$_dr_fs" "$_dr_sha" \
-            "$_dr_pb" "$_dr_minr" "$_dr_w" "$_dr_t" "$_dr_retries" "$_dr_bitrate" || return 1
+            "$_dr_pb" "$_dr_minr" "$_dr_w" "$_dr_t" "$_dr_retries" "$_dr_bitrate"; _dr_rc=$?
+        [ "$_dr_rc" != 3 ] || direct_wait_running "$1" || { _direct_failed "$2" "הגל לא התחיל"; return 1; }
+        done; [ "$_dr_rc" = 0 ] || return 1
         _dr_sent=$((_dr_sent + 1)); _dr_prev=$_dr_idx   # #1952: whose log the next hello reads (directrecv.sh)
     done 3< "$_dr_plan"
     # done is a count against the manifest, never "nothing failed" (#51).

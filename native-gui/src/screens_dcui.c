@@ -256,12 +256,14 @@ static void icon_menu(G *g, Rect box, const char *kind, Rgb c) {
 /* .hero .gl: a 56px disc, the 30-unit glyph inside at 30px, stroke 3 */
 static void hero_glyph(G *g, double x, double y, const char *kind) {
     cairo_t *cr = g->cr;
-    Rgb bg = !strcmp(kind, "bad") ? g->t->danger : !strcmp(kind, "wait") ? g->t->info : g->t->led_ok;
+    /* #2144: "alert" = an orange hero that lists problems (none of them blocking) */
+    const int alert = !strcmp(kind, "alert");
+    Rgb bg = !strcmp(kind, "bad") ? g->t->danger : alert ? g->t->warn : !strcmp(kind, "wait") ? g->t->info : g->t->led_ok;
     cairo_arc(cr, x + 28, y + 28, 28, 0, 2 * M_PI); draw_set(cr, bg); cairo_fill(cr);
     cairo_save(cr); cairo_translate(cr, x + 13, y + 13);
     stroke_style(cr, 3);
     cairo_new_path(cr);
-    if (!strcmp(kind, "bad")) {
+    if (!strcmp(kind, "bad") || alert) {
         cairo_move_to(cr, 15, 8); cairo_line_to(cr, 15, 17);
         cairo_move_to(cr, 15, 22); cairo_line_to(cr, 15, 22.5);
     } else if (!strcmp(kind, "wait")) {
@@ -316,6 +318,14 @@ static void header(G *g, const DcuiFrame *f, double W) {
     put_l(g, &clock, x, (H - clock.h) / 2, WHITE);
     x += clock.w + 18;
     text_free(&clock);
+    if (f->clock_chip[0]) {                                     /* #2144 .d-cchip: beside the clock it qualifies */
+        Text c = rtl(g, 12, 600, f->clock_chip, 0);
+        Rect chip = { x, (H - 22) / 2, c.w + 20, 22 };
+        draw_set(cr, g->t->warn); draw_rrect_path(cr, chip, 11); cairo_fill(cr);
+        put_r(g, &c, chip.x + chip.w - 10, chip.y + (22 - c.h) / 2, on_fill(g));
+        x += chip.w + 18;
+        text_free(&c);
+    }
     Text vv = mono(g, 12, 400, f->version), vk = rtl(g, 12, 400, "גרסה", 0);
     cairo_push_group(cr);
     put_l(g, &vv, x, (H - vv.h) / 2, WHITE);
@@ -522,7 +532,11 @@ static double problem_draw(G *g, const DcuiProb *p, double x, double w, double y
 
 static double hero(G *g, const DcuiFrame *f, double x, double y, double w, int draw) {
     const Theme *t = g->t;
-    const int bad = !strcmp(f->hero_kind, "bad");
+    /* #2144 (Nadav 04/11): problems that do not block are an orange hero --
+     * the red one's layout, the warning's colours. "warn" without problems
+     * (a secondary with no fresh contact) keeps its plain look. */
+    const int red = !strcmp(f->hero_kind, "bad");
+    const int bad = red || (!strcmp(f->hero_kind, "warn") && f->nprobs);
     const double ppy = bad ? 16 : (g->sm ? 16 : 20), ppx = bad ? 22 : (g->sm ? 18 : 24);
     const double bw = bad ? 2 : 1;
     double inner = w - 2 * ppx - 2 * bw;
@@ -546,10 +560,11 @@ static double hero(G *g, const DcuiFrame *f, double x, double y, double w, int d
     double h = bw + ppy + body + ppy + bw;
     if (draw) {
         Rect box = { x, y, w, h };
-        draw_fill_rrect(g->cr, box, 8, bad ? t->danger : t->hair);
-        draw_fill_rrect(g->cr, (Rect){ x + bw, y + bw, w - 2 * bw, h - 2 * bw }, 8 - bw, bad ? t->danger_soft : t->surface);
+        draw_fill_rrect(g->cr, box, 8, red ? t->danger : bad ? t->warn : t->hair);
+        draw_fill_rrect(g->cr, (Rect){ x + bw, y + bw, w - 2 * bw, h - 2 * bw }, 8 - bw,
+                        red ? t->danger_soft : bad ? t->warning_soft : t->surface);
         double right = x + w - bw - ppx, top = y + bw + ppy;
-        hero_glyph(g, right - 56, top, f->hero_kind);
+        hero_glyph(g, right - 56, top, bad && !red ? "alert" : f->hero_kind);
         right -= 56 + 20;
         put_r(g, &h1, right, top, t->ink);
         put_r(g, &sub, right, top + h1.h + 4, t->muted);
