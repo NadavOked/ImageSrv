@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   full:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11 והפיל טסטים; נעול עד שנתמוך ב-26.04
     # #2134: 30 דק' ביטלו את הריצה כל לילה (cancelled, 20-24/10): החבילה לוקחת
     # ~90 דק' על runner (tests.yml: 150). בדיוק כמו tests.yml -- ביטול אינו אדום.
     timeout-minutes: 150
@@ -105,7 +105,7 @@ jobs:
   report:
     needs: full
     if: failure()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11 והפיל טסטים; נעול עד שנתמוך ב-26.04
     steps:
       - name: Open or update the failure issue
         env:
