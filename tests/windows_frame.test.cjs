@@ -119,7 +119,7 @@ test('password: one component — show/hide button, live policy that mirrors the
 
 test('modal: openModalContent draws title, sub, the width class and a primary/danger button', () => {
   const {run, get} = setup();
-  run('openModalContent("מחיקה","<p>x</p>","מחק","closeModal()",true,"תת","narrow")');
+  run('openModalContent("מחיקה","<p>x</p>","מחק",closeModal,true,"תת","narrow")');
   assert.equal(get('modalTitle').textContent, 'מחיקה');
   assert.equal(get('modalSub').textContent, 'תת');
   assert.equal(get('modalSub').hidden, false);

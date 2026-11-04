@@ -35,9 +35,10 @@ from test_server_streams import overview, pull, report, second_class
 from test_wol import macs_of
 
 
-#: The question the agent asks for a drawer whose last clone failed (same shape
-#: as ``test_sender.SMART_ASK``, which only exists once #1606 is merged).
-SMART_ASK = {"nonce": "3-2", "port": 2, "verdict": "failed_last", "reason": "נכשל בשיכפול הקודם"}
+#: A question to the operator as the agent sends it (attended.sh, `prompt`). Until
+#: #2044 this was the SMART question (`ask`), which no longer exists; the hold is
+#: the same (#2202, prompt_hold.py).
+OPERATOR_PROMPT = {"waiting_for": "operator", "prompt": "Disk 2: share question"}
 
 
 def _gui_state_lines(tmp_path, room_view: dict) -> list[str]:
@@ -106,7 +107,7 @@ def test_failed_pull_then_new_pull_closes_old(server):
 
 
 @pytest.mark.parametrize("delay", [0.0, 5.0])
-def test_smart_ask_after_send_start_pauses_timeout_then_resumes(
+def test_a_question_after_send_start_pauses_timeout_then_resumes(
         server_with_sender, free_ports, monkeypatch, delay):
     from server.rounds import sender as sender_module
     from test_sender import NOBODY_JOINED_LOG, TRANSFER_LOG, wait_for
@@ -125,19 +126,12 @@ def test_smart_ask_after_send_start_pauses_timeout_then_resumes(
     assert recorder.spawned.wait(timeout=5)
     threading.Event().wait(delay)
     server["anon"].post("/api/v1/agent/hello", json={
-        **hello_body(ids["mac1"]), "ask": SMART_ASK})
+        **hello_body(ids["mac1"]), **OPERATOR_PROMPT})
     assert wait_for(lambda: recorder.processes[0].terminated)
-    # Represents 200 seconds of unanswered wall time without sleeping.
-    asked = (datetime.now(timezone.utc) - timedelta(seconds=200)).isoformat()
-    server["ctx"].conn.execute("UPDATE smart_asks SET asked_at = ? WHERE mac = ?",
-                               (asked, ids["mac1"]))
-    server["ctx"].conn.commit()
     assert not any(r["event"] == "send_failed" for r in
                    server["ctx"].conn.execute("SELECT event FROM journal"))
     recorder.log_text = TRANSFER_LOG
-    server["anon"].post("/api/v1/agent/hello", json={
-        **hello_body(ids["mac1"]), "ask": SMART_ASK,
-        "ask_answered": {"nonce": SMART_ASK["nonce"], "answer": "skip"}})
+    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "joining": False})
     assert wait_for(lambda: len(recorder.commands) == 2)
     assert recorder.commands[0][recorder.commands[0].index("--file") + 1] == \
         recorder.commands[1][recorder.commands[1].index("--file") + 1]

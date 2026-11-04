@@ -1,15 +1,14 @@
 """מסך מחשב השיכפול (clonergui.sh) — הצד של הסוכן, בהזרקת מעטפת.
 
-מחשב השיכפול קיבל מסך (הכרעת הבעלים): הוא מציג התקדמות פר-מגירה ותפריט
-SMART גרפי, ומחליף את התפריט הטקסטואלי של #666 כשהמסך חי. שתי הבדיקות
-המרכזיות כאן הן בקרות שליליות מובנות:
+מחשב השיכפול קיבל מסך (הכרעת הבעלים): הוא מציג התקדמות פר-מגירה ואת
+שאלות המגירה (askgui.sh). הבדיקה המרכזית כאן היא בקרה שלילית מובנית:
 
 * ``cloner_gui_state`` בונה את קובץ המצב **מהאמת המקומית** — קובצי
   ``$RUN_DIR/targets/<dev>``, מסודרים לפי port בצד ה-C — ולא מהשרת.
-* ``gui_smart_choice`` **חוסם עד שמגיעה החלטה תקינה**: החלטה לא-חוקית
-  נדחית והמתנה נמשכת; רק ``replace``/``rescue``/``skip`` משחררים. תקלת
-  מסך אינה אישור כתיבה (עיקרון 5) — אם ה-GUI נעלם, היא נכשלת ולא
-  מוותרת ל-``rescue``.
+
+תפריט ה-SMART הגרפי (``gui_smart_choice``, ‏``smart-request``/``smart-decision``)
+הוסר ב-#2044: אדום אינו נשאל (#1732) וכתום נכתב בלי שאלה (#2042) — ראו
+test_smart_ask_removed_2044.py.
 
 הצד הגרפי (C) נבנה ונבדק על המעבדה: ``requires_native`` מדלג כאן כשאין
 מהדר או ספריות cairo/pango, וה-``--png`` מריץ את בדיקת הניתוב המובנית
@@ -224,19 +223,14 @@ def test_a_drawer_that_stopped_writing_drops_its_anchor_and_reports_unmeasured(t
 
 
 @requires_native("jq", why="the shared GUI state reads the cached hello reply")
-def test_a_pending_smart_request_becomes_a_prompt_record(tmp_path):
-    """כשהסוכן כתב smart-request, המצב נושא smart_prompt — וזה מה
-    שמצייר את הפאנל הדומיננטי בצד ה-C. ה-request הוא nonce|port|verdict|
-    reason, וה-nonce **זורם ל-GUI** (הוא נצייר עם ה-prompt וחוזר בקליק,
-    כדי שהגשר יכבול אותו לבקשה המדויקת)."""
+def test_a_leftover_smart_request_draws_no_smart_prompt(tmp_path):
+    """‏#2044: שאלת ה-SMART של המשכפל הוסרה. קובץ `smart-request` שנשאר (סוכן
+    ישן, ריצה קודמת) אינו הופך לפאנל `smart_prompt=` — אין מי שיענה עליו.
+
+    **בקרה שלילית:** על clonergui.sh של הבסיס (v0.80.6) המצב נושא
+    `smart_prompt=12-2|2|fail|pending`."""
     lines = state_lines(tmp_path, smart_request="12-2|2|fail|pending")
-    assert "smart_prompt=12-2|2|fail|pending" in lines
-
-
-@requires_native("jq", why="the shared GUI state reads the cached hello reply")
-def test_no_smart_request_means_no_prompt(tmp_path):
-    """הצד החיובי: בלי בקשה אין פאנל, אחרת כל דיסק היה נראה פגום."""
-    assert not any(l.startswith("smart_prompt=") for l in state_lines(tmp_path))
+    assert not any(line.startswith("smart_prompt=") for line in lines), lines
 
 
 def test_an_error_pipe_cannot_corrupt_the_record(tmp_path):
@@ -380,200 +374,11 @@ def test_the_memory_is_read_from_the_last_hello_every_second(tmp_path):
     assert "|failed_last|disk|" in lines[1], lines
 
 
-# --- gui_smart_choice: חוסם עד החלטה תקינה, ולעולם לא מוותר לכתיבה ------------
-
-
-def smart_choice_env(tmp_path: Path) -> tuple[str, Path]:
-    gui = tmp_path / "gui"; gui.mkdir()
-    run = tmp_path / "run"; run.mkdir()
-    return env(run, gui) + PRELUDE + PORTS + 'D_ROLE=cloner; ', gui
-
-
-def test_gui_smart_choice_returns_a_valid_decision(tmp_path):
-    """המסלול המלא: הסוכן כותב smart-request עם nonce, ממתין, והמסך
-    (מדומה כאן ע"י קריאת ה-nonce וכתיבת nonce|decision, בדיוק כמו הגשר)
-    משחרר עם החלטה תקינה."""
-    setup, gui = smart_choice_env(tmp_path)
-    script = f"""{setup}
-sleep 20 & _gui_pid=$!
-( gui_smart_choice sda fail pending > {posix(gui)}/out; echo "rc=$?" > {posix(gui)}/rc ) &
-CH=$!
-# ממתינים שהבקשה תיכתב, קוראים את ה-nonce, ומשחררים בהחלטה כבולה אליו
-for _ in 1 2 3 4 5; do [ -f {posix(gui)}/smart-request ] && break; sleep 0.3; done
-N=$(IFS='|' read -r n _ < {posix(gui)}/smart-request; echo "$n")
-printf '%s|replace\\n' "$N" > {posix(gui)}/smart-decision
-wait $CH
-kill $_gui_pid 2>/dev/null
-cat {posix(gui)}/out {posix(gui)}/rc
-[ -f {posix(gui)}/smart-request ] && echo REQUEST-LEFT
-[ -f {posix(gui)}/smart-decision ] && echo DECISION-LEFT
-true
-"""
-    out = sh(script)
-    assert out.returncode == 0, out.stderr
-    assert "replace" in out.stdout
-    assert "rc=0" in out.stdout
-    # אחרי הכרעה, שני הקבצים נמחקים — קליק ישן לא יאשר את הדיסק הבא.
-    assert "REQUEST-LEFT" not in out.stdout
-    assert "DECISION-LEFT" not in out.stdout
-
-
-def test_gui_smart_choice_blocks_until_a_valid_decision(tmp_path):
-    """‏**הבקרה השלילית המרכזית (HIGH + #666).** ‏gui_smart_choice
-    משתחרר **רק** על החלטה שכבולה ל-nonce של הבקשה **וגם** חוקית. כאן
-    נבדקים שני מסלולי הדחייה, שכל אחד מהם לבדו הוא באג בטיחות:
-
-    1. **nonce לא-תואם** — החלטה של בקשה אחרת (קליק מושהה שהוזרק אחרי
-       שהדיסק התחלף). אילו התקבלה, ההחלטה של דיסק אחד הייתה מאושרת
-       לדיסק אחר — במקרה הגרוע `rescue` על הדיסק החשוד הלא-נכון.
-    2. **ערך לא-חוקי** — "garbage" עם ה-nonce הנכון.
-
-    רק החלטה תקינה עם ה-nonce הנכון משחררת."""
-    setup, gui = smart_choice_env(tmp_path)
-    script = f"""{setup}
-sleep 20 & _gui_pid=$!
-( gui_smart_choice sda fail pending > {posix(gui)}/out; echo done > {posix(gui)}/rc ) &
-CH=$!
-for _ in 1 2 3 4 5; do [ -f {posix(gui)}/smart-request ] && break; sleep 0.3; done
-N=$(IFS='|' read -r n _ < {posix(gui)}/smart-request; echo "$n")
-# (1) nonce לא-תואם עם ערך חוקי — חייב להידחות
-printf 'BOGUS-9|rescue\\n' > {posix(gui)}/smart-decision
-sleep 2
-[ -f {posix(gui)}/rc ] && echo RETURNED-ON-BAD-NONCE
-[ -f {posix(gui)}/smart-decision ] && echo BAD-NONCE-KEPT
-# (2) nonce תואם אך ערך לא-חוקי — חייב להידחות
-printf '%s|garbage\\n' "$N" > {posix(gui)}/smart-decision
-sleep 2
-[ -f {posix(gui)}/rc ] && echo RETURNED-ON-BAD-VALUE
-# (3) nonce תואם + ערך חוקי — משחרר
-printf '%s|skip\\n' "$N" > {posix(gui)}/smart-decision
-wait $CH
-kill $_gui_pid 2>/dev/null
-cat {posix(gui)}/out
-"""
-    out = sh(script)
-    assert out.returncode == 0, out.stderr
-    assert "RETURNED-ON-BAD-NONCE" not in out.stdout, "שוחרר על nonce לא-תואם — באג הבטיחות"
-    assert "BAD-NONCE-KEPT" not in out.stdout, "החלטה עם nonce לא-תואם לא נמחקה"
-    assert "RETURNED-ON-BAD-VALUE" not in out.stdout, "שוחרר על ערך לא-חוקי"
-    assert "skip" in out.stdout
-
-
-def test_a_dead_gui_fails_instead_of_defaulting_to_write(tmp_path):
-    """המסך נעלם בלי החלטה: הפונקציה נכשלת (rc≠0) ואינה מדפיסה כלום,
-    כדי שהקורא ייפול לתפריט הטקסטואלי — לא ל-`rescue`. עיקרון 5."""
-    setup, gui = smart_choice_env(tmp_path)
-    # ‏pid שכבר מת: לולאת ההמתנה לא מתחילה בכלל.
-    script = f"""{setup}
-sh -c 'exit 0' & _gui_pid=$!
-wait $_gui_pid 2>/dev/null
-gui_smart_choice sda fail pending > {posix(gui)}/out; echo "rc=$?"
-"""
-    out = sh(script)
-    assert "rc=1" in out.stdout, out.stdout
-    assert (gui / "out").read_text() == "", "אסור פלט — היעדר פלט הוא הנפילה לטקסט"
-
-
-def test_an_unanswered_question_gives_up_after_its_ceiling(tmp_path):
-    """סקירת אבטחה 17/10: בלי תקרה, שאלה שאיש לא עונה עליה החזיקה את המכונה
-    — ואת השולח, שממתין לה — לנצח. אחרי `WAIT_SMART_GUI_S` הפונקציה נכשלת
-    (rc=1, בלי פלט), הלחיצה הישנה נמחקת, ו-smart_ask לוקח את "בלי תשובה" של
-    הצבע (כתום כותב, אדום מדלג — נדב 16/09). המסך עצמו **חי** כל הזמן.
-
-    **בקרה שלילית:** על הקוד הישן הלולאה ממתינה עד שהמסך מת (20ש' כאן)."""
-    setup, gui = smart_choice_env(tmp_path)
-    script = f"""{setup}
-WAIT_SMART_GUI_S=2
-sleep 20 & _gui_pid=$!
-s=$(date +%s)
-gui_smart_choice sda failed_last cable > {posix(gui)}/out 2> {posix(gui)}/err; rc=$?
-e=$(date +%s)
-kill -0 $_gui_pid 2>/dev/null && echo GUI-ALIVE
-kill $_gui_pid 2>/dev/null
-echo "rc=$rc elapsed=$((e - s))"
-[ -f {posix(gui)}/smart-request ] && echo REQUEST-LEFT
-true
-"""
-    out = sh(script)
-    assert out.returncode == 0, out.stderr
-    last = [l for l in out.stdout.splitlines() if l.startswith("rc=")][0]
-    assert last.startswith("rc=1 "), out.stdout
-    assert int(last.split("elapsed=")[1]) < 10, out.stdout
-    assert "GUI-ALIVE" in out.stdout, "המבחן חייב לרוץ מול מסך חי"
-    assert "REQUEST-LEFT" not in out.stdout
-    assert (gui / "out").read_text() == ""
-    assert "no SMART answer" in (gui / "err").read_text()
-
-
-def test_a_closed_round_ends_the_question(tmp_path):
-    """ברזל rc2 (17/10): אחרי send_failed השרת סגר את הסבב, והמכונה נשארה על
-    שאלת ה-SMART עם המגירות `waiting`. הסמן `session-closed` (‏progress.sh)
-    מסיים את השאלה (rc=1, בלי פלט), והמסלול עוצר על הסבב הסגור (drawers.sh).
-    המסך עצמו **חי**.
-
-    **בקרה שלילית:** על הקוד הקודם השאלה ממתינה עד שהמסך מת (20ש' כאן)."""
-    setup, gui = smart_choice_env(tmp_path)
-    script = f"""{setup}
-sleep 20 & _gui_pid=$!
-( sleep 1; echo ses_80844e82 > "$RUN_DIR/session-closed" ) &
-s=$(date +%s)
-gui_smart_choice sda failed_last unclassified > {posix(gui)}/out; rc=$?
-e=$(date +%s)
-kill -0 $_gui_pid 2>/dev/null && echo GUI-ALIVE
-kill $_gui_pid 2>/dev/null
-echo "rc=$rc elapsed=$((e - s))"
-[ -f {posix(gui)}/smart-request ] && echo REQUEST-LEFT
-true
-"""
-    out = sh(script)
-    assert out.returncode == 0, out.stderr
-    last = [l for l in out.stdout.splitlines() if l.startswith("rc=")][0]
-    assert last.startswith("rc=1 ") and int(last.split("elapsed=")[1]) < 10, out.stdout
-    assert "GUI-ALIVE" in out.stdout and "REQUEST-LEFT" not in out.stdout
-    assert (gui / "out").read_text() == ""
-
-
-def test_a_decision_with_no_trailing_newline_still_cleans_up_the_handshake(tmp_path):
-    """‏#680: החלטה תקינה שכתובה בלי newline מסיים גורמת ל-`read` להחזיר
-    nonzero (EOF לפני שורה שלמה) — אבל handshake נקי הוא חוזה לכל מסלול
-    יציאה, גם הכישלון הזה. אילו הקבצים נשארו, קליק ישן על הדיסק הבא היה
-    עלול להתבלבל (ראו את ה-nonce למעלה)."""
-    setup, gui = smart_choice_env(tmp_path)
-    script = f"""{setup}
-sleep 20 & _gui_pid=$!
-( gui_smart_choice sda fail pending > {posix(gui)}/out; echo "rc=$?" > {posix(gui)}/rc ) &
-CH=$!
-for _ in 1 2 3 4 5; do [ -f {posix(gui)}/smart-request ] && break; sleep 0.3; done
-N=$(IFS='|' read -r n _ < {posix(gui)}/smart-request; echo "$n")
-printf '%s|replace' "$N" > {posix(gui)}/smart-decision
-wait $CH
-kill $_gui_pid 2>/dev/null
-cat {posix(gui)}/out {posix(gui)}/rc
-[ -f {posix(gui)}/smart-request ] && echo REQUEST-LEFT
-[ -f {posix(gui)}/smart-decision ] && echo DECISION-LEFT
-true
-"""
-    out = sh(script)
-    assert out.returncode == 0, out.stderr
-    assert "rc=1" in out.stdout, out.stdout
-    assert "REQUEST-LEFT" not in out.stdout, "smart-request נשאר אחרי כשל read"
-    assert "DECISION-LEFT" not in out.stdout, "smart-decision נשאר אחרי כשל read"
-
-
-def test_gui_smart_choice_refuses_off_the_cloner(tmp_path):
-    """רק מחשב שיכפול. תחנת כיתה מקבלת את התפריט הטקסטואלי של #666."""
-    run = tmp_path / "run"; run.mkdir()
-    gui = tmp_path / "gui"; gui.mkdir()
-    setup = env(run, gui) + PRELUDE + PORTS + 'D_ROLE=classroom; _gui_pid=1; '
-    out = sh(setup + 'gui_smart_choice sda fail pending; echo "rc=$?"')
-    assert "rc=1" in out.stdout
-
-
-# --- gui_dispatch: הכרעת SMART כבולה לבקשה הפעילה, בלי כניסה -----------------
+# --- gui_dispatch: הגשר של מסך המשכפל --------------------------------------
 
 
 def bridge_setup(tmp_path: Path, screen: str) -> tuple[str, Path]:
-    """גשר ה-GUI טעון, עם gui_role שמסמן אם נקרא (אסור על אסימון SMART)."""
+    """גשר ה-GUI טעון, עם gui_role שמסמן אם נקרא."""
     gui = tmp_path / "gui"; gui.mkdir()
     run = tmp_path / "run"; run.mkdir()
     setup = (f'export RUN_DIR={posix(run)!r} GUI_DIR={posix(gui)!r} '
@@ -591,65 +396,18 @@ def bridge_setup(tmp_path: Path, screen: str) -> tuple[str, Path]:
     return setup, gui
 
 
-def test_the_bridge_binds_the_decision_to_the_active_request(tmp_path):
-    """‏cloner headless — אין לו כניסה. ה-GUI שולח `smart-<action>|<nonce>`
-    (ה-nonce שצויר עם ה-prompt); הגשר מקבל רק כשה-nonce תואם לבקשה
-    הפעילה, וכותב את ההחלטה כבולה אליו."""
+def test_the_bridge_turns_no_smart_click_into_a_decision(tmp_path):
+    """‏#2044: אין עוד הכרעת SMART במסך המשכפל. אסימון `smart-<action>|<nonce>`
+    (GUI ישן) אינו נכתב ל-`smart-decision`, גם כשיש `smart-request` שנשאר עם
+    אותו nonce.
+
+    **בקרה שלילית:** על guibridge.sh של הבסיס (v0.80.6) נכתב `7-2|replace`."""
     setup, gui = bridge_setup(tmp_path, "cloner")
     (gui / "smart-request").write_text("7-2|2|fail|pending\n", newline="\n")
-    out = sh(setup + 'token="smart-replace|7-2"; gui_dispatch; echo "rc=$?"')
-    assert "rc=0" in out.stdout, out.stderr
-    assert (gui / "smart-decision").read_text().strip() == "7-2|replace"
-    assert "GUI_ROLE_CALLED" not in out.stderr, "בדיקת ה-role נקראה על אסימון SMART"
-
-
-def test_the_bridge_rejects_a_stale_click_after_a_same_port_reprompt(tmp_path):
-    """‏**הבקרה השלילית של באג ה-HIGH — התרחיש המדויק של אסטרה.** דיסק
-    ‏port 2 התבקש (bakash A, nonce 1-2), המפעיל לחץ כפול; הבקשה הבאה
-    היא **שוב אותו port 2** (הדיסק נתבקש שוב, nonce 2-2). הקליק המושהה
-    השני נושא את nonce-A הישן (1-2). הוא תואם ב-port אבל **לא ב-nonce**
-    → נדחה.
-
-    זה בדיוק מה שבדיקת port בלבד **לא** תפסה: same-port re-prompt.
-    בלי echo של ה-nonce, הקליק הישן היה מאושר לבקשה B — במקרה הגרוע
-    ‏rescue על הדיסק הלא-נכון (עיקרון 5/7)."""
-    setup, gui = bridge_setup(tmp_path, "cloner")
-    (gui / "smart-request").write_text("2-2|2|fail|pending\n", newline="\n")   # bakash B
-    out = sh(setup + 'token="smart-rescue|1-2"; gui_dispatch; echo "rc=$?"')   # nonce ישן של A
-    assert "rc=1" in out.stdout
-    assert not (gui / "smart-decision").exists(), "קליק מושהה עם nonce ישן אושר על same-port"
-
-
-def test_the_bridge_refuses_a_smart_click_with_no_active_request(tmp_path):
-    """קליק SMART כשאין בקשה פעילה (מושהה/כפול, או אחרי שהבקשה נצרכה)
-    **נדחה** — לא נכתבת החלטה. על הקוד הישן הגשר כתב smart-decision על
-    כל אסימון smart-*, ואז gui_smart_choice של הדיסק הבא היה קורא החלטה
-    שהמפעיל לא קיבל עליו."""
-    setup, gui = bridge_setup(tmp_path, "cloner")
-    assert not (gui / "smart-request").exists()
-    out = sh(setup + 'token="smart-replace|1-2"; gui_dispatch; echo "rc=$?"')
-    assert "rc=1" in out.stdout
-    assert not (gui / "smart-decision").exists(), "החלטה נכתבה בלי בקשה פעילה"
-
-
-def test_the_bridge_rejects_a_smart_click_with_no_nonce(tmp_path):
-    """אסימון smart-* בלי nonce (פורמט ישן) נדחה — ה-nonce חובה כדי
-    לכבול את הקליק לבקשה שצוירה."""
-    setup, gui = bridge_setup(tmp_path, "cloner")
-    (gui / "smart-request").write_text("7-2|2|fail|pending\n", newline="\n")
-    out = sh(setup + 'token=smart-replace; gui_dispatch; echo "rc=$?"')
-    assert "rc=1" in out.stdout
-    assert not (gui / "smart-decision").exists()
-
-
-def test_the_bridge_rejects_a_smart_token_off_the_cloner_screen(tmp_path):
-    """אותו אסימון על מסך אחר (למשל כיתה) נדחה — לא נכתבת החלטה, גם אם
-    יש smart-request פעיל."""
-    setup, gui = bridge_setup(tmp_path, "class")
-    (gui / "smart-request").write_text("7-2|2|fail|pending\n", newline="\n")
-    out = sh(setup + 'token="smart-skip|7-2"; gui_dispatch; echo "rc=$?"')
-    assert "rc=1" in out.stdout
-    assert not (gui / "smart-decision").exists()
+    for token in ("smart-replace|7-2", "smart-rescue|7-2", "smart-skip|7-2"):
+        out = sh(setup + f'token="{token}"; gui_dispatch; echo "rc=$?"')
+        assert "rc=0" not in out.stdout, (token, out.stdout, out.stderr)
+        assert not (gui / "smart-decision").exists(), token
 
 
 # --- הצד הגרפי (C): נבנה ונבדק היכן שיש מהדר וספריות ------------------------

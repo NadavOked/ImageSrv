@@ -14,9 +14,12 @@ import pytest
 
 import hostguard
 import hygiene
+import msys_guard
 import native
 import orphan_guard as _orphan_guard
+import powertrap
 from orphan_guard import orphan_guard  # noqa: F401 -- autouse fixture (#1736)
+from powertrap import power_guard  # noqa: F401 -- autouse fixture (#2181)
 
 try:
     from fastapi.testclient import TestClient
@@ -81,6 +84,10 @@ def pytest_configure(config) -> None:
     hygiene.isolate_sender_log(os.environ.get("PYTEST_XDIST_WORKER"))
     hostguard.block_real_host_reads()
     hostguard.detach_host_dev()
+    # ‏#893: בווינדוס סקריפט `-c` ארוך נחתך בשקט — טסט שמעביר כזה נכשל בשמו.
+    msys_guard.install()
+    # ‏#2181: reboot/poweroff/halt/shutdown אמיתי — מלכודת ב-PATH, וטסט שהגיע אליה נכשל.
+    powertrap.install()
 
 
 #: קובץ עקבות אופציונלי — ‏`IMAGESRV_TEST_TRACE=<נתיב>`.

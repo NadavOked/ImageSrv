@@ -101,15 +101,15 @@ test('a server node per secondary from /storage-nodes, with the tree under it; c
   assert.match(html, /<strong class="server-name">באר שבע<\/strong>/, 'a disabled secondary is still in the tree');
   assert.doesNotMatch(html, /יוגדר בהמשך|תל אביב/);
   // #931 + the gate's tree (owner 11/10): one click opens the secondary's overview (in its context), the next toggles; the arrow toggles alone.
-  assert.match(html, /data-secondary="n0de"[^>]*onclick="treeNavToggle\(this,'srv-n0de',function\(\)\{openSecondaryPage\('n0de','home',this\)\}\)"/);
-  assert.match(html, /<span class="tree-arrow" data-open="false" onclick="event\.stopPropagation\(\);toggleInventoryGroup\(this\.closest\('\.inventory-node'\),'srv-n0de'\)">▸<\/span>/);
+  assert.match(html, /data-secondary="n0de"[^>]*onclick="treeNavToggle\(this,decodeURIComponent\('srv-n0de'\),function\(\)\{openSecondaryPage\('n0de','home',this\)\}\)"/);
+  assert.match(html, /<span class="tree-arrow" data-open="false" onclick="event\.stopPropagation\(\);toggleInventoryGroup\(this\.closest\('\.inventory-node'\),decodeURIComponent\('srv-n0de'\)\)">▸<\/span>/);
   assert.match(html, /<div id="srv-n0de" class="inventory-children" role="group" hidden>/, 'closed by default');
   for (const [page, label] of [['home', 'סקירה כללית'], ['machines', 'מחשבים'], ['images', "אימג&#39;ים"], ['health', 'בריאות ושירותים'], ['permissions', 'משתמשים והרשאות']]) {
-    const re = new RegExp(`data-branch-page="${page}" data-branch-node="n0de" role="treeitem" tabindex="0"(?: aria-expanded="(?:true|false)")? onclick="(?:treeNavToggle\\(this,'srv-n0de-[A-Za-z]+',function\\(\\)\\{)?openSecondaryPage\\('n0de','${page}',this\\)[^"]*"[^>]*>.*?<span>${label}</span>`);
+    const re = new RegExp(`data-branch-page="${page}" data-branch-node="n0de" role="treeitem" tabindex="0"(?: aria-expanded="(?:true|false)")? onclick="(?:treeNavToggle\\(this,decodeURIComponent\\('srv-n0de-[A-Za-z]+'\\),function\\(\\)\\{)?openSecondaryPage\\('n0de','${page}',this\\)[^"]*"[^>]*>.*?<span>${label}</span>`);
     assert.match(html, re, `child ${page}`);
   }
   assert.match(html, /data-branch-view="transfers" data-branch-node="n0de" role="treeitem" tabindex="0" onclick="openBranchView\('n0de','transfers',this\)">.*?<span>העברות<\/span>/);
-  assert.match(html, /role="treeitem" tabindex="0" aria-expanded="false" onclick="treeNavToggle\(this,'srv-n0de',function\(\)\{openSecondaryPage\('n0de'/, 'server node is a focusable treeitem');
+  assert.match(html, /role="treeitem" tabindex="0" aria-expanded="false" onclick="treeNavToggle\(this,decodeURIComponent\('srv-n0de'\),function\(\)\{openSecondaryPage\('n0de'/, 'server node is a focusable treeitem');
 });
 
 test('the status dot is measured against the secondary: green only when it answered and its health is clean, red with the reason when not, grey when disabled', async () => {

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+import struct
 from pathlib import Path
 
 import pytest
@@ -27,7 +28,7 @@ from conftest import hello_body
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_capture_refusals import (EMPTY_TABLE, GPT_DISK, ONE_PARTITION, capture_run,
-                                   refusal_reason)
+                                   fat32_head, refusal_reason)
 from test_timeouts import make_stubs, run_sh
 
 pytestmark = requires_native(("bash", BASH))
@@ -235,3 +236,66 @@ def test_the_agent_and_the_server_accept_the_same_filesystems():
     found = re.search(r'^CAPTURE_FILESYSTEMS="([^"]*)"', text, re.M)
     agent = set(found.group(1).split()) if found else set()
     assert agent == FILESYSTEMS - {""}
+
+
+# --- #1823: ‏ESP שלא כובה כראוי -----------------------------------------------
+
+#: בדיקת המקום עונה "refused" — הגענו אליה = עברנו את שערי המחיצות.
+CURL_STOP_AT_SPACE = CURL_LOG.replace('"status":"ok","reason":"space checked"',
+                                      '"status":"refused","reason":"STOP-AT-SPACE"')
+
+
+def _fat16_head(fat1: int) -> bytes:
+    """‏FAT16: ‏40000 סקטורים, ‏4 לאשכול, ‏40 לכל FAT — ‏9971 אשכולות (≥4085)."""
+    raw = bytearray(1024)
+    struct.pack_into("<HBHBHH", raw, 11, 512, 4, 1, 2, 512, 40000)
+    struct.pack_into("<H", raw, 22, 40)
+    struct.pack_into("<HH", raw, 512, 0xFFF8, fat1)
+    return bytes(raw)
+
+
+def _fat_capture(tmp_path, head: bytes):
+    """קליטה של מחיצה 1 שה-blkid קורא לה vfat, וראשה `head`."""
+    src = tmp_path / "head.bin"
+    src.write_bytes(head)
+    part = tmp_path / "box" / "dev" / "sda1"
+    return capture_run(tmp_path, raid=True,
+                       stubs={"sgdisk": ONE_PARTITION, "blkid": _blkid_fs("vfat"), "curl": CURL_STOP_AT_SPACE},
+                       shell_pre=f"cp {posix(src)!r} {posix(part)!r}; ")
+
+
+def _preflight_ran(run: Path) -> bool:
+    log = run / "curl.log"
+    return log.exists() and "preflight" in log.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("head", [fat32_head(0x07FFFFFF), _fat16_head(0x7FFF)], ids=["fat32", "fat16"])
+def test_an_esp_not_cleanly_shut_down_is_refused_by_name_before_a_byte(tmp_path, head):
+    """partclone.fat מסרב ל-FAT בלי ביט הכיבוי הנקי ב-FAT[1] — גם עם ‏-I
+    (‏get_used_block). עד #1823 זה הגיע לקונסולה כ"שלב=pcl rc=1"."""
+    box, run, out = _fat_capture(tmp_path, head)
+    reason = refusal_reason(box, run, out)
+    assert "מחיצה 1" in reason and "לא נקייה" in reason and "כבו" in reason, reason
+    assert not _preflight_ran(run), "בדיקת המקום רצה לפני הסירוב"
+
+
+def test_an_esp_with_the_io_error_bit_is_refused_by_name(tmp_path):
+    box, run, out = _fat_capture(tmp_path, fat32_head(0x0BFFFFFF))
+    reason = refusal_reason(box, run, out)
+    assert "מחיצה 1" in reason and "שגיאת קלט/פלט" in reason, reason
+
+
+@pytest.mark.parametrize("head", [fat32_head(), _fat16_head(0xFFFF)], ids=["fat32", "fat16"])
+def test_a_clean_esp_passes_the_gate(tmp_path, head):
+    box, run, out = _fat_capture(tmp_path, head)
+    reason = refusal_reason(box, run, out)
+    assert "STOP-AT-SPACE" in reason, reason
+    assert _preflight_ran(run)
+
+
+def test_a_fat_header_that_does_not_read_is_unchecked_not_clean(tmp_path):
+    """עיקרון 5: ראש מחיצה שאינו נקרא (‏512 בייט — FAT[1] מעבר לסוף) — סירוב."""
+    box, run, out = _fat_capture(tmp_path, fat32_head()[:512])
+    reason = refusal_reason(box, run, out)
+    assert "לא הצלחנו לקרוא את כותרת ה-FAT" in reason, reason
+    assert not _preflight_ran(run)

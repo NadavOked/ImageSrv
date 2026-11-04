@@ -127,10 +127,10 @@ function dkListTab(stateOnly) {
   const serials = rows.map((d) => d.serial);
   const chosen = rows.filter((d) => DK.picked.has(d.serial));
   const allOn = rows.length && chosen.length === rows.length;
-  const cols = [{ html: `<input type="checkbox" aria-label="סימון הכול"${allOn ? " checked" : ""} onchange='dkPickAll(this.checked,${JSON.stringify(serials)})'>` },
+  const cols = [{ html: `<input type="checkbox" aria-label="סימון הכול"${allOn ? " checked" : ""} onchange="dkPickAll(this.checked,JSON.parse(${jsStr(JSON.stringify(serials))}))">` },   // #2352: the serials come from hello -- never raw JSON in an attribute
     "מספר סידורי", "דגם", "סט", "מצב", "איפה עכשיו", "כתיבה תקינה אחרונה"];
   const body = rows.map((d) => ({ attrs: DK.picked.has(d.serial) ? 'class="sel"' : "", cells: [
-    `<input type="checkbox" aria-label="סימון ${esc(d.serial)}"${DK.picked.has(d.serial) ? " checked" : ""} onchange="dkPick('${esc(d.serial)}',this.checked)">`,
+    `<input type="checkbox" aria-label="סימון ${esc(d.serial)}"${DK.picked.has(d.serial) ? " checked" : ""} onchange="dkPick(${jsStr(d.serial)},this.checked)">`,
     `<span class="mono" dir="ltr">${esc(d.serial)}</span>`, `${esc(d.model || "—")}${d.size_bytes ? ` · ${dkSize(d.size_bytes)}` : ""}`,
     dkLabel(d), dkStateCell(d), dkWhere(d), dkLastGood(d)] }));
   const assign = chosen.length ? `<div class="dk-pick"><button class="btn primary" onclick="diskAssignPickedSheet()">שייך ${chosen.length} נבחרים לסט…</button></div>` : "";
@@ -164,7 +164,7 @@ function dkSetsTab() {
       const cols = ["מדבקה", "מצב", "דגם ומספר סידורי", "איפה עכשיו", "כתיבה תקינה אחרונה", ""];
       const rows = shown.map((d) => ({ attrs: d.state === "red" ? 'class="dk-red"' : "", cells: [
         dkLabel(d), dkStateCell(d), `${esc(d.model || "—")}<span class="sub mono" dir="ltr">${esc(d.serial)}</span>`, dkWhere(d), dkLastGood(d),
-        `<button class="btn sm${d.state === "red" ? " danger" : ""}" onclick="diskReplaceSheet(${set.id},'${esc(d.suffix)}')">החלף…</button>`] }));
+        `<button class="btn sm${d.state === "red" ? " danger" : ""}" onclick="diskReplaceSheet(${set.id},${jsStr(d.suffix)})">החלף…</button>`] }));
       const more = DK.members.length > 10 ? `<button class="btn sm flat" onclick="DK_ALL=!DK_ALL;renderCurrent()">${DK_ALL ? "הצג 10" : `הצג את כל ${DK.members.length}`}</button>` : "";
       inner = UI.datagrid({ columns: cols, rows, empty: "אין עדיין דיסקים בסט הזה — שייכו מסבב או מרשימת הדיסקים" }) + (more ? `<div class="dk-more">${more}</div>` : "");
     }

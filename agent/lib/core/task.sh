@@ -24,7 +24,8 @@ do_task() {
         *) log "unknown task type '$_type' -- ignoring it"; sleep 5; return 0 ;;
     esac
 
-    _disk=$(json_get "$RESP" ".task.disk")
+    _disk=$(json_disk "$RESP" ".task.disk") \
+        || log "capture: disk name '$(json_get "$RESP" ".task.disk")' refused -- not a kernel disk name (#1635)"
     ui_clear; ui_header
     echo "  Capturing $(json_get "$RESP" ".task.name")"
     echo "  Source disk: /dev/$_disk"
@@ -44,7 +45,7 @@ do_task() {
     # path it is the worst of the three: the next step is `poweroff -f` with
     # the drive about to be pulled out, so a capture the server never heard
     # about stays open for ever against a machine that is off.
-    if capture_disk "$_tid" "$_disk" "$(json_get "$RESP" ".task.disk_serial")"; then   # #1901: the disk chosen, not its name
+    if [ -n "$_disk" ] && capture_disk "$_tid" "$_disk" "$(json_get "$RESP" ".task.disk_serial")"; then   # #1901: the disk chosen, not its name; #1635: "" = refused
         if upload_manifest "$_tid" "$RUN_DIR/new-manifest.json"; then
             echo "done" > "$RUN_DIR/state"
             report_final "$_ppid" "" "$MAC" "$SERVER" "$_tid" \

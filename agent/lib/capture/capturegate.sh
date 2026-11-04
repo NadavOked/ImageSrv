@@ -42,11 +42,44 @@ capture_source_reason() {
 }
 
 capture_fs_reason() {
-    # $1 = partition index, $2 = fs as _fs_of prints it. #1900: refused here,
+    # $1 = partition index, $2 = fs as _fs_of prints it, $3 = its node. #1900: refused here,
     # before the space check and the first byte -- not by the server at the end.
+    [ "$2" != vfat ] || { capture_fat_reason "$1" "$3"; return; }   # #1823
     case " $CAPTURE_FILESYSTEMS " in *" $2 "*) return 0 ;; esac
     case "$2" in *[Bb]it[Ll]ocker*) _bitlocker_reason "$1" "$2" ""; return ;; esac
     echo "מחיצה $1: מערכת הקבצים $2 אינה נתמכת לקליטה (נתמכות: ntfs, vfat, ext4, btrfs) — לא נקלט"
+}
+
+_cg_le() { # $1 file, $2 offset, $3 bytes -- little-endian unsigned; rc 1 = a short read
+    _le_n=$3; _le_v=0; _le_m=1
+    # shellcheck disable=SC2046 # one word per byte
+    set -- $(od -An -tu1 -j "$2" -N "$3" "$1" 2>/dev/null)
+    [ "$#" -eq "$_le_n" ] || return 1
+    for _le_b; do _le_v=$((_le_v + _le_b * _le_m)); _le_m=$((_le_m * 256)); done
+    echo "$_le_v"
+}
+
+capture_fat_reason() {
+    # $1 = partition index, $2 = node. #1823: partclone.fat refuses a FAT whose FAT[1]
+    # lacks the clean-shutdown bit (or the no-I/O-error bit) -- -I does not help there:
+    # get_used_block() checks it unconditionally (fatclone.c, master, read 03/11/2026).
+    # Read the way it reads it; a check that could not read is a refusal (principle 5).
+    _cf_bad="מחיצה $1 (FAT): לא הצלחנו לקרוא את כותרת ה-FAT — לא נקלט"
+    _cf_bps=$(_cg_le "$2" 11 2) && _cf_spc=$(_cg_le "$2" 13 1) && _cf_rsv=$(_cg_le "$2" 14 2) \
+        && _cf_nf=$(_cg_le "$2" 16 1) && _cf_root=$(_cg_le "$2" 17 2) && _cf_t16=$(_cg_le "$2" 19 2) \
+        && _cf_f16=$(_cg_le "$2" 22 2) && _cf_t32=$(_cg_le "$2" 32 4) && _cf_f32=$(_cg_le "$2" 36 4) \
+        && [ "$_cf_bps" -gt 0 ] && [ "$_cf_spc" -gt 0 ] || { echo "$_cf_bad"; return; }
+    if [ "$_cf_f16" -ne 0 ]; then   # FAT12/16: by cluster count, like partclone (FAT12 is not checked)
+        [ "$_cf_t16" -ne 0 ] || _cf_t16=$_cf_t32
+        [ $(((_cf_t16 - _cf_rsv - _cf_nf * _cf_f16 - (_cf_root * 32 + _cf_bps - 1) / _cf_bps) / _cf_spc)) -ge 4085 ] || return 0
+        _cf_w=2; _cf_clean=32768; _cf_io=16384
+    elif [ "$_cf_f32" -ne 0 ]; then _cf_w=4; _cf_clean=134217728; _cf_io=67108864
+    else echo "מחיצה $1 (FAT): סוג ה-FAT לא זוהה מהכותרת — לא נקלט"; return; fi
+    _cf_e=$(_cg_le "$2" $((_cf_rsv * _cf_bps + _cf_w)) "$_cf_w") || { echo "$_cf_bad"; return; }
+    [ $((_cf_e & _cf_clean)) -ne 0 ] \
+        || { echo "מחיצה $1 (FAT/ESP) מסומנת כלא נקייה — המחשב לא כובה כראוי. הפעילו את Windows, כבו אותו כרגיל, וקלטו שוב; המקור לא נכתב — לא נקלט"; return; }
+    [ $((_cf_e & _cf_io)) -ne 0 ] \
+        || echo "מחיצה $1 (FAT/ESP): Windows רשם בה שגיאת קלט/פלט — בדקו את הדיסק לפני הקליטה; המקור לא נכתב — לא נקלט"
 }
 
 #: ‏#1824: סוגי המחיצות של דיסק דינמי (LDM) — metadata ו-data (‏sgdisk 4201/4200).

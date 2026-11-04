@@ -117,10 +117,9 @@ do_restore_drawers() {
     progress_loop "$2" "$MAC" "$SERVER" &
     _ppid=$!
 
-    # שער SMART לפני כתיבה (#652); rc=2 = "החלף" -> כיבוי לפני שנכתב בייט.
+    # שער SMART לפני כתיבה (#652); בלי שאלה (#2044).
     # shellcheck disable=SC2086 # the disk list is a word list on purpose
     _all=$_disks; _disks=$(smart_gate "$2" $_disks); _gr=$?   # #1760: _all = the end count's, red skips included
-    [ "$_gr" = 2 ] && smart_replace_stop   # #1222: never returns
     # #1560: a round where every drawer was skipped ended too -- reported, the count, power-off
     [ "$_gr" = 0 ] || { round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }
     _disks=$(EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") drawer_gates $_disks)   # #1808 old RAID metadata, #1898 the split: asked (drawergate.sh)
@@ -185,7 +184,6 @@ do_restore() {
 
     # שער SMART לפני כתיבה (#652), אותו שער כמו בחדר השיכפולים.
     _disk=$(smart_gate "$_ses" "$_disk"); _gr=$?
-    [ "$_gr" = 2 ] && smart_replace_stop   # #1224: never returns
     [ "$_gr" = 0 ] || { round_beep failure; ui_error_hold "the disk was skipped -- nothing written" hold_beat; return 1; }
 
     ui_clear; ui_header

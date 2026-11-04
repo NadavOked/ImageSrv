@@ -1,5 +1,6 @@
-# smartgate.sh -- the SMART gate before writing (#652): the operator's choice,
-# disk_event, and the power-off-and-swap screen. POSIX sh (busybox ash).
+# smartgate.sh -- the SMART gate before writing (#652): the verdict per disk,
+# disk_event, and the orange note. No question (#1732 red, #2042 orange; the
+# question itself was removed in #2044). POSIX sh (busybox ash).
 # נשען על smart.sh (smart_probe/smart_field -- הקריאה, הסיווג והמטמון), שנטען
 # לפניו; פוצל ממנו ב-#1211 לפני קיר 300 השורות, בלי שינוי התנהגות.
 
@@ -15,29 +16,6 @@ smart_disk_label() {
         ''|*[!0-9]*) printf '%s %s' "${2:-Disk}" "$1" ;;   # $2 = the word: 'דיסק' for the console prompt, default for the ASCII tty
         *)           printf '%s %s' "${2:-Disk}" "$_sl_p" ;;
     esac
-}
-
-smart_choice() { attended "$1: $2" smart_ask "$@"; }   # #906: hello keeps going while a person is asked (attended.sh)
-smart_ask() {
-    # $1 = label (Disk N), $2 = context line, $3 = disk, $4 = verdict,
-    # $5 = reason, $6 = ברירת המחדל בלי תשובה. מחזיר את ההכרעה: replace /
-    # rescue / skip.
-    #
-    # ההכרעה נלקחת **רק** מהמסך הגרפי של מחשב השיכפול (#666, gui_smart_choice).
-    # תפריט הטקסט שהיה כאן הוסר (נדב 11/10: GUI בלבד, בלי מסך טקסט חלופי).
-    # בלי מסך, או מסך שנעלם/לא ענה -- "המשך" של אותו צבע, בדיוק מה שתפריט
-    # הטקסט עשה על EOF (נדב 16/09): כתום כותב, אדום מדלג; הברירה מגיעה מהקורא
-    # (‏$6), וריק = skip.
-    # תשובה מפורשת מבוצעת כמות שהיא (#1580): עד 17/10 ‏rescue על failed_last
-    # הונמך כאן בשקט ל-skip. אדום (SMART תקול) אינו נשאל בכלל (#1732), ומאז
-    # #2042 (נדב 23/10) גם כתום אינו נשאל -- smart_preflight אינו קורא לכאן עוד.
-    if [ "$#" -ge 5 ] &&
-            _sc_gui=$(gui_smart_choice "$3" "$4" "$5"); then
-        printf '%s\n' "$_sc_gui"
-        return 0
-    fi
-    log "$1: no answer from the GUI -- the default for ${4:-this verdict}: ${6:-skip}" >&2
-    printf '%s\n' "${6:-skip}"
 }
 
 smart_event_json() {
@@ -74,7 +52,6 @@ smart_preflight() {
     # בלי שאלה עם הערה (#2042). מדפיס את רשימת הדיסקים שייכתבו בפועל.
     # ‏ok/unchecked לא נשאלים — unchecked נכתב, זה קריטי (עיקרון 5).
     _pf_ses="$1"; shift
-    rm -f "$RUN_DIR/smart/awaiting_replace"
     disk_failures_refresh || :   # #874: זיכרון השרת מה-hello האחרון; כשל = הקובץ הקודם
     command -v smart_learned_refresh >/dev/null 2>&1 && { smart_learned_refresh || :; }   # #1859: what the server learned, the same way
     _pf_write=""
@@ -151,60 +128,14 @@ smart_note_apply() {
     return 0
 }
 
-smart_awaiting_replace() {
-    # אמת אם המפעיל בחר "החלף" על דיסק כלשהו. אז המכונה מדפיסה את הוראת
-    # ההחלפה ומתכבה (כיבוי הוא כל המכונה — אסור להתחיל כתיבה ואז לכבות).
-    [ -s "$RUN_DIR/smart/awaiting_replace" ]
-}
-
 smart_gate() {
     # $1 = session, $2.. = disks. השער השלם, כדי שמסלולי השחזור יישארו
     # קצרים: מריץ את ה-preflight, מדפיס את רשימת הדיסקים לכתיבה, ומחזיר
     #   0 = כתוב את הרשימה שהודפסה
-    #   2 = המפעיל בחר "החלף" -- המכונה מתכבה להחלפה, **לפני** כל כתיבה
     #   1 = לא נשאר מה לכתוב (הכול דולג)
+    # ‏#2044: אין עוד "החלף" (rc 2) -- אין שאלה, ולכן אין מי שבוחר בו.
     _sg_ses="$1"; shift
     _sg_list=$(smart_preflight "$_sg_ses" "$@")
-    smart_awaiting_replace && { echo "$_sg_list"; return 2; }
     [ -n "$_sg_list" ] || return 1
     echo "$_sg_list"
-}
-
-smart_replace_screen() {
-    # מסך "כבה -> החלף -> הדלק" לפני שהמכונה מתכבה. כיבוי הוא כל המכונה,
-    # ולכן זה קורה לפני שנכתב בייט; ה-job כבר נשמר בשרת ב-disk_event
-    # (write_state=replacing), ואחרי הריבוט הסוכן מפקד מחדש לפי port+serial.
-    ui_clear; ui_header
-    echo "  Replace the flagged disk, then power the machine back on."
-    echo
-    while read -r _rs_d; do
-        echo "    $(smart_disk_label "$_rs_d") -- swap it out"
-    done < "$RUN_DIR/smart/awaiting_replace"
-    echo
-    echo "  Powering off for the swap."
-}
-
-smart_replace_stop() {
-    # smart_gate rc=2, on either restore path (drawers, #1222; station,
-    # #1224): the screen, then the power-off -- before a byte is written.
-    # Never returns.
-    smart_replace_screen
-    [ "${IMAGESRV_TEST:-0}" = "1" ] && exit 0
-    finish_and_stop
-    # finish_and_stop returns only when it stayed on: WoL (#587), or poweroff came back (#1483).
-    # Nothing failed and the disk still has to come out, so this is not
-    # "skipped" / "no drawer completed", and not back into the round either
-    # (the next hello hands the same round back, with this progress_loop
-    # still running): hold on this screen, heartbeat on (#64), for a
-    # power-off by hand.
-    # #1483: or the power-off itself came back -- said as what it was
-    if [ "${POWEROFF_WHY:-}" = poweroff ]; then
-        log "smart: replace chosen -- the power-off did not take, staying powered on"
-        echo "  The power-off command returned: power off by hand for the swap."
-    else
-        log "smart: replace chosen -- wol not armed, staying powered on"
-        echo "  Wake-on-LAN could not be armed: power off by hand for the swap."
-    fi
-    HOLD_PROMPT="Replace the flagged disk: power off by hand"
-    hold_watch hold_beat
 }

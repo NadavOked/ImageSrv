@@ -2,18 +2,15 @@
 # POSIX sh (busybox ash).
 #
 # The cloning machine now has a screen (owner decision): it shows per-drawer
-# progress and the graphical SMART choice -- the only one since the text menu
-# of #666 was removed (owner, 11/10: GUI only). Two rules never bend:
+# progress and a drawer's questions (askgui.sh). The SMART choice that was
+# drawn here is gone (#2044): red is never written (#1732), orange is written
+# without a question (#2042). One rule never bends:
 #   * A display that will not draw NEVER stops the write. gui_cloner_parent
 #     always returns 0 -- do_restore_drawers must run headless all the same.
-#   * A display failure is NEVER an approval of the operator's (principle 5).
-#     If the GUI vanishes while a SMART choice is pending, gui_smart_choice
-#     fails and smart_ask takes the no-answer default of the colour (16/09):
-#     orange writes, red skips.
 
-# Both processes agree on one directory: the agent (gui_smart_choice) and the
-# kiosk (cloner_gui_state) exchange smart-request/smart-decision here, and it
-# is the same $RUN_DIR/gui that guiparent.sh and gui_main use.
+# Both processes agree on one directory: the agent and the kiosk
+# (cloner_gui_state) exchange the state and the questions here, and it is the
+# same $RUN_DIR/gui that guiparent.sh and gui_main use.
 GUI_DIR="${GUI_DIR:-$RUN_DIR/gui}"
 
 gui_cloner_parent() {
@@ -79,7 +76,7 @@ cloner_gui_state() {
     [ -f "$RUN_DIR/manifest.json" ] &&
         _cg_name=$(json_get "$RUN_DIR/manifest.json" ".name")
     case "$_cg_name" in null) _cg_name= ;; esac
-    printf 'cloner=%s\n' "$_cg_name" >> "$_cg_next" || return 1
+    printf 'cloner=%s\n' "$(printf '%s' "$_cg_name" | tr '\r\n|' '   ')" >> "$_cg_next" || return 1   # #1635: one record, as guistate.sh
     [ -s "$RUN_DIR/server-restarted-wave" ] && printf 'server_restarted_wave=1\n' >> "$_cg_next"
     gui_header_state "$RUN_DIR/response.json" >> "$_cg_next" || return 1
     _cg_count=$(json_get "$RUN_DIR/response.json" ".drawer_count")
@@ -132,18 +129,6 @@ cloner_gui_state() {
         cloner_cdisks "$(list_disks)" >> "$_cg_next" || return 1
     fi
     if command -v disk_used_records > /dev/null 2>&1; then disk_used_records "$(list_disks)" >> "$_cg_next" || return 1; fi   # #2030: cused= -- size and bytes in use per disk; none = "not measured" (guibridge.sh loads it, a test pins that)
-
-    if [ -f "$GUI_DIR/smart-request" ]; then
-        # ‏smart-request הוא nonce|port|verdict|reason|model|serial (16/10: _cg_reason נושא את שלושתם). ה-nonce **זורם
-        # ל-GUI** ומצויר עם ה-prompt, כדי שהקליק יחזיר אותו: הוא הזהות
-        # הבלתי-משתנה של הבקשה שצוירה. בלי זה קליק מושהה על אותו port
-        # (דיסק שנתבקש שוב, nonce חדש) היה מאושר לבקשה הלא-נכונה.
-        IFS='|' read -r _cg_nonce _cg_sport _cg_verdict _cg_reason \
-            < "$GUI_DIR/smart-request" || return 1
-        printf 'smart_prompt=%s|%s|%s|%s\n' \
-            "$_cg_nonce" "$_cg_sport" "$_cg_verdict" "$_cg_reason" >> "$_cg_next" ||
-            return 1
-    fi
 
     gui_ask_state >> "$_cg_next" || return 1   # #1808/#1898: a drawer's question (drawergate.sh, askgui.sh)
     # #410: when this snapshot was taken -- the screen shows its age.
@@ -202,68 +187,4 @@ cloner_gui_state_loop() {
         _cg_wait=0
         while [ "$_cg_wait" -lt 10 ] && [ ! -e "$GUI_DIR/disk-event" ]; do sleep 0.1; _cg_wait=$((_cg_wait + 1)); done
     done
-}
-
-gui_smart_choice() {
-    # $1=disk, $2=verdict, $3=reason. stdout is the decision (replace/rescue/
-    # skip). Returns non-zero when the GUI cannot answer -- the caller then
-    # takes the no-answer default (smart_ask). A display failure is never an
-    # approval.
-    #
-    # ‏**כל בקשה נושאת nonce ייחודי**, וההחלטה מתקבלת רק אם היא כבולה
-    # לאותו nonce. בלי זה קליק מושהה/כפול על דיסק אחד היה מאושר לדיסק
-    # הבא -- ובמקרה הגרוע `rescue` ישן היה מאשר כתיבה לדיסק החשוד הלא-
-    # נכון, בדיוק מה ש-SMART נועד למנוע (עיקרון 5/7). ה-nonce מגובה-קובץ
-    # מונוטוני, כי הפונקציה רצה בתת-מעטפת של `$( )` ומשתנה מקומי לא היה
-    # שורד בין דיסקים.
-    [ "$D_ROLE" = cloner ] || return 1
-    [ -n "${_gui_pid:-}" ] && kill -0 "$_gui_pid" 2>/dev/null || return 1
-
-    _gsc_port=$(disk_port "$1")
-    case "$_gsc_port" in ''|*[!0-9]*) return 1 ;; esac
-
-    _gsc_seq=$(cat "$GUI_DIR/smart-seq" 2>/dev/null)
-    case "$_gsc_seq" in ''|*[!0-9]*) _gsc_seq=0 ;; esac
-    _gsc_seq=$((_gsc_seq + 1))
-    echo "$_gsc_seq" > "$GUI_DIR/smart-seq" || return 1
-    _gsc_nonce="$_gsc_seq-$_gsc_port"; _gsc_t=0
-
-    rm -f "$GUI_DIR/smart-decision"
-    printf '%s|%s|%s|%s|%s|%s\n' "$_gsc_nonce" "$_gsc_port" "$2" "$3" "$(trim "$(cat "$SYSROOT/sys/block/$1/device/model" 2>/dev/null)" | tr '|\n' '  ')" \
-        "$(disk_serial "$1" | tr '|\n' '  ')" > "$GUI_DIR/smart-request.next" || return 1   # 16/10: model, serial -- the SMART window's details
-    mv "$GUI_DIR/smart-request.next" "$GUI_DIR/smart-request" || return 1
-
-    while kill -0 "$_gui_pid" 2>/dev/null && [ -e "$GUI_DIR/smart-request" ] && [ "$_gsc_t" -lt "${WAIT_SMART_GUI_S:-1800}" ] && [ ! -e "$RUN_DIR/session-closed" ]; do   # rc2 17/10: a closed round ends the question
-        attended_power_check
-        if [ -s "$GUI_DIR/smart-decision" ]; then
-            IFS='|' read -r _gsc_dnonce _gsc_dec < "$GUI_DIR/smart-decision" || {
-                rm -f "$GUI_DIR/smart-request" "$GUI_DIR/smart-decision"
-                return 1
-            }
-            # רק החלטה שכבולה ל-nonce של הבקשה הזאת, ורק ערך חוקי. החלטה
-            # ישנה/לא-תואמת/פגומה נמחקת וההמתנה נמשכת -- לא משוחררת.
-            if [ "$_gsc_dnonce" = "$_gsc_nonce" ]; then
-                case "$_gsc_dec" in
-                    replace|rescue|skip)
-                        # #989 item 2: the server settles who answered first
-                        # (console or this screen) and returns the winner.
-                        # Before the request is cleared: the beat still asks.
-                        if command -v attended_claim >/dev/null 2>&1; then
-                            _gsc_dec=$(attended_claim "$_gsc_nonce" "$_gsc_dec")
-                        fi
-                        rm -f "$GUI_DIR/smart-request" "$GUI_DIR/smart-decision"
-                        printf '%s\n' "$_gsc_dec"
-                        return 0
-                        ;;
-                esac
-            fi
-            rm -f "$GUI_DIR/smart-decision"
-        fi
-        sleep 1; _gsc_t=$((_gsc_t + 1))
-    done
-
-    # The GUI died (its bridge took the request, #1726), or no answer in WAIT_SMART_GUI_S (17/10): clear the handshake; smart_ask takes the no-answer default
-    [ "$_gsc_t" -lt "${WAIT_SMART_GUI_S:-1800}" ] || printf 'native GUI: no SMART answer in %ss\n' "$_gsc_t" >&2
-    rm -f "$GUI_DIR/smart-request" "$GUI_DIR/smart-decision"
-    return 1
 }

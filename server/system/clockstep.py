@@ -13,8 +13,8 @@
 השרת לא שמע איש בזמן הזה, ואין לזה משמעות של "המכונות שתקו".
 
 **הכיול:** החותמות של הסבבים הפעילים מוזזות לבסיס הזמן החדש (`rebase`),
-וכך כל הטיימרים שקוראים אותן — אובדן, ‏rewake, גיל הגל, ההמתנה לשאלת
-SMART, ‏`last_join_at` — נשארים נכונים בלי שכל אחד מהם יכיר את הקפיצה.
+וכך כל הטיימרים שקוראים אותן — אובדן, ‏rewake, גיל הגל, ההמתנה לשאלה
+למפעיל (‏`last_seen`, ‏`started_at`), ‏`last_join_at` — נשארים נכונים בלי שכל אחד מהם יכיר את הקפיצה.
 
 הגלאי שייך ל-`SessionStore` (תהליך = runtime אחד = store אחד); בבדיקות כל
 שרת מקבל גלאי משלו, ולכן קפיצה מזויפת בטסט אחד אינה זולגת לבא אחריו.
@@ -113,8 +113,6 @@ def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[
         f"SELECT session_id, mac, updated_at FROM session_members WHERE session_id IN ({marks})"
         " AND state NOT IN ('done', 'failed', 'partial', 'lost')", ids).fetchall() if ids else []
     devices = conn.execute("SELECT mac, last_seen FROM net_devices").fetchall()
-    asks = conn.execute(
-        "SELECT mac, nonce, asked_at FROM smart_asks WHERE answer IS NULL").fetchall()
     now_epoch = store.now()
     with writing(conn):
         for s in sessions:
@@ -138,12 +136,6 @@ def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[
             if new is not None:
                 conn.execute("UPDATE net_devices SET last_seen = ? WHERE mac = ? AND last_seen = ?",
                              (new, d["mac"], d["last_seen"]))
-        for a in asks:
-            new = _shift(a["asked_at"], step, now)
-            if new is not None:
-                conn.execute("UPDATE smart_asks SET asked_at = ?"
-                             " WHERE mac = ? AND nonce = ? AND asked_at = ? AND answer IS NULL",
-                             (new, a["mac"], a["nonce"], a["asked_at"]))
     return ids
 
 

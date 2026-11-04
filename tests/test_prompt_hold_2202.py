@@ -148,20 +148,9 @@ def test_no_hold_for_a_question_nobody_is_at(conn, kw):
     assert prompt_hold.open_in_wave(conn, "ses_ca1fb8e9", NOW) == []
 
 
-def test_an_open_smart_question_stays_smarts(conn):
-    """חבר עם שאלת SMART פתוחה נספר ב-`smart_ask` בלבד — היומן והתקרה שלו
-    (ו-#1889) לא משתנים."""
-    from server.rounds import prompt_hold
-    _member(conn)
-    conn.execute("INSERT INTO smart_asks (mac, nonce, port, verdict, reason, asked_at)"
-                 " VALUES (?, '3-2', 2, 'warn', '', '2026-10-25T21:32:30+00:00')", (CLONER,))
-    conn.commit()
-    assert prompt_hold.open_in_wave(conn, "ses_ca1fb8e9", NOW) == []
-
-
 def test_past_the_ceiling_only_that_machine_leaves_the_wave(conn):
-    from server.disks.smart_ask import ASK_HOLD_MAX_SECONDS
     from server.rounds import prompt_hold
+    from server.rounds.prompt_hold import ASK_HOLD_MAX_SECONDS
     _member(conn, started_at="2026-10-25T20:58:00+00:00")       # 36 דקות
     assert ASK_HOLD_MAX_SECONDS < 36 * 60
     assert prompt_hold.waiting_in_wave(conn, "ses_ca1fb8e9", NOW) == []

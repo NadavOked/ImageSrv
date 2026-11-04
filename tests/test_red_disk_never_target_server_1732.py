@@ -2,8 +2,8 @@
 
 * `_validate_target_slots` (‏room.py) — סבב חדר מהקונסולה, סבב ממסך משכפל
   (lcpull) והפצה ישירה עוברים שם — דוחה מגירה שה-hello דיווח עליה `smart: fail`.
-* שאלת SMART עם `verdict: fail` אינה נרשמת (`well_formed_ask`), ו-`rescue` על
-  שורה אדומה ישנה נדחה גם עם `confirmed: true` של קונסולה ישנה.
+* שאלת ה-SMART והתשובה מהקונסולה הוסרו ב-#2044 (test_smart_ask_removed_2044.py):
+  אין עוד שורה אדומה שאפשר לענות עליה "כתוב".
 * בקונסולה אין "כתוב בכל זאת" לאדום ולא נשלח `confirmed`.
 
 הצד של הסוכן: test_red_disk_never_target_1732.py (שם גם פקודות הבקרה השלילית).
@@ -74,62 +74,6 @@ def test_server_cloner_round_refuses_its_own_red_drawer(identity_server):
     assert r.status_code == 400 and r.json()["code"] == "bad_round" and RED in r.json()["error"], r.text
     assert no_round(srv)
     assert ask(srv, ports=[1, 2]).status_code == 200
-
-
-@pytest.fixture()
-def ask_server(tmp_path, images_root):
-    from fastapi.testclient import TestClient
-
-    from server.console import users
-    from server.app import create_app
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", wol_send=lambda _p: None)
-    ctx = app.state.ctx
-    users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
-    admin = TestClient(app)
-    admin.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"})
-    assert admin.post("/api/console/machines", json={
-        "mac": "aa:bb:cc:00:00:31", "name": "01", "group_id": "grp_CLONERS"}).status_code == 200
-    yield {"ctx": ctx, "admin": admin, "anon": TestClient(app)}
-    ctx.sender.stop()
-
-
-CLONER = "aa:bb:cc:00:00:31"
-
-
-def _ask_hello(srv, verdict: str):
-    r = srv["anon"].post("/api/v1/agent/hello", json={
-        **hello_body(CLONER), "joining": False,
-        "ask": {"nonce": "3-2", "port": 2, "verdict": verdict, "reason": "pending_sectors"}})
-    assert r.status_code == 200
-    return r.json()
-
-
-def _row(srv):
-    return srv["ctx"].conn.execute("SELECT * FROM smart_asks WHERE mac = ?", (CLONER,)).fetchone()
-
-
-def test_server_a_red_question_is_never_recorded(ask_server):
-    """RED: על הקוד הישן שאלה עם verdict=fail נרשמה והוצגה בקונסולה עם "כתוב בכל זאת…"."""
-    _ask_hello(ask_server, "fail")
-    assert _row(ask_server) is None
-    _ask_hello(ask_server, "failed_last")             # orange is still a question (both states)
-    assert _row(ask_server)["verdict"] == "failed_last"
-
-
-def test_server_refuses_rescue_on_a_red_row_even_with_confirmation(ask_server):
-    """RED: שורה אדומה שנשארה מלפני העדכון (או סוכן ישן) — "כתוב בכל זאת" עם
-    `confirmed: true` מהקונסולה (ישנה) נדחה ב-400 עם המשפט; על הקוד הישן 200."""
-    conn = ask_server["ctx"].conn
-    conn.execute("INSERT INTO smart_asks (mac, nonce, port, verdict, reason, asked_at)"
-                 " VALUES (?, '3-2', 2, 'fail', 'pending_sectors', '2026-10-18T10:00:00+00:00')", (CLONER,))
-    conn.commit()
-    r = ask_server["admin"].post("/api/console/room/answer", json={
-        "mac": CLONER, "nonce": "3-2", "answer": "rescue", "confirmed": True})
-    assert r.status_code == 400 and r.json()["detail"] == RED, r.text
-    assert _row(ask_server)["answer"] is None
-    skip = ask_server["admin"].post("/api/console/room/answer", json={
-        "mac": CLONER, "nonce": "3-2", "answer": "skip"})
-    assert skip.status_code == 200, skip.text           # skipping it is always fine (both states)
 
 
 # --- הקונסולה: אין "כתוב בכל זאת" על אדום --------------------------------------------

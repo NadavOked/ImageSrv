@@ -152,14 +152,14 @@ const UI = {
     const barEl = bar == null ? "" : `<div class="bar" style="margin-top:6px" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${bar}"><i style="--w:${bar}%"></i></div>`;
     // ‏barPct (stage 2): פס שימוש מציג גם את האחוז לידו; פס התקדמות רגיל — בלי.
     const barHtml = barEl && barPct ? `<div class="bar-row">${barEl}<span class="pct">${bar}%</span></div>` : barEl;
-    return `<div class="kpi ${cls}"><div class="l">${esc(label)}</div><div class="v"><bdi dir="auto">${esc(value)}</bdi>${unit ? ` <small>${esc(unit)}</small>` : ""}</div>${barHtml}${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
+    return `<div class="kpi ${esc(cls)}"><div class="l">${esc(label)}</div><div class="v"><bdi dir="auto">${esc(value)}</bdi>${unit ? ` <small>${esc(unit)}</small>` : ""}</div>${barHtml}${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
   },
   card({ title, small = "", acts = "", body, cls = "c12", flush = false }) {
-    return `<div class="${cls} card"><div class="card-h"><span>${esc(title)}${small ? ` <small>${esc(small)}</small>` : ""}</span>${acts ? `<div class="acts">${acts}</div>` : ""}</div><div class="card-b${flush ? " flush" : ""}">${body}</div></div>`;
+    return `<div class="${esc(cls)} card"><div class="card-h"><span>${esc(title)}${small ? ` <small>${esc(small)}</small>` : ""}</span>${acts ? `<div class="acts">${acts}</div>` : ""}</div><div class="card-b${flush ? " flush" : ""}">${body}</div></div>`;
   },
   /* מצב עם נקודה: ok/warn/err/run/"" (אפור = כבוי/לא נבדק). */
-  status(cls, text) { return `<span class="st ${cls}">${esc(text)}</span>`; },
-  pill(cls, text) { return `<span class="pill ${cls}">${esc(text)}</span>`; },
+  status(cls, text) { return `<span class="st ${esc(cls)}">${esc(text)}</span>`; },
+  pill(cls, text) { return `<span class="pill ${esc(cls)}">${esc(text)}</span>`; },
   /* datagrid: columns = תוויות; rows = מערכי HTML לתאים (מוברחים ע"י הקורא). */
   /* שורה: מערך תאים, או {cells, attrs} (תכונות ל-<tr>), או {html} (שורה מוכנה).
      עמודה: מחרוזת (מוברחת) או {html}. */
@@ -168,7 +168,7 @@ const UI = {
     const td = (c, i) => `<td${opt.includes(i) ? ` class="c-opt"` : ""}>${c}</td>`;   // opt = עמודות משניות: מוסתרות בכרטיס צר
     const tr = (r) => Array.isArray(r) ? `<tr>${r.map(td).join("")}</tr>`
       : r.html != null ? r.html : `<tr ${r.attrs || ""}>${r.cells.map(td).join("")}</tr>`;
-    return `<table class="dg${cls ? " " + cls : ""}"><thead><tr>${columns.map((c, i) => `<th${opt.includes(i) ? ` class="c-opt"` : ""}>${typeof c === "string" ? esc(c) : c.html}</th>`).join("")}</tr></thead><tbody>${rows.map(tr).join("")}</tbody></table>`;
+    return `<table class="dg${cls ? " " + esc(cls) : ""}"><thead><tr>${columns.map((c, i) => `<th${opt.includes(i) ? ` class="c-opt"` : ""}>${typeof c === "string" ? esc(c) : c.html}</th>`).join("")}</tr></thead><tbody>${rows.map(tr).join("")}</tbody></table>`;
   },
   name(main, sub = "") { return `<span class="name">${esc(main)}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ""}`; },
   nameHtml(main, subHtml) { return `<span class="name">${esc(main)}</span>${subHtml ? `<span class="sub">${subHtml}</span>` : ""}`; },
@@ -178,7 +178,7 @@ const UI = {
     const known = typeof pct === "number" && Number.isFinite(pct);
     const w = known ? Math.max(0, Math.min(100, Math.round(pct))) : 0;
     const label = text != null ? text : (known ? w + "%" : "—");
-    return `<div class="bar-row"><div class="bar ${cls}"><i style="--w:${w}%"></i></div><span class="pct">${esc(label)}</span></div>`;
+    return `<div class="bar-row"><div class="bar ${esc(cls)}"><i style="--w:${w}%"></i></div><span class="pct">${esc(label)}</span></div>`;
   },
   /* שימוש = פס + המספרים עצמם: כמה תפוס מתוך כמה, ואחוז לידו (console-full.html useCell).
      total/free חסרים או total<=0 = "לא נמדד" — לא 0% (עיקרון 5). */
@@ -189,7 +189,7 @@ const UI = {
     return `<div class="usecell"><div class="bar ${pct >= 90 ? "err" : pct >= 75 ? "warn" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="--w:${pct}%"></i></div><div class="usenums"><bdi dir="ltr">${esc(fmtBytes(used))} / ${esc(fmtBytes(t))}</bdi><span class="pct">${pct}%</span></div></div>`;
   },
   kv(pairs) { return `<div class="kv">${pairs.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${v}</span>`).join("")}</div>`; },
-  note(cls, html) { return `<div class="note ${cls}"><span aria-hidden="true">●</span><span>${html}</span></div>`; },
+  note(cls, html) { return `<div class="note ${esc(cls)}"><span aria-hidden="true">●</span><span>${html}</span></div>`; },
   /* הודעה עם שגיאת מערכת (apple-pending-4, דשבורדים): ‏raw — הטקסט הגולמי שהשרת החזיר. כשהוא לטיני בעיקרו
      (נתיב, שם קובץ, שגיאת OS) הוא לא מוצג בגוף ההודעה אלא מאחורי "פרטים טכניים"; משפט עברי נשאר בגוף.
      ‏before/after הם HTML מוכן (הקורא מבריח). */
@@ -202,7 +202,7 @@ const UI = {
   empty(text, action = "", title = "") { return `<div class="empty">${title ? `<b class="et">${esc(title)}</b>` : ""}${esc(text)}${action ? `<div>${action}</div>` : ""}</div>`; },
   /* ציר-זמן: [{t, cls, text(html), who}] */
   timeline(events) {
-    return `<div class="timeline">${events.map((e) => `<div class="ev"><span class="t">${esc(e.t)}</span><span class="d ${e.cls || ""}"></span><span>${e.text}</span><span class="who">${esc(e.who || "")}</span></div>`).join("")}</div>`;
+    return `<div class="timeline">${events.map((e) => `<div class="ev"><span class="t">${esc(e.t)}</span><span class="d ${esc(e.cls || "")}"></span><span>${e.text}</span><span class="who">${esc(e.who || "")}</span></div>`).join("")}</div>`;
   },
   /* מה שאין לו API: הודעה ולא כפתור מנוטרל (README §8). */
   soon(label) { return `<span class="muted" title="דורש API">${esc(label)} — בקרוב</span>`; },
@@ -1657,7 +1657,7 @@ function populateSidebarImages() {
       const idEnc = encodeId(im.id || "");
       return `<div class="inventory-node" role="treeitem" tabindex="0" onclick="${sideClick(`openImageDetail('${idEnc}')`)}"><span class="tree-arrow-sp"></span><span>${uiIcon("image")}</span><span>${esc(im.name)}</span></div>`;
     }).join("");
-    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="toggleInventoryGroup(this,'${fid}')"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),'${fid}')">${open ? "▾" : "▸"}</span><span>${uiIcon("t-subfolder")}</span><span>${esc(f.name)}</span></div><div id="${fid}" class="inventory-children"${open ? "" : " hidden"}>${rows}</div>`;
+    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="toggleInventoryGroup(this,${jsStr(fid)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(fid)})">${open ? "▾" : "▸"}</span><span>${uiIcon("t-subfolder")}</span><span>${esc(f.name)}</span></div><div id="${esc(fid)}" class="inventory-children"${open ? "" : " hidden"}>${rows}</div>`;
   }).join("");
 }
 
@@ -1681,7 +1681,7 @@ function fillSidebarTree(treeId, groups, machines, icon) {
       return `<div class="inventory-node" role="treeitem" tabindex="0" onclick="${sideClick(`selectMachinesGroup('${gidEnc}')`)}"><span class="tree-arrow-sp"></span><span>${uiIcon(icon)}</span><span>${esc(g.label)}</span></div>`;
     }
     const childHtml = kids.map(leaf).join("");
-    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,'${esc(boxId)}',function(){${sideClick(`selectMachinesGroup('${gidEnc}')`)}})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),'${esc(boxId)}')">${open ? "▾" : "▸"}</span><span style="display:contents"><span>${uiIcon(icon)}</span><span>${esc(g.label)}</span></span></div><div id="${esc(boxId)}" class="inventory-children"${open ? "" : " hidden"}>${childHtml}</div>`;
+    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){${sideClick(`selectMachinesGroup('${gidEnc}')`)}})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span><span style="display:contents"><span>${uiIcon(icon)}</span><span>${esc(g.label)}</span></span></div><div id="${esc(boxId)}" class="inventory-children"${open ? "" : " hidden"}>${childHtml}</div>`;
   }).join("");
 }
 
@@ -1854,14 +1854,14 @@ function branchBox(n, wasOpen, key, head, kids, open = false) {
   const isOpen = boxId in wasOpen ? wasOpen[boxId] : open;
   return `${head(boxId, isOpen)}<div id="${esc(boxId)}" class="inventory-children" role="group"${isOpen ? "" : " hidden"}>${kids}</div>`;
 }
-const branchArrow = (boxId, open) => `<span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),'${esc(boxId)}')">${open ? "▾" : "▸"}</span>`;
+const branchArrow = (boxId, open) => `<span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span>`;
 /* מתחת לעלה: אימג'ים ← תיקיות (מתמלא משרת המשנה); מחשבים ← כיתות/בנייה/שיכפול ← קבוצות;
    רשת ← חיבורים פיזיים (← כרטיסים) · רשת הפצה · פורטים. כמו #invTA/#netTA בראשי. */
 function branchLeafKids(n, page, wasOpen) {
   const idEnc = encodeId(n.id);
   const go = (handler) => `inSecondary('${idEnc}',()=>{${handler}})`;
   const sub = (key, label, icon, handler, cap = "") => branchBox(n, wasOpen, key, (boxId, open) =>
-    `<div class="inventory-node${cap && !(ME && ME.capabilities && ME.capabilities[cap]) ? " hidden" : ""}"${cap ? ` data-cap="${cap}"` : ""} role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,'${esc(boxId)}',function(){${go(handler)}})">${branchArrow(boxId, open)}<span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`, "");
+    `<div class="inventory-node${cap && !(ME && ME.capabilities && ME.capabilities[cap]) ? " hidden" : ""}"${cap ? ` data-cap="${cap}"` : ""} role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){${go(handler)}})">${branchArrow(boxId, open)}<span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`, "");
   const plain = (label, icon, handler, attrs = "") =>
     `<div class="inventory-node"${attrs} role="treeitem" tabindex="0" onclick="${handler}"><span class="tree-arrow-sp"></span><span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`;
   if (page === "images") return "";   // התיקיות עצמן — populateSidebarImages בהקשר שרת המשנה
@@ -1885,7 +1885,7 @@ function branchTreeHtml(n, wasOpen) {
   const leaf = ([page, label, icon]) => {
     if (BRANCH_TREE_BOXES[page]) {
       return branchBox(n, wasOpen, BRANCH_TREE_BOXES[page], (boxId, open) =>
-        `<div class="inventory-node" data-branch-page="${esc(page)}" data-branch-node="${esc(n.id)}" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,'${esc(boxId)}',function(){openSecondaryPage('${idEnc}','${page}',this)})">${branchArrow(boxId, open)}<span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`,
+        `<div class="inventory-node" data-branch-page="${esc(page)}" data-branch-node="${esc(n.id)}" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){openSecondaryPage('${idEnc}','${page}',this)})">${branchArrow(boxId, open)}<span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`,
         branchLeafKids(n, page, wasOpen));
     }
     return leafPlain([page, label, icon]);
@@ -1897,7 +1897,7 @@ function branchTreeHtml(n, wasOpen) {
     if (Array.isArray(x)) return leaf(x);
     const boxId = `srv-${n.id}-${x.id}`;
     const open = boxId in wasOpen ? wasOpen[boxId] : x.open;
-    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="toggleInventoryGroup(this,'${esc(boxId)}')"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),'${esc(boxId)}')">${open ? "▾" : "▸"}</span><span>${uiIcon(x.icon)}</span><span>${esc(x.label)}</span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${x.kids.map(leaf).join("")}</div>`;
+    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="toggleInventoryGroup(this,${jsStr(boxId)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span><span>${uiIcon(x.icon)}</span><span>${esc(x.label)}</span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${x.kids.map(leaf).join("")}</div>`;
   }).join("");
 }
 
@@ -1978,7 +1978,7 @@ async function populateSidebarSecondaries() {
     const idEnc = encodeId(n.id);
     const kids = branchTreeHtml(n, wasOpen);
     const dot = n.disabled_at ? { cls: "", text: "מושבת" } : serverDotState(SERVER_HEALTH[n.id]);   // נדב 18/10: אותה נקודה כמו TA
-    return `<div class="inventory-node server-node" data-secondary="${esc(n.id)}" data-conn="${n.disabled_at ? "off" : "checking"}" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,'${esc(boxId)}',function(){openSecondaryPage('${idEnc}','home',this)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),'${esc(boxId)}')">${open ? "▾" : "▸"}</span><span>${uiIcon("server")}</span><strong class="server-name">${esc(n.label)}</strong><span class="status ${dot.cls}" data-secondary-status="${esc(n.id)}" title="${esc(dot.text)}" aria-label="${esc(dot.text)}"><i></i></span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${kids}</div>`;
+    return `<div class="inventory-node server-node" data-secondary="${esc(n.id)}" data-conn="${n.disabled_at ? "off" : "checking"}" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){openSecondaryPage('${idEnc}','home',this)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span><span>${uiIcon("server")}</span><strong class="server-name">${esc(n.label)}</strong><span class="status ${dot.cls}" data-secondary-status="${esc(n.id)}" title="${esc(dot.text)}" aria-label="${esc(dot.text)}"><i></i></span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${kids}</div>`;
   }).join("");
   await Promise.all(nodes.filter((n) => !n.disabled_at).map((n) =>
     api(`/storage-nodes/${encodeId(n.id)}/machines`, { primary: true })
@@ -2489,7 +2489,8 @@ function home(tab = 0) {
    השאלה למפעיל #906), /disk-failures (אדום), /net (IP). כתיבה — רק ה-endpoints הקיימים:
    POST /room, /room/start, /room/wake, /room/close (חלון אישור, #1270); בלי שינוי שרת.
    ההכרעה על SMART (נדב 16/09): כתום = בלי תשובה ממשיך לכתוב, אדום = בלי תשובה מדלג —
-   לעולם לא דילוג בשני המקרים; היא נענית ליד המכונה או מהקונסולה (#989 ס׳ 2, POST /room/answer — הראשונה גוברת);
+   לעולם לא דילוג בשני המקרים. ‏#1732/#2042: אדום אינו נשאל, כתום נכתב בלי שאלה — ושאלת ה-SMART עם
+   התשובה מהקונסולה (#989 ס׳ 2, POST /room/answer) הוסרה ב-#2044;
    קצב הזרם ובלוקים ששודרו שוב — מ-/room.round (#989). מה שאין לו API — מספר הגלים הכולל, היסטוריה, דילוג מרחוק — טקסט,
    לא נתון מומצא (README §8, עיקרון 5). */
 const DEPLOY = { err: "", roomErr: "", busy: false, form: { image: "", folder: null, src: "library", builder: "", disk: "", target: "", drv: false, drvMap: {}, sel: {} } };
@@ -2769,7 +2770,7 @@ function roomMissingHtml(r) {
   if (!miss.length) return "";
   const op = roomOperator();
   const rows = impactList(miss.map((x) => ["w", esc(x.text_he) + (x.pxe && x.pxe.state !== "hello" ? ` — ${esc(x.pxe.he)}` : "") + (op && x.can_poweroff
-    ? ` <button type="button" class="btn sm" onclick="poweroffMissing('${esc(x.mac)}')">כבה אותו</button>` : "")]));
+    ? ` <button type="button" class="btn sm" onclick="poweroffMissing(${jsStr(x.mac)})">כבה אותו</button>` : "")]));
   const acts = op ? `<div class="acts"><button type="button" class="btn primary" onclick="startWave()">התחל בכל זאת (${r.ready_drives || 0} מוכנים)</button><button type="button" class="btn danger" onclick="stopRoom()">בטל את הסבב</button></div>` : "";
   return UI.note("warn", `<b>חסרים בגל: ${miss.length === 1 ? "מחשב אחד" : `${miss.length} מחשבים`}</b> — ${r.ready_drives || 0} מגירות מוכנות, והגל לא יוצא מקוצר מעצמו.${rows}${acts}`);
 }
@@ -2966,13 +2967,11 @@ function roomGridCard(kids) {
 }
 /* השאלה הפתוחה למפעיל — בדף, לא במודאל. הצבע = מה קורה בלי תשובה (הכרעת נדב 16/09):
    כתום ממשיך לכתוב, אדום מדלג. הפעולות: מוניטור (לענות ליד המסך), "נקה" על רשומת אדום
-   (אחרי החלפת דיסק/כבל); תשובה מהקונסולה — roomAskNote. */
+   (אחרי החלפת דיסק/כבל). ‏#2044: אין שאלת SMART שעונים עליה מכאן. */
 function roomNotes(kids, st, hint = "") {
-  const admin = isAdmin(), out = hint ? [hint] : [], asked = new Set([...st.prompts, ...kids.filter((m) => (roomMachine(m.mac) || {}).ask)].map((m) => m.mac));
+  const admin = isAdmin(), out = hint ? [hint] : [], asked = new Set(st.prompts.map((m) => m.mac));
   const clears = (items) => admin ? items.filter((x) => x.s.fail).map((x) => UI.link(`נקה כשל קודם — ${machineName(x.m)} · ${slotLabel(x.m, x.s.n, x.s.disk)}`, `clearDiskFailure(${Number(x.s.fail.id)})`)) : [];
-  const askOf = (m) => (roomMachine(m.mac) || {}).ask || null;
-  for (const m of kids) { const a = askOf(m); if (a) out.push(roomAskNote(m, a)); }   // ‏#989 ס׳ 2: שאלה שאפשר לענות עליה מכאן
-  for (const m of st.prompts.filter((x) => !askOf(x))) {
+  for (const m of st.prompts) {
     const red = st.red.filter((x) => x.m.mac === m.mac), warn = st.warn.filter((x) => x.m.mac === m.mac);
     const fate = red.length ? `<b>אדום — בלי תשובה הסוכן מדלג</b> על ${esc(whereList(red))}` : warn.length ? `<b>כתום — בלי תשובה הסוכן ממשיך לכתוב</b> על ${esc(whereList(warn))}` : "<b>ממתין לתשובה ליד המכונה</b>";
     const acts = [admin ? UI.link("לענות ליד המסך — דף המוניטור", `selectPageById('monitor')`) : "", ...clears(red),
@@ -2995,40 +2994,8 @@ function roomNotes(kids, st, hint = "") {
   }
   return out.length ? `<div class="c12 rnotes">${out.join("")}</div>` : "";
 }
-/* ‏#989 ס׳ 2: שאלת ה-SMART של משכפל, ותשובה ממנה — אותם צעדים של התפריט ליד המכונה. ‏#1732 (נדב
-   18/10, מחליף את "כתוב בכל זאת" של #1580): אדום = SMART תקול (fail) — לעולם אינו יעד: הסוכן אינו
-   שואל עליו והשרת דוחה כל "כתוב" עליו, ולכן אין לו כפתור כתיבה כאן; כתום = נכשל בשיכפול הקודם
-   (failed_last) — "נסה שוב" כותב; warn — "כתוב בכל זאת". התשובה הראשונה גוברת: אחרי שנענתה — מי ענה
-   ומה, בלי כפתורים; 409 מוצג כפי שהוא. */
+/* ‏#1732: אדום = SMART תקול (fail) — לעולם אינו יעד. אותו משפט כמו בסוכן (smartgate.sh) ובשרת (room.py). */
 const SMART_RED_HE = "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת";
-const ASK_VERDICT_HE = { warn: "SMART אזהרה", fail: "SMART תקלה", failed_last: "נכשל בשיכפול הקודם" };
-const ASK_ANSWER_HE = { replace: "החלף דיסק", rescue: "כתוב בכל זאת", skip: "דלג" };
-function askAnswerHe(a) { return a.answer === "rescue" && a.verdict === "failed_last" ? "נסה שוב" : ASK_ANSWER_HE[a.answer] || a.answer; }
-function roomAskNote(m, a) {
-  const red = a.verdict === "fail", name = esc(machineName(m));
-  const slot = esc(portLabel(findMachine(m.mac) || m, a.port));   // #2001: the connection's name
-  const what = a.verdict === "fail" ? `${slot} — ${esc(smartF1Text(a.reason))}`   // #1366
-    : `${slot} — ${ASK_VERDICT_HE[a.verdict] || "SMART"}${a.reason ? ` (${esc(smartReasonHe(a.reason))})` : ""}`;   // #1861: "(cable)" was raw
-  if (a.answer) return UI.note("info", `<b>${name}</b> · ${what}: נענתה ע&quot;י ${esc(a.answered_by || "גורם לא ידוע")}: ${esc(askAnswerHe(a))}.`);
-  const fate = red ? `<b>${esc(SMART_RED_HE)}</b>` : "<b>כתום — בלי תשובה הסוכן ממשיך לכתוב</b>";
-  const btn = (ans, label, cls = "") => `<button type="button" class="btn sm${cls}" onclick="answerSmart('${esc(m.mac)}','${esc(a.nonce)}','${ans}','${esc(a.verdict)}')">${label}</button>`;
-  const acts = roomOperator() ? `<div class="acts">${btn("replace", "החלף דיסק (כיבוי)")}${red ? "" : btn("rescue", a.verdict === "failed_last" ? "נסה שוב" : "כתוב בכל זאת")}${btn("skip", "דלג על הדיסק")}</div>` : "";   // #1732: no write on red
-  return UI.note(red ? "err" : "warn", `<b>${name}</b> שואל: ${what}. ${fate}. התשובה הראשונה גוברת — גם ליד המכונה.${acts}`);
-}
-async function answerSmart(mac, nonce, answer, verdict) {
-  if (!roomOperator()) return;
-  if (verdict === "fail" && answer === "rescue") return toast(SMART_RED_HE, 6000);   // #1732: the server refuses it too
-  const send = async () => {
-    try { await post("/room/answer", { mac, nonce, answer }); toast("התשובה נשלחה — המכונה תקבל אותה בתוך כמה שניות"); }
-    catch (e) { toast(e.message, 6000); }       // ‏409: כבר נענה ע"י … / השאלה התחלפה — מוצג כפי שהשרת אמר
-    await loadDeploy();
-  };
-  const m = findMachine(mac), name = machineName(m || { mac });
-  if (answer !== "replace") return send();
-  sheet({ title: "להחליף את הדיסק?", sub: `${name} תיכבה כדי שיחליפו את הדיסק`, danger: true, submitLabel: "כיבוי והחלפה",
-    note: impactList([["b", `${esc(name)} יכבה — כל המכונה, לא רק הדיסק`], ["w", "היא כבויה לפני כתיבה: אף מגירה שלה לא נכתבת בגל הזה"], ["w", "אדם צריך להחליף את הדיסק ליד המכונה ולהדליק אותה"], ["w", "שאר המכונות ממשיכות"]]),
-    onSubmit: send });
-}
 /* ‏#1275: בחירת הדיסקים לפתיחת סבב — אותו גריד שנדב אישר במוקאפ מחשב הבנייה (native-full.html) ובגואי
    (screens_room.c): כרטיס לכל משכפל, מלבן לכל דיסק, לחיצה מחליפה בחירה (טבעת + ‏✓), "N נבחרו",
    "בחר / נקה הכל". ניתן לבחור רק דיסק קיים (עם port ו-serial); חריץ ריק — לא. ‏#1954 (נדב 22/10): דיסק של
@@ -3104,9 +3071,9 @@ function roomPickGrid(kids) {
       const why = fitWhy || (x.preflightRed ? (preflight.reason || (preflight.state === "slow" ? "בדיקת הכתיבה איטית" : "בדיקת הכתיבה נכשלה")) : x.red ? (smartText(x.d) || "הדיסק אינו ניתן לבחירה") : roomPickWarning(x.d))
         || (x.wol && x.ok ? "לפי הדיווח האחרון — דיסק אחר בחריץ ידולג" : "");   // #1954
       const state = x.red ? "לא ניתן לסימון" : x.wol ? "יידלק ב-WoL" : warn ? "אזהרה" : "נכנס";   // #1954
-      return `<label class="dk st-${cls}${on ? " sel" : ""}" data-key="${esc(x.key)}"><input class="dk-in" type="checkbox"${on ? " checked" : ""}${x.ok ? ` onchange="roomPick('${esc(x.key)}')"` : " disabled"}><span class="dk-t">${esc(label)}</span><span class="dk-sz">${ltr(marketedDiskSize(x.d.size_bytes))}</span><span class="dk-br">${esc(x.d.model || "דגם לא ידוע")}</span>${why ? `<span class="dk-why">${esc(why)}</span>` : ""}<span class="n-chip${cls === "g" ? "" : cls === "w" ? " w" : " d"}">${esc(x.s.n == null ? "לא ממופה" : state)}</span></label>`;
+      return `<label class="dk st-${cls}${on ? " sel" : ""}" data-key="${esc(x.key)}"><input class="dk-in" type="checkbox"${on ? " checked" : ""}${x.ok ? ` onchange="roomPick(${jsStr(x.key)})"` : " disabled"}><span class="dk-t">${esc(label)}</span><span class="dk-sz">${ltr(marketedDiskSize(x.d.size_bytes))}</span><span class="dk-br">${esc(x.d.model || "דגם לא ידוע")}</span>${why ? `<span class="dk-why">${esc(why)}</span>` : ""}<span class="n-chip${cls === "g" ? "" : cls === "w" ? " w" : " d"}">${esc(x.s.n == null ? "לא ממופה" : state)}</span></label>`;
     }).join("");
-    return `<section class="rn-m${!awake ? " off" : ""}" data-mac="${esc(m.mac)}"><div class="rn-mh"><div class="rn-nm"><h4>${esc(machineName(m))}</h4><span class="st"><i class="led${awake ? " ok" : ""}"></i>${sub}</span></div><span class="rn-cnt" aria-live="polite"><b>${n}</b> מתוך ${pick.length} נבחרו</span><button class="btn sm" type="button" onclick="roomPickMachine('${esc(m.mac)}')">בחר הכול</button><button class="btn sm" type="button" onclick="roomPickClearMachine('${esc(m.mac)}')">נקה</button></div><div class="rn-ds">${slots || `<div class="muted">לא דווחו מגירות</div>`}</div></section>`;
+    return `<section class="rn-m${!awake ? " off" : ""}" data-mac="${esc(m.mac)}"><div class="rn-mh"><div class="rn-nm"><h4>${esc(machineName(m))}</h4><span class="st"><i class="led${awake ? " ok" : ""}"></i>${sub}</span></div><span class="rn-cnt" aria-live="polite"><b>${n}</b> מתוך ${pick.length} נבחרו</span><button class="btn sm" type="button" onclick="roomPickMachine(${jsStr(m.mac)})">בחר הכול</button><button class="btn sm" type="button" onclick="roomPickClearMachine(${jsStr(m.mac)})">נקה</button></div><div class="rn-ds">${slots || `<div class="muted">לא דווחו מגירות</div>`}</div></section>`;
   }).join("");
   return `<h3 class="n-sec-h full">מחשבים ומגירות</h3><div class="full rn-pick"><div class="rn-ph"><span>${ready.length} מגירות ניתנות לבחירה · <b>${nsel} נבחרו</b></span><span class="rn-all"><button type="button" class="btn sm" onclick="roomPickAll()">בחר הכול</button><button type="button" class="btn sm" onclick="roomPickClearAll()">נקה הכול</button></span></div><ul class="rn-legend" aria-label="מקרא"><li><i class="rn-sw sel"></i>נבחר</li><li><i class="rn-sw g"></i>נכנס</li><li><i class="rn-sw w"></i>אזהרה — אפשר לסמן</li><li><i class="rn-sw d"></i>לא ניתן לסימון</li><li><i class="rn-sw e"></i>ריק</li></ul>` + (kids.length ? `<div class="rn-grid">${cards}</div>` : `<div class="muted">אין משכפלים בחדר</div>`) + `<p class="muted">"בחר הכול" מסמן רק מגירות ירוקות; מגירה באזהרה מסמנים בנפרד. מחשב כבוי יידלק ב-WoL כשהסבב נפתח.</p></div>`;
 }
@@ -3193,7 +3160,7 @@ function roomDriversBlock(kids, direct) {
     `<option value="${i}"${cur && cur.vendor === m.vendor && cur.model === m.model ? " selected" : ""}>${esc(m.vendor + " " + m.model)}</option>`).join("");
   const slots = roomDriverSlots(kids);
   const all = `<label>דגם לכל הדיסקים<select id="rn-drv-all" onchange="roomDrvAll(this.value)"><option value="-" selected>— להחיל על כולם —</option>${opts({})}</select></label>`;
-  const rows = slots.map(({ m, port, key }) => `<label>${esc(machineName(m))} · ${esc(diskLabel(m, { port }))}<select data-drv="${esc(key)}" onchange="roomDrvSet('${esc(key)}',this.value)">${opts(DEPLOY.form.drvMap[key])}</select></label>`).join("");
+  const rows = slots.map(({ m, port, key }) => `<label>${esc(machineName(m))} · ${esc(diskLabel(m, { port }))}<select data-drv="${esc(key)}" onchange="roomDrvSet(${jsStr(key)},this.value)">${opts(DEPLOY.form.drvMap[key])}</select></label>`).join("");
   const scope = "";
   return `<details class="full rn-drv" open><summary>דרייברים לפי דגם <small>(אופציונלי)</small></summary><div class="rn-db">${sw}<div class="rn-drivers">${slots.length ? all + rows : `<div class="muted">סמנו דיסקים בגריד כדי לבחור להם דגם</div>`}<div class="muted">${esc(roomDriversSummary(slots))}${esc(scope)}</div></div></div></details>`;
 }
@@ -3741,7 +3708,7 @@ function roundBusyNote(idEnc) {
   const r = roomRound(), s = OVERVIEW && OVERVIEW.session;
   const what = r ? `${roomImageLabel(r)} (גל ${r.wave_number || 1})` : s ? esc(sessionImage(s)) : "";
   openModalContent("כבר יש סבב פעיל", UI.note("warn", `כבר יש סבב פעיל${what ? " — " + what : ""}. אי אפשר לפתוח סבב נוסף עד שהוא יסתיים או ייעצר.`) + `<p>${UI.link("מעבר לסבב הפעיל", "closeModal();selectPageById('deploy')")}</p>`,
-    "מעבר לסבב", "closeModal();selectPageById('deploy')", false, "", "mid");
+    "מעבר לסבב", () => { closeModal(); selectPageById("deploy"); }, false, "", "mid");
 }
 async function startRoundWith(idEnc) {
   let id = idEnc; try { id = decodeURIComponent(idEnc); } catch (e) {}
@@ -5068,7 +5035,7 @@ function poweroffRoom(gidEnc) {
 function openRoomRound() {
   if (!roomOperator() || ROOM == null || roomRound()) return;
   const kids = roomMachines();
-  openModalContent("התחל סבב", roomNewWindow(kids), "פתח סבב", "openRoomRoundSubmit()", false,
+  openModalContent("התחל סבב", roomNewWindow(kids), "פתח סבב", () => openRoomRoundSubmit(), false,
     "בחרו אימג׳, יעד ומגירות · מחשבים כבויים יידלקו ב-WoL", "wide");
   roomFooterSync(kids);
 }
@@ -5814,7 +5781,7 @@ function openSlotMap(macEnc) {
     rows: built.rows, base: JSON.stringify(built.rows.map((r) => [r.key, r.on, r.name])), proposal: built.proposal,
     add: null, err: null, note: "" };
   const when = m.disks_reported_at ? ` · דיווח אחרון ${seenAgo(m.disks_reported_at)}` : "";
-  openModalContent("מיפוי חיבורים", `<div class="smap" id="smap"></div>`, "שמירה", "smapSave()", false,
+  openModalContent("מיפוי חיבורים", `<div class="smap" id="smap"></div>`, "שמירה", () => smapSave(), false,
     /* כל חלק מבודד (FSI…PDI): שם דגם ו-MAC לטיניים לא הופכים את סדר השורה */
     [machineName(m) || m.mac, m.slot_model, m.mac].filter(Boolean).map((x) => `⁨${x}⁩`).join(" · ") + when, "wide");
   const reset = document.createElement("button");
@@ -8431,7 +8398,7 @@ async function toolsSave() {
 }
 
 function toolRowHtml(t) {
-  const box = (target, label) => `<input type="checkbox" id="tool-${target}-${esc(t.id)}" aria-label="${esc(label)}: ${esc(t.title_he)}"${TOOLS_DRAFT[target].has(t.id) ? " checked" : ""} onchange="toolsToggle('${esc(t.id)}','${target}',this.checked)">`;
+  const box = (target, label) => `<input type="checkbox" id="tool-${target}-${esc(t.id)}" aria-label="${esc(label)}: ${esc(t.title_he)}"${TOOLS_DRAFT[target].has(t.id) ? " checked" : ""} onchange="toolsToggle(${jsStr(t.id)},'${target}',this.checked)">`;
   const [cls, label, title] = TOOLS_RISK[t.risk] || ["", t.risk, ""];
   const risk = `<span title="${esc(title)}">${UI.pill(cls, label)}</span>`;
   let size;
@@ -9388,7 +9355,9 @@ function dhcpNotice(r) {
   return true;
 }
 
-function openModalContent(title, body, okLabel = "אישור", okFn = "closeModal()", danger = false, sub = "", size = "mid") {
+function openModalContent(title, body, okLabel = "אישור", okFn = closeModal, danger = false, sub = "", size = "mid") {
+  // ‏#1634: okFn הוא פונקציה, לעולם לא מחרוזת — ‏new Function על מחרוזת היה eval לכל מי שיעביר לכאן טקסט.
+  if (typeof okFn !== "function") throw new TypeError("openModalContent: okFn must be a function");
   document.getElementById("modalTitle").textContent = title;
   const subEl = document.getElementById("modalSub");
   if (subEl) { subEl.textContent = sub || ""; subEl.hidden = !sub; }
@@ -9406,7 +9375,7 @@ function openModalContent(title, body, okLabel = "אישור", okFn = "closeModa
   ok.textContent = okLabel;
   ok.className = "btn " + (danger ? "danger" : "primary");   // פעולה הרסנית לא נראית כמו אישור רגיל
   ok.disabled = false;
-  ok.onclick = typeof okFn === "function" ? okFn : new Function(okFn);
+  ok.onclick = okFn;
   const modal = document.getElementById("modal");
   const form = document.getElementById("sheet");
   if (form) form.classList.add("hidden");
@@ -10398,3 +10367,6 @@ const UI_ICON_PATHS = {
 function uiIcon(name) { return '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">'+(UI_ICON_PATHS[name] || UI_ICON_PATHS.list)+'</svg>'; }
 
 function encodeId(value) { return encodeURIComponent(value).replaceAll("'", "%27"); }
+/* ‏#1634: ערך כמחרוזת JS בתוך on*="…". ‏esc() אינו מספיק שם — הדפדפן מפענח &#39; חזרה ל-' לפני שה-JS רץ;
+   אחרי encodeId לא נשאר גרש, & או < לפענח, והפונקציה מקבלת את הערך המקורי. */
+function jsStr(value) { return `decodeURIComponent('${encodeId(value == null ? "" : value)}')`; }

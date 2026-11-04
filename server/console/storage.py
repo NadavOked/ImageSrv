@@ -257,7 +257,8 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             error = "תשובה לא צפויה משרת המשנה"
             return {"connected": False, "error": error, "images": [],
                     **_contact(node, error)}
-        return {"connected": True, "error": None, "images": answer,
+        # ‏#1634: כמו ה-relay — המשני אינו מקור אמין לדפדפן של הראשי.
+        return {"connected": True, "error": None, "images": peer_safe.defang(answer),
                 **_contact(node, None)}
 
     # --- צפייה במשני: המכונות שלו (#655 v1) ----------------------------------
@@ -288,8 +289,8 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             return {"connected": False, "error": error, "machines": [],
                     **_contact(node, error)}
         storage_nodes.record_version(ctx.conn, node["id"], answer)   # #1300
-        return {"connected": True, "error": None, "machines": machines,
-                "node_id": answer.get("node_id"), **_contact(node, None)}
+        return {"connected": True, "error": None, "machines": peer_safe.defang(machines),   # #1634
+                "node_id": peer_safe.defang(answer.get("node_id")), **_contact(node, None)}
 
     # --- הקונסולה של המשני דרך הראשי: GET מרשימה מותרת (#1179) ---------------
     #

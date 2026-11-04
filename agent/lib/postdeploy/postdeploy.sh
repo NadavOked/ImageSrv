@@ -183,6 +183,14 @@ _stage_drivers() {
         '')   if [ -n "${DR_PORT:-}" ]; then _drivers_fail "לשרת אין חבילת דרייברים לדגם שנבחר"
               else _drivers_result "no_match" ""; fi; return 0 ;;
     esac
+    # #1635: every name is a folder under Drivers/ that is rm -rf'd below -- also a
+    # package with no files, which _drivers_fetch never sees. drivers.py NAME_RE's
+    # characters, one name per line, before anything is fetched or mounted.
+    while IFS= read -r _n; do
+        case "$_n" in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*|*..*) _drivers_fail "שם חבילה לא תקין: '$_n'"; return 0 ;; esac
+    done <<EOF
+$_names
+EOF
     _list=""
     for _n in $_names; do _list="$_list${_list:+,}\"$(json_escape "$_n")\""; done
     log "drivers: staging $(echo "$_names" | tr '\n' ' ')"

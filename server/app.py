@@ -57,7 +57,6 @@ from server.system import housekeeping   # #1737
 from .db import journal
 from server.net import wol
 from server.rounds import direct
-from server.disks import smart_ask
 from server.rounds import prompt_hold
 from server.rounds.sender import QUIET_SECONDS, SenderEngine
 from server.console.library import create_library_router
@@ -611,10 +610,9 @@ def create_runtime(
             session_id, QUIET_SECONDS),
         # ‏#2056: תקרת הנטישה של השולח גדלה עם ההמתנה למחשב שהתנתק (הגדרה בקונסולה).
         lost_wait=lambda: agent_timing.lost_seconds(conn),
-        # ברזל 17/10: שאלת SMART פתוחה בגל עוצרת את שעון ה-180 של השולח.
-        # מכונה שחרגה מהתקרה (‏ASK_HOLD_MAX_SECONDS) משתחררת מהגל לבדה.
-        pending_asks=lambda session_id: smart_ask.waiting_in_wave(conn, session_id),
-        # ‏#2202: וכל שאלה אחרת למפעיל (‏net_devices.prompt — חלוקת המקום, RAID).
+        # ‏#2202: שאלה למפעיל בגל (‏net_devices.prompt — חלוקת המקום, RAID) עוצרת
+        # את שעון ה-180 של השולח; מכונה שחרגה מהתקרה (‏ASK_HOLD_MAX_SECONDS)
+        # משתחררת מהגל לבדה. שאלת ה-SMART שהייתה כאן הוסרה (#2044).
         pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
     )
     def wake_class(group_id: str, opener_mac: str | None,

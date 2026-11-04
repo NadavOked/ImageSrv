@@ -667,5 +667,5 @@ function emHistSheet(id) {
   if (next) rows.push([next[0], esc(next[1])]);
   const items = h.items.length ? `<h3 class="n-sec-h">האירוע</h3><ul class="em-items">${h.items.map((x) => `<li>${esc(typeof x === "string" ? x : x.detail || JSON.stringify(x))}</li>`).join("")}</ul>${h.count > h.items.length ? `<p class="n-help">ועוד ${h.count - h.items.length} שורות.</p>` : ""}` : "";
   openModalContent(h.label, `<dl class="mkv em-kv">${rows.map(([dt, dd]) => `<dt>${esc(dt)}</dt><dd>${dd}</dd>`).join("")}</dl>${items}`,
-    "סגירה", "closeModal()", false, `${emWhen(h.created_at)} · כלל: ${emRuleLabel(h.rule_id, h.rule_name)}`, "mid");
+    "סגירה", closeModal, false, `${emWhen(h.created_at)} · כלל: ${emRuleLabel(h.rule_id, h.rule_name)}`, "mid");
 }

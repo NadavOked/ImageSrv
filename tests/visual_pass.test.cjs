@@ -122,7 +122,7 @@ test('image delete is a danger sheet with no typed field (#1270), and modals res
   run('ME={username:"a",role:"admin",capabilities:{}}; IMAGES=[{id:"i1",name:"Img"}]; findImage=(id)=>IMAGES.find(i=>i.id===id); openModalFrame=()=>{};');
   run('globalThis.cfg=null; sheet=(o)=>{ globalThis.cfg=o; }; deleteImage("i1")');
   assert.equal(run('cfg.danger'), true); assert.equal(run('cfg.verify'), undefined); assert.equal(run('cfg.fields'), undefined);
-  run('openModalContent("x","y","ok","closeModal()",true)');
+  run('openModalContent("x","y","ok",closeModal,true)');
   assert.equal(doc.getElementById('modalOk').className, 'btn danger');
   run('openModalContent("x","y")');
   assert.equal(doc.getElementById('modalOk').className, 'btn primary');

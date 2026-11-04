@@ -62,7 +62,7 @@ PRELUDE = (
     f'{agent_sources("sysinfo", "progress", "failmark")}'   # failmark: disk_failure_cause — זיכרון השרת בשער (#872/#874)
     f'. {posix(AGENT)}/lib/smart/smart.sh; '
     f'. {posix(AGENT)}/lib/smart/smartgate.sh; '   # #1211: השער (smart_preflight/smart_gate) פוצל מ-smart.sh
-    f'. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '   # gui_smart_choice — כמו בסוכן האמיתי
+    f'. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '   # כמו בסוכן האמיתי
     # ‏#906: hello בזמן ההמתנה לאדם. **רק אם הקובץ קיים**: הבקרה השלילית
     # מחזירה את main, ושם הטסט חייב ליפול על ההתנהגות ולא על `.` של קובץ חסר.
     + (f'. {posix(AGENT)}/lib/core/attended.sh; ' if (AGENT / "lib" / "core" / "attended.sh").exists() else "")
@@ -405,10 +405,9 @@ def fake_memory(failed: dict[str, str]) -> str:
             'json_get_join() {{ [ -s "$1" ] || return 1; echo ok; {lines} }}; ').format(lines=lines)
 
 
-#: ‏11/10 (GUI בלבד): תפריט ה-SMART בטקסט הוסר, וההכרעה מגיעה **רק** מהמסך
-#: הגרפי (‏gui_smart_choice). הזיוף כאן הוא הגבול הזה: תור תשובות בקובץ,
-#: אחת לכל שאלה, וכל שאלה נרשמת ב-`asked` (הראיה החיובית שנשאלה). תור ריק
-#: = אין גואי (return 1) — ואז ברירת "אין תשובה" של הצבע.
+#: ‏11/10 (GUI בלבד): תפריט ה-SMART בטקסט הוסר, וההכרעה הגיעה **רק** מהמסך
+#: הגרפי (‏gui_smart_choice). מאז #2042 השער אינו שואל, וב-#2044 הפונקציה עצמה
+#: הוסרה. הזיוף נשאר כמלכודת: שער שהיה חוזר לשאול היה רושם ב-`asked`.
 GUI_STUB = (
     'gui_smart_choice() { echo "$1" >> "$RUN_DIR/asked"; '
     '_q=$(sed -n 1p "$RUN_DIR/gui_answers" 2>/dev/null); '
@@ -735,7 +734,8 @@ FAKE_HELLO = (
 
 
 def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
-    """נמדד 16/09 על מחשב 2: בזמן `smart_choice` אף hello לא יצא, ‏`last_seen`
+    """נמדד 16/09 על מחשב 2: בזמן שאלה למפעיל (אז — `smart_choice`, שהוסר ב-#2044)
+    אף hello לא יצא, ‏`last_seen`
     קפא והמוניטור נחסם (403) בדיוק כשהמפעיל צריך לראות את השאלה. כאן
     ‏`http_post_json` מזויף רושם כל גוף שנשלח; התשובה מגיעה אחרי ~2.5 פעימות
     (‏ATTENDED_BEAT_S=1 — שניות שלמות, #1333), ולכן חייבים להיספר ≥2 hello — כל
@@ -746,8 +746,8 @@ def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
     out = sh(env(run, dev) + PRELUDE + FAKE_HELLO
              + 'export ATTENDED_BEAT_S=1; '
              + 'http_post_json() { printf "%s\\n" "$(cat "$2")" >> "$RUN_DIR/hellos"; }; '
-             + 'gui_smart_choice() { sleep 2.5; echo skip; }; '
-             + "smart_choice 'Disk 1' 'SMART fail (x)' sda fail x rescue")
+             + 'ask_fake() { sleep 2.5; echo skip; }; '
+             + "attended 'Disk 1: SMART fail (x)' ask_fake")
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "skip", out.stdout          # ההכרעה עצמה לא נפגעה
     lines = (run / "hellos").read_text().splitlines() if (run / "hellos").exists() else []
@@ -763,7 +763,7 @@ def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
 
 
 def test_the_beat_stops_with_the_answer(tmp_path):
-    """אחרי שהמפעיל ענה, הפעימה מפסיקה: ‏`$( )` של הקורא (‏smart_preflight)
+    """אחרי שהמפעיל ענה, הפעימה מפסיקה: ‏`$( )` של הקורא (‏drawergate.sh)
     אינו נתקע על תת-מעטפת שעוד מחזיקה את stdout, ואף hello נוסף אינו
     נשלח אחרי ההכרעה."""
     run = tmp_path / "run"; run.mkdir()
@@ -771,8 +771,8 @@ def test_the_beat_stops_with_the_answer(tmp_path):
     out = sh(env(run, dev) + PRELUDE + FAKE_HELLO
              + 'export ATTENDED_BEAT_S=1; '
              + 'http_post_json() { echo hello >> "$RUN_DIR/hellos"; }; '
-             + 'gui_smart_choice() { echo replace; }; '
-             + "_dec=$(smart_choice 'Disk 1' 'ctx' sda fail x rescue); "
+             + 'ask_fake() { echo replace; }; '
+             + "_dec=$(attended 'Disk 1: ctx' ask_fake); "
              + 'sleep 0.8; echo "dec=$_dec"; _n=$(wc -l < "$RUN_DIR/hellos"); '
              + 'sleep 0.8; echo "grew=$(( $(wc -l < "$RUN_DIR/hellos") - _n ))"')
     assert out.returncode == 0, out.stderr
@@ -836,27 +836,6 @@ def test_a_beat_that_is_not_whole_seconds_is_named_not_a_hello_storm(tmp_path, b
     assert len(hellos) == 2, len(hellos)    # פעימה אחת, ו-hello הניקוי שאחרי התשובה (#2202)
     assert f"ATTENDED_BEAT_S='{beat}' is not a whole number of seconds" in out.stderr, out.stderr
     assert out.stdout == "", out.stdout          # stdout של העוטף נשאר נקי
-
-
-@pytest.mark.parametrize("ask", ["0.5", "0"])
-def test_an_ask_beat_that_is_not_whole_seconds_does_not_kill_the_beat(tmp_path, ask):
-    """#1333: אותה משפחה ב-ATTENDED_ASK_BEAT_S — בזמן שאלת SMART על הגואי
-    הלולאה מחשבת `$((t % ask))`, ועל "0.5" או "0" זו שגיאה אריתמטית שהורגת
-    את תת-המעטפת בשקט (stderr שלה הוא /dev/null): הפעימה מתה, וזה #906
-    מחדש. נדרש: נאמר ב-stderr, וברירת המחדל (3) — כאן ATTENDED_BEAT_S=2
-    קצר ממנה, ולכן יוצאים hello ב-0 וב-2. בבסיס: hello אחד ומוות שקט."""
-    run = tmp_path / "run"; run.mkdir()
-    dev = tmp_path / "dev"; dev.mkdir()
-    gui = tmp_path / "gui"; gui.mkdir()
-    (gui / "smart-request").write_text("3-2|2|fail|x\n")
-    out = sh(env(run, dev) + PRELUDE + FAKE_HELLO
-             + f"export GUI_DIR='{posix(gui)}' ATTENDED_BEAT_S=2 ATTENDED_ASK_BEAT_S='{ask}'; "
-             + 'http_post_json() { echo hello >> "$RUN_DIR/hellos"; }; '
-             + 'attended q sleep 3.2')
-    assert out.returncode == 0, out.stderr
-    hellos = (run / "hellos").read_text().splitlines()
-    assert len(hellos) == 3, len(hellos)    # 0 ו-2, ו-hello הניקוי שאחרי התשובה (#2202)
-    assert f"ATTENDED_ASK_BEAT_S='{ask}' is not a whole number of seconds" in out.stderr, out.stderr
 
 
 def test_a_plain_beat_carries_no_prompt(tmp_path):

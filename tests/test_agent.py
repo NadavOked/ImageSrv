@@ -30,6 +30,10 @@ REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
 INSTALLER = REPO / "installer"
 
+#: ‏#1821: כותרת regf של כוורת מסונכרנת — רצף ראשי (offset 4) = משני (8).
+#: ‏`_write_hostname_windows` קורא אותה לפני כתיבה, ו"hive" הישן היה "לא נקרא".
+CLEAN_HIVE = b"regf" + (7).to_bytes(4, "little") * 2
+
 
 def find_bash() -> str | None:
     """ב-Windows מעדיפים את Git Bash על פני ה-bash של WSL שיושב
@@ -928,7 +932,7 @@ def test_a_windows_hostname_write_that_cannot_unmount_is_not_success(tmp_path):
     run = box / "run"
     hive = run / "win" / "Windows" / "System32" / "config"
     hive.mkdir(parents=True)
-    (hive / "SYSTEM").write_text("hive", encoding="utf-8")  # מה ש-ntfs-3g היה חושף
+    (hive / "SYSTEM").write_bytes(CLEAN_HIVE)  # מה ש-ntfs-3g היה חושף
     # hivewrite: קריאה (-g) של Current מחזירה מספר סט־בקרה; כל קריאה אחרת
     # מחזירה את השם שנכתב, כך שהאימות (read-back) עובר. כתיבה יוצאת 0.
     hivewrite_body = (
@@ -967,7 +971,7 @@ def test_an_unreadable_control_set_fails_instead_of_defaulting_to_001(tmp_path):
     run = box / "run"
     hive = run / "win" / "Windows" / "System32" / "config"
     hive.mkdir(parents=True)
-    (hive / "SYSTEM").write_text("hive", encoding="utf-8")
+    (hive / "SYSTEM").write_bytes(CLEAN_HIVE)
     # קריאת Select\Current נכשלת (exit 3, stdout ריק — "value not found"
     # של hivewrite.c). כל read-back אחר מחזיר את השם, כך שאם הקוד היה
     # בוחר סט־בקרה כלשהו, האימות "היה עובר" — וזה בדיוק הבאג.

@@ -12,7 +12,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
-from test_capture_refusals import CURL_SINK, capture_run, refusal_reason
+from test_capture_refusals import CLEAN_PARTITION, CURL_SINK, capture_run, refusal_reason
 from test_directsend import PARTCLONE, TWO_PARTITIONS, direct_run
 from test_lc_ntfs_note_2009 import UNHIB, UNHIB_LOGFILE
 from test_shrink_on_capture import (
@@ -105,7 +105,7 @@ def no_source_writes(box, run):
     assert not bad, bad
     assert not (run / "targets/sda/shrunk").exists()
     for n in (1, 2):                                  # and the bytes themselves
-        assert (box / "dev" / f"sda{n}").read_bytes() == bytes(512), n
+        assert (box / "dev" / f"sda{n}").read_bytes() == CLEAN_PARTITION, n
 
 
 def succeeded(result, *, direct=False, action="unhibernated"):

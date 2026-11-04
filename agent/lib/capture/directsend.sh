@@ -249,14 +249,14 @@ direct_send_task() {
     # $1 = task id; the answer that carried the task is in $RESP. Mirrors
     # do_task for a capture: both roads out end at report_final (#127), and
     # "the server never heard" holds instead of powering off.
-    _dt_disk=$(json_get "$RESP" ".task.disk")
+    _dt_disk=$(json_disk "$RESP" ".task.disk") || log "direct send: disk name '$(json_get "$RESP" ".task.disk")' refused (#1635)"
     ui_clear; ui_header
     echo "  Deploying /dev/$_dt_disk directly to the cloning machines."
     echo "  Source disk: read only -- nothing is written to it."
     echo "  Do not power off."
     progress_loop "" "$MAC" "$SERVER" "$1" &
     _dt_ppid=$!
-    direct_send_run "$1" "$_dt_disk" "$(json_get "$RESP" ".task.disk_serial")"; _dt_rc=$?
+    [ -n "$_dt_disk" ] && direct_send_run "$1" "$_dt_disk" "$(json_get "$RESP" ".task.disk_serial")"; _dt_rc=$?
     shrink_restore_source "$_dt_disk" || :   # #1171: the tail's RAM view, after both reads; not released = a warning in error
     [ "$_dt_rc" != 0 ] || capture_unhib_note "$_dt_disk" || { _direct_failed "$_dt_disk" "לא הצלחנו לרשום שההשהיה בוטלה בעותק — המקור לא נכתב"; _dt_rc=1; }
     if [ "$_dt_rc" -eq 0 ]; then

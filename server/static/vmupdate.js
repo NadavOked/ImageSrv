@@ -112,7 +112,7 @@ function vmuName(st) { return (st && st.image_name) || "אימג'"; }
 function vmuVersion(st) { return st && st.image_version ? `v${st.image_version}` : ""; }
 function vmuMine(st) { return !!st && st.you_control; }
 /* הודעה בתוך חלון — UI.note מעוצב רק בתוך ‏.page, החלונות יושבים מחוצה לו. */
-function vmuNote(kind, html) { return `<div class="n-note vmu-note ${kind}"><span>${html}</span></div>`; }
+function vmuNote(kind, html) { return `<div class="n-note vmu-note ${esc(kind)}"><span>${html}</span></div>`; }
 function vmuPct(done, total) { return total ? Math.max(0, Math.min(100, Math.round(100 * done / total))) : null; }
 /* ‏#1391: "62% · 27.8 / 44.9 GB" — רק כשהשרת כבר יודע את הגודל הכולל; לפני כן כלום, לא 0%. */
 function vmuPrepProgress(st, before = "", after = "") {
