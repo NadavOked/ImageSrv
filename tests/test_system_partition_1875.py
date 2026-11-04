@@ -231,7 +231,7 @@ NTFS3G = ('echo "$*" >> "$RUN_DIR/ntfs-3g.calls"\n'
           'eval "mnt=\\${$#}"; eval "node=\\${$(($# - 1))}"\n'
           'echo "$node" > "$RUN_DIR/mounted"\n'
           'case "$node" in *2) mkdir -p "$mnt/Windows/System32/config"\n'
-          '                    echo hive > "$mnt/Windows/System32/config/SYSTEM" ;; esac\n'
+          '                    printf "regf\\007\\000\\000\\000\\007\\000\\000\\000" > "$mnt/Windows/System32/config/SYSTEM" ;; esac\n'
           'exit 0')
 #: hivewrite: a write records which partition was mounted; reads answer as a
 #: hive that took the name (Select\\Current = 1).

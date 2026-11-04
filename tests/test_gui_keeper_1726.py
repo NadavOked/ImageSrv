@@ -222,29 +222,6 @@ def test_a_restore_screen_that_ends_by_itself_is_not_started_again(tmp_path):
 
 
 @POSIX
-def test_a_gui_killed_during_a_smart_question_ends_the_question_at_once(tmp_path):
-    """The dying bridge clears the question (gui_cleanup). With the keeper alive
-    the wait must not run on to WAIT_SMART_GUI_S: no answer is the colour's own
-    default (smart_ask), as before #1726."""
-    body = ('D_ROLE=cloner; gui_cloner_parent; GUI_DIR="$RUN_DIR/gui"; '
-            'mkdir -p "$SYSROOT/sys/block/sda/device"; '
-            'until [ -s "$RUN_DIR/stations" ]; do sleep 0.1; done; '
-            # killed once the question is up -- before it, the new GUI would just be asked it
-            '( n=0; until [ -e "$GUI_DIR/smart-request" ] || [ "$n" -ge 100 ]; do sleep 0.1; n=$((n + 1)); done; '
-            'kill -9 "$(head -n1 "$RUN_DIR/stations")" ) & '
-            't0=$(date +%s); gui_smart_choice sda warn reason; echo "SMART rc=$? after $(( $(date +%s) - t0 ))s"')
-    proc = _start(tmp_path, body, env="WAIT_SMART_GUI_S=30")
-    try:
-        proc.wait(timeout=60)
-    finally:
-        _stop(proc)
-    out = (tmp_path / "out.txt").read_text(encoding="utf-8")
-    line = [ln for ln in out.splitlines() if ln.startswith("SMART rc=")]
-    assert line and line[0].startswith("SMART rc=1 after"), _report(tmp_path)
-    assert int(line[0].rsplit(" ", 1)[1].rstrip("s")) < 15, line   # not the 30 s of no answer
-
-
-@POSIX
 def test_the_handoff_ends_the_keeper_without_a_restart(tmp_path):
     """restore-start is the bridge's planned exit -- not a crash to undo."""
     kiosk = _write(tmp_path / "kiosk-handoff",

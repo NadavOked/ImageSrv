@@ -20,6 +20,24 @@ def test_attended_power_check_executes_the_saved_response(tmp_path: Path):
 
 
 def test_all_person_wait_loops_check_for_power_requests():
-    for name in ("clonergui.sh", "shrinkgui.sh", "askgui.sh", "hold.sh"):
+    # #2044: clonergui.sh is not on the list any more -- its only wait for a person
+    # (gui_smart_choice, the SMART question) was removed; the drawer questions on the
+    # cloner wait in askgui.sh. The scan below keeps the rule for any wait that comes back.
+    for name in ("shrinkgui.sh", "askgui.sh", "hold.sh"):
         text = (lib_path(name)).read_text(encoding="utf-8")
         assert "attended_power_check" in text, name
+    assert "smart-decision" not in lib_path("clonergui.sh").read_text(encoding="utf-8")
+
+
+def test_every_wait_on_a_gui_decision_checks_for_power_requests():
+    """A loop that waits for the person's answer in `$GUI_DIR/<x>-decision` is a
+    person wait wherever it lives: it must consume a console power request
+    (#1395) like the named ones above. Found by scanning, not by a hand list."""
+    import re
+    readers = []
+    for path in sorted(Path(AGENT).rglob("*.sh")):
+        text = path.read_text(encoding="utf-8")
+        if re.search(r'<\s*"\$GUI_DIR/[a-z]+-decision"', text):
+            readers.append(path.name)
+            assert "attended_power_check" in text, path
+    assert {"askgui.sh", "shrinkgui.sh"} <= set(readers), readers   # the scan sees what it was written for

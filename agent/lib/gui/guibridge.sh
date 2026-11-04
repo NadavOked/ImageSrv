@@ -71,28 +71,6 @@ gui_dispatch() {
             # no session (the login screen is exactly where a person waits).
             touch "$RUN_DIR/idle.touch" || return 1
             return 0 ;;
-        smart-*)
-            # ה-GUI שולח `smart-<action>|<nonce>` -- ה-nonce של הבקשה
-            # ש**צוירה**. הגשר מקבל רק אם ה-nonce הזה תואם ל-nonce של
-            # הבקשה הפעילה. ‏nonce ייחודי לכל בקשה (מונוטוני), ולכן גם
-            # דיסק שנתבקש שוב (אותו port, nonce חדש) דוחה קליק מושהה עם
-            # ה-nonce הישן -- מה שבדיקת port בלבד לא תפסה. קליק בלי בקשה
-            # פעילה או על מסך אחר נדחה גם הוא.
-            [ "${GUI_SCREEN:-}" = cloner ] || return 1
-            case "$token" in *'|'*) ;; *) return 1 ;; esac    # ה-nonce חובה
-            _sd_action=${token%%|*}
-            case "$_sd_action" in smart-replace|smart-rescue|smart-skip) ;; *) return 1 ;; esac
-            _sd_click_nonce=${token#*|}
-            case "$_sd_click_nonce" in ''|*[!0-9-]*) return 1 ;; esac
-            [ -s "$GUI_DIR/smart-request" ] || return 1
-            IFS='|' read -r _sd_nonce _ < "$GUI_DIR/smart-request" || return 1
-            [ -n "$_sd_nonce" ] || return 1
-            [ "$_sd_click_nonce" = "$_sd_nonce" ] || return 1
-            printf '%s|%s\n' "$_sd_nonce" "${_sd_action#smart-}" \
-                > "$GUI_DIR/smart-decision.next" &&
-                mv "$GUI_DIR/smart-decision.next" "$GUI_DIR/smart-decision"
-            return $?
-            ;;
     esac
     gui_role || { gui_error 'לא ניתן לאמת את ההתחברות — התחברו מחדש' 'Session/role could not be verified; restart and sign in'; return 1; }
     case "$token" in
@@ -219,7 +197,6 @@ gui_cleanup() {
     done
     # A stale click must never authorize the next disk (principle 5).
     rm -f "$CONSOLE_JAR" "$RUN_DIR/console_login.json" "$GUI_DIR/actions" \
-        "$GUI_DIR/smart-request" "$GUI_DIR/smart-decision" \
         "$GUI_DIR/shrink-request" "$GUI_DIR/shrink-decision" "$GUI_DIR/ask-request" "$GUI_DIR/ask-decision"
 }
 

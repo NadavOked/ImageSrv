@@ -289,24 +289,6 @@ def test_the_gui_unavailable_message_is_ascii(tmp_path):
     assert out.isascii(), out
 
 
-def test_smart_without_a_gui_takes_the_no_answer_default(tmp_path):
-    """תפריט ה-SMART בטקסט הוסר. בלי גואי — "המשך" של הצבע (נדב 16/09):
-    כתום כותב (rescue), אדום מדלג (skip). ה-"1" שמחכה ב-stdin היה בוחר
-    "החלף" בתפריט הישן."""
-    lib = posix(flat_lib())
-    out, rc, _log = _run(
-        tmp_path,
-        f". {lib}/smartgate.sh; D_ROLE=cloner; "
-        'gui_smart_choice() { return 1; }; '
-        'echo "orange=$(smart_ask "Disk 1" "SMART warn" sda warn "realloc" rescue)"; '
-        'echo "red=$(smart_ask "Disk 2" "failed" sdb failed_last "cable" skip)"; '
-        'IFS= read -r _left && echo "STDIN-UNTOUCHED $_left"')
-    assert rc == 0, out
-    assert "orange=rescue" in out
-    assert "red=skip" in out
-    assert "STDIN-UNTOUCHED 1" in out
-
-
 def test_the_shrink_question_without_a_gui_cancels(tmp_path):
     """שאלת הכיווץ בטקסט הוסרה (#928 היא דיאלוג). בלי גואי — cancel: שום
     דבר לא מכווץ בלי אדם שאמר כן. ה-"1" ב-stdin היה "כווץ וקלוט" בישן."""

@@ -153,9 +153,10 @@ CREATE TABLE IF NOT EXISTS drawer_cancels (
     PRIMARY KEY (session_id, mac, dev)
 );
 
--- ‏#989 ס׳ 2: שאלת ה-SMART של משכפל (`smart_ask.py`) — שורה אחת למכונה, והתשובה
--- הראשונה (הקונסולה או המכונה עצמה) נכתבת ב-UPDATE מותנה. `closed` = המכונה כבר
--- שלחה hello בלי השאלה; nonce חוזר אחרי אתחול, ושורה סגורה אינה שאלה חדשה.
+-- ‏#989 ס׳ 2: שאלת ה-SMART של משכפל — שורה אחת למכונה. ‏#2044: השאלה הוסרה, ואף קוד
+-- אינו כותב או קורא את הטבלה. היא נשארת בסכמה, ריקה, **בכוונה** (הכרעת המתאם 03/11):
+-- הסרה היא שינוי סכמה ו-bump של SCHEMA_VERSION, והגרסה הקודמת הייתה מסרבת לפתוח את
+-- ה-DB (#1894) — "חזור לגרסה" נשבר. ‏tests/test_smart_ask_removed_2044.py שומר שאין לה קורא.
 CREATE TABLE IF NOT EXISTS smart_asks (
     mac         TEXT PRIMARY KEY,
     nonce       TEXT NOT NULL,

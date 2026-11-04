@@ -21,6 +21,7 @@ from pathlib import Path
 
 from native import requires_native
 from test_smart import AGENT, BASH, posix
+from test_agent import CLEAN_HIVE
 from agentlib import lib_path
 
 pytestmark = requires_native(("bash", BASH))
@@ -90,7 +91,7 @@ def windows_box(tmp_path: Path, **override: str) -> tuple[str, Path]:
     run = tmp_path / "run"
     hive = run / "win" / "Windows" / "System32" / "config"
     hive.mkdir(parents=True)
-    (hive / "SYSTEM").write_text("hive", encoding="utf-8")  # מה ש-ntfs-3g היה חושף
+    (hive / "SYSTEM").write_bytes(CLEAN_HIVE)  # מה ש-ntfs-3g היה חושף
     stubs = {"ntfs-3g": "exit 0", "hivewrite": HIVEWRITE_OK, "umount": "exit 0"}
     stubs.update(override)
     return box(tmp_path, stubs)

@@ -11,10 +11,9 @@ SMART; ושיכפול מקומי הפך דיסק עם אזהרה ליעד בקל
 
 שני חצאים:
 
-* **הסוכן** (bash, רץ גם בווינדוס כש-Git bash קיים): ‏`gui_smart_choice`
-  כותב דגם וסידורי ב-`smart-request`; ‏`attended.sh` עדיין שולח לקונסולה
-  את הסיבה לבדה; ‏`gui_state` כותב `dsmart=` במסכי הקליטה והשחזור בלבד
-  (צריך jq).
+* **הסוכן** (bash, רץ גם בווינדוס כש-Git bash קיים): ‏`gui_state` כותב
+  `dsmart=` במסכי הקליטה והשחזור בלבד (צריך jq). הצד של המשכפל
+  (‏`gui_smart_choice` ו-`smart-request`) הוסר ב-#2044.
 * **הגואי** (C, רק על לינוקס עם cc+pango): דרייבר שמכליל את `main.c`
   ומזין אירועים אמיתיים ל-`handle()` — כל מסלול: Enter על אזהרה פותח
   חלון ולא כותב; "דלג" לא כותב; האדום כותב; מקור עם אזהרה עובר חלון.
@@ -37,8 +36,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from test_cloner_gui import (BASH, GUI, PORTS, PRELUDE, _build_gui, _pkgconfig, _png_rgb,
-                             env, posix, sh)
+from test_cloner_gui import BASH, GUI, _build_gui, _pkgconfig, _png_rgb, posix, sh
 
 REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
@@ -50,64 +48,6 @@ native_gui = requires_native(
     ("bash", BASH),
     why="native-gui נבנה על המעבדה בלבד",
 )
-
-
-# --- הסוכן: smart-request נושא דגם וסידורי ----------------------------------------
-
-
-def _fake_sysfs(root: Path, dev: str, model: str, serial: str) -> None:
-    d = root / "sys" / "block" / dev / "device"
-    d.mkdir(parents=True)
-    (d / "model").write_text(model + "\n", newline="\n")
-    (d / "serial").write_text(serial + "\n", newline="\n")
-
-
-@bash_only
-def test_the_smart_request_carries_the_model_and_the_serial(tmp_path):
-    """הבקשה שהגואי מצייר היא nonce|port|verdict|reason|model|serial — הפרטים
-    שהחלון מציג. ‏`|` בתוך דגם אינו מפצל רשומה (מוחלף ברווח)."""
-    gui = tmp_path / "gui"; gui.mkdir()
-    run = tmp_path / "run"; run.mkdir()
-    sysroot = tmp_path / "root"
-    _fake_sysfs(sysroot, "sdb", "  WDC WD5000|AAKX  ", "WD-WCC2EVC71234")
-    script = (env(run, gui) + f"export SYSROOT={posix(sysroot)!r}; " + PRELUDE + PORTS + "D_ROLE=cloner; " + f"""
-sleep 20 & _gui_pid=$!
-( gui_smart_choice sdb fail pending_sectors > {posix(gui)}/out ) &
-CH=$!
-for _ in 1 2 3 4 5 6 7 8 9 10; do [ -f {posix(gui)}/smart-request ] && break; sleep 0.3; done
-cp {posix(gui)}/smart-request {posix(gui)}/seen
-N=$(IFS='|' read -r n _ < {posix(gui)}/smart-request; echo "$n")
-printf '%s|skip\\n' "$N" > {posix(gui)}/smart-decision
-wait $CH; kill $_gui_pid 2>/dev/null; true
-""")
-    out = sh(script)
-    assert out.returncode == 0, out.stderr
-    seen = (gui / "seen").read_text().strip()
-    fields = seen.split("|")
-    assert fields[1:] == ["2", "fail", "pending_sectors", "WDC WD5000 AAKX", "WD-WCC2EVC71234"], seen
-
-
-@requires_native(("bash", BASH), "jq", why="cloner_gui_state קורא את שם האימג' ב-jq")
-def test_the_cloner_state_passes_the_details_through_to_the_prompt(tmp_path):
-    from test_cloner_gui import state_lines
-    lines = state_lines(tmp_path, smart_request="12-2|2|fail|pending_sectors|WDC WD5000|WD-123")
-    assert "smart_prompt=12-2|2|fail|pending_sectors|WDC WD5000|WD-123" in lines, lines
-
-
-@bash_only
-def test_the_console_ask_still_carries_the_reason_alone(tmp_path):
-    """‏`attended.sh` קרא ארבעה שדות — המשתנה האחרון היה בולע את
-    ‏`reason|model|serial` ושולח אותו לקונסולה כסיבה."""
-    from test_smart_ask_agent import JQ_STUB, prelude, request
-    box = tmp_path
-    (box / "run").mkdir(); (box / "gui").mkdir(); (box / "bin").mkdir()
-    if shutil.which("jq") is None:
-        (box / "jqstub.py").write_text(JQ_STUB, encoding="utf-8", newline="\n")
-        (box / "bin" / "jq").write_text(f'#!/bin/sh\nexec python "{posix(box / "jqstub.py")}" "$@"\n', newline="\n")
-    (box / "gui" / "smart-request").write_text("3-2|2|fail|pending_sectors|WDC WD5000|WD-123\n", newline="\n")
-    out = sh(prelude(box, None) + 'attended_hello "Disk 2: SMART fail"')
-    assert out.returncode == 0, out.stderr
-    assert request(box)["ask"] == {"nonce": "3-2", "port": 2, "verdict": "fail", "reason": "pending_sectors"}
 
 
 # --- הסוכן: dsmart= במסכי הקליטה והשחזור ----------------------------------------

@@ -24,7 +24,7 @@ import pytest
 from agentlib import agent_sources
 
 from native import requires_native
-from test_captured_stdout import HIVEWRITE_OK, LINUX_PLAN, WIN_PLAN, sh, stub
+from test_captured_stdout import CLEAN_HIVE, HIVEWRITE_OK, LINUX_PLAN, WIN_PLAN, sh, stub
 from test_smart import AGENT, BASH, posix
 
 pytestmark = requires_native(("bash", BASH))
@@ -51,7 +51,7 @@ def box(tmp_path: Path, plans: list[str], *, subvols: str = "", others: str = "h
     run = tmp_path / "run"; run.mkdir()
     if hive:
         (run / "win/Windows/System32/config").mkdir(parents=True)
-        (run / "win/Windows/System32/config/SYSTEM").write_text("hive", encoding="utf-8")
+        (run / "win/Windows/System32/config/SYSTEM").write_bytes(CLEAN_HIVE)
     stubs = {"mount": MOUNT, "umount": UMOUNT, "ntfs-3g": "exit 0",
              "hivewrite": HIVEWRITE_LOGGED, **override}
     script = "".join(stub(stub_dir / n, b) for n, b in stubs.items())

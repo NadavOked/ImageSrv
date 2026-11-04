@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from native import requires_native
-from test_captured_stdout import box, only_json, sh
+from test_captured_stdout import CLEAN_HIVE, box, only_json, sh
 from test_smart import BASH
 
 pytestmark = requires_native(("bash", BASH))
@@ -64,7 +64,7 @@ def windows(tmp_path: Path, state: str, files: dict[str, str | bytes]) -> tuple[
     win = run / "win"
     (win / "Windows/System32/config").mkdir(parents=True)
     for hive in ("SYSTEM", "SOFTWARE"):
-        (win / "Windows/System32/config" / hive).write_text("hive", encoding="utf-8")
+        (win / "Windows/System32/config" / hive).write_bytes(CLEAN_HIVE)
     for rel, body in files.items():
         target = win / rel
         target.parent.mkdir(parents=True, exist_ok=True)

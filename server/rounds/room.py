@@ -29,7 +29,7 @@ from server.console import auth
 from server.rounds import drawer_cancel, drive_rates, room_drivers, room_precheck
 from server.library import drivers, minfree
 from server.agent import registry, reports
-from server.disks import disk_failures, drawer_slots, slot_names, smart_ask
+from server.disks import disk_failures, drawer_slots, slot_names
 from server.storage import locations as storage_locations
 from server.disks import model_slots   # #2001
 from server.db import _write_lock, journal, now_iso, update_one, writing
@@ -44,6 +44,10 @@ from server.library.images import required_bytes, restore_refusal
 from server.library.imagefit import validate_expand_choice
 from server.rounds.sessions import SessionError, SessionStore, SessionSuperseded
 from server.core.tasks import request_origin
+
+#: ‏#1732: מה שהמפעיל קורא על דיסק אדום — אותו משפט כמו בסוכן (smartgate.sh).
+#: עד #2044 ישב ב-`smart_ask.py`, שהוסר עם שאלת ה-SMART.
+SMART_RED_HE = "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת"
 
 log = logging.getLogger("imagesrv.room")
 
@@ -755,7 +759,7 @@ def _validate_target_slots(conn: sqlite3.Connection, raw) -> list[dict]:
                      if d.get("smart") == "fail" and d.get("port") in ports)
         if red:
             raise ValueError(
-                f"אי אפשר לפתוח סבב: דיסק {red[0]} ב־{mac} — {smart_ask.SMART_RED_HE}")
+                f"אי אפשר לפתוח סבב: דיסק {red[0]} ב־{mac} — {SMART_RED_HE}")
         item = {"mac": mac, "ports": sorted(ports)}
         # ‏#1954 (נדב 22/10): משכפל כבוי — הבחירה היא לפי הדיווח האחרון שלו, ולכן היא
         # נקשרת ל-serial של כל דיסק שנבחר. כשהוא עולה (`wake_check`) — אותו דיסק נכתב,
@@ -1897,7 +1901,6 @@ def status_view(ctx) -> dict:
             "disk_probe": row["disk_probe"],
             "fresh_drawers": sum(1 for d in drawers if d["fresh"]),
             "drawer_list": drawers,
-            "ask": smart_ask.view(ctx.conn, row["mac"]),   # ‏#989 ס׳ 2: שאלת SMART פתוחה/שנענתה
             # ‏#704: כל השמות של המכונה, גם של חריץ ריק (‏sata:3 בלי דיסק).
             "slot_names": names,
             "joined": member is not None,

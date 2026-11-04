@@ -941,68 +941,17 @@ def test_a_simulated_sender_never_runs_udp_sender_and_never_fails(library, monke
     assert "send_failed" not in events
 
 
-# --- ברזל 17/10: שאלת SMART פתוחה עוצרת את שעון השולח -------------------------
+# --- ברזל 17/10: שאלה פתוחה למפעיל עוצרת את שעון השולח -----------------------
+# ‏#2044: עד אז הבדיקות כאן נשענו על שאלת ה-SMART (‏`ask` ב-hello, ‏`smart_asks`),
+# שהוסרה. אותה עצירה, עם אותן תקרות, עוברת היום רק דרך `prompt` של ה-hello
+# (‏#2202, ‏`prompt_hold.py`); ההחזקה הבסיסית והשחרור — ב-test_prompt_hold_2202.py.
 
-SMART_ASK = {"nonce": "3-2", "port": 2, "verdict": "failed_last", "reason": "נכשל בשיכפול הקודם"}
+#: השאלה כפי שהסוכן שולח אותה בזמן שאלת מגירה (‏attended.sh).
+OPERATOR_PROMPT = {"waiting_for": "operator", "prompt": "Disk 2: share question"}
 
 
 def _journal_events(ctx) -> list[str]:
     return [r["event"] for r in ctx.conn.execute("SELECT event FROM journal ORDER BY id")]
-
-
-def test_the_sender_clock_does_not_run_while_a_cloner_is_asked_about_a_disk(
-    server_with_sender, free_ports, monkeypatch,
-):
-    """ברזל 17/10 (‏ses_d6e79f65): ‏send_start ב-08:13:09, המכונה עצרה על חלון
-    SMART, ‏smart_answered ב-08:16:00, ו-send_failed ב-08:16:10 — 180 שניות
-    בדיוק מ-send_start: ‏`--start-timeout` של udp-sender רץ מתחת לשאלה, והמכונה
-    שענתה מצאה שולח שכבר יצא. כאן: כל עוד השאלה פתוחה **אף udp-sender לא
-    מופעל**; התשובה משחררת אותו, והיומן אומר את שניהם.
-
-    **בקרה שלילית:** על הקוד הישן השולח מופעל מיד עם תחילת הגל."""
-    monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
-    server, recorder = server_with_sender
-    ctx = server["ctx"]
-    ids = setup_classroom(server)
-    server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 1},
-    )
-    for _ in range(2):    # מצטרף ושואל; ה-hello השני מוצא סבב בשל ומתחיל את הגל
-        server["anon"].post("/api/v1/agent/hello",
-                            json={**hello_body(ids["mac1"]), "ask": SMART_ASK})
-    assert wait_for(lambda: "send_held_smart" in _journal_events(ctx))
-    assert "send_start" in _journal_events(ctx)
-    threading.Event().wait(0.3)
-    assert recorder.commands == [], "udp-sender הופעל בזמן שהמכונה ממתינה לאדם"
-
-    server["anon"].post("/api/v1/agent/hello", json={
-        **hello_body(ids["mac1"]), "ask": SMART_ASK,
-        "ask_answered": {"nonce": "3-2", "answer": "skip"}})
-    assert recorder.spawned.wait(timeout=5)
-    events = _journal_events(ctx)
-    assert events.index("send_held_smart") < events.index("send_hold_released")
-    first = recorder.commands[0]
-    assert first[first.index("--start-timeout") + 1] == str(int(DEFAULT_START_TIMEOUT))
-    recorder.processes[0].release()
-
-
-def test_without_an_open_question_the_sender_starts_at_once(server_with_sender, free_ports):
-    """הצד השני: בלי שאלה פתוחה — שום המתנה ושום אירוע חדש ביומן (עובר
-    בשני המצבים)."""
-    server, recorder = server_with_sender
-    ids = setup_classroom(server)
-    server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 1},
-    )
-    for _ in range(2):
-        server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
-    assert "send_held_smart" not in _journal_events(server["ctx"])
-    recorder.processes[0].release()
 
 
 def test_closing_the_round_during_the_hold_never_starts_udp_sender(library, free_ports, monkeypatch):
@@ -1012,9 +961,9 @@ def test_closing_the_round_during_the_hold_never_starts_udp_sender(library, free
     recorder = Recorder()
     engine = SenderEngine(library, runner=recorder,
                           on_event=lambda e, d: events.append(e))
-    engine.pending_asks = lambda _sid: ["78:ac:c0:9b:11:c2"]
+    engine.pending_prompts = lambda _sid: ["78:ac:c0:9b:11:c2"]
     engine.start({"id": "ses_hold", "image_id": "img_7f3a91", "joined": 1})
-    assert wait_for(lambda: "send_held_smart" in events)
+    assert wait_for(lambda: "send_held_prompt" in events)
     engine.stop("ses_hold")
     assert wait_for(lambda: "send_stopped" in events)
     assert recorder.commands == [] and "send_failed" not in events
@@ -1029,7 +978,7 @@ def test_an_unreadable_question_list_does_not_hold_the_sender_forever(library, f
     def broken(_sid):
         raise RuntimeError("database is locked")
 
-    engine.pending_asks = broken
+    engine.pending_prompts = broken
     engine.start({"id": "ses_x", "image_id": "img_7f3a91", "joined": 1})
     assert wait_for(lambda: engine.status()["state"] == "done")
     assert len(recorder.commands) == 2
@@ -1039,13 +988,10 @@ def test_a_question_open_past_its_ceiling_releases_only_that_machine(
     server_with_sender, free_ports, monkeypatch,
 ):
     """סקירת אבטחה 17/10: שאלה שאיש לא עונה עליה אינה מחזיקה את הגל לנצח.
-    מעל `ASK_HOLD_MAX_SECONDS` **רק המכונה ששואלת** משתחררת — ‏`failed`
-    עם הסיבה, ‏`smart_ask_expired` ביומן — והשולח יוצא לשאר הגל
-    (‏`--min-receivers 1`).
-
-    **בקרה שלילית:** על הקוד הישן אין עצירה ואין שחרור: השולח יוצא עם 2,
-    ושתי המכונות נשארות חברות חיות."""
-    from server.disks import smart_ask
+    התקרה (‏`ASK_HOLD_MAX_SECONDS`) נספרת מתחילת הגל; מעליה **רק המכונה
+    ששואלת** משתחררת — ‏`failed` עם הסיבה, ‏`prompt_hold_expired` ביומן — והשולח
+    יוצא לשאר הגל (‏`--min-receivers 1`)."""
+    from server.rounds import prompt_hold
     monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
     server, recorder = server_with_sender
     ctx = server["ctx"]
@@ -1055,13 +1001,15 @@ def test_a_question_open_past_its_ceiling_releases_only_that_machine(
         json={"group_id": ids["group"], "image_id": "img_7f3a91",
               "prefix": "LAB1", "expected_clients": 2},
     ).json()["id"]
-    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "ask": SMART_ASK})
-    ctx.conn.execute("UPDATE smart_asks SET asked_at = ? WHERE mac = ?", (
-        (datetime.now(timezone.utc)
-         - timedelta(seconds=smart_ask.ASK_HOLD_MAX_SECONDS + 60)).isoformat(), ids["mac1"]))
-    ctx.conn.commit()
+    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), **OPERATOR_PROMPT})
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac2"]))
-    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "ask": SMART_ASK})
+    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), **OPERATOR_PROMPT})
+    assert wait_for(lambda: "send_held_prompt" in _journal_events(ctx))
+    assert recorder.commands == []
+    ctx.conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?", (
+        (datetime.now(timezone.utc)
+         - timedelta(seconds=prompt_hold.ASK_HOLD_MAX_SECONDS + 60)).isoformat(), session))
+    ctx.conn.commit()
 
     assert recorder.spawned.wait(timeout=5)
     first = recorder.commands[0]
@@ -1070,49 +1018,7 @@ def test_a_question_open_past_its_ceiling_releases_only_that_machine(
         "SELECT mac, state, error FROM session_members WHERE session_id = ?", (session,))}
     assert states[ids["mac1"]][0] == "failed" and "שוחררה מהגל" in states[ids["mac1"]][1], states
     assert states[ids["mac2"]][0] != "failed", states
-    assert "smart_ask_expired" in _journal_events(ctx)
-    recorder.processes[0].release()
-
-
-def test_a_machine_asking_question_after_question_is_released_after_one_ceiling(
-    server_with_sender, free_ports, monkeypatch,
-):
-    """סקירה שנייה 17/10: מכונה ששואלת שלוש שאלות ברצף (nonce חדש לכל דיסק,
-    ‏`asked_at` מתאפס בכל אחת) אינה מחזיקה את הגל 3×35 דקות. התקרה נספרת
-    מתחילת הגל: כשהיא חלפה, המכונה משתחררת גם ששאלתה הנוכחית צעירה.
-
-    **בקרה שלילית:** על התקרה-לפי-שאלה (‏19a65ad1) השולח ממשיך להמתין; על
-    main השולח יוצא מיד עם 2 מקבלים ואיש אינו משתחרר."""
-    monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
-    from server.disks import smart_ask
-    server, recorder = server_with_sender
-    ctx = server["ctx"]
-    ids = setup_classroom(server)
-    session = server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 2},
-    ).json()["id"]
-    ask = lambda nonce: {**SMART_ASK, "nonce": nonce}          # noqa: E731
-    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "ask": ask("1-1")})
-    server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac2"]))
-    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "ask": ask("1-1")})
-    assert wait_for(lambda: "send_held_smart" in _journal_events(ctx))
-    for nonce in ("2-2", "3-3"):     # דיסק אחרי דיסק — כל שאלה מאפסת את asked_at
-        server["anon"].post("/api/v1/agent/hello", json={
-            **hello_body(ids["mac1"]), "ask": ask(nonce)})
-    assert recorder.commands == []
-    ctx.conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?", (
-        (datetime.now(timezone.utc)
-         - timedelta(seconds=smart_ask.ASK_HOLD_MAX_SECONDS + 60)).isoformat(), session))
-    ctx.conn.commit()
-
-    assert recorder.spawned.wait(timeout=5)
-    first = recorder.commands[0]
-    assert first[first.index("--min-receivers") + 1] == "1", first
-    state = ctx.conn.execute("SELECT state FROM session_members WHERE session_id = ? AND mac = ?",
-                             (session, ids["mac1"])).fetchone()["state"]
-    assert state == "failed"
+    assert "prompt_hold_expired" in _journal_events(ctx)
     recorder.processes[0].release()
 
 
@@ -1121,14 +1027,10 @@ def test_a_question_that_arrives_after_udp_sender_started_rewinds_partition_one(
     server_with_sender, free_ports, monkeypatch, delay,
 ):
     """ברזל rc2 (17/10, ‏ses_80844e82): ‏send_start ב-14:08:10 והשאלה נרשמה
-    **באותה שנייה** (‏asked_at 14:08:10) — ההמתנה לפני ההפעלה כבר עברה,
-    udp-sender עלה, ו-send_failed ב-14:11:10 בלי `send_held_smart`. שאלה
-    שמגיעה 0–2 שניות **אחרי** שהשולח עלה, כל עוד הוא לא התחיל לשדר (אין
-    Starting transfer), הורגת אותו, הגל ממתין, והתשובה מפעילה את מחיצה 1
-    מחדש עם שעון מלא.
-
-    **בקרה שלילית:** על הקוד שלפני (בדיקה אחת לפני ההפעלה) udp-sender
-    הראשון אינו נהרג, ושום הפעלה שנייה אינה קורית."""
+    **באותה שנייה** — ההמתנה לפני ההפעלה כבר עברה, udp-sender עלה, ו-send_failed
+    ב-14:11:10. שאלה שמגיעה 0–2 שניות **אחרי** שהשולח עלה, כל עוד הוא לא התחיל
+    לשדר (אין Starting transfer), הורגת אותו, הגל ממתין, והתשובה מפעילה את
+    מחיצה 1 מחדש עם שעון מלא."""
     monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
     monkeypatch.setattr(sender_module, "PACE_POLL", 0.02)
     server, recorder = server_with_sender
@@ -1143,19 +1045,17 @@ def test_a_question_that_arrives_after_udp_sender_started_rewinds_partition_one(
     for _ in range(2):
         server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
     assert recorder.spawned.wait(timeout=5)
-    assert "send_held_smart" not in _journal_events(ctx)      # לא הייתה שאלה כשעלה
+    assert "send_held_prompt" not in _journal_events(ctx)      # לא הייתה שאלה כשעלה
     threading.Event().wait(delay)
-    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "ask": SMART_ASK})
+    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), **OPERATOR_PROMPT})
 
     assert wait_for(lambda: recorder.processes[0].terminated), "udp-sender של מחיצה 1 לא נהרג"
-    assert wait_for(lambda: "send_held_smart" in _journal_events(ctx))
+    assert wait_for(lambda: "send_held_prompt" in _journal_events(ctx))
     threading.Event().wait(0.3)
     assert len(recorder.commands) == 1, "הופעל שוב בזמן שהשאלה פתוחה"
 
     recorder.log_text = TRANSFER_LOG
-    server["anon"].post("/api/v1/agent/hello", json={
-        **hello_body(ids["mac1"]), "ask": SMART_ASK,
-        "ask_answered": {"nonce": "3-2", "answer": "skip"}})
+    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "joining": False})
     assert wait_for(lambda: len(recorder.commands) == 2)
     first, again = recorder.commands
     assert first[first.index("--file") + 1] == again[again.index("--file") + 1]   # שוב מחיצה 1
@@ -1171,7 +1071,7 @@ def test_a_question_after_the_transfer_started_does_not_kill_it(library, free_po
     recorder = Recorder(block=True)                 # TRANSFER_LOG: כבר משדר
     asks: list[str] = []
     engine = SenderEngine(library, runner=recorder)
-    engine.pending_asks = lambda _sid: list(asks)
+    engine.pending_prompts = lambda _sid: list(asks)
     engine.start({"id": "ses_t", "image_id": "img_7f3a91", "joined": 1})
     assert recorder.spawned.wait(timeout=5)
     asks.append("78:ac:c0:9b:11:c2")

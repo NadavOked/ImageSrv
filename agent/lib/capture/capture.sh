@@ -108,7 +108,7 @@ capture_disk() {
             _why=$(capture_ntfs_hibernation_reason "$_node" "$RUN_DIR/ntfs-check.$_idx"); _hn_status=$?
             capture_ntfs_gate "$_disk" "$_idx" "$_node" "$_hn_status" "$_why" || { _capture_failed "$_disk" "$CAPTURE_NTFS_ERROR" "$CAPTURE_NTFS_CODE"; return 1; } ;;
             unreadable) _capture_failed "$_disk" "מחיצה $_idx: לא הצלחנו לקרוא את מערכת הקבצים שלה (blkid) — לא נקלט"; return 1 ;;   # #1905: never raw, never past the hibernation gate
-            *) _why=$(capture_fs_reason "$_idx" "$_fs") || _why="בדיקת מערכת הקבצים לא רצה (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; } ;; esac   # #1900: before the space check, not at the end
+            *) _why=$(capture_fs_reason "$_idx" "$_fs" "$_node") || _why="בדיקת מערכת הקבצים לא רצה (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; } ;; esac   # #1900: before the space check, not at the end
     done < "$_parts"; _why=$(capture_layout_reason "$_disk" "$_parts") || _why="source_disk|בדיקת הדיסק הדינמי ומחיצת האתחול לא רצה (capturegate.sh) — לא נקלט"; [ -z "$_why" ] || { _capture_failed "$_disk" "${_why#*|}" "${_why%%|*}"; return 1; }   # #1824 LDM, #1822 no ESP
     # ‏#87: אחרי שער המהובר ולפני חישוב הפריסה — הכיווץ משכתב את $_parts,
     # וכל מה שלמטה (הרצפה, השער החמישי, המניפסט) רואה את הפריסה המצומצמת.

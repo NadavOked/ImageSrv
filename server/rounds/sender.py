@@ -74,7 +74,7 @@ LATER_MAX_WAIT = 600
 #: udp-sender) — נספר: המקלט שלו חי, כמו `lost` ב-#1950.
 QUIET_SECONDS = 60
 #: ‏ברזל 17/10: כל כמה זמן השולח שואל אם מחשב שיכפול בגל עוד ממתין לתשובת
-#: אדם על דיסק (‏`smart_ask.open_in_wave`). קריאה אחת מה-DB, בלי תעבורה.
+#: אדם (‏`prompt_hold.open_in_wave`). קריאה אחת מה-DB, בלי תעבורה.
 ASK_HOLD_POLL_S = 1.0
 
 
@@ -496,7 +496,6 @@ class SenderEngine:
         wave_bitrate: Callable[[dict], str | None] | None = None,
         live_receivers: Callable[[str], int] | None = None,
         link_speed: Callable[[str | None], dict] | None = None,
-        pending_asks: Callable[[str], list[str]] | None = None,
         pending_prompts: Callable[[str], list[str]] | None = None,
         lost_receivers: Callable[[str], list[str | None]] | None = None,
         lost_wait: Callable[[], int] | None = None,
@@ -550,13 +549,11 @@ class SenderEngine:
         # — הגג והפתיחה של הקצב לפיה. ‏None = לא מחובר (בדיקות; ‏`server.main`
         # מחבר תמיד): "לא נקרא", וההתנהגות של היום — לא ניחוש של 1GbE.
         self.link_speed = link_speed
-        # ברזל 17/10: מי בגל ממתין עכשיו לאדם (שאלת SMART פתוחה). כל עוד יש
-        # כזה, ‏udp-sender של המחיצה הראשונה לא מופעל — ה-`--start-timeout`
-        # שלו נספר מההפעלה, ושלוש דקות מול חלון SMART פתוח נגמרו בשולח שיצא
-        # עשר שניות אחרי התשובה. ‏None = לא מחובר: ההתנהגות של לפני.
-        self.pending_asks = pending_asks
-        # ‏#2202: מי בגל עומד על שאלה **אחרת** למפעיל (‏`net_devices.prompt` —
-        # חלוקת המקום, RAID). אותה עצירה, ביומן משלה. ‏None = לא מחובר.
+        # ברזל 17/10 / ‏#2202: מי בגל ממתין עכשיו לאדם (‏`net_devices.prompt` —
+        # חלוקת המקום, RAID). כל עוד יש כזה, ‏udp-sender של המחיצה הראשונה לא
+        # מופעל — ה-`--start-timeout` שלו נספר מההפעלה, ושלוש דקות מול שאלה
+        # פתוחה נגמרו בשולח שיצא אחרי התשובה. ‏None = לא מחובר: ההתנהגות של
+        # לפני. שאלת ה-SMART (`pending_asks`) הוסרה ב-#2044.
         self.pending_prompts = pending_prompts
         self.on_event = on_event or (lambda event, detail: None)
         #: ‏#705: ‏`gate(interface)` → סיבת סירוב או None — השידור כבוי בכרטיס
@@ -731,7 +728,7 @@ class SenderEngine:
         (ההמתנה ל-ACK האחרון אחרי הבייט האחרון גם אינה). דגימה אחרונה גם
         אחרי היציאה — השורה הסופית. מחיצה שזזה בדגימה אחת בלבד — לא תורמת.
 
-        ‏`asks_of` (ברזל rc2, 17/10): מזהה הגל — המחיצה הראשונה. שאלת SMART
+        ‏`asks_of` (ברזל rc2, 17/10): מזהה הגל — המחיצה הראשונה. שאלה למפעיל
         שהגיעה **אחרי** ש-udp-sender עלה (באותה שנייה כמו `send_start`) לא
         נתפסה בהמתנה שלפניו, ו-`--start-timeout` רץ מתחתיה עד הכשל. כל עוד
         יש ראיה חיובית שהשידור **לא** התחיל (הלוג נקרא ואין Starting
@@ -743,7 +740,7 @@ class SenderEngine:
             if asks_of is not None and time.monotonic() >= next_ask:
                 next_ask = time.monotonic() + ASK_HOLD_POLL_S
                 if (transfer_started_in_log(log_path) is False
-                        and (self._asks_waiting(asks_of) or self._prompts_waiting(asks_of))
+                        and self._prompts_waiting(asks_of)
                         and process.poll() is None):
                     log.info("sender: a question to the operator arrived before the first byte -- "
                              "rewinding partition 1 of %s", asks_of)
@@ -968,19 +965,8 @@ class SenderEngine:
         return ("הפורטים נבדקו כעת ושניהם פנויים — הכישלון אינו התנגשות"
                 " על פורט, והסיבה אינה ידועה")
 
-    def _asks_waiting(self, session_id: str) -> list[str]:
-        """מי בגל ממתין עכשיו לאדם. קריאה שנכשלה = אין (נרשם), לא "יש" לנצח."""
-        if self.pending_asks is None:
-            return []
-        try:
-            return list(self.pending_asks(session_id))
-        except Exception as exc:      # noqa: BLE001 — חריגה כאן הורגת את התהליכון
-            log.warning("sender: open SMART questions of %s unreadable (%s);"
-                        " sending without waiting", session_id, exc)
-            return []
-
     def _prompts_waiting(self, session_id: str) -> list[str]:
-        """‏#2202: מי בגל עומד עכשיו על שאלה למפעיל שאינה SMART. קריאה שנכשלה = אין (נרשם)."""
+        """‏#2202: מי בגל עומד עכשיו על שאלה למפעיל. קריאה שנכשלה = אין (נרשם), לא "יש" לנצח."""
         if self.pending_prompts is None:
             return []
         try:
@@ -1008,35 +994,28 @@ class SenderEngine:
         process.wait()
 
     def _hold_for_asks(self, session_id: str) -> bool:
-        """ממתין כל עוד מחשב שיכפול בגל עומד על שאלת SMART (ברזל 17/10).
+        """ממתין כל עוד מחשב שיכפול בגל עומד על שאלה למפעיל (ברזל 17/10, #2202).
 
         רק לפני המחיצה הראשונה: השאלה נשאלת לפני שהמכונה כותבת בייט, ומי
         שכבר קיבל את המחיצה הראשונה עבר אותה. ההמתנה נגמרת כשאין שאלה
         פתוחה של מכונה חיה (‏`open_in_wave` משחרר מכונה שנעלמה), או בעצירה
         — ‏False. קריאה שנכשלה אינה "יש שאלה" לנצח: יומן, ומשדרים כמו לפני.
-
-        ‏#2202: גם כל שאלה אחרת למפעיל (‏`pending_prompts` — חלוקת המקום,
-        RAID), ביומן משלה: ‏`send_held_prompt`, ובשחרור `send_prompt_released`
-        כשלא הייתה שאלת SMART — ‏`send_hold_released` נספר כזמן SMART (#1889).
+        ביומן: ‏`send_held_prompt`, ובשחרור `send_prompt_released`.
+        ‏`send_held_smart`/`send_hold_released` של שאלת ה-SMART אינם נכתבים
+        עוד (#2044); ‏`learn/waits.py` קורא אותם מההיסטוריה בלבד.
         """
-        if self.pending_asks is None and self.pending_prompts is None:
+        if self.pending_prompts is None:
             return True
-        held_since, smart, prompt = None, False, False
+        held_since = None
         while not self._stop.is_set():
-            waiting = self._asks_waiting(session_id)
             asked = self._prompts_waiting(session_id)
-            if not waiting and not asked:
+            if not asked:
                 if held_since is not None:
-                    self.on_event("send_hold_released" if smart else "send_prompt_released",
+                    self.on_event("send_prompt_released",
                                   f"{session_id} {int(time.monotonic() - held_since)}s")
                 return True
             if held_since is None:
                 held_since = time.monotonic()
-            if waiting and not smart:
-                smart = True
-                self.on_event("send_held_smart", f"{session_id} {' '.join(waiting)}")
-            if asked and not prompt:
-                prompt = True
                 self.on_event("send_held_prompt", f"{session_id} {' '.join(asked)}")
             self._stop.wait(ASK_HOLD_POLL_S)
         return False
@@ -1187,7 +1166,7 @@ class SenderEngine:
                 )
                 return
             if not started and number == 1 and (
-                    asking := self._asks_waiting(session["id"]) + self._prompts_waiting(session["id"])):
+                    asking := self._prompts_waiting(session["id"])):
                 # ‏#2202: "יש לבדוק כבל רשת" שלח את המפעיל לחפש תקלה במכונה שחיכתה לו.
                 self._fail(
                     f"udp-sender סיים בלי לשדר את {part['file']}: מחשב בגל עדיין ממתין"

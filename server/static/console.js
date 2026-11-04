@@ -2489,7 +2489,8 @@ function home(tab = 0) {
    השאלה למפעיל #906), /disk-failures (אדום), /net (IP). כתיבה — רק ה-endpoints הקיימים:
    POST /room, /room/start, /room/wake, /room/close (חלון אישור, #1270); בלי שינוי שרת.
    ההכרעה על SMART (נדב 16/09): כתום = בלי תשובה ממשיך לכתוב, אדום = בלי תשובה מדלג —
-   לעולם לא דילוג בשני המקרים; היא נענית ליד המכונה או מהקונסולה (#989 ס׳ 2, POST /room/answer — הראשונה גוברת);
+   לעולם לא דילוג בשני המקרים. ‏#1732/#2042: אדום אינו נשאל, כתום נכתב בלי שאלה — ושאלת ה-SMART עם
+   התשובה מהקונסולה (#989 ס׳ 2, POST /room/answer) הוסרה ב-#2044;
    קצב הזרם ובלוקים ששודרו שוב — מ-/room.round (#989). מה שאין לו API — מספר הגלים הכולל, היסטוריה, דילוג מרחוק — טקסט,
    לא נתון מומצא (README §8, עיקרון 5). */
 const DEPLOY = { err: "", roomErr: "", busy: false, form: { image: "", folder: null, src: "library", builder: "", disk: "", target: "", drv: false, drvMap: {}, sel: {} } };
@@ -2966,13 +2967,11 @@ function roomGridCard(kids) {
 }
 /* השאלה הפתוחה למפעיל — בדף, לא במודאל. הצבע = מה קורה בלי תשובה (הכרעת נדב 16/09):
    כתום ממשיך לכתוב, אדום מדלג. הפעולות: מוניטור (לענות ליד המסך), "נקה" על רשומת אדום
-   (אחרי החלפת דיסק/כבל); תשובה מהקונסולה — roomAskNote. */
+   (אחרי החלפת דיסק/כבל). ‏#2044: אין שאלת SMART שעונים עליה מכאן. */
 function roomNotes(kids, st, hint = "") {
-  const admin = isAdmin(), out = hint ? [hint] : [], asked = new Set([...st.prompts, ...kids.filter((m) => (roomMachine(m.mac) || {}).ask)].map((m) => m.mac));
+  const admin = isAdmin(), out = hint ? [hint] : [], asked = new Set(st.prompts.map((m) => m.mac));
   const clears = (items) => admin ? items.filter((x) => x.s.fail).map((x) => UI.link(`נקה כשל קודם — ${machineName(x.m)} · ${slotLabel(x.m, x.s.n, x.s.disk)}`, `clearDiskFailure(${Number(x.s.fail.id)})`)) : [];
-  const askOf = (m) => (roomMachine(m.mac) || {}).ask || null;
-  for (const m of kids) { const a = askOf(m); if (a) out.push(roomAskNote(m, a)); }   // ‏#989 ס׳ 2: שאלה שאפשר לענות עליה מכאן
-  for (const m of st.prompts.filter((x) => !askOf(x))) {
+  for (const m of st.prompts) {
     const red = st.red.filter((x) => x.m.mac === m.mac), warn = st.warn.filter((x) => x.m.mac === m.mac);
     const fate = red.length ? `<b>אדום — בלי תשובה הסוכן מדלג</b> על ${esc(whereList(red))}` : warn.length ? `<b>כתום — בלי תשובה הסוכן ממשיך לכתוב</b> על ${esc(whereList(warn))}` : "<b>ממתין לתשובה ליד המכונה</b>";
     const acts = [admin ? UI.link("לענות ליד המסך — דף המוניטור", `selectPageById('monitor')`) : "", ...clears(red),
@@ -2995,40 +2994,8 @@ function roomNotes(kids, st, hint = "") {
   }
   return out.length ? `<div class="c12 rnotes">${out.join("")}</div>` : "";
 }
-/* ‏#989 ס׳ 2: שאלת ה-SMART של משכפל, ותשובה ממנה — אותם צעדים של התפריט ליד המכונה. ‏#1732 (נדב
-   18/10, מחליף את "כתוב בכל זאת" של #1580): אדום = SMART תקול (fail) — לעולם אינו יעד: הסוכן אינו
-   שואל עליו והשרת דוחה כל "כתוב" עליו, ולכן אין לו כפתור כתיבה כאן; כתום = נכשל בשיכפול הקודם
-   (failed_last) — "נסה שוב" כותב; warn — "כתוב בכל זאת". התשובה הראשונה גוברת: אחרי שנענתה — מי ענה
-   ומה, בלי כפתורים; 409 מוצג כפי שהוא. */
+/* ‏#1732: אדום = SMART תקול (fail) — לעולם אינו יעד. אותו משפט כמו בסוכן (smartgate.sh) ובשרת (room.py). */
 const SMART_RED_HE = "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת";
-const ASK_VERDICT_HE = { warn: "SMART אזהרה", fail: "SMART תקלה", failed_last: "נכשל בשיכפול הקודם" };
-const ASK_ANSWER_HE = { replace: "החלף דיסק", rescue: "כתוב בכל זאת", skip: "דלג" };
-function askAnswerHe(a) { return a.answer === "rescue" && a.verdict === "failed_last" ? "נסה שוב" : ASK_ANSWER_HE[a.answer] || a.answer; }
-function roomAskNote(m, a) {
-  const red = a.verdict === "fail", name = esc(machineName(m));
-  const slot = esc(portLabel(findMachine(m.mac) || m, a.port));   // #2001: the connection's name
-  const what = a.verdict === "fail" ? `${slot} — ${esc(smartF1Text(a.reason))}`   // #1366
-    : `${slot} — ${ASK_VERDICT_HE[a.verdict] || "SMART"}${a.reason ? ` (${esc(smartReasonHe(a.reason))})` : ""}`;   // #1861: "(cable)" was raw
-  if (a.answer) return UI.note("info", `<b>${name}</b> · ${what}: נענתה ע&quot;י ${esc(a.answered_by || "גורם לא ידוע")}: ${esc(askAnswerHe(a))}.`);
-  const fate = red ? `<b>${esc(SMART_RED_HE)}</b>` : "<b>כתום — בלי תשובה הסוכן ממשיך לכתוב</b>";
-  const btn = (ans, label, cls = "") => `<button type="button" class="btn sm${cls}" onclick="answerSmart('${esc(m.mac)}','${esc(a.nonce)}','${ans}','${esc(a.verdict)}')">${label}</button>`;
-  const acts = roomOperator() ? `<div class="acts">${btn("replace", "החלף דיסק (כיבוי)")}${red ? "" : btn("rescue", a.verdict === "failed_last" ? "נסה שוב" : "כתוב בכל זאת")}${btn("skip", "דלג על הדיסק")}</div>` : "";   // #1732: no write on red
-  return UI.note(red ? "err" : "warn", `<b>${name}</b> שואל: ${what}. ${fate}. התשובה הראשונה גוברת — גם ליד המכונה.${acts}`);
-}
-async function answerSmart(mac, nonce, answer, verdict) {
-  if (!roomOperator()) return;
-  if (verdict === "fail" && answer === "rescue") return toast(SMART_RED_HE, 6000);   // #1732: the server refuses it too
-  const send = async () => {
-    try { await post("/room/answer", { mac, nonce, answer }); toast("התשובה נשלחה — המכונה תקבל אותה בתוך כמה שניות"); }
-    catch (e) { toast(e.message, 6000); }       // ‏409: כבר נענה ע"י … / השאלה התחלפה — מוצג כפי שהשרת אמר
-    await loadDeploy();
-  };
-  const m = findMachine(mac), name = machineName(m || { mac });
-  if (answer !== "replace") return send();
-  sheet({ title: "להחליף את הדיסק?", sub: `${name} תיכבה כדי שיחליפו את הדיסק`, danger: true, submitLabel: "כיבוי והחלפה",
-    note: impactList([["b", `${esc(name)} יכבה — כל המכונה, לא רק הדיסק`], ["w", "היא כבויה לפני כתיבה: אף מגירה שלה לא נכתבת בגל הזה"], ["w", "אדם צריך להחליף את הדיסק ליד המכונה ולהדליק אותה"], ["w", "שאר המכונות ממשיכות"]]),
-    onSubmit: send });
-}
 /* ‏#1275: בחירת הדיסקים לפתיחת סבב — אותו גריד שנדב אישר במוקאפ מחשב הבנייה (native-full.html) ובגואי
    (screens_room.c): כרטיס לכל משכפל, מלבן לכל דיסק, לחיצה מחליפה בחירה (טבעת + ‏✓), "N נבחרו",
    "בחר / נקה הכל". ניתן לבחור רק דיסק קיים (עם port ו-serial); חריץ ריק — לא. ‏#1954 (נדב 22/10): דיסק של

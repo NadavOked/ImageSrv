@@ -472,52 +472,18 @@ test('drivers outcome (#1331 mockup v2): a line under the bar of each drawer, on
   assert.doesNotMatch(html,/0x7B|class="dline bad"/,'nothing here may fail to boot');
 });
 
-/* ‏#989 ס׳ 2 — תשובת SMART מהקונסולה. השאלה מגיעה מ-/room (machines[].ask), לא מ-prompt: רק מכונה
-   שהמסך שלה חי מציעה אותה. התשובה הראשונה גוברת; השנייה מקבלת 409 והקונסולה מציגה אותו כפי שהוא. */
-const askOpen=(extra={})=>({nonce:'3-2',port:2,verdict:'warn',reason:'crc 4',asked_at:minutesAgo(1),answer:null,answered_by:null,answered_at:null,...extra});
-
-test('SMART question from the console: an open question shows the disk, the verdict and three buttons; a disk that failed last time is orange with "retry" (#1580)', () => {
+/* ‏#2044 — שאלת ה-SMART של המשכפל והתשובה מהקונסולה (#989 ס׳ 2) הוסרו. שרת ישן שעוד מחזיר
+   machines[].ask אינו מצייר כפתורי תשובה ואינו שולח /room/answer; ה-prompt נשאר הערה "ענו ליד המכונה".
+   RED: על console.js של v0.80.6 יש answerSmart והכפתורים "החלף דיסק" / "כתוב בכל זאת" / "דלג על הדיסק". */
+test('#2044: a stray machines[].ask draws no answer buttons; the prompt note says to answer at the machine', () => {
   const room=roomRunning();
-  room.machines[0].ask=askOpen(); room.machines[1].ask=askOpen({nonce:'5-3',port:3,verdict:'failed_last',reason:'cable'});
-  const {run}=setup({room,prompts:{[C1]:'Disk 2: SMART warn (crc 4)',[C2]:'Disk 3: failed the previous clone'}});
+  room.machines[0].ask={nonce:'3-2',port:2,verdict:'warn',reason:'crc 4',asked_at:minutesAgo(1),answer:null,answered_by:null,answered_at:null};
+  const {run}=setup({room,prompts:{[C1]:'Disk 2: share question'}});
   const html=run('deploy(0)'); balanced(html);
-  const notes=between(html,'<div class="c12 rnotes">'), n1=between(notes,'<b>מחשב 1</b>','</div></div>'), n2=between(notes,'<b>מחשב 2</b>','</div></div>');
-  assert.match(n1,/דיסק 2/); assert.match(n1,/SMART אזהרה/);
-  assert.match(n1,new RegExp(`answerSmart\\('${C1}','3-2','replace','warn'\\)">החלף דיסק`)); assert.match(n1,new RegExp(`answerSmart\\('${C1}','3-2','rescue','warn'\\)">כתוב בכל זאת`)); assert.match(n1,new RegExp(`answerSmart\\('${C1}','3-2','skip','warn'\\)">דלג על הדיסק`));
-  assert.match(n1,/בלי תשובה הסוכן ממשיך לכתוב/,'orange: no answer = keeps writing');
-  assert.match(n2,/דיסק 3/); assert.match(n2,/נכשל בשיכפול הקודם/);
-  assert.match(n2,new RegExp(`answerSmart\\('${C2}','5-3','rescue','failed_last'\\)">נסה שוב`),'orange: retry writes');
-  assert.match(n2,/בלי תשובה הסוכן ממשיך לכתוב/);
-  assert.doesNotMatch(notes,/דורש API<\/b>[^]{0,80}תשובה מהקונסולה|תשובה מהקונסולה — <b[^>]*>דורש API/,'the "needs API" placeholder is gone for a machine that can be answered');
-  assert.equal((notes.match(/ממתין למפעיל:/g)||[]).length,0,'one note per machine: the question replaces the generic prompt note');
-});
-
-test('SMART question: answered → who answered and what, no buttons; a prompt with no ask (text menu / old agent) says to answer at the machine', () => {
-  const room=roomRunning(); room.machines[0].ask=askOpen({answer:'skip',answered_by:'המכונה (ליד המסך)',answered_at:minutesAgo(0)});
-  const {run}=setup({room,prompts:{[C1]:'Disk 2: SMART warn (crc 4)',[C2]:'Disk 3: failed the previous clone'}});
-  const html=run('deploy(0)'), notes=between(html,'<div class="c12 rnotes">');
-  const n1=between(notes,'<b>מחשב 1</b>','</div></div>');
-  assert.match(n1,/נענתה ע&quot;י המכונה \(ליד המסך\): דלג/); assert.doesNotMatch(n1,/answerSmart/);
-  assert.match(notes,/<b>מחשב 2<\/b> ממתין למפעיל[^]*?תשובה מהקונסולה אינה זמינה לשאלה הזאת — עונים ליד המכונה/,'no ask → the console cannot answer, and says so (not a silent missing button)');
-  assert.doesNotMatch(notes,/דורש API/);
-});
-
-test('SMART answer posts {mac, nonce, answer}; replace powers the machine off and goes through a confirm sheet; a 409 shows the server text and re-reads', async () => {
-  const room=roomRunning(); room.machines[0].ask=askOpen();
-  const {run,requests,fixtures}=setup({room});
-  await run(`answerSmart('${C1}','3-2','skip')`);
-  let r=requests.filter(x=>x.url==='/api/console/room/answer').at(-1);
-  assert.deepEqual(JSON.parse(r.options.body),{mac:C1,nonce:'3-2',answer:'skip'}); assert.match(run('toasted'),/התשובה נשלחה/);
-  await run(`answerSmart('${C1}','3-2','rescue')`); assert.equal(JSON.parse(requests.filter(x=>x.url==='/api/console/room/answer').at(-1).options.body).answer,'rescue');
-  const before=requests.filter(x=>x.url==='/api/console/room/answer').length;
-  run(`formOptions=undefined; answerSmart('${C1}','3-2','replace')`);
-  assert.equal(requests.filter(x=>x.url==='/api/console/room/answer').length,before,'replace: nothing posted before the sheet is confirmed');
-  assert.equal(run('formOptions.danger'),true); assert.match(run('formOptions.note'),/יכבה/);
-  await run('formOptions.onSubmit({})'); assert.equal(JSON.parse(requests.filter(x=>x.url==='/api/console/room/answer').at(-1).options.body).answer,'replace');
-  fixtures['/room/answer']={__status:409,detail:'כבר נענה ע"י המכונה (ליד המסך)'};
-  requests.length=0; await run(`answerSmart('${C1}','3-2','skip')`);
-  assert.match(run('toasted'),/כבר נענה ע"י המכונה \(ליד המסך\)/); assert.ok(requests.some(x=>x.url==='/api/console/room'),'re-read after the refusal: the screen shows the winner');
-  run('ME=null'); requests.length=0; await run(`answerSmart('${C1}','3-2','skip')`); assert.equal(requests.length,0,'not an operator → nothing sent');
+  const notes=between(html,'<div class="c12 rnotes">');
+  assert.doesNotMatch(html,/answerSmart|כתוב בכל זאת|החלף דיסק \(כיבוי\)/);
+  assert.equal(run('typeof answerSmart'),'undefined'); assert.equal(run('typeof roomAskNote'),'undefined');
+  assert.match(notes,/<b>מחשב 1<\/b> ממתין למפעיל[^]*?תשובה מהקונסולה אינה זמינה לשאלה הזאת — עונים ליד המכונה/);
 });
 
 test('start wave posts /room/start and a 409 is a toast with the reason; stop is behind the typed image name and posts /room/close with confirm_name; WoL posts /room/wake', async () => {

@@ -26,6 +26,7 @@ import inspect
 import json
 import re
 import shutil
+import struct
 from pathlib import Path
 
 from agentlib import lib_files, agent_sources
@@ -45,6 +46,23 @@ TASK = "tsk_106"
 GPT_DISK = bytes(512) + b"EFI PART" + bytes(504)
 #: ‏MBR ותו לא — החתימה ב-510, ואין "EFI PART" אחריה.
 MBR_DISK = bytes(510) + b"\x55\xaa" + bytes(512)
+
+
+def fat32_head(fat1: int = 0x0FFFFFFF) -> bytes:
+    """‏#1823: ראש מחיצה ש-`capture_fat_reason` קורא כ-FAT32 — ‏BPB (512 בייט
+    לסקטור, סקטור שמור אחד, שתי FAT) ו-FAT[1] בסקטור 1. ברירת המחדל: ביט
+    הכיבוי הנקי וביט אין-שגיאת-קלט/פלט דולקים. בלי `FAT32   ` ובלי `55AA` —
+    ‏blkid אמיתי (מעבדה) עדיין עונה "אין TYPE" על מחיצות הקופסה."""
+    raw = bytearray(1024)
+    struct.pack_into("<HBH", raw, 11, 512, 1, 1)
+    raw[16] = 2
+    struct.pack_into("<I", raw, 36, 1)
+    struct.pack_into("<II", raw, 512, 0x0FFFFFF8, fat1)
+    return bytes(raw)
+
+
+#: מחיצת קופסה: לא BitLocker, ו-FAT נקי אם טסט אומר שהיא vfat (#1823).
+CLEAN_PARTITION = fat32_head()
 #: לא זה ולא זה. דיסק ריק שזה עתה יצא מהאריזה.
 BLANK_DISK = bytes(1024)
 
@@ -194,10 +212,10 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
     (dev / disk).write_bytes(image)
     # ‏#1130: שער ה-BitLocker קורא את הסקטור הראשון של **צומת המחיצה**, וקריאה
     # שנכשלה היא "לא הצלחנו לבדוק" — סירוב, לא ירוק. בקופסה יש קובץ לדיסק
-    # בלבד; המחיצות מקבלות כותרת נקייה (512 אפסים), וטסט שרוצה חתימה
+    # בלבד; המחיצות מקבלות כותרת נקייה (CLEAN_PARTITION, #1823), וטסט שרוצה חתימה
     # (‏FVE_SECTOR) דורס אותה ב-shell_pre.
     for idx in range(1, 5):
-        (dev / f"{disk}{idx}").write_bytes(bytes(512))
+        (dev / f"{disk}{idx}").write_bytes(CLEAN_PARTITION)
     # ‏`disk_scheme` גוזר את מיקום כותרת ה-GPT מגודל הסקטור הלוגי (#126),
     # ולכן הקופסה חייבת לחשוף אותו כמו כל כונן אמיתי. בלעדיו התשובה היא
     # `unknown` — לא ידענו — וזה מצב אחר מכל ארבעת הסירובים שנבדקים כאן.

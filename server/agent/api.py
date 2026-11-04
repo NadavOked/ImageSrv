@@ -30,7 +30,6 @@ from server.db import agent_seen, disk_full, journal, note_disk_full
 from server.rounds import direct, room_console
 from server.agent import gui_failure, local_clone_report, readbackhash
 from server.learn import wol as learn_wol
-from server.disks import smart_ask
 from server.agent import logs as agent_logs   # #1882
 from server.agent import held# #2031
 from server.agent import timing as agent_timing   # #2056
@@ -376,13 +375,6 @@ def create_agent_router(ctx: ServerContext,
                 # ‏#1367: רק בקשה שאושרה מעל אזהרת השיכפול המקומי מכבה מכונה שכותבת
                 if power_confirmed:
                     answer["power_confirmed"] = True
-            # ‏#989 ס׳ 2: שאלת ה-SMART — נרשמת, והתשובה המנצחת (קונסולה או
-            # המכונה עצמה, הראשונה גוברת) חוזרת באותה תשובה. שדה חסר = אין מה לבצע.
-            ask_answer = smart_ask.note_hello(
-                ctx.conn, mac, smart_ask.well_formed_ask(body.get("ask")),
-                smart_ask.well_formed_claim(body.get("ask_answered")))
-            if ask_answer is not None:
-                answer["ask_answer"] = ask_answer
         log.info("hello from %s (%s): known=%s off_vlan=%s",
                  # codeql[py/log-injection] false positive: MAC מנורמל, client_ip מה-socket, והשאר bool (#291)
                  mac, client_ip, answer["known"], off_vlan)

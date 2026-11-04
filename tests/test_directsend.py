@@ -87,7 +87,7 @@ import json
 import shutil
 
 from test_agent import REPO
-from test_capture_refusals import GPT_DISK, ONE_PARTITION
+from test_capture_refusals import CLEAN_PARTITION, GPT_DISK, ONE_PARTITION
 from test_timeouts import run_sh
 
 MAC = "aa:bb:cc:00:00:10"
@@ -177,7 +177,7 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
     dev.mkdir(parents=True); run.mkdir(parents=True)
     (dev / "sda").write_bytes(GPT_DISK + bytes(8192 - len(GPT_DISK)))   # #1808: the RAID gate reads the last 16 sectors
     for n in range(1, partitions + 1):
-        (dev / f"sda{n}").write_bytes(bytes(512))
+        (dev / f"sda{n}").write_bytes(CLEAN_PARTITION)   # #1823: a clean FAT when a test says vfat
     queue = box / "sys/block/sda/queue"; queue.mkdir(parents=True)
     (queue / "logical_block_size").write_text("512\n")
     (box / "sys/block/sda/size").write_text("16\n")

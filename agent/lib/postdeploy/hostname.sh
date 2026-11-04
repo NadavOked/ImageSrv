@@ -184,6 +184,14 @@ _write_hostname_windows() {
         return 1
     }
     log "writing hostname $_name into $_cs" >&2
+    # ‏#1821: רצף ראשי (offset 4) ≠ משני (8) = Windows לא סיים כתיבה; בעלייה הוא משחזר מ-SYSTEM.LOG1/2, ו-commit של hivex
+    # משווה את השניים ומסתיר זאת. לוגים ליד כוורת נקייה Windows מתעלם מהם (מפרט regf של Suhanov) — אינם סירוב.
+    _seq=$(od -An -tu4 -j4 -N8 "$_hive" 2>> "$LOG_FILE" | awk 'NF == 2 { if ($1 == $2) print "clean"; else print $1 "/" $2 }')
+    [ "$_seq" = clean ] || {
+        umount "$_mnt" 2>/dev/null
+        if [ -n "$_seq" ]; then _hv="כוורת SYSTEM באימג' לא סונכרנה (רצף $_seq) — Windows עלול לדרוס את השם בעלייה. הפעילו את Windows במחשב הבנייה, כבו כרגיל, וקלטו מחדש"; _hc=hive_dirty
+        else _hv="לא הצלחנו לקרוא את מספרי הרצף של כוורת SYSTEM — השם לא נכתב"; _hc=hive_unchecked; fi
+        printf '{"ok":false,"error":"%s","code":"%s"}\n' "$(json_escape "$_hv")" "$_hc"; return 1; }
 
     # שלושה ערכים בשני מפתחות, כולם דרך hivewrite (‏agent/hivewrite.c):
     # כתיבה משמרת-ערכים — ‏setval של hivexsh מחליף את *כל* רשימת ערכי

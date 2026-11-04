@@ -41,17 +41,7 @@ test('the scans see what they were written for', () => {
   for(const s of ['skipped','cancelled']) assert.ok(states.has(s),s);   // #2042: no "replacing" -- it came only from "replace" on an orange disk's question
 });
 
-test('the SMART question names its reason in Hebrew -- a cause of the previous clone and every smart.sh word', () => {
-  const m={mac:'aa:bb:cc:dd:ee:01',name:'מחשב 1'};
-  const asks=[...causes.map(r=>({verdict:'failed_last',reason:r})),...smartReasons.map(r=>({verdict:'warn',reason:r}))];
-  for(const a of asks) {
-    const html=run(`roomAskNote(${JSON.stringify(m)},${JSON.stringify({nonce:'1-2',port:2,answer:null,...a})})`);
-    const shown=visible(html);
-    assert.doesNotMatch(shown,new RegExp(`\\b${a.reason}\\b`),`${a.verdict}/${a.reason} reached the note raw: ${shown}`);
-    assert.doesNotMatch(shown,/סיבה לא מוכרת/,`${a.reason} has no words of its own`);
-    assert.doesNotMatch(html,/dir="ltr">/,'the reason is a Hebrew phrase, not an LTR code word');
-  }
-});
+/* ‏#2044: "the SMART question names its reason in Hebrew" (roomAskNote) went with the question. */
 
 test('every state the agent writes for a drawer is said in Hebrew -- the tooltip and the branches page', () => {
   for(const s of states) {

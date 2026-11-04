@@ -21,6 +21,7 @@ from agentlib import flat_lib
 
 import pytest
 
+from msys_guard import run_script_file
 from native import requires_native
 
 BUILDER = Path(__file__).resolve().parent.parent / "tools" / "build_initramfs.sh"
@@ -293,8 +294,9 @@ def run_copy(tmp_path: Path, trees: dict[str, list[str]]) -> Path:
 
     script = (f"ROOT={root.as_posix()!r}\nKVER={KVER!r}\n"
               f"MODSRC={src.as_posix()!r}\nWITH_GUI=0\n" + copy_snippet())
-    subprocess.run([BASH, "-c", script], check=True, stdin=subprocess.DEVNULL,
-                   capture_output=True, timeout=90)
+    # #893: past 8,186 characters -- on Windows `bash -c` ran half of it and exited 0.
+    run_script_file(BASH, script, tmp_path / "copy.sh", check=True,
+                    capture_output=True, timeout=90)
     return root / "lib" / "modules" / KVER
 
 
@@ -502,9 +504,11 @@ def run_required(tmp_path: Path, present, kver: str = KVER,
     script = (f"ROOT={root.as_posix()!r}\nKVER={kver!r}\n"
               f"MODSRC={src.as_posix()!r}\nWITH_GUI=0\nMODULE_SUBDIRS=()\n"
               + pre + required_snippet())
-    done = subprocess.run([BASH, "-c", script], stdin=subprocess.DEVNULL,
-                          capture_output=True, encoding="utf-8", errors="replace",
-                          timeout=90)
+    # #893: a file, not `bash -c` -- the snippet is past the 8,186 characters
+    # that Git for Windows' bash keeps of a `-c` script.
+    done = run_script_file(BASH, script, tmp_path / "required.sh",
+                           capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=90)
     return done, root / "lib" / "modules" / kver
 
 
