@@ -134,7 +134,7 @@ static void nic_row(App *a,cairo_t *cr,Rect r,int i){InstallState *s=&a->install
     double cx=r.x+r.w-22,cy=r.y+r.h/2;cairo_arc(cr,cx,cy,7,0,6.283);draw_set(cr,sel?t->indigo:t->hair);cairo_set_line_width(cr,2);cairo_stroke(cr);if(sel){cairo_arc(cr,cx,cy,3.5,0,6.283);draw_set(cr,t->indigo);cairo_fill(cr);}
     /* #2096: a name a person reads (the model, or "כרטיס רשת N"), not "VMware 0x07b0"; the
      * kernel name and the MAC on the line under it, each one line (it wrapped onto the MAC) */
-    char label[96],ids[96];if(n->model[0])snprintf(label,sizeof label,"%s",n->model);else snprintf(label,sizeof label,"כרטיס רשת %d",i+1);snprintf(ids,sizeof ids,"%s · %s",n->name,n->mac);
+    char label[96],ids[96];install_nic_label(s,i,label,sizeof label);snprintf(ids,sizeof ids,"%s · %s",n->name,n->mac);
     install_text_r(cr,t,label,13,600,r.x+r.w-45,r.y+9,200,t->ink);Text q=text_make(cr,FONT_MONO,11,400,ids,0,DIR_LTR);text_draw(cr,&q,r.x+r.w-45-q.w,r.y+31,t->muted);text_free(&q);
     char link[40];if(!strcmp(n->link,"unknown"))snprintf(link,sizeof link,"לא ידוע");else snprintf(link,sizeof link,"%s",n->link);
     install_text_r(cr,t,link,12,600,r.x+r.w*.56,r.y+20,r.w*.15,!strcmp(link,"מחובר")?t->success_ink:t->muted);

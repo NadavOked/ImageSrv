@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ImageSrv — מוניטור</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg?v=12.64">
-<link rel="icon" href="favicon.ico?v=12.64" sizes="any">
-<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=12.64">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=12.64">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=12.64">
-<link rel="stylesheet" href="design-tokens.css?v=12.64">
-<link rel="stylesheet" href="console.css?v=12.64">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=12.65">
+<link rel="icon" href="favicon.ico?v=12.65" sizes="any">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=12.65">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=12.65">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=12.65">
+<link rel="stylesheet" href="design-tokens.css?v=12.65">
+<link rel="stylesheet" href="console.css?v=12.65">
 <script>
   (function () {
     var choice = localStorage.getItem("imagesrv-theme");
@@ -94,8 +94,11 @@
     <div class="modal-h"><strong id="pmodal-title">פעולה</strong></div>
     <div class="modal-b">
       <div class="confirm-box" id="pmodal-msg"></div>
-      <div class="danger-confirm">הפעולה מתבצעת מיד על המחשב <b id="pmodal-name"></b>, ועבודה שלא נשמרה עליו תאבד.</div>
+      <div class="danger-confirm" id="pmodal-danger">הפעולה מתבצעת מיד על המחשב <b id="pmodal-name"></b>, ועבודה שלא נשמרה עליו תאבד.</div>
+      <!-- #2240: הערות האזהרה של שיכפול מקומי / כיבוי מיידי (monitor.js) -->
+      <div id="pmodal-notes"></div>
       <p class="danger-text" id="pmodal-error"></p>
+      <p class="muted" id="pmodal-alt" style="display:none">המחשב לא עונה? <button class="btn" type="button" id="pmodal-alt-btn"></button></p>
     </div>
     <div class="modal-f">
       <button class="btn danger" id="pmodal-ok">אישור</button>
@@ -103,6 +106,6 @@
     </div>
   </div>
 </div>
-<script src="monitor.js?v=3.41"></script>
+<script src="monitor.js?v=3.42"></script>
 </body>
 </html>

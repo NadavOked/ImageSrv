@@ -34,8 +34,11 @@ def test_apply_brings_an_admin_down_interface_up_before_ifup(monkeypatch):
 
     monkeypatch.setattr(netcfg_host, "_run", run)
     assert netcfg_host.apply_interface("ens35") is None
-    assert calls == [["ip", "link", "set", "dev", "ens35", "up"],
-                     ["ifdown", "--force", "ens35"], ["ifup", "ens35"]]
+    # #2105: ifup in its own transient unit (test_ifup_detached_2105.py)
+    assert [c[0] for c in calls] == ["ip", "ifdown", "systemctl", "systemd-run"]
+    assert calls[:2] == [["ip", "link", "set", "dev", "ens35", "up"],
+                         ["ifdown", "--force", "ens35"]]
+    assert calls[-1][-2:] == ["ifup", "ens35"]
 
 try:
     from fastapi.testclient import TestClient

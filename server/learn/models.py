@@ -30,6 +30,7 @@ import sqlite3
 import statistics
 
 from server.db import _write_lock, now_iso, writing
+from server.disks import writefloor
 
 log = logging.getLogger("imagesrv.learn_models")
 
@@ -45,6 +46,10 @@ MIN_SAMPLES = 3
 MIN_SERIALS = 2
 
 SLOW_HE = "איטי מהרגיל לדגם — {mbps} MB/s מול חציון {median} MB/s ל-{model} ({n} מדידות)"
+
+#: ‏#447: מול הסף שבתוקף — `writefloor.mbps`, אותה פונקציה שממלאת את המניפסט שהסוכן אוכף
+#: (‏#2338, ההגדרה `writecheck_min_mbps`).
+LAST_SLOW_HE = "בבדיקת הכתיבה הקודמת נמדד איטי — {mbps} MB/s, מתחת לסף {floor} MB/s"
 
 
 def _mbps(pre: object) -> int | None:
@@ -92,6 +97,28 @@ def last_mbps(conn: sqlite3.Connection, serial: str | None) -> int | None:
     row = conn.execute("SELECT mbps FROM model_speeds WHERE serial = ?"
                        " ORDER BY at DESC, rowid DESC LIMIT 1", (serial,)).fetchone()
     return row["mbps"] if row else None
+
+
+def last_check(conn: sqlite3.Connection, serial: str | None) -> dict:
+    """‏#447: ‏`{"mbps", "slow", "text_he"}` — המדידה האחרונה של הדיסק מול הסף שבתוקף.
+
+    ברזל 03/11: דיסק שנפסל "איטי — 33 MB/s" לא הוזהר בסבב הבא — ‏`judge` שופט רק מול
+    הדגם, ובלי בסיס לדגם שתק. הסף — ‏`writefloor.mbps`, מה שהמניפסט של הסבב הבא ימסור
+    לסוכן (‏#2338). ‏`slow`: ‏True — מתחתיו (הסוכן: ‏`-lt`); ‏False — נמדד ואינו; ‏None —
+    לא נמדד מעולם, או שהשאילתה נכשלה ("לא נבדק", לא "תקין").
+    ⚠️ הכלל היחסי של הסוכן (חצי מחציון המגירות מאותו סוג במכונה) אינו נשמר כאן."""
+    out = {"mbps": None, "slow": None, "text_he": None}
+    try:
+        mbps = last_mbps(conn, serial)
+        floor = writefloor.mbps(conn) if mbps is not None else None
+    except Exception:             # noqa: BLE001 — מסך החדר אינו נופל בגלל הלמידה
+        log.exception("last write check of %s failed", serial)
+        return out
+    if mbps is None:
+        return out
+    slow = mbps < floor
+    return {"mbps": mbps, "slow": slow,
+            "text_he": LAST_SLOW_HE.format(mbps=mbps, floor=floor) if slow else None}
 
 
 def judge(conn: sqlite3.Connection, model: str | None, serial: str | None,

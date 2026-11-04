@@ -303,3 +303,34 @@ def test_a_nic_is_added_described_and_forgotten_on_the_secondary(server, seconda
 ])
 def test_the_network_write_allowlist(method, path, allowed):
     assert interserver_api.console_write_allowed(method, path) is allowed
+
+
+# --- #2240: כוח דרך הסוכן למכונה של המשני באמצע שיכפול מקומי -----------------------
+
+def test_power_over_a_local_copy_is_a_request_on_the_secondary(server, secondary, paired):
+    """"כבה בכל זאת" במוניטור מהראשי: ‏`…/agent-power` עובר ב-relay, והבקשה נרשמת
+    **במשני** (בשם `primary:<user>`), בערוץ ה-hello של המכונה שם, כ-confirmed — לא
+    בראשי ולא כפריים במנהרה. ה-MAC במקפים: `:` אינו עובר את בדיקת הנתיב."""
+    from datetime import datetime, timezone
+    from server.agent import registry
+    from server.db import net_seen
+    from server.rounds import room_console
+    mac = "aa:bb:cc:dd:ee:01"
+    registry.add_machine(secondary["conn"], mac, "Remote", "grp_BUILD", "test")
+    net_seen(secondary["conn"], mac, "10.20.0.77")
+    secondary["conn"].execute(
+        "UPDATE net_devices SET local_clone = 'copying', last_seen = ? WHERE mac = ?",
+        (datetime.now(timezone.utc).isoformat(), mac))
+    secondary["conn"].commit()
+    resp = _write(server, paired, "POST", "/monitor/aa-bb-cc-dd-ee-01/agent-power",
+                  {"action": "poweroff", "confirm": "Remote", "confirm_local_copy": True})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["requested"] == 1
+    assert room_console.take_power(secondary["conn"], mac) == ("poweroff", True)
+    assert server["ctx"].conn.execute("SELECT COUNT(*) FROM power_requests").fetchone()[0] == 0
+    assert _journal(secondary["conn"], "monitor_power") == [
+        ("primary:noc", f"{mac} poweroff — דרך הסוכן, באישור מעל שיכפול מקומי")]
+    # בלי האישור המשני עצמו מסרב, והסירוב מגיע לדף עם הסיבה שלו.
+    refused = _write(server, paired, "POST", "/monitor/aa-bb-cc-dd-ee-01/agent-power",
+                     {"action": "poweroff", "confirm": "Remote"})
+    assert refused.status_code == 400 and "אזהרת השיכפול המקומי" in refused.json()["detail"]

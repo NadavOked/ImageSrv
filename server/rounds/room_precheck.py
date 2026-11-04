@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 
 from server.disks import crcwarn, smart_history
-from server.learn import ports as learn_ports
+from server.learn import models as learn_models, ports as learn_ports
 
 #: ‏verdict של disk_event שבו מונה ה-CRC נקרא באמת (‏`smart.sh`). ‏`unchecked`
 #: נקרא רק כשהסיבה היא `no_health` — ‏smartctl פתח את הדיסק וקרא מאפיינים.
@@ -89,6 +89,9 @@ def drawer_fields(conn: sqlite3.Connection, disk: dict, mac: str | None = None) 
         # ‏#1844: מה שהשרת למד על החיבור ועל הדיסק מהגלים הקודמים — "כנראה כבל/מחבר"
         # (‏`port_suspect`) או "הדיסק עצמו" (‏`disk_suspect`). המלצה, לא חסימה.
         **_ports(conn, disk, mac),
+        # ‏#447 (ברזל 03/11): בדיקת הכתיבה האחרונה של הסידורי מול הסף הקבוע — דיסק שנפסל
+        # "איטי" לפני הזרם מוזהר בסבב/גל הבא שלו. ‏`slow: None` = לא נמדד, לא "תקין".
+        "last_write_check": learn_models.last_check(conn, disk.get("serial") or None),
     }
 
 
@@ -139,7 +142,9 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
             ported = d.get("learned_he")                                            # #1844
             speed = d.get("model_speed") if isinstance(d.get("model_speed"), dict) else {}
             model_slow = speed.get("slow") is True                                  # #1845
-            if not slow and rise <= 0 and not suspect and not learned and not ported                     and not model_slow:
+            check = d.get("last_write_check") if isinstance(d.get("last_write_check"), dict) else {}
+            write_slow = check.get("slow") is True                                  # #447
+            if not slow and rise <= 0 and not suspect and not learned and not ported                     and not model_slow and not write_slow:
                 continue
             parts = []
             if slow:
@@ -156,6 +161,8 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
                 text = " · ".join(x for x in (ported, text) if x)
             if model_slow:
                 text = " · ".join(x for x in (speed.get("text_he"), text) if x)
+            if write_slow:
+                text = " · ".join(x for x in (check.get("text_he"), text) if x)
             out.append({
                 "mac": m["mac"], "machine": m.get("name"), "port": d.get("port"),
                 "serial": d.get("serial"), "slot_name": d.get("slot_name"),
@@ -163,7 +170,7 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
                 "crc_rise": d.get("crc_rise"), "crc": d.get("crc"), "crc_suspect": suspect,
                 "smart_learned": d.get("smart_learned"),
                 "port_suspect": d.get("port_suspect"), "disk_suspect": d.get("disk_suspect"),
-                "model_slow": model_slow,
+                "model_slow": model_slow, "write_slow": write_slow,
                 "text_he": f"{m.get('name') or m['mac']} · {_slot(m, d.get('port'), d)}: {text}",
             })
     return out

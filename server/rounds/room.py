@@ -613,6 +613,8 @@ def journal_precheck(conn: sqlite3.Connection, round_row: sqlite3.Row,
             item += " learned=disk"      # #1844: the same disk in different connections
         if w.get("model_slow"):
             item += " learned=slow_model"   # #1845: slower than the usual for its model
+        if w.get("write_slow"):
+            item += " learned=slow_write"   # #447: its last write check was under the fixed floor
         items.append(item)
     # שורה אחת, בלי תקרת `_one_line`: תשע מגירות לא ייחתכו באמצע (סידורי מה-hello
     # הוא קלט חיצוני — רק שבירות השורה מוחלפות).
@@ -1519,6 +1521,7 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
     if wave is not None:
         members = store.members(wave["id"])
         drive_rates.record_wave(conn, wave["id"], members)      # ‏#447
+        learn_models.record_wave(conn, wave["id"], members)     # ‏#2345: גם גל שנסגר מבחוץ
         total, written, skipped, cancelled = _tally(conn, round_row, members)
         slots_raw, closed = _close_no_disk(conn, round_row, members)   # #2201
         no_disk += len(closed)

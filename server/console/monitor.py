@@ -15,6 +15,7 @@ from typing import Awaitable, Callable
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
+from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
 from server.console import auth, viewer_sessions
@@ -100,6 +101,14 @@ WS_MOVED = 4410
 WS_HANDED_OVER = 4411
 POWER_NAME_STALE = "שם המחשב השתנה מאז שהמוניטור נפתח — סגרו ופתחו אותו מחדש"
 POWER_OVER_WS_REFUSED = "פקודת כוח אינה עוברת ב-WebSocket — רק POST …/power"
+#: ‏#2240 (הכרעה 03/11): ‏`poweroff -f` של monitor.c באמצע שיכפול מקומי עוקף את
+#: ‏`lc_power_commit` — יעד שלא הושלם נראה אחרי העלייה כמו יעד טוב. ‏`…/power`
+#: מסרב (409, ‏`local_copy: true`) עד שהמפעיל בוחר: דרך הסוכן (‏`…/agent-power`)
+#: או "המחשב לא עונה" (‏`immediate: true`).
+POWER_OVER_LOCAL_COPY = ("המחשב באמצע שיכפול מקומי — כיבוי או הפעלה מחדש עכשיו ישאירו"
+                         " דיסק יעד שעדיין לא הושלם שבור. אשרו מעל האזהרה")
+NOT_IN_LOCAL_COPY = ("המחשב אינו באמצע שיכפול מקומי עכשיו — הבקשה לא נשלחה."
+                     " סגרו את החלון ונסו שוב")
 
 
 def origin_allowed(headers) -> bool:
@@ -163,6 +172,15 @@ def machine_name(conn, canonical: str) -> str | None:
     row = conn.execute("SELECT suffix FROM machines WHERE mac = ?",
                        (canonical,)).fetchone()
     return None if row is None else row["suffix"]
+
+
+def in_local_copy(conn, canonical: str) -> bool:
+    """‏#2240: המכונה באמצע שיכפול מקומי **עכשיו** — אותה ראיה כמו `local_copy`
+    בחלון המחשב (‏`room.local_copy_now`: hello טרי עם `local_clone: copying`)."""
+    from server.rounds.room import local_copy_now
+    row = conn.execute("SELECT local_clone, last_seen FROM net_devices WHERE mac = ?",
+                       (canonical,)).fetchone()
+    return row is not None and local_copy_now(row["local_clone"], row["last_seen"])
 
 
 def close_reason(text: str) -> str:
@@ -318,8 +336,10 @@ def machine_rows(conn, now: datetime | None = None) -> list[dict]:
     """רשימת המכונות של דף המוניטור (#822): רק build/cloner, ‏``online``
     נקבע **בשרת** באותו חלון-נוכחות של ``_target``. משמש גם את הראשי
     שצופה במשני (#655 v1) — אותה רשימה, אותו חישוב."""
+    from server.rounds.room import local_copy_now
     rows = conn.execute(
-        "SELECT m.mac, m.suffix, g.role, d.ip, d.last_seen, d.progress_seen, d.prompt "
+        "SELECT m.mac, m.suffix, g.role, d.ip, d.last_seen, d.progress_seen, d.prompt,"
+        " d.local_clone "
         "FROM machines m "
         "JOIN groups g ON g.id = m.group_id "
         "LEFT JOIN net_devices d ON d.mac = m.mac "
@@ -336,6 +356,8 @@ def machine_rows(conn, now: datetime | None = None) -> list[dict]:
             "online": bool(r["ip"]) and (seen_within(r["last_seen"], now)
                                          or seen_within(r["progress_seen"], now)),
             "prompt": r["prompt"],   # #906: השאלה שממתינה לאדם, או None
+            # ‏#2240: כפתורי הכוח של המוניטור מזהירים לפני כיבוי באמצע שיכפול מקומי
+            "local_copy": local_copy_now(r["local_clone"], r["last_seen"]),
         }
         for r in rows
     ]
@@ -961,6 +983,12 @@ def create_monitor_router(
             # ‏#1850: מאז #1270 איש אינו מקליד — הדף שולח את שמו. אי-התאמה = השם
             # השתנה אחרי שהדף נפתח.
             raise HTTPException(403, POWER_NAME_STALE)
+        # ‏#2240: באמצע שיכפול מקומי — לא `poweroff -f` בלי בחירה מפורשת.
+        copying = in_local_copy(ctx.conn, canonical)
+        immediate = body.get("immediate") is True
+        if copying and not immediate:
+            return JSONResponse(status_code=409,
+                                content={"detail": POWER_OVER_LOCAL_COPY, "local_copy": True})
         writer = bridges.get(canonical)
         if writer is None:
             raise HTTPException(
@@ -973,8 +1001,44 @@ def create_monitor_router(
                                      " — בקשו שליטה כדי לשלוח פקודה")
         writer.write(power_frame(action))
         await writer.drain()
-        journal(ctx.conn, "monitor_power", f"{canonical} {action}", user[0])
+        journal(ctx.conn, "monitor_power", f"{canonical} {action}"
+                + (" — מיידי, באמצע שיכפול מקומי, בלי סימון היעדים" if copying else ""), user[0])
         return {"ok": True, "action": action}
+
+    @router.post("/monitor/{mac}/agent-power")
+    def agent_power(mac: str, body: dict, user=Depends(admin_only)):
+        """‏#2240: כיבוי/הפעלה מחדש **דרך הסוכן** של מכונה באמצע שיכפול מקומי —
+        אחרי שהמפעיל אישר מעל האזהרה. אותו ערוץ כמו חלון המחשב (#1367):
+        ‏`request_power(confirmed=True)` נמסר ב-hello הבא, והסוכן מסמן את היעדים
+        שלא הושלמו (‏`lc_power_commit`) ומדווח ליומן לפני שהוא נכבה. ‏200 = הבקשה
+        נרשמה, לא "בוצעה". אינו נוסע בגשר, ולכן אינו דורש מוניטור פתוח — רק שאיש
+        אחר אינו מחזיק את המכונה (#1852). הראשי מגיע לכאן במשני דרך
+        ‏`CONSOLE_WRITES`."""
+        from server.rounds import room_console
+        canonical = _canonical_or_404(mac)
+        action = body.get("action")
+        if action not in POWER_ACTIONS:
+            raise HTTPException(400, "פעולה לא מוכרת — reboot או poweroff")
+        if body.get("confirm_local_copy") is not True:
+            raise HTTPException(400, "הבקשה נשלחת רק מעל אזהרת השיכפול המקומי")
+        name = machine_name(ctx.conn, canonical)
+        if name is None:
+            raise HTTPException(404, "מכונה לא מוכרת")
+        if body.get("confirm") != name:
+            raise HTTPException(403, POWER_NAME_STALE)
+        with lock:
+            holder = active.get(canonical)
+        if holder is not None and holder.user != user[0]:
+            raise HTTPException(409, f"המכונה בצפייה של {holder.user}"
+                                     " — בקשו שליטה כדי לשלוח פקודה")
+        if not in_local_copy(ctx.conn, canonical):
+            # עיקרון 5: לא `poweroff -f` במקום — המפעיל אישר משהו אחר.
+            raise HTTPException(409, NOT_IN_LOCAL_COPY)
+        count = room_console.request_power(ctx.conn, [canonical], action, user[0], confirmed=True)
+        journal(ctx.conn, "monitor_power",
+                f"{canonical} {action} — דרך הסוכן, באישור מעל שיכפול מקומי", user[0])
+        return {"requested": count, "action": action,
+                "ttl_s": room_console.POWEROFF_TTL_SECONDS}
 
     @router.websocket("/monitor/{mac}")
     async def monitor(
