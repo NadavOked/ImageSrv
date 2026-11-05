@@ -41,6 +41,7 @@ from server.agent import timing as agent_timing   # #2056
 from server.system import timezone, timesync   # #1447, #1773
 from server.system import dnsmasq_dropin as dnsmasq_dropin_mod   # #2174
 from server.agent.api import ServerContext, boot_identity_ok, create_agent_router
+from server.agent import body as agent_body   # #2410
 from server.console.api import create_console_router
 from server.console.data import create_console_data_router   # #1882-#1889
 from server.console.hostcfg import create_hostcfg_router
@@ -56,6 +57,7 @@ from server.console.storage_locations import create_storage_locations_router
 from server.storage import locations as storage_locations
 from server.interserver import storage_heartbeat
 from server.system import housekeeping   # #1737
+from server.system import grub_password   # #2437
 from .db import journal
 from server.net import wol
 from server.rounds import direct
@@ -79,7 +81,7 @@ from server.system.health import default_hooks as health_default_hooks
 from .update import (PUBLIC_UPDATE_URL, create_update_router, current_version, display_version,
                      default_hooks as default_update_hooks, read_version,
                      VersionRead)
-from server.agent.hello import make_resolver, off_deploy_vlan, self_probe
+from server.agent.hello import make_resolver, off_deploy_vlan, self_probe, server_source
 from server.library.images import ImageLibrary
 from server.agent.kiosk import create_kiosk_router, mark_build_gui
 from server.rounds.cloner_round import create_cloner_round_router
@@ -123,6 +125,22 @@ def _off_vlan_decline(mac: str, step: str) -> bool:
     log.warning("boot step %s for %s not recorded — off deployment vlan (#584)",
                 step, mac)
     return False
+
+
+def _record_verified(rt: ServerRuntime, scope: dict, mac: str, step: str) -> bool:
+    """‏#2411: פירור אתחול (#400) על וילן ההפצה נרשם רק כשה-`?mac=` תואם את
+    החכירה — אותה בדיקה כמו בתפריט (`api.boot_identity_ok`, אותו יומן ואותו
+    ריסון של #1949). אחרת מכונה אחרת בוילן הייתה כותבת שביל מומצא ("הגיע עד
+    agent-hello") למכונה כבויה, ומאפסת את `first_at` של שביל אמיתי. בקשה של
+    השרת עצמו (‏`server_source`, הסימולציה על loopback) נרשמת כמו היום.
+    ‏False — ראיה חיובית שלא נרשם; ‏GRUB מקבל 200 בכל מקרה (`record_step`)."""
+    client = scope.get("client")
+    client_ip = client[0] if client else None
+    if not server_source(scope) and not boot_identity_ok(rt.ctx, mac, client_ip):
+        log.warning("boot step %s for %s from %s not recorded — identity not verified (#2411)",
+                    step, mac, client_ip)
+        return False
+    return boottrace.record(rt.conn, mac, step)
 
 
 def _probe_decline(mac: str, step: str) -> bool:
@@ -223,6 +241,9 @@ class ServerRuntime:
     #: ‏#1737: הסיבוב היומי (‏`housekeeping`) — מתי הראשון ובאיזה קצב. בדיקות מקצרות.
     housekeeping_first: float = housekeeping.FIRST_RUN_S
     housekeeping_every: float = housekeeping.EVERY_S
+    #: ‏#2437: ה-hash של סיסמת עורך ה-GRUB לכל grub.cfg שמוגש. ריק = נעול בלי
+    #: סיסמה (בדיקות, תחנת פיתוח, או סיסמה שלא נקראה).
+    grub_password_hash: str = ""
 
 
 async def _room_clock(rt: ServerRuntime, interval: float) -> None:
@@ -478,6 +499,11 @@ def create_runtime(
     # בבדיקות ברירת המחדל הייתה משנה את אזור הזמן של מכונת הבדיקות.
     apply_timezone: bool = False,
     apply_timesync: bool = False,
+    # ‏#2437: קובץ סיסמת עורך ה-GRUB (‏`grub_password.PASSWORD_FILE`). ‏None =
+    # לא נוגעים בו — מאותו טעם כמו ``sync_dnsmasq``: רק ``main`` מעביר, ורק על
+    # לינוקס. אז הסיסמה נוצרת אם חסרה (התקנה חדשה ושדרוג), וה-bootstrap על
+    # ה-TFTP ננעל אם הוא נכתב לפני #2437.
+    grub_password_file: str | Path | None = None,
 ) -> ServerRuntime:
     """בונה את המצב המשותף פעם אחת ומריץ את האתחול החד-פעמי.
 
@@ -547,8 +573,9 @@ def create_runtime(
     # מזריקים שולח, ואיש לא בנה אחד למסלול האמיתי: `wol_send` נשאר
     # `None` וכל שידור נפל לברירת המחדל חסרת-הממשק. יכולת שקיימת ואינה
     # מחוברת נראית בדיוק כמו יכולת שעובדת (עיקרון 5).
-    if wol_send is None and interface:
-        wol_send = wol.broadcast_sender(interface)
+    # ‏#2428: וכשאין כרטיס הפצה (לא הוגדרה) — שולח שמסרב, לא ברירת המחדל.
+    if wol_send is None:
+        wol_send = wol.broadcast_sender(interface) if interface else wol.unpinned_sender
 
     # מנוע השידור מחובר למעברי המצב של הסבב: running מתחיל לשדר,
     # סגירה עוצרת. ניהול הסבב עצמו לא יודע מה זה udpcast.
@@ -646,7 +673,13 @@ def create_runtime(
                                lambda: room.wave_drives(conn, session["id"]),
                                sender.max_bitrate, direct=True)
             return
-        sender.start(session)
+        # ‏#2427: שידור שלא הופעל אינו `running` שקט — הסבב נכשל בשמו. ‏`fail` הוא
+        # CAS על open/running: סבב שכבר נסגר (הסגירה הקדימה את ההתחלה) אינו משתנה.
+        refused = sender.start(session)
+        if refused and store.fail(
+                session["id"], refused,
+                related=lambda: room.fail_wave(conn, session["id"], refused, commit=False)):
+            journal(conn, "send_failed", refused)
 
     store = SessionStore(
         conn,
@@ -701,6 +734,7 @@ def create_runtime(
     if dnsmasq_dropin:
         dnsmasq_dropin_mod.apply_on_start(
             conn, {**dnsmasq_dropin_mod.default_hooks(), **(host_hooks or {})}, repo_dir)
+    grub_hash = _grub_lock(conn, grub_password_file, deploy)
 
     engine = vmupdate_engine or VmUpdate(
         conn, library,
@@ -736,7 +770,31 @@ def create_runtime(
         auto_reboot_hook=auto_reboot_hook or auto_reboot.default_reboot,
         auto_reboot_interval=auto_reboot_interval,
         auto_reboot_last=auto_reboot_last,
+        grub_password_hash=grub_hash,
     )
+
+
+def _grub_lock(conn, password_file, deploy) -> str:
+    """‏#2437: הסיסמה של עורך ה-GRUB — נוצרת אם חסרה — וה-hash שלה.
+
+    כשל אינו עוצר את השרת: התפריטים ננעלים בלי סיסמה (איש אינו עורך), והסיבה
+    ביומן. אותו hash עובר ל-`DeployContext`, כדי שה-bootstrap שהקונסולה כותבת
+    בהדלקת DHCP יהיה נעול באותה סיסמה."""
+    if password_file is None:
+        return ""
+    password_hash, created, error = grub_password.ensure(Path(password_file))
+    if error:
+        journal(conn, "grub_password_failed",
+                f"סיסמת עורך ה-GRUB לא נקראה — התפריטים נעולים בלי סיסמה: {error}")
+    elif created:
+        journal(conn, "grub_password_created",
+                f"נוצרה סיסמה לעורך ה-GRUB של התחנות ב-{password_file} (‏0600, ‏#2437)")
+    if deploy is not None:
+        deploy.grub_password_hash = password_hash
+        problem = deploy_net.refresh_grub_cfg(deploy.tftp_root, password_hash)
+        if problem:
+            journal(conn, "grub_cfg_lock_failed", f"ה-bootstrap על ה-TFTP לא ננעל: {problem}")
+    return password_hash
 
 
 def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
@@ -772,11 +830,19 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
             proxy = deploy_net.firewall_proxy_interfaces(ctx.conn)
             proxy_args = {"proxy_interfaces": proxy} if proxy else {}
             if per is None:      # חזרנו ל"היום" — הכללים לפי שני התפקידים
-                return regenerate(deploy.repo_dir, deploy_if=deploy.state.interface,
-                                  servers_if=deploy.servers_interface,
-                                  primary_ip=deploy.primary_ip, **proxy_args)
-            return regenerate(deploy.repo_dir, deploy_if=None, servers_if=None,
-                              primary_ip=deploy.primary_ip, services=per, **proxy_args)
+                error = regenerate(deploy.repo_dir, deploy_if=deploy.state.interface,
+                                   servers_if=deploy.servers_interface,
+                                   primary_ip=deploy.primary_ip, **proxy_args)
+            else:
+                error = regenerate(deploy.repo_dir, deploy_if=None, servers_if=None,
+                                   primary_ip=deploy.primary_ip, services=per, **proxy_args)
+            if error == deploy_net.NO_FIREWALL:
+                # ‏#2440: שרת בלי חומת אש — שינוי השירותים אינו מוחזר בגללה, אבל
+                # היומן אומר שאין כלל שנכתב (ומסך הבריאות: "לא נטענה").
+                from .db import journal as journal_line   # ‏`journal` מקומי בפונקציה הזו
+                journal_line(ctx.conn, "firewall_not_installed", error)
+                return None
+            return error
         hooks["firewall"] = firewall_step
     if "timesync" not in hooks and apply_timesync:
         chrony_hooks = timesync.default_hooks()
@@ -869,6 +935,8 @@ def _boot_asgi(rt: ServerRuntime):
                     tuple(p for p in rt.extra_cmdline
                           if not p.startswith(STRIPPED_CMDLINE)),
                     monitor.stations_enabled(conn)),
+                # ‏#2437: ‏`e`/`c` נעולים בסיסמה; כל ערך `--unrestricted`.
+                password_hash=rt.grub_password_hash,
             ),
             boot_dir=rt.boot_dir,
             # ‏#400: שביל הפירורים. מוזרק כמו ה-resolver — ‏`boot/` אינו
@@ -876,7 +944,7 @@ def _boot_asgi(rt: ServerRuntime):
             # ההפצה הרושם דוחה את הפירור בגלוי במקום לכתוב אותו.
             record=(_probe_decline if probe
                     else _off_vlan_decline if off_vlan
-                    else lambda mac, step: boottrace.record(conn, mac, step)),
+                    else lambda mac, step: _record_verified(rt, scope, mac, step)),
         )(scope, receive, send)
 
     return boot_asgi
@@ -1052,6 +1120,8 @@ def create_agent_app(rt: ServerRuntime) -> FastAPI:
     app.state.runtime = rt
     app.state.data_dir = rt.data_dir
     _add_agent_routes(app, rt)
+    # ‏#2410: תקרת גוף לכל נתיבי הכתיבה בפורט הסוכן, חוץ מהעלאת נתוני האימג'.
+    app.add_middleware(agent_body.BodyCap)
     return app
 
 

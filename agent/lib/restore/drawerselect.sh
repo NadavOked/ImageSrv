@@ -16,7 +16,7 @@ resolve_target_drawers() {
     if [ "$_rt_ports" = "null" ]; then
         die_local "room target selection is missing"
     fi
-    _disks=""
+    _disks=""; DRAWER_MAP=""   # #2434: disk:port as chosen, for drawers_bound
     _rt_list=$(jq -er '.session.target_ports
         | select(type == "array" and length > 0)
         | .[] | select(type == "number" and floor == .)' "$RESP") \
@@ -29,10 +29,33 @@ resolve_target_drawers() {
         # shellcheck disable=SC2086 # word-splitting the match list is intended
         set -- $_rt_match
         case "$#" in
-            1) _disks="$_disks $1" ;;
+            1) _disks="$_disks $1"; DRAWER_MAP="$DRAWER_MAP $1:$_rt_port" ;;
             0) log "selected drawer $_rt_port has no disk on this machine -- it is not written; the other drawers are (#2201)" ;;
             *) die_local "selected drawer $_rt_port does not map to exactly one disk" ;;
         esac
     done
     [ -n "$_disks" ] || die_local "the room selected no writable drawers"
+}
+
+drawers_bound() {
+    # $1.. = the round's drawers, each through target_init (its `bound`, failmark.sh).
+    # PRINTS the ones the round may write: a serial, and still in the slot the room
+    # chose (DRAWER_MAP). #2434: the drawer is then written by that identity, and
+    # assert_target asks it again before every write. A drawer with no serial has
+    # nothing to be asked by -- it fails by name, in the open, and is not written.
+    for _db_d in "$@"; do
+        _db_p=""; for _db_m in $DRAWER_MAP; do [ "${_db_m%:*}" != "$_db_d" ] || _db_p=${_db_m##*:}; done
+        _db_b=$(cat "$RUN_DIR/targets/$_db_d/bound" 2>/dev/null)
+        if [ -z "$_db_b" ]; then
+            target_foreign "$_db_d" "זהות המגירה $_db_d לא נרשמה בבחירה — אי אפשר לוודא שזה הדיסק שנבחר, לא נכתב"
+        elif [ -z "$(target_bound_serial "$_db_d")" ]; then
+            target_foreign "$_db_d" "למגירה $_db_d אין מספר סידורי — אי אפשר לוודא שזה הדיסק שנבחר, לא נכתב"
+        elif [ -z "$_db_p" ]; then
+            target_foreign "$_db_d" "המגירה $_db_d אינה במיפוי החריצים שהחדר בחר — לא נכתב"
+        elif [ "${_db_b##*|}" != "$_db_p" ]; then
+            target_foreign "$_db_d" "הדיסק $_db_d בחריץ $(_p=${_db_b##*|}; echo "${_p:-לא ידוע}"), לא בחריץ שנבחר ($_db_p) — לא נכתב"
+        else
+            echo "$_db_d"
+        fi
+    done
 }

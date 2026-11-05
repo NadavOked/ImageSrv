@@ -70,7 +70,9 @@ def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
                 " (token_hash, username, ip, since, last_seen, expires_at, auth_epoch)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (token_hash) DO UPDATE SET"
-                " ip = excluded.ip, last_seen = excluded.last_seen",
+                # ‏#2414: ‏WebSocket (``auth.check``) אינו מעביר כתובת — לא מוחקים את הידועה.
+                " ip = CASE WHEN excluded.ip = '' THEN console_sessions.ip ELSE excluded.ip END,"
+                " last_seen = excluded.last_seen",
                 (key, username, ip, _iso(expires - ttl), _iso(now), expires, epoch),
             )
     except sqlite3.Error as exc:
@@ -80,6 +82,27 @@ def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
         with _lock:
             _written.pop(key, None)
         log.warning("console_sessions: last_seen of %s not written: %s", username, exc)
+
+
+def idle_expired(conn: sqlite3.Connection, token: str, idle_seconds: int,
+                 ttl: int) -> bool:
+    """‏#2414: האם העוגייה לא נראתה יותר מ-``idle_seconds`` (‏``console_idle_seconds``).
+
+    עד כאן הניתוק בחוסר פעילות היה של הדפדפן בלבד, והעוגייה נשארה תקפה 12
+    שעות אחרי שהלשונית נסגרה. הפעילות האחרונה = ‏``last_seen`` של העוגייה, או
+    רגע ההנפקה כשאין לה שורה עדיין (עוגייה שהונפקה ולא נשלחה). ‏``last_seen``
+    נכתב לכל היותר פעם ב-``TOUCH_SECONDS``, ולכן החסד הוא בדיוק דקה כזו —
+    הדפדפן מנתק ב-``idle_seconds``, השרת לכל המוקדם דקה אחריו. ‏0 = כבוי."""
+    if idle_seconds <= 0:
+        return False
+    row = conn.execute(
+        "SELECT last_seen FROM console_sessions WHERE token_hash = ?", (_hash(token),),
+    ).fetchone()
+    if row is not None:
+        last = datetime.fromisoformat(row["last_seen"]).timestamp()
+    else:
+        last = int(token.rpartition("|")[0].split("|")[2]) - ttl
+    return _now() - last > idle_seconds + TOUCH_SECONDS
 
 
 def forget(conn: sqlite3.Connection, token: str | None) -> None:

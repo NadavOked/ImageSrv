@@ -83,13 +83,15 @@ def build_config_text(
     mac = normalize_mac(raw_mac)
     if mac is None:
         log.warning("boot request with unusable mac %r from %s", raw_mac, client_ip)
-        return render_local_only("missing or malformed mac")
+        return render_local_only("missing or malformed mac",
+                                 password_hash=config.password_hash)
 
     try:
         answer = resolve(mac, client_ip)
     except Exception:
         log.exception("resolver failed for %s from %s", mac, client_ip)
-        return render_local_only("server lookup failed")
+        return render_local_only("server lookup failed",
+                                 password_hash=config.password_hash)
 
     text = render(answer, config)
     log.info("served boot config for %s from %s", mac, client_ip)
@@ -192,6 +194,7 @@ def config_for_scope(scope: dict, config: GrubConfig) -> GrubConfig:
             initrd_path=config.initrd_path,
             gui_initrd_path=config.gui_initrd_path,
             extra_cmdline=config.extra_cmdline,
+            password_hash=config.password_hash,   # #2437: a scoped menu is locked too
         )
     except Exception:  # noqa: BLE001 — כאן זו בדיוק הכוונה
         return config

@@ -795,8 +795,11 @@ static int readback(int argc, char **argv)
         total = rb_le(head + 60, 8);
         used = rb_le(head + 76, 8);
         bs = rb_le(head + 84, 4);
+        /* #2433: `total > 2^34` is "a map over 2 GiB" without the sum --
+         * (total + 7) / 8 wrapped to 0 for total >= 2^64 - 7: malloc(0) and a
+         * popcount far past it (SIGSEGV). */
         if (bs == 0 || bs > (64u << 20) || used > total || total == 0 ||
-            (total + 7) / 8 > (1ULL << 31)) {
+            total > (1ULL << 34)) {
             fprintf(stderr, "fanout: readback: implausible map (%llu of %llu blocks of %llu)\n",
                     (unsigned long long)used, (unsigned long long)total, (unsigned long long)bs);
             return 3;

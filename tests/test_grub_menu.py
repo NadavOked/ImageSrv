@@ -231,7 +231,7 @@ def test_agent_config_loads_kernel_and_initrd_from_the_server():
 )
 def test_every_network_entry_retries_kernel_and_initrd_three_times(a):
     text = render(a, CFG)
-    entry = text.split('menuentry "ImageSrv" --id imagesrv {', 1)[1].split("\n}", 1)[0]
+    entry = text.split('menuentry "ImageSrv" --unrestricted --id imagesrv {', 1)[1].split("\n}", 1)[0]
     assert entry.count("for attempt in 1 2 3; do") == 2
     assert 'if linux (http,10.44.12.10:8080)/boot/vmlinuz ' in entry
     # ‏`then` בשורה משלו מאז 54223f94 ("Fix GRUB retry command boundaries")

@@ -46,6 +46,15 @@
 CAPTURE_SHRINK_RESTORE="${CAPTURE_SHRINK_RESTORE:-1}"
 SHRINK_ERROR=""
 
+shrink_args_ok() {
+    # $1 uguid $2 attrs. ‏#2436: שניהם מפוצלים למילים של sgdisk ב-_shrink_gpt, והם
+    # מגיעים גם מרשומת השרת: GUID של הקס ומקפים, דגלים של 16 ספרות הקס, או ריק.
+    # כל ערך אחר (רווח, `--delete=3`) הוא ארגומנט נוסף לפקודה -- סירוב.
+    case "$1" in *[!0-9A-Fa-f-]*) return 1 ;; esac
+    case "$2" in *[!0-9A-Fa-f]*) return 1 ;; ''|????????????????) return 0 ;; esac
+    return 1
+}
+
 _shrink_gpt() {
     # $1 disk $2 idx $3 start $4 size_sectors $5 type $6 uguid $7 name $8 attrs.
     # הכניסה נכתבת מחדש (מחיקה+יצירה באותו אינדקס) עם ה-GUID הייחודי, השם
@@ -55,6 +64,7 @@ _shrink_gpt() {
     # עולה -- כניסה שכבר הייתה כאן נבנית **בדיוק** במקומה. ואז הקרנל מתבקש
     # לקרוא את הטבלה, והתחילה והגודל נקראים בחזרה **מהדיסק** (#51): ‏sgdisk
     # שלא צעק אינו טבלה שהשתנתה. 1/2/3 = איזה צעד נכשל.
+    shrink_args_ok "$6" "$8" || return 1   # #2436: before sgdisk, for every caller
     _sg_u=""; [ -n "$6" ] && _sg_u="-u $2:$6"
     _sg_a=""; [ -n "$8" ] && _sg_a="-A $2:=:0x$8"
     # shellcheck disable=SC2086 # הפיצול של $_sg_u/$_sg_a מכוון

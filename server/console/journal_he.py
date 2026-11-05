@@ -91,6 +91,7 @@ EVENTS_HE = {
     "room_drawer_cancelled": "הכתיבה לדיסק בוטלה — טבלת המחיצות נמחקה, שאר הדיסקים ממשיכים",
     # ‏#105: כונן בלי serial שסיים — לא הוחלף, פשוט אין זהות לספור.
     "room_drawer_unidentified": "לא ניתן לזהות את הכונן (אין serial) — הכתיבה לא נספרה",
+    "room_drawer_serial_conflict": "אותו serial במכונה אחרת — הכתיבה לא נספרה, כדי לא לסמן 'נכתב' מגירה שלא נכתבה",   # #2421
     "room_drawer_wake_mismatch": "המשכפל עלה ובחריץ שנבחר אין את הדיסק שנבחר — המגירה דולגה ולא נכתבה",   # #1954
     "room_drawer_no_disk": "בחריץ שנבחר לסבב אין דיסק — המגירה נכשלה ולא נכתבה, שאר המגירות נכתבו",   # #2201
     "room_done": "סבב חדר השיכפולים הושלם",
@@ -335,6 +336,7 @@ EVENTS_HE = {
     "session_role_denied": "פעולה בסבב נדחתה — התפקיד אינו רשאי",
     "shrink_cleared": "רשומת כיווץ נוקתה",
     "shrink_note": "הערת כיווץ נרשמה לדיסק",
+    "shrink_refused": "סגירת רשומת כיווץ נדחתה — הבקשה הגיעה ממכונה אחרת מזו שפתחה אותה",   # #2413
     "storage_iscsi_login": "התחברות iSCSI למיקום אחסון",
     "storage_location_connect": "התחברות למיקום אחסון",
     "storage_location_connected": "מיקום אחסון מחובר",
@@ -397,6 +399,9 @@ EVENTS_HE = {
     "email_test": "מייל בדיקה",
     "email_oauth_connected": "חשבון שליחה התחבר (OAuth)",
     "email_oauth_failed": "התחברות חשבון שליחה (OAuth) נכשלה",
+    "grub_password_created": "נוצרה סיסמת GRUB לנעילת תפריט האתחול (#2437)",
+    "grub_password_failed": "יצירת סיסמת GRUB נכשלה — התפריט נעול בלי סיסמה (#2437)",
+    "grub_cfg_lock_failed": "נעילת grub.cfg הקיים על ה-TFTP נכשלה (#2437)",
 }
 
 #: ‏#968: חומרת האירוע לציר-הזמן ולעמודת הצבע ביומן — נקבעת **כאן**, לצד
@@ -426,6 +431,7 @@ _SEVERITY_WARN = {
     "net_rollback_unreadable", "net_rollback_marker_stuck", "work_area_kept", "nic_services_armed", "nic_services_reverted",
     "storage_node_disable",
     "room_drawer_changed", "room_drawer_unidentified", "room_drawer_wake_mismatch", "room_rewake", "clock_jump",
+    "room_drawer_serial_conflict", "shrink_refused",   # #2421, #2413
     "power_expired", "gui_failed", "wol_arm_failed", "net_loss_jump", "wol_no_wake", "wol_resent", "boot_step_slow", "server_disk_slow", "capture_space_refused", "capture_space_unchecked", "cloner_throttled", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
     "vmupdate_mac_created", "vmupdate_leftover_failed", "linux_initramfs_warning",
     "send_counts_lost", "send_quiet_wait",   # #1430

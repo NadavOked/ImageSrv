@@ -176,13 +176,17 @@ lc_run() {
     _lr_all=$(tr '\n' ' ' < "$_lr_r/targets"); _lr_small=""
     # shellcheck disable=SC2086 # #1914: the clone stick snapshots its disks' serials (RAM, usbdiag.sh)
     log "local clone: $_lr_src -> $_lr_all"; [ "${IMAGESRV_MODE:-}" != usbclone ] || usb_serials_snap "$_lr_src" $_lr_all   # #1914 (RAM)
-    # Fresh evidence, not the screen's 2-second-old picture (principle 5/7).
-    if [ "$(lc_inv_field "$_lr_src" 12)" != 1 ] || [ "$(_lc_clean "$(disk_serial "$_lr_src")")" != "$(lc_inv_field "$_lr_src" 4)" ]; then
+    # Fresh evidence, not the screen's 2-second-old picture (principle 5/7). #2429: an empty
+    # serial is no identity -- "" = "" is not "the same disk"; a target is compared by what
+    # target_init bound (assert_target asks it again before every write).
+    _lr_ss=$(_lc_clean "$(disk_serial "$_lr_src")")
+    if [ "$(lc_inv_field "$_lr_src" 12)" != 1 ] || [ -z "$_lr_ss" ] || [ "$_lr_ss" != "$(lc_inv_field "$_lr_src" 4)" ]; then
         _fail_alive "$_lr_all" "דיסק המקור אינו מה שנבדק — חזרו ובחרו שוב. לא נכתב דבר"; lc_end; return 1
     fi
     [ -f "$LC/measure/$_lr_src" ] && [ "$(cat "$LC/source" 2>/dev/null)" = "$_lr_src" ] || lc_measure "$_lr_src"
     for _lr_t in $_lr_all; do
-        if [ "$_lr_t" = "$_lr_src" ] || [ ! -f "$LC/inv/$_lr_t.line" ] || [ "$(_lc_clean "$(disk_serial "$_lr_t")")" != "$(lc_inv_field "$_lr_t" 4)" ]; then
+        _lr_ts=$(_lc_clean "$(target_bound_serial "$_lr_t")")
+        if [ "$_lr_t" = "$_lr_src" ] || [ ! -f "$LC/inv/$_lr_t.line" ] || [ -z "$_lr_ts" ] || [ "$_lr_ts" != "$(lc_inv_field "$_lr_t" 4)" ] || ! target_same "$_lr_t"; then
             fail_written_target "$_lr_t" "היעד אינו מה שנבדק — לא נכתב"; continue
         fi
         smart_red "$_lr_t" && { fail_written_target "$_lr_t" "$(smart_red_he "$_lr_t") — לא נכתב"; continue; }   # #1732: never a target; #1742: why

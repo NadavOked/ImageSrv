@@ -116,7 +116,9 @@ def _names(tmp_path, entries, fail=False, marked=(1, 2, 3, 4)):
         f"exit {1 if fail else 0}\n", encoding="utf-8", newline="\n")
     out = sh(f'chmod 0755 {posix(stubs)}/sgdisk; export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
              f'LC={posix(lc)!r} DEVROOT=/nodev LOG_FILE={posix(tmp_path / "log")!r}; log() {{ :; }}; '
-             f'. {posix(AGENT)}/lib/restore/writemark.sh; writemark_clear sdb "$LC/run/entries"; echo "rc=$?"')
+             f'. {posix(AGENT)}/lib/restore/writemark.sh; '
+             'assert_target() { :; }; '   # #2434: the disk chosen -- the identity has its own tests (test_target_identity_2434.py)
+             'writemark_clear sdb "$LC/run/entries"; echo "rc=$?"')
     lines = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
     return rc_of(out), lines
 

@@ -105,6 +105,7 @@ finish_grow() {
     # האבחון שלהם.
     # #2015: a moved NTFS/FAT partition says where it starts -- after the
     # read-back, before the grow (ntfsboot.sh). Not best-effort: BIOS/MBR boot.
+    assert_target "$1" || return 1   # #2434: every write below is to the disk chosen
     if [ -n "${3:-}" ] && ! boot_hidden_disk "$1" "$3"; then
         fail_written_target "$1" "${BOOT_HIDDEN_ERROR:-מיקום ההתחלה בסקטורי האתחול לא נבדק (ntfsboot.sh לא נטען)}"; return 1
     fi

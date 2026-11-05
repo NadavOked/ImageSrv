@@ -129,6 +129,9 @@ def validate_name(name: str) -> None:
         raise ValueError(f"{NAME_ERROR} — התקבל {shown[:40]!r}")
 
 
+_LEASE = re.compile(r"[0-9]+[mhd]")
+
+
 def validate(cfg: InterfaceConfig) -> None:
     """זורק ValueError בעברית על הגדרה שלא תעבוד.
 
@@ -162,8 +165,8 @@ def validate(cfg: InterfaceConfig) -> None:
             raise ValueError("השער אינו ברשת של הטווח")
     for entry in cfg.dns:
         _ip(entry, "DNS")
-    lease = cfg.lease.strip().lower()
-    if not lease or lease[-1] not in "mhd" or not lease[:-1].isdigit():
+    # ‏#2419: ספרות ASCII בלבד. ‏`isdigit` מקבל גם '١٢' — ההגדרה נשמרה, ו-dnsmasq נפל.
+    if not _LEASE.fullmatch(cfg.lease.strip().lower()):
         raise ValueError("זמן חכירה: מספר ואחריו m/h/d, למשל 12h")
 
 
@@ -481,7 +484,8 @@ def render_proxy(configs: list[InterfaceConfig],
 #: MAC קנוני — אותה תבנית בדיוק כמו הקנוני של registry.py. השורה הזו
 #: נכתבת לקובץ ש-dnsmasq קורא כ-root, בלי בריחה ובלי מרכאות (בדיוק כמו
 #: שם הכרטיס, #102) — לכן היא מאומתת כאן שוב ולא רק בכניסה ל-DB.
-_MAC_HOSTLINE = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
+#: ‏#2419: ‏`fullmatch`, לא `^…$` — ה-`$` של Python מקבל גם "\n" בסוף.
+_MAC_HOSTLINE = re.compile(r"[0-9a-f]{2}(:[0-9a-f]{2}){5}")
 
 
 def _guard_macs(macs: list[str]) -> None:
@@ -489,7 +493,7 @@ def _guard_macs(macs: list[str]) -> None:
     ‏_guard_names (#102): רשומה שאינה MAC קנוני לא הופכת לשורת dnsmasq
     שבורה בשקט. ‏render_known_macs נכשלת במקום לכתוב אותה."""
     for mac in macs:
-        if not isinstance(mac, str) or not _MAC_HOSTLINE.match(mac):
+        if not isinstance(mac, str) or not _MAC_HOSTLINE.fullmatch(mac):
             raise ValueError(f"MAC לא קנוני בטבלת המכונות: {mac!r}")
 
 

@@ -37,6 +37,7 @@ from server.disks import disk_sets   # #1857
 from server.disks import writefloor   # #2338
 from server.agent import firmware_image# #2080
 from server.agent import unknown_screen   # #1802
+from server.agent import body as agent_body   # #2410/#2416
 from server.agent.readbackhash import mode as readback_mode
 from server.agent.hello import (build_answer, hello_payload_oversized, login_required,
                                 off_deploy_vlan, well_formed_monitor_auth,
@@ -85,6 +86,16 @@ def _error(status: int, message: str, code: str) -> JSONResponse:
     return JSONResponse(
         {"ok": False, "error": message, "code": code}, status_code=status
     )
+
+
+async def _read_body(request: Request) -> tuple[object, JSONResponse | None]:
+    """‏#2410/#2416: הגוף עם תקרת בייטים ונרמול (`body.read_json`). ‏`(גוף, None)`,
+    או `(None, תשובה)` — ‏413/400 בתבנית הרוחבית, **לפני** שער הזהות: גוף שלא
+    נקרא אינו מגיע לשום בדיקה."""
+    try:
+        return await agent_body.read_json(request), None
+    except agent_body.BodyError as exc:
+        return None, _error(exc.status, exc.message, exc.code)
 
 
 def _identity_refusal(ctx: ServerContext, verdict: identity.Verdict,
@@ -228,14 +239,23 @@ def create_agent_router(ctx: ServerContext,
             return _error(503, "the server's database partition is full", "db_full")
 
     async def _agent_hello(request: Request) -> JSONResponse:
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
 
         return await run_in_threadpool(_agent_hello_body, request, body)
+
+    def _extra_ok(mac: str, extra: str, client_ip: str | None) -> bool:
+        """‏#2439: כרטיס רשום מ-`all_macs` שאינו נמצא עכשיו במקום אחר
+        (`identity.verify_extra`). כרטיס שאינו רשום אינו מזהה ממילא — לא נבדק
+        ואינו מרעיש את היומן. ‏`ctx.leases is None` — השומר אינו מותקן, כמו
+        ב-`identity_gate`."""
+        if ctx.leases is None or registry.lookup(ctx.conn, extra) is None:
+            return True
+        verdict = identity.verify_extra(ctx.conn, ctx.leases, mac, extra, client_ip)
+        return _identity_refusal(ctx, verdict, "hello all_macs") is None
 
     def _agent_hello_body(request: Request, body: dict) -> JSONResponse:
         """All registry/session/sqlite work runs on a worker with its own connection."""
@@ -263,9 +283,12 @@ def create_agent_router(ctx: ServerContext,
                     all_macs.append(extra)
 
         client_ip = request.client.host if request.client else None
+        # ‏#2439: ‏`all_macs` מזהה רק מה שלא נמצא עכשיו במקום אחר — אחרת הוא עקף
+        # את השער שלמעלה, שבודק את `mac` בלבד. כרטיס שנדחה נשמט מהרשימה (ונרשם
+        # ביומן); ה-hello עצמו נענה, ומה שנשאר מזהה כמו תמיד.
+        all_macs = [extra for extra in all_macs if extra == mac or _extra_ok(mac, extra, client_ip)]
         disks = body.get("disks") if isinstance(body.get("disks"), list) else None
         optical = drawer_slots.clean_optical(body.get("optical")) if "optical" in body else None
-        reported_ip = body.get("ip") if isinstance(body.get("ip"), str) else None
         off_vlan = off_deploy_vlan(request.scope, server_base)
         # ‏hello של דופק (`joining: false`) אומר "אני חי" בלי לבקש להצטרף.
         # מכונה שנעצרה על שגיאה חייבת להישאר נראית בקונסולה, אבל אסור
@@ -334,7 +357,7 @@ def create_agent_router(ctx: ServerContext,
         answer = build_answer(
             ctx.conn, ctx.library, ctx.store, mac,
             disks=disks, client_ip=client_ip, joining=joining,
-            reported_ip=reported_ip, off_vlan=off_vlan,
+            off_vlan=off_vlan,
             all_macs=all_macs, monitor_secret=monitor_secret,
             monitor_auth=monitor_auth,
             hw_inventory=hw_inventory, hw_probe=hw_probe,
@@ -418,16 +441,18 @@ def create_agent_router(ctx: ServerContext,
         שתלמידים שולטים בה (סעיף 15). ההצלחה אינה מחזירה טוקן: הסוכן
         ממשיך באותה שיחה, וכל פעולה ממילא עוברת דרך השרת.
         """
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
         username = body.get("username", "")
         mac = lenient_mac(body.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
+        # ‏#2446: שם/סיסמה שאינם מחרוזת — 400, לפני `login_guard` ו-`users.verify`.
+        if not isinstance(username, str) or not isinstance(body.get("password", ""), str):
+            return _error(400, "username and password must be strings", "bad_login")
         # ‏#997: הזהות לפני הסיסמה — זר אינו מנסה סיסמאות בשם מכונה, ואינו
         # מייצר `agent_login_failed` על מכונה שאינה שלו.
         refused = identity_gate(ctx, mac, request, "login")
@@ -453,10 +478,9 @@ def create_agent_router(ctx: ServerContext,
         הזרם עצמו אינו תופס את חריץ השידור: כמה משיכות במקביל, וגם
         בזמן סבב כיתה (#60).
         """
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
 
@@ -521,10 +545,9 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/progress")
     async def agent_progress(request: Request) -> JSONResponse:
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             body = {}
         # ‏#855: הזהות נבדקת לפני הדיווח, בסבב ובמשימה כאחד — ורק כשיש MAC
@@ -569,10 +592,9 @@ def create_agent_router(ctx: ServerContext,
         best-effort מצד הסוכן: כשל כאן אינו מפיל שחזור. השרת שומר את
         התמונה החיה ואינו מכריע ממנה — ההכרעה נעשתה בסוכן, ליד המכונה.
         """
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             body = {}
         # ‏#997: כמו progress — הזהות נבדקת כשיש MAC לבדוק; MAC שאינו נקרא
@@ -590,10 +612,9 @@ def create_agent_router(ctx: ServerContext,
         """#1322 D: a cloning machine's report of a local clone -- one
         journal line, labelled as the machine's own. Best effort from the
         agent's side; the copy never passed through the server."""
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
         mac = lenient_mac(body.get("mac"))
@@ -643,10 +664,9 @@ def create_agent_router(ctx: ServerContext,
         ההפך מ-disk-event: **לא** best-effort. הסוכן מכווץ רק אחרי 2xx
         עם `ok` — בלי רשומה בשרת אין כתיבה למקור (עיקרון 5).
         """
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             body = {}
         mac = lenient_mac(body.get("mac"))
@@ -664,28 +684,47 @@ def create_agent_router(ctx: ServerContext,
                                  "opened_at": exc.opened_at}, status_code=409)
         return JSONResponse({"ok": True, "id": row["id"]})
 
-    def _shrink_identity(body: dict, request: Request, where: str) -> JSONResponse | None:
-        # ‏#997: הסידורי הוא הזהות של הרשומה, אבל ה-MAC — שהסוכן שולח תמיד
-        # (‏`shrinkmem.sh`) — הוא הזהות של **הפונה**. בלעדיו אין מה להשוות לחכירה.
+    def _shrink_identity(body: dict, request: Request, where: str
+                         ) -> tuple[str | None, int | None, JSONResponse | None]:
+        """‏`(mac, id, None)` — הפונה הוא המכונה שפתחה את הרשומה הפתוחה; אחרת
+        ‏`(None, None, תשובה)`.
+
+        ‏#997: הסידורי הוא הזהות של הרשומה, אבל ה-MAC — שהסוכן שולח תמיד
+        (‏`shrinkmem.sh`) — הוא הזהות של **הפונה**. בלעדיו אין מה להשוות לחכירה.
+        ‏#2413: ושער הזהות לבדו אומר רק "הפונה הוא מי שהוא אומר" — תחנה אחרת עם
+        חכירה תקפה סגרה (או כתבה הערה על) רשומה של דיסק שאינו שלה, לפי הסידורי,
+        והתזכורת להחזיר אותו לגודלו נעלמה. רשומה נסגרת בידי המכונה שפתחה אותה;
+        דיסק שעבר מכונה — "נקה" בקונסולה (`clear`), בגלוי ובשם המשתמש."""
         mac = lenient_mac(body.get("mac"))
         if mac is None:
-            return _error(400, "missing or malformed mac", "bad_mac")
-        return identity_gate(ctx, mac, request, where)
+            return None, None, _error(400, "missing or malformed mac", "bad_mac")
+        refused = identity_gate(ctx, mac, request, where)
+        if refused is not None:
+            return None, None, refused
+        record_id = body.get("id") if isinstance(body.get("id"), int) else None
+        owner = shrink_records.open_owner(ctx.conn, body.get("serial"), record_id)
+        if owner is None:
+            return None, None, _error(404, "no open shrink record for this serial", "not_open")
+        if owner != mac:
+            journal(ctx.conn, "shrink_refused",
+                    f"{where}: {mac} is not {owner}, which opened the record of"
+                    f" serial={body.get('serial')}")
+            return None, None, _error(403, "this shrink record was opened by another machine",
+                                      "not_owner")
+        return mac, record_id, None
 
     @router.post("/agent/shrink-close")
     async def agent_shrink_close(request: Request) -> JSONResponse:
         """‏#926: המקור הוחזר לגודלו. סגירה של מה שאינו פתוח היא 404."""
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
-        if not isinstance(body, dict):
-            return _error(400, "body is not an object", "bad_json")
-        refused = _shrink_identity(body, request, "shrink-close")
+        body, refused = await _read_body(request)
         if refused is not None:
             return refused
-        record_id = body.get("id") if isinstance(body.get("id"), int) else None
-        if not shrink_records.close_record(ctx.conn, body.get("serial"), record_id):
+        if not isinstance(body, dict):
+            return _error(400, "body is not an object", "bad_json")
+        mac, record_id, refused = _shrink_identity(body, request, "shrink-close")
+        if refused is not None:
+            return refused
+        if not shrink_records.close_record(ctx.conn, body.get("serial"), record_id, mac=mac):
             return _error(404, "no open shrink record for this serial", "not_open")
         return JSONResponse({"ok": True})
 
@@ -693,20 +732,18 @@ def create_agent_router(ctx: ServerContext,
     async def agent_shrink_note(request: Request) -> JSONResponse:
         """‏#926 (סקירת Fable): למה הרשומה עדיין פתוחה — הטבלה הוחזרה אך
         מערכת הקבצים לא נמתחה. best-effort מצד הסוכן; 404 על מה שאינו פתוח."""
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
-        refused = _shrink_identity(body, request, "shrink-note")
+        mac, record_id, refused = _shrink_identity(body, request, "shrink-note")
         if refused is not None:
             return refused
         note = body.get("note")
         if not isinstance(note, str) or not note.strip():
             return _error(400, "note must be a non-empty string", "bad_note")
-        record_id = body.get("id") if isinstance(body.get("id"), int) else None
-        if not shrink_records.note_record(ctx.conn, body.get("serial"), record_id, note):
+        if not shrink_records.note_record(ctx.conn, body.get("serial"), record_id, note, mac=mac):
             return _error(404, "no open shrink record for this serial", "not_open")
         return JSONResponse({"ok": True})
 

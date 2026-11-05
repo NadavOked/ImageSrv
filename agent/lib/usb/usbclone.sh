@@ -38,7 +38,10 @@ usb_media_disks() {
     # The disks that carry a partition labelled USB_LABEL or USB_DATA_LABEL,
     # one per line. Whole-disk labels count too (a stick written without a
     # partition table). Read from sysfs: a partition is a directory of its disk.
+    # #2431: never an internal disk -- a drawer with the label found before the
+    # stick enumerated was taken for it, hid itself and left the stick a target.
     for _um_d in $(list_disks); do
+        disk_internal "$_um_d" && continue
         for _um_p in "$SYSROOT/sys/block/$_um_d/$_um_d"* "$SYSROOT/sys/block/$_um_d"; do
             [ -e "$_um_p" ] || continue
             case "$(usb_part_label "${_um_p##*/}")" in
@@ -79,19 +82,25 @@ usb_data_mount() {
 }
 
 _usb_data_mount() {
+    # #2431: a label is not the stick -- an internal drawer labelled IMGSRV_DATA was
+    # mounted rw and written to. A data partition on a disk that is not internal, one only.
+    _ud_c=""
     for _ud_d in $(cat "$RUN_DIR/usb-media.disks" 2>/dev/null); do
         for _ud_p in "$SYSROOT/sys/block/$_ud_d/$_ud_d"*; do
-            [ -e "$_ud_p" ] || continue
-            [ "$(usb_part_label "${_ud_p##*/}")" = "$USB_DATA_LABEL" ] || continue
-            mkdir -p "$USB_DATA_DIR"
-            if mount -t vfat -o rw,noatime,flush "$SYSROOT/dev/${_ud_p##*/}" "$USB_DATA_DIR" 2>> "$LOG_FILE"; then
-                USB_DATA_STATE=mounted; log "usbclone: data partition ${_ud_p##*/} mounted"; return 0
-            fi
-            USB_DATA_STATE=failed; log "usbclone: data partition ${_ud_p##*/} did not mount -- settings for this session only"
-            return 1
+            [ -e "$_ud_p" ] && [ "$(usb_part_label "${_ud_p##*/}")" = "$USB_DATA_LABEL" ] || continue
+            if disk_internal "$_ud_d"; then log "usbclone: ${_ud_p##*/} is labelled $USB_DATA_LABEL on an internal disk -- not the stick, not mounted"; continue; fi
+            _ud_c="$_ud_c${_ud_c:+ }${_ud_p##*/}"
         done
     done
-    log "usbclone: no data partition ($USB_DATA_LABEL) -- settings for this session only"
+    case "$_ud_c" in
+        '') log "usbclone: no data partition ($USB_DATA_LABEL) -- settings for this session only"; return 1 ;;
+        *' '*) USB_DATA_STATE=failed; log "usbclone: data partitions $_ud_c -- which is the stick is not known; none mounted, settings for this session only"; return 1 ;;
+    esac
+    mkdir -p "$USB_DATA_DIR"
+    if mount -t vfat -o rw,noatime,flush "$SYSROOT/dev/$_ud_c" "$USB_DATA_DIR" 2>> "$LOG_FILE"; then
+        USB_DATA_STATE=mounted; log "usbclone: data partition $_ud_c mounted"; return 0
+    fi
+    USB_DATA_STATE=failed; log "usbclone: data partition $_ud_c did not mount -- settings for this session only"
     return 1
 }
 

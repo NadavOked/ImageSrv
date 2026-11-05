@@ -258,6 +258,7 @@ STUBS = (
     # #1808/#1898: the drawer questions after it (drawergate.sh) -- the same
     # isolation; their own tests are test_raid_drawer_1808 / test_head_share_1898.
     'drawer_gates() { echo "$@"; }; '
+    'drawers_bound() { echo "$@"; }; '   # #2434: the drawers' identity -- its own tests (test_target_identity_2434.py)
     'pick_internal_disk() { echo sda; }; '
     'list_drawers() { echo "sdb sdc"; }; '
     # ‏#1410: resolve_target_drawers ממפה כל פורט שנבחר לדיסק אחד בדיוק

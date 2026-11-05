@@ -96,7 +96,9 @@ _linux_system() {
     rm -f "$RUN_DIR/system.$1"
     case "$3" in ext4|btrfs) ;; *) return 0 ;; esac
     _lm="$RUN_DIR/sysprobe"; mkdir -p "$_lm"
-    _probe_mount "$2" "$3" ro "$_lm" || {
+    # #2430: the capture source -- a bare ro would replay its journal (writes)
+    _lm_o=ro,noload; [ "$3" = btrfs ] && _lm_o=ro,nologreplay
+    _probe_mount "$2" "$3" "$_lm_o" "$_lm" || {
         echo "מחיצה $1: לא הצלחנו לעגן לקריאה ולבדוק אם היא שורש הלינוקס (/etc)"; return 1; }
     for _le in "$_lm/etc" "$_lm"/*/etc; do
         if [ -f "$_le/os-release" ] || [ -f "$_le/fstab" ]; then : > "$RUN_DIR/system.$1"; break; fi
@@ -123,7 +125,7 @@ _used_bytes() {
     # A read-only mount can still replay a journal. Capacity preflight must
     # not change the source before the operator has approved shrinking it.
     _probe_opts=ro
-    case "$2" in ext2|ext3|ext4) _probe_opts=ro,noload ;; btrfs) _probe_opts=ro,nologreplay ;; esac
+    case "$2" in ext2|ext3|ext4) _probe_opts=ro,noload ;; btrfs) _probe_opts=ro,nologreplay ;; xfs) _probe_opts=ro,norecovery ;; esac   # xfs: #2430
     # ‏-t מפורש, ולא זיהוי אוטומטי: ‏mount בלי סוג בוחר רק מבין מערכות הקבצים
     # שכבר טעונות (/proc/filesystems), ואילו `-t ext4` מבקש מהקרנל לטעון את
     # המודול. כל עוד עץ kernel/fs לא נארז בכלל שני המסלולים נכשלו, וכל

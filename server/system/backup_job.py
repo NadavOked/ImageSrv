@@ -13,7 +13,8 @@
    חייב להיות מעוגן (`ensure_mounted`) — אחרת כשל בשם, לא כתיבה לדיסק המקומי.
 2. עותק עקבי דרך ‏`sqlite3.Connection.backup` (‏`server.system.backup.consistent_db_copy` —
    ‏`integrity_check` = ok על העותק), **כתיבה אטומית** ל-`<dest>/db/imagesrv-<ts>.db`: קובץ
-   זמני באותה תיקייה, ‏`fsync`, ‏`os.replace`, ‏`fsync` לתיקייה — ואז קריאה חוזרת:
+   זמני באותה תיקייה (שם אקראי, ‏`O_EXCL|O_NOFOLLOW` — מי שכותב לשיתוף אינו מפנה את
+   ה-root דרך symlink, #2423), ‏`fsync`, ‏`os.replace`, ‏`fsync` לתיקייה — ואז קריאה חוזרת:
    ‏sha256 של מה שעל היעד = של מה שנכתב, ו-`integrity_check` על הקובץ שביעד (עיקרון 5).
 3. גיזום: ‏`imagesrv-<ts>.db` ב-`<dest>/db` שהחותמת **בשמו** מלפני יותר מ-30 יום. רק
    שמות בצורה הזו — לא שום קובץ אחר ביעד.
@@ -31,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import sqlite3
 import subprocess
 import sys
@@ -79,9 +81,25 @@ def _fsync_dir(path: Path) -> None:
         os.close(fd)
 
 
+#: ‏#2423: ל-Windows (תחנת הפיתוח) אין O_NOFOLLOW; שם ‏O_EXCL לבדו.
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+
+
+def _tmp_name(target: Path) -> Path:
+    return target.with_name(f".{target.name}.{secrets.token_hex(8)}.tmp")
+
+
 def _atomic_write(target: Path, data: bytes, mode: int = 0o600) -> None:
-    tmp = target.with_name(f".{target.name}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    """‏#2423: היעד הוא NAS שאחרים כותבים אליו, והגיבוי רץ כ-root. שם זמני קבוע
+    עם ‏`O_TRUNC` עקב אחרי symlink שנשתל בשמו ודרס קובץ ייצור — ו-`os.replace`
+    העביר את הקישור עצמו לשם הסופי, כך שהקריאה החוזרת "אימתה" את הקובץ שנדרס.
+    עכשיו: שם אקראי, ‏`O_EXCL|O_NOFOLLOW` (קובץ חדש תמיד — ולכן גם ה-`mode` חל
+    תמיד), ותיקייה או יעד שהם symlink — סירוב בשם."""
+    for path in (target.parent, target):
+        if path.is_symlink():
+            raise RuntimeError(f"{path} הוא קישור סמלי — הגיבוי אינו כותב דרכו (#2423)")
+    tmp = _tmp_name(target)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, mode)
     try:
         with os.fdopen(fd, "wb") as out:
             out.write(data)
@@ -94,9 +112,18 @@ def _atomic_write(target: Path, data: bytes, mode: int = 0o600) -> None:
     _fsync_dir(target.parent)
 
 
-def _integrity(path: Path) -> str:
-    conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+def _read_back(target: Path) -> bytes:
+    """‏#2423: הקובץ ביעד, ב-`O_NOFOLLOW` — קישור שהוחלף לתוך השם אחרי הכתיבה אינו נקרא."""
+    fd = os.open(target, os.O_RDONLY | _NOFOLLOW | getattr(os, "O_BINARY", 0))
+    with os.fdopen(fd, "rb") as handle:
+        return handle.read()
+
+
+def _integrity(payload: bytes) -> str:
+    """‏integrity_check על הבייטים שנקראו מהיעד (בזיכרון — לא פתיחה נוספת של נתיב)."""
+    conn = sqlite3.connect(":memory:")
     try:
+        conn.deserialize(payload)
         row = conn.execute("PRAGMA integrity_check").fetchone()
         return row[0] if row else "no answer"
     finally:
@@ -132,9 +159,10 @@ def backup_once(db_path: Path, dest: Path, now: datetime) -> dict:
     target = db_dir / f"imagesrv-{now.strftime(_STAMP)}.db"
     _atomic_write(target, data)
     # ראיה חיובית מהיעד עצמו: מה שנקרא בחזרה הוא מה שנכתב, וה-DB שביעד נפתח ותקין.
-    if hashlib.sha256(target.read_bytes()).hexdigest() != hashlib.sha256(data).hexdigest():
+    back = _read_back(target)
+    if hashlib.sha256(back).hexdigest() != hashlib.sha256(data).hexdigest():
         raise RuntimeError(f"הקובץ ביעד ({target}) אינו מה שנכתב")
-    verdict = _integrity(target)
+    verdict = _integrity(back)
     if verdict != "ok":
         raise RuntimeError(f"integrity_check על {target}: {verdict}")
     return {"file": target.name, "bytes": len(data), "pruned": prune(db_dir, now)}

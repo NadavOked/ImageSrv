@@ -35,7 +35,9 @@
 # IMAGESRV_UNIT_DIR, IMAGESRV_JOURNALD_DIR, IMAGESRV_INITRD_FLAGS, IMAGESRV_ISO_MANIFEST,
 # IMAGESRV_HTTP_ROOT, IMAGESRV_UPGRADE_LOG, IMAGESRV_CONSOLE_URL,
 # IMAGESRV_LIVE_WAIT.
-set -euo pipefail
+# ‏#2419: ‏`-E` (errtrace) — ה-ERR trap שלמטה חל גם בתוך פונקציות. בלעדיו כשל
+# בתוך `stage()` (סמן השחזור) אחרי ה-checkout יצא ב-`set -e` בלי rollback.
+set -Eeuo pipefail
 
 die() { echo "server-upgrade: $*" >&2; exit 1; }
 
@@ -420,7 +422,10 @@ rollback() {   # rollback <סיבה> [<סוג>]
 # כל כשל מכאן והלאה חוזר לתג הקודם, גם כשל שאיש לא כתב לו `|| rollback`:
 # בלי ה-trap, ‏`set -e` היה יוצא עם העץ על החדש, השירות/היחידות/ה-initrd
 # על הישן, וסטטוס `running` לתמיד ("לא ידוע" שנראה כמו "בתהליך").
-trap 'rollback "server-upgrade.sh נכשל בשורה $LINENO (קוד $?) — הפירוט ב-$LOG"' ERR
+# ‏#2419: עם `set -E` ה-trap עובר גם לתת-מעטפות (`$(…)`, ‏`<(…)`) — שם הוא אינו
+# עושה דבר: חזרה מתוך תת-מעטפת הייתה רצה פעמיים, והראשונה כשהפלט שלה נבלע
+# במשתנה. הכשל של תת-המעטפת מגיע למעטפת הראשית כקוד יציאה, כמו לפני `-E`.
+trap 'ERR_RC=$?; [[ $BASHPID == "$$" ]] && rollback "server-upgrade.sh נכשל בשורה $LINENO (קוד $ERR_RC) — הפירוט ב-$LOG"' ERR
 current=$(git rev-parse HEAD 2>&1) || rollback "git rev-parse HEAD נכשל אחרי checkout: $current"
 target=$(git rev-list -n 1 "$TAG" 2>&1) || rollback "git rev-list נכשל עבור $TAG אחרי checkout: $target"
 # שתי תשובות ריקות אינן "אותו קומיט" -- ראיה חיובית בלבד (עיקרון 5).

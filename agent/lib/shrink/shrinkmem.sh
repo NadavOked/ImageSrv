@@ -53,10 +53,12 @@ shrink_records_refresh() {
     # שרת שקדם ל-#929 (בלי `partitions`) נקראת מהשדות העליונים — שורה אחת.
     # כמו disk_failures_refresh: "ok" ראשונה היא הראיה שה-JSON נקרא בשלמותו;
     # תשובה שלא נקראה משאירה את הקובץ הקודם (עיקרון 5). 0 = רוענן.
+    # ‏#2436: ‏`|`, ‏CR ו-LF בשדה (שם `X|8000…`) הזיזו שדות או הוסיפו שורה שלמה --
+    # הם הופכים ל-\037, ו-shrink_offer_disk מסרב לשורה שיש בה אותו.
     _sr_n="$RUN_DIR/shrink_open.next"
     # shellcheck disable=SC2016 # ‏$r הוא משתנה של jq, לא של המעטפת
     json_get_join "${RESP:-$RUN_DIR/response.json}" \
-        '["ok"] + [(.shrink_open // [])[] as $r | ($r.partitions // [$r])[] | "\($r.id)|\($r.serial // "")|\(.idx)|\(.start_sector)|\(.size_sectors)|\(.type_guid)|\(.unique_guid // "")|\(.name // "")|\(.attrs // "")|\(.ntfs_bytes // "")|\($r.opened_at // "")"]' \
+        'def c: tostring | gsub("[|\r\n]"; "\u001f"); ["ok"] + [(.shrink_open // [])[] as $r | ($r.partitions // [$r])[] | "\($r.id | c)|\($r.serial // "" | c)|\(.idx | c)|\(.start_sector | c)|\(.size_sectors | c)|\(.type_guid | c)|\(.unique_guid // "" | c)|\(.name // "" | c)|\(.attrs // "" | c)|\(.ntfs_bytes // "" | c)|\($r.opened_at // "" | c)"]' \
         > "$_sr_n" 2>/dev/null
     [ "$(head -n 1 "$_sr_n" 2>/dev/null)" = ok ] || { rm -f "$_sr_n"; return 1; }
     mv "$_sr_n" "$RUN_DIR/shrink_open"

@@ -78,6 +78,9 @@ def test_password_alone_does_not_count_until_the_second_factor(server):
     enrol = TestClient(create_console_app(runtime), client=("10.44.10.66", 50000))
     complete_console_login(enrol, conn, "mfa2", "Aa12345!-x")
     assert _users(server)["mfa2"]["last_login_from"] == "10.44.10.66"
+    # ‏#2414: קוד הרישום נצרך — הכניסה הבאה, באותם 30 שניות, היא ב-step הבא.
+    conn.execute("UPDATE users SET mfa_last_step = NULL WHERE username = 'mfa2'")
+    conn.commit()
 
     remote = TestClient(create_console_app(runtime), client=("10.44.10.55", 50000))
     first = remote.post("/api/console/login",

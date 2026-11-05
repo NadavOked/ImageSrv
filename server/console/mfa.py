@@ -124,6 +124,12 @@ def _new_backup_codes(conn: sqlite3.Connection, username: str) -> list[str]:
     return codes
 
 
+def _replayed(step: int, last_step: int | None) -> bool:
+    """‏#2414: קוד TOTP תקף רק ל-step שאחרי האחרון שנצרך. ‏``valid_window=1`` מקבל
+    גם את ה-step הקודם — ובלי ``<=``, קוד N נכנס שוב אחרי כניסה בקוד N+1."""
+    return last_step is not None and step <= last_step
+
+
 def consume_backup(conn: sqlite3.Connection, username: str, code: str) -> bool:
     rows = conn.execute(
         "SELECT code_hash, used_at FROM mfa_backup_codes WHERE username = ?",
@@ -231,10 +237,11 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             raise HTTPException(401, "קוד שגוי, לא ניתן להפעיל MFA")
         codes = _new_backup_codes(ctx.conn, username)
         with _write_lock, writing(ctx.conn):
+            # ‏#2414: הקוד שהפעיל את ה-MFA נצרך — אחרת הוא נכנס שוב ב-`/login/mfa`.
             ctx.conn.execute(
-                "UPDATE users SET mfa_enabled = 1, mfa_enrolled_at = ?"
+                "UPDATE users SET mfa_enabled = 1, mfa_enrolled_at = ?, mfa_last_step = ?"
                 " WHERE username = ?",
-                (now_iso(), username),
+                (now_iso(), step, username),
             )
         _pending_since.pop(username, None)   # #2101: אושר — אין עוד סוד ממתין
         journal(ctx.conn, "mfa_enabled", username, username)
@@ -271,7 +278,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
         password_ok = users.verify(ctx.conn, username, str(body.get("current_password") or "")) is not None
         code = str(body.get("code") or "")
         step = totp.verify_totp(info["mfa_secret"], code) if password_ok else None
-        replay = step is not None and info["mfa_last_step"] is not None and step == info["mfa_last_step"]
+        replay = step is not None and _replayed(step, info["mfa_last_step"])
         # קוד גיבוי נצרך רק אחרי סיסמה נכונה — ניחוש סיסמה אינו שורף קודים.
         if not password_ok or ((step is None or replay)
                                and not consume_backup(ctx.conn, username, code)):
@@ -345,8 +352,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
         used_backup = False
         if step is None and consume_backup(ctx.conn, stored, code):
             used_backup = True
-        elif step is None or (info["mfa_last_step"] is not None
-                              and step == info["mfa_last_step"]):
+        elif step is None or _replayed(step, info["mfa_last_step"]):
             # ‏#1120: ה-challenge חד-פעמי גם בכישלון — ניחוש שני דורש
             # סיסמה מחדש. הכישלון נספר, והמסך חוזר לכניסה.
             consume_challenge(ctx.conn, raw)
@@ -362,6 +368,14 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
                     (step, stored),
                 )
         row = users.lookup(ctx.conn, stored)
+        if info["must_change_password"]:
+            # ‏#2409: הקוד עבר — ועכשיו ההחלפה הכפויה, כמו בכניסה בלי MFA.
+            # עוגייה מוגבלת בלבד: ‏`/me/password` מנפיק את המלאה.
+            auth.attach_cookie(response, ctx.conn, stored, row["role"], tls,
+                               purpose=auth.PURPOSE_PWCHANGE)
+            users.record_login(ctx.conn, stored, ip)
+            journal(ctx.conn, "login", "must_change_password", stored)
+            return {"must_change_password": True}
         auth.attach_cookie(response, ctx.conn, stored, row["role"], tls)
         users.record_login(ctx.conn, stored, ip)
         journal(ctx.conn, "login", "mfa_backup" if used_backup else "mfa", stored)

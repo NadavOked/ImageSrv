@@ -24,6 +24,7 @@ from server.net import ports
 from server.system import timezone
 from server.storage import locations as storage_locations
 from server.agent.api import ServerContext, _error, agent_credentials, identity_gate
+from server.agent import body as agent_body   # #2410
 from server.db import journal
 from server.agent.hello import class_deploy_enabled
 from server.library.images import restore_refusal
@@ -185,10 +186,10 @@ def create_station_router(ctx: ServerContext,
         refused = classrooms_off()
         if refused is not None:
             return refused
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(400, "body is not JSON", "bad_json")
+        try:                                   # #2410/#2416: תקרה, עומק, surrogate
+            body = await agent_body.read_json(request)
+        except agent_body.BodyError as exc:
+            return _error(exc.status, exc.message, exc.code)
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
 

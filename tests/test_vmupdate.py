@@ -319,6 +319,22 @@ def test_unknown_image_is_404(lab):
     assert (exc.status, exc.reason) == (404, "image")
 
 
+def test_2420_the_vm_state_carries_the_version_number_not_the_manifest_string(lab):
+    """#2420: ‏`image_version` מוצג בקונסולה (הפס "VM רץ" שבכל עמוד). הוא נגזר
+    ב-`version_of` — מספר שלם — ולא מועתק מהמניפסט כמו שהוא."""
+    real = lab["library"].get
+
+    def poisoned(image_id):
+        found = real(image_id)
+        return None if found is None else {**found, "version": "<img src=x onerror=alert(1)>"}
+
+    lab["monkeypatch"].setattr(lab["library"], "get", poisoned)
+    engine = lab["make"]()
+    engine.start("img_7f3a91", "noc")
+    assert engine.status()["image_version"] == 1
+    wait_for(engine, "running")
+
+
 # --- מחזור החיים ------------------------------------------------------------------
 
 

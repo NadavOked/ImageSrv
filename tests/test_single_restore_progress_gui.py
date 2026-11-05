@@ -166,6 +166,9 @@ def restore(tmp_path: Path, run_restore: str, *, gui: str | None = "live", manif
         f". {posix(AGENT)}/lib/restore/single_restore.sh; . {posix(AGENT)}/lib/gui/srgui.sh; "
         f". {posix(AGENT)}/lib/gui/guistate.sh; "   # gui_header_state: the header's machine and server
         "disk_port() { echo 1; }; pick_internal_disk() { echo sda; }; stage_drivers() { :; }; "
+        # #2431: the disk the cancel may wipe, by serial|size -- never the host's /sys/block/sda;
+        # another disk in its place has its own tests (test_agent_hardening_2431.py)
+        "sr_disk_ident() { echo 'S2431|1000215216'; }; "
         "sr_share_gate() { return 0; }; "   # #1898: the split question -- its own tests (test_single_restore_share_1898.py)
         f"http_get() {{ {get}; }}; "
         "pull_post() { printf '{\"id\":\"ses_1\"}' > \"$3\"; echo 200; }; "

@@ -32,6 +32,7 @@ import ipaddress
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from boot.grub_menu import normalize_mac as lenient_mac
@@ -202,6 +203,51 @@ def verify(conn: sqlite3.Connection, leases: LeaseFile,
         return Verdict(ok=False, event=REFUSED,
                        detail=f"{mac} from {client_ip}, lease says {lookup.ip}",
                        message="source address does not match this mac's DHCP lease")
+    return Verdict(ok=True)
+
+
+#: ‏#2439: "נראתה לאחרונה" — חלון שבו `net_devices.last_seen` של כרטיס רשום הוא
+#: ראיה שהמכונה שלו נמצאת עכשיו בכתובת שנרשמה. ‏hello חוזר כל דקות ספורות לכל
+#: היותר, ומכונה שעברה לכרטיס אחר באתחול חדש עושה זאת אחרי יותר מזה.
+EXTRA_SEEN_SECONDS = 600
+
+
+def _recent(stamp: str | None, now: datetime | None = None) -> bool:
+    try:
+        seen = datetime.fromisoformat(stamp) if stamp else None
+    except ValueError:
+        return False
+    if seen is None or seen.tzinfo is None:
+        return False
+    age = (now or datetime.now(timezone.utc)) - seen
+    return timedelta(0) <= age <= timedelta(seconds=EXTRA_SEEN_SECONDS)
+
+
+def verify_extra(conn: sqlite3.Connection, leases: LeaseFile, mac: str, extra: str,
+                 client_ip: str | None) -> Verdict:
+    """‏#2439: האם `extra` — כרטיס **רשום** מתוך `all_macs` של hello ש-`mac` שלו
+    כבר עבר את `verify` — יכול לזהות את הפונה כמכונה שלו (#524).
+
+    ‏#524 נשאר: לכרטיס שאינו כרטיס האתחול אין חכירה, ולכן אין לדרוש אותה. אבל
+    כשהכרטיס הרשום **נמצא עכשיו במקום אחר** — חכירה שלו על כתובת אחרת, או
+    ‏hello/תפריט שנרשם ממנו מכתובת אחרת ב-`EXTRA_SEEN_SECONDS` האחרונות —
+    המכונה האמיתית אינה הפונה, ו-`all_macs` הוא הצהרה של זר (‏`identity_refused`).
+    עד #2439 תחנה עם חכירה משלה הוסיפה לרשימה MAC של מכונה רשומה וקיבלה את
+    ה-role, השם וה-`allowed_images` שלה."""
+    if not enabled(conn) or not client_ip:
+        return Verdict(ok=True)
+    lookup = leases.lookup(extra)
+    if lookup.read and lookup.ip is not None and not _same_address(lookup.ip, client_ip):
+        return Verdict(ok=False, event=REFUSED,
+                       detail=f"{mac} from {client_ip}: all_macs {extra} is leased to {lookup.ip}",
+                       message="")
+    row = conn.execute("SELECT ip, last_seen FROM net_devices WHERE mac = ?", (extra,)).fetchone()
+    if (row is not None and row["ip"] and not _same_address(row["ip"], client_ip)
+            and _recent(row["last_seen"])):
+        return Verdict(ok=False, event=REFUSED,
+                       detail=f"{mac} from {client_ip}: all_macs {extra} was seen from {row['ip']}"
+                              f" at {row['last_seen']}",
+                       message="")
     return Verdict(ok=True)
 
 

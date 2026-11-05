@@ -2,7 +2,8 @@
 
 הסדר אחרי סיסמה נכונה:
   (1) deploy בקונסולה → 403 deploy_no_console, לפני MFA/כפייה (#1073)
-  (2) must_change_password / mfa_required / mfa_enrollment_required — או session מלאה
+  (2) mfa_required / must_change_password / mfa_enrollment_required — או session מלאה.
+      ‏MFA לפני החלפה כפויה (#2409): סיסמה זמנית מאיפוס אינה עוקפת את הקוד.
 הקיוסק (`kiosk=True`) מקבל גם deploy, מדלג על MFA; החלפה כפויה → 403.
 הגבלת ניסיונות (#1075) חלה על שלב הסיסמה לכל תפקיד.
 """
@@ -12,6 +13,7 @@ from __future__ import annotations
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
+from server.agent import body as agent_body   # #2446
 from server.console import auth, mfa as console_mfa, login_guard, users
 from server.db import get_setting, journal
 
@@ -33,9 +35,21 @@ def _raise_blocked(exc: login_guard.LoginBlocked) -> None:
 
 async def finish_login(conn, request: Request, response: Response, *,
                        tls, kiosk: bool = False):
-    body = await request.json()
-    username = (body.get("username") or "").strip()
-    password = body.get("password") or ""
+    # ‏#2446: גוף פגום (`{`, ‏`\xff\xfe`, ריק), גוף שאינו אובייקט, או שם/סיסמה שאינם
+    # מחרוזת — ‏400 לפני כל בדיקה, ולא 500 מ-`.strip()`/`.get()` על מה שהגיע.
+    # ‏`body.read_json` — אותה תקרה, עומק ונרמול של הסוכן; הנתיב חשוף גם ב-8080.
+    try:
+        body = await agent_body.read_json(request)
+    except agent_body.BodyError as exc:
+        raise HTTPException(exc.status, "גוף הבקשה אינו JSON תקין" if exc.status == 400
+                            else "גוף הבקשה גדול מהתקרה") from None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "גוף הבקשה אינו אובייקט")
+    username, password = body.get("username"), body.get("password")
+    if not isinstance(username, (str, type(None))) or not isinstance(password, (str, type(None))):
+        raise HTTPException(400, "שם המשתמש והסיסמה חייבים להיות טקסט")
+    username = (username or "").strip()
+    password = password or ""
     ip = _ip(request)
     auth.assert_secret(conn)
     try:
@@ -54,7 +68,8 @@ async def finish_login(conn, request: Request, response: Response, *,
     # ‏#1120: למשתמש MFA בקונסולה הסיסמה היא חצי כניסה — המונה מתאפס רק
     # ב-`/login/mfa`. אחרת קוד שגוי + כניסה מחדש
     # היו מאפסים את הספירה, ו-10 ניסיונות לא היו מצטברים לנעילה לעולם.
-    if kiosk or not info["mfa_enabled"] or info["must_change_password"]:
+    # ‏#2409: גם עם החלפה כפויה — הסיסמה הזמנית היא עדיין רק חצי כניסה.
+    if kiosk or not info["mfa_enabled"]:
         login_guard.clear(conn, username, ip)
 
     if role == "deploy" and not kiosk:
@@ -82,17 +97,20 @@ async def finish_login(conn, request: Request, response: Response, *,
         return {"username": stored, "role": role, "idle_seconds": _idle(conn),
                 "theme": users.get_theme(conn, stored)}
 
+    # ‏#2409: ‏MFA לפני החלפה כפויה. בסדר ההפוך, סיסמה זמנית מאיפוס של מנהל
+    # הספיקה: ‏pwchange → ‏`/me/password` → עוגייה מלאה, בלי קוד. ההחלפה
+    # הכפויה נמשכת **אחרי** הקוד — ‏`/login/mfa` מנפיק אז את עוגיית ה-pwchange.
+    if info["mfa_enabled"]:
+        challenge = console_mfa.make_challenge(conn, stored)
+        journal(conn, "login", "mfa_required", stored)
+        return {"mfa_required": True, "challenge": challenge}
+
     if info["must_change_password"]:
         auth.attach_cookie(response, conn, stored, role, tls,
                            purpose=auth.PURPOSE_PWCHANGE)
         users.record_login(conn, stored, ip)
         journal(conn, "login", "must_change_password", stored)
         return {"must_change_password": True}
-
-    if info["mfa_enabled"]:
-        challenge = console_mfa.make_challenge(conn, stored)
-        journal(conn, "login", "mfa_required", stored)
-        return {"mfa_required": True, "challenge": challenge}
 
     if console_mfa.enrollment_required(conn, role, info):   # נדב 18/10: רק כשהחיוב דלוק
         auth.attach_cookie(response, conn, stored, role, tls,

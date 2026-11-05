@@ -11,13 +11,18 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom
+from fastapi.testclient import TestClient
 
 
 def hello(server, mac, ip=None):
+    """‏`ip` — הכתובת **שממנה** ה-hello נשלח (ה-peer של החיבור). מאז #2432 השרת
+    רושם אותה, ולא את `ip` שבגוף; הגוף נושא כתובת אחרת כדי שהבדיקה תבחין."""
     body = hello_body(mac)
+    client = server["anon"]
     if ip:
-        body["ip"] = ip
-    return server["anon"].post("/api/v1/agent/hello", json=body).json()
+        body["ip"] = "10.99.99.99"
+        client = TestClient(server["app"], client=(ip, 40000))
+    return client.post("/api/v1/agent/hello", json=body).json()
 
 
 # --- רשת ---------------------------------------------------------------------

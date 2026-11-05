@@ -303,7 +303,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         """
         found = hooks["probe"](name)
         return {"interface": name, "checked": found.checked,
-                "servers": list(found.servers)}
+                "servers": list(found.servers), "reason": found.reason}
 
     @router.get("/interfaces/{name}/leases")
     def leases(name: str, user=Depends(admin_only)):
@@ -401,8 +401,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 409, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v1.2)")
         # ‏#1263: כרטיס הניהול (נבחר בהתקנה) הוא לקוח DHCP או כתובת ידנית — לא
         # מחלק כתובות ולא עונה ל-PXE. כיבוי (enabled=false) תמיד מותר.
-        if (cfg.enabled or cfg.proxy) and name == console_netcfg.management_interface(
-                ctx.conn, hooks["netcfg_management"]):
+        if (cfg.enabled or cfg.proxy) and _is_management(name):
             raise HTTPException(
                 409, f"{name} הוא כרטיס הניהול (נבחר בהתקנה) — אין עליו DHCP "
                      "ואין proxy; הוא לקוח DHCP או כתובת ידנית בלבד")
@@ -443,10 +442,13 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 # המכללה "לא יודעים" עולה רשת שלמה. פורט 68 תפוס הוא בדיוק
                 # מה שקורה על כרטיס trunk שמקבל כתובת מהמכללה.
                 if not found.checked:
+                    # ‏#2417: הסיבה מהבדיקה עצמה (האזנה, שליחה, ראיה שלא נמצאה).
+                    why = found.reason or (
+                        "נדרשות הרשאות root, ופורט 68 חייב להיות פנוי; לקוח DHCP "
+                        "שרץ על הכרטיס תופס אותו")
                     raise HTTPException(
                         409, f"לא ניתן לבדוק אם כבר יש DHCP על {name} — הבדיקה "
-                        "עצמה לא רצה (נדרשות הרשאות root, ופורט 68 חייב להיות "
-                        "פנוי; לקוח DHCP שרץ על הכרטיס תופס אותו). לא נמצא "
+                        f"עצמה לא רצה ({why}). לא נמצא "
                         "שרת אחר — פשוט לא נבדק. אם אתה יודע שהכרטיס אינו "
                         "מחובר לרשת המכללה, הדלק עם ignore_existing.",
                     )
@@ -532,6 +534,15 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         "deploy": lambda: deploy,
         "apply": apply_all,
     }
+
+    def _is_management(name: str) -> bool:
+        """‏#2428: כרטיס הניהול משני מקורות — מה שהמתקין/מסך השרת רשם, **וגם**
+        הכרטיס שהקונסולה נקשרת אליו (‏`--console-host`, ‏`deploy.servers_interface`).
+        כשהרישום חסר או לא נקרא ("" = לא ידוע) הכרטיס של הקונסולה עדיין ידוע,
+        והדלקה ראשונה בלשונית ה-DHCP הייתה הופכת אותו לרשת ההפצה."""
+        recorded = console_netcfg.management_interface(ctx.conn, hooks["netcfg_management"])
+        console_nic = deploy.servers_interface if deploy is not None else None
+        return name in {n for n in (recorded, console_nic) if n}
 
     def _only_the_deploy_nic_or_409(name: str) -> None:
         """‏#1121 ס' 4: אחרי שרשת ההפצה הוגדרה מהקונסולה, DHCP **מלא** מותר רק

@@ -220,6 +220,26 @@ def test_a_symlink_partition_file_is_never_served(tmp_path):
     assert ImageLibrary(tmp_path).file_path(MANIFEST_256["id"], name) is None
 
 
+@pytest.mark.parametrize("version", [
+    "<img src=x onerror=alert(1)>", "3", 0, -1, 2.5, True, [], {},
+])
+def test_2420_a_manifest_version_that_is_not_a_whole_number_from_1_is_rejected(version):
+    """#2420: ‏`version` מגיע לקונסולה. מניפסט משרת משנה, משיתוף NAS או מארכיון
+    עם ערך אחר אינו נכנס לספרייה."""
+    manifest = json.loads(json.dumps(MANIFEST_256))
+    manifest["version"] = version
+    assert ImageLibrary._validate(manifest) == "version must be a whole number from 1"
+
+
+@pytest.mark.parametrize("version", [1, 7, None, "absent"])
+def test_2420_a_whole_version_or_none_is_still_accepted(version):
+    """קליטה לפני #1334 אין לה `version` כלל — עדיין תקינה (גרסה 1)."""
+    manifest = json.loads(json.dumps(MANIFEST_256))
+    if version != "absent":
+        manifest["version"] = version
+    assert ImageLibrary._validate(manifest) is None
+
+
 def _invalid_manifest(mutator):
     manifest = json.loads(json.dumps(MANIFEST_256))
     mutator(manifest)

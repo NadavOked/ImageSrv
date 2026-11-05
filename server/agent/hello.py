@@ -278,7 +278,6 @@ def build_answer(
     disks: list[dict] | None = None,
     client_ip: str | None = None,
     joining: bool = False,
-    reported_ip: str | None = None,
     off_vlan: bool = False,
     record_seen: bool = True,
     all_macs: list[str] | None = None,
@@ -310,7 +309,10 @@ def build_answer(
     # הרישום **אינו מופסק** — הוא רק מותנה בדיוק כמו ספירת האתחול (#536).
     if record_seen:
         try:
-            _record_seen(conn, mac, reported_ip or client_ip, disks, monitor_secret,
+            # ‏#2432: הכתובת שנרשמת היא ה-peer של החיבור — זו שעברה את שער הזהות
+            # מול החכירה — ולא `ip` מגוף ה-hello. ממנה הפרוקסי של המוניטור מתחבר
+            # (‏`monitor.py`), ושדה בגוף היה מפנה את חיבור המנהל לכל כתובת.
+            _record_seen(conn, mac, client_ip, disks, monitor_secret,
                          monitor_auth, prompt, disk_probe, firmware, secure_boot,
                          agent_version, local_clone, optical, optical_reported,
                          hw_inventory, hw_probe)
@@ -517,22 +519,29 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
         local_request = server_source(scope)
         invalid_mac = not valid_machine_mac(mac)
         do_not_record = off_vlan or probe or local_request or invalid_mac
-        if not do_not_record:
+        # #1629: a query MAC is not identity -- the agent routes' lease check
+        # (`api.boot_identity_ok`, which journals a refusal). None = no
+        # identity hook, as in identity_gate.
+        # #2411: the check gates **everything** this request would record --
+        # the cancellation (#1576), `net_seen` and the boot budget (#75) --
+        # not only the cancellation: four `GET /boot/menu?mac=<station>` from
+        # another machine on the deploy vlan spent a live station's budget
+        # (lab 04/11: identity_refused journaled, attempts 1 -> 5).
+        identity_verified = (do_not_record or identity_ok is None
+                             or identity_ok(mac, client_ip))
+        if not do_not_record and identity_verified:
             # ‏#1576: אתחול שנספר (אותו תנאי כמו net_seen והספירה של #75)
             # מבטל משימת גואי שלא התחילה -- **לפני** בניית התשובה, כדי שהתפריט
             # והסוכן שעולה לא יראו אותה.
-            # #1629: a query MAC is not identity -- the cancellation waits for
-            # the agent routes' lease check (`api.boot_identity_ok`, which
-            # journals a refusal). None = no identity hook, as in identity_gate.
-            if identity_ok is None or identity_ok(mac, client_ip):
-                cancel_gui_tasks_on_boot(conn, store, mac)
+            cancel_gui_tasks_on_boot(conn, store, mac)
         answer = build_answer(
             conn, library, store, mac, client_ip=client_ip, joining=False,
             # ‏#585: בקשת תפריט מחוץ לווילן ההפצה אינה כותבת `net_seen` —
             # אותה הכרעה בדיוק כמו הספירה למטה, ומאותו טעם (‏MAC בשאילתה
             # אינו זהות). על וילן ההפצה התפריט כן רושם, כמו היום.
             # ‏#976: וגם לא הבדיקה העצמית של השרת — היא אינה המכונה.
-            record_seen=not do_not_record,
+            # ‏#2411: וגם לא פונה שהזהות שלו לא אומתה מול החכירה.
+            record_seen=not do_not_record and identity_verified,
             record_journal=not (probe or local_request or invalid_mac),
         )
         if local_request or invalid_mac:
@@ -567,6 +576,19 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
             log.warning("boot menu for %s (from %s) did not arrive on the "
                         "deployment vlan — served, not counted", mac, client_ip)
             return answer
+        if not identity_verified:
+            # ‏#2411: הפונה אינו המכונה (`identity_refused`), או שאי-אפשר לדעת
+            # (`identity_unverifiable`) — הסירוב כבר נרשם ביומן. הבקשה **אינה
+            # נספרת** בתקציב של #75 ואינה רושמת דבר, ולכן אינה יכולה לגמור את
+            # התקציב של תחנה אחרת. והיא גם אינה שולחת לסוכן (עיקרון 1): התשובה
+            # מסומנת כמו תקציב שנגמר — תחנה וכיתה ומחשב בנייה מקבלים את התפריט
+            # הגלוי עם הדיסק כברירת מחדל, ומשכפל את מסך ההמתנה (‏`decide`). אחרת
+            # תחנה אמיתית שהזהות שלה אינה ניתנת לבדיקה (קובץ חכירות שלא נקרא)
+            # הייתה עולה לסוכן, נדחית ב-hello, מאתחלת — ולולאה בלי מונה.
+            # התשובה עצמה מגיעה לפונה, לא לתחנה: התחנה מבקשת תפריט משלה.
+            log.warning("boot menu for %s from %s: identity not verified — "
+                        "served without the agent, not counted (#2411)", mac, client_ip)
+            return {**answer, "boot_guard": bootguard.EXHAUSTED}
         if answer.get("known") is not True:
             # ‏#1802: מכונה לא רשומה בווילן ההפצה — המסך (`unknown_screen`); כשההגדרה
             # דלוקה, בחלון — ‏UEFI לדיסק, ‏BIOS שוב המסך. ‏`bootguard` אינו רלוונטי: אין לה

@@ -136,6 +136,8 @@ validate_answers() {
     validate_ntp_servers   # #2144 (clock.sh): the time source, checked before any disk command
     export DISK_NAME ANSWER_DISK ANSWER_ROLE ANSWER_PRIMARY_URL ANSWER_PRIMARY_FINGERPRINT ANSWER_SERVERS_IF
     export ANSWER_SERVERS_MAC ANSWER_SERVERS_MODE ANSWER_SERVERS_ADDR ANSWER_SERVERS_MASK
-    export ANSWER_SERVERS_GW ANSWER_SERVERS_DNS ANSWER_HOSTNAME ANSWER_TIMEZONE ANSWER_ADMIN_USER ANSWER_ADMIN_PASS
+    # #2426: not ANSWER_ADMIN_PASS -- an exported value is in /proc/<pid>/environ of every
+    # child (#1131); finish.sh is sourced and hands it to write_target_secret as an argument.
+    export ANSWER_SERVERS_GW ANSWER_SERVERS_DNS ANSWER_HOSTNAME ANSWER_TIMEZONE ANSWER_ADMIN_USER
     export ANSWER_RAID_LEVEL ANSWER_RAID_DISKS ANSWER_RAID_SPARES
 }

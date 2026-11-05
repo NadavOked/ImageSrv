@@ -119,7 +119,7 @@ do_restore_drawers() {
 
     # שער SMART לפני כתיבה (#652); בלי שאלה (#2044).
     # shellcheck disable=SC2086 # the disk list is a word list on purpose
-    _all=$_disks; _disks=$(smart_gate "$2" $_disks); _gr=$?   # #1760: _all = the end count's, red skips included
+    _all=$_disks; _disks=$(drawers_bound $_disks); _disks=$(smart_gate "$2" $_disks); _gr=$?   # #1760: _all = the end count's, red skips included; #2434: identity first (drawerselect.sh)
     # #1560: a round where every drawer was skipped ended too -- reported, the count, power-off
     [ "$_gr" = 0 ] || { round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }
     _disks=$(EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") drawer_gates $_disks)   # #1808 old RAID metadata, #1898 the split: asked (drawergate.sh)
@@ -195,7 +195,7 @@ do_restore() {
         log "restore complete"; smart_note_apply "$_disk"   # #2042: an orange disk's note
         name_this_machine "$_disk" "$_ses"; stage_drivers "$_disk" "$RUN_DIR/manifest.json"   # #720
         WRITEMARK_HOLD=0; writemark_release_done "$_disk" \
-            || { echo failed > "$RUN_DIR/state"; round_beep failure; ui_error_hold "the incomplete-write mark did not come off the disk" hold_beat; return 1; }
+            || { echo failed > "$RUN_DIR/state"; round_beep failure; _m="the incomplete-write mark did not come off the disk"; [ ! -f "$RUN_DIR/targets/$_disk/foreign" ] || _m="the disk was replaced after the restore -- the new one was not written"; ui_error_hold "$_m" hold_beat; return 1; }   # #2434
         echo "done" > "$RUN_DIR/state"
         report_final "$_ppid" "$_ses" "$MAC" "$SERVER" \
             || { hold_unheard "$_ses"; return 1; }

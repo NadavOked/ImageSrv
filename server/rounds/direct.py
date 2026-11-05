@@ -447,7 +447,7 @@ def create_direct_router(ctx) -> APIRouter:
         raw = await request.body()
         try:
             manifest = json.loads(raw.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):   # #2447: deep JSON is 400, not 500
             snippet = raw[:160].decode("utf-8", "replace")
             _fail(task_id, f"manifest is not valid JSON: {snippet}")
             raise HTTPException(400, "manifest is not valid JSON")

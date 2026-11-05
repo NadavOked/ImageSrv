@@ -40,16 +40,16 @@ target_init() {
     echo "$2" > "$_t/total"
     rm -f "$_t/error" "$_t/crc_delta" "$_t/temp_after" "$_t/ata_log" "$_t/ata_log.json" "$_t/ident" "$_t/evidence_only" \
         "$_t/boot_ca_state" "$_t/boot_ca_reason" "$_t/write_check_state" "$_t/write_check_reason" "$_t/write_check_mbps" \
-        "$_t/write_started" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok"   # #1805; #1883; #1907; #1808/#1898
-    target_ident_keep "$1"   # #1602: serial|port|ata while it is still in sysfs (failmark.sh)
+        "$_t/write_started" "$_t/foreign" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok"   # #1805; #1883; #1907; #1808/#1898
+    target_ident_keep "$1"; target_bind "$1"   # #1602: serial|port|ata while it is still in sysfs; #2434: the disk chosen (failmark.sh)
     # ‏#874: מאיפה dmesg נספר בכשל -- ריק (אין /proc/uptime) = מההתחלה.
     cut -d' ' -f1 "$SYSROOT/proc/uptime" > "$_t/since" 2>/dev/null
 }
 job_reset() { echo waiting > "$RUN_DIR/state"; rm -f "$RUN_DIR/stage" "$RUN_DIR/drivers.json" "$RUN_DIR/udp_drops.json" "$RUN_DIR/udp_drops.sum" "$RUN_DIR/cdetail.txt" "$RUN_DIR/cdetail.txt.old"; for _jr in "$RUN_DIR"/targets/*/*; do case "${_jr##*/}" in shrunk*|shrink_id) ;; *) rm -rf "$_jr" ;; esac; done; }   # #1916: before a job's reporter starts, nothing of the last job's report is left (a disk left shrunk is not report: shrinkoffer.sh); udp_drops = the last round's (waits.sh); #1931: cdetail = the last capture's table (capturedetail.sh)
 
 target_write_started() {
-    # The serial binds later failure cleanup to the disk this run wrote.
-    _tw_s=$(disk_serial "$1")
+    # The serial binds later failure cleanup to the disk this run wrote -- #2434: the one chosen, compared (failmark.sh).
+    assert_target "$1" || return 1; _tw_s=$(disk_serial "$1")
     [ -n "$_tw_s" ] || log "$1: no serial -- a failure here keeps its GPT (#1427)"   # loop/VM: no wipe without identity
     mkdir -p "$RUN_DIR/targets/$1" && printf '%s\n' "$_tw_s" > "$RUN_DIR/targets/$1/write_started"
 }
@@ -67,7 +67,7 @@ _counter_of() {
 
 target_set() {
     # $1 = dev, $2 = state, $3 = optional error text.
-    _t="$RUN_DIR/targets/$1"
+    _t="$RUN_DIR/targets/$1"; [ ! -f "$_t/foreign" ] || return 0   # #2434: not the disk chosen -- it stays failed, by its reason
     echo "$2" > "$_t/state"
     [ -n "${3:-}" ] && echo "$3" > "$_t/error"
 }

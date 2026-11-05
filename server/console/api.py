@@ -16,9 +16,10 @@ import shutil
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from server.console import auth, login as console_login, mfa as console_mfa, presence as console_presence, users
+from server.console import auth, login as console_login, login_guard, mfa as console_mfa, presence as console_presence, users
 from server.core import capabilities, hostname_rule
 from server.library import minfree
 from server.rounds import drive_rates, nic_speed, room
@@ -1091,7 +1092,7 @@ def create_console_router(
             body = {}
         typed = body.get("confirm_name", "") if isinstance(body, dict) else ""
         row = ctx.conn.execute(
-            "SELECT image_id FROM sessions WHERE id = ?", (session_id,)
+            "SELECT image_id, kind FROM sessions WHERE id = ?", (session_id,)
         ).fetchone()
         if row is None:
             raise HTTPException(409, "סבב לא קיים")
@@ -1100,10 +1101,18 @@ def create_console_router(
         # כולל הנפילה חזרה ל-`image_id` כשהמניפסט נמחק באמצע הסבב.
         if typed != session_label(row, ctx.library):
             raise HTTPException(400, "השם שהוקלד אינו זהה לשם האימג' שהסבב משדר")
+        # ‏#2427: הסגירה עוצרת את udp-sender (TERM, ואז KILL — עד 1.5 ש') — בתהליכון,
+        # לא על לולאת האירועים, שקפאה בכל סגירה.
         try:
-            ctx.store.close(session_id, user[0])
+            await run_in_threadpool(ctx.store.close, session_id, user[0])
         except SessionError as exc:
             raise HTTPException(409, str(exc))
+        # ‏#2427: כמו `close_round` (#439) — "נסגר" רק עם ראיה שהמשדר מת.
+        if row["kind"] == "multicast" and ctx.sender is not None:
+            left = await run_in_threadpool(ctx.sender.stop, session_id)
+            if left is not None:
+                who = f"PID {left}" if left > 0 else "לא הצלחנו לוודא שהוא מת"
+                raise HTTPException(500, f"הסבב נסגר, אבל udp-sender עדיין רץ ({who})")
         return {"ok": True}
 
     # --- משתמשים, יומן, הגדרות (admin) --------------------------------------
@@ -1146,14 +1155,26 @@ def create_console_router(
     async def change_own_password(request: Request, response: Response,
                                   user=Depends(current_user)):
         body = await request.json()
+        # ‏#2414: הסיסמה הנוכחית היא ניחוש כמו בכניסה — אותו מונה ואותם ספים
+        # (שם משתמש + IP), כמו ב-`/me/mfa/disable`. אחרת session גנוב מנחש בלי הגבלה.
+        ip = request.client.host if request.client else "?"
+        try:
+            login_guard.check(ctx.conn, user[0], ip)
+        except login_guard.LoginBlocked as exc:
+            headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else {}
+            raise HTTPException(exc.status, exc.message, headers=headers)
         try:
             users.change_own_password(
                 ctx.conn, user[0],
                 body.get("current_password") or "",
                 body.get("new_password") or "",
             )
+        except users.WrongCurrentPassword as exc:
+            login_guard.record_failure(ctx.conn, user[0], ip)
+            raise HTTPException(400, str(exc))
         except ValueError as exc:
             raise HTTPException(400, str(exc))
+        login_guard.clear(ctx.conn, user[0], ip)
         info = users.flags(ctx.conn, user[0])
         if console_mfa.enrollment_required(ctx.conn, user[1], info):   # נדב 18/10
             auth.attach_cookie(response, ctx.conn, user[0], user[1], tls,
@@ -1166,10 +1187,13 @@ def create_console_router(
     async def edit_user(username: str, request: Request, user=Depends(admin_only)):
         body = await request.json()
         role = body.get("role") or None
-        if username == user[0] and role and role != user[1]:
+        # ‏#2414: ‏`users.lookup` מוצא בלי תלות ברישיות, ולכן גם השומרים — אחרת
+        # ‏`PUT /users/NOC` היה מוריד את `noc` המחובר ל-deploy.
+        is_self = username.strip().lower() == user[0].lower()
+        if is_self and role and role != user[1]:
             raise HTTPException(400, "אי אפשר לשנות את התפקיד של עצמך")
         disabled = body.get("disabled")
-        if disabled is not None and username == user[0]:
+        if disabled is not None and is_self:
             # נעילה מיידית מחוץ למסך, ובלי דרך לחזור — `auth.check` קורא
             # את החסימה בכל בקשה (#186), כולל בזו ששחררה אותה.
             raise HTTPException(400, "אי אפשר לחסום את המשתמש המחובר")
@@ -1191,7 +1215,8 @@ def create_console_router(
 
     @router.delete("/users/{username}")
     def del_user(username: str, user=Depends(admin_only)):
-        if username == user[0]:
+        # ‏#2414: בלי תלות ברישיות, כמו ב-edit_user — ‏`DELETE /users/NOC` הוא `noc`.
+        if username.strip().lower() == user[0].lower():
             raise HTTPException(400, "אי אפשר למחוק את המשתמש המחובר")
         # השומר על "יישאר מי שינהל" ירד ל-``users.delete`` ב-#521: שם הוא
         # תנאי **בתוך** ה-DELETE ולא קריאה שלפניו, ולכן שני מנהלים שנמחקים

@@ -196,7 +196,11 @@ static int mem_open(Backend *b, const char *path, char *err, size_t n) {
     if (fd < 0) { snprintf(err, n, "%s: %s", path, strerror(errno)); return -1; }
     b->w = MEMFB_W; b->h = MEMFB_H; b->pitch = MEMFB_W * 4;
     b->map_len = MEMFB_HEADER_BYTES + (size_t)b->pitch * (size_t)b->h;
-    if (ftruncate(fd, (off_t)b->map_len) < 0) { snprintf(err, n, "%s: ftruncate: %s", path, strerror(errno)); close(fd); return -1; }
+    /* #2433: grow only, as backend_mirror -- the mirror's file at a larger
+     * display size, shrunk to ours, is SIGBUS in a monitor that maps it all. */
+    struct stat st;
+    if (fstat(fd, &st) < 0) { snprintf(err, n, "%s: fstat: %s", path, strerror(errno)); close(fd); return -1; }
+    if ((size_t)st.st_size < b->map_len && ftruncate(fd, (off_t)b->map_len) < 0) { snprintf(err, n, "%s: ftruncate: %s", path, strerror(errno)); close(fd); return -1; }
     b->map = mmap(NULL, b->map_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (b->map == MAP_FAILED) { snprintf(err, n, "%s: mmap: %s", path, strerror(errno)); close(fd); return -1; }
     b->pix = b->map + MEMFB_HEADER_BYTES;
@@ -339,25 +343,21 @@ int backend_verify(Backend *b, char *err, size_t n) {
 }
 
 /* ---- #1362: VT switching while the screen is ours ---------------------------------
- * The keyboard is grabbed (input.c), so the kernel never sees Alt+F2: the GUI
- * asks for the switch itself (backend_vt_activate). And a DRM master keeps the
- * CRTC even on tty2 -- fbcon cannot restore its mode while a master exists. So
- * the VT is put in VT_PROCESS mode: the kernel asks before switching away
- * (relsig -> drop master, release) and says when it is back (acqsig). */
+ * The keyboard is grabbed (input.c), so the kernel never sees Alt+F2 -- and
+ * since #2438 the GUI does not ask for that switch either. A switch can still
+ * come from elsewhere (chvt, shutdown), and a DRM master keeps the CRTC even on
+ * another VT -- fbcon cannot restore its mode while a master exists. So the VT
+ * is put in VT_PROCESS mode: the kernel asks before switching away (relsig ->
+ * drop master, release) and says when it is back (acqsig). */
 int backend_vt_take(Backend *b, int relsig, int acqsig) {
     if (b->tty_fd < 0) return -1;
     struct vt_mode m = { .mode = VT_PROCESS, .relsig = (short)relsig, .acqsig = (short)acqsig };
     if (ioctl(b->tty_fd, VT_SETMODE, &m) < 0) {
-        fprintf(stderr, "native-gui: VT_SETMODE VT_PROCESS: %s (Alt+Fn cannot leave this screen)\n", strerror(errno));
+        fprintf(stderr, "native-gui: VT_SETMODE VT_PROCESS: %s (a VT switch from elsewhere keeps DRM master)\n", strerror(errno));
         return -1;
     }
     b->vt_process = 1;
     return 0;
-}
-
-int backend_vt_activate(Backend *b, int vt) {
-    if (b->tty_fd < 0) return -1;
-    return ioctl(b->tty_fd, VT_ACTIVATE, vt);
 }
 
 void backend_vt_release(Backend *b) {

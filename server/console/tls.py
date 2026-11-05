@@ -98,7 +98,7 @@ class ConsoleTLS:
         directory.mkdir(parents=True, exist_ok=True)
         cert_path, key_path = directory / CERT_NAME, directory / KEY_NAME
         write_credential_0600(key_path, self.key_pem.decode("utf-8"))
-        cert_path.write_bytes(self.cert_pem)
+        write_atomic(cert_path, self.cert_pem, mode=0o600)   # ‏#2425: כמו הקנונית שהועלתה
         return {"ssl_certfile": str(cert_path), "ssl_keyfile": str(key_path)}
 
 
@@ -290,6 +290,35 @@ def _ssl_loads(cert_pem: bytes, key_pem: bytes, directory: Path) -> str | None:
     return None
 
 
+#: ‏#2425: העקומות ש-Chrome, ‏Firefox ו-Safari מקבלים בתעודת שרת.
+BROWSER_CURVES = ("secp256r1", "secp384r1")
+
+
+def _browsers_accept(cert) -> None:
+    """‏#2425: ‏``load_cert_chain`` מצליח גם על תעודה שהדפדפן ידחה (ed25519, ‏secp256k1,
+    ‏EKU של clientAuth בלבד). פורט 8081 אינו נופל ל-HTTP, ולכן אחרי האתחול הקונסולה הייתה
+    ננעלת עד שמחזירים את ``.prev`` ממסוף השרת. מתקבלים: ‏RSA, ‏EC על P-256/P-384, ו-EKU
+    שכולל serverAuth (‏Apple דורשת את ההרחבה עצמה — support.apple.com/103769)."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives.asymmetric import ec, rsa
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+    public = cert.public_key()
+    if isinstance(public, ec.EllipticCurvePublicKey):
+        if public.curve.name not in BROWSER_CURVES:
+            raise UploadRefused(f"מפתח EC על העקומה {public.curve.name} — דפדפנים מקבלים רק "
+                                f"P-256 או P-384; הקונסולה הייתה ננעלת אחרי האתחול")
+    elif not isinstance(public, rsa.RSAPublicKey):
+        raise UploadRefused(f"סוג המפתח ({type(public).__name__}) אינו נתמך בדפדפנים — נדרש "
+                            f"RSA או EC (P-256/P-384); הקונסולה הייתה ננעלת אחרי האתחול")
+    try:
+        usages = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    except x509.ExtensionNotFound:
+        usages = ()
+    if ExtendedKeyUsageOID.SERVER_AUTH not in usages:
+        raise UploadRefused("לתעודה אין Extended Key Usage של serverAuth (‏TLS Web Server "
+                            "Authentication) — הדפדפן ידחה אותה והקונסולה הייתה ננעלת אחרי האתחול")
+
+
 def validate_upload(cert_pem: bytes, key_pem: bytes, now=None) -> dict:
     """בודק זוג שהועלה: PEM, מפתח לא מוצפן, תואם, ובתוקף **עכשיו**.
 
@@ -301,6 +330,11 @@ def validate_upload(cert_pem: bytes, key_pem: bytes, now=None) -> dict:
     from cryptography.hazmat.primitives import serialization
     if len(cert_pem) > MAX_PEM_BYTES or len(key_pem) > MAX_PEM_BYTES:
         raise UploadRefused("קובץ גדול מ-64KB — זו אינה תעודה או מפתח PEM")
+    # ‏#2425: ‏PEM שמכיל גם את המפתח הודבק בשדה התעודה — הפענוח מדלג על הבלוק, והמפתח
+    # היה נכתב לקובץ התעודה, שאינו מוגן כמו קובץ המפתח.
+    if b"PRIVATE KEY-----" in cert_pem:
+        raise UploadRefused("בשדה התעודה יש מפתח פרטי — מדביקים בו רק את התעודה "
+                            "(-----BEGIN CERTIFICATE-----), ואת המפתח בשדה המפתח")
     try:
         cert = _first_cert(cert_pem)
     except ValueError:
@@ -318,6 +352,7 @@ def validate_upload(cert_pem: bytes, key_pem: bytes, now=None) -> dict:
     if cert.public_key().public_bytes(*spki) != key.public_key().public_bytes(*spki):
         raise UploadRefused("המפתח אינו תואם את התעודה — "
                             "המפתח הציבורי שבתעודה שונה מזה של המפתח")
+    _browsers_accept(cert)
     now = now or datetime.datetime.now(datetime.timezone.utc)
     if now < cert.not_valid_before_utc:
         raise UploadRefused(f"התעודה עוד לא בתוקף — תקפה מ-"
@@ -344,7 +379,7 @@ def install_upload(data_dir, cert_pem: bytes, key_pem: bytes) -> dict:
                               key_path.read_text(encoding="utf-8"))
     # כל קובץ מוחלף אטומית; בין שתי ההחלפות הזוג אינו תואם, וזה החלון היחיד.
     write_credential_0600(key_path, key_pem.decode())
-    write_atomic(cert_path, cert_pem)
+    write_atomic(cert_path, cert_pem, mode=0o600)   # ‏#2425: מה שהמפעיל הדביק, לא קריא לכל
     (directory / GENERATED_MARKER).unlink(missing_ok=True)
     return info
 

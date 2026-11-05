@@ -46,6 +46,13 @@ def _console_client(server):
     return TestClient(create_console_app(server["app"].state.runtime))
 
 
+def _next_totp_step(server, name):
+    """‏#2414: הקוד שהפעיל את ה-MFA נצרך (‏`mfa_last_step`), וכניסה באותם 30 שניות
+    בקוד הזה היא replay. טסט שנכנס מיד אחרי הרישום מדמה כאן שה-step הבא הגיע."""
+    server["ctx"].conn.execute("UPDATE users SET mfa_last_step = NULL WHERE username = ?", (name,))
+    server["ctx"].conn.commit()
+
+
 def test_fresh_admin_admin_is_forced_to_change_password(
         tmp_path, images_root, clock, monkeypatch):
     app = _fresh(tmp_path, images_root, clock, monkeypatch)
@@ -241,6 +248,7 @@ def test_two_step_login_and_wrong_code(server):
     })
     c = _console_client(server)
     complete_console_login(c, server["ctx"].conn, "mfa2", "Aa12345!")
+    _next_totp_step(server, "mfa2")
     c2 = _console_client(server)
     r = c2.post("/api/console/login", json={"username": "mfa2", "password": "Aa12345!"})
     assert r.json()["mfa_required"] is True
@@ -268,6 +276,7 @@ def test_same_totp_code_twice_is_rejected(server):
     })
     c = _console_client(server)
     complete_console_login(c, server["ctx"].conn, "replay", "Aa12345!")
+    _next_totp_step(server, "replay")
     secret = server["ctx"].conn.execute(
         "SELECT mfa_secret FROM users WHERE username = 'replay'"
     ).fetchone()["mfa_secret"]
@@ -537,6 +546,7 @@ def _mfa_user(server, name):
     })
     c = _console_client(server)
     complete_console_login(c, server["ctx"].conn, name, "Aa12345!")
+    _next_totp_step(server, name)
     secret = server["ctx"].conn.execute(
         "SELECT mfa_secret FROM users WHERE username = ?", (name,),
     ).fetchone()["mfa_secret"]
@@ -657,6 +667,110 @@ def test_1120_admin_reset_revokes_sessions(server):
     assert live.get("/api/console/me").status_code == 200
     assert server["admin"].post("/api/console/users/rsv/reset-password").status_code == 200
     assert live.get("/api/console/me").status_code == 401
+
+
+def test_2409_reset_password_does_not_bypass_mfa(server):
+    """#2409: סיסמה זמנית מאיפוס של מנהל, למשתמש שה-MFA שלו דלוק, אינה עוקפת את
+    הקוד. עד התיקון: ‏login → ‏must_change_password → ‏`/me/password` → עוגייה מלאה
+    ו-`GET /users` ‏200, בלי TOTP. עכשיו: קוד קודם, ואז ההחלפה הכפויה."""
+    _, secret = _mfa_user(server, "rmfa")
+    r = server["admin"].post("/api/console/users/rmfa/reset-password")
+    assert r.status_code == 200, r.text
+    temp = r.json()["new_password"]
+    c = _console_client(server)
+    login = c.post("/api/console/login", json={"username": "rmfa", "password": temp})
+    assert login.status_code == 200, login.text
+    body = login.json()
+    assert body.get("mfa_required") is True, body
+    assert "must_change_password" not in body
+    # בלי קוד אין שום עוגייה: גם לא זו שמחליפה סיסמה ומנפיקה עוגייה מלאה.
+    assert c.post("/api/console/me/password", json={
+        "current_password": temp, "new_password": "Cc12345!",
+    }).status_code == 401
+    assert c.get("/api/console/users").status_code == 401
+    assert users.flags(server["ctx"].conn, "rmfa")["must_change_password"] is True
+    # הקוד עבר — עכשיו ההחלפה הכפויה, בעוגייה מוגבלת בלבד.
+    server["ctx"].conn.execute("UPDATE users SET mfa_last_step = NULL WHERE username = 'rmfa'")
+    server["ctx"].conn.commit()
+    mfa = c.post("/api/console/login/mfa", json={
+        "challenge": body["challenge"], "code": totp.totp_code(secret),
+    })
+    assert mfa.status_code == 200, mfa.text
+    assert mfa.json() == {"must_change_password": True}
+    assert c.get("/api/console/users").status_code == 403
+    assert c.get("/api/console/users").json()["detail"] == "password_change_required"
+    changed = c.post("/api/console/me/password", json={
+        "current_password": temp, "new_password": "Cc12345!",
+    })
+    assert changed.status_code == 200, changed.text
+    assert c.get("/api/console/users").status_code == 200
+    assert users.flags(server["ctx"].conn, "rmfa")["mfa_enabled"] is True
+
+
+def test_2409_wrong_code_after_reset_still_counts_toward_the_lock(server, monkeypatch):
+    """#2409: סיסמה זמנית נכונה אינה מאפסת את מונה הניסיונות — כמו בכל כניסת MFA
+    (#1120). עד התיקון ‏must_change_password איפס אותו בשלב הסיסמה."""
+    from server.console import login_guard
+    t = {"now": 1_000_000.0}
+    monkeypatch.setattr(login_guard, "now", lambda: t["now"])
+    _mfa_user(server, "rlock")
+    temp = server["admin"].post("/api/console/users/rlock/reset-password").json()["new_password"]
+    for _ in range(login_guard.LOCK_AFTER):
+        c = _console_client(server)
+        r = c.post("/api/console/login", json={"username": "rlock", "password": temp})
+        assert r.status_code == 200, r.text
+        assert r.json().get("mfa_required") is True, r.json()
+        assert c.post("/api/console/login/mfa", json={
+            "challenge": r.json()["challenge"], "code": "000000",
+        }).status_code == 401
+        t["now"] += 120
+    r = _console_client(server).post("/api/console/login", json={"username": "rlock", "password": temp})
+    assert r.status_code == 403, r.text
+
+
+@pytest.fixture()
+def totp_clock(monkeypatch):
+    from types import SimpleNamespace
+    t = {"now": 1_700_000_000.0}
+    monkeypatch.setattr(totp, "time", SimpleNamespace(time=lambda: t["now"]))
+    return t
+
+
+def _self_enrolled(server, name):
+    """מנהל שרושם MFA בעצמו (setup → enable) בשעון הקפוא של totp."""
+    server["admin"].post("/api/console/users", json={"username": name, "password": "Aa12345!", "role": "admin"})
+    c = _console_client(server)
+    assert c.post("/api/console/login", json={"username": name, "password": "Aa12345!"}).json() == {
+        "mfa_enrollment_required": True}
+    secret = c.post("/api/console/me/mfa/setup").json()["secret"]
+    assert c.post("/api/console/me/mfa/enable", json={"code": totp.totp_code(secret)}).status_code == 200
+    return secret
+
+
+def _mfa_login(server, name, code):
+    c = _console_client(server)
+    r = c.post("/api/console/login", json={"username": name, "password": "Aa12345!"})
+    assert r.json().get("mfa_required") is True, r.text
+    return c.post("/api/console/login/mfa", json={"challenge": r.json()["challenge"], "code": code}).status_code
+
+
+def test_2414_the_enrollment_code_is_spent(server, totp_clock):
+    """הקוד שהפעיל את ה-MFA אינו נכנס שוב ב-`/login/mfa`; הקוד של ה-step הבא — כן."""
+    secret = _self_enrolled(server, "spent")
+    assert _mfa_login(server, "spent", totp.totp_code(secret, when=totp_clock["now"])) == 401
+    totp_clock["now"] += 30
+    assert _mfa_login(server, "spent", totp.totp_code(secret, when=totp_clock["now"])) == 200
+
+
+def test_2414_an_older_code_is_refused_after_a_newer_one(server, totp_clock):
+    """‏valid_window=1 מקבל גם את ה-step הקודם — אבל לא אחרי שנצרך step חדש ממנו."""
+    secret = _self_enrolled(server, "older")
+    totp_clock["now"] += 90
+    code_n = totp.totp_code(secret, when=totp_clock["now"])
+    assert _mfa_login(server, "older", code_n) == 200
+    totp_clock["now"] += 30
+    assert _mfa_login(server, "older", totp.totp_code(secret, when=totp_clock["now"])) == 200
+    assert _mfa_login(server, "older", code_n) == 401
 
 
 def test_1120_password_longer_than_128_is_rejected_by_name(server):

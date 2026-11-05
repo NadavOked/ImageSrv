@@ -888,6 +888,12 @@ def close_round(ctx, user: str, confirm_name: str) -> None:
     ):
         raise SessionError("סבב החדר כבר נסגר או נמצא בתהליך סגירה")
     ctx.conn.commit()
+    # ‏#2427: הגל נקרא **אחרי** ה-CAS. ‏`_finish_wave` בתהליכון אחר יכול היה להחליף את
+    # הגל בין הקריאה למעלה ל-CAS; עם השורה הישנה הגל החדש נשאר `open` ותפס את
+    # חריץ המולטיקאסט לתמיד. מ-`closing` והלאה ה-UPDATE שלו (‏`state = 'active'`)
+    # כבר אינו יכול להחליף אותו, ומה שנקרא כאן הוא הגל האחרון.
+    round_row = ctx.conn.execute(
+        "SELECT * FROM room_rounds WHERE id = ?", (round_row["id"],)).fetchone()
     try:
         wave = ctx.conn.execute(
             "SELECT id, state FROM sessions WHERE id = ?",
@@ -1334,6 +1340,63 @@ def _journal_drawer_changed(conn: sqlite3.Connection, round_id: str,
         journal(conn, event, detail)
 
 
+def _held_elsewhere(conn: sqlite3.Connection, round_row: sqlite3.Row,
+                    member: sqlite3.Row, serial: str) -> str | None:
+    """‏#2421: מכונה **אחרת** שמחזיקה את הסידורי הזה — או None.
+
+    הסבב סוגר מגירות לפי סידורי בלבד (`written_serials`), בכוונה: מגירה שנכתבה
+    ונדדה למשכפל אחר באותו סבב אינה נכתבת שוב. אבל כשמכונה אחרת מחזיקה את אותו
+    סידורי — שני כוננים עם סידורי זהה מהמפעל, או תחנה שהכריזה ב-hello שלה על
+    הסידורי של מגירה במכונה אחרת — הדיווח של אחת היה סוגר את המגירה של השנייה,
+    והיא הייתה מוצגת "נכתב" בלי שנכתב בה בייט (עיקרון 4). "מחזיקה" = במלאי של
+    ה-hello האחרון שלה, ואחד משניים: היא דיברה איתנו מאז שהגל התחיל, **או**
+    שהסידורי יושב בחריץ שנבחר לה בסבב הזה (גם כשהיא כבויה — אחרת די היה לחכות
+    שהמשכפל יכבה). מגירה שעברה ממכונה כבויה שלא נבחרה בה אינה עוצרת דבר; מכונה
+    שנבחרה ועוד לא התעוררה מתעדכנת ב-hello הבא שלה, ועד אז הכתיבה לא נספרת."""
+    wave = conn.execute("SELECT started_at, created_at FROM sessions WHERE id = ?",
+                        (member["session_id"],)).fetchone()
+    since = (wave["started_at"] or wave["created_at"]) if wave is not None else None
+    chosen = {item["mac"]: set(item.get("ports") or [])
+              for item in json.loads(round_row["target_slots_json"] or "[]")
+              if isinstance(item, dict) and item.get("mac") != member["mac"]}
+    for row in conn.execute(
+            "SELECT mac, disks_json, last_seen FROM net_devices WHERE mac != ?"
+            " AND instr(disks_json, ?) > 0", (member["mac"], serial)):
+        try:
+            disks = json.loads(row["disks_json"])
+        except (TypeError, ValueError):
+            continue
+        held = [d for d in disks if isinstance(d, dict) and d.get("serial") == serial]             if isinstance(disks, list) else []
+        if not held:
+            continue
+        if since and row["last_seen"] and row["last_seen"] >= since:
+            return row["mac"]
+        if any(d.get("port") in chosen.get(row["mac"], ()) for d in held):
+            return row["mac"]
+    return None
+
+
+def _journal_serial_conflict(conn: sqlite3.Connection, round_id: str, member: sqlite3.Row,
+                             dev: str | None, serial: str, other: str) -> None:
+    detail = f"{round_id} {member['mac']} {dev or '?'} serial={serial} also on {other}"
+    if conn.execute("SELECT 1 FROM journal WHERE event = ? AND detail = ?",
+                    ("room_drawer_serial_conflict", detail)).fetchone() is None:
+        journal(conn, "room_drawer_serial_conflict", detail)
+
+
+def _own_serial(target: dict, serial_of: dict) -> str | None:
+    """‏#2421: הסידורי של יעד `skipped`/`cancelled` — זה שבמלאי של **המכונה
+    המדווחת** באותו `dev`. עד כאן נלקח הסידורי שבדיווח, ותחנה סגרה (כ"בוטל" או
+    "דולג") מגירה של מכונה אחרת לפי הסידורי שלה. סידורי בדיווח שאינו זה שבמלאי
+    — None: לא נסגר כלום, והמגירה נשארת טרייה לגל הבא (‏`done` נקשר כך כבר ב-
+    `reports.stamp_done_serials`)."""
+    current = serial_of.get(target.get("dev"))
+    reported = target.get("serial")
+    if reported and reported != current:
+        return None
+    return current or None
+
+
 def _tally(conn: sqlite3.Connection, round_row: sqlite3.Row,
            members: list[sqlite3.Row]) -> tuple[int, set[str], set[str], set[str]]:
     """כמה מגירות נכתבו בסבב עד כה, ואילו — לפי serial; ואילו נסגרו בלי שנכתבו:
@@ -1357,17 +1420,27 @@ def _tally(conn: sqlite3.Connection, round_row: sqlite3.Row,
             if target.get("state") == "skipped":
                 # ‏#1760: דולגה כאדומה — סגורה בסבב, לא נכתבה. דילוג כתום (המפעיל
                 # בחר "דלג") אינו נסגר כאן: הוא נשאר טרי לגל הבא, כמו קודם.
-                serial = target.get("serial") or serial_of.get(target.get("dev"))
+                serial = _own_serial(target, serial_of)          # #2421
                 if serial and serial not in written and _red_skip(
                         conn, member, target.get("dev"), serial, disks):
-                    skipped.add(serial)
+                    other = _held_elsewhere(conn, round_row, member, serial)
+                    if other is None:
+                        skipped.add(serial)
+                    else:
+                        _journal_serial_conflict(conn, round_row["id"], member,
+                                                 target.get("dev"), serial, other)
                 continue
             if target.get("state") == "cancelled":
                 # ‏#1936: הסוכן דיווח שהמגירה בוטלה (‏#1386 — הראיה, `drawer_cancel`).
                 # ביטול של מפעיל סופי לסבב: סגורה, לא נכתבה, ואינה פותחת גל נוסף.
-                serial = target.get("serial") or serial_of.get(target.get("dev"))
+                serial = _own_serial(target, serial_of)          # #2421
                 if serial and serial not in written:
-                    cancelled.add(serial)
+                    other = _held_elsewhere(conn, round_row, member, serial)
+                    if other is None:
+                        cancelled.add(serial)
+                    else:
+                        _journal_serial_conflict(conn, round_row["id"], member,
+                                                 target.get("dev"), serial, other)
                 continue
             if target.get("state") != "done":
                 continue
@@ -1395,6 +1468,10 @@ def _tally(conn: sqlite3.Connection, round_row: sqlite3.Row,
                 )
                 continue
             if serial not in written:
+                other = _held_elsewhere(conn, round_row, member, serial)          # #2421
+                if other is not None:
+                    _journal_serial_conflict(conn, round_row["id"], member, dev, serial, other)
+                    continue
                 written.add(serial)
                 new_drives += 1
     return (round_row["written_drives"] + new_drives, written, skipped - written,

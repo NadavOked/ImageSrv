@@ -74,7 +74,7 @@ def test_the_cloner_file_holds_exactly_one_entry(a):
     היא בחירה בין הסוכן לבין כתיבה על הסחורה."""
     text = render(a, CFG)
     assert text.count("menuentry ") == 1
-    assert 'menuentry "ImageSrv" --id imagesrv {' in text
+    assert 'menuentry "ImageSrv" --unrestricted --id imagesrv {' in text
 
 
 @pytest.mark.parametrize("a", CLONER_ANSWERS)

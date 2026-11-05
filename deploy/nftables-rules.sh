@@ -90,7 +90,10 @@ done
 case "$DEPLOY_IF$SERVERS_IF" in
     *[!A-Za-z0-9_.:-]*|*"'"*|*"\""*) die "interface name is not safe for nftables" ;;
 esac
+# ‏#2441: גלוב **שלילי** קודם. ב-sh ה-`*` של `[0-9]*-[0-9]*` תופס גם רווח ושורה
+# חדשה, ו-"9000-9001 accept<LF>iifname ... accept" עבר ונכתב לחומת האש.
 case "$MCAST_PORTS" in
+    *[!0-9-]*|*-*-*) die "--mcast-ports must be A-B (got: $MCAST_PORTS)" ;;
     [0-9]*-[0-9]*) ;;
     *) die "--mcast-ports must be A-B (got: $MCAST_PORTS)" ;;
 esac
@@ -103,6 +106,7 @@ done
 
 if [ -n "$PRIMARY_IP" ]; then
     case "$PRIMARY_IP" in
+        *[!0-9.]*|*.*.*.*.*) die "--primary-ip must be an IPv4 address (got: $PRIMARY_IP)" ;;
         [0-9]*.[0-9]*.[0-9]*.[0-9]*) ;;
         *) die "--primary-ip must be an IPv4 address (got: $PRIMARY_IP)" ;;
     esac

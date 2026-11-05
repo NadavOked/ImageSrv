@@ -30,6 +30,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import re
 import socket
 import subprocess
 import urllib.parse
@@ -159,9 +160,11 @@ def _run(cmd: list[str], *, stdin_text: str | None = None,
     return done.returncode == 0, done.stdout, (done.stderr or "").strip()
 
 
-def write_grub_cfg(url: str, tftp_root: str | Path) -> str | None:
+def write_grub_cfg(url: str, tftp_root: str | Path, password_hash: str = "") -> str | None:
     """‏`grub/grub.cfg` על שורש ה-TFTP — מאותו מחולל שהמתקין מוטמע ממנו
-    (‏`tests/test_installer_matches_generator.py` שומר שהם זהים)."""
+    (‏`tests/test_installer_matches_generator.py` שומר שהם זהים).
+
+    ‏#2437: ‏`password_hash` הוא ה-hash של סיסמת העורך; ריק = נעול בלי סיסמה."""
     from boot.grub_menu import GrubConfig, render_bootstrap
     path = Path(tftp_root) / "grub" / "grub.cfg"
     try:
@@ -171,11 +174,43 @@ def write_grub_cfg(url: str, tftp_root: str | Path) -> str | None:
             path.parent.chmod(0o755)   # #1817: not the process umask (dnsmasq traverses it)
         # ‏#1908: אטומי — grub.cfg חתוך הוא אף מחשב שלא מגיע לתפריט.
         # #1817: dnsmasq must also read a formerly private file, regardless of umask.
-        write_atomic(path, render_bootstrap(GrubConfig(server_base=url)),
+        write_atomic(path, render_bootstrap(GrubConfig(server_base=url,
+                                                       password_hash=password_hash)),
                      encoding="ascii", mode=0o644)
     except (OSError, ValueError) as exc:
         return f"לא ניתן לכתוב את {path}: {exc}"
     return None
+
+
+_FALLBACK_LINE = re.compile(r"^set imagesrv_fallback=(\S+)$", re.M)
+
+
+def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
+    """‏#2437: שרת משודרג נועל את ה-bootstrap שהשאיר על ה-TFTP — בעלייה.
+
+    נכתב מחדש רק כשהנעילה חסרה בו: בלי `set superusers` (גרסה שקדמה ל-#2437),
+    או בלי `password_pbkdf2` כשיש hash (המתקין כותב אותו לפני שהשרת עלה אי
+    פעם). הכתובת נלקחת **מהקובץ עצמו** (`set imagesrv_fallback=`), כך שהנעילה
+    אינה משנה לאן התחנות פונות. אין קובץ — אין מה לרענן (#1088: הקונסולה
+    תכתוב אותו). קובץ שלא אנחנו כתבנו נשאר כמות שהוא, ונאמר."""
+    from boot.grub_lock import is_pbkdf2_hash
+    path = Path(tftp_root) / "grub" / "grub.cfg"
+    try:
+        text = path.read_text(encoding="ascii")
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError) as exc:
+        return f"{path}: could not be read to lock it ({exc}) (#2437)"
+    lines = text.splitlines()
+    locked = any(line.startswith("set superusers=") for line in lines)
+    has_password = any(line.startswith("password_pbkdf2 ") for line in lines)
+    if locked and (has_password or not is_pbkdf2_hash(password_hash)):
+        return None
+    found = _FALLBACK_LINE.search(text)
+    if not found:
+        return (f"{path} has no 'set imagesrv_fallback=' line -- not a file this server "
+                "wrote; left unlocked as it is (#2437)")
+    return write_grub_cfg(f"http://{found.group(1)}", tftp_root, password_hash)
 
 
 def enable_dnsmasq() -> str | None:
@@ -183,6 +218,14 @@ def enable_dnsmasq() -> str | None:
     חייב לעלות גם באתחול הבא. ה-restart עצמו — ‏`dhcp_host.apply`."""
     ok, out, err = _run(["systemctl", "enable", DNSMASQ_UNIT])
     return None if ok else f"systemctl enable {DNSMASQ_UNIT} נכשל: {err or out.strip()}"
+
+
+#: ‏#2440: מה ש-`regenerate_firewall` מחזיר כשהמתקין לא כתב חומת אש (‏`--no-firewall`,
+#: או קובץ שאיבד את הכללים). זה כישלון בשם ולא הצלחה: אף כלל לא נכתב. הקוראים
+#: שמתזמרים (ההשלמה, שירותים לכל כרטיס) ממשיכים בגלוי, כאזהרה, כי שרת בלי חומת
+#: אש הוא מצב שהמתקין תומך בו; כל קורא אחר רואה אותו כשגיאה.
+NO_FIREWALL = ("לא הותקנה חומת אש (‏/etc/nftables.conf אינו של ImageSrv — "
+               "--no-firewall?) — אף כלל לא נכתב, וכל הפורטים פתוחים לכל כרטיס")
 
 
 def firewall_installed(conf: str | Path = NFTABLES_CONF) -> bool | None:
@@ -212,7 +255,7 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     if installed is None:
         return f"לא ניתן לקרוא את {conf} — חומת האש לא עודכנה"
     if not installed:
-        return None
+        return NO_FIREWALL          # ‏#2440: לא "הצליח" — לא נכתב דבר
     gen = Path(repo_dir) / "deploy" / "nftables-rules.sh"
     if services is not None:
         args = ["sh", str(gen), "--per-nic"]
@@ -275,13 +318,42 @@ def restart_server_later(delay: int = RESTART_DELAY_SECONDS) -> str | None:
     return None if ok else f"לא ניתן לתזמן אתחול לשרת: {err or out.strip()}"
 
 
-def default_hooks() -> Hooks:
+def default_hooks(password_hash: str = "") -> Hooks:
     return {
-        "write_grub_cfg": write_grub_cfg,
+        # ‏#2437: אותה חתימה כמו hook מוזרק (url, root) — ה-hash נקשר כאן.
+        "write_grub_cfg": lambda url, root: write_grub_cfg(url, root, password_hash),
         "enable_dnsmasq": enable_dnsmasq,
         "firewall": regenerate_firewall,
         "restart_server": restart_server_later,
     }
+
+
+def firewall_gate(conf: str | Path = NFTABLES_CONF,
+                  read_ruleset: Callable[[], str | None] | None = None) -> str | None:
+    """‏#2440: האם מותר לשרת לעלות ולהגיש. ‏None = מותר; אחרת הסיבה.
+
+    המתקין כתב חומת אש (‏`firewall_installed`) — אז הטבלה `inet imagesrv` חייבת
+    להיות טעונה עכשיו. ‏nftables שלא עלה באתחול (קובץ פגום, מודול חסר) השאיר
+    את 8080/8081/8443 פתוחים לכל כרטיס, והשרת עלה כאילו כלום. ‏`nft` שלא נקרא
+    אינו "טעונה" (עיקרון 5). שרת בלי חומת אש מותקנת (‏`--no-firewall`) עולה —
+    זה מצב שהמתקין תומך בו, ומסך הבריאות מציג "לא נטענה"."""
+    installed = firewall_installed(conf)
+    if installed is None:
+        return f"לא ניתן לקרוא את {conf} — אי אפשר לדעת אם חומת האש אמורה להיות טעונה"
+    if not installed:
+        return None
+    if read_ruleset is None:
+        from server.net.ports import read_nft_ruleset    # noqa: PLC0415 — ports כבד
+        read_ruleset = read_nft_ruleset
+    ruleset = read_ruleset()
+    if ruleset is None:
+        return ("לא ניתן לקרוא את חומת האש (nft list ruleset נכשל) — אי אפשר לוודא "
+                "שהטבלה inet imagesrv טעונה")
+    if "table inet imagesrv" not in ruleset:
+        return (f"חומת האש הותקנה ({conf}) אבל הטבלה inet imagesrv אינה טעונה — "
+                "nftables לא עלה? (systemctl status nftables). בלעדיה כל הפורטים "
+                "פתוחים לכל כרטיס, ולכן השרת אינו עולה")
+    return None
 
 
 def firewall_proxy_interfaces(conn) -> list[str]:
@@ -319,6 +391,9 @@ class DeployContext:
     #: ‏#2160: משני שכתובת הראשי שלו לא נפתרה — חומת האש **לא** מחוללת מחדש
     #: (הכללים הקיימים נשארים), והסיבה חוזרת כשגיאה. ‏None = אין מה לחסום.
     primary_ip_error: str | None = None
+    #: ‏#2437: ה-hash של סיסמת עורך ה-GRUB, ל-`grub/grub.cfg` שההשלמה כותבת.
+    #: ‏`create_runtime` ממלא אותו; ריק = נעול בלי סיסמה.
+    grub_password_hash: str = ""
 
 
 def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dict:
@@ -330,10 +405,17 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dic
     משאיר `source=console` על שרת שחומת האש שלו לא נכתבה, ואתחול היה
     מעלה אותו כך). מה שכבר נכתב לדיסק (grub.cfg) הוא idempotent ונכתב
     שוב בניסיון הבא. מחזיר `ok` רק כשהכול הצליח."""
-    hooks = {**default_hooks(), **(ctx.hooks or {})}
+    hooks = {**default_hooks(ctx.grub_password_hash), **(ctx.hooks or {})}
     url = deploy_url(server_ip, ctx.agent_port)
     result = {"ok": False, "url": url, "interface": interface,
               "errors": [], "restarting": False, "recorded": False}
+    # ‏#2428: כרטיס הניהול אינו רשת ההפצה — בכל מסלול שמגיע לכאן, לפני כל
+    # צעד. אחרת dnsmasq, ‏67/69/8080 ומולטיקאסט נפתחים ברשת המכללה.
+    if ctx.servers_interface and interface == ctx.servers_interface:
+        result["errors"].append(
+            f"{interface} הוא כרטיס הניהול (הקונסולה נקשרת אליו) — הוא אינו "
+            "יכול להיות רשת ההפצה")
+        return result
     steps = [
         ("grub.cfg", lambda: hooks["write_grub_cfg"](url, ctx.tftp_root)),
         ("dnsmasq", hooks["enable_dnsmasq"]),
@@ -355,6 +437,10 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dic
         **({"services": per_nic} if per_nic is not None else {}))))
     for label, call in steps:
         err = call()
+        if err == NO_FIREWALL:
+            # ‏#2440: שרת שהותקן בלי חומת אש — ממשיכים, ואומרים זאת בתשובה.
+            result.setdefault("warnings", []).append(f"{label}: {err}")
+            continue
         if err:
             result["errors"].append(f"{label}: {err}")
             return result

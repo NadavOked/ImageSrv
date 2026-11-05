@@ -62,6 +62,7 @@ raid_wipe() {
     # and the last MiB -- md 1.1/1.2 at the start; IMSM, DDF and md 0.90/1.0 at
     # the end -- and asks again: only `none` afterwards is a wiped disk
     # (principle 5). The table is written after it (apply_gpt), as always.
+    assert_target "$1" || return 1   # #2434: the approval was for the disk chosen, not for its name
     _rw_t=$(cat "$RUN_DIR/targets/$1/raid_wipe" 2>/dev/null)
     _rw_now=$(raid_member_probe "$1")
     [ -n "$_rw_t" ] && [ "$_rw_now" = "$_rw_t" ] || {

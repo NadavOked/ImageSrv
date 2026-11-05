@@ -48,6 +48,11 @@ class UsernameTaken(ValueError):
     """שם תפוס, כולל כפילות case-insensitive. הקורא מתרגם ל-409."""
 
 
+class WrongCurrentPassword(ValueError):
+    """‏#2414: הסיסמה הנוכחית שגויה ב-``change_own_password``. נפרד מהפרת נוהל:
+    רק זה ניחוש, ורק זה נספר ב-``login_guard``. ``ValueError`` — קורא ישן עדיין 400."""
+
+
 class BuiltinProtected(ValueError):
     """‏#1262: המנהל שנוצר בהתקנה (``is_builtin=1``) הוא דלת החירום — בלי
     MFA בכוונה (``builtin_no_mfa``), ולכן לא נמחק, לא מושבת ולא מורד
@@ -414,7 +419,7 @@ def change_own_password(conn: sqlite3.Connection, username: str,
                         current: str, new: str) -> None:
     """החלפת סיסמה עצמית. מאמתת את הנוכחית, אוכפת נוהל, מורידה כפייה."""
     if verify(conn, username, current) is None:
-        raise ValueError("הסיסמה הנוכחית שגויה")
+        raise WrongCurrentPassword("הסיסמה הנוכחית שגויה")
     validate_password(new)
     stored = canonical_name(conn, username)
     with _write_lock, writing(conn):

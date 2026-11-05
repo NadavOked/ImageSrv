@@ -78,6 +78,7 @@ def _room(tmp_path: Path, fanout: str, sdb_read: str, drawer_s: int) -> tuple[st
         + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers",
                         "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + f"stream_source() {{ cat {posix(payload)!r}; }}; "
+        "target_bind sda; target_bind sdb; "   # #2434: the drawers chosen, as target_init binds them
         "s=$(date +%s); "
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; rc=$?; e=$(date +%s); "

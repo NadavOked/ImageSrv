@@ -17,11 +17,14 @@
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import re
 import secrets
 import socket
+import struct
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -99,7 +102,7 @@ class ProbeResult:
     """תוצאת ה-DHCPDISCOVER על ממשק — **שלושה** מצבים, לא שניים.
 
     - ‏`checked=False` — הבדיקה לא רצה בכלל. זה *לא* "נקי": שום דבר לא
-      נשלל, ואסור לתת לזה לפתוח את ההדלקה.
+      נשלל, ואסור לתת לזה לפתוח את ההדלקה. ‏`reason` אומר למה.
     - ‏`checked=True` עם `servers` ריק — שאלנו, ואיש לא ענה.
     - ‏`servers` — מי ענה.
 
@@ -111,23 +114,95 @@ class ProbeResult:
 
     checked: bool
     servers: tuple[str, ...] = ()
+    reason: str = ""
 
 
-def probe_existing_dhcp(iface: str, timeout: float = 2.0) -> ProbeResult:
-    """שולח DHCPDISCOVER על הממשק ומחזיר מי ענה — ואם בכלל הצלחנו לשאול.
+# ‏#2417: ההאזנה היא ברמת הקישור (AF_PACKET), לא על סוקט UDP. סוקט UDP
+# מקבל את ה-OFFER רק אחרי ה-hook של nft input ואחרי rp_filter — ו-OFFER
+# משודר אינו משויך ב-conntrack לבקשה שיצאה, ולכן חומת האש של השרת עצמו
+# (policy drop, בלי כלל ל-dport 68) זרקה אותו, והבדיקה דיווחה "נבדק, נקי".
+# אומת על Debian 13 במעבדה, 04/11. ‏AF_PACKET רואה את המסגרת לפני שניהם.
+AF_PACKET = getattr(socket, "AF_PACKET", 17)
+ETH_P_ALL = getattr(socket, "ETH_P_ALL", 3)
+PACKET_OUTGOING = getattr(socket, "PACKET_OUTGOING", 4)
+SOL_PACKET = getattr(socket, "SOL_PACKET", 263)
+PACKET_STATISTICS = 6
+SO_ATTACH_FILTER = getattr(socket, "SO_ATTACH_FILTER", 26)
 
-    בלי הרשאות או כשפורט 68 תפוס (לקוח DHCP על הכרטיס) מוחזר
-    `ProbeResult(checked=False)`. זה מה שמונע את התקלה הגרועה ביותר:
-    להדליק DHCP שני על רשת שכבר יש בה.
-    """
-    xid = secrets.token_bytes(4)
+#: מסנן BPF בקרנל: רק UDP/IPv4 לא-מקוטע מפורט 67 או אליו (ה-OFFER, וה-DISCOVER
+#: שלנו כשהוא יוצא). בלעדיו כל תעבורת הכרטיס — גם מולטיקאסט של סבב שהשרת
+#: עצמו משדר — הייתה ממלאת את החוצץ, ו-OFFER שנזרק שם היה נראה כמו שקט.
+#: ‏(code, jt, jf, k); הקפיצות יחסיות לפקודה הבאה. ‏drop=11, ‏accept=12.
+_BPF_DHCP = (
+    (0x28, 0, 0, 12),          # 0  ldh [12]            ethertype
+    (0x15, 0, 9, 0x0800),      # 1  jeq IPv4            : drop
+    (0x30, 0, 0, 23),          # 2  ldb [23]            IP protocol
+    (0x15, 0, 7, 17),          # 3  jeq UDP             : drop
+    (0x28, 0, 0, 20),          # 4  ldh [20]            flags + fragment offset
+    (0x45, 5, 0, 0x1FFF),      # 5  jset fragment       ? drop
+    (0xB1, 0, 0, 14),          # 6  ldxb 4*([14]&0xf)   IP header length
+    (0x48, 0, 0, 14),          # 7  ldh [x+14]          UDP source port
+    (0x15, 3, 0, 67),          # 8  jeq 67              ? accept
+    (0x48, 0, 0, 16),          # 9  ldh [x+16]          UDP destination port
+    (0x15, 1, 0, 67),          # 10 jeq 67              ? accept : drop
+    (0x06, 0, 0, 0),           # 11 drop
+    (0x06, 0, 0, 0x40000),     # 12 accept
+)
+
+
+def _open_tap(iface: str) -> socket.socket:
+    """סוקט AF_PACKET על `iface` בלבד, עם המסנן. ‏protocol=0 ביצירה = לא מקבל
+    כלום עד ה-bind, כך שמסגרות מכרטיסים אחרים לא נכנסות לפני שהמסנן והכרטיס
+    נקבעו. כשל = OSError, והקורא מחזיר "לא נבדק"."""
+    tap = socket.socket(AF_PACKET, socket.SOCK_RAW, 0)
     try:
-        mac = bytes.fromhex(
-            (Path("/sys/class/net") / iface / "address").read_text().strip().replace(":", "")
-        )
-    except (OSError, ValueError):
-        mac = b"\x02" + secrets.token_bytes(5)          # locally administered, random
-    packet = (
+        program = ctypes.create_string_buffer(
+            b"".join(struct.pack("HBBI", *op) for op in _BPF_DHCP))
+        tap.setsockopt(socket.SOL_SOCKET, SO_ATTACH_FILTER,
+                       struct.pack("HP", len(_BPF_DHCP), ctypes.addressof(program)))
+        tap.bind((iface, ETH_P_ALL))
+    except BaseException:
+        tap.close()
+        raise
+    return tap
+
+
+def _dhcp_frame(frame: bytes, xid: bytes) -> tuple[str, str] | None:
+    """מסגרת Ethernet → ‏("request", כתובת המקור) ל-BOOTREQUEST עם ה-xid שלנו,
+    ‏("reply", כתובת המקור) לתשובה אליו, או None לכל דבר אחר (כולל מסגרת
+    קצרה/פגומה)."""
+    if len(frame) < 14 + 20 or frame[12:14] != b"\x08\x00":
+        return None
+    ip = frame[14:]
+    ihl = (ip[0] & 0x0F) * 4
+    if ip[0] >> 4 != 4 or ihl < 20 or ip[9] != 17 or len(ip) < ihl + 8 + 8:
+        return None
+    sport, dport = struct.unpack("!HH", ip[ihl:ihl + 4])
+    bootp = ip[ihl + 8:]
+    if bootp[4:8] != xid:
+        return None
+    if bootp[0] == 1 and dport == 67:
+        return ("request", socket.inet_ntoa(ip[12:16]))
+    if bootp[0] == 2 and sport == 67:
+        return ("reply", socket.inet_ntoa(ip[12:16]))
+    return None
+
+
+def _ip_checksum(header: bytes) -> int:
+    total = sum(struct.unpack(f"!{len(header) // 2}H", header))
+    while total > 0xFFFF:
+        total = (total & 0xFFFF) + (total >> 16)
+    return ~total & 0xFFFF
+
+
+def _discover_frame(mac: bytes, xid: bytes) -> bytes:
+    """ה-DISCOVER כמסגרת שלמה, כמו שלקוח DHCP שולח (RFC 2131 4.1): מ-0.0.0.0:68
+    אל 255.255.255.255:67, ל-ff:ff:ff:ff:ff:ff, ממקור ה-MAC של הכרטיס.
+
+    ‏#2417, במעבדה 04/11: סוקט UDP על כרטיס בלי כתובת שלח עם כתובת **של כרטיס
+    אחר** (192.168.68.61), ושרת עם rp_filter=2 — ברירת המחדל בדביאן — לא ענה.
+    "נבדק, נקי" על שאלה שאיש לא יכול היה לענות עליה."""
+    bootp = (
         b"\x01\x01\x06\x00"           # op=BOOTREQUEST, htype=ethernet, hlen=6, hops
         + xid
         + b"\x00\x00"                   # secs
@@ -139,30 +214,110 @@ def probe_existing_dhcp(iface: str, timeout: float = 2.0) -> ProbeResult:
         + b"\x35\x01\x01"               # option 53: DHCPDISCOVER
         + b"\xff"
     )
+    udp = struct.pack("!HHHH", 68, 67, 8 + len(bootp), 0) + bootp   # checksum 0: מותר ב-IPv4
+    header = struct.pack("!BBHHHBBH4s4s", 0x45, 0, 20 + len(udp), 0, 0, 64, 17, 0,
+                         b"\x00" * 4, b"\xff" * 4)
+    header = header[:10] + struct.pack("!H", _ip_checksum(header)) + header[12:]
+    return b"\xff" * 6 + mac + b"\x08\x00" + header + udp
+
+
+def probe_existing_dhcp(iface: str, timeout: float = 2.0) -> ProbeResult:
+    """שולח DHCPDISCOVER על הממשק ומחזיר מי ענה — ואם בכלל הצלחנו לשאול.
+
+    השליחה וההאזנה שתיהן ב-AF_PACKET על הכרטיס עצמו (‏#2417): ה-DISCOVER יוצא
+    כמסגרת שנבנתה כאן, ממקור 0.0.0.0, מהכרטיס הזה — עם כתובת או בלעדיה; וההאזנה
+    רואה את ה-OFFER גם כשחומת האש של השרת או rp_filter זורקים אותו לפני כל
+    סוקט UDP. אין bind לפורט 68, ולכן לקוח DHCP על הכרטיס אינו חוסם את הבדיקה.
+
+    ‏`checked=True` דורש **ראיה חיובית** שהשאלה נשאלה כמו שצריך ושההאזנה שמעה
+    את הכרטיס: ה-DISCOVER שלנו (ה-xid שלנו, ממקור 0.0.0.0) נראה יוצא בה, והקרנל
+    לא השליך מסגרות שלה (PACKET_STATISTICS). בלי אלה — "לא הצלחנו לבדוק", לא
+    "נקי" (עיקרון 5). כך גם בלי root ובלי קישור. זה מה שמונע את התקלה הגרועה
+    ביותר: להדליק DHCP שני על רשת שכבר יש בה.
+    """
+    xid = secrets.token_bytes(4)
+    tap = sender = None
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.setsockopt(socket.SOL_SOCKET, 25, iface.encode() + b"\0")  # SO_BINDTODEVICE
-        sock.bind(("", 68))
-        sock.settimeout(timeout)
-        sock.sendto(packet, ("255.255.255.255", 67))
-    except OSError:
-        return ProbeResult(checked=False)
+        try:
+            tap = _open_tap(iface)
+        except OSError as exc:
+            return ProbeResult(False, reason=(
+                f"לא ניתן להאזין ל-{iface} ברמת הקישור (AF_PACKET, נדרש root): {exc}"))
+        try:
+            # סוקט נפרד: ההאזנה אינה רואה מה שהיא עצמה שלחה. ‏protocol=0 — אינו מקבל.
+            sender = socket.socket(AF_PACKET, socket.SOCK_RAW, 0)
+            sender.bind((iface, 0))
+            mac = sender.getsockname()[4]
+            if len(mac) != 6:
+                return ProbeResult(False, reason=(
+                    f"ל-{iface} אין כתובת Ethernet (קיבלנו {mac.hex() or 'כלום'}) — "
+                    "אי אפשר לשלוח עליו DHCPDISCOVER"))
+            frame = _discover_frame(mac, xid)
+            written = sender.sendto(frame, (iface, 0x0800))
+        except OSError as exc:
+            return ProbeResult(False, reason=f"לא ניתן לשלוח DHCPDISCOVER על {iface}: {exc}")
+        if written != len(frame):
+            return ProbeResult(False, reason=(
+                f"הקרנל קיבל {written} מתוך {len(frame)} בייט של ה-DHCPDISCOVER על {iface}"))
+        return _listen(tap, iface, xid, timeout)
+    finally:
+        for s in (sender, tap):
+            if s is not None:
+                s.close()
+
+
+def _listen(tap: socket.socket, iface: str, xid: bytes, timeout: float) -> ProbeResult:
+    """עד `timeout` מרגע השליחה (מועד אחרון, לא לכל קריאה — DISCOVER של מכונות
+    אחרות ברשת עמוסה לא מאריך את ההמתנה). ואז הראיות, לפי הסדר."""
+    asked = False
+    wrong_source = ""
     seen: list[str] = []
+    deadline = time.monotonic() + timeout
     try:
         while True:
-            data, addr = sock.recvfrom(1024)
-            if len(data) > 8 and data[4:8] == xid and addr[0] not in seen:
-                seen.append(addr[0])
+            left = deadline - time.monotonic()
+            if left <= 0:
+                break
+            tap.settimeout(left)
+            frame, addr = tap.recvfrom(65535)
+            found = _dhcp_frame(frame, xid)
+            if found is None:
+                continue
+            if found[0] == "request":
+                if addr[2] != PACKET_OUTGOING:
+                    continue
+                if found[1] == "0.0.0.0":
+                    asked = True
+                else:
+                    wrong_source = found[1]
+            elif found[1] not in seen:
+                seen.append(found[1])
     except socket.timeout:
         pass
-    except OSError:
+    except OSError as exc:
         # שגיאה באמצע ההאזנה: מי שכבר ענה נספר, אבל שקט כאן אינו ראיה.
-        return ProbeResult(checked=bool(seen), servers=tuple(seen))
-    finally:
-        sock.close()
-    return ProbeResult(checked=True, servers=tuple(seen))
+        return ProbeResult(bool(seen), tuple(seen), "" if seen else
+                           f"ההאזנה על {iface} נקטעה: {exc}")
+    if seen:
+        return ProbeResult(True, tuple(seen))
+    if not asked and wrong_source:
+        return ProbeResult(False, reason=(
+            f"ה-DHCPDISCOVER יצא מ-{iface} ממקור {wrong_source} ולא 0.0.0.0 — שרת "
+            "שמסנן מקור (rp_filter, DHCP snooping) לא היה עונה לו, ולכן שקט אינו ראיה"))
+    if not asked:
+        return ProbeResult(False, reason=(
+            f"ה-DHCPDISCOVER לא נראה יוצא מ-{iface} — אין ראיה שהבקשה יצאה ושההאזנה "
+            "שומעת את הכרטיס (אין קישור? הכרטיס מושבת?)"))
+    try:
+        _packets, drops = struct.unpack(
+            "II", tap.getsockopt(SOL_PACKET, PACKET_STATISTICS, 8))
+    except (OSError, struct.error) as exc:
+        return ProbeResult(False, reason=f"לא ניתן לקרוא את מוני ההאזנה על {iface}: {exc}")
+    if drops:
+        return ProbeResult(False, reason=(
+            f"הקרנל השליך {drops} מסגרות DHCP בזמן ההאזנה על {iface} — תשובה יכלה "
+            "להיות ביניהן"))
+    return ProbeResult(True, ())
 
 
 # --- האם מצב proxy בטוח בגרסת dnsmasq שמותקנת כאן? (#36) --------------------

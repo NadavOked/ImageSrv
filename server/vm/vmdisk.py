@@ -352,6 +352,11 @@ def build_disk(host: Host, manifest: dict, image_dir: Path, workdir: Path,
     warnings: list[str] = []
     loop = attach(host, disk)
     try:
+        # #2434: the agent writes only a disk chosen in this job -- what target_init
+        # binds on a machine (failmark.sh). Here the chosen disk is this loop device.
+        bound = host.agent("target_bind", loop, run_dir=run_dir)
+        if not bound.ok:
+            raise DiskError("table", bound.reason("לא ניתן לקבוע את זהות הדיסק לפני הכתיבה"))
         table = host.agent("apply_gpt", loop, str(source_file), run_dir=run_dir)
         if not table.ok:
             raise DiskError("table", table.reason("לא ניתן לכתוב את טבלת המחיצות"))

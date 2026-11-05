@@ -77,3 +77,27 @@ test('the client timer does not run when the value is 0, and runs when it is on'
   ctx({}, {...base, ME: {idle_seconds: 600}}).startIdleWatch();
   assert.equal(started, 1);
 });
+
+// #2414: the server now also drops a cookie it has not seen for console_idle_seconds (+1 min). A hidden
+// console tab does not poll, so activity in a separate monitor window (#1854) has to reach the server
+// some other way: at most one GET /me a minute, and only when there was activity since the last one.
+test('a hidden console with activity pings the server at most once a minute; a visible or idle one does not', () => {
+  const calls = [];
+  const c = vm.createContext({document: {hidden: true}, api: (p) => { calls.push(p); return Promise.resolve({}); }, Date});
+  vm.runInContext('let lastActivity = 0; let idleLastPing = 0;\n' + functionSource('idleKeepAlive'), c);
+  const t0 = 10_000_000;
+  vm.runInContext(`lastActivity = ${t0}`, c);
+  assert.equal(c.idleKeepAlive(t0 + 1000), true);
+  assert.deepEqual(calls, ['/me']);
+  vm.runInContext(`lastActivity = ${t0 + 2000}`, c);
+  assert.equal(c.idleKeepAlive(t0 + 30_000), false, 'not twice within a minute');
+  assert.equal(c.idleKeepAlive(t0 + 61_001), true, 'activity since the last ping, a minute later');
+  assert.equal(c.idleKeepAlive(t0 + 200_000), false, 'no activity since the last ping: no ping');
+  vm.runInContext(`lastActivity = ${t0 + 300_000}; document.hidden = false;`, c);
+  assert.equal(c.idleKeepAlive(t0 + 400_000), false, 'a visible tab already polls every 2 seconds');
+  assert.equal(calls.length, 2);
+});
+
+test('the idle tick calls the keep-alive while time is left', () => {
+  assert.match(functionSource('startIdleWatch'), /if \(left > 0\) idleKeepAlive\(\);/);
+});

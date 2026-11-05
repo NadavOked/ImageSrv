@@ -158,7 +158,8 @@ class Box:
             f'SYSROOT={posix(self.run)!r}/sys LIB_DIR={posix(AGENT)!r}/lib '
             f'SERVER=http://10.44.12.10:8080 MAC=b4:2e:99:07:1a:c4 {env}; '
             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
-            f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
+            + agent_sources("sysinfo", "progress", "failmark")   # #2434: assert_target (the disk chosen, bound in stage)
+            + f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
             f'. {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; . {posix(AGENT)}/lib/postdeploy/linuxdrivers.sh; '
             f'. {posix(AGENT)}/lib/postdeploy/bootstorage.sh; . {posix(AGENT)}/lib/postdeploy/postdeploy.sh; '
             f'manifest_plan() {{ printf \'%s\\n\' {plan!r}; return {plan_rc}; }}; '
@@ -172,7 +173,7 @@ class Box:
     def stage(self, disk: str = "sda") -> tuple[subprocess.CompletedProcess, dict]:
         out = subprocess.run(
             [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + self.script
-             + f'stage_drivers {disk} /dev/null; echo "rc=$?"'],
+             + f'target_bind {disk}; stage_drivers {disk} /dev/null; echo "rc=$?"'],   # #2434: as target_init binds it
             capture_output=True, text=True, encoding="utf-8",
             cwd=str(AGENT.parent), stdin=subprocess.DEVNULL,
         )

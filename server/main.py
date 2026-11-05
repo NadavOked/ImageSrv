@@ -395,12 +395,15 @@ def _host_config_writes() -> dict:
     כשל גלוי ביומן (עיקרון 5). על תחנת פיתוח (ווינדוס) אין /etc, אין systemctl ואין dnsmasq: הכתיבה רק יצרה ‏`C:\\etc\\imagesrv`
     ו-`C:\\etc\\dnsmasq.d` מחוץ ל-data-dir — ולכן לא מדליקים אותם, ואומרים זאת."""
     from server.net import dhcp_host
+    from server.system import grub_password
     if not sys.platform.startswith("linux"):
-        print(f"dev station ({sys.platform}): /etc/imagesrv/known-macs and "
-              "/etc/dnsmasq.d are not written (#2267)")
-        return {"known_macs_hooks": None, "sync_dnsmasq": False, "dnsmasq_dropin": False}
+        print(f"dev station ({sys.platform}): /etc/imagesrv/known-macs, "
+              "/etc/imagesrv/grub-password and /etc/dnsmasq.d are not written (#2267, #2437)")
+        return {"known_macs_hooks": None, "sync_dnsmasq": False, "dnsmasq_dropin": False,
+                "grub_password_file": None}
+    # ‏#2437: סיסמת עורך ה-GRUB של התחנות — נוצרת בעלייה הראשונה אם חסרה.
     return {"known_macs_hooks": {"apply": dhcp_host.apply_known_macs}, "sync_dnsmasq": True,
-            "dnsmasq_dropin": True}
+            "dnsmasq_dropin": True, "grub_password_file": grub_password.PASSWORD_FILE}
 
 
 def main() -> None:
@@ -409,6 +412,16 @@ def main() -> None:
     args = parser.parse_args()
 
     from server.net import ifaddr
+
+    # ‏#2440: חומת אש שהותקנה ואינה טעונה = שרת בלי סינון. לא עולים, ואומרים
+    # למה; ‏Restart=on-failure מנסה שוב, והשרת עולה מעצמו כש-nftables עולה.
+    blocked = deploy_net.firewall_gate()
+    if blocked:
+        print(f"imagesrv: {blocked}", file=sys.stderr)
+        raise SystemExit(1)
+    if deploy_net.firewall_installed() is False:
+        print("warning: no ImageSrv firewall installed (--no-firewall) — every port "
+              "is open on every interface (#2440)")
     deploy = _deploy_state(args)
 
     if deploy.source == "cli":

@@ -139,7 +139,7 @@ room)   # $@ = the selected ports (line numbers); every fixture disk is a drawer
     list_drawers() { awk '$1 != "plain" { print $2 }' "$F/names"; }
     resolve_target_drawers; echo "SEL$_disks"
     for d in $_disks; do target_init "$d" 0; done
-    apply_gpt() { echo "gpt $1" >> "$F/calls"; }
+    apply_gpt() { echo "gpt $1" >> "$F/calls"; }; plan_gate() { :; }   # #2412: the table is stubbed, so is its plan check
     expand_last() { return 0; }
     manifest_plan() { echo '1|guid|data|ntfs|2048|2048|p1.zst|sha|0|||'; }
     restore_partition_drawers() { shift 8; for d in "$@"; do
@@ -153,7 +153,7 @@ room)   # $@ = the selected ports (line numbers); every fixture disk is a drawer
     ;;
 station)
     # the real apply_gpt always sets PLAN_ERROR first (expand.sh); run_restore reads it (77557596)
-    apply_gpt() { PLAN_ERROR=""; echo "gpt $1" >> "$F/calls"; return 1; }
+    apply_gpt() { PLAN_ERROR=""; echo "gpt $1" >> "$F/calls"; return 1; }; plan_gate() { :; }   # #2412
     : > "$F/calls"; target_init "$(k "$1")" 0
     run_restore multicast "$(k "$1")" http://127.0.0.1:9 img "$F/m.json"; echo "RS $?"
     show "$1"

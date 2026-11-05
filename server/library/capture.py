@@ -33,6 +33,7 @@ from server.storage import disk_reserve, history as storage_history, locations a
 from server.learn import server_io
 from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
 from server.agent.api import ServerContext, identity_gate
+from server.agent import body as agent_body   # #2410
 from server.library.images import validate_display_name
 from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.library import capture_detail
@@ -268,10 +269,11 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         refused = identity_gate(ctx, row["mac"], request, "capture-preflight")
         if refused is not None:
             return refused
-        try:
-            body = await request.json()
-        except ValueError:
-            raise HTTPException(400, "הגוף אינו JSON תקין")
+        try:                                   # #2410/#2416: תקרה, עומק, surrogate
+            body = await agent_body.read_json(request)
+        except agent_body.BodyError as exc:
+            raise HTTPException(exc.status, "הגוף אינו JSON תקין" if exc.status == 400
+                                else "גוף הבקשה גדול מהתקרה") from None
         # ‏#1884: מכאן ההעלאה — צילום הדיסק של הספרייה (קצב הכתיבה ולחץ ה-I/O של הקליטה).
         server_io.begin(ctx.conn, "capture", task_id, ctx.library.root)
         parts = body.get("partitions") if isinstance(body, dict) else None
@@ -409,7 +411,7 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         raw = await request.body()
         try:
             manifest = json.loads(raw.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):   # #2447: deep JSON is 400, not 500
             # קטע מהגוף נכנס ליומן: "לא JSON" בלי ראיה השאיר אותנו
             # מגששים מול סוכן שאי אפשר להיכנס אליו (מעבדה, #12).
             snippet = raw[:160].decode("utf-8", "replace")

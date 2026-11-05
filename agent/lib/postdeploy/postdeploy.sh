@@ -130,13 +130,14 @@ stage_drivers() {
     # #433: the boot entry comes after the drivers, on the same hook -- both
     # restore paths (the round, single_restore.sh) pass through here.
     _stage_drivers "$@"
-    ensure_boot_entry "$@"
+    assert_target "$1" && ensure_boot_entry "$@"   # #2434
     return 0
 }
 
 _stage_drivers() {
     _dr_mnt=""; _dr_why=""; _dr_boot=""; _dr_linux=""
     rm -f "${DR_OUT:-$RUN_DIR/drivers.json}"
+    assert_target "$1" || { _drivers_fail "הדיסק אינו הדיסק שנבחר — הדרייברים לא נכתבו"; return 0; }   # #2434
     _dr_plan="$RUN_DIR/drivers.plan"
     if ! manifest_plan "$2" > "$_dr_plan"; then
         _drivers_fail "לא הצלחנו לקרוא את תוכנית המחיצות"

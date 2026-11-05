@@ -92,6 +92,7 @@ def _run(tmp_path: Path, p1_start: int, check: str = "lc_table_check sda manifes
         f'.disk_guid) echo {DISK_GUID} ;; *) echo null ;; esac; }}\n'
         f'blockdev() {{ case "$1" in --getss) echo 512 ;; --getsz) echo {TARGET} ;; *) return 0 ;; esac; }}\n'
         'target_write_started() { :; }\n'
+        'assert_target() { :; }\n'   # #2434: the identity is not what is tested here (test_target_identity_2434.py)
         'verify_table() { :; }   # the partition nodes; the table itself is read below\n'
         'share_tail() { printf "%s\\n" "$4"; }   # nothing was shrunk: test_expand_share_1897.py\n'
         'apply_gpt sda manifest.json || { echo "FAIL apply"; exit 0; }\n'

@@ -117,7 +117,7 @@ lc_stream() {
     _ls_r="$LC/run"; _ls_pcl=$(partclone_for_fs "$_ls_fs"); _ls_feeds=""
     for _ls_t in "$@"; do
         _ls_d="$RUN_DIR/targets/$_ls_t"
-        [ "$(cat "$_ls_d/state")" = failed ] && continue
+        [ "$(cat "$_ls_d/state")" = failed ] && continue; assert_target "$_ls_t" || continue   # #2429: before its fifo
         rm -f "$_ls_d/feed" "$_ls_d/feed.bytes" "$_ls_d/relay" "$_ls_d/relay.bytes" "$_ls_d/relay.out" \
               "$_ls_d/sha.out" "$_ls_d/pipeline.rc" "$_ls_d/tee.rc" "$_ls_d/pipeline.pid" "$_ls_d/reader.pid"
         mkfifo "$_ls_d/feed" "$_ls_d/relay" || { fail_written_target "$_ls_t" "מחיצה $_ls_i: mkfifo נכשל"; continue; }
@@ -240,7 +240,7 @@ _lc_copy_parts() {
         [ -f "$LC/stop.req" ] && { _fail_alive "$*" "השיכפול נעצר לפני מחיצה $_lk_i — היעד אינו שמיש"; return 2; }
         if is_swap_partition "$_lk_fs"; then
             for _lk_t in "$@"; do
-                [ "$(cat "$RUN_DIR/targets/$_lk_t/state")" = failed ] && continue
+                [ "$(cat "$RUN_DIR/targets/$_lk_t/state")" = failed ] && continue; assert_target "$_lk_t" || continue   # #2429
                 if make_swap "$(partition_node "$_lk_t" "$_lk_i")" "$_lk_uuid"; then echo "$_lk_i" >> "$RUN_DIR/targets/$_lk_t/lc_ok"
                 else fail_written_target "$_lk_t" "מחיצה $_lk_i: mkswap נכשל"; fi
             done
@@ -268,7 +268,7 @@ lc_finish() {
     readback_local "$_lf_m" "$(cat "$LC/run/src" 2>/dev/null)" "$@"   # one that fails fails alone
     [ "$?" -ne 127 ] || _fail_alive "$*" "האימות אחרי הכתיבה לא רץ — readback.sh לא נטען"   # missing is not "verified"
     for _lf_t in "$@"; do   # #1798: a failed read-back keeps the mark; the source's names replace it only after the grow
-        [ "$(cat "$RUN_DIR/targets/$_lf_t/state")" = failed ] && continue
+        [ "$(cat "$RUN_DIR/targets/$_lf_t/state")" = failed ] && continue; assert_target "$_lf_t" || continue   # #2429: the copy's own writes
         lc_unhibernate_target "$_lf_t" "$_lf_m"; _lf_u=$?   # #2009: on the copy, before its grow; 1 = failed by name
         [ "$_lf_u" = 0 ] || { [ "$_lf_u" = 1 ] || fail_written_target "$_lf_t" "מצב ההשהיה של Windows בעותק לא נבדק (rc=$_lf_u)"; continue; }
         lc_raw_nogrow "$_lf_t" "$_lf_m"; finish_grow "$_lf_t" "$LC/run/entries" "$_lf_m" || continue

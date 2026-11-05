@@ -185,11 +185,26 @@ test('openModalContent takes a function and refuses a string -- no new Function'
 
 // --- (4) static guard over all of server/static ------------------------------------------
 
-test("no '${esc(' left inside an on*=\"…\" handler, and no new Function, in server/static", () => {
+// #2422: the guard looked only for '${esc( -- esc right after a quote. esc() is HTML escaping and is wrong
+// anywhere inside a JS handler, so it now catches every ${…esc(…} in on*="…": unquoted, after &quot;, or
+// inside a ternary. The samples below are the guard's own negative control -- the old regex missed three.
+const ESC_IN_HANDLER = /\bon[a-z]+="[^"]*\$\{[^}"]*\besc\(/;
+
+test('#2422: the handler guard catches every form of esc() inside on*="…", and only those', () => {
+  for (const bad of [`onclick="f('\${esc(x)}')"`, `onclick="f(\${esc(x)})"`, `onclick="f(&quot;\${esc(x)}&quot;)"`,
+    `onchange="g('\${a ? esc(x) : ""}')"`])
+    assert.match(bad, ESC_IN_HANDLER, bad);
+  for (const good of [`onclick="f('\${jsStr(x)}')"`, `title="\${esc(x)}" onclick="f()"`, `onclick="f()" title="\${esc(x)}"`,
+    `onclick="f(\${Number(n)})"`])
+    assert.doesNotMatch(good, ESC_IN_HANDLER, good);
+});
+
+test("no esc() left inside an on*=\"…\" handler, and no new Function, in server/static and the wizard", () => {
   const bad = [];
-  for (const f of fs.readdirSync(root).filter((n) => n.endsWith('.js'))) {
-    fs.readFileSync(path.join(root, f), 'utf8').split('\n').forEach((line, i) => {
-      if (/\bon[a-z]+="[^"]*'\$\{esc\(/.test(line)) bad.push(`${f}:${i + 1} esc in handler`);
+  const wizard = path.resolve(__dirname, '../server/wizard/static');
+  for (const dir of [root, wizard]) for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.js'))) {
+    fs.readFileSync(path.join(dir, f), 'utf8').split('\n').forEach((line, i) => {
+      if (ESC_IN_HANDLER.test(line)) bad.push(`${f}:${i + 1} esc in handler`);
       if (/new Function\(/.test(line)) bad.push(`${f}:${i + 1} new Function`);
     });
   }

@@ -110,6 +110,7 @@ def _run(tmp_path: Path, call: str, rows: list[str]) -> str:
         'json_get() { case "$2" in .sector_size) echo 512 ;; .scheme) echo gpt ;; *) echo null ;; esac; }\n'
         f'blockdev() {{ case "$1" in --getss) echo 512 ;; --getsz) echo {SECTORS} ;; *) return 0 ;; esac; }}\n'
         'target_write_started() { :; }\n'
+        'assert_target() { :; }\n'   # #2434: the identity is not what is tested here (test_target_identity_2434.py)
         'verify_table() { :; }   # הקריאה בחזרה נבדקת למטה עם sgdisk אמיתי\n'
         f'if {call} sda manifest.json; then echo OK; else echo "FAIL $PLAN_ERROR"; fi\n'
     )

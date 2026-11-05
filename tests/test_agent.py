@@ -1190,7 +1190,8 @@ def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share
         # אותו דבר לקריאה החוזרת של GUID המחיצות (#1212): היא נבדקת, גם
         # אחרי הרחבה, ב-test_partition_guid.py מול sgdisk שזוכר את `-u`.
         "verify_unique_guids() { true; }; "
-        f'expand_last sda {manifest_path!r} >/dev/null 2>&1; echo "rc=$?"'
+        + agent_sources("sysinfo", "progress", "failmark") + "target_bind sda; "   # #2434: the disk chosen
+        + f'expand_last sda {manifest_path!r} >/dev/null 2>&1; echo "rc=$?"'
     )
     marker = run / "targets" / "sda" / "expanded"
     # #1798: the incomplete-write mark rides in the same call (writemark.sh) --
@@ -1555,6 +1556,7 @@ def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_pat
         "node_is_block() { true; }; "
         # ‏#1487: סקטור אתחול הגיבוי נבדק ב-test_ntfs_backup_boot_1487.py; ה-partclone כאן זורק את הזרם.
         "ntfs_boot_target() { true; }; "
+        "target_bind sda; "   # #2434: the disk chosen, as target_init binds it
         f"restore_partition unicast http://s img sda 4 ntfs p4.recovery.pcl.zst "
         f'{digest} "" > {posix(box)}/pipe.out 2>&1; echo "rc=$?"'
     )
@@ -1605,6 +1607,7 @@ def swap_box(tmp_path, disks=("sda",)):
         # ‏/dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
         # של כל כתיבה (#51). היא נבדקת בנפרד ב-test_restore_evidence.py.
         "node_is_block() { true; }; "
+        + "".join(f"target_bind {d}; " for d in disks)   # #2434: the drawers chosen, as target_init binds them
     )
     return box, run, calls, prelude
 

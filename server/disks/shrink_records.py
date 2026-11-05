@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 
 from boot.grub_menu import normalize_mac as lenient_mac
@@ -66,6 +67,11 @@ FIELDS = ("id", "mac", "dev", "serial", "port", "model", "image_name", "task_id"
 #: כמה מהסיבה נשמר (סקירת Fable): שורת קונסולה, לא יומן שלם.
 NOTE_MAX_CHARS = 400
 
+#: ‏#2436: הדגלים חוזרים ל-sgdisk כ-`-A idx:=:0x<attrs>` -- 16 ספרות הקס, כפי
+#: ש-sgdisk -i מדפיס אותם. ערך אחר (רווח, אות) היה ארגומנט נוסף לפקודה.
+_ATTRS = re.compile(r"[0-9A-Fa-f]{16}")
+_SEPARATORS = re.compile(r"[|\r\n]")
+
 
 def _int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
@@ -86,6 +92,14 @@ def _partition(entry: object) -> dict:
     # ‏GPT מתחיל מכניסה 1, ומחיצה בת 0 סקטורים אינה מחיצה (סקירת Fable).
     if ints["idx"] < 1 or ints["size_sectors"] < 1:
         raise BadRecord("bad_layout", "idx and size_sectors must be at least 1")
+    attrs = entry.get("attrs")
+    if attrs not in (None, "") and not (isinstance(attrs, str) and _ATTRS.fullmatch(attrs)):
+        raise BadRecord("bad_layout", "attrs must be 16 hex digits")
+    # ‏#2436: הסוכן קורא את הרשומה כשורה מופרדת ב-`|` -- שם `X|8000…` היה attrs
+    # אחר, ושורה חדשה בשם הייתה שורה שלמה משלה.
+    for key in ("type_guid", "unique_guid", "name"):
+        if isinstance(entry.get(key), str) and _SEPARATORS.search(entry[key]):
+            raise BadRecord("bad_layout", f"{key} must not carry '|', CR or LF")
     return {**ints, "type_guid": type_guid, "ntfs_bytes": _int(entry.get("ntfs_bytes")),
             **{k: _text(entry.get(k)) for k in _PART_TEXT}}
 
@@ -146,11 +160,28 @@ def open_record(conn: sqlite3.Connection, body: dict) -> dict:
     return row
 
 
+def open_owner(conn: sqlite3.Connection, serial: object,
+               record_id: int | None = None) -> str | None:
+    """‏#2413: ה-MAC שפתח את הרשומה הפתוחה של הסידורי (ו-`record_id`, אם ניתן),
+    או None כשאין כזו. ‏`api.py` משווה אותו ל-MAC של הפונה לפני close/note."""
+    if not isinstance(serial, str) or not serial:
+        return None
+    sql = "SELECT mac FROM shrink_records WHERE serial = ? AND closed_at IS NULL"
+    params: list = [serial]
+    if record_id is not None:
+        sql += " AND id = ?"
+        params.append(record_id)
+    row = conn.execute(sql, params).fetchone()
+    return row["mac"] if row is not None else None
+
+
 def close_record(conn: sqlite3.Connection, serial: str, record_id: int | None = None,
-                 by: str = "agent", event: str = "shrink_close") -> bool:
+                 by: str = "agent", event: str = "shrink_close",
+                 mac: str | None = None) -> bool:
     """סוגר את הרשומה הפתוחה של הסידורי. אמת רק אם רשומה פתוחה נסגרה
     עכשיו — רשומה שאינה קיימת או שכבר נסגרה אינה "נסגרה" (עיקרון 5).
-    ‏`record_id`, אם ניתן, חייב להיות אותה רשומה."""
+    ‏`record_id`, אם ניתן, חייב להיות אותה רשומה. ‏`mac`, אם ניתן (‏#2413,
+    הסוכן), חייב להיות המכונה שפתחה אותה — באותו UPDATE, בלי מרוץ."""
     if not isinstance(serial, str) or not serial:
         return False
     sql = "UPDATE shrink_records SET closed_at = ?, closed_by = ? WHERE serial = ? AND closed_at IS NULL"
@@ -158,6 +189,9 @@ def close_record(conn: sqlite3.Connection, serial: str, record_id: int | None = 
     if record_id is not None:
         sql += " AND id = ?"
         params.append(record_id)
+    if mac is not None:
+        sql += " AND mac = ?"
+        params.append(mac)
     with _write_lock, writing(conn):
         done = conn.execute(sql, params).rowcount == 1
     if done:
@@ -167,10 +201,11 @@ def close_record(conn: sqlite3.Connection, serial: str, record_id: int | None = 
 
 
 def note_record(conn: sqlite3.Connection, serial: str, record_id: int | None,
-                note: str) -> bool:
+                note: str, mac: str | None = None) -> bool:
     """למה הרשומה עדיין פתוחה — "הטבלה הוחזרה, מערכת הקבצים לא נמתחה
     (ntfsresize …)" — כדי שהקונסולה תראה סיבה ולא רק "מכווץ". אמת רק אם
-    רשומה פתוחה עודכנה; ‏`note` ריק אינו הערה (הקורא מסרב לפני)."""
+    רשומה פתוחה עודכנה; ‏`note` ריק אינו הערה (הקורא מסרב לפני). ‏`mac` — כמו
+    ב-`close_record` (‏#2413)."""
     if not isinstance(serial, str) or not serial or not isinstance(note, str) or not note.strip():
         return False
     sql = "UPDATE shrink_records SET note = ? WHERE serial = ? AND closed_at IS NULL"
@@ -178,6 +213,9 @@ def note_record(conn: sqlite3.Connection, serial: str, record_id: int | None,
     if record_id is not None:
         sql += " AND id = ?"
         params.append(record_id)
+    if mac is not None:
+        sql += " AND mac = ?"
+        params.append(mac)
     with _write_lock, writing(conn):
         done = conn.execute(sql, params).rowcount == 1
     if done:

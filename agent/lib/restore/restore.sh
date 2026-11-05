@@ -157,8 +157,8 @@ restore_partition() {
     # אליו את המחיצה כולה, יוצא 0, וה-sha256 היה עובר — כי הוא נלקח על
     # הבייטים שהתקבלו. ‏apply_gpt כבר אימת את כל הצמתים; זו הבדיקה
     # האחרונה, מיד לפני הכתיבה עצמה (#51).
-    node_is_block "$_node" \
-        || { log "partition $5: $_node is not a block device"; return 1; }
+    assert_target "$4" && node_is_block "$_node" \
+        || { log "partition $5: $_node is not a block device, or not on the disk chosen (#2434)"; return 1; }
 
     if is_swap_partition "$6"; then
         make_swap "$_node" "$9" || { log "partition $5: mkswap failed"; return 1; }
@@ -238,8 +238,8 @@ run_restore() {
         echo "failed" > "$RUN_DIR/state"
         return 1
     fi
-    # #1366: a disk that does not take a write, or writes below the floor, fails here by name.
-    { write_check "$2" && write_speed_verdict "$5" "$2"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }
+    # #1366: a disk that does not take a write, or writes below the floor, fails here by name -- after the plan (#2412).
+    { plan_gate "$2" "$5" && write_check "$2" && write_speed_verdict "$5" "$2"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }   # #2412: the plan first
     discard_before_restore "$2"; [ $? != 2 ] || { target_set "$2" failed "ה-TRIM לא הסתיים תוך $DISCARD_MAX_S שניות"; echo "failed" > "$RUN_DIR/state"; return 1; }   # #1969
 
     # הטבלה נקבעת עד תומה לפני שהנתונים מגיעים — כולל ההרחבה, כי היא זו

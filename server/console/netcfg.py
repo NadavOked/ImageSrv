@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import socket
 import time
 from pathlib import Path
@@ -88,6 +89,10 @@ def default_hooks() -> Hooks:
         # אליה, ולא זו שהוגדרה בשורת הפקודה.
         "netcfg_local_address": lambda request: (request.scope.get("server")
                                                  or ("", 0))[0],
+        # ‏#2418: מי שלח את הבקשה — אם הרשת החדשה של כרטיס אחר מכילה אותו,
+        # התשובות אליו יצאו מהכרטיס ההוא, והשינוי מחמש את ההחזרה.
+        "netcfg_peer_address": lambda request: (request.client.host
+                                                if request.client else ""),
     }
 
 
@@ -189,6 +194,27 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
             return True
         return any(f in netcfg.REACH_FIELDS
                    for f in netcfg.changed(before, after))
+
+    def could_cut_console(request: Request, before: netcfg.NetConfig,
+                          after: netcfg.NetConfig,
+                          state: netcfg_host.LiveState | None) -> bool:
+        """‏#2418: כתובת חדשה על כרטיס **אחר** מנתקת את הקונסולה כשהרשת שלה
+        מכילה את מי ששולח את הבקשה (מפעיל שמגיע דרך נתב — התשובות היו יוצאות
+        מהכרטיס החדש), או כשלא ניתן היה לקרוא את הרשתות החיות ולכן החפיפה
+        איתן לא נשללה. כתובת מקור שאינה כתובת (רק בטסטים — ‏uvicorn נותן IP)
+        אינה ראיה לכלום, והשאר נשפט לפי `touches_console` כמו קודם."""
+        if not {"mode", "address", "netmask"} & set(netcfg.changed(before, after)):
+            return False
+        network = after.network()
+        if network is None:
+            return False
+        if not (state or hooks["netcfg_state"]()).checked:
+            return True
+        try:
+            peer = ipaddress.IPv4Address(hooks["netcfg_peer_address"](request))
+        except (ValueError, TypeError):
+            return False
+        return peer in network
 
     def bond_of(name: str) -> netcfg.NetConfig | None:
         """‏#1264: ה-bond שהכרטיס חבר בו, או None."""
@@ -297,12 +323,21 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                     for r in (body.get("routes") or [])],
         )
 
+    def live_before(cfg: netcfg.NetConfig) -> netcfg_host.LiveState | None:
+        """‏#2418: הרשתות החיות לפני השינוי — קריאה אחת לבקשה, לשני השומרים."""
+        return hooks["netcfg_state"]() if cfg.mode == netcfg.MODE_STATIC else None
+
     def check(cfg: netcfg.NetConfig,
-              dhcp_cfg: dhcp.InterfaceConfig | None = None) -> list[str]:
+              dhcp_cfg: dhcp.InterfaceConfig | None = None,
+              state: netcfg_host.LiveState | None = None) -> list[str]:
         """‏`dhcp_cfg` (‏#1263): ה-DHCP **שייכתב** יחד עם הכתובת — רשת
         הפצה משנה את שניהם בבקשה אחת, וההשוואה היא מול מה שיהיה."""
         others = [c for c in all_configs() if c.name != cfg.name] + [cfg]
-        return netcfg.problems(cfg, others, dhcp_cfg or dhcp_of(cfg.name))
+        # ‏#2418: גם מול הרשת החיה של כל כרטיס. מצב שלא נקרא אינו "אין חפיפה" —
+        # ‏`_configure` מחמש אז את ההחזרה (`could_cut_console`).
+        state = state or live_before(cfg)
+        live = state.addresses if state is not None and state.checked else None
+        return netcfg.problems(cfg, others, dhcp_cfg or dhcp_of(cfg.name), live=live)
 
     def checked_name(name: str) -> None:
         """‏#1628: שם הכרטיס נכנס לנתיב הקובץ ול-`iface`/`post-up` שרצים
@@ -350,13 +385,15 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         # ‏#1264: חברי ה-bond אינם שדה בטופס הזה — הם נשמרים כפי שהם (נתיב
         # סטטי על bond0, למשל), וקובעים אותם רק מ-`/second`.
         cfg.slaves = before.slaves
-        found = check(cfg)
+        state = live_before(cfg)
+        found = check(cfg, state=state)
         if found:
             raise HTTPException(400, " · ".join(found))
-        return await _configure(name, before, cfg, body, request, user, live)
+        return await _configure(name, before, cfg, body, request, user, live, state)
 
     async def _configure(name: str, before: netcfg.NetConfig, cfg: netcfg.NetConfig,
-                   body: dict, request: Request, user, live: dict) -> dict:
+                   body: dict, request: Request, user, live: dict,
+                   state: netcfg_host.LiveState | None = None) -> dict:
         """מכאן — אחרי שהקלט נבדק: הקלדת השם, זרוע ההחזרה, כתיבה, קריאה חוזרת."""
         # ‏#1558: הקונסולה כותבת ל-ifupdown. כשמשהו אחר מנהל את הרשת (שרת
         # חיפה: netplan) — סירוב בשם **לפני** הזרוע ולפני כל קובץ, ולא
@@ -381,7 +418,8 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
             raise HTTPException(
                 409, "שינוי רשת קודם עדיין ממתין לאישור — אשרו אותו או "
                 "המתינו שיוחזר, לפני שינוי נוסף")
-        arm = touches_console(name, before, cfg, active_interface(request, live))
+        arm = (touches_console(name, before, cfg, active_interface(request, live))
+               or could_cut_console(request, before, cfg, state))
         if arm:
             ready, detail = hooks["netcfg_timer_active"]()
             if not ready:
@@ -554,13 +592,15 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
             "ignore_existing": bool(body.get("ignore_existing")),
         }
         dhcp_cfg = dhcp_steps["build"](name, dhcp_body, dhcp_before)
-        found = check(cfg, dhcp_cfg)
+        state = live_before(cfg)
+        found = check(cfg, dhcp_cfg, state)
         if found:
             raise HTTPException(400, " · ".join(found))
         risky = dhcp_steps["gates"](name, dhcp_cfg, dhcp_before, dhcp_body)
         address_result = None
         if netcfg.changed(before, cfg):
-            address_result = await _configure(name, before, cfg, body, request, user, live)
+            address_result = await _configure(name, before, cfg, body, request, user, live,
+                                              state)
             if not address_result["ok"] or address_result["rollback"]["pending"]:
                 why = ("ממתינה לאישור שהקונסולה עדיין נגישה — אשרו, ואז שמרו "
                        "שוב את רשת ההפצה" if address_result["ok"] else

@@ -91,13 +91,26 @@ def safe_partition_filename(value: object) -> bool:
             and "/" not in value and "\\" not in value and "\0" not in value)
 
 
+#: ‏#2447: עומק הקינון המרבי של מניפסט. המניפסט האמיתי עמוק 3–4 (‏partitions →
+#: מחיצה → `system_partition`); מעבר לזה — לא מניפסט, ולא RecursionError.
+MANIFEST_MAX_DEPTH = 16
+
+
 def _unsafe_agent_string(value: object) -> bool:
-    if isinstance(value, str):
-        return any(ord(ch) < 32 or ch == "|" for ch in value)
-    if isinstance(value, dict):
-        return any(_unsafe_agent_string(item) for item in value.values())
-    if isinstance(value, list):
-        return any(_unsafe_agent_string(item) for item in value)
+    """מחרוזת עם תו בקרה או `|` (המפריד של הסוכן) בכל עומק — **או** קינון עמוק
+    מ-`MANIFEST_MAX_DEPTH`. איטרטיבית (‏#2447): ‏description מקונן לעומק ~3000
+    זרק RecursionError מתוך `_validate`, שחוזהו להחזיר סיבה."""
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, str):
+            if any(ord(ch) < 32 or ch == "|" for ch in item):
+                return True
+        elif isinstance(item, (dict, list)):
+            if depth > MANIFEST_MAX_DEPTH:
+                return True
+            stack.extend((child, depth + 1)
+                         for child in (item.values() if isinstance(item, dict) else item))
     return False
 
 
@@ -463,11 +476,15 @@ class ImageLibrary:
                 continue
             try:
                 manifest = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, RecursionError) as exc:   # #2447: גם JSON עמוק מדי
                 log.warning("skipping unreadable manifest %s: %s", path, exc)
                 self._report_invalid(path, f"unreadable JSON: {exc}")
                 continue
-            problem = self._validate(manifest)
+            try:
+                problem = self._validate(manifest)
+            except Exception as exc:  # noqa: BLE001 — ‏#2447: מניפסט אחד אינו מפיל את הספרייה
+                log.exception("validating manifest %s crashed -- skipping it", path)
+                problem = f"validation crashed: {type(exc).__name__}: {exc}"
             if problem:
                 log.warning("skipping manifest %s: %s", path, problem)
                 self._report_invalid(path, problem)
@@ -544,13 +561,19 @@ class ImageLibrary:
             if field not in manifest:
                 return f"missing field: {field}"
         if _unsafe_agent_string(manifest):
-            return "a string field contains a control or agent delimiter character"
+            return ("a string field contains a control or agent delimiter character,"
+                    f" or the manifest nests deeper than {MANIFEST_MAX_DEPTH}")
         if require_library_fields and (not valid_image_id(manifest["id"])
                                        or not isinstance(manifest["name"], str)
                                        or not manifest["name"]):
             return "image id or name is malformed"
         # שני השדות שההחלטה "האם האימג' נכנס לכונן" נשענת עליהם. מניפסט
         # שהם פגומים בו נדחה כאן, ולא מגיע להשוואה שתשווה מחרוזת למספר.
+        # ‏#2420: ‏`version` מוצג בקונסולה (‏"VM רץ", גרסאות). שלם מ-1, או חסר — לא
+        # מחרוזת שמגיעה מספרייה של שרת משנה, משיתוף NAS או מארכיון ונכנסת ל-HTML.
+        version = manifest.get("version")
+        if version is not None and not (type(version) is int and version >= 1):
+            return "version must be a whole number from 1"
         if manifest["family"] not in (256, 500):
             return f"family must be 256 or 500, not {manifest['family']!r}"
         if not (_whole(manifest["min_target_bytes"]) or 0) > 0:
@@ -576,7 +599,9 @@ class ImageLibrary:
             if index is None or not 1 <= index <= 128 or index in indexes:
                 return f"partition index must be unique and between 1 and 128: {part['index']!r}"
             indexes.add(index)
-            if part.get("role") not in PARTITION_ROLES or part.get("fs") not in FILESYSTEMS:
+            # ‏#2447: ‏list/dict אינם hashable — `in set` זרק TypeError במקום להחזיר סיבה.
+            if (not isinstance(part.get("role"), str) or not isinstance(part.get("fs"), str)
+                    or part["role"] not in PARTITION_ROLES or part["fs"] not in FILESYSTEMS):
                 return f"partition {index} has an unsupported role or filesystem"
             for field in ("type_guid", "unique_guid"):
                 value = part.get(field)

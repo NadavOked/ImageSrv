@@ -130,7 +130,8 @@ def test_a_static_address_is_read_once_and_never_waits(tmp_path, images_root, cl
             "confirm": "eth1"}
     result = admin.put(f"{CONF}/eth1", json=body).json()
     assert result["ok"] is False                             # the fake never moves it
-    assert machine.reads == 1 and machine.sleeps == []
+    # #2418: one read before the change (live-network overlap), one read-back.
+    assert machine.reads == 2 and machine.sleeps == []
 
 
 async def _during_the_wait(app, machine: Machine, cookies, second):

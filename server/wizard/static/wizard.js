@@ -88,10 +88,11 @@ function renderNics(nics, selected) {
   $("#nic-list").innerHTML = nics.map((nic) => `<tr><td><input type="radio" name="interface" value="${esc(nic.name)}" ${nic.name === selected ? "checked" : ""}></td><td class="mono">${esc(nic.name)}</td><td>${esc(nic.link_label || (nic.link === "up" ? "מחובר" : "מנותק"))}</td><td class="mono">${esc(nic.current_ip || "—")}</td><td class="mono">${esc(nic.mac || "—")}</td></tr>`).join("");
 }
 
+/* ‏#2422: ‏textContent → innerHTML אינו מקודד גרש כפול או בודד, ו-esc משמש גם בתוך
+   value="…" ו-href="…" — שם ‏" סוגר את התכונה. אותה מפה כמו ב-console.js (#1129). */
+const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
 function esc(valueToEscape) {
-  const span = document.createElement("span");
-  span.textContent = String(valueToEscape);
-  return span.innerHTML;
+  return String(valueToEscape).replace(/[&<>"'`]/g, (c) => ESC_MAP[c]);
 }
 
 function toggle() {

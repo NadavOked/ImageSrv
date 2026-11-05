@@ -67,7 +67,7 @@ restore_partition_drawers() {
     if is_swap_partition "$_fs"; then
         for _d in $_disks; do
             case "$(cat "$RUN_DIR/targets/$_d/state")" in failed|cancelled) continue ;; esac
-            if make_swap "$(partition_node "$_d" "$_idx")" "$_uuid"; then
+            if assert_target "$_d" && make_swap "$(partition_node "$_d" "$_idx")" "$_uuid"; then   # #2434
                 target_partition_done "$_d"
             else
                 fail_written_target "$_d" "מחיצה $_idx: mkswap נכשל"
@@ -81,7 +81,7 @@ restore_partition_drawers() {
     _feeds=""
     for _d in $_disks; do
         _t="$RUN_DIR/targets/$_d"
-        case "$(cat "$_t/state")" in failed|cancelled) continue ;; esac   # #1386
+        case "$(cat "$_t/state")" in failed|cancelled) continue ;; esac; assert_target "$_d" || continue   # #1386; #2434: before its fifo
         rm -f "$_t/feed" "$_t/feed.bytes" "$_t/pipeline.rc" "$_t/pipeline.pid" \
               "$_t/zstd.rc" "$_t/reader.pid"
         mkfifo "$_t/feed"

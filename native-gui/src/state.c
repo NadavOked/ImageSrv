@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <glib.h>
 #include "state.h"
 
 int lc_state_line(State *s, const char *key, char *val);   /* #1322, lc_state.c */
@@ -138,6 +139,16 @@ void state_parse(State *s, FILE *fp) {
         }
         line[--len] = 0;
         if (len && line[len - 1] == '\r') line[len - 1] = 0;
+        /* #2433: a broken UTF-8 byte (a model or a serial off the disk) made
+         * Pango draw nothing for the whole value -- U+FFFD for each instead.
+         * A line that no longer fits is rejected, as an overlong one is. */
+        if (!g_utf8_validate(line, -1, NULL)) {
+            gchar *ok = g_utf8_make_valid(line, -1);
+            size_t okn = strlen(ok);
+            if (okn < sizeof line) memcpy(line, ok, okn + 1);
+            g_free(ok);
+            if (okn >= sizeof line) { s->rejected_lines++; continue; }
+        }
         if (!line[0] || line[0] == '#') continue;
         char *eq = strchr(line, '=');
         if (!eq) continue;

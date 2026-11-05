@@ -110,6 +110,7 @@ target_set() { echo "$2" > "$RUN_DIR/targets/$1/state"; }
 progress_loop() { :; }
 smart_gate() { shift; echo "$@"; return 0; }
 drawer_gates() { echo "$@"; }   # #1808/#1898: the drawer questions -- their own tests
+drawers_bound() { echo "$@"; }   # #2434: the drawers' identity -- its own tests (test_target_identity_2434.py)
 ui_clear() { :; }; ui_header() { :; }; hold_beat() { :; }
 crc_delta_after() { :; }; crc_delta_measure() { :; }
 pick_internal_disk() { echo sda; }

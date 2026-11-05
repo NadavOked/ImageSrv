@@ -374,6 +374,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "readable": True,           # האם המצב בפועל בכלל נקרא
         "timer": (True, "active"),  # האם זרוע ההחזרה של #56 פעילה
         "local": "10.10.10.8",      # דרך איזו כתובת הגיעה הבקשה
+        "peer": "10.10.10.50",      # ‏#2418: מאיזו כתובת הגיעה הבקשה (המפעיל)
         "dnsmasq": [],              # מה נכתב ל-dnsmasq (לשונית ה-DHCP)
         "proxy": [],                # ומה לאינסטנס ה-proxy
         "management": "",           # ‏#1263: כרטיס הניהול שהמתקין רשם ("" = לא ידוע)
@@ -410,6 +411,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "netcfg_now": clock,
         "netcfg_boot_id": lambda *a: "boot-A",
         "netcfg_local_address": lambda request: fake["local"],
+        "netcfg_peer_address": lambda request: fake["peer"],   # #2418
         "netcfg_management": lambda: fake["management"],
         "netcfg_foreign_manager": lambda: fake["foreign"],   # #1558
     }

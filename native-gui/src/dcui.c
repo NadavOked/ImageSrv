@@ -303,11 +303,11 @@ int dcui_main(const Theme *theme) {
             input_pump(in, fds + 1, n - 1);
             Event e;
             while (input_next(in, &e)) {
-                if (e.key == KEYSYM_VT && e.type == UIEV_KEY) {
-                    if (e.vt != DCUI_VT && backend_vt_activate(b, e.vt) < 0)
-                        fprintf(stderr, "native-gui: VT_ACTIVATE %d: %s\n", e.vt, strerror(errno));
-                    continue;
-                }
+                /* #2438: Alt+Fn is dropped -- not a switch (tty2-6 is an OS login,
+                 * the one local surface on a server without SSH) and not an F key
+                 * (F2 is the settings dialog, #1362). The technician's way to a
+                 * login is the server's GRUB recovery entry: the text screen. */
+                if (e.key == KEYSYM_VT && e.type == UIEV_KEY) continue;
                 if (caps_sent != e.caps) { printf("CAPS %d\n", e.caps ? 1 : 0); caps_sent = e.caps; }
                 char tok[32];
                 if (e.key != KEYSYM_CAPS && dcui_token(&e, e.caps, tok, sizeof tok)) printf("%s\n", tok);

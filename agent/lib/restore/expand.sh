@@ -71,11 +71,18 @@ verify_table() {
     verify_unique_guids "$1" "$_plan"
 }
 
-apply_gpt() {
-    # $1 = disk name, $2 = manifest file.
-    # The partition table never travels in the stream -- it is derived
-    # from the manifest alone, then the GPT backup is pushed to the real
-    # end of the disk (matters when restoring onto a bigger drive).
+plan_gate() {
+    # $1 = disk, $2 = manifest. #2412: the whole plan (plan_preflight) is checked
+    # before a restore's first destructive write -- the RAID wipe, the write
+    # check, the TRIM -- not only in apply_gpt, after them. 1 = the target failed
+    # by name, and nothing was written on it.
+    plan_preflight "$1" "$2" && return 0
+    target_set "$1" failed "${PLAN_ERROR:-תוכנית השחזור נדחתה — הדיסק לא שונה}"; return 1
+}
+
+plan_preflight() {
+    # $1 = disk, $2 = manifest. Every check of the table before it is written,
+    # read only; 1 = PLAN_ERROR (when set) says why. apply_gpt runs it again.
     PLAN_ERROR=""   # מאופס לפני השער הראשון: מגירה קודמת לא מדברת בשם הנוכחית
     # כל מספר בטבלה הוא סקטורים: אימג' 512n על יעד 4Kn = הכול פי 8 שגוי (#958).
     # לכן היעד נמדד (`blockdev --getss`) ומושווה לסקטור שהאימג' נקלט ממנו,
@@ -95,7 +102,7 @@ apply_gpt() {
     _scheme=$(json_get "$2" ".scheme")
     [ "$_scheme" = "gpt" ] || { log "unsupported scheme: $_scheme"; return 1; }
 
-    # השער האחרון לפני מחיקת הטבלה בשורה שמתחת, ומכאן והלאה אין חזרה.
+    # השער האחרון לפני מחיקת הטבלה (apply_gpt), ומשם והלאה אין חזרה.
     # מחיצה שאינה swap ובלי קובץ היא **מניפסט פגום**, ולא מחיצת swap:
     # ההסקה ההפוכה שלחה `mkswap` על מחיצת NTFS ומחקה אותה (#424). ‏jq -r
     # מרנדר JSON null כמחרוזת `null`, ולכן שתי הצורות נבדקות. ‏PLAN_ERROR
@@ -110,7 +117,14 @@ apply_gpt() {
         log "$1: $PLAN_ERROR"
         return 1
     fi
+}
 
+apply_gpt() {
+    # $1 = disk name, $2 = manifest file.
+    # The partition table never travels in the stream -- it is derived
+    # from the manifest alone, then the GPT backup is pushed to the real
+    # end of the disk (matters when restoring onto a bigger drive).
+    plan_preflight "$1" "$2" || return 1
     target_write_started "$1" || { PLAN_ERROR="לא הצלחנו לתעד את זהות היעד לפני הכתיבה"; return 1; }
     # ‏#1545: על טבלה ישנה פגומה --zap-all מוחק ויוצא 2 (gptcl.cc); השני רץ על דיסק נקי וחייב 0
     sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 || { log "$1: zap-all exited non-zero (damaged old table?) -- again on the wiped disk"; sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1; } || return 1
@@ -205,6 +219,7 @@ expand_last() {
     [ -z "$_attrs" ] || _gpt="$_gpt -A $_idx:=:0x$_attrs"
     _gpt="$_gpt$(printf '%s\n%s\n%s\n' "$_line" "$_tail" "$_head" | writemark_args -)"   # #1798: -d/-n rebuilt them unnamed
     # ‏0 בסוף = סוף השטח הפנוי הגדול ביותר, כלומר עד תחילת ה-swap החדשה.
+    assert_target "$1" || return 1   # #2434: the disk chosen, again -- this is a second table write
     # shellcheck disable=SC2086 # הפיצול של $_gpt מכוון
     sgdisk $_gpt "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 \
         || { log "$1: sgdisk refused the expanded table (one call): $_gpt"; return 1; }

@@ -49,6 +49,7 @@ from boot.grub_menu import normalize_mac as lenient_mac
 
 from server.agent import identity, registry
 from server.agent.api import ServerContext, _error, identity_gate
+from server.agent import body as agent_body   # #2410
 from server.db import journal
 from server.rounds.room import FitRefusal, open_round
 from server.rounds.sessions import SessionError
@@ -85,10 +86,10 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
 
     async def caller(request: Request, where: str):
         """(body, mac, machine) או (None, None, תשובת-סירוב). הזהות נכשלת סגור."""
-        try:
-            body = await request.json()
-        except ValueError:
-            return None, None, refuse("?", 400, "body is not JSON", "bad_json")
+        try:                                   # #2410/#2416: תקרה, עומק, surrogate
+            body = await agent_body.read_json(request)
+        except agent_body.BodyError as exc:
+            return None, None, refuse("?", exc.status, exc.message, exc.code)
         if not isinstance(body, dict):
             return None, None, refuse("?", 400, "body is not an object", "bad_json")
         mac = lenient_mac(body.get("mac"))

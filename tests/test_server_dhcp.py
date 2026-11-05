@@ -365,7 +365,7 @@ def dhcp_server(tmp_path: Path, images_root: Path, clock):
         # ה-probe המזויף חייב להיות מסוגל להחזיר גם "לא הצלחתי לבדוק" —
         # זה המצב שלא היה כאן, ולכן #53 לא נתפס.
         "probe": lambda name: dhcp.ProbeResult(
-            fake["probe_checked"], tuple(fake["existing"])),
+            fake["probe_checked"], tuple(fake["existing"]), fake.get("probe_reason", "")),
         "apply": lambda text: (fake["applied"].append(text), fake["apply_error"])[1],
         "apply_proxy": lambda text, active: (
             fake["proxy_applied"].append((text, active)), fake["proxy_error"])[1],
@@ -496,6 +496,21 @@ def test_a_check_that_could_not_run_blocks_the_switch_too(dhcp_server):
     assert "ignore_existing" in detail               # מה עושים מכאן
 
 
+def test_the_refusal_says_why_the_check_could_not_run(dhcp_server):
+    """‏#2417: "לא נבדק" נושא את הסיבה של הבדיקה עצמה — אין קישור, אין
+    AF_PACKET, מסגרות שנזרקו — ולא רק "root ופורט 68" הקבועים."""
+    fake = dhcp_server["fake"]
+    fake["probe_checked"] = False
+    fake["probe_reason"] = "ה-DHCPDISCOVER לא נראה יוצא מ-eth0"
+    admin = dhcp_server["admin"]
+    r = admin.put("/api/console/net/interfaces/eth0", json={**GOOD, "confirm": "eth0"})
+    assert r.status_code == 409
+    assert "ה-DHCPDISCOVER לא נראה יוצא מ-eth0" in r.json()["detail"]
+    probe = admin.get("/api/console/net/interfaces/eth0/probe").json()
+    assert probe == {"interface": "eth0", "checked": False, "servers": [],
+                     "reason": "ה-DHCPDISCOVER לא נראה יוצא מ-eth0"}
+
+
 def test_an_unrunnable_check_is_still_overridable_on_purpose(dhcp_server):
     """המעקף המפורש נשאר מעקף — מי שיודע שהכרטיס מבודד מדליק בכל זאת,
     ולא נתקע בלי דרך קדימה."""
@@ -511,7 +526,7 @@ def test_the_probe_endpoint_tells_the_three_states_apart(dhcp_server):
     """אותה הבחנה גם בדיווח לקונסולה: "לא נבדק" אינו "נקי"."""
     admin, fake = dhcp_server["admin"], dhcp_server["fake"]
     assert admin.get("/api/console/net/interfaces/eth0/probe").json() == {
-        "interface": "eth0", "checked": True, "servers": []}
+        "interface": "eth0", "checked": True, "servers": [], "reason": ""}
 
     fake["existing"] = ["10.44.9.1"]
     assert admin.get("/api/console/net/interfaces/eth0/probe").json()["servers"] \

@@ -132,7 +132,7 @@ def test_the_menu_is_served_even_with_no_recorder_wired_in():
 
 def agent_entry(text: str) -> list[str]:
     """שורות ערך ה-ImageSrv, בלי השורות העוטפות."""
-    body = re.search(r'menuentry "ImageSrv" --id imagesrv \{\n(.*?)\n\}',
+    body = re.search(r'menuentry "ImageSrv" --unrestricted --id imagesrv \{\n(.*?)\n\}',
                      text, re.S)
     assert body, f"no ImageSrv entry in:\n{text}"
     return [line.strip() for line in body.group(1).splitlines()]

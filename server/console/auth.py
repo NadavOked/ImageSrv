@@ -100,7 +100,9 @@ def dependencies(conn: sqlite3.Connection):
         peer = request.scope.get(PEER_SCOPE_KEY)
         if peer is not None:
             return peer
-        found = read_session(conn, request.cookies.get(COOKIE_NAME))
+        found = read_session(conn, request.cookies.get(COOKIE_NAME),
+                             ip=request.client.host if request.client else "",
+                             idle_exempt=_is_logout(request))
         if found is None:
             raise HTTPException(401, "לא מחובר")
         _enforce_purpose(request, found)
@@ -138,20 +140,17 @@ def console_only(conn: sqlite3.Connection):
     ולא ``Request`` כדי ש-FastAPI ימלא את הפרמטר בשני הסוגים, והסירוב
     עצמו נשאר של ה-HTTP.
 
-    ‏#1039: כאן גם נרשם "מי מחובר לקונסולה" (``console_presence.touch``) —
-    זה המקום היחיד שרואה כל בקשת קונסולה ואת העוגייה שכבר אומתה, ורק
-    בקונסולה (לא בקיוסק ולא בפורט הסוכן). הכתיבה עצמה — לכל היותר פעם
-    בדקה לעוגייה."""
+    ‏#1039 / #2414: "מי מחובר לקונסולה" והניתוק בחוסר פעילות יושבים ב-``read_session``
+    — השער שכל נתיב עובר בו (HTTP בשני הפורטים, WebSocket, הקיוסק) — ולא כאן."""
     from fastapi import HTTPException
     from starlette.requests import HTTPConnection
-
-    from server.console import presence as console_presence
 
     def no_deploy(connection: HTTPConnection) -> None:
         if connection.scope.get("type") != "http":
             return
         token = connection.cookies.get(COOKIE_NAME)
-        found = check(conn, token)
+        found = check(conn, token, ip=connection.client.host if connection.client else "",
+                      idle_exempt=_is_logout(connection))
         if found is None:
             # ‏#1340: עוגיית קיוסק של deploy — אותו סירוב בדיוק כמו קודם. של
             # admin — עוברת לנתיב, ו-``current_user`` מחזיר 401 (לא "מחובר").
@@ -160,12 +159,13 @@ def console_only(conn: sqlite3.Connection):
                 raise HTTPException(403, DEPLOY_NO_CONSOLE_HE)
         if found is not None and found[1] == "deploy":
             raise HTTPException(403, DEPLOY_NO_CONSOLE_HE)
-        if found is not None:
-            console_presence.touch(
-                conn, token, found[0],
-                connection.client.host if connection.client else "", TTL_SECONDS)
 
     return no_deploy
+
+
+def _is_logout(connection) -> bool:
+    return (connection.scope.get("method") == "POST"
+            and connection.scope["path"].rstrip("/") == "/api/console/logout")
 
 
 def _secret(conn: sqlite3.Connection) -> bytes:
@@ -230,8 +230,14 @@ def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
     )
 
 
-def read_session(conn: sqlite3.Connection, token: str | None) -> Session | None:
-    """מפענח עוגייה: 3 מפרידים (ישן) או 4 (purpose:epoch). None אם פסול."""
+def read_session(conn: sqlite3.Connection, token: str | None, *,
+                 ip: str = "", idle_exempt: bool = False) -> Session | None:
+    """מפענח עוגייה: 3 מפרידים (ישן) או 4 (purpose:epoch). None אם פסול.
+
+    ‏#2414: **השער היחיד** לחוסר פעילות. כל דרך לעוגייה עוברת כאן — ‏``current_user``
+    (HTTP בקונסולה ובפורט הסוכן, כולל ראוטרים שמחוץ ל-``console_only``), ‏``check``
+    (‏WebSocket של המוניטור, ה-VM והמשני, ‏``still_admin``) ופתיחת pull מהגואי. עד
+    כאן הבדיקה ישבה ב-``console_only`` בלבד, ושלושה מסלולים עקפו אותה."""
     if not token:
         return None
     n = token.count("|")
@@ -272,7 +278,36 @@ def read_session(conn: sqlite3.Connection, token: str | None) -> Session | None:
         return None
     if epoch < int(row["auth_epoch"] or 0):
         return None
-    return Session(row["username"], row["role"], purpose)
+    session = Session(row["username"], row["role"], purpose)
+    return session if _active(conn, token, session, ip, idle_exempt) else None
+
+
+def _active(conn: sqlite3.Connection, token: str, session: Session, ip: str,
+            idle_exempt: bool) -> bool:
+    """‏#2414: ‏``console_idle_seconds`` בשרת, לכל עוגייה חוץ מהקיוסק.
+
+    - **מלאה** — הפעילות האחרונה היא ``last_seen`` שלה ב-``console_sessions``; כל
+      שימוש מאומת הוא פעילות (``touch``, לכל היותר כתיבה בדקה) — ולכן גם "מי מחובר".
+    - **pwchange / mfaenroll** — אין להן שורה (אינן "מחוברות"), והמדידה היא מרגע
+      ההנפקה: החלפת הסיסמה או הרישום צריכים לקרות בתוך חלון אחד.
+    - **קיוסק** — פטורה. היא של מחשב בנייה פיזי, בפורט הסוכן בלבד (הקונסולה מסרבת
+      לה, #1340), והגואי מחזיק אותה לאורך פעולה שלמה בלי בקשות: סבב של 34 דקות
+      ואז סגירה, קליטה ואז ביטול מכפתור ההפעלה. לגואי שעון חוסר-פעילות משלו (#434).
+
+    שפג — מבוטלת (``revoke``) ולא רק נדחית, כדי ששורה חדשה לא תחייה אותה, ובכל
+    הפורטים. ‏``idle_exempt`` — ל-logout בלבד: הוא עצמו מבטל, ודפדפן שחזר משינה
+    מתנתק בלי "הניתוק לא אושר"."""
+    if session.purpose == PURPOSE_KIOSK:
+        return True
+    from server.console import presence   # noqa: PLC0415 — presence אינו תלוי ב-auth; כאן בשביל הסדר
+    if not idle_exempt and presence.idle_expired(
+            conn, token, int(get_setting(conn, "console_idle_seconds") or 600), TTL_SECONDS):
+        revoke(conn, token)
+        presence.forget(conn, token)
+        return False
+    if not session.purpose:
+        presence.touch(conn, token, session.username, ip, TTL_SECONDS)
+    return True
 
 
 def _token_hash(token: str) -> str:
@@ -298,7 +333,8 @@ def revoke(conn: sqlite3.Connection, token: str | None) -> None:
         )
 
 
-def check(conn: sqlite3.Connection, token: str | None) -> tuple[str, str] | None:
+def check(conn: sqlite3.Connection, token: str | None, *, ip: str = "",
+          idle_exempt: bool = False) -> tuple[str, str] | None:
     """מחזיר (username, role) לטוקן תקף, אחרת None.
 
     החתימה מוכיחה **מי** — שהטוקן יצא מהשרת הזה ולא שונה בדרך. היא לא
@@ -316,7 +352,7 @@ def check(conn: sqlite3.Connection, token: str | None) -> tuple[str, str] | None
     Session מוגבלת (החלפת סיסמה / הרשמת MFA) אינה session מלאה —
     WebSocket והקוראים הישנים מקבלים None, לא הרשאה חלקית בשקט.
     """
-    found = read_session(conn, token)
+    found = read_session(conn, token, ip=ip, idle_exempt=idle_exempt)
     if found is None or found.purpose:
         return None
     return found.username, found.role

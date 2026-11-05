@@ -371,6 +371,7 @@ def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
         + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + f'stream_source() {{ cat {posix(payload)!r}; }}; '
+        "target_bind sda; target_bind sdb; "   # #2434: the drawers chosen, as target_init binds them
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; echo \"rc=$?\""
     )
@@ -409,6 +410,7 @@ def test_a_station_whose_stream_never_arrives_fails_instead_of_freezing(tmp_path
         # הבדיקה הזו על התקרה של הזרם. בדיקת ההתקן שלפניה (#51) מוחלפת
         # כי אין התקן בלוקים בקופסה, ונבדקת בנפרד ב-test_restore_evidence.py.
         "node_is_block() { true; }; "
+        "target_bind sda; "   # #2434: the disk chosen, as target_init binds it
         "s=$(date +%s); "
         # פלט הצינור לקובץ נפרד, כדי ששורות ה-log של הסוכן לא יתערבבו
         # בשורת ה-rc שהבדיקה מפרסרת.
@@ -485,6 +487,7 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
         + "eval \"orig_$(declare -f wait_progress)\"; "
         f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
         "node_is_block() { true; }; "
+        "target_bind sda; "   # #2434: the disk chosen, as target_init binds it
         + harness
         + f"{call} 2 dd p2.zst {sha} '' sda > {posix(box)}/pipe.out 2>&1; r1=$?; "
         f"{call} 3 dd p3.zst {sha} '' sda >> {posix(box)}/pipe.out 2>&1; r2=$?; "

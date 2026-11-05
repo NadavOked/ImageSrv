@@ -76,6 +76,7 @@ writemark_clear() {
     # (#1714). 0 only when each name, read back with sgdisk -i, is the one we
     # meant: sgdisk's exit code is not evidence (principle 5).
     _wc_d="$1"; _wc_names="${2:-}"
+    assert_target "$_wc_d" || return 1   # #2434
     _wc_i=$(_writemark_marked "$_wc_d") || { log "$_wc_d: the table could not be read to clear the incomplete-write mark"; return 1; }
     [ -n "$_wc_i" ] || return 0
     set --
@@ -109,6 +110,7 @@ writemark_release_done() {
     # here, after them. 1 = at least one mark stayed (that target is failed now).
     _wr_rc=0
     for _wr_d in "$@"; do
+        [ ! -f "$RUN_DIR/targets/$_wr_d/foreign" ] || { _wr_rc=1; continue; }   # #2434: failed after its grow -- not a "done" left out
         [ "$(cat "$RUN_DIR/targets/$_wr_d/state" 2>/dev/null)" = "done" ] || continue
         writemark_release "$_wr_d" || _wr_rc=1
     done

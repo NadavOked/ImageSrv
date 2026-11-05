@@ -22,7 +22,7 @@ from pathlib import Path
 from native import requires_native
 from test_smart import AGENT, BASH, posix
 from test_agent import CLEAN_HIVE
-from agentlib import lib_path
+from agentlib import agent_sources, lib_path
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -140,7 +140,7 @@ def test_hostname_json_is_valid_json_after_a_successful_name(tmp_path):
     (אין jq בבדיקה); השם עצמו מורכב ע"י compose_hostname האמיתית."""
     script, run = windows_box(tmp_path)
     (run / "response.json").write_text("{}", encoding="utf-8")
-    out = sh(script
+    out = sh(script + agent_sources("sysinfo", "progress", "failmark") + "target_bind sda; "   # #2434: the disk chosen
              + f'RESP={posix(run / "response.json")!r}; '
              'json_get() { case "$2" in *prefix) echo lab1;; *suffix) echo 05;; esac; }; '
              'name_this_machine sda sess1')

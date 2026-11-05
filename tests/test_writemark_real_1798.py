@@ -61,6 +61,7 @@ def _run(tmp_path: Path, commands: str, run_dir: str = "run") -> str:
         f'.disk_guid) echo {DISK_GUID} ;; *) echo null ;; esac; }}\n'
         f'blockdev() {{ case "$1" in --getss) echo 512 ;; --getsz) echo {SECTORS} ;; *) return 0 ;; esac; }}\n'
         'target_write_started() { :; }\n'
+        'assert_target() { :; }\n'   # #2434: the identity is not what is tested here (test_target_identity_2434.py)
         'verify_table() { :; }\n'
         'share_tail() { printf "%s\\n" "$4"; }   # #1897: no shrunk tail here; test_expand_share_1897.py\n'
         + commands

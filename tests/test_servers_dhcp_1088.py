@@ -552,8 +552,9 @@ def test_1817_write_grub_cfg_creates_a_traversable_grub_dir_under_private_umask(
 
 
 def test_regenerate_firewall_skips_when_the_installer_wrote_none(tmp_path):
+    """‏#2440: לא נוגעים בקובץ — אבל זה אינו "הצליח": התשובה אומרת שלא נכתב כלל."""
     assert deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if="eth0",
-                                          conf=tmp_path / "nftables.conf") is None
+                                          conf=tmp_path / "nftables.conf") == deploy_net.NO_FIREWALL
     assert not (tmp_path / "nftables.conf").exists()
 
 
@@ -754,10 +755,10 @@ def test_complete_restart_failure_is_not_committed_either(tmp_path):
 
 def test_complete_without_a_servers_nic_stops_only_when_a_firewall_is_installed(tmp_path):
     """‏`--console-host` שאינו שם כרטיס: עם חומת אש מותקנת — עוצר בשם; בלי
-    חומת אש (‏--no-firewall) — אין מה לחולל, וההשלמה ממשיכה."""
+    חומת אש (‏--no-firewall) — אין מה לחולל, וההשלמה ממשיכה (באזהרה, #2440)."""
     conf = tmp_path / "nftables.conf"
     assert deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if=None,
-                                          conf=conf) is None
+                                          conf=conf) == deploy_net.NO_FIREWALL
     conf.write_text("# ImageSrv\n", encoding="utf-8")
     err = deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if=None, conf=conf)
     assert err and "כרטיס השרתים אינו ידוע" in err
@@ -1062,18 +1063,22 @@ def test_full_dhcp_on_another_nic_after_console_deploy_is_409(console, classroom
     המכללה) נדחה בשם — ושום דבר לא נכתב; ‏proxy על eth0 מותר."""
     from server.db import get_setting
     build, fake = console
+    # ‏#2428: eth0 כאן הוא כרטיס הקונסולה (servers_interface) ונדחה לפני כן ככרטיס
+    # הניהול — "כרטיס אחר" הוא eth2.
+    fake["interfaces"].append({"name": "eth2", "state": "up", "mac": "aa:aa:aa:aa:aa:02",
+                               "addresses": ["10.1.3.3/24"]})
     client, ctx, _ = build("none")
     assert client.put("/api/console/net/interfaces/eth1",
                       json={**GOOD, "confirm": "eth1"}).status_code == 200
     applied_before = len(fake["applied"])
-    r = client.put("/api/console/net/interfaces/eth0", json={**GOOD, "confirm": "eth0"})
+    r = client.put("/api/console/net/interfaces/eth2", json={**GOOD, "confirm": "eth2"})
     assert r.status_code == 409, r.text
-    assert "כרטיס ההפצה (eth1)" in r.json()["detail"] and "eth0" in r.json()["detail"]
-    assert get_setting(ctx.conn, dhcp.SETTING_PREFIX + "eth0") is None
+    assert "כרטיס ההפצה (eth1)" in r.json()["detail"] and "eth2" in r.json()["detail"]
+    assert get_setting(ctx.conn, dhcp.SETTING_PREFIX + "eth2") is None
     assert len(fake["applied"]) == applied_before
     assert deploy_net.stored(ctx.conn) == ("eth1", "http://10.44.9.10:8080")
-    r = client.put("/api/console/net/interfaces/eth0",
-                   json={"proxy": True, "confirm": "eth0", "confirm_proxy_broken": True})
+    r = client.put("/api/console/net/interfaces/eth2",
+                   json={"proxy": True, "confirm": "eth2", "confirm_proxy_broken": True})
     assert r.status_code == 200, r.text
 
 
@@ -1097,13 +1102,17 @@ def test_first_dhcp_enable_refuses_a_nic_that_does_not_carry_the_address(console
     """הסדר של נדב: כתובת → DHCP. בלי הכתובת על הכרטיס — 409, ושום דבר
     לא נרשם (לא deploy ולא dhcp:eth0), כי אחרת השרת לא היה עולה."""
     build, fake = console
+    # ‏#2428: eth0 כאן הוא כרטיס הקונסולה (servers_interface) ונדחה לפני כן ככרטיס
+    # הניהול — "כרטיס אחר" הוא eth2.
+    fake["interfaces"].append({"name": "eth2", "state": "up", "mac": "aa:aa:aa:aa:aa:02",
+                               "addresses": ["10.1.2.3/24"]})
     client, ctx, _ = build("none")
-    r = client.put("/api/console/net/interfaces/eth0", json={**GOOD, "confirm": "eth0"})
+    r = client.put("/api/console/net/interfaces/eth2", json={**GOOD, "confirm": "eth2"})
     assert r.status_code == 409
     assert "10.44.9.10" in r.json()["detail"] and "10.1.2.3" in r.json()["detail"]
     assert deploy_net.stored(ctx.conn) == (None, None)
     from server.db import get_setting
-    assert get_setting(ctx.conn, dhcp.SETTING_PREFIX + "eth0") is None
+    assert get_setting(ctx.conn, dhcp.SETTING_PREFIX + "eth2") is None
     assert fake["deploy_calls"] == [] and fake["applied"] == []
 
 

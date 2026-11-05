@@ -54,6 +54,48 @@ target_ident() {
     printf '%s|%s|%s\n' "$_ti_s" "$_ti_p" "$_ti_a"
 }
 
+# --- #2434/#2429: הדיסק שנכתב הוא הדיסק שנבחר -----------------------------------
+# שם התקן (sdb) אינו זהות: מגירה שנשלפה ודיסק שהוכנס, גם בחריץ שלא נבחר, מקבלים
+# את אותו שם. לכן הזהות נקבעת ב-target_init -- רגע הבחירה -- כ-serial|סקטורים|חריץ
+# (`bound`), ונבדקת מחדש לפני כל שלב הרסני (assert_target). אין `bound` = היעד לא
+# נבחר במשימה הזו = לא נכתב (עיקרון 5). דיסק שאינו הנבחר מסומן `foreign`: הוא
+# נכשל בשמו, ושום דבר אחריו -- לא done, לא ראיית ATA, לא מחיקת GPT -- אינו משנה
+# אותו (target_set, progress.sh). serial ריק: המגירות (drawers_bound) והשיכפול
+# המקומי (lc_run) דוחים אותו בבחירה; בתחנה של דיסק יחיד (בנייה/תלמיד) אין דיסק
+# אחר להתבלבל איתו, והגודל והחריץ לבדם נבדקים -- זה לא נשבר בגלל VM בלי serial.
+
+_target_id() { printf '%s|%s|%s' "$(disk_serial "$1")" "$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null)" "$(disk_port "$1")"; }
+
+target_bind() {
+    # $1 = disk. מה שיושב בשם הזה עכשיו -- מ-target_init, ומשם בלבד.
+    mkdir -p "$RUN_DIR/targets/$1" && _target_id "$1" > "$RUN_DIR/targets/$1/bound"
+}
+
+target_bound_serial() {
+    # $1 = disk. ה-serial שנקבע בבחירה (ריק = אין, או שלא נקבעה זהות כלל).
+    _tb=$(cat "$RUN_DIR/targets/$1/bound" 2>/dev/null) || return 1
+    printf '%s' "${_tb%|*|*}"   # serial יכול להכיל '|'; גודל וחריץ אינם
+}
+
+target_same() {
+    # $1 = disk. 0 = הדיסק שבשם הזה עכשיו הוא הדיסק שנקבע ב-target_bind.
+    [ -f "$RUN_DIR/targets/$1/bound" ] || return 1
+    [ "$(_target_id "$1")" = "$(cat "$RUN_DIR/targets/$1/bound")" ]
+}
+
+target_foreign() {
+    # $1 = disk, $2 = why. נכשל בשמו, בגלוי, וננעל (`foreign`) -- בלי לגעת בדיסק.
+    target_set "$1" failed "$2"; stage_at "$1" end 2>/dev/null; : > "$RUN_DIR/targets/$1/foreign"
+    log "$1: $2 (bound: $(cat "$RUN_DIR/targets/$1/bound" 2>/dev/null || echo none); now: $(_target_id "$1")) -- not written (#2434)" >&2   # >&2: callers run inside $( ) and > result files
+}
+
+assert_target() {
+    # $1 = disk. לפני כל שלב הרסני. 0 = זה הדיסק שנבחר; 1 = היעד נכשל בשמו ולא נכתב.
+    target_same "$1" && return 0
+    target_foreign "$1" "הדיסק שבשם $1 אינו הדיסק שנבחר לכתיבה (הוחלף או נשלף) — לא נכתב עליו"
+    return 1
+}
+
 ata_log_json() {
     # $1 = disk. מערך JSON של שורות ata_log, מחרוזת לכל שורה.
     _aj="["; _aj_sep=""
@@ -154,8 +196,9 @@ wipe_written_gpt() {
     # $1 = disk, $2 = why (the log line). #1388, and #1386's cancel: the primary
     # and backup GPT of the disk THIS run wrote -- write_started holds its serial;
     # another disk, or one with no serial (#1427), is not touched. 0 = wiped.
+    # #2434: and only the disk chosen -- write_started alone recorded whoever was there.
     _written_serial=$(cat "$RUN_DIR/targets/$1/write_started" 2>/dev/null)
-    [ -n "$_written_serial" ] && [ "$(disk_serial "$1")" = "$_written_serial" ] || return 1
+    [ -n "$_written_serial" ] && [ "$(disk_serial "$1")" = "$_written_serial" ] && target_same "$1" || return 1
     if sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1; then
         blockdev --rereadpt "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 || :
         log "$1: wiped primary and backup GPT after $2"

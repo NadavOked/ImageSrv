@@ -86,6 +86,7 @@ ntfs_boot_target() {
     # for the end screen). 1 = NTFS_BOOT_ERROR names the partition and why;
     # the caller fails the target with it.
     [ "$3" = ntfs ] || return 0
+    assert_target "$1" || { NTFS_BOOT_ERROR="$(cat "$RUN_DIR/targets/$1/error" 2>/dev/null)"; return 1; }   # #2434
     if ntfs_backup_boot "$(partition_node "$1" "$2")"; then
         echo "$2" >> "$RUN_DIR/targets/$1/ntfs_boot"
         log "$1: partition $2: NTFS backup boot sector written and read back"

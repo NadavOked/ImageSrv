@@ -65,6 +65,14 @@ shrink_offer_disk() {
     _od_ss=$(cat "$SYSROOT/sys/block/$1/queue/logical_block_size" 2>/dev/null); case "$_od_ss" in ''|*[!0-9]*) _od_ss=512 ;; esac
     while IFS='|' read -r _od_rid _od_ser _od_idx _od_start _od_size _od_type _od_uguid _od_name _od_attr _od_ntfs _od_when <&3; do
         [ -n "$_od_idx" ] || continue
+        # #2436: flags and GUID reach sgdisk as extra words; a field that carried `|`, CR or LF
+        # (\037 from shrink_records_refresh, or a `|` left in the last field) moved the others
+        case "$_od_rid$_od_ser$_od_idx$_od_start$_od_size$_od_type$_od_uguid$_od_name$_od_attr$_od_ntfs$_od_when" in
+            *"$(printf '\037')"*|*'|'*) _od_bad=1 ;; *) shrink_args_ok "$_od_uguid" "$_od_attr" && _od_bad=0 || _od_bad=1 ;; esac
+        if [ "$_od_bad" = 1 ]; then
+            log "WARNING: $1: shrink record #$_od_rid (partition $_od_idx) carries attribute flags '$_od_attr' / GUID '$_od_uguid' / a field with a separator in it -- nothing changed; clear it in the console"
+            return 1
+        fi
         _od_info=$(sgdisk -i "$_od_idx" "$DEVROOT/$1" 2>> "$LOG_FILE")
         _od_got=$(printf '%s\n' "$_od_info" | awk -F': ' '/^First sector/ { split($2, f, " ") } /^Partition size/ { split($2, z, " ") }
                                                          /^Partition unique GUID/ { u = $2 } END { print f[1] "|" z[1] "|" u }')

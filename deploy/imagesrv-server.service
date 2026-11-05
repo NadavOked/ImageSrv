@@ -14,7 +14,11 @@
 
 [Unit]
 Description=ImageSrv image server and console
-After=network-online.target
+# ‏#2440: אחרי חומת האש, כדי שהשער ב-server.main (‏deploy_net.firewall_gate) ימצא
+# את `inet imagesrv` טעונה באתחול. סדר בלבד, בכוונה: ‏Requires/Requisite היו
+# מפילים — או מדליקים nftables — בשרת שהותקן ב---no-firewall. האכיפה בשער:
+# חומת אש שהותקנה ואינה טעונה = השרת אינו עולה.
+After=network-online.target nftables.service
 Wants=network-online.target
 
 [Service]

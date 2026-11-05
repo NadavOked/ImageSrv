@@ -78,6 +78,7 @@ def box(tmp_path: Path, plan: str = LINUX_PLAN, **disk_kw) -> tuple[str, Path]:
         f"manifest_plan() {{ printf '%s\\n' {' '.join(repr(ln) for ln in plan.splitlines())}; }}; "
         'partition_node() { printf "/dev/%s%s\\n" "$1" "$2"; }; '
         'boot_hidden_disk() { return 0; }; '   # #2015: the hidden sectors have their own file
+        + "".join(f"target_bind {node}; " for node in DRAWERS)   # #2434: the drawers chosen, as target_init binds them
     )
     return setup, run
 

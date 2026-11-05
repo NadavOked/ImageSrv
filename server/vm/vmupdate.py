@@ -41,7 +41,7 @@ from server.core.atomicfile import write_atomic
 from server.library.capture import validate_manifest_files
 from server.db import get_setting, journal, now_iso, set_setting, set_settings
 from server.library.images import (ImageLibrary, image_os, lineage_of, streamed_partitions,
-                           validate_display_name)
+                           validate_display_name, version_of)
 
 log = logging.getLogger("imagesrv.vmupdate")
 
@@ -954,7 +954,7 @@ class VmUpdate:
             self._progress = _Progress(stage="disk")
             self._state = {
                 "state": "preparing", "image_id": image_id, "image_name": manifest["name"],
-                "image_version": manifest.get("version") or 1,
+                "image_version": version_of(manifest),   # #2420: מספר, לא מה שכתוב במניפסט
                 "lineage": lineage_of(manifest), "started_by": user,
                 "controller": user, "controller_since": now_iso(), "control_request": None,
                 "control_last": None, "created_at": now_iso(), "accel": accel,

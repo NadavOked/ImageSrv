@@ -76,8 +76,19 @@ Text text_make_markup(cairo_t *cr, Font font, double px, int weight,
 }
 
 char *text_escape(const char *utf8, char *out, size_t n) {
+    if (!n) return out;
     char *e = g_markup_escape_text(utf8, -1);
-    snprintf(out, n, "%s", e);
+    size_t len = strlen(e);
+    if (len >= n) {
+        /* #2433: a cut ends on a whole character and outside an entity --
+         * half of "&amp;" or of a letter and Pango refuses the whole markup. */
+        len = n - 1;
+        while (len && ((unsigned char)e[len] & 0xC0) == 0x80) len--;
+        for (size_t i = len; i-- > 0 && e[i] != ';';)
+            if (e[i] == '&') { len = i; break; }
+    }
+    memcpy(out, e, len);
+    out[len] = 0;
     g_free(e);
     return out;
 }

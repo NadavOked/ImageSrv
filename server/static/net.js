@@ -251,25 +251,6 @@ async function saveDeployNet(name, body) {
   await loadNet();
 }
 
-/* --- בריאות המערכת — רמזור לכל בדיקה (health.py) ------------------------- */
-/* השם loadHealthPanel כדי לא לדרוס את loadHealth של console.js. */
-
-async function loadHealthPanel() {
-  const list = $("#health-list");
-  if (!list) return;
-  const checks = await api("/health");
-  list.innerHTML = checks.map((c) => `
-    <div class="health-row">
-      <span class="hlight ${c.state}"></span>
-      <b>${esc(c.label)}</b>
-      <span class="sub">${esc(c.detail)}</span>
-    </div>`).join("");
-}
-
-const healthRefresh = $("#health-refresh");
-if (healthRefresh) healthRefresh.addEventListener("click", () =>
-  loadHealthPanel().catch((error) => toast("רענון נכשל: " + error.message)));
-
 async function loadNet() {
   // הלשונית כולה היא הכרטיסים: כל שורה היא כרטיס רשת של השרת,
   // שיכול להיות DHCP או לא. מכונות שנראו ברשת — בלשונית המחשבים.

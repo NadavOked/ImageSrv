@@ -66,7 +66,7 @@ def _room(tmp_path: Path, apply_gpt: str, drawers=("sda", "sdb", "sdc"), **env) 
         + agent_sources(*LIBS)   # #2272: imagesrv-agent's order
         + "log() { :; }; disk_fits() { return 0; }; write_check() { return 0; }; boot_hidden_disk() { return 0; }; "   # #2015
         "write_speed_verdict() { return 0; }; readback_drawers() { :; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
-        f"apply_gpt() {{ {apply_gpt} }}; "
+        f"apply_gpt() {{ {apply_gpt} }}; plan_gate() {{ return 0; }}; "   # #2412: the table is stubbed, so is the check of its plan
         "expand_last() { sleep 1; return 0; }; "
         "manifest_plan() { echo '1|G|win|ntfs|2048|1024|p1.zst|sha|false|UG|'; }; "
         "restore_partition_drawers() { return 0; }; "

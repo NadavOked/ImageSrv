@@ -78,7 +78,7 @@ def test_a_round_closed_before_writing_touches_no_disk(tmp_path):
     (run / "session-closed").write_text("ses_d6e79f65\n")
     out = sh(prelude
              + 'write_check_round() { echo wc >> "$RUN_DIR/touched"; }; '
-             + 'apply_gpt() { echo "gpt $1" >> "$RUN_DIR/touched"; }; '
+             + 'plan_gate() { return 0; }; apply_gpt() { echo "gpt $1" >> "$RUN_DIR/touched"; }; '
              + 'restore_partition_drawers() { echo "fed $4" >> "$RUN_DIR/touched"; }; '
              + 'run_restore_drawers multicast http://s img m.json sda sdb; echo "rc=$?"')
     assert out.strip().endswith("rc=1"), out

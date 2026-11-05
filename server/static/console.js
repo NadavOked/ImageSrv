@@ -687,6 +687,20 @@ function listenMonitorActivity() {
 }
 listenMonitorActivity();
 
+/* ‏#2414: גם השרת מנתק עוגייה שלא נראתה console_idle_seconds (ועוד דקה). לשונית מוסתרת
+   אינה מתשאלת (startStatusWatch), ולכן פעילות מחלון מוניטור נפרד (#1854) לא הגיעה לשרת —
+   ומי שעובד במוניטור היה מנותק בשרת בזמן שהדפדפן רואה אותו פעיל. לכן: פעילות מאז האות
+   הקודם → ‏GET /me, לכל היותר פעם בדקה. אות שנכשל אינו מוסתר — 401 מציג את מסך הכניסה
+   (api()), וכל כשל אחר פשוט לא הגיע לשרת: האות הבא בדקה הבאה, ואם גם הוא לא — השרת מנתק
+   והמסך אומר "נותקת עקב חוסר פעילות", לא "מחובר". */
+let idleLastPing = 0;
+function idleKeepAlive(now = Date.now()) {
+  if (!document.hidden || lastActivity <= idleLastPing || now - idleLastPing < 60000) return false;
+  idleLastPing = now;
+  api("/me").catch(() => {});
+  return true;
+}
+
 function startIdleWatch() {
   clearInterval(idleTimer);
   if (!ME || !ME.idle_seconds) return;
@@ -695,6 +709,7 @@ function startIdleWatch() {
   idleTimer = setInterval(async () => {
     const idle = (Date.now() - lastActivity) / 1000;
     const left = ME.idle_seconds - idle;
+    if (left > 0) idleKeepAlive();
     if (left <= 0) {
       if (inFlight) return;
       inFlight = true;

@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from native import requires_native
+from agentlib import agent_sources
 from test_agent import AGENT, BASH, posix
 from test_drawer_prep_waits_1704_1705 import _error, _room, _state
 from test_timeouts import run_sh
@@ -52,7 +53,8 @@ def _one(tmp_path: Path, disk: str, body: str = "exit 0", **env: str) -> tuple[s
         f"export PATH={posix(bindir)!r}:$PATH SYSROOT={posix(root)!r} DEVROOT={posix(tmp_path / 'dev')!r} "
         f"RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(log)!r} {exports}; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/restore/discard.sh; "
-        f'discard_before_restore {disk}; echo "rc=$?"')
+        + agent_sources("sysinfo", "progress", "failmark")   # #2434: assert_target, and the disk chosen (target_init's bind)
+        + f'target_bind {disk}; discard_before_restore {disk}; echo "rc=$?"')
     return (out.strip().splitlines()[-1],
             calls.read_text(encoding="utf-8").splitlines() if calls.exists() else [],
             log.read_text(encoding="utf-8") if log.exists() else "")
@@ -103,8 +105,8 @@ def _round(tmp_path: Path, blk_body: str, **env: str):
     bindir = _blkdiscard(tmp_path, blk_body)
     calls = posix(tmp_path / "trim.calls")
     run, prelude = _room(tmp_path, f'echo "gpt $1" >> {calls!r}; return 0;',
-                         drawers=("sda", "sdb", "sdc", "sdd"), **env)
-    prelude = (prelude + f"export PATH={posix(bindir)!r}:$PATH SYSROOT={posix(root)!r}; "
+                         drawers=("sda", "sdb", "sdc", "sdd"), SYSROOT=posix(root), **env)   # #2434: bound in that sysfs
+    prelude = (prelude + f"export PATH={posix(bindir)!r}:$PATH; "
                f". {posix(AGENT)}/lib/restore/discard.sh; "
                # a gate failed sdc before the tables (the write check, as #1366 does)
                'write_check() { [ "$1" != sdc ] || { target_set sdc failed "gate"; return 1; }; }; ')

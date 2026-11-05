@@ -321,3 +321,18 @@ test('#1535: the start dialog titles each source version with its plain text (st
   assert.match(titles[0], /אימג׳ים.* · עודכן ב-VM · nadav/);
   assert.match(titles[1], /^גרסה ראשונה · נקלט ממחשב בנייה · dana/);
 });
+
+// #2420: image_version comes from the manifest and lands in innerHTML -- the global "VM רץ" strip on every
+// page, and the preparing card. It is escaped where it is formatted (vmuVersion), not at each sink.
+test('#2420: a hostile image_version is escaped in the global strip in the page head and in the preparing card', () => {
+  const {run} = setup();
+  run('current = "home"');
+  const bad = '<img src=x onerror=alert(1)>';
+  const strip = run(`vmuGlobalHtml(${st({image_version: bad})})`);
+  assert.doesNotMatch(strip, /<img/);
+  assert.match(strip, /v&lt;img src=x onerror=alert\(1\)&gt;/);
+  const prep = run(`vmuPrepCard(${st({state: 'preparing', image_version: bad, progress: {stage: 'disk', done_bytes: 1, total_bytes: 2}})})`);
+  assert.doesNotMatch(prep, /<img/);
+  assert.doesNotMatch(run(`vmuHeadHtml(${st({image_version: bad})})`), /<img/);
+  assert.match(run(`vmuGlobalHtml(${st({})})`), /v3 ·/, 'a whole version is shown as it was');
+});

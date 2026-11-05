@@ -229,6 +229,7 @@ def build_box(tmp_path, *, plan=PLAN, count=None, plan_cut=None, nodes=None,
         'readback_drawers() { :; }; '
         "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file (test_ntfs_hidden_sectors_2015.py); these disks are files
+        "target_bind sda; "   # #2434: the station's disk is chosen -- what target_init does in the agent (test_target_identity_2434.py)
     )
     return box, run, prelude
 

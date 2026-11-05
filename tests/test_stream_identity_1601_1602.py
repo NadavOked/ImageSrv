@@ -76,7 +76,7 @@ STUBS = {
 
 #: מה שלפני הזרם אינו הנבדק: הטבלה "נכתבה", ‏write_started נרשם כמו ב-apply_gpt.
 PRE_STREAM = (
-    "disk_fits() { :; }; boot_ca_preflight() { :; }; write_check() { :; }; "
+    "disk_fits() { :; }; boot_ca_preflight() { :; }; plan_gate() { :; }; write_check() { :; }; "   # #2412: plan_gate (expand.sh)
     "write_speed_verdict() { :; }; readback_drawers() { :; }; expand_last() { :; }; finish_grow() { :; }; "
     "apply_gpt() { target_write_started \"$1\"; }; node_is_block() { :; }; "
     "ntfs_boot_target() { :; }; "

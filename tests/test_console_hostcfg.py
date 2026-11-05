@@ -22,7 +22,7 @@ pytest.importorskip("fastapi")
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from server.console import tls as console_tls
 
@@ -47,6 +47,8 @@ def make_pair(cn="imagesrv.college.ac.il", *, dns=("imagesrv.college.ac.il",),
     if dns:
         builder = builder.add_extension(
             x509.SubjectAlternativeName([x509.DNSName(d) for d in dns]), critical=False)
+    # ‏#2425: תעודה בלי serverAuth נדחית בהעלאה (הדפדפן היה דוחה אותה) — tests/test_console_tls_upload_2425.py
+    builder = builder.add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
     cert = builder.sign(key, hashes.SHA256())
     key_pem = key.private_bytes(serialization.Encoding.PEM,
                                 serialization.PrivateFormat.PKCS8,

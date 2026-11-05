@@ -24,6 +24,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -564,6 +565,10 @@ class SenderEngine:
         self._process: subprocess.Popen | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        # ‏#2427: סבבים שנסגרו (``stop(id)``) לפני שה-``start`` שלהם הגיע. ה-commit
+        # ל-running קודם ל-``on_running``, וסגירה שנכנסה ביניהם הייתה no-op —
+        # ו-udp-sender עלה אחריה לסבב סגור. חסום: מזהה ישן שלא יתחיל לעולם יוצא.
+        self._closed_early: deque[str] = deque(maxlen=64)
         # ‏#989: הדגימה הקודמת של הלוג הנוכחי — (נתיב, mtime, בייטים) —
         # והקצב האחרון שנגזר ממנה. נדגם רק כשמישהו קורא את `/room`.
         self._pace_sample: tuple[Path, float, int] | None = None
@@ -572,12 +577,29 @@ class SenderEngine:
 
     # --- API ------------------------------------------------------------------
 
-    def start(self, session: dict) -> None:
-        """נקרא כשסבב עובר ל-running. חוזר מיד; השידור רץ ברקע."""
+    def start(self, session: dict) -> str | None:
+        """נקרא כשסבב עובר ל-running. חוזר מיד; השידור רץ ברקע.
+
+        ‏#2427: מחזיר ``None`` כשהשידור הופעל, אחרת את הסיבה שלא — והקורא
+        מכשיל את הסבב בשמו. עד כאן הסירוב נבלע ב-log, והסבב נשאר ``running``
+        בלי משדר. שידור קודם שנעצר (``stop``) ועוד מסיים — ממתינים לו, בתקרה."""
+        sid = session["id"]
         with self._lock:
+            refused = self._closed_before_start(sid)
+            thread, stopping = self._thread, self._stop.is_set()
+        if refused:
+            return refused
+        if thread is not None and thread.is_alive() and stopping:
+            thread.join(STOP_TERM_WAIT + STOP_KILL_WAIT + 1.0)   # מחוץ לנעילה: on_event קורא status()
+        with self._lock:
+            refused = self._closed_before_start(sid)
+            if refused:
+                return refused
             if self._thread is not None and self._thread.is_alive():
-                log.warning("sender already running; ignoring start of %s", session["id"])
-                return
+                busy = self._state.session_id if self._state is not None else "?"
+                log.warning("sender already running (%s); refusing start of %s", busy, sid)
+                return (f"השידור של {sid} לא הופעל: udp-sender של הסבב {busy}"
+                        " עדיין רץ בשרת")
             self._stop.clear()
             self._state = SendState(
                 session_id=session["id"], image_id=session["image_id"]
@@ -587,6 +609,15 @@ class SenderEngine:
                 name=f"sender-{session['id']}",
             )
             self._thread.start()
+        return None
+
+    def _closed_before_start(self, session_id: str) -> str | None:
+        """תחת ``_lock``. סבב שנסגר לפני ה-``start`` שלו — סיבה, ומוסר מהרשימה."""
+        if session_id not in self._closed_early:
+            return None
+        self._closed_early.remove(session_id)
+        log.warning("sender: %s was closed before its start arrived; not starting", session_id)
+        return f"הסבב {session_id} נסגר לפני שהשידור שלו התחיל — udp-sender לא הופעל"
 
     def stop(self, session_id: str | None = None) -> int | None:
         """הורג את udp-sender וקורא בחזרה שהוא מת (#439).
@@ -607,6 +638,9 @@ class SenderEngine:
             if session_id is not None and session_id != current:
                 log.info("sender: ignoring stale stop of %s (current is %s)",
                          session_id, current)
+                # ‏#2427: ואם ה-start שלו עוד בדרך — הוא לא יפעיל udp-sender.
+                if session_id not in self._closed_early:
+                    self._closed_early.append(session_id)
                 return None
             self._stop.set()
             process = self._process
@@ -1082,6 +1116,27 @@ class SenderEngine:
             return []
 
     def _run(self, session: dict) -> None:
+        """‏#2427: שומר עליון. חריגה בתהליכון (למשל ``database is locked`` מ-
+        ``journal`` דרך ``on_event``) השאירה ``starting`` לתמיד, בלי ``send_failed``
+        ובלי שמישהו יעצור את udp-sender שכבר רץ."""
+        try:
+            self._send(session)
+        except Exception as exc:                 # noqa: BLE001 — כאן נגמר התהליכון
+            log.exception("sender: the sender thread of %s crashed", session["id"])
+            with self._lock:
+                process = self._process
+            if process is not None and process.poll() is None:
+                self._reap(process)
+            with self._lock:
+                if self._process is process:
+                    self._process = None
+            try:
+                self._fail(f"תהליכון השידור נפל ({type(exc).__name__}: {exc})"
+                           " — השידור הופסק")
+            except Exception:                    # noqa: BLE001 — המצב כבר failed
+                log.exception("sender: reporting the crash of %s failed too", session["id"])
+
+    def _send(self, session: dict) -> None:
         if self.gate is not None:
             refused = self.gate(self.interface)
             if refused:
@@ -1132,14 +1187,24 @@ class SenderEngine:
                     number, bitrate)
                 log_path = partition_log(path)
                 log.info("sending partition %s/%s: %s", number, len(partitions), part["file"])
-                try:
-                    process = self.runner(cmd)
-                except OSError as exc:
-                    self._fail(f"udp-sender לא רץ: {exc}")
-                    return
+                # ‏#2427: בדיקת העצירה וההפעלה הן צעד אחד, תחת הנעילה ש-``stop`` לוקח.
+                # בלי זה ``stop`` בין מחיצות מצא ``_process=None``, החזיר "התהליך
+                # איננו", ו-udp-sender של המחיצה הבאה עלה אחריו לסבב שנסגר.
+                process, spawn_error = None, None
                 with self._lock:
-                    self._process = process
-                    self._state.commands.append(cmd)
+                    if not self._stop.is_set():
+                        try:
+                            process = self.runner(cmd)
+                        except OSError as exc:
+                            spawn_error = exc
+                        else:
+                            self._process = process
+                            self._state.commands.append(cmd)
+                if spawn_error is not None:
+                    self._fail(f"udp-sender לא רץ: {spawn_error}")
+                    return
+                if process is None:
+                    break
                 code = self._wait_sampling(process, log_path,
                                            session["id"] if number == 1 else None)
                 with self._lock:

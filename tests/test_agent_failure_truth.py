@@ -30,6 +30,7 @@ def grow_box(tmp_path: Path, stubs: dict[str, str]) -> tuple[str, Path]:
         f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress", "failmark")}'
         f'. {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
         'partition_node() { printf "/dev/%s%s\\n" "$1" "$2"; }; '
+        'target_bind sda; '   # #2434: the disk chosen, as target_init binds it
     )
     return setup, run
 
@@ -87,7 +88,7 @@ def test_restore_plan_count_failure_is_named_before_any_partition_stream(tmp_pat
     script = (
         f'RUN_DIR={posix(run)!r}; LOG_FILE={posix(run / "agent.log")!r}; '
         f'. {posix(AGENT)}/lib/restore/restore.sh; '
-        'target_set() { :; }; disk_fits() { return 0; }; boot_ca_preflight() { return 0; }; apply_gpt() { return 0; }; '
+        'target_set() { :; }; disk_fits() { return 0; }; boot_ca_preflight() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; '
         'write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; '
         'expand_last() { return 0; }; manifest_plan() { echo "1|g|linux|ext4|1|512|p|s"; }; '
         'awk() { return 7; }; restore_partition() { echo STREAMED; return 0; }; '

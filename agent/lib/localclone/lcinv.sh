@@ -57,7 +57,7 @@ lc_layout_need() {
 _lc_os_name() {
     # $1 = node, $2 = fs. PRETTY_NAME of a Linux root, read-only, or nothing.
     _lo_m="$RUN_DIR/lc-probe"; mkdir -p "$_lo_m"
-    _lo_o=ro; case "$2" in ext2|ext3|ext4) _lo_o=ro,noload ;; esac
+    _lo_o=ro; case "$2" in ext2|ext3|ext4) _lo_o=ro,noload ;; btrfs) _lo_o=ro,nologreplay ;; xfs) _lo_o=ro,norecovery ;; esac   # #2430: a bare ro replays a journal
     mount -t "$2" -o "$_lo_o" "$1" "$_lo_m" 2>> "$LOG_FILE" || return 0
     sed -n 's/^PRETTY_NAME="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$_lo_m/etc/os-release" 2>/dev/null | head -n 1
     umount "$_lo_m" 2>> "$LOG_FILE"

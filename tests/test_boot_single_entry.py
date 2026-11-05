@@ -123,7 +123,7 @@ def test_the_single_entry_is_called_plainly_imagesrv():
     ערך אחד הוא רק שואל את המפעיל שאלה שאין לו דרך לענות עליה."""
     for role in ["classroom", "build"]:
         text = render(answer(role=role), CFG)
-        assert 'menuentry "ImageSrv" --id imagesrv {' in text   # #1302: השם הגלוי; ה-id נשאר
+        assert 'menuentry "ImageSrv" --unrestricted --id imagesrv {' in text   # #1302: השם הגלוי; ה-id נשאר
         assert 'echo "Loading ImageSrv..."' in text and "Loading ImageCtl" not in text
         assert "recovery / imaging" not in text
         text.encode("ascii")                    # פלט GRUB תמיד ASCII

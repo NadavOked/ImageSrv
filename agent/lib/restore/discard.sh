@@ -25,7 +25,9 @@ DISCARD_MAX_S="${DISCARD_MAX_S:-180}"
 
 discard_before_restore() {
     # $1 = disk name. 0 = trimmed, not trimmable, or the TRIM failed (logged);
-    # 2 = the TRIM did not end within DISCARD_MAX_S -- the caller fails the disk.
+    # 2 = the TRIM did not end within DISCARD_MAX_S, or the disk is not the one
+    # chosen (#2434: assert_target already failed it, by that reason) -- the caller fails the disk.
+    assert_target "$1" || return 2
     _db_q="$SYSROOT/sys/block/$1/queue"
     _db_rot=$(cat "$_db_q/rotational" 2>/dev/null)
     _db_max=$(cat "$_db_q/discard_max_bytes" 2>/dev/null)

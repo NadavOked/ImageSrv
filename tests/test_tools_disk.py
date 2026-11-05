@@ -96,10 +96,15 @@ def run_disk(
     box.mkdir(exist_ok=True)
     if fakes:
         make_fakes(box)
+    # #2431: the device must be a whole disk the kernel lists -- these two.
+    root = tmp_path / "sysroot"
+    for disk in ("sda", "nvme0n1"):
+        (root / "sys" / "block" / disk).mkdir(parents=True, exist_ok=True)
+        (root / "sys" / "block" / disk / "size").write_text("1000215216\n", newline="\n")
     # Git Bash needs a Unix pwd on PATH — a raw Windows path is invisible
     # to command -v (same pattern as test_smart / test_agent stubs).
     script = (
-        f"export RUN_DIR=$(cd {posix(run)!r} && pwd) MACHINE_NAME=lab-pc "
+        f"export RUN_DIR=$(cd {posix(run)!r} && pwd) MACHINE_NAME=lab-pc SYSROOT={posix(root)!r} "
         f"FAKE_LOG=$(cd {posix(tmp_path)!r} && pwd)/touched.log "
         f'PATH="$(cd {posix(box)!r} && pwd):/usr/bin:/bin"; '
         f"{env_extra}"

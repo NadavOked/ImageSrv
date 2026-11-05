@@ -137,6 +137,20 @@ class VersionError(RuntimeError):
         self.category = category
 
 
+def downgrade_refusal(current: str | None, tag: str) -> str | None:
+    """‏#2419: ‏"החל עדכון" אינו מוריד גרסה. החזרה לגרסה ישנה היא "חזרה לגרסה
+    הקודמת" (‏``/revert``) בלבד — מפורשת, ועם חלון אישור משלה. אותה גרסה מותרת
+    (ניסיון חוזר, ‏``updRetry``). גרסה נוכחית שלא נקראה אינה ראיה לירידה: אותו
+    כלל כמו ``check_update``, שמציע את האחרונה כשהבסיס אינו ידוע."""
+    base = _base_version(current)
+    if base is None or semver_key(tag) is None:
+        return None
+    if semver_key(tag) >= semver_key(base):
+        return None
+    return (f"{tag} ישנה מהגרסה המותקנת {base} — \"החלת עדכון\" אינה מורידה גרסה."
+            " חזרה לגרסה הקודמת נעשית בכפתור \"חזרה לגרסה הקודמת\"")
+
+
 def _describe_error(err: str) -> str:
     if _NOT_INSTALLED in err:
         return "git-missing"
@@ -637,7 +651,7 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
                f"current={result['current']} latest={result['latest']}", user[0])
         return result
 
-    def _apply_or_revert(user, tag: str, force: bool = False):
+    def _apply_or_revert(user, tag: str, force: bool = False, revert: bool = False):
         if not enabled(ctx.conn):
             raise HTTPException(404, "עדכון כבוי בהגדרות השרת")
         blocker = restart_blocker(busy_source or ctx)
@@ -655,6 +669,10 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
             if now.get("state") == "running":
                 raise HTTPException(409, f"עדכון ל-{now.get('tag')} כבר רץ — ממתינים "
                                          "שיסתיים (השרת יאותחל) לפני עדכון נוסף")
+            # ‏#2419: ירידת גרסה רק דרך /revert. בתוך הנעילה, כמו השומר "כבר רץ".
+            older = None if revert else downgrade_refusal(current_version(hooks, repo_dir), tag)
+            if older:
+                raise HTTPException(409, older)
             try:
                 started = start_apply(ctx, hooks, repo_dir, tag, user[0], forced=blocker or None)
             except UpgradeLaunchError as exc:
@@ -687,6 +705,6 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
         if not previous:
             raise HTTPException(404, "אין גרסה קודמת לחזור אליה")
         force = isinstance(body, dict) and body.get("force") is True   # ‏#1891
-        return _apply_or_revert(user, previous, force=force)
+        return _apply_or_revert(user, previous, force=force, revert=True)
 
     return router

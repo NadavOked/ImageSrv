@@ -133,7 +133,8 @@ def fail_run(tmp_path, *, script, state="writing", error="", since="300", dmesg=
 def test_a_failed_target_wipes_the_gpt_after_recording_failure(tmp_path):
     """הבקרה המרכזית של #874: אחרי כשל **אין** קריאה ל-sgdisk כלל. בקרה
     שלילית: על main (#845) ‏sgdisk.calls מכיל `-p` ואז `-c 1:IMAGESRV-FAILED`."""
-    box, run, out = fail_run(tmp_path, script='fail_written_target sda "partition 3: stream cut"; echo "rc=$?"')
+    # #2434: the wipe is of the disk chosen -- bound as target_init does, with IDENT's identity
+    box, run, out = fail_run(tmp_path, script='target_bind sda; fail_written_target sda "partition 3: stream cut"; echo "rc=$?"')
     assert out.strip().endswith("rc=0"), out
     assert zap_calls(box) == [f"--zap-all {posix(box)}/dev/sda"]
     assert (run / "targets" / "sda" / "state").read_text().strip() == "failed"
@@ -152,7 +153,7 @@ def test_a_target_rejected_before_writing_is_failed_without_any_wipe(tmp_path):
 def test_write_start_is_recorded_on_the_vm_path_where_targets_does_not_exist(tmp_path):
     """‏#1427 (פתיחה מחדש): במסלול ה-VM אין `targets/loop0/` — ה-redirect נכשל."""
     _box, run, out = fail_run(tmp_path, write_started=False, script=(
-        'disk_serial() { :; }; target_write_started loop0; echo "ws=$?"'))
+        'disk_serial() { :; }; target_bind loop0; target_write_started loop0; echo "ws=$?"'))   # #2434: vmdisk binds its loop first
     assert "ws=0" in out, out
     assert (run / "targets" / "loop0" / "write_started").exists()
 
@@ -162,7 +163,7 @@ def test_a_disk_without_a_serial_is_written_and_never_wiped_on_failure(tmp_path)
     ‏#1409 סירב לכתוב אליהם בכלל — כל עדכון VM נכשל. הזהות נדרשת רק לניקוי
     שאחרי כשל, ולכן: הכתיבה ממשיכה, והניקוי לא קורה בלי זהות."""
     box, run, out = fail_run(tmp_path, write_started=False, script=(
-        'disk_serial() { :; }; target_write_started sda; echo "ws=$?"; '
+        'disk_serial() { :; }; target_bind sda; target_write_started sda; echo "ws=$?"; '
         'fail_written_target sda "stream cut"'))
     assert "ws=0" in out, out
     assert sgdisk_calls(box) == [], "GPT נמחק בלי זהות יעד"
@@ -317,7 +318,10 @@ def test_ata_port_of_reads_the_ata_component_of_the_device_link(tmp_path):
 
 #: ‏apply_gpt (שהטסטים כאן עוקפים) רושם write_started לפני הזרם — בלעדיו אין
 #: ראיה ואין ניקוי, כי לא נוסתה כתיבה (#1429).
-WRITTEN = "target_write_started sda; target_write_started sdb; "
+#: ‏#2434: ‏target_init (ב-drawer_run) קשר את הדיסקים לפני ש-IDENT הוזרק — הקשירה
+#: מחדש היא "הדיסקים שנבחרו הם אלה של IDENT".
+BOUND = "target_bind sda; target_bind sdb; "
+WRITTEN = BOUND + "target_write_started sda; target_write_started sdb; "
 
 
 def test_only_the_drawer_that_failed_carries_evidence_and_no_disk_is_renamed(tmp_path):
@@ -344,7 +348,7 @@ def test_only_the_drawer_that_failed_carries_evidence_and_no_disk_is_renamed(tmp
 def test_a_wave_that_succeeds_leaves_no_evidence(tmp_path):
     box = tmp_path / "box"
     run, out = drawer_run(
-        tmp_path, IDENT + call(GOOD_SHA, disks=("sda", "sdb")),
+        tmp_path, IDENT + BOUND + call(GOOD_SHA, disks=("sda", "sdb")),
         {"fanout": GOOD_FANOUT, "sgdisk": stub_for(box)},
         disks=("sda", "sdb"),
     )

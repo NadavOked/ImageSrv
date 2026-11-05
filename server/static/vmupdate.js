@@ -109,7 +109,8 @@ function vmuClock(seconds) {
 function vmuGB(bytes) { return bytes == null ? "—" : (Number(bytes) / 1e9).toFixed(1) + " GB"; }
 function vmuDays(seconds) { const d = Math.ceil((Number(seconds) || 0) / 86400); return d <= 1 ? "יום" : `${d} ימים`; }
 function vmuName(st) { return (st && st.image_name) || "אימג'"; }
-function vmuVersion(st) { return st && st.image_version ? `v${st.image_version}` : ""; }
+// ‏#2420: ‏HTML — הערך מגיע מהמניפסט ונכנס ל-innerHTML (הפס "VM רץ" שבכל עמוד, כרטיסי ההכנה).
+function vmuVersion(st) { return st && st.image_version ? `v${esc(st.image_version)}` : ""; }
 function vmuMine(st) { return !!st && st.you_control; }
 /* הודעה בתוך חלון — UI.note מעוצב רק בתוך ‏.page, החלונות יושבים מחוצה לו. */
 function vmuNote(kind, html) { return `<div class="n-note vmu-note ${esc(kind)}"><span>${html}</span></div>`; }

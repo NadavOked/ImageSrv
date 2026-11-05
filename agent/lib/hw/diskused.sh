@@ -24,6 +24,7 @@
 DU_DIR="${GUI_DIR:-$RUN_DIR/gui}/used"
 
 _du_round_open() {
+    [ ! -f "${LC:-$RUN_DIR/lc}/screen" ] || return 0   # #2431: the local clone owns the disks there (lcinv mounts them itself)
     for _du_t in "$RUN_DIR"/targets/*/; do [ -d "$_du_t" ] && return 0; done
     return 1
 }
@@ -31,7 +32,7 @@ _du_round_open() {
 _du_mount_used() {
     # $1 = node, $2 = fs. Bytes in use, or nothing when it was not measured.
     _du_m="$DU_DIR/mnt"; mkdir -p "$_du_m" || return 1
-    _du_o=ro; case "$2" in ext2|ext3|ext4) _du_o=ro,noload ;; btrfs) _du_o=ro,nologreplay ;; esac
+    _du_o=ro; case "$2" in ext2|ext3|ext4) _du_o=ro,noload ;; btrfs) _du_o=ro,nologreplay ;; xfs) _du_o=ro,norecovery ;; esac   # xfs: #2430
     _probe_mount "$1" "$2" "$_du_o" "$_du_m" || return 1
     _du_b=$(df -kP "$_du_m" 2>> "$LOG_FILE" | awk 'NR==2 && $3 ~ /^[0-9]+$/ { printf "%.0f\n", $3 * 1024 }')
     umount "$_du_m" 2>> "$LOG_FILE" || { log "diskused: $1 would not unmount -- not a measurement"; return 1; }

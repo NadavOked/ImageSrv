@@ -155,7 +155,7 @@ def run_restore_gate(tmp_path: Path, *, sb: int | None, db: bytes | None):
               f". {posix(lib / 'bootcadb.sh')!r}; . {posix(lib / 'restore.sh')!r}; "
               "disk_fits() { return 0; }; "
               "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
-              "apply_gpt() { echo APPLY_GPT; return 1; }; fail_written_target() { :; }; "
+              "plan_gate() { return 0; }; apply_gpt() { echo APPLY_GPT; return 1; }; fail_written_target() { :; }; "
               f"run_restore multicast sda http://s img {posix(manifest)!r}; "
               'echo "rc=$?"')
     proc = subprocess.run([BASH, "-c", script], env=env, cwd=REPO,

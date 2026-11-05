@@ -168,8 +168,10 @@ EOF
             _lc_dev_ok "$_gd_s" || return 1
             case "$_gd_k" in 0|1) ;; *) return 1 ;; esac
             [ -n "$_gd_t" ] || return 1
-            for _gd_d in $(printf '%s' "$_gd_t" | tr ',' ' '); do
+            _gd_seen=" "
+            for _gd_d in $(printf '%s' "$_gd_t" | tr ',' ' '); do   # #2431: each target once
                 _lc_dev_ok "$_gd_d" && [ "$_gd_d" != "$_gd_s" ] || return 1
+                case "$_gd_seen" in *" $_gd_d "*) return 1 ;; esac; _gd_seen="$_gd_seen$_gd_d "
             done
             _lc_req start.req "$_gd_s|$_gd_t|$_gd_k" ;;
         lc-usbset)   # #1914: "הגדרות" -- the USB stick only, and not while a copy runs

@@ -39,7 +39,6 @@ void backend_set_tty(const char *path);
 /* #1362: VT_PROCESS mode -- relsig/acqsig arrive on a switch away / back;
  * answer them with backend_vt_release / backend_vt_acquire. */
 int backend_vt_take(Backend *b, int relsig, int acqsig);
-int backend_vt_activate(Backend *b, int vt);
 void backend_vt_release(Backend *b);
 int backend_vt_acquire(Backend *b);
 /* Puts the display back as it was (saved CRTC / text-mode VT). */

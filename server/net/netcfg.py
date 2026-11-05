@@ -200,18 +200,24 @@ def reachable(address: str, configs: list[NetConfig]) -> bool:
 
 
 def problems(cfg: NetConfig, others: list[NetConfig],
-             dhcp_cfg: dhcp.InterfaceConfig | None = None) -> list[str]:
+             dhcp_cfg: dhcp.InterfaceConfig | None = None,
+             live: dict[str, list[str]] | None = None) -> list[str]:
     """**כל** מה שלא יעבוד בהגדרה, בעברית. רשימה ריקה = מותר לכתוב.
 
     ‏`others` הן ההגדרות של שאר הכרטיסים כפי שהן יהיו *אחרי* השינוי;
     ‏`dhcp_cfg` היא הגדרת ה-DHCP של אותו כרטיס, אם יש. שתי משפחות
     הבדיקות רצות יחד ומחזירות רשימה אחת (ראו ראש הקובץ).
+
+    ‏`live` (‏#2418): הכתובות שעל כל כרטיס **עכשיו** (`ip addr`, שם →
+    ‏["10.10.0.8/16"]). ‏`others` רואה רק כרטיס סטטי — כרטיס הניהול הוא
+    לקוח DHCP, ורשת הפצה שחפפה לרשת שקיבל מהמכללה עברה בלי מילה.
     """
     found: list[str] = []
     if cfg.mode not in MODES:
         return [f"מצב לא מוכר: {cfg.mode!r}"]
     if cfg.mode == MODE_STATIC:
         found += _static_problems(cfg, others)
+        found += _live_clashes(cfg, others, live or {})
     if cfg.mode != MODE_STATIC and (cfg.gateway or cfg.routes):
         found.append("שער ונתיבים סטטיים דורשים כתובת סטטית")
     found += [f"‏DNS: כתובת לא תקינה ({d})" for d in cfg.dns if not _valid_ip(d)]
@@ -273,6 +279,32 @@ def _clash(cfg: NetConfig, network: ipaddress.IPv4Network,
         return [f"הרשת {network} חופפת לרשת של {other.name} ({other_net}) — "
                 "שני כרטיסים באותה רשת שולחים לפי טבלת ניתוב ולא לפי כוונה"]
     return []
+
+
+def _live_clashes(cfg: NetConfig, others: list[NetConfig],
+                  live: dict[str, list[str]]) -> list[str]:
+    """חפיפה עם הרשת **החיה** של כל כרטיס אחר, גם כשאינו סטטי (‏#2418).
+    כרטיס שהגדרתו הסטטית כבר נבדקה ב-`_clash` על אותה רשת — לא פעמיים."""
+    network = cfg.network()
+    if network is None:
+        return []
+    found = []
+    for name in sorted(live):
+        if name == cfg.name or name in cfg.slaves:
+            continue
+        configured = next((o.network() for o in others if o.name == name), None)
+        for cidr in live[name]:
+            try:
+                nic = ipaddress.IPv4Interface(cidr)
+            except ValueError:
+                continue
+            if nic.network != configured and network.overlaps(nic.network):
+                found.append(
+                    f"הרשת {network} חופפת לרשת שעל {name} עכשיו ({nic.network}, "
+                    f"הכתובת {nic.ip}) — גם כשהכרטיס אינו סטטי, הקרנל מנתב לפי "
+                    "הרשת שעליו, וחפיפה מנתקת את מה שמגיע דרכו, כולל הקונסולה")
+                break
+    return found
 
 
 def _route_problems(cfg: NetConfig, others: list[NetConfig]) -> list[str]:

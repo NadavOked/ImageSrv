@@ -19,8 +19,12 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient       # noqa: E402
 
 
-def forge(secret: bytes, username: str, role: str, seconds: int = 3600) -> str:
-    """טוקן חתום בסוד נתון — מה שתוקף היה בונה."""
+def forge(secret: bytes, username: str, role: str, seconds: int = 12 * 3600) -> str:
+    """טוקן חתום בסוד נתון — מה שתוקף היה בונה.
+
+    ‏#2414: ברירת המחדל היא עוגייה שהונפקה עכשיו (תפוגה = עכשיו + ‏TTL). בלי
+    שורה ב-``console_sessions`` חוסר הפעילות נמדד מרגע ההנפקה (תפוגה פחות TTL),
+    ותפוגה של שעה אחת היא עוגייה שהונפקה לפני 11 שעות."""
     payload = f"{username}|{role}|{int(time.time()) + seconds}"
     signature = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}|{signature}"

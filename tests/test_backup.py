@@ -61,7 +61,7 @@ def test_archive_has_db_manifest_sums_and_no_images(tmp_path: Path):
     (data / "branding" / "logo.png").write_bytes(b"PNG")
     (data / "imagesrv.db-wal").write_bytes(b"wal")
     conn = sqlite3.connect(data / "imagesrv.db")
-    conn.execute("CREATE TABLE settings (k TEXT, v TEXT)")
+    conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")   # הצורה של server.db (#2424 מוחק בה שורה)
     conn.commit()
     payload, name = backup_mod.build_archive(conn, data, "v0.53.3")
     assert name.startswith("imagesrv-settings-") and name.endswith(".tar.gz")
@@ -115,8 +115,10 @@ def test_download_restores_to_a_database_with_the_users(server):
     restored.deserialize(members["data/imagesrv.db"])
     names = {row[0] for row in restored.execute("SELECT username FROM users")}
     assert {"noc", "dep"} <= names
+    # ‏#2424 (נדב 04/11): חותם העוגיות אינו בגיבוי — שרת משוחזר מייצר חדש
+    # (tests/test_backup_console_secret_2424.py).
     secret = restored.execute("SELECT value FROM settings WHERE key='console_secret'").fetchone()
-    assert secret and len(secret[0]) >= 32
+    assert secret is None
     assert b"version=v0.53.3" in members["MANIFEST.txt"]
     ev = conn.execute("SELECT event, detail, user FROM journal WHERE event='settings_backup_downloaded'").fetchone()
     assert ev is not None and ev["user"] == "noc" and "bytes" in ev["detail"]

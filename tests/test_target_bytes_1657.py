@@ -28,7 +28,7 @@ RUN_DIR={posix(tmp_path / 'run')!r}; SYSROOT={posix(tmp_path / 'sys')!r}
 mkdir -p "$RUN_DIR/targets" "$SYSROOT/proc"
 printf '1 0\n' > "$SYSROOT/proc/uptime"
 . {posix(progress)!r}
-target_ident_keep() {{ :; }}   # #1602's identity (failmark.sh, sysfs): not what is counted here
+target_ident_keep() {{ :; }}; target_bind() {{ :; }}   # #1602's identity, #2434's bind (failmark.sh, sysfs): not what is counted here
 target_init sda {FIRST + SECOND}
 SAMPLES={posix(samples)!r}; _busy=
 _sample() {{

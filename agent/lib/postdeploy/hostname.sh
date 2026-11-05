@@ -258,7 +258,7 @@ name_this_machine() {
         log "no prefix/suffix in the server answer -- skipping the hostname"
         return 0
     fi
-    echo "naming" > "$RUN_DIR/state"
+    assert_target "$1" || return 0; echo "naming" > "$RUN_DIR/state"   # #2434: it failed by name; the mark stays
     _name=$(compose_hostname "$_prefix" "$_suffix")
     _result=$(write_hostname "$1" "$RUN_DIR/manifest.json" "$_name")
     _hrc=$?

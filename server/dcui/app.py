@@ -1142,13 +1142,40 @@ def curses_main(stdscr, data_dir: Path = DATA_DIR, why_text: str = "") -> None:
         _handle_key(runtime, key, curses)
 
 
-def run(data_dir: Path = DATA_DIR, text_only: bool = False) -> None:
+#: #2438: the kernel line of the server's GRUB entry "ImageSrv recovery (text
+#: console)" (installer/lib/finish.sh) -- both words, which no normal boot has.
+RECOVERY_MARKS = ("nomodeset", "systemd.unit=multi-user.target")
+CMDLINE = Path("/proc/cmdline")
+
+
+def recovery_boot(cmdline: str) -> bool:
+    words = cmdline.split()
+    return all(mark in words for mark in RECOVERY_MARKS)
+
+
+def run(data_dir: Path = DATA_DIR, text_only: bool = False,
+        cmdline: Path | None = None) -> None:
     """#1203: the graphical screen first; the 80x25 text screen only when the
-    graphical one cannot run (no DRM/fbdev, no binary, no fonts) or stops."""
+    graphical one cannot run (no DRM/fbdev, no binary, no fonts) or stops.
+
+    #2438: the graphical screen drops Alt+Fn -- tty2-6 is an OS login. Booted
+    from the recovery entry the text screen comes straight away: it grabs no
+    keyboard, so Alt+F2 is the kernel's and the technician gets tty2's login."""
     import curses
     import sys
 
     from . import gui
-    why = "text screen requested (--text)" if text_only else gui.run(data_dir)
+    cmdline = cmdline or CMDLINE
+    if text_only:
+        why = "text screen requested (--text)"
+    else:
+        try:
+            recovery = recovery_boot(cmdline.read_text(encoding="ascii", errors="replace"))
+        except OSError as exc:
+            print(f"imagesrv-dcui: {cmdline} unreadable ({exc}) -- a normal boot",
+                  file=sys.stderr, flush=True)
+            recovery = False
+        why = ("recovery boot: the text screen, so Alt+F2 reaches tty2's login (#2438)"
+               if recovery else gui.run(data_dir))
     print(f"imagesrv-dcui: text screen: {why}", file=sys.stderr, flush=True)
     curses.wrapper(curses_main, data_dir, why)

@@ -402,4 +402,5 @@ def test_hello_records_the_machine_even_from_another_network(server):
     assert response.status_code == 200
 
     row = net_row(server, ids["mac1"])
-    assert row is not None and row["ip"] == "10.44.12.187"   # ה-ip מגוף ה-hello
+    # ‏#2432: ה-peer של החיבור (‏TestClient = "testclient"), לא ה-ip שבגוף.
+    assert row is not None and row["ip"] == "testclient"

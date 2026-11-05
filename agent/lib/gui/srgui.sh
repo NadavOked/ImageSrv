@@ -145,8 +145,9 @@ sr_gui_start() {
     # $1 = manifest file, $2 = disk. The progress card's head, then the GUI
     # if the handoff did not bring it up. 1 = no GUI to show it on.
     _sg_g="$RUN_DIR/gui"; mkdir -p "$_sg_g" || return 1
-    rm -f "$_sg_g/pace.$2" "$RUN_DIR/targets/$2/partition" "$_sg_g/restore.cancel" "$_sg_g/restore.cancelled" "$RUN_DIR/power.stop"
+    rm -f "$_sg_g/pace.$2" "$RUN_DIR/targets/$2/partition" "$_sg_g/restore.cancel" "$_sg_g/restore.cancelled" "$RUN_DIR/power.stop" "$_sg_g/restore.disk"
     echo "$(date +%s)-$2" > "$_sg_g/restore.id" || return 1   # #1918: this restore's run id -- the power button's stop names it
+    sr_disk_ident "$2" > "$_sg_g/restore.disk" || rm -f "$_sg_g/restore.disk"   # #2431: the one disk a cancel may wipe
     _sg_n=$(json_get "$1" ".name" | tr -d '\r\n' | tr '|' ' '); [ "$_sg_n" != null ] || _sg_n=
     # title= is 128 bytes in the GUI: a longer name is left out, not cut mid-letter
     [ "$(printf '%s' "$_sg_n" | wc -c)" -le 90 ] || _sg_n=
@@ -268,12 +269,17 @@ sr_stop_stream() {
 }
 
 sr_cancel_requested() { [ -f "$RUN_DIR/gui/restore.cancel" ]; }
+sr_disk_ident() { _si_z=$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null); case "$_si_z" in ''|*[!0-9]*) return 1 ;; esac; printf '%s|%s\n' "$(disk_serial "$1")" "$_si_z"; }   # serial|sectors
 
 sr_cancelled() {
     # $1 = disk, $2 = the reporter's pid. Principle 4: an empty disk, never a
     # half-written one that looks whole -- the primary and backup GPT go. 0 =
     # wiped (sgdisk exit 0): the card says so, the caller counts to the
     # power-off. 1 = not wiped: said on the screen, the machine held for a person.
+    _sc_id=$(sr_disk_ident "$1") && [ "$_sc_id" = "$(cat "$RUN_DIR/gui/restore.disk" 2>/dev/null)" ] || {   # #2431: the disk it began on only
+        target_set "$1" failed "השחזור בוטל, אבל הדיסק ב-$1 אינו זה שהשחזור התחיל עליו (או שלא נקרא) — הטבלה לא נמחקה"
+        sr_gui_message "השחזור בוטל — הטבלה לא נמחקה" "הדיסק במחשב אינו זה שהשחזור התחיל עליו. בדקו אותו לפני שמאתחלים ממנו." || :
+        log "WARNING: restore: cancelled, but $1 is not the disk the restore began on (${_sc_id:-unreadable}) -- nothing wiped"; return 1; }
     if sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 ||
         sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1; then   # #1545: a damaged old table needs the second
         blockdev --rereadpt "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 || log "$1: re-read of the wiped table failed (the kernel keeps the old view)"

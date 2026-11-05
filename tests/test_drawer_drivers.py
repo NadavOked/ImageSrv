@@ -67,6 +67,7 @@ class Drawers(Box):
     def stage_drawers(self) -> subprocess.CompletedProcess:
         out = subprocess.run(
             [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + self.script
+             + 'target_bind sda; target_bind sdb; '   # #2434: the drawers chosen, as target_init binds them
              + 'stage_drawer_drivers ses_1 /dev/null sda sdb; echo "rc=$?"'],
             capture_output=True, text=True, encoding="utf-8",
             cwd=str(AGENT.parent), stdin=subprocess.DEVNULL,

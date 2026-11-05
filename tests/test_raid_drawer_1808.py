@@ -56,7 +56,8 @@ def box(tmp_path: Path, images: dict[str, bytes], stubs: dict[str, str] | None =
            f"SYSROOT={posix(tmp_path)!r} LOG_FILE={posix(run / 'log')!r} IMAGESRV_TEST=1 D_ROLE=cloner; "
            + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in LIBS)
            + "attended() { shift; \"$@\"; }; attended_power_check() { :; }; "
-           + 'disk_port() { case "$1" in sda) echo 1;; sdb) echo 2;; esac; }; ')
+           + 'disk_port() { case "$1" in sda) echo 1;; sdb) echo 2;; esac; }; '
+           + "".join(f"target_bind {name}; " for name in images))   # #2434: the drawers chosen, as target_init binds them
     return pre, run
 
 

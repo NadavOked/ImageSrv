@@ -11,10 +11,16 @@ FB_DEV="${FB_DEV:-/dev/fb0}"
 # HERE, on the machine, reported in hello, and rewritten by imagesrv-monitor
 # at every successful authentication (#1837). Direction matters: hello is
 # unauthenticated, so a secret the server handed out in its answer could be
-# fetched by anyone posting this machine's MAC. The reverse flow only lets
-# a rogue hello overwrite the row (monitor DoS until the next real hello),
-# never learn the secret. Only the server's proxy answers the RFB challenge
-# with HMAC(secret, challenge); the browser never sees it.
+# fetched by anyone posting this machine's MAC. The reverse flow does not
+# let a rogue hello learn the secret -- but it is NOT only a DoS (#2432): a
+# machine that spoofs this MAC and holds its DHCP lease passes the identity
+# check, reports its own secret, and the admin's monitor session (screen and
+# keystrokes) goes to its own RFB server. Since #2432 the server connects to
+# the hello's peer address, never an "ip" from the body, so the impostor must
+# sit on the leased address itself. The secret also travels in clear in every
+# hello. Closing this needs TLS / a per-machine key (#1076). Only the server's
+# proxy answers the RFB challenge with HMAC(secret, challenge); the browser
+# never sees it.
 _monitor_secret_file() {
     printf '%s' "${MONITOR_SECRET_FILE:-${RUN_DIR:-/run/imagesrv}/monitor.secret}"
 }

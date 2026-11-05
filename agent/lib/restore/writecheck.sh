@@ -59,6 +59,7 @@ _wc_body() {
         [ "$(wc -c < "$_wb_w/pat.$_wb_i" 2>/dev/null | tr -d ' ')" = "$_wb_b" ] \
             || { echo "unchecked|לא נוצר דפוס לבדיקה (urandom)"; return; }
     done
+    assert_target "$_wb_d" || { echo "failed|$(cat "$RUN_DIR/targets/$_wb_d/error" 2>/dev/null)"; return; }   # #2434: not the disk chosen = failed, never "unchecked"
     target_write_started "$_wb_d" || { echo "unchecked|לא ניתן לשמור את זהות היעד לפני הכתיבה"; return; }
     _wb_i=0; _wb_t0=$(cut -d' ' -f1 "$SYSROOT/proc/uptime" 2>/dev/null)
     for _wb_o in "$@"; do   # all three written before any is read back
@@ -233,7 +234,8 @@ write_check_round() {
     _wr_m=$1; shift
     for _wr_d in "$@"; do
         target_set "$_wr_d" writing
-        disk_fits "$_wr_d" "$_wr_m" && { [ ! -s "$RUN_DIR/targets/$_wr_d/raid_wipe" ] || raid_wipe "$_wr_d"; } && write_check "$_wr_d"   # #1808: the old RAID metadata the operator let go, before the first test write
+        # #1808: the old RAID metadata the operator let go, before the first test write; #2412: the whole plan before both
+        disk_fits "$_wr_d" "$_wr_m" && plan_gate "$_wr_d" "$_wr_m" && { [ ! -s "$RUN_DIR/targets/$_wr_d/raid_wipe" ] || raid_wipe "$_wr_d"; } && write_check "$_wr_d"
     done
     write_speed_verdict "$_wr_m" "$@" || :
 }

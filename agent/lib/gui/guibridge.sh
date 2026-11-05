@@ -3,8 +3,9 @@
 # (function defs only, inert there) so the load gate (#84) sees every lib.
 gui_error() {
     printf 'native-gui bridge: %s\n' "${2:-$1}" >&2   # $1 Hebrew for the screen, $2 English for the log
+    _ge_m=$(printf '%s' "$1" | tr '\r\n' '  ')   # #2431: a server detail's newline was a record of its own
     printf 'toast=%s\nform_error=%s\nroom_error=%s\nclass_error=%s\n' \
-        "$1" "$1" "$1" "$1" > "$GUI_DIR/error.next" &&
+        "$_ge_m" "$_ge_m" "$_ge_m" "$_ge_m" > "$GUI_DIR/error.next" &&
         mv "$GUI_DIR/error.next" "$GUI_DIR/error"
     return 1
 }
