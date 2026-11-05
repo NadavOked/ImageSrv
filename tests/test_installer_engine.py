@@ -12,6 +12,7 @@ import pytest
 
 import sizelimit
 from agentlib import flat_lib
+from test_grub_server_lock_2450 import _tools as grub_tools, sh_path
 
 REPO = Path(__file__).resolve().parent.parent
 ENGINE = REPO / "installer" / "imagesrv-install"
@@ -117,7 +118,9 @@ def _shim(path: Path, body: str) -> None:
 # (grub-common 2.12, trixie) -- UUID= only when /dev/disk/by-uuid/<uuid>
 # exists in the target, else the device name. The recovery entry is ours
 # (41_imagesrv_recovery) and always UUID. GRUB_IGNORES_UUID stands for an
-# update-grub that writes the device anyway.
+# update-grub that writes the device anyway. #2450: 00_header's
+# menuentry_id_option, then the target's own 01_imagesrv_lock (it needs
+# grub-mkpasswd-pbkdf2 on PATH: `grub_tools`), then 10_linux's entry passing it.
 _FAKE_GRUB = r"""
 fake_grub() {
     _fg_t=$1; shift
@@ -129,12 +132,20 @@ fake_grub() {
         if [ -L "$_fg_t/dev/disk/by-uuid/$_fg_u" ] && [ -z "${GRUB_IGNORES_UUID:-}" ]; then _fg_r=UUID=$_fg_u
         else _fg_r=$_fg_d; fi
         mkdir -p "$_fg_t/boot/grub" || return 1
-        printf 'menuentry "Debian GNU/Linux" {\n\tlinux\t/boot/vmlinuz-6.12.113+deb13-amd64 root=%s ro  quiet\n}\n' "$_fg_r" > "$_fg_t/boot/grub/grub.cfg"
+        printf 'if [ x"${feature_menuentry_id}" = xy ]; then\n  menuentry_id_option="--id"\nfi\n' > "$_fg_t/boot/grub/grub.cfg"
+        if [ -f "$_fg_t/etc/grub.d/01_imagesrv_lock" ]; then
+            sed "s#/etc/imagesrv/#$_fg_t/etc/imagesrv/#g" "$_fg_t/etc/grub.d/01_imagesrv_lock" | sh >> "$_fg_t/boot/grub/grub.cfg" || return 1
+        fi
+        printf "menuentry 'Debian GNU/Linux' --class debian %s 'gnulinux-simple' {\n\tlinux\t/boot/vmlinuz-6.12.113+deb13-amd64 root=%s ro  quiet\n}\n" '$menuentry_id_option' "$_fg_r" >> "$_fg_t/boot/grub/grub.cfg"
         printf 'menuentry "ImageSrv recovery (text console)" {\n    linux /vmlinuz root=UUID=%s ro nomodeset\n}\n' "$_fg_u" >> "$_fg_t/boot/grub/grub.cfg" ;;
     esac
 }
 """
 ROOT_UUID = "0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d"
+# #2450: what imagesrv-install sources after finish.sh; only if it is there, so
+# that these harnesses still run against an engine that predates it.
+_GRUBLOCK = (f"if [ -f '{(INSTALLER / 'lib' / 'grublock.sh').as_posix()}' ]; "
+             f"then . '{(INSTALLER / 'lib' / 'grublock.sh').as_posix()}'; fi")
 
 
 def _command_shims(tmp_path: Path, env: dict[str, str], *, debootstrap_rc: int = 0) -> Path:
@@ -309,7 +320,9 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "install", "install", "install", "chroot",   # #1569: the boot screen
         "mkdir", "cp", "cp", "verify-package-pool", "write-target",
         "write-target", "write-target", "write-target", "cp", "printf",
-        "chroot", "chroot", "write-target", "write-target", "chroot", "chroot", "ln", "chroot", "blkid", "blkid",
+        "chroot", "chroot", "write-target",
+        "write-target", "write-target",   # #2450: the GRUB password and 01_imagesrv_lock
+        "write-target", "chroot", "chroot", "ln", "chroot", "blkid", "blkid",
         "write-target", "write-target", "write-target", "chroot", "chroot", "write-target", "chroot",
         "write-target",   # #2144: /etc/chrony/conf.d/imagesrv.conf
         "write-target", "write-target-secret",
@@ -329,6 +342,11 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
     grub_cfg = "+ write-target mode=0644 <target>/etc/default/grub.d/imagesrv.cfg"
     recovery = "+ write-target mode=0755 <target>/etc/grub.d/41_imagesrv_recovery"
     assert lines.index(grub_cfg) < lines.index(recovery) < lines.index("+ chroot <target> update-grub")
+    # #2450: the password (root-only) and the lock before update-grub, and no password printed
+    password = "+ write-target mode=0600 <target>/etc/imagesrv/grub-password"
+    lock = "+ write-target mode=0755 <target>/etc/grub.d/01_imagesrv_lock"
+    assert lines.index(grub_cfg) < lines.index(password) < lines.index(lock) < lines.index(recovery)
+    assert "grub.pbkdf2" not in got.stdout and "<generated>" not in got.stdout
     # #2137: the by-uuid link update-grub reads is there before it runs
     link = "+ ln -sf '<root-device>' '<target>/dev/disk/by-uuid/<root-uuid>'"
     assert lines.index(recovery) < lines.index(link) < lines.index("+ chroot <target> update-grub")
@@ -355,6 +373,7 @@ def test_grub_menu_is_hidden_with_an_esc_window_written_before_update_grub(tmp_p
     calls = tmp_path / "calls"
     harness = tmp_path / "harness.sh"
     harness.write_text(f"""set -u
+PATH='{sh_path(grub_tools(tmp_path)[0])}':$PATH   # #2450: grub-mkpasswd-pbkdf2
 DRY_RUN=0 TARGET='{target.as_posix()}' CDROM='{tmp_path.as_posix()}' ANSWER_DISK=/dev/sda ANSWER_ROOT_PASS='{ROOT_PW}'
 SYSROOT='{tmp_path.as_posix()}'   # no efivars here: the NVRAM branch is another test's (#2093)
 log() {{ printf '%s\\n' "$*" >> '{calls.as_posix()}'; }}
@@ -369,6 +388,7 @@ write_target() {{
     mkdir -p "$TARGET${{2%/*}}" && printf '%s' "$3" > "$TARGET$2"
 }}
 . '{(INSTALLER / "lib" / "finish.sh").as_posix()}'
+{_GRUBLOCK}
 install_bootloader
 """, newline="\n")
     got = subprocess.run([SH, str(harness)], text=True, capture_output=True,
@@ -380,8 +400,9 @@ install_bootloader
     assert log.index(write) < log.index(f"chroot {target.as_posix()} update-grub"), log
     cfg = (target / "etc" / "default" / "grub.d" / "imagesrv.cfg").read_text(encoding="utf-8")
     settings = [line for line in cfg.splitlines() if line and not line.startswith("#")]
-    # hidden with 0 would leave no window in which to press Esc
-    assert settings == ["GRUB_TIMEOUT_STYLE=hidden", "GRUB_TIMEOUT=3"]
+    # hidden with 0 would leave no window in which to press Esc; #2450: no
+    # Debian recovery entries (they would boot without the GRUB password)
+    assert settings == ["GRUB_TIMEOUT_STYLE=hidden", "GRUB_TIMEOUT=3", "GRUB_DISABLE_RECOVERY=true"]
 
     recovery = target / "etc" / "grub.d" / "41_imagesrv_recovery"
     text = recovery.read_text(encoding="utf-8")
@@ -405,6 +426,7 @@ def _grub_root_harness(tmp_path: Path, **probe: str):
     knobs = "".join(f"{key}='{value}'\nexport {key}\n" for key, value in probe.items())
     harness = tmp_path / "harness.sh"
     harness.write_text(f"""set -u
+PATH='{sh_path(grub_tools(tmp_path)[0])}':$PATH   # #2450: grub-mkpasswd-pbkdf2
 {knobs}DRY_RUN=0 TARGET='{target.as_posix()}' CDROM='{tmp_path.as_posix()}' ANSWER_DISK=/dev/sda ANSWER_ROOT_PASS='{ROOT_PW}'
 SYSROOT='{tmp_path.as_posix()}'
 log() {{ printf '%s\\n' "$*" >> '{calls.as_posix()}'; }}
@@ -414,8 +436,9 @@ must_run() {{ shift 2; "$@" || exit 2; }}
 {_FAKE_GRUB}
 chroot() {{ log "chroot $*"; fake_grub "$@"; }}
 mount() {{ return 1; }}
-write_target() {{ log "write-target $1 $2"; }}
+write_target() {{ log "write-target $1 $2"; mkdir -p "$TARGET${{2%/*}}" && printf '%s' "$3" > "$TARGET$2"; }}
 . '{(INSTALLER / "lib" / "finish.sh").as_posix()}'
+{_GRUBLOCK}
 install_bootloader
 log done
 """, newline="\n")
@@ -604,6 +627,8 @@ def _full_install_box(tmp_path):
     import gzip
     box = _machine(tmp_path)
     calls = _command_shims(tmp_path, box["env"])
+    # #2450: update-grub runs the target's 01_imagesrv_lock, which hashes with grub-mkpasswd-pbkdf2
+    box["env"]["PATH"] = str(grub_tools(tmp_path, "grub-bin")[0]) + os.pathsep + box["env"]["PATH"]
     target, mounts, bindir = box["target"], box["mounts"], tmp_path / "bin"
     (box["root"] / "sys" / "firmware" / "efi" / "efivars").mkdir(parents=True)   # a UEFI machine
     efivars = f"{target}/sys/firmware/efi/efivars"
@@ -866,7 +891,7 @@ exec '{OPENSSL}' "$@"
 """)
     harness = tmp_path / "harness.sh"
     harness.write_text(f"""set -u
-PATH='{bindir.as_posix()}':$PATH
+PATH='{bindir.as_posix()}':'{sh_path(grub_tools(tmp_path, "grub-bin")[0])}':$PATH
 DRY_RUN=0 TARGET='{target.as_posix()}' CDROM='{cdrom.as_posix()}' ANSWER_DISK=/dev/sda
 ANSWER_ROOT_PASS='{root_pass}'
 SYSROOT='{tmp_path.as_posix()}'   # no efivars here: the NVRAM branch is another test's (#2093)
@@ -877,8 +902,9 @@ must_run() {{ shift 2; "$@" || exit 2; }}
 {_FAKE_GRUB}
 chroot() {{ log "chroot $*"; case "$2" in chpasswd) cat > '{files["shadow"].as_posix()}' ;; *) fake_grub "$@" ;; esac; }}
 mount() {{ return 1; }}
-write_target() {{ log "write-target $1 $2"; }}
+write_target() {{ log "write-target $1 $2"; mkdir -p "$TARGET${{2%/*}}" && printf '%s' "$3" > "$TARGET$2"; }}
 . '{(INSTALLER / "lib" / "finish.sh").as_posix()}'
+{_GRUBLOCK}
 install_bootloader
 """, newline="\n")
     got = subprocess.run([SH, str(harness)], text=True, capture_output=True, stdin=subprocess.DEVNULL)

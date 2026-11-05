@@ -277,7 +277,7 @@ def test_build_iso_proves_every_requested_package_is_in_the_merged_pool() -> Non
 def test_grub_template_boots_the_live_installer_only() -> None:
     grub = GRUB_TEMPLATE.read_text(encoding="utf-8")
     entries = re.findall(r"^menuentry .*", grub, re.MULTILINE)
-    assert entries == ["menuentry --hotkey=m 'ImageSrv server install' {"]   # #1302
+    assert entries == ["menuentry --hotkey=m 'ImageSrv server install' --unrestricted {"]   # #1302, #2450
     assert "set timeout=0" in grub, "‏#1190: ישר למתקין, בלי תפריט"
     assert "set default=0" in grub
     assert "ImageSrv @TAG@ installer" in grub
@@ -293,7 +293,8 @@ def test_grub_template_boots_the_live_installer_only() -> None:
 
 def test_isolinux_templates_boot_the_live_installer_only() -> None:
     menu = ISOLINUX_MENU_TEMPLATE.read_text(encoding="utf-8").splitlines()
-    assert menu == ["include stdmenu.cfg", "include imagesrv.cfg", "timeout 1"], "‏#1190: ישר למתקין גם ב-BIOS"
+    assert menu == ["include stdmenu.cfg", "include imagesrv.cfg", "timeout 1",
+                    "noescape 1", "allowoptions 0"], "‏#1190: ישר למתקין גם ב-BIOS; #2453: בלי עריכה"
     entries = ISOLINUX_ENTRY_TEMPLATE.read_text(encoding="utf-8")
     assert re.findall(r"^label (.+)$", entries, re.MULTILINE) == ["imagesrv"]
     assert entries.count("menu default") == 1

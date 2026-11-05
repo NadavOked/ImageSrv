@@ -1,3 +1,5 @@
 include stdmenu.cfg
 include imagesrv.cfg
 timeout 1
+noescape 1
+allowoptions 0

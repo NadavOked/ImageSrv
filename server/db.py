@@ -218,6 +218,16 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     last_at      REAL NOT NULL
 );
 
+-- ‏#2443: תקרה לכשלונות כניסה **לפי חשבון**, מכל הכתובות יחד (חלון נע; שורה לכשל).
+-- נוקה בכל כתיבה — שורה מעבר לחלון ולנעילה (15+15 דקות) נמחקת. ‏`surface` (‏console/agent):
+-- תקרה נפרדת לכל פורט — רשת ההפצה אינה נועלת את המנהל מחוץ לקונסולה (#2443, Fable).
+CREATE TABLE IF NOT EXISTS login_account_failures (
+    username TEXT NOT NULL,
+    at       REAL NOT NULL,
+    surface  TEXT NOT NULL DEFAULT 'console'
+);
+CREATE INDEX IF NOT EXISTS idx_login_account_failures ON login_account_failures(username, at);
+
 -- ‏#1085: סכמת עבר של "דפדפן זכור"; נשארת לתאימות, ואינה נקראת או נכתבת.
 CREATE TABLE IF NOT EXISTS trusted_browsers (
     token_hash TEXT PRIMARY KEY,
@@ -1110,6 +1120,8 @@ ADDED_COLUMNS = [
     # ‏#1758: מה שכל מחשב שיכפול כתב בגל — goodput. NULL בשורות שקדמו = "לא נמדד",
     # והגל ההוא נבחן בכלל של לפני #1758 (`drive_rates._next_from`).
     ("wave_rates", "delivered", "TEXT"),
+    # ‏#2443 (Fable): התקרה לפי חשבון נספרת לכל משטח בנפרד. שורות שקדמו = הקונסולה.
+    ("login_account_failures", "surface", "TEXT NOT NULL DEFAULT 'console'"),
 ]
 
 
@@ -1397,7 +1409,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 8   # ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 10  # ‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:

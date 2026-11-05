@@ -18,6 +18,7 @@ EVENTS_HE = {
     "login_failed": "ניסיון כניסה כושל",
     "login_refused_console": "כניסה לקונסולה סורבה — משתמש הפצה (#1073)",
     "login_lockout": "חשבון ננעל אחרי ניסיונות כושלים",
+    "login_account_lockout": "חשבון נחסם זמנית — ניסיונות כושלים מכמה כתובות (#2443)",
     "password_changed": "סיסמה הוחלפה",
     "password_reset": "סיסמה אופסה",
     "mfa_setup": "הקמת MFA",
@@ -361,6 +362,13 @@ EVENTS_HE = {
     "smart_answered": "שאלת SMART על דיסק נענתה",               # #989
     "task_token_refused": "אסימון משימה נדחה",
     "settings_backup_downloaded": "גיבוי ההגדרות הורד",
+    # ‏#2437: סיסמת עורך ה-GRUB (‏server/app.py `_grub_lock`), ו-#2450: מנהל ראה אותה.
+    "grub_password_created": "נוצרה סיסמה לעורך ה-GRUB",
+    "grub_password_failed": "סיסמת עורך ה-GRUB לא נקראה — התפריטים נעולים בלי סיסמה",
+    "grub_cfg_lock_failed": "קובץ האתחול על ה-TFTP לא ננעל",
+    "grub_password_viewed": "סיסמת ה-GRUB הוצגה למנהל",
+    "grub_server_lock_failed": "ה-GRUB של השרת לא ננעל בעדכון",   # #2452, tools/server-upgrade.sh
+    "grub_password_saved": "מנהל סימן שסיסמת ה-GRUB נשמרה מחוץ לשרת",   # #2454
     "update_apply_busy": "החלת עדכון נדחתה — יחידת השדרוג כבר רצה",
     "update_forced": "עדכון הוחל מעל חסימה באישור מנהל",   # #1891
     "update_apply_failed": "החלת עדכון נכשלה",
@@ -372,6 +380,9 @@ EVENTS_HE = {
     "shrink_open": "רשומת כיווץ נפתחה לדיסק — הטבלה המקורית נשמרה בשרת",
     # ‏#1861: ברירת המחדל של `event` ב-`shrink_records.close_record`.
     "shrink_close": "רשומת כיווץ נסגרה",
+    # ‏#2442 (א): ‏server/net/rogue_dhcp.py
+    "foreign_dhcp_seen": "נראה שרת DHCP או proxyDHCP זר ברשת ההפצה",
+    "foreign_dhcp_more": "עוד תשובות DHCP זרות ממקורות שמעבר לתקרה — אולי הצפה (#2442)",
     # ‏#1973: ה-UPS (‏server/system/ups.py).
     "ups_on_battery": "החשמל נפל — השרת על סוללת UPS",
     "ups_power_restored": "החשמל חזר — השרת על חשמל",
@@ -411,7 +422,7 @@ EVENTS_HE = {
 #: כולל אירוע שאינו ב-EVENTS_HE — לא נופל, לא צובע).
 SEVERITY_LEVELS = ("info", "ok", "warn", "err")
 _SEVERITY_ERR = {
-    "login_failed", "login_refused_console", "login_lockout",
+    "login_failed", "login_refused_console", "login_lockout", "login_account_lockout",
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
     "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
     "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure",
@@ -419,6 +430,7 @@ _SEVERITY_ERR = {
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
     "known_macs_apply_failed", "dnsmasq_dropin_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
     "vmupdate_no_lease", "vmupdate_net_teardown_failed",
+    "foreign_dhcp_seen", "foreign_dhcp_more",   # #2442
     "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
     "peer_unreachable", "email_alert_gave_up", "email_alerts_step_failed", "email_oauth_failed",   # #1751
 }
@@ -448,6 +460,7 @@ _SEVERITY_OK = {
     "wol_sent", "vmupdate_saved", "vmupdate_lease",
     "ups_power_restored", "ups_reachable",
     "dnsmasq_dropin_applied",   # #2174
+    "grub_password_saved",   # #2454
     "email_alert_sent", "peer_back", "email_oauth_connected",   # #1751
 }
 

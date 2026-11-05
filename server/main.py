@@ -373,6 +373,31 @@ def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
     threading.Thread(target=querier.run_forever, daemon=True, name="igmp-querier").start()
 
 
+def _start_rogue_dhcp_watch(runtime, deploy, interface: str | None) -> None:
+    """‏#2442 (א): הקשבה לשרת DHCP/proxyDHCP זר על כרטיס ההפצה — ותמיד שורה
+    במסך הבריאות. כאן בלבד (כמו ה-querier): בבדיקות אין AF_PACKET ואין תהליכון."""
+    from server.console import dhcp as console_dhcp
+    from server.net import rogue_dhcp
+    from server.system import health
+    hooks = getattr(runtime, "health_hooks", None)
+    if hooks is None:          # בדיקות של main מחליפות את create_runtime
+        return
+    if not (deploy.configured and interface):
+        hooks["rogue_dhcp"] = lambda: ("not_applicable", health.NOT_APPLICABLE)
+        return
+
+    def gate() -> str | None:
+        """רק כש-DHCP **שלנו** דלוק בכרטיס ההפצה: אחרת שרת אחר הוא אולי מתוכנן."""
+        for config in console_dhcp.load_configs(runtime.conn):
+            if config.name == interface and config.enabled:
+                return None
+        return f"ה-DHCP של השרת אינו דלוק בכרטיס ההפצה {interface}, ושרת אחר הוא אולי מתוכנן"
+
+    watch = rogue_dhcp.Watch(runtime.conn, interface, gate=gate)
+    hooks["rogue_dhcp"] = watch.health
+    threading.Thread(target=watch.run_forever, daemon=True, name="rogue-dhcp").start()
+
+
 def _start_ups_monitor(runtime) -> None:
     """‏#1973: מנטר ה-UPS — יומן בנפילת חשמל, כיבוי מסודר בסוללה נמוכה. כאן
     בלבד: בבדיקות אסור שתהליכון יקרא ל-`systemctl poweroff`."""
@@ -641,6 +666,7 @@ def main() -> None:
                 f"old_sha256={console_tls.previous_fingerprint_sha256} "
                 f"new_sha256={console_tls.fingerprint_sha256}")
     _start_igmp_querier(runtime, deploy, interface)   # #1972
+    _start_rogue_dhcp_watch(runtime, deploy, interface)   # #2442
     _start_ups_monitor(runtime)   # #1973
     agent_app = create_agent_app(runtime)
     console_app = create_console_app(runtime)

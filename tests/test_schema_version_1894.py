@@ -35,7 +35,12 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # 7: applied_timing (#2056/#2059), disk sets + inventory (#1857), firmware images (#2080) -- mockups 05/04/06, 24/10
                 7: "47896c6739283e20dfc43b9458dc2d6f039de4717af91caa89b20004e3387a1c",
                 # 8: email_queue (#1751, PR #1757, 31/10)
-                8: "d43d9f74c5c05f8448f2a0c9333c82875fc77fd608874320707e34a9f2a9db00"}
+                8: "d43d9f74c5c05f8448f2a0c9333c82875fc77fd608874320707e34a9f2a9db00",
+                # 9: login_account_failures + login_known_ips (#2443, 05/11)
+                9: "aaa90d0571c5fd7abde1e92ce3e24db9c60b7e96b1002e120f3f25dd1852b8d7",
+                # 10: login_account_failures.surface (#2443 Fable, 05/11); login_known_ips
+                # removed before any release (Nadav 05/11: no exemption, a 15-minute lock)
+                10: "cda49192f1a686cf062355ae0c78a27066a3c623d03842873c1845f808bab24f"}
 
 
 def _fingerprint(conn) -> str:
@@ -74,7 +79,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 8
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 10
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'model_slot_maps'").fetchone()
     assert "disk_serial" in [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
 
@@ -91,7 +96,7 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 8
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 10
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "held_at" in columns and "held_json" in columns
 
@@ -107,7 +112,7 @@ def test_a_database_on_7_gains_the_email_queue_and_is_stamped_8(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 8
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 10
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"email_queue", "email_queue_one_pending"} <= names
 
@@ -177,3 +182,37 @@ def test_rollback_without_a_migration_keeps_what_was_written(tmp_path):
     assert raw.execute("SELECT 1 FROM journal WHERE event = 'after_update'").fetchone()
     assert "systemctl stop imagesrv-server" not in seen
     assert "הוחזר לעותק" not in status["error"]
+
+
+def test_a_database_on_8_gains_the_account_lockout_table_and_is_stamped_9(tmp_path):
+    """#2443: the per-account failure cap adds a table. A server already on 8
+    gains it (with the cap's index) and is stamped 9."""
+    path = tmp_path / "imagesrv.db"
+    connect(path).close()
+    raw = sqlite3.connect(path)
+    raw.execute("DROP TABLE login_account_failures")
+    raw.execute("PRAGMA user_version = 8")
+    raw.commit()
+    raw.close()
+    conn = connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 10
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+    assert {"login_account_failures", "idx_login_account_failures"} <= names
+
+
+def test_a_database_on_9_gains_the_cap_surface_and_old_rows_are_the_console(tmp_path):
+    """#2443 (Fable): the per-account cap is counted per surface. A server on 9 has
+    the table without `surface`; it gains the column, and the rows it already had
+    (all written by the console-or-agent shared cap) count as the console."""
+    path = tmp_path / "imagesrv.db"
+    connect(path).close()
+    raw = sqlite3.connect(path)
+    raw.execute("DROP TABLE login_account_failures")
+    raw.execute("CREATE TABLE login_account_failures (username TEXT NOT NULL, at REAL NOT NULL)")
+    raw.execute("INSERT INTO login_account_failures (username, at) VALUES ('noc', 1.0)")
+    raw.execute("PRAGMA user_version = 9")
+    raw.commit()
+    raw.close()
+    conn = connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 10
+    assert conn.execute("SELECT surface FROM login_account_failures").fetchone()[0] == "console"

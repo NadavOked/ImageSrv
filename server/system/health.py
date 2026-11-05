@@ -111,6 +111,8 @@ def default_hooks() -> dict:
         # ה-UPS (‏`ups.UpsMonitor.health`) — ‏`(state, detail)`. ‏None = לא הוזרק
         # (בדיקות, הרצה ישירה) — אין שורה; ‏main מזריק את שניהם.
         "igmp_querier": None,
+        # ‏#2442 (א): ‏`rogue_dhcp.Watch.health` — שרת DHCP/proxyDHCP זר ברשת ההפצה.
+        "rogue_dhcp": None,
         "ups": None,
         # ‏#968: זמן הפעילות של **המכונה** (‏`/proc/uptime`), ל-`/me`. ‏None =
         # לא נקרא (ווינדוס, קובץ חסר) — הקונסולה מציגה "לא נבדק", לא 0.
@@ -591,8 +593,15 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     # ‏#1972: querier ברשת ההפצה — פעיל / יש querier אחר / כבוי. ‏#1973: מצב ה-UPS.
     if hooks.get("igmp_querier"):
         results.append(check("igmp_querier", "IGMP querier", *hooks["igmp_querier"]()))
+    if hooks.get("rogue_dhcp"):
+        results.append(check("rogue_dhcp", "שרת DHCP זר", *hooks["rogue_dhcp"]()))
     if hooks.get("ups"):
         results.append(check("ups", "UPS", *hooks["ups"]()))
+
+    # ‏#2454: סיסמת ה-GRUB של השרת — צהוב עד שמנהל סימן שנשמרה מחוץ לשרת.
+    grub_reminder = hooks["grub_password"]() if hooks.get("grub_password") else None
+    if grub_reminder:
+        results.append(check("grub_password", "סיסמת GRUB", *grub_reminder))
 
     # ‏#1372: מארח שאינו מוכן ל-VM הוא אזהרה בשם — לא שקט ירוק אחרי עדכון.
     if hooks.get("vm_host"):

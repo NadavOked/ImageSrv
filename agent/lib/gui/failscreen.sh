@@ -178,7 +178,7 @@ fail_fatal_he() {
         *"MAC not registered"*)    printf 'המחשב אינו רשום במערכת — הוא עולה מהדיסק המקומי.' ;;   *"another vlan"*) printf 'הסבב פתוח ברשת אחרת — המחשב אינו ברשת ההפצה.' ;;
         *"no image id"*|*"without image or id"*) printf 'לא נבחר אימג׳ למשימה. לא נכתב דבר.' ;;
         *"failed SMART"*)          printf 'הדיסק נכשל בבדיקת SMART ואינו יעד לכתיבה. לא נכתב דבר.' ;;   *"is read-only"*) printf 'הדיסק במצב קריאה בלבד ואינו יעד לכתיבה. לא נכתב דבר.' ;;
-        *"target selection"*|*"selected drawer"*|*"selected no writable"*) printf 'בחירת המגירות לסבב חסרה או אינה תואמת לדיסקים במחשב. לא נכתב דבר.' ;;
+        *"target selection"*|*"room target disks"*|*"selected drawer"*|*"selected no writable"*) printf 'בחירת המגירות לסבב חסרה או אינה תואמת לדיסקים במחשב. לא נכתב דבר.' ;;
         *"imagesrv.server"*|*"network configuration"*) printf 'הגדרות הרשת או כתובת השרת חסרות באתחול.' ;;   *"GUI unavailable"*) printf 'המסך הגרפי לא עלה.' ;;
         *)                         printf 'המחשב נעצר בשלב שאין לו הסבר כאן. הלוג המלא במגירת המכונה בקונסולה.' ;;   # #1861: never the English itself; #2068: no details box
     esac

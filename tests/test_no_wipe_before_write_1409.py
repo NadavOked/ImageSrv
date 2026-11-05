@@ -15,8 +15,9 @@ write had started -> exactly one ``--zap-all``, on that disk only.
 Negative control (mutation): ``wipe_written_gpt`` without its evidence line (the
 ``write_started`` serial check) -- the unconditional wipe of #1388 as it was.
 
-Not covered here, and still open (see the Issue): a drawer whose plan is refused by
-``validate_restore_plan`` *after* the write check (writecheck.sh) already wrote it.
+Not covered here: a drawer whose plan is refused by ``validate_restore_plan`` after
+the write check (writecheck.sh) already wrote it -- closed by 3dca834c (#2412),
+guarded in test_refused_plan_keeps_table_1409.py.
 """
 
 from __future__ import annotations

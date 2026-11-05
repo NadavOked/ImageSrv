@@ -507,7 +507,7 @@ tftp <כתובת-השרת> -c get bootx64.efi
 
 | כלי | מה הוא עושה | מתי |
 |---|---|---|
-| `tools/backup-server.sh --dest DIR` | ‏DB (עותק עקבי + integrity) → `db/`, שאר `data_dir` → `data/`, קובצי המערכת של ImageSrv (dnsmasq, nftables, ‏interfaces.d, ‏`/etc/imagesrv`, שורות fstab, יחידות) → `system/<ts>/`, אימג'ים → `images/` (‏rsync **בלי** `--delete` — או `cp -au` כשאין rsync, כמו בשרת מה-ISO של v0.53.0 — בלי `.capture-*`/`.import-*`) **ואימות** מול המניפסטים; ‏`SHA256SUMS-<ts>`. ‏`--no-images` לריצה השעתית | cron |
+| `tools/backup-server.sh --dest DIR` | ‏DB (עותק עקבי + integrity) → `db/`, שאר `data_dir` → `data/`, קובצי המערכת של ImageSrv (dnsmasq, nftables, ‏interfaces.d, ‏`/etc/imagesrv` **בלי `grub-password` ובלי `creds/`**, שורות fstab, יחידות) → `system/<ts>/`, אימג'ים → `images/` (‏rsync **בלי** `--delete` — או `cp -au` כשאין rsync, כמו בשרת מה-ISO של v0.53.0 — בלי `.capture-*`/`.import-*`) **ואימות** מול המניפסטים; ‏`SHA256SUMS-<ts>`. ‏`--no-images` לריצה השעתית | cron |
 | `tools/verify-images.py DIR` | לכל `manifest.json`: ‏sha256 של כל מחיצה מול המניפסט. יציאה 0 רק כשהכול תואם; **אפס אימג'ים אינו פאס** (יציאה 3) אלא עם `--allow-empty` | אחרי כל העתקה, ועל השרת עצמו |
 | `tools/restore-drill.sh` | גיבוי (או `--backup DIR` קיים) → שחזור לתיקייה זמנית → **שרת שני** על העותק (‏loopback, פורט 18080+, כ-`nobody` כדי שלא ייגע ב-`/etc` של הייצור) → `GET /health/live` = 200, מספר האימג'ים שווה, ‏verify-images ירוק. **זה הפאס** — לא `is-active`. ‏`--skip-images` כשאין מקום לעותק האימג'ים (אז DB ותצורה בלבד, ונאמר) | שבועי |
 
@@ -547,6 +547,13 @@ tftp <כתובת-השרת> -c get bootx64.efi
    עיוור: משווים, ומתקנים שמות כרטיסים ב-dnsmasq/nftables/interfaces.d
    לפני שמעתיקים. ‏`/etc/iscsi/initiatorname.iscsi` — לפי ACL של האחסון
    (הכרעת אתר: לשמור את הישן או לרשום את החדש באחסון).
+   **שני סודות אינם בגיבוי** (#2450, ‏#2455), ומי שקורא את שיתוף הגיבוי אינו מקבל אותם:
+   - ‏`/etc/imagesrv/grub-password` — ההתקנה הנקייה בשלב 1 כבר יצרה סיסמה חדשה, והשרת
+     נועל בה את התפריטים של התחנות כשהוא עולה. הסיסמה החדשה — בקונסולה, הגדרות → "סיסמת
+     GRUB". **לא להעתיק סיסמה ישנה מעליה**: ה-GRUB של השרת ננעל בהתקנה בסיסמה החדשה.
+   - ‏`/etc/imagesrv/creds/` — סיסמת מיקום SMB שמורה ב-DB ששוחזר בשלב 3, ובאחסון →
+     **"התחבר"** על כל מיקום SMB הקובץ נכתב מחדש. סיסמת **יעד הגיבוי** (‏`creds/backup`)
+     אינה ב-DB: מגדירים את יעד הגיבוי מחדש, עם הסיסמה של השיתוף.
 6. **‏boot payload:** ‏`tools/build_initramfs.sh` (או ההעתקה מה-ISO), ואז
    `bash deploy/verify-boot-payload.sh --server-url http://<כתובת ההפצה>:8080`.
 7. `systemctl start imagesrv-server` → קונסולה → **בריאות** ירוק.

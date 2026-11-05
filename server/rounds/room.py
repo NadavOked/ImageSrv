@@ -290,6 +290,28 @@ def target_ports(round_row: sqlite3.Row | None, mac: str,
     return sorted(p for p in ports if p not in done or p in open_)
 
 
+def target_disks(ports: list[int] | None, disks: list | None) -> list[dict] | None:
+    """‏#2448: ‏`session.target_disks` — לכל חריץ ב-`target_ports`, ה-serial והגודל שהקונסולה
+    מציגה בו: מה שהמלאי של **ה-hello הזה עצמו** (`disks`) שם שם. הסוכן משווה אליהם את מה
+    שנקשר ב-`target_init` (‏`drawer_shown`, ‏drawerselect.sh), ודיסק שנכנס לחריץ אחרי ה-hello
+    נכשל ("המגירה הוחלפה אחרי שנבחרה") במקום להיכתב.
+
+    חריץ שאין בו בדיוק דיסק אחד במלאי (ריק, או ששניים טוענים לו), או בלי serial/גודל —
+    ‏`null` בשדה: הסוכן אינו מוצא בו "אותו דיסק" ואינו כותב (עיקרון 5). ‏None = אין מה
+    לשלוח (סבב ישן בלי בחירה, או hello בלי מלאי) — הסוכן ממשיך לפי החריץ בלבד, כמו קודם."""
+    if ports is None or not isinstance(disks, list):
+        return None
+    out = []
+    for port in ports:
+        here = [d for d in disks if isinstance(d, dict) and _port(d.get("port")) == port]
+        one = here[0] if len(here) == 1 else {}
+        serial, size = one.get("serial"), _port(one.get("size_bytes"))
+        out.append({"port": port,
+                    "serial": serial if isinstance(serial, str) and serial else None,
+                    "size_bytes": size if size and size > 0 else None})
+    return out
+
+
 def _disks(conn: sqlite3.Connection, mac: str) -> list[dict]:
     row = conn.execute(
         "SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)

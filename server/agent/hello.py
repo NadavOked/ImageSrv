@@ -491,6 +491,8 @@ def build_answer(
         round_row = room.active_round(conn)
         # ‏#1790: בגל חוזר — בלי חריץ שהדיסק שבו כבר נכתב בסבב (לפי המלאי של ה-hello הזה).
         answer["session"]["target_ports"] = room.target_ports(round_row, mac, disks)
+        # ‏#2448: ה-serial והגודל שבכל חריץ כזה, כפי שהמלאי של ה-hello הזה (והקונסולה) מציגים.
+        answer["session"]["target_disks"] = room.target_disks(answer["session"]["target_ports"], disks)
         # ‏#1269: החריצים שלה שנבחר להם דגם דרייברים. ‏null = הסבב בלי
         # דרייברים, והסוכן אינו שואל דבר — ההתנהגות מלפני ה-Issue.
         answer["session"]["driver_ports"] = room_drivers.ports_for(round_row, mac)

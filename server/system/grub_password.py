@@ -6,8 +6,11 @@
 ונשמרת ב-`/etc/imagesrv/grub-password`, ‏0600, בבעלות root. **לתפריט נכנס
 רק ה-hash**: הקובץ מוגש ב-TFTP וב-HTTP וקריא לכל מי שברשת ההפצה.
 
-טכנאי שצריך לערוך ערך (ניפוי על ברזל) קורא את הקובץ מקונסולת השרת
-כ-root. אין שום ממשק רשת שמחזיר את הסיסמה, בכוונה.
+‏#2450: זו גם הסיסמה של ה-GRUB של השרת עצמו. המתקין יוצר את הקובץ לפני
+ה-update-grub הראשון (`installer/lib/grublock.sh`), וכאן הוא רק נקרא — אותה
+סיסמה לשרת ולתחנות. מנהל מחובר רואה אותה בהגדרות ("סיסמת GRUB", ‏`read`
+דרך `server/console/grubpw.py`, ‏admin בלבד, וכל צפייה ביומן). זה הממשק היחיד
+שמחזיר אותה.
 
 הסיסמה עצמה אינה משתנה מעלייה לעלייה; ה-hash כן (מלח חדש בכל עלייה),
 וזה בסדר — כל hash שנוצר ממנה מאמת אותה.
@@ -23,7 +26,7 @@ from pathlib import Path
 from boot.grub_lock import pbkdf2_hash
 from server.core.atomicfile import write_atomic
 
-__all__ = ["PASSWORD_FILE", "new_password", "load_or_create", "ensure"]
+__all__ = ["PASSWORD_FILE", "new_password", "load_or_create", "read", "ensure"]
 
 PASSWORD_FILE = Path("/etc/imagesrv/grub-password")
 
@@ -65,6 +68,16 @@ def load_or_create(path: Path = PASSWORD_FILE) -> tuple[str, bool]:
         # נקרא אבל פתוח לאחרים — סוגרים, ולא מוותרים עליו.
         os.chmod(path, 0o600)
     return password, created
+
+
+def read(path: Path = PASSWORD_FILE) -> str:
+    """הסיסמה כפי שהיא בקובץ — בלי ליצור אותו (#2450, הקונסולה). זורקת
+    OSError/ValueError על כל מה שאינו סיסמה שאפשר להקליד ב-GRUB."""
+    path = Path(path)
+    password = path.read_text(encoding="ascii").strip()
+    if not _usable(password):
+        raise ValueError(f"{path} does not hold a password GRUB can take")
+    return password
 
 
 def ensure(path: Path = PASSWORD_FILE) -> tuple[str, bool, str | None]:

@@ -117,6 +117,9 @@ def physical_reset_admin_password(conn, new_password: str) -> ActionResult:
         conn.execute("DELETE FROM mfa_backup_codes WHERE username = ?", (stored,))
         conn.execute("DELETE FROM login_attempts WHERE key LIKE ?",
                      (stored.lower() + "|%",))
+        # ‏#2443: גם התקרה לפי חשבון — זו הדרך החוזרת של מי שננעל מכל הכתובות.
+        conn.execute("DELETE FROM login_account_failures WHERE username = ?",
+                     (stored.lower(),))
     # ‏#1853: ‏`users.update(password=…)` כבר מבטל את כל ה-sessions והצופים (`bump_auth_epoch`).
     info = users.flags(conn, stored)
     verified = (users.verify(conn, stored, new_password) == "admin"

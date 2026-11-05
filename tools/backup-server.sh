@@ -20,6 +20,10 @@
 #   system/<ts>/          קובצי המערכת של ImageSrv: dnsmasq, nftables,
 #                         interfaces.d, ‏/etc/imagesrv, שורות ImageSrv
 #                         ב-fstab, יחידות ה-systemd וה-drop-ins שלהן.
+#                         **בלי שני הסודות של /etc/imagesrv** (#2450, #2455):
+#                         ‏grub-password — התקנה נקייה יוצרת חדשה; ‏creds/ —
+#                         הסוד של מיקום SMB שמור ב-DB (‏params_json) ו"התחבר"
+#                         כותב את הקובץ מחדש, ושל יעד הגיבוי מוזן מחדש.
 #   images/               rsync של תיקיית האימג'ים (אלא אם --no-images):
 #                         בלי `.capture-*`/`.import-*` (באמצע), **בלי
 #                         `--delete`** — גיבוי אינו מוחק עותקי עבר בגלל
@@ -144,7 +148,8 @@ SYS="$DEST/system/$TS"
 say "קובצי מערכת → $SYS/"
 SYS_PATHS=(
     /etc/nftables.conf
-    /etc/imagesrv
+    '/etc/imagesrv/*'                           # רשומה-רשומה, כדי ש-SYS_SKIP יחול
+    '/etc/imagesrv/.[!.]*'
     /srv/imagesrv/boot/grub.cfg
     /etc/systemd/system/imagesrv-server.service
     /etc/systemd/system/imagesrv-server.service.d
@@ -155,7 +160,16 @@ SYS_PATHS=(
     '/etc/dnsmasq.d/imagesrv*'                  # מצוטט: הגלוב מתרחב בלולאה, יחסית ל---system-root
     '/etc/network/interfaces.d/imagesrv-*'
 )
+# ‏#2450/#2455: סודות שאינם נכנסים לגיבוי (יחסית לשורש). מי שקורא את שיתוף
+# הגיבוי אינו מקבל את סיסמת ה-GRUB ואת סיסמאות ה-SMB; ‏.grub-password.*.tmp
+# הוא write_atomic של השרת באמצע כתיבה.
+SYS_SKIP=(
+    etc/imagesrv/grub-password
+    'etc/imagesrv/.grub-password.*'
+    etc/imagesrv/creds
+)
 copied=0
+skipped=()
 # ‏--system-root: הבדיקות מצביעות על שורש מזויף ולא על /etc של המכונה
 # שמריצה אותן (ב-CI יש `/etc/iscsi/initiatorname.iscsi` שרק root קורא).
 # ‏cp שנכשל מפיל את הריצה: כ-root "לא קריא" הוא תקלה, לא משהו שמדלגים עליו.
@@ -164,11 +178,23 @@ for path in "${SYS_PATHS[@]}"; do          # glob שלא תאם נשאר מיל�
     # shellcheck disable=SC2086  # ‏${path#/} יחסי לשורש; הגלוב מתרחב כאן בכוונה
     for match in ${path#/}; do
         [[ -e "$match" ]] || continue
+        skip=0
+        # shellcheck disable=SC2053  # the pattern is a glob on purpose
+        for pat in "${SYS_SKIP[@]}"; do [[ "$match" == $pat ]] && { skip=1; break; }; done
+        if [[ "$skip" -eq 1 ]]; then skipped+=("/$match"); continue; fi
         cp -a --parents "$match" "$SYS/"
         copied=$((copied + 1))
     done
 done
 cd - >/dev/null
+# ראיה, לא כוונה (עיקרון 5): אף סוד מהרשימה אינו בעותק.
+for pat in "${SYS_SKIP[@]}"; do
+    # shellcheck disable=SC2086
+    for leaked in "$SYS"/$pat; do
+        [[ ! -e "$leaked" ]] || die "סוד הגיע לגיבוי: $leaked"
+    done
+done
+[[ ${#skipped[@]} -eq 0 ]] || say "לא בגיבוי (סודות, #2450/#2455): ${skipped[*]} — בשחזור: סיסמת GRUB חדשה, ו-creds/ נכתב מחדש ב'התחבר'"
 # שורות ImageSrv ב-fstab: ‏grep 1 = אין שורות (תקין), ‏2 = הבדיקה נשברה.
 set +e
 grep -i imagesrv "$SYS_ROOT/etc/fstab" > "$SYS/fstab.imagesrv"

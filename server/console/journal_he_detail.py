@@ -106,6 +106,26 @@ RULES: dict[str, list[tuple[str, str]]] = {
                         r"\1: \2 אינה \3, שפתחה את רשומת הכיווץ של ")],
     # ‏#2421: "<סבב> <mac> <dev> serial=<סידורי> also on <mac>"
     "room_drawer_serial_conflict": [(r" also on ", " נמצא גם אצל ")],
+    # ‏#2443: "<שם> — <N> failures in <M> min from many addresses via console|agent (last ip=<ip>)"
+    # (בלי "via" — שורות שנכתבו לפני שהתקרה פוצלה לפי משטח)
+    "login_account_lockout": [
+        (r" via console \(last ip=", " via בקונסולה (last ip="),
+        (r" via agent \(last ip=", " via ברשת ההפצה (last ip="),
+        (r" — (\d+) failures in (\d+) min from many addresses via (.+?) \(last ip=(\S+)\)$",
+         r" — \1 ניסיונות כושלים ב-\2 דקות מכמה כתובות, \3 (האחרונה: \4)"),
+        (r" — (\d+) failures in (\d+) min from many addresses \(last ip=(\S+)\)$",
+         r" — \1 ניסיונות כושלים ב-\2 דקות מכמה כתובות (האחרונה: \3)")],
+    # ‏#2442: "mac=<mac> ip=<ip> kind=offer|proxy nic=<כרטיס>[ as=server]"
+    "foreign_dhcp_seen": [
+        (r" as=server$", " · מתחזה לשרת (הכתובת שלו במסגרת)"),
+        (r"^mac=(\S+) ip=(\S+) kind=offer nic=(\S+)",
+         r"כתובת MAC \1 · כתובת IP \2 · מציע כתובות (DHCPOFFER) · כרטיס \3"),
+        (r"^mac=(\S+) ip=(\S+) kind=proxy nic=(\S+)",
+         r"כתובת MAC \1 · כתובת IP \2 · מציע אתחול רשת (proxyDHCP) · כרטיס \3")],
+    # ‏#2442 (הצפה): "count=<N> last_mac=<mac> last_ip=<ip> nic=<כרטיס>"
+    "foreign_dhcp_more": [
+        (r"^count=(\d+) last_mac=(\S+) last_ip=(\S+) nic=(\S+)$",
+         r"\1 תשובות ממקורות שלא נרשמו אחד-אחד · האחרון: MAC \2, IP \3 · כרטיס \4")],
     # ‏#2218: "<אימג'> sample -> full: … (<כתובת המשכפל>)"
     "readback_mode_switched": [(r" sample -> full: a direct send has no list on the server;"
                                 r" every chunk is compared with the live manifest's readback_xxh64",

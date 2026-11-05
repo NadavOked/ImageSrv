@@ -15,8 +15,14 @@ if loadfont $prefix/font.pf2 ; then
     terminal_output gfxterm
 fi
 echo 'ImageSrv @TAG@ installer'
+# #2450: e and c are locked for everyone -- superusers names a user that has
+# no password here, so nobody can edit the kernel line or open the command
+# line. An ISO is built before any server exists and cannot know the password of a server;
+# one baked in at build time would be in every published copy.
+# Booting the entry asks nothing (--unrestricted).
+set superusers="imagesrv"
 
-menuentry --hotkey=m 'ImageSrv server install' {
+menuentry --hotkey=m 'ImageSrv server install' --unrestricted {
     set background_color='#1b2a41'
     linux    /live/vmlinuz @DI_ARGS@ --- quiet
     initrd   /live/initrd.img

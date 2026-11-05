@@ -60,8 +60,8 @@ LimitNOFILE=65536
 # ‏#55–#57: הגדרות הרשת של השרת עצמו נכתבות ל-`/etc/network/interfaces.d`
 # ‏(קובץ לכל כרטיס, `imagesrv-<שם>`) ול-`/etc/resolv.conf`. שתי הדרישות
 # האלה הן מה שהופך "ההגדרה נשמרה" ל"הקובץ נכתב"; בלעדיהן ההחלה נכשלת
-# בגלוי והקונסולה אומרת זאת. ‏`/etc` כולו ב-ReadWritePaths אך ורק בגלל
-# ‏resolv.conf — הוא קובץ בשורש, ואין דרך לפתוח אותו לבדו.
+# בגלוי והקונסולה אומרת זאת. ‏resolv.conf הוא קובץ בשורש, ואין דרך לפתוח
+# אותו לבדו — ראו #2419 ליד ReadWritePaths.
 #
 # ההחזרה האוטומטית של שינוי רשת שלא אושר אינה כאן אלא ביחידה נפרדת
 # (`imagesrv-netrollback`), ובכוונה: שינוי שהפיל את הרשת מפיל לעיתים
@@ -87,7 +87,16 @@ ProtectHome=yes
 # ושומר רשומות discovery/node ב-/var/lib/iscsi. בלעדיהם "גלה יעדים" נכשל
 # ב-"Read-only file system" בשרת חיפה (17/10). ‏/run/lock ולא /run/lock/iscsi:
 # התת-תיקייה אינה קיימת עד ההרצה הראשונה, ומקף היה מדלג עליה בשקט.
-ReadWritePaths=/var/lib/imagesrv /srv/imagesrv/images /etc/dnsmasq.d -/etc/imagesrv /etc/network/interfaces.d /etc/chrony/conf.d /etc -/srv/tftp -/run/network -/run/dhcpcd -/var/lib/dhcpcd -/run/lock -/var/lib/iscsi
+#
+# ‏#2419 (4): כל נתיב שהשרת כותב תחת /etc רשום כאן בשמו — הרשימה המדויקת,
+# שנאכפת מול הקוד ב-tests/test_unit_etc_writes_2419.py (נתיב חדש בקוד בלי
+# שורה כאן נכשל שם, ולא ב-Read-only file system על שרת מותקן). ‏/etc החשוף
+# נשאר **רק** בשביל שלושה קבצים בשורש שנכתבים אטומית — קובץ זמני לצידם
+# ו-os.replace (#1123, ‏#1908) — ולכן צריכים את התיקייה ולא את הקובץ:
+# ‏/etc/fstab, ‏/etc/resolv.conf (גם ה-hooks של dhcpcd תחת ifup) ו-/etc/nftables.conf.
+# הוצאתו ממתינה להכרעה על שלושתם. ‏-/etc/... = אופציונלי: חבילה שלא הותקנה
+# (nut, ‏open-iscsi) לא מפילה את מרחב השמות.
+ReadWritePaths=/var/lib/imagesrv /srv/imagesrv/images /etc/dnsmasq.d -/etc/imagesrv /etc/network/interfaces.d /etc/chrony/conf.d -/etc/chrony/chrony.conf -/etc/modules-load.d -/etc/systemd/system/dnsmasq.service.d -/etc/nut -/etc/iscsi /etc -/srv/tftp -/run/network -/run/dhcpcd -/var/lib/dhcpcd -/run/lock -/var/lib/iscsi
 PrivateTmp=yes
 
 [Install]

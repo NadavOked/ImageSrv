@@ -45,6 +45,7 @@ SYSROOT="${SYSROOT:-}"; DEVROOT="${DEVROOT:-/dev}"
 . "$INSTALLER_DIR/lib/answers.sh"
 . "$INSTALLER_DIR/lib/bootstrap.sh"
 . "$INSTALLER_DIR/lib/finish.sh"
+. "$INSTALLER_DIR/lib/grublock.sh"   # #2450
 . "$INSTALLER_DIR/lib/raid.sh"
 . "$INSTALLER_DIR/lib/clock.sh"   # #2144
 

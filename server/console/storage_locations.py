@@ -46,6 +46,13 @@ def create_storage_locations_router(
         reason = sl.validate_params(kind, params)
         if reason:
             raise HTTPException(400, reason)
+        if kind == "local":
+            # ‏#2444: ביצירה ובבדיקה בלבד — מיקום שמור אינו עובר כאן.
+            path = params.get("path") or params.get("mount_point")
+            if path:
+                reason = sl.local_path_problem(path, data_dir, hooks["is_mount"])
+                if reason:
+                    raise HTTPException(400, reason)
 
     def _delete_row(loc_id: str) -> None:
         _settle(ctx.conn)

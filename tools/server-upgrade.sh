@@ -624,6 +624,41 @@ else
     dcui_warn "מסך השרת לא הופעל מחדש: $DCUI_UNIT אינו active אחרי restart — הוא מציג את הגרסה הקודמת עד אתחול"
 fi
 
+# 5ג. ‏#2452: נעילת ה-GRUB של השרת עצמו (#2450) גם בשרת שמשתדרג, לא רק בהתקנה
+# חדשה — deploy/grub-lock-host.sh של התג: סיסמה רק כשאין (לא דורס), ‏01_imagesrv_lock,
+# ‏update-grub וקריאה חוזרת של grub.cfg. אחרי האימות בלבד, וכשל אינו כשל שדרוג (השרת
+# החדש רץ ואומת) — אבל גם אינו נבלע: הוא נאמר כאן בשמו, באזהרה ובאירוע יומן.
+# הצלחה = קוד 0 **וגם** שורת `grub-locked:` אחרונה (עיקרון 5). הקריאה היא רשימת
+# `||`: לא set -e ולא ה-ERR trap (חזרה לתג הקודם) חלים בתוכה.
+lock_server_grub() {
+    local host=deploy/grub-lock-host.sh out last why
+    if [[ ! -f "$host" ]]; then
+        echo "$host אינו בתג $TAG — גרסה בלי נעילת ה-GRUB של השרת"
+        return 0
+    fi
+    if out="$(sh "$host" "$REPO_DIR" 2>&1)"; then
+        last="$(printf '%s\n' "$out" | tail -n 1)"
+        echo "$out"
+        [[ "$last" != "grub-locked: "* ]] || return 0
+        last="אין שורת grub-locked בפלט (קוד 0)"
+    else
+        echo "$out"
+        last="$(printf '%s\n' "${out:-אין פלט}" | tail -n 1)"
+    fi
+    why="ה-GRUB של השרת לא ננעל (#2452): $last"
+    echo "server-upgrade: $why"
+    UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$why"
+    python3 - "$REPO_DIR" "$DB" "$TAG: $why" <<'PYEOF' || echo "server-upgrade: רישום grub_server_lock_failed ביומן נכשל"
+import sys
+repo, db, detail = sys.argv[1:4]
+sys.path.insert(0, repo)
+from server.db import connect, journal
+journal(connect(db), "grub_server_lock_failed", detail, "server-upgrade")
+PYEOF
+    return 1
+}
+lock_server_grub || echo "server-upgrade: השדרוג ממשיך — הסיבה באזהרה וביומן"
+
 echo "--- $(date -Is) upgrade to $TAG done and verified ---"
 STAGE="done"
 # ‏#1893: הסמן יורד **לפני** "done" — חשמל שנופל ביניהם משאיר `running` (נעשה stale

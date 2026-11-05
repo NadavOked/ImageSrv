@@ -773,6 +773,9 @@ function loginErrorMessage(status, body, retryAfter) {
   if (status === 401) return "שם משתמש או סיסמה שגויים";
   if (status === 403 && body.error === "deploy_no_console")
     return body.message_he || "משתמש הפצה עובד ממחשב הבנייה, לא מהקונסולה";
+  // #2443: the per-account cap — the server's sentence says what happened and when it opens
+  if (status === 429 && body.error === "login_account_capped" && body.message_he)
+    return body.message_he;
   if (status === 429) {
     const sec = Number(retryAfter);
     const mins = Number.isFinite(sec) && sec > 0 ? Math.max(1, Math.ceil(sec / 60)) : 15;
@@ -6116,6 +6119,9 @@ function healthRow(c, grouped = false) {
   } else if (grouped) {
     const mac = String(c.id).slice(String(c.id).indexOf(":") + 1);
     if (findMachine(mac)) act = UI.acts([["פרטים", `openMachineDetail('${encodeId(mac)}')`]]);
+  } else if (c.id === "grub_password" && c.state === "warn" && !SERVER_CTX) {
+    // ‏#2454: להציג, לשמור מחוץ לשרת, "שמרתי". שרת משנה — מהקונסולה שלו (הנתיבים אינם בערוץ בין השרתים).
+    act = UI.acts([["הצג סיסמה", "grubPasswordSheet()"], ["שמרתי", "grubPasswordSavedSheet()"]]);
   } else if (HEALTH_GOTO[c.id]) {
     act = UI.acts([[HEALTH_GOTO[c.id][0] + " ←", HEALTH_GOTO[c.id][1]]]);
   }
@@ -7856,6 +7862,10 @@ const SETTING_ROWS = [
     more: "מי שעומד ליד מחשב ומשחזר אליו אימג' מהשרת, כשאין סבב פתוח, מתבקש להיכנס עם משתמש וסיסמה של הקונסולה. בסבב פתוח לא מתבקשת כניסה. מומלץ דלוק." },
   { key: "identity_check", card: "security", label: "אימות מחשבים לפי כתובת ה-DHCP", type: "switch", defaultOn: true, confirmOff: true,
     more: "השרת מקבל פנייה ממחשב רק אם כתובת ה-IP שלו היא זו שהשרת נתן ל-MAC שלו. כך מחשב אחד לא יכול להתחזות לאחר. לכבות רק כשה-DHCP ברשת ההפצה אינו השרת הזה. הכיבוי נרשם ביומן." },
+  // ‏#2450 (נדב 04/11): הסיסמה שנועלת את ה-GRUB של השרת (e, c וערך השחזור) ושל התחנות (#2437). ‏POST /grub-password,
+  // מנהל בלבד, וכל צפייה ביומן. לא בערוץ בין השרתים — לכל שרת סיסמה משלו.
+  { key: "grub_password", card: "security", label: "סיסמת GRUB", type: "grubpw",
+    more: "משתמש imagesrv. נדרשת לערך השחזור של השרת ולעריכת ערך (e) או שורת הפקודה (c) בתפריט ה-GRUB של השרת ושל התחנות. כל צפייה נרשמת ביומן" },
   // ‏#1973 (נדב 22/10): ‏GET/POST /ups — אין UPS / USB / רשת (שרת NUT). המצב החי מאותו מנטר שמכבה את השרת.
   { key: "ups", card: "general", label: "UPS (אל-פסק)", type: "ups",
     more: "בנפילת חשמל השרת רושם ביומן; בסוללה נמוכה הוא עוצר בגלוי את מה שרץ ונכבה מסודר" },
@@ -7969,6 +7979,7 @@ function settingDd(r) {
   if (r.type === "ntpsource") return ntpSourceHtml();
   if (r.type === "ntpstatus") return ntpStatusHtml();
   if (r.type === "ups") return upsRowHtml();   // #1973
+  if (r.type === "grubpw") return grubPasswordRowHtml();   // #2450
   if (r.type === "name") {
     const v = settingCurrent(r.key);
     const btn = SERVER_CTX ? `<button class="btn sm flat" type="button" disabled title="שם של שרת משנה משנים מהקונסולה שלו — השינוי מפעיל אותו מחדש">שינוי שם…</button>` : ghostBtn("שינוי שם…", "hostnameSheet()");
@@ -8171,6 +8182,49 @@ function timesyncSheet() {
 async function timesyncCheckNow() {
   try { const status = await post("/timesync/check", {}); NTP_STATUS.status = status; renderCurrent(); }
   catch (e) { toast(e.message); await loadHostCfg(); renderCurrent(); }
+}
+/* ‏#2450: סיסמת ה-GRUB — מוסתרת עד "הצג…", ואז חלון אחד שמציג אותה (כמו הסיסמה הזמנית, #1268). תשובה בלי
+   סיסמה היא כשל גלוי (עיקרון 5), לא חלון ריק. בשרת משנה — מהקונסולה שלו: הנתיב אינו בערוץ בין השרתים. */
+function grubPasswordRowHtml() {
+  const btn = SERVER_CTX
+    ? `<button class="btn sm flat" type="button" disabled title="סיסמת ה-GRUB של שרת משנה מוצגת בקונסולה שלו">הצג…</button>`
+    : ghostBtn("הצג…", "grubPasswordSheet()");
+  return `<span class="sv muted">מוסתרת</span> ${btn}`;
+}
+function grubPasswordSheet() {
+  if (!isAdmin() || SERVER_CTX) return;
+  sheet({ title: "להציג את סיסמת ה-GRUB?", submitLabel: "הצג",
+    note: impactList([["w", "הצפייה נרשמת ביומן, עם שם המשתמש שלך"],
+      ["b", "עם הסיסמה אפשר לערוך את שורת הקרנל בכל תפריט GRUB של השרת ושל התחנות, ולהעלות את ערך השחזור של השרת"]]),
+    onSubmit: async () => {
+      const r = await post("/grub-password", {});
+      const pw = r && typeof r.password === "string" ? r.password : "";
+      if (!pw) throw new Error("השרת לא החזיר סיסמה");
+      return () => grubPasswordResult(r.user || "imagesrv", pw);
+    } });
+}
+function grubPasswordResult(user, pw) {
+  sheet({ title: "סיסמת GRUB", sub: `משתמש: ${user}`, submitLabel: "העתקה", cancelLabel: "סגירה",
+    note: UI.note("info", "שמור אותה במקום בטוח מחוץ לשרת: כשהשרת לא עונה, ערך השחזור שלו מבקש אותה, והקונסולה לא זמינה כדי להציג אותה. ב-GRUB מקלידים את שם המשתמש ואת הסיסמה; המקלדת שם תמיד באנגלית.")
+      + passwordFieldHtml({ id: "sf-grubpw", label: "סיסמה", value: pw, readonly: true, autocomplete: "off" }),
+    onSubmit: async () => {
+      const clip = navigator.clipboard;
+      if (!clip || !clip.writeText) throw new Error("ההעתקה אינה זמינה בדפדפן הזה — לחץ \"הצג\" והעתק ידנית");
+      try { await clip.writeText(pw); } catch (e) { throw new Error("ההעתקה נכשלה — לחץ \"הצג\" והעתק ידנית"); }
+      toast("הסיסמה הועתקה");
+    } });
+}
+/* ‏#2454: "שמרתי" — מנהל מסמן שהסיסמה הנוכחית נשמרה מחוץ לשרת. הסימון ביומן; שורת הבריאות
+   חוזרת לצהוב כשנוצרת סיסמה אחרת (התקנה, שדרוג, החלפה ביד). */
+function grubPasswordSavedSheet() {
+  if (!isAdmin() || SERVER_CTX) return;
+  sheet({ title: "סיסמת ה-GRUB נשמרה מחוץ לשרת?", submitLabel: "שמרתי",
+    note: impactList([["w", "הסימון נרשם ביומן, עם שם המשתמש שלך"],
+      ["b", "התזכורת בבריאות תיעלם, ותחזור אם הסיסמה תוחלף"]]),
+    onSubmit: async () => {
+      await post("/grub-password/saved", {});
+      return async () => { toast("הסימון נרשם"); await loadHealth(); };
+    } });
 }
 /* ‏#1973: ה-UPS — המצב השמור והקריאה האחרונה של המנטר. "לא נקרא" ≠ "על חשמל" (עיקרון 5). */
 let UPS_STATUS = null, upsError = "";

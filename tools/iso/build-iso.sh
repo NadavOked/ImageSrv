@@ -332,8 +332,11 @@ grep -q '^label imagesrv$' "$ISO_TREE/isolinux/imagesrv.cfg" || die "יצירת 
 if grep -q '@DI_ARGS@' "$ISO_TREE/isolinux/imagesrv.cfg"; then die "הפרמטרים לא הוזרקו ל-isolinux/imagesrv.cfg"; fi
 n_isolinux=$(grep -c '^label ' "$ISO_TREE/isolinux/imagesrv.cfg" || true)
 [[ "$n_isolinux" -eq 1 ]] || die "isolinux/imagesrv.cfg אינו מכיל בדיוק ערך אחד (נמצאו $n_isolinux)"
+# ‏#2453: ב-BIOS אין GRUB במסלול — ‏noescape 1 (בלי Shift/Alt בעלייה לשורת boot:) ו-
+# ‏allowoptions 0 (בלי Tab לעריכת הערך ובלי Esc מהתפריט ל-boot:): איש אינו עורך את
+# שורת הקרנל, כמו ה-GRUB של ה-ISO (#2450). הבדיקה המדויקת כאן שומרת גם עליהם.
 install -m 0644 "$SCRIPT_DIR/isolinux-menu.cfg.in" "$ISO_TREE/isolinux/menu.cfg"
-[[ "$(cat "$ISO_TREE/isolinux/menu.cfg")" == $'include stdmenu.cfg\ninclude imagesrv.cfg\ntimeout 1' ]] || die "isolinux/menu.cfg מכיל ערכים שאינם של ImageSrv"
+[[ "$(cat "$ISO_TREE/isolinux/menu.cfg")" == $'include stdmenu.cfg\ninclude imagesrv.cfg\ntimeout 1\nnoescape 1\nallowoptions 0' ]] || die "isolinux/menu.cfg מכיל ערכים שאינם של ImageSrv"
 n_default=$(grep -cE '^[[:space:]]+menu default$' "$ISO_TREE/isolinux/imagesrv.cfg" || true)
 [[ "$n_default" -eq 1 ]] || die "לא בדיוק menu default אחד בתפריט הראשי (נמצאו $n_default)"
 

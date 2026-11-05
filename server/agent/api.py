@@ -200,14 +200,15 @@ def agent_credentials(ctx: ServerContext, request: Request, username: str,
     ובלי נעילה, ו-admin/admin של התקנה טרייה נכנס לפני שהוחלף.
     ‏`failed_detail` הוא שורת היומן של `agent_login_failed`."""
     ip = request.client.host if request.client else "?"
+    # ‏#2443 (Fable): תקרת החשבון של פורט הסוכן — נפרדת מזו של הקונסולה.
     try:
-        login_guard.check(ctx.conn, username, ip)
+        login_guard.check(ctx.conn, username, ip, login_guard.AGENT)
     except login_guard.LoginBlocked as exc:
         return None, _error(exc.status, exc.message,
                             "login_locked" if exc.status == 403 else "login_delayed")
     role = users.verify(ctx.conn, username, password)
     if role is None:
-        login_guard.record_failure(ctx.conn, username, ip)
+        login_guard.record_failure(ctx.conn, username, ip, login_guard.AGENT)
         journal(ctx.conn, "agent_login_failed", failed_detail)
         return None, _error(401, "wrong username or password", "bad_login")
     login_guard.clear(ctx.conn, username, ip)

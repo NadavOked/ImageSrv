@@ -304,3 +304,15 @@ test('#1268: "שנה סיסמה" in my account — current + new + confirm, POST
   await s.onSubmit({current: 'Old-pass-1!', next: 'New-pass-2!'});
   assert.equal(run('flow.join(",")'), 'login,setup:nadav');
 });
+
+test('2443: the per-account cap shows the server sentence — what happened and when it opens', () => {
+  const {run} = setup();
+  const msg = 'החשבון חסום זמנית לכניסה מכתובת חדשה: 50 ניסיונות כניסה כושלים ב-15 הדקות האחרונות, מכמה כתובות. החסימה נפתחת לבד בעוד 12 דקות.';
+  const body = {detail: msg, error: 'login_account_capped', message_he: msg};
+  const st = run('loginStateFromResponse(429, ' + JSON.stringify(body) + ', 700, {username:"noc"})');
+  assert.equal(st.error, msg);
+  assert.equal(st.username, 'noc');
+  // the (name, IP) delay keeps the designed short line (#1085)
+  const st429 = run('loginStateFromResponse(429, ' + JSON.stringify(FIX.error429.body) + ', 900, {username:"nadav"})');
+  assert.equal(st429.error, 'החשבון נעול ל-15 דקות');
+});

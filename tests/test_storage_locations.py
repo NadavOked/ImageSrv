@@ -830,7 +830,7 @@ def test_fstab_write_is_atomic(tmp_path: Path, monkeypatch):
 
 
 def test_duplicate_mount_point_is_409_and_enforced_in_db(env, tmp_path: Path):
-    shared = tmp_path / "shared-images"
+    shared = env["data"] / "shared-images"      # ‏#2444: local רק בתוך data_dir / ‏/srv / כונן מעוגן
     shared.mkdir()
     first = env["admin"].post("/api/console/storage-locations", json={
         "name": "usb-a", "type": "local", "params": {"path": str(shared)},

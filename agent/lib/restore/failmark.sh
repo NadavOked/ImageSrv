@@ -64,11 +64,42 @@ target_ident() {
 # המקומי (lc_run) דוחים אותו בבחירה; בתחנה של דיסק יחיד (בנייה/תלמיד) אין דיסק
 # אחר להתבלבל איתו, והגודל והחריץ לבדם נבדקים -- זה לא נשבר בגלל VM בלי serial.
 
-_target_id() { printf '%s|%s|%s' "$(disk_serial "$1")" "$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null)" "$(disk_port "$1")"; }
+_target_key() { printf '%s|%s' "$(disk_serial "$1")" "$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null)"; }
+_target_id() { printf '%s|%s' "$(_target_key "$1")" "$(disk_port "$1")"; }
 
 target_bind() {
-    # $1 = disk. מה שיושב בשם הזה עכשיו -- מ-target_init, ומשם בלבד.
-    mkdir -p "$RUN_DIR/targets/$1" && _target_id "$1" > "$RUN_DIR/targets/$1/bound"
+    # $1 = disk. מה שיושב בשם הזה עכשיו -- מ-target_init, ומשם בלבד. ותאום שיושב כאן עכשיו (#2448).
+    mkdir -p "$RUN_DIR/targets/$1" && _target_id "$1" > "$RUN_DIR/targets/$1/bound" || return 1
+    rm -f "$RUN_DIR/targets/$1/twin"; _tb_tw=$(target_twin "$1") && printf '%s\n' "$_tb_tw" > "$RUN_DIR/targets/$1/twin"
+    return 0
+}
+
+# --- #2448: serial זהה מהמפעל -------------------------------------------------------
+# שני כוננים מאותו דגם ובאותו גודל עם אותו serial (למשל 0000000000) הם אותה זהות בלי
+# החריץ: מגירה 2 שעברה לחריץ 1 עונה בשם הזה ל-bound של מגירה 1. אי אפשר להבדיל
+# ביניהם, ולכן כל אחד מהם שהוא יעד נכשל בשמו ולא נכתב -- כשהתאום כאן עכשיו, או היה
+# כאן ב-target_init (`twin`: התאום שנשלף אחרי הבחירה עדיין אומר שהבחירה לא הייתה
+# חד-משמעית). ‏serial ריק נספר כזהות: שני דיסקים בלי serial באותו גודל הם תאומים, ודיסק
+# יחיד (בנייה/תלמיד) אין לו תאום -- הוא נכתב כמו קודם.
+
+target_twin() {
+    # $1 = disk. PRINTS the other disks here with its serial|sectors. 0 = there is one.
+    case "$1" in loop*) return 1 ;; esac      # the VM bridge's file (vmdisk.py), not a drawer: the host's disks are not its twins
+    _tt_k=$(_target_key "$1"); _tt=""
+    case "$_tt_k" in *'|') return 1 ;; esac   # no size: it is not here -- target_same says so
+    for _tt_d in $(list_disks); do
+        [ "$_tt_d" = "$1" ] || [ "$(_target_key "$_tt_d")" != "$_tt_k" ] || _tt="$_tt $_tt_d"
+    done
+    [ -n "$_tt" ] || return 1
+    printf '%s' "${_tt# }"
+}
+
+target_unique() {
+    # $1 = disk. 0 = no twin, now or at target_init. 1 = it failed by name (foreign).
+    _tu=$(target_twin "$1") || _tu=$(cat "$RUN_DIR/targets/$1/twin" 2>/dev/null) || return 0
+    [ -n "$_tu" ] || return 0
+    target_foreign "$1" "לדיסק $1 ולדיסק $_tu אותו מספר סידורי ואותו גודל — אי אפשר לדעת איזה מהם נבחר, לא נכתב על אף אחד מהם"
+    return 1
 }
 
 target_bound_serial() {
@@ -91,6 +122,7 @@ target_foreign() {
 
 assert_target() {
     # $1 = disk. לפני כל שלב הרסני. 0 = זה הדיסק שנבחר; 1 = היעד נכשל בשמו ולא נכתב.
+    target_unique "$1" || return 1   # #2448: a twin here -- "the same" would not tell them apart
     target_same "$1" && return 0
     target_foreign "$1" "הדיסק שבשם $1 אינו הדיסק שנבחר לכתיבה (הוחלף או נשלף) — לא נכתב עליו"
     return 1

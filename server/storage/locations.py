@@ -155,6 +155,58 @@ def validate_params(kind: str, params: dict) -> str | None:
     return None
 
 
+#: ‏#2444: מיקום `local` — תיקיות שמותרות בלי עיגון משלהן, וענפי מערכת שאסורים גם
+#: כשהם מעוגנים (‏`/boot`, ‏`/proc`…). השרת רץ כ-root ויוצר שם `images/`.
+LOCAL_ROOTS = ("/srv",)
+#: ‏Fable על #2444: ‏`/var` (אחרי `data_dir`, שיושב בתוכו), ‏`/tmp`, ‏`/opt` (קוד השרת)
+#: ועצי האתחול של השרת עצמו (‏`--boot-dir`, ‏`--tftp-root` בברירת המחדל) — נבדקים
+#: **לפי prefix אחרי realpath, לפני כל כלל היתר**, ולכן `/var` מעוגן בנפרד אינו פותח
+#: את `/var/lib/dpkg`, ו-`/srv` המותר אינו פותח את `/srv/tftp`.
+LOCAL_SYSTEM_TREES = ("/proc", "/sys", "/dev", "/run", "/boot", "/etc", "/usr", "/bin",
+                      "/sbin", "/lib", "/lib32", "/lib64", "/root", "/var", "/tmp", "/opt",
+                      "/srv/imagesrv/boot", "/srv/tftp")
+LOCAL_PATH_REFUSED = ("נתיב לא מורשה למיקום מקומי — רק בתוך תיקיית הנתונים של השרת, "
+                      "תחת /srv, או על כונן מעוגן נפרד (לא מערכת הקבצים של השורש)")
+
+
+def _posix(path: str) -> str:
+    """צורה פוסיקסית בלי אות כונן — כדי שהכלל ייבדק אותו דבר גם בתחנת הפיתוח."""
+    return os.path.splitdrive(path)[1].replace("\\", "/")
+
+
+def _under(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+def local_path_problem(path, data_dir, is_mount) -> str | None:
+    """‏#2444: ‏None = מותר; מחרוזת = סיבת ה-400. נקרא ביצירה ובבדיקת חיבור בלבד —
+    מיקום ששמור ב-DB לא נבדק מחדש, ולכן שרת קיים לא נשבר.
+
+    מותר: בתוך `data_dir`; אחרת אסור כל מה שתחת `LOCAL_SYSTEM_TREES` (לפי prefix, גם
+    כשהוא מעוגן); ומהשאר — תחת `/srv`, או על/מתחת לנקודת עיגון קיימת שאינה `/`
+    (‏`is_mount` — ההוק, אצל PID 1 וגם אצל השירות). ההשוואה אחרי `realpath`, כלומר
+    `..` וקישורים סימבוליים כבר נפתרו. עיגון שאי אפשר היה לבדוק = לא עיגון."""
+    raw = str(path or "")
+    if not raw or _CONTROL_CHARS.search(raw) or not (os.path.isabs(raw) or raw.startswith("/")):
+        return LOCAL_PATH_REFUSED
+    real = os.path.realpath(raw)
+    where = _posix(real)
+    data = _posix(os.path.realpath(str(data_dir)))
+    if data not in ("", "/") and _under(where, data):
+        return None
+    if any(_under(where, tree) for tree in LOCAL_SYSTEM_TREES):
+        return LOCAL_PATH_REFUSED
+    roots = [_posix(os.path.realpath(r)) for r in LOCAL_ROOTS]
+    if any(root not in ("", "/") and _under(where, root) for root in roots):
+        return None
+    for candidate in (Path(real), *Path(real).parents):
+        if _posix(str(candidate)) in ("", "/"):
+            break
+        if is_mount(str(candidate)):
+            return None
+    return LOCAL_PATH_REFUSED
+
+
 @dataclass(frozen=True)
 class HookResult:
     """תוצאת hook — שלושה מצבים, לא bool (עיקרון 5)."""

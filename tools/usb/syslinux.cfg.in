@@ -2,6 +2,9 @@
 DEFAULT imagesrv
 PROMPT 0
 TIMEOUT 0
+# #2453: nobody edits the kernel line -- no boot: prompt from Shift/Alt/Caps Lock, no options but APPEND.
+NOESCAPE 1
+ALLOWOPTIONS 0
 LABEL imagesrv
     KERNEL /imagesrv/vmlinuz
     INITRD /imagesrv/initrd.img

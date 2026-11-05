@@ -26,11 +26,24 @@ def _idle(conn) -> int:
     return int(get_setting(conn, "console_idle_seconds") or 600)
 
 
-def _raise_blocked(exc: login_guard.LoginBlocked) -> None:
+def _blocked_reply(exc: login_guard.LoginBlocked) -> JSONResponse:
     headers = {}
     if exc.retry_after is not None:
         headers["Retry-After"] = str(exc.retry_after)
+    if exc.code == login_guard.ACCOUNT_CAPPED:
+        # ‏#2443: מה קרה ומתי זה נפתח — מסך הכניסה מציג את המשפט הזה כלשונו,
+        # ולא את "החשבון נעול ל-N דקות" של התקרה לפי (שם, IP).
+        return JSONResponse({"detail": exc.message, "error": exc.code,
+                             "message_he": exc.message},
+                            status_code=exc.status, headers=headers)
     raise HTTPException(exc.status, exc.message, headers=headers)
+
+
+def login_surface(request: Request) -> str:
+    """‏#2443: המשטח נקבע לפי הפורט — ‏`/api/console/login` חי גם בפורט הסוכן
+    (מחשב הבנייה), וכשלון משם אינו נספר בתקרה של הקונסולה."""
+    on_agent_port = getattr(request.app.state, auth.KIOSK_APP_FLAG, False)
+    return login_guard.AGENT if on_agent_port else login_guard.CONSOLE
 
 
 async def finish_login(conn, request: Request, response: Response, *,
@@ -52,14 +65,15 @@ async def finish_login(conn, request: Request, response: Response, *,
     password = password or ""
     ip = _ip(request)
     auth.assert_secret(conn)
+    surface = login_surface(request)
     try:
-        login_guard.check(conn, username, ip)
+        login_guard.check(conn, username, ip, surface)
     except login_guard.LoginBlocked as exc:
-        _raise_blocked(exc)
+        return _blocked_reply(exc)
 
     role = users.verify(conn, username, password)
     if role is None:
-        login_guard.record_failure(conn, username, ip)
+        login_guard.record_failure(conn, username, ip, surface)
         journal(conn, "login_failed", username)
         raise HTTPException(401, "שם משתמש או סיסמה שגויים")
 

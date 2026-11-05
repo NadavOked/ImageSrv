@@ -86,13 +86,21 @@ install_bootloader() {
     done
     [ "${RAID_LEVEL:-none}" = none ] || raid_extra_esps
     # Boot straight through like ESXi, while leaving a short Esc/Shift window.
-    # Written before update-grub reads it.
+    # Written before update-grub reads it. #2450: no Debian recovery entries --
+    # every entry 10_linux writes boots without the GRUB password, and recovery
+    # is the one below, which asks for it.
     write_target 0644 /etc/default/grub.d/imagesrv.cfg "GRUB_TIMEOUT_STYLE=hidden
 GRUB_TIMEOUT=3
+GRUB_DISABLE_RECOVERY=true
 "
+    # #2450: e and c ask for the GRUB password (grublock.sh)
+    write_grub_password
+    write_target 0755 /etc/grub.d/01_imagesrv_lock "$GRUB_LOCK_SCRIPT"
     # A deterministic recovery path that does not depend on Debian's optional
     # recovery submenu. grub-probe runs when update-grub generates grub.cfg, so
     # both BIOS and UEFI installations use the installed root filesystem UUID.
+    # #2450: no --unrestricted and no $menuentry_id_option -- booting it asks
+    # for the GRUB password (owner, 04/11).
     write_target 0755 /etc/grub.d/41_imagesrv_recovery '#!/bin/sh
 set -eu
 root_uuid=$(grub-probe --target=fs_uuid /)
@@ -107,6 +115,7 @@ EOF
     link_root_by_uuid
     must_run grub-config "update-grub failed" chroot "$TARGET" update-grub
     grub_boots_root_by_uuid
+    grub_menu_locked
 }
 
 # #2137 (rc3, Hyper-V 24/10): grub.cfg booted root=/dev/sda2, and a second

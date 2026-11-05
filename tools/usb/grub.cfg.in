@@ -4,7 +4,11 @@
 # word, imagesrv.mode=usbclone (CLAUDE.md principle 2): no imagesrv.server, no task.
 set timeout=0
 set default=0
-menuentry "ImageSrv USB @VERSION@" {
+# #2450: e and c are locked for everyone -- superusers names a user with no password
+# here, so nobody edits the kernel line of the agent. The stick is built for a release, not
+# by one server, so it cannot carry the password of a server. Booting asks nothing.
+set superusers="imagesrv"
+menuentry "ImageSrv USB @VERSION@" --unrestricted {
     linux /imagesrv/vmlinuz imagesrv.mode=usbclone console=tty0 quiet loglevel=3
     initrd /imagesrv/initrd.img
 }

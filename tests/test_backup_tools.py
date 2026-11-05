@@ -185,3 +185,38 @@ def test_the_docs_describe_backup_and_restore():
     for needle in ("backup-server.sh", "verify-images.py", "restore-drill.sh",
                    "הורד גיבוי הגדרות", "RPO"):
         assert needle in text, needle
+
+
+GRUB_PW = "abcde-fghjk-mnpqr-stuvw"
+SMB_PW = "smb-Secret-of-the-nas-77"
+
+
+@posix_tools
+def test_backup_server_carries_no_grub_password_and_no_smb_credentials(tmp_path: Path):
+    """‏#2450/#2455: ‏`/etc/imagesrv` נכנס לגיבוי — חוץ משני הסודות שבו.
+
+    ‏grub-password: התקנה נקייה (שלב 1 בשחזור) יוצרת סיסמה חדשה. ‏creds/: הסוד של מיקום
+    SMB שמור ב-DB (‏params_json), ו"התחבר" כותב את הקובץ מחדש; של יעד הגיבוי — מוזן מחדש.
+    שאר `/etc/imagesrv` (known-macs, ‏dnsmasq-proxy.conf, ‏raid) נשאר בגיבוי."""
+    data, images = _seed_server(tmp_path)
+    etc = tmp_path / "sysroot" / "etc" / "imagesrv"
+    (etc / "creds").mkdir(parents=True)
+    (etc / "grub-password").write_text(GRUB_PW + "\n")
+    (etc / f".grub-password.{os.getpid()}.tmp").write_text(GRUB_PW + "\n")   # write_atomic באמצע
+    (etc / "creds" / "loc_1a2b3c4d").write_text(f"username=svc\npassword={SMB_PW}\n")
+    (etc / "creds" / "backup").write_text(f"username=bk\npassword={SMB_PW}\n")
+    (etc / "known-macs").write_text("aa:bb:cc:dd:ee:01,set:known\n")
+    (etc / "dnsmasq-proxy.conf").write_text("dhcp-range=10.0.0.0,proxy\n")
+    (etc / "raid").write_text("level=1\n")
+    dest = tmp_path / "dest"
+    r = _sh(BACKUP_SH, "--dest", str(dest), "--data-dir", str(data), "--images", str(images),
+            "--app-dir", str(REPO), "--system-root", str(tmp_path / "sysroot"), "--no-images")
+    assert r.returncode == 0, r.stdout + r.stderr
+    sysd = next((dest / "system").iterdir()) / "etc" / "imagesrv"
+    for kept in ("known-macs", "dnsmasq-proxy.conf", "raid"):
+        assert (sysd / kept).read_text() == (etc / kept).read_text(), kept
+    leaked = [p for p in dest.rglob("*") if p.is_file()
+              and (GRUB_PW.encode() in p.read_bytes() or SMB_PW.encode() in p.read_bytes())]
+    assert leaked == [], leaked
+    assert not (sysd / "creds").exists() and not (sysd / "grub-password").exists()
+    assert "grub-password" in r.stdout and "creds" in r.stdout      # נאמר, לא בשקט

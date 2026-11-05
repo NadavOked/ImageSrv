@@ -49,6 +49,7 @@ from server.console.timezone import create_timezone_router
 from server.console.timesync import create_timesync_router
 from server.console.ups import create_ups_router
 from server.console.email_alerts import create_email_router   # #1751
+from server.console.grubpw import create_grub_password_router, reminder as grub_reminder   # #2450, #2454
 from server.system import email_alerts   # #1751
 from server.console.tls import ConsoleTLS
 from server.console.storage import create_storage_router
@@ -244,6 +245,8 @@ class ServerRuntime:
     #: ‏#2437: ה-hash של סיסמת עורך ה-GRUB לכל grub.cfg שמוגש. ריק = נעול בלי
     #: סיסמה (בדיקות, תחנת פיתוח, או סיסמה שלא נקראה).
     grub_password_hash: str = ""
+    #: ‏#2450: הקובץ עצמו — למנהל שרואה את הסיסמה בהגדרות. ‏None = אין כזה.
+    grub_password_file: "str | Path | None" = None
 
 
 async def _room_clock(rt: ServerRuntime, interval: float) -> None:
@@ -771,6 +774,7 @@ def create_runtime(
         auto_reboot_interval=auto_reboot_interval,
         auto_reboot_last=auto_reboot_last,
         grub_password_hash=grub_hash,
+        grub_password_file=grub_password_file,
     )
 
 
@@ -1007,6 +1011,8 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     שהוא גם מסך ניהול). ה-API `/api/v1/agent/*` חי על הסוכן (#824)."""
     ctx = rt.ctx
     health_hooks = dict(rt.health_hooks or {})
+    # ‏#2454: שורת "סיסמת GRUB" — צהובה עד "שמרתי"; אין קובץ (בדיקות, פיתוח) = אין שורה.
+    health_hooks.setdefault("grub_password", lambda: grub_reminder(ctx.conn, rt.grub_password_file))
     # ‏#748: תיקיית העץ נופלת לתיקיית הקוד עצמה כשאין ``--repo-dir``
     # מפורש (בדיקות/הרצה ישירה) — ראו ``main.py``.
     repo_dir = rt.repo_dir or REPO_ROOT
@@ -1090,6 +1096,7 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_timesync_router(ctx, rt.host_hooks))   # #1773
     include(create_ups_router(ctx, (rt.host_hooks or {}).get("ups")))   # #1973
     include(create_email_router(ctx))   # #1751
+    include(create_grub_password_router(ctx, rt.grub_password_file))   # #2450
     # ‏#690: admin RFB proxy + settings — ה-HTTP שלו admin_only ממילא.
     app.include_router(create_monitor_router(ctx))
     # ‏#1334: ה-HTTP דרך include (console_only: deploy מקבל את הסירוב של #1073),

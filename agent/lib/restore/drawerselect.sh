@@ -35,6 +35,33 @@ resolve_target_drawers() {
         esac
     done
     [ -n "$_disks" ] || die_local "the room selected no writable drawers"
+    # #2448: what the console showed in each chosen slot (the serial and size of this
+    # hello's own inventory) -> drawer_shown, port|size_bytes|serial. Absent/null = a
+    # server from before #2448: the slot alone, as before. Anything else -- or jq that
+    # broke on it -- is not "nothing to compare": die_local, nothing written (principle 5).
+    rm -f "$RUN_DIR/drawer_shown"
+    case "$(jq -r '.session.target_disks | type' "$RESP" 2>/dev/null)" in
+        null) ;;
+        array) jq -r '.session.target_disks[] | select(type == "object" and (.port | type) == "number" and (.port | floor) == .port)
+                  | "\(.port)|\(.size_bytes // "")|\(.serial // "")"' "$RESP" > "$RUN_DIR/drawer_shown" \
+                   || { rm -f "$RUN_DIR/drawer_shown"; die_local "room target disks are malformed"; } ;;
+        *) die_local "room target disks are malformed" ;;
+    esac
+}
+
+drawer_shown() {
+    # $1 = disk, $2 = the slot the room chose. #2448: 0 = no drawer_shown (an old server),
+    # or what target_init bound is what the console showed in that slot -- the same
+    # serial and size. A slot the server sent nothing for, or null, is not "the same".
+    [ -f "$RUN_DIR/drawer_shown" ] || return 0
+    _ds_b=$(cat "$RUN_DIR/targets/$1/bound" 2>/dev/null); _ds_n=${_ds_b%|*}; _ds_n=${_ds_n##*|}
+    case "$_ds_n" in ''|*[!0-9]*) return 1 ;; esac
+    while IFS='|' read -r _ds_p _ds_z _ds_v; do
+        [ "$_ds_p" = "$2" ] || continue
+        [ -n "$_ds_v" ] && [ "$_ds_v" = "$(target_bound_serial "$1")" ] && [ "$_ds_z" = "$((_ds_n * 512))" ]
+        return
+    done < "$RUN_DIR/drawer_shown"
+    return 1
 }
 
 drawers_bound() {
@@ -43,6 +70,8 @@ drawers_bound() {
     # chose (DRAWER_MAP). #2434: the drawer is then written by that identity, and
     # assert_target asks it again before every write. A drawer with no serial has
     # nothing to be asked by -- it fails by name, in the open, and is not written.
+    # #2448: nor a drawer with a twin here, nor one that is not the disk the console
+    # showed in its slot (drawer_shown) -- the identity target_init bound, compared.
     for _db_d in "$@"; do
         _db_p=""; for _db_m in $DRAWER_MAP; do [ "${_db_m%:*}" != "$_db_d" ] || _db_p=${_db_m##*:}; done
         _db_b=$(cat "$RUN_DIR/targets/$_db_d/bound" 2>/dev/null)
@@ -50,10 +79,14 @@ drawers_bound() {
             target_foreign "$_db_d" "זהות המגירה $_db_d לא נרשמה בבחירה — אי אפשר לוודא שזה הדיסק שנבחר, לא נכתב"
         elif [ -z "$(target_bound_serial "$_db_d")" ]; then
             target_foreign "$_db_d" "למגירה $_db_d אין מספר סידורי — אי אפשר לוודא שזה הדיסק שנבחר, לא נכתב"
+        elif ! target_unique "$_db_d"; then
+            :   # #2448: a twin (the same serial and size) -- failed by name (failmark.sh)
         elif [ -z "$_db_p" ]; then
             target_foreign "$_db_d" "המגירה $_db_d אינה במיפוי החריצים שהחדר בחר — לא נכתב"
         elif [ "${_db_b##*|}" != "$_db_p" ]; then
             target_foreign "$_db_d" "הדיסק $_db_d בחריץ $(_p=${_db_b##*|}; echo "${_p:-לא ידוע}"), לא בחריץ שנבחר ($_db_p) — לא נכתב"
+        elif ! drawer_shown "$_db_d" "$_db_p"; then
+            target_foreign "$_db_d" "המגירה הוחלפה אחרי שנבחרה: בחריץ $_db_p יש עכשיו דיסק $(target_bound_serial "$_db_d"), לא הדיסק שהקונסולה הציגה — לא נכתב"
         else
             echo "$_db_d"
         fi
