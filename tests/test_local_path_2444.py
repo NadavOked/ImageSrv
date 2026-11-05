@@ -161,7 +161,12 @@ def test_a_folder_inside_the_data_dir_is_created(env):
     assert r.status_code == 200, r.text
 
 
-def test_a_mounted_disk_is_created(env, tmp_path):
+def test_a_mounted_disk_is_created(env, tmp_path, monkeypatch):
+    # tmp_path של pytest יושב ב-CI תחת /tmp, שאסור גם כשהוא מעוגן (#2467). הטסט בודק
+    # את כלל העיגון, לא איפה pytest שם קבצים — לכן הענף שמכיל את tmp_path מוצא מהרשימה.
+    where = sl._posix(os.path.realpath(str(tmp_path)))
+    monkeypatch.setattr(sl, "LOCAL_SYSTEM_TREES",
+                        tuple(t for t in sl.LOCAL_SYSTEM_TREES if not sl._under(where, t)))
     usb = tmp_path / "usb"
     (usb / "images").mkdir(parents=True)
     env["fake"].mounted.add(str(usb))

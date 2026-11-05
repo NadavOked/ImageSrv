@@ -18,7 +18,11 @@ useDefault = true
     # כדי שסוד אמיתי שייכנס לטסטים ייתפס.
     # וסוד-הדוגמה של המוניטור (#846): 16 בייטים סדרתיים ב-hex, ב-docs/architecture/interfaces.md
     # וב-tests/test_monitor{,_native}.py — אותו כלל: הערך הזה בלבד.
-    regexes = ['''aabbccddeeff00112233445566778899''', '''00112233445566778899aabbccddeeff''']
+    # ושני ערכים של נעילת ה-GRUB (#2452): האלפבית של סיסמת ה-GRUB ב-
+    # installer/lib/grublock.sh (קבוע ציבורי, לא סיסמה), ודגל שורת הפקודה
+    # של grub-mkpasswd-pbkdf2 ב-tests/test_grub_lock_2437.py.
+    regexes = ['''aabbccddeeff00112233445566778899''', '''00112233445566778899aabbccddeeff''',
+               '''^abcdefghjkmnpqrstuvwxyz23456789$''', '''^--iteration-count=1000$''']
 
 [[rules]]
   # מפתחות Gemini/Google בפורמט החדש (2026): קידומת `AQ.` ו-~50 תווי
