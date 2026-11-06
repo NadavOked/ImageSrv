@@ -137,6 +137,15 @@ event_beep() {
 
 round_beep() { event_beep "$1"; }
 
+source_failed_beep() {
+    # #2067 (Nadav 24/10): "המקור נכשל" is heard at the moment the source could not be
+    # read -- not after the copy's cleanup (lc_end). One failure, one tune: the mark tells
+    # lc_end its own would be the second. A mark that cannot be written = it may sound twice,
+    # never none.
+    echo 1 > "${LC:-$RUN_DIR/lc}/run/beeped" || log 'beep: source-failure mark not saved'
+    event_beep failure
+}
+
 round_beep_result() {
     # $@ = every target of the job, the ones skipped before writing too:
     # all done = success; partial or none = failure (Nadav 24/10).
@@ -187,14 +196,56 @@ stream_beep_tick() {
     # age in seconds; none = sampled. The stream stood still NETLOST_AFTER_S
     # (30) = netlost, once an outage; it moves again = netback, once.
     # In-process and synchronous (one caller): only a tune forks.
+    # The screen's bars (#2067, mockup 08) read the same two moments, kept by
+    # stream_net_record: when the last byte came before the outage (beep.netsince)
+    # and how long it lasted (beep.netend), so the bar and the tune never disagree.
     if [ "$#" -gt 0 ]; then _rb_age=$1; else _rb_stream_age; fi
-    case "$_rb_age" in ''|*[!0-9]*) [ ! -e "$RUN_DIR/beep.net" ] || rm -f "$RUN_DIR/beep.net"; return 0 ;; esac
+    case "$_rb_age" in ''|*[!0-9]*) [ ! -e "$RUN_DIR/beep.net" ] || rm -f "$RUN_DIR/beep.net" "$RUN_DIR/beep.netsince"; return 0 ;; esac
     _rb_limit=${NETLOST_AFTER_S:-30}; case "$_rb_limit" in ''|*[!0-9]*) _rb_limit=30 ;; esac
     _rb_net=up; [ ! -r "$RUN_DIR/beep.net" ] || read -r _rb_net < "$RUN_DIR/beep.net"
     if [ "$_rb_net" = lost ] && [ "$_rb_age" -lt "$_rb_limit" ]; then
-        event_beep netback; echo up > "$RUN_DIR/beep.net" || log 'beep: stream state not saved'
+        _rb_netmark back; event_beep netback; echo up > "$RUN_DIR/beep.net" || log 'beep: stream state not saved'
     elif [ "$_rb_net" != lost ] && [ "$_rb_age" -ge "$_rb_limit" ]; then
-        event_beep netlost; echo lost > "$RUN_DIR/beep.net" || log 'beep: stream state not saved'
+        _rb_netmark lost; event_beep netlost; echo lost > "$RUN_DIR/beep.net" || log 'beep: stream state not saved'
     fi
     return 0
+}
+
+_rb_netmark() {
+    # $1 = lost | back, at the moment of the change. The last byte came at
+    # now - age; an outage lasted from the last byte before it to the first
+    # after it. A moment that could not be saved is absent ("-"), never a guess.
+    _rb_now=$(date +%s); case "$_rb_now" in ''|*[!0-9]*) return 0 ;; esac
+    if [ "$1" = lost ]; then
+        rm -f "$RUN_DIR/beep.netend"
+        echo $((_rb_now - _rb_age)) > "$RUN_DIR/beep.netsince" || log 'beep: outage start not saved'
+        return 0
+    fi
+    _rb_since=; [ ! -r "$RUN_DIR/beep.netsince" ] || read -r _rb_since < "$RUN_DIR/beep.netsince"
+    rm -f "$RUN_DIR/beep.netsince"
+    case "$_rb_since" in ''|*[!0-9]*) _rb_since= ;; esac
+    _rb_away=; [ -z "$_rb_since" ] || _rb_away=$((_rb_now - _rb_age - _rb_since))
+    [ -z "$_rb_away" ] || [ "$_rb_away" -ge 0 ] || _rb_away=0
+    echo "${_rb_away:--} $_rb_now" > "$RUN_DIR/beep.netend" || log 'beep: outage end not saved'
+}
+
+stream_net_record() {
+    # The state record of the screen's bar (clonergui.sh, native-gui state.c):
+    #   net=lost|<epoch of the last byte, or empty>|<stall ceiling, s>  while it lasts
+    #   net=back|<seconds it lasted, or empty>|<epoch it came back>   for 5 s after
+    # Nothing = no bar. Builtin reads; `date` only in the 5 s after a return.
+    _rb_net=; [ ! -r "$RUN_DIR/beep.net" ] || read -r _rb_net < "$RUN_DIR/beep.net"
+    if [ "$_rb_net" = lost ]; then
+        _rb_since=; [ ! -r "$RUN_DIR/beep.netsince" ] || read -r _rb_since < "$RUN_DIR/beep.netsince"
+        case "$_rb_since" in *[!0-9]*) _rb_since= ;; esac
+        _rb_ceil=${UDPCAST_STALL_TIMEOUT:-300}; case "$_rb_ceil" in ''|*[!0-9]*) _rb_ceil= ;; esac
+        printf 'net=lost|%s|%s\n' "$_rb_since" "$_rb_ceil"; return 0
+    fi
+    [ -r "$RUN_DIR/beep.netend" ] || return 0
+    _rb_away=; _rb_at=; read -r _rb_away _rb_at < "$RUN_DIR/beep.netend"
+    case "$_rb_at" in ''|*[!0-9]*) rm -f "$RUN_DIR/beep.netend"; return 0 ;; esac
+    _rb_now=$(date +%s); case "$_rb_now" in ''|*[!0-9]*) return 0 ;; esac
+    if [ $((_rb_now - _rb_at)) -ge "${NETBACK_SHOW_S:-5}" ]; then rm -f "$RUN_DIR/beep.netend"; return 0; fi
+    case "$_rb_away" in *[!0-9]*) _rb_away= ;; esac
+    printf 'net=back|%s|%s\n' "$_rb_away" "$_rb_at"
 }

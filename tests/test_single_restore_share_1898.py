@@ -24,6 +24,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -135,7 +136,13 @@ def test_no_approval_writes_nothing_and_says_why_in_hebrew(tmp_path, answer, gui
     assert not (r["run"] / "targets/sda/share.ok").exists()
     assert "TEST-REBOOT: restore: the split of the room was not approved (#1898)" in r["out"], r["out"]
     if gui:
-        last = body(cards(r["seen"])[-1])
+        # The agent does not hold the card under IMAGESRV_TEST, so it can exit
+        # before the stub's next poll; the stub is still running and records it.
+        seen = r["run"] / "gui.seen"
+        deadline = time.monotonic() + 10
+        while "message=" not in seen.read_text(encoding="utf-8") and time.monotonic() < deadline:
+            time.sleep(0.05)
+        last = body(cards(seen.read_text(encoding="utf-8"))[-1])
         assert last == (f"message=השחזור לא התחיל — לא נכתב דבר|{RLM}"
                         "חלוקת המקום בין המחיצות לא אושרה · המחשב יופעל מחדש\n"), last
 

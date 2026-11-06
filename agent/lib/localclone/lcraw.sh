@@ -91,7 +91,7 @@ lc_stream_any() {
     if [ "$_sa_a" = stop ]; then
         log "local clone: partition $_sa_i: bad sectors -- the operator stopped the copy"
         _fail_alive "$*" "מחיצה $_sa_i: קריאת המקור נכשלה גם בהעתקה גולמית (rc=$_sa_dd) — כנראה סקטורים פגומים. המפעיל בחר לעצור; המקור לא שונה"
-        echo "$_sa_i|failed" > "$LC/run/cur"; return 1
+        echo "$_sa_i|failed" > "$LC/run/cur"; source_failed_beep; return 1   # #2067: the operator stopped at bad sectors -- heard now
     fi
     [ "$_sa_a" = continue ] || log "local clone: partition $_sa_i: no answer in ${LC_RESCUE_ASK_S}s, or no GUI -- continued by itself (Nadav 22/10)"
     _sa_z=$(jq -r --argjson i "$_sa_i" '.partitions[] | select(.index == $i) | .size_bytes' "$_sa_m" 2>/dev/null)

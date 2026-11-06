@@ -732,7 +732,7 @@ CONSOLE_GETS: tuple[tuple[str, type], ...] = (
     (r"/users", list), (r"/journal", list), (r"/journal/events", list),
     (r"/settings", dict), (r"/update", dict), (r"/update/status", dict),
     # מה-gate (11/10): כרטיסי TLS ושם המארח בהגדרות, ומי מחובר לקונסולה (דף הרשת).
-    (r"/tls", dict), (r"/hostname", dict), (r"/sessions", list),
+    (r"/tls", dict), (r"/hostname", dict), (r"/sessions", list),   # ‏``current`` תמיד False כאן: אין עוגייה של המשני (#2552)
     # ‏#1932: שורת "אזור זמן" בהגדרות של המשני (קריאה; הכתיבה ב-``CONSOLE_WRITES``).
     (r"/timezone", dict),
     # המשני עונה 409 משלו (אינו מנהל ילדים) — העמוד מקבל את תשובת המשני.

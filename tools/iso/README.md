@@ -77,7 +77,7 @@ sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v
 
 * ‏`xorriso -report_el_torito`: שני קטעי אתחול (BIOS `isolinux.bin`, ‏UEFI
   `efi.img`), ‏MBR/GPT/APM שוחזרו מה-netinst.
-* ‏BIOS: התפריט עולה, "ImageSrv server install" מסומן, **אין טיימר**. שני
+* ‏BIOS (**לפני #1190** — מאז: ‏GRUB `timeout=0` ו-isolinux `timeout 1`, כלומר ה-ISO עולה ישר למתקין בלי Enter, כפי שכתוב למעלה; הדיסק נמחק רק אחרי "אני מבין" ו"החל התקנה" בגואי): התפריט עולה, "ImageSrv server install" מסומן, **אין טיימר**. שני
   דברים ב-netinst של דביאן 13 היו מונעים זאת ו-`build-iso.sh` מסיר אותם:
   ‏`gtk.cfg` נושא `menu default` משלו (האחרון מנצח), ו-`spkgtk.cfg` מפעיל
   **התקנה קולית אינטראקטיבית אחרי 30 שניות** בלי מגע (`timeout 300` +

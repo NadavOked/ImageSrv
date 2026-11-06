@@ -4,6 +4,7 @@
 #include "screens_install.h"
 #include "install_raid.h"     /* #1989 */
 #include "screens_rounds.h"   /* bidi_isolate, RLM */
+#include "he_time.h"          /* #1503 */
 
 /* #2097: under DHCP the address the NIC has now -- https://<name>:8081 works only
  * once the college's DNS knows the new server. The name when there is no address. */
@@ -55,7 +56,7 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
     console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+354+dy,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+354+dy,w-210,t->indigo);y+=388+dy;
     Rect seq={x,y,fmin(760,w),112};install_card(cr,t,seq);install_text_r(cr,t,"מה יקרה בלחיצה על \"החל התקנה\"",14,600,seq.x+seq.w-16,y+14,seq.w-32,t->ink);
     install_text_r(cr,t,"מחיקת הדיסק ← מערכת בסיס ← חבילות ImageSrv ← מנהל אתחול ← הגדרות",13,500,seq.x+seq.w-16,y+50,seq.w-32,t->ink);
-    char after[192];snprintf(after,sizeof after,"בסיום תתבקש להסיר את מדיית ההתקנה; השרת יופעל מחדש אוטומטית אחרי %d שניות.",INSTALL_AUTO_REBOOT_S);install_text_r(cr,t,after,12,400,seq.x+seq.w-16,y+78,seq.w-32,t->muted);
+    char after[192],secs[32];he_secs(INSTALL_AUTO_REBOOT_S,secs,sizeof secs);snprintf(after,sizeof after,"בסיום תתבקש להסיר את מדיית ההתקנה; השרת יופעל מחדש אוטומטית אחרי %s.",secs);install_text_r(cr,t,after,12,400,seq.x+seq.w-16,y+78,seq.w-32,t->muted);
     install_footer(a,cr,l,"החל התקנה",HIT_INSTALL_NEXT,1,1);
 }
 
@@ -148,7 +149,7 @@ static void reboot_countdown(App *a,cairo_t *cr,Rect r){
     InstallState *s=&a->install;const Theme *t=a->theme;char line[128];
     if(s->reboot_at<=0){install_text_r(cr,t,"ההפעלה מחדש האוטומטית בוטלה. לחץ 'הפעל מחדש' כשתסיים.",13,500,r.x+r.w-20,r.y+18,r.w-40,t->muted);return;}
     draw_fill_rrect(cr,r,t->radius,t->indigo_soft);draw_border_rrect(cr,r,t->radius,t->indigo,1);
-    snprintf(line,sizeof line,"הפעלה מחדש אוטומטית בעוד %d שניות",s->reboot_left);install_text_r(cr,t,line,15,600,r.x+r.w-20,r.y+18,r.w-160,t->ink);
+    {char secs[32];he_secs(s->reboot_left,secs,sizeof secs);snprintf(line,sizeof line,"הפעלה מחדש אוטומטית בעוד %s",secs);}install_text_r(cr,t,line,15,600,r.x+r.w-20,r.y+18,r.w-160,t->ink);
     Text c=btn_label(cr,"בטל");double cw=btn_width(&c);draw_btn(a,cr,(Rect){r.x+10,r.y+10,cw,N_BUTTON_H},&c,BTN_PLAIN,HIT_INSTALL_CANCEL_REBOOT);text_free(&c);
 }
 

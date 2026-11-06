@@ -270,16 +270,18 @@ function ago(iso) {
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 90) return "עכשיו";
   if (seconds < 3600) return `לפני ${Math.round(seconds / 60)} דק'`;
-  if (seconds < 86400) return `לפני ${Math.round(seconds / 3600)} שע'`;
+  if (seconds < 86400) { const h = Math.round(seconds / 3600); return h === 1 ? "לפני שעה" : `לפני ${h} שע'`; }   // #1503: לא "1 שע'"
   return iso.slice(0, 10);
 }
 
 /* #400 — "כמה זמן עבר" לשלב האתחול האחרון (שלב האתחול — במגירת המחשב, ‏bootCell). */
 function sinceSeconds(seconds) {
-  if (seconds < 90) return `לפני ${Math.round(seconds)} שנ'`;
+  // #1503: יחיד במקום "לפני 1 ימים" / "1 שע'"
+  if (seconds < 90) { const s = Math.round(seconds); return s === 1 ? "לפני שנייה" : `לפני ${s} שנ'`; }
   if (seconds < 3600) return `לפני ${Math.round(seconds / 60)} דק'`;
-  if (seconds < 86400) return `לפני ${Math.round(seconds / 3600)} שע'`;
-  return `לפני ${Math.round(seconds / 86400)} ימים`;
+  if (seconds < 86400) { const h = Math.round(seconds / 3600); return h === 1 ? "לפני שעה" : `לפני ${h} שע'`; }
+  const d = Math.round(seconds / 86400);
+  return d === 1 ? "לפני יום" : `לפני ${d} ימים`;
 }
 
 /* ‏#954 גל 3: הרשימה עצמה מצוירת ב-console.js (seenDevicesCard, מ-NET); כאן נשאר טופס

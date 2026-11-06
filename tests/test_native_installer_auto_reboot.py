@@ -207,7 +207,9 @@ def test_countdown_contract_in_the_source() -> None:
     final = (SRC / "screens_install_final.c").read_text(encoding="utf-8")
     assert re.search(r"^#define INSTALL_AUTO_REBOOT_S 90$", state_h, re.M)
     assert "s->reboot_at=now+INSTALL_AUTO_REBOOT_S;s->reboot_left=INSTALL_AUTO_REBOOT_S;" in control
-    assert '"הפעלה מחדש אוטומטית בעוד %d שניות",s->reboot_left' in final
+    # #1503: the count goes through he_secs ("שנייה", never "1 שניות"); the sentence takes it as %s.
+    assert 'he_secs(s->reboot_left,secs,sizeof secs)' in final
+    assert '"הפעלה מחדש אוטומטית בעוד %s",secs' in final
     assert "HIT_INSTALL_CANCEL_REBOOT" in final and "HIT_INSTALL_CANCEL_REBOOT)cancel_reboot(s)" in control
     assert "if(s->view==INSTALL_DONE)cancel_reboot(s);else back(a);" in control, "Esc עוצר"
     restart = next(line for line in control.splitlines() if "static void reboot_or_report" in line)

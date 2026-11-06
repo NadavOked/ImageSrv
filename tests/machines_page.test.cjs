@@ -108,7 +108,7 @@ test('console-full.html P.machines: header counts from the API, three tabs with 
   assert.equal((html.match(/<table class="dg kebab-col"/g)||[]).length,1);
   assert.equal((html.match(/<tr class="group"/g)||[]).length,0,'flat, not grouped');
   const head=between(html,'<thead>','</thead>');
-  assert.deepEqual([...head.matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')),['בחירה','שם','תפקיד','קבוצה','כתובת','דיסקים','מצב','פעולות']);
+  assert.deepEqual([...head.matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')),['בחירה','שם','תפקיד','קבוצה','כתובת','דיסקים','באתחול הבא','מצב','פעולות']);
   assert.deepEqual([...html.matchAll(/<tr data-mac="([^"]+)"/g)].map(m=>m[1]),
     ['c8:d9:d2:0b:fe:32','c8:d9:d2:0b:fe:34','a0:48:1c:8a:18:40','78:ac:c0:9b:11:c2','b4:2e:99:07:1a:c1','b4:2e:99:07:1a:c2','b4:2e:99:07:1a:c3','b4:2e:99:07:1b:c1'],'build → cloners → each class in group order, by name inside each');
   const b1=between(html,'data-mac="c8:d9:d2:0b:fe:32"','data-mac="c8:d9:d2:0b:fe:34"');

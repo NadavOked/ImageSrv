@@ -604,26 +604,31 @@ class SessionStore:
         from server.rounds import session_view      # noqa: PLC0415 — נמנע ממעגל ייבוא
         return session_view.build(self, session, library)
 
-    def maybe_start(self, session: sqlite3.Row) -> sqlite3.Row:
-        """מיישם את תנאי ההתחלה הכפול. מוחזרת השורה העדכנית.
+    def would_start(self, session: sqlite3.Row) -> bool:
+        """האם תנאי ההתחלה הכפול מתקיים עכשיו. **קריאה בלבד** — ‏`maybe_start`
+        מיישם אותו, והתצוגה של מה שמחשב יקבל באתחול (#2550) שואלת אותו בלי
+        להתחיל דבר: אותה הכרעה, בלי מקום שבו שתיים יכולות להיפרד.
 
         המספר שהוצהר הושג, או שהטיימר מהמצטרף האחרון פקע (ובתנאי שיש
         לפחות מצטרף אחד — סבב ריק לא מתחיל מעצמו, הוא נסגר מהקונסולה).
         """
         if session["state"] != "open":
-            return session
+            return False
         group = self.conn.execute(
             "SELECT role FROM groups WHERE id = ?", (session["group_id"],)
         ).fetchone()
         if group is not None and group["role"] == "cloner":
             # גל של חדר השיכפולים: המוכנות נמדדת בכוננים, לא במחשבים,
             # ואין טיימר. room.py מחליט מתי הוא יוצא.
-            return session
+            return False
         joined = self.joined_count(session["id"])
-        ripe = joined >= session["expected_clients"] or (
+        return joined >= session["expected_clients"] or (
             joined > 0 and self.starts_in_seconds(session) == 0
         )
-        if ripe:
+
+    def maybe_start(self, session: sqlite3.Row) -> sqlite3.Row:
+        """מיישם את תנאי ההתחלה הכפול (`would_start`). מוחזרת השורה העדכנית."""
+        if self.would_start(session):
             self.start_auto(session["id"])
             return self.conn.execute(
                 "SELECT * FROM sessions WHERE id = ?", (session["id"],)

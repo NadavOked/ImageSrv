@@ -124,6 +124,7 @@ cloner_gui_state() {
     done
 
     stream_beep_tick   # #2067: one stream sample across all writing drawers, in the background
+    stream_net_record >> "$_cg_next" || :   # #2067: net=lost|back, the screen's red and green bars (mockup 08); a bar that cannot be written never freezes the drawers
     # Idle -- no round targets yet: what is plugged in, not a bare "waiting".
     if [ "$_cg_any" = 0 ]; then
         cloner_cdisks "$(list_disks)" >> "$_cg_next" || return 1

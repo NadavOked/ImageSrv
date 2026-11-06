@@ -186,7 +186,7 @@ lc_stream() {
     if [ -n "$_ls_why" ]; then
         _fail_alive "$*" "$_ls_why"; echo "$_ls_i|failed" > "$_ls_r/cur"
         [ "$_ls_w" = 2 ] && return 2
-        return 1
+        source_failed_beep; return 1   # #2067: the source could not be read -- heard now, not at lc_end after the RAM views are released
     fi
     echo "$_ls_i|$_ls_sha" >> "$_ls_r/source.sha"
     for _ls_t in "$@"; do lc_judge "$_ls_t" "$_ls_i" "$_ls_sha" "$_ls_fs"; done

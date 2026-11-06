@@ -367,6 +367,13 @@ drawer=<port>|<dev>|<state>|<bytes>|<total>|<error>|<rate_bps>|<eta_s>|<drawer>|
 drawer_moved=<dev>|<epoch>          # #2055: after that drawer's drawer=, while it writes: when its bytes last
                                     # moved. The cloner head's "עודכן לפני N" counts from the newest of these,
                                     # not from updated= (which is rewritten every tick); absent = updated=
+net=lost|<epoch>|<seconds>          # #2067 (mockup 08): the stream stands -- no byte for 30 s (roundbeep.sh
+                                    # stream_beep_tick). <epoch> = when the last byte came (empty = not saved: the
+                                    # bar then says only "הרשת נותקה"), <seconds> = the receiver's own stall ceiling
+                                    # (UDPCAST_STALL_TIMEOUT; empty = not said). A red bar over the hero while it lasts
+net=back|<seconds>|<epoch>          # #2067: the bytes moved again -- it was gone <seconds> (empty = not saved),
+                                    # back at <epoch>. A green bar for 5 s, then gone: the agent stops writing the
+                                    # record after 5 s and the screen does not draw it past 5 s either. Absent = no bar
 cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>|<mark>|<hw>
                                     # the idle inventory (no round targets) -- see the #1304 table below;
                                     # #1495: fields 10-11 as drawer= fields 9-10

@@ -31,6 +31,7 @@ EVENTS_HE = {
     "login_account_failures_trimmed": "רשומות כשלי כניסה לפי חשבון פונו — יותר מדי שמות שונים (#2478)",
     "mfa_reset": "אימות דו-שלבי אופס למשתמש",   # נדב 18/10: מנהל איפס למשתמש אחר; הפירוט = למי
     "sessions_revoked": "הפעלות בוטלו",
+    "session_revoked": "סשן בקונסולה נותק",   # #2552: מי ניתק — ביומן; הפירוט = משתמש, מזהה, כתובת
     "agent_login": "כניסה ממסך תחנה",
     "local_clone": "שיכפול מקומי במחשב שיכפול (דיווח המחשב)",   # #1322
     "local_clone_note": "שיכפול מקומי — הושלם עם הערה (דיווח המחשב)",   # #2049: a done drawer with ntfs_note
@@ -515,7 +516,7 @@ SETTINGS_HE = {
     "auto_reboot": "הפעלה מחדש אוטומטית",
     "auto_reboot_time": "שעה",
     "auto_reboot_weekday": "יום",
-    "cloner_beep": "צליל בסיום סבב שיכפול",   # #1967, as in console.js
+    "cloner_beep": "צלילי המשכפל ומחשב הבנייה",   # #1967, as in console.js
     "backup_target": "יעד גיבוי המסד",   # #1956: הסוג, ואחריו היעד (בלי סיסמה)
     # ‏#1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
     "identity_check": "אימות מחשבים לפי כתובת ה-DHCP",

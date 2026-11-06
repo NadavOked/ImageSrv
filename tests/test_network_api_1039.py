@@ -116,7 +116,8 @@ def test_admin_sees_who_is_connected_from_where_and_since_when(net, presence_clo
     body = resp.json()
     assert sorted(s["user"] for s in body) == ["noc", "noc2"]
     for s in body:
-        assert set(s) == {"user", "ip", "since", "last_seen"}
+        # ‏#2552 הוסיף sid/role/current/monitor (מסך הסשנים); ארבעת הראשונים הם של #1039
+        assert set(s) == {"user", "ip", "since", "last_seen", "sid", "role", "current", "monitor"}
         assert s["ip"] == "testclient"               # ‏request.client.host של TestClient
         assert s["since"] and s["last_seen"]
         assert s["since"] <= s["last_seen"]

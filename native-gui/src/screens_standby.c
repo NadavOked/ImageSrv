@@ -14,6 +14,7 @@
 #include <time.h>
 #include "lcui.h"   /* #2030: card_used_text */
 #include "screens_rounds.h"
+#include "he_time.h"
 
 #define SB_CAGE_W   980.0   /* .A .st / .cage / .note width */
 #define SB_BAY_H    132.0   /* .A .bay height */
@@ -36,11 +37,7 @@ void disk_size(unsigned long long b, char *out, size_t n) {
     else              snprintf(out, n, "%.3g GB", v / 1e9);
 }
 
-static void ago(int s, char *out, size_t n) {
-    if (s < 120) snprintf(out, n, "לפני %d שניות", s);
-    else if (s < 7200) snprintf(out, n, "לפני %d דקות", s / 60);
-    else snprintf(out, n, "לפני %d שעות", s / 3600);
-}
+static void ago(int s, char *out, size_t n) { he_ago(s, out, n); }   /* #1503: "לפני שנייה", not "1 שניות" */
 
 /* The wall-clock time <age> seconds ago; --png counts back from the header's 12:45. */
 static void clock_ago(const App *a, int age, char *out, size_t n) {

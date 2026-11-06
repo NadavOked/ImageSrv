@@ -236,8 +236,8 @@ lc_end() {
     fi
     [ ! -f "$_lr_r/shrink_path" ] || echo $(( $(date +%s) - _le_t0 )) > "$_lr_r/restore_s"
     date +%s > "$_lr_r/ended"
-    # shellcheck disable=SC2086 # #2067: all done = success, else failure (a failed source fails them all); stopped by hand = none
-    [ -f "$_lr_r/stopped" ] || round_beep_result $_lr_all
+    # shellcheck disable=SC2086 # #2067: all done = success, else failure (a failed source fails them all); stopped by hand = none; a source that failed was heard when it failed (source_failed_beep)
+    [ -f "$_lr_r/stopped" ] || [ -f "$_lr_r/beeped" ] || round_beep_result $_lr_all
     lc_report
     kill "$_lr_beat" 2>/dev/null; wait_pid "$_lr_beat" "$WAIT_HELPER_S" "local clone watchdog beat"
     # #1483: the result -- and its "כבה את המחשב" -- last: the loop that reads

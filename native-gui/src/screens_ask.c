@@ -24,6 +24,7 @@
 #include <string.h>
 #include <time.h>
 #include "widgets.h"
+#include "he_time.h"   /* #1503 */
 #include "lcui.h"   /* #1918: lc_dialog_box / lc_dialog_head / lc_btn -- the local clone's stop window */
 
 #define ASK_W_MAX    760.0
@@ -46,7 +47,7 @@ static void left_text(long long at, char *out, size_t n) {
     long long left = at - (long long)time(NULL);
     if (left < 0) left = 0;
     if (left >= 60) snprintf(out, n, "%lld:%02lld דקות", left / 60, left % 60);
-    else snprintf(out, n, "%lld שניות", left);
+    else he_secs(left, out, n);
 }
 
 /* #1898 (Nadav 22/10): one disk is "הדיסק", more are "הדיסקים" -- the drawers the rows are about
@@ -224,7 +225,7 @@ static void end_left(const App *a, char *out, size_t n) {
     long long left = a->st.end_poweroff_at - (long long)time(NULL);
     if (left < 0) left = 0;
     if (left >= 60) snprintf(out, n, "%lld:%02lld דקות", left / 60, left % 60);
-    else snprintf(out, n, "%lld שניות", left);
+    else he_secs(left, out, n);
 }
 
 static void draw_end_bar(App *a, cairo_t *cr, double W, double H) {

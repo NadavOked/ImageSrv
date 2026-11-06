@@ -12,51 +12,9 @@
   "findings": [
     {
       "file": "server/static/console.css",
-      "rule": "border-accent-on-rounded",
-      "snippet": "border-top:3px solid",
-      "line": 633
-    },
-    {
-      "file": "server/static/console.css",
-      "rule": "border-accent-on-rounded",
-      "snippet": "border-top:4px solid",
-      "line": 840
-    },
-    {
-      "file": "server/static/console.css",
       "rule": "side-tab",
       "snippet": "border-inline-end:3px solid",
       "line": 219
-    },
-    {
-      "file": "server/static/console.css",
-      "rule": "side-tab",
-      "snippet": "border-inline-start:4px solid",
-      "line": 440
-    },
-    {
-      "file": "server/static/console.css",
-      "rule": "side-tab",
-      "snippet": "border-inline-start:3px solid",
-      "line": 1908
-    },
-    {
-      "file": "server/static/index.html",
-      "rule": "cramped-padding",
-      "snippet": "<div> \"statusbar\": children flush against border-top on top (no inset)",
-      "line": 0
-    },
-    {
-      "file": "server/static/index.html",
-      "rule": "cramped-padding",
-      "snippet": "<div> \"task-panel-head\": children flush against border-bottom on bottom (no inset)",
-      "line": 0
-    },
-    {
-      "file": "server/static/index.html",
-      "rule": "dark-glow",
-      "snippet": "Zero-offset box-shadow glow (#318700)",
-      "line": 0
     },
     {
       "file": "server/static/index.html",
@@ -72,27 +30,9 @@
     },
     {
       "file": "server/static/monitor.html",
-      "rule": "cramped-padding",
-      "snippet": "<div> \"mon-bar\": children flush against bg on top/bottom (no inset)",
-      "line": 0
-    },
-    {
-      "file": "server/static/monitor.html",
-      "rule": "dark-glow",
-      "snippet": "Zero-offset box-shadow glow (#318700)",
-      "line": 0
-    },
-    {
-      "file": "server/static/monitor.html",
       "rule": "repeating-stripes-gradient",
       "snippet": "repeating-gradient decorative stripes",
       "line": 0
-    },
-    {
-      "file": "server/static/vmupdate.css",
-      "rule": "side-tab",
-      "snippet": "border-inline-start: 3px solid",
-      "line": 130
     }
   ]
 }

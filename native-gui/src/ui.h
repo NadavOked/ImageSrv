@@ -450,6 +450,10 @@ typedef struct State {
      * question any more -- the agent asks none since #2044. */
     char cloner_image[96];
     int server_restarted_wave;       /* #1377: closed report after server restart */
+    /* #2067 (mockup 08): net=lost|<last byte>|<ceiling s> / net=back|<s away>|<at> -- the
+     * stream's outage bar (roundbeep.sh stream_net_record). -1 = the agent did not say. */
+    enum { NET_NONE, NET_LOST, NET_BACK } net_kind;
+    long long net_since, net_ceiling, net_away, net_at;
     /* #704: cslot_name=<port>|<name> -- [port-1], "" = "דיסק N" */
     char cslot_names[MAX_DRAWERS][SLOT_NAME_MAX];
 

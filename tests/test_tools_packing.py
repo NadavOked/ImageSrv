@@ -230,10 +230,11 @@ def listed(out: subprocess.CompletedProcess) -> list[str]:
     return [l.split("|")[0] for l in out.stdout.splitlines() if "|" in l]
 
 
-#: מזהי הקטלוג שיש להם מימוש `tools_<domain>_run` היום (#649 d2/d4/d5/d6 לאחר
-#: הגיזום ל-#1050). השאר נארזים ואינם מוצעים בתחנה — פער גלוי, לא שקט.
+# #1104: the remaining packed-only tools need a wizard or a recovery destination.
 RUNNABLE = ["disk-blkdiscard", "disk-hdparm-erase", "disk-nvme-format", "disk-dd-zero",
-            "disk-wipefs-all", "win-users", "win-blank-password", "esp-fsck-repair", "tpm-clear"]
+            "disk-wipefs-all", "win-users", "win-blank-password", "esp-fsck-repair", "tpm-clear",
+            "nvme-sanitize", "nvme-sanitize-status", "zap-partition-table", "nwipe",
+            "windows-ntfs-cat", "ntfs-recover-scan", "unsquashfs", "bsdtar"]
 PACKED_ONLY = sorted(set(CATALOG_IDS) - set(RUNNABLE))
 
 
@@ -248,7 +249,9 @@ def test_the_station_with_the_whole_catalog_lists_exactly_the_runnable_ids(tmp_p
     שנופלת כשמישהו מוסיף או מוחק מימוש בלי לעדכן אותה."""
     out = station(tmp_path, CATALOG_IDS)
     assert sorted(listed(out)) == sorted(RUNNABLE), listed(out)
-    assert len(PACKED_ONLY) == 16
+    assert len(PACKED_ONLY) == 8
+    assert PACKED_ONLY == sorted(["testdisk", "photorec", "scalpel", "foremost",
+                                  "extundelete", "magicrescue", "ddrescue-image", "safecopy"])
 
 
 def test_the_station_without_a_selection_file_lists_nothing(tmp_path):
@@ -266,7 +269,8 @@ def test_the_station_with_an_empty_selection_lists_nothing(tmp_path):
 
 
 @pytest.mark.parametrize("name", ["tools.sh", "toolbins.sh", "tools_disk.sh",
-                                  "tools_windows.sh", "tools_boot.sh", "tools_hw.sh"])
+                                  "tools_windows.sh", "tools_boot.sh", "tools_hw.sh",
+                                  "tools_erase.sh", "tools_recover.sh"])
 def test_touched_lib_files_stay_within_the_limit(name):
     sizelimit.assert_within_limit(LIB / name)
 
@@ -282,4 +286,5 @@ def test_no_tools_bins_module_shadows_the_glob():
     כתחום "bins" בלי `tools_bins_list` — לכן הטבלה היא `toolbins.sh`."""
     assert not (LIB / "tools_bins.sh").exists()
     modules = sorted(p.name for p in lib_files(LIB) if p.match("tools_*.sh"))
-    assert modules == ["tools_boot.sh", "tools_disk.sh", "tools_hw.sh", "tools_windows.sh"]
+    assert modules == ["tools_boot.sh", "tools_disk.sh", "tools_erase.sh", "tools_hw.sh",
+                       "tools_recover.sh", "tools_windows.sh"]

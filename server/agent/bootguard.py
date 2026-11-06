@@ -60,11 +60,9 @@ def guard(conn: sqlite3.Connection, mac: str, answer: dict) -> dict:
     נקראת אך ורק ממסלול תפריט האתחול. ‏`hello` אינו עובר כאן: הוא לא
     מחליט מאיפה המכונה עולה, והספירה היא של אתחולים.
     """
-    if decide(answer).action != AGENT:
-        return answer                     # ממילא דיסק מקומי — אין מה לספור
-    context = context_of(answer)
+    context = _counted_context(answer)
     if context is None:
-        return answer                     # cloner-wait: אין הקשר תחום בזמן
+        return answer                     # ממילא דיסק מקומי, או cloner-wait: אין מה לספור
 
     attempts = _record(conn, mac, context)
     if attempts is None:
@@ -74,7 +72,7 @@ def guard(conn: sqlite3.Connection, mac: str, answer: dict) -> dict:
         journal(conn, "boot_loop_unverified", f"{mac} {context}", machine=mac)
         return _exhausted(answer)
 
-    if attempts <= ATTEMPT_LIMIT:
+    if not _over_budget(attempts):
         return answer
     if attempts == ATTEMPT_LIMIT + 1:
         # פעם אחת, ברגע המעבר: אחרי זה המכונה כבר עולה מהדיסק ואין
@@ -83,6 +81,49 @@ def guard(conn: sqlite3.Connection, mac: str, answer: dict) -> dict:
     log.warning("boot loop guard sends %s to the local disk (%s, attempt %d)",
                 mac, context, attempts)
     return _exhausted(answer)
+
+
+def _counted_context(answer: dict) -> str | None:
+    """ההקשר שבו בקשת התפריט הזו נספרת — או None כשאינה נספרת בכלל: ‏`decide`
+    אומרת דיסק מקומי (אין מה לספור), או שאין הקשר תחום בזמן (`cloner-wait`).
+    נקראת גם מ-`guard` וגם מ-`peek`, כדי ששתיהן יסכימו מה נספר."""
+    if decide(answer).action != AGENT:
+        return None
+    return context_of(answer)
+
+
+def _over_budget(attempts: int) -> bool:
+    """האם ניסיון מספר `attempts` כבר חורג מהתקציב — הכרעה אחת, לשתי הקריאות."""
+    return attempts > ATTEMPT_LIMIT
+
+
+def peek(conn: sqlite3.Connection, mac: str, answer: dict) -> tuple[dict, int] | None:
+    """**קריאה בלבד**: מה `guard` היה עושה בבקשת התפריט **הבאה** של המכונה הזו.
+
+    מחזירה (התשובה כפי שהיא הייתה מוגשת, כמה פעמים השרת כבר שלח את המכונה
+    לאותה עבודה), או None כש-**אי אפשר לדעת** — הקריאה נכשלה (עיקרון 5: ‏
+    "לא הצלחנו לבדוק" אינו "בדקנו, לא מוגנת"). אינה כותבת דבר, אינה מקדמת
+    את המונה ואינה רושמת ליומן: זה בדיוק מה שמבדיל אותה מ-`guard`, ושימושה
+    היחיד הוא התצוגה בקונסולה של מה שמחשב יקבל (#2550).
+
+    הספירה הבאה היא `attempts + 1` באותו הקשר ו-`1` בהקשר אחר — אותו כלל
+    שה-UPSERT ב-`_record` מיישם; הטסט `test_peek_agrees_with_guard` מריץ את
+    שתיהן זו מול זו בכל מצב של המונה."""
+    context = _counted_context(answer)
+    if context is None:
+        return answer, 0
+    try:
+        row = conn.execute(
+            "SELECT context, attempts FROM boot_attempts WHERE mac = ?", (mac,)
+        ).fetchone()
+    except sqlite3.Error:
+        log.exception("boot attempts of %s could not be read for the preview", mac)
+        return None
+    same = row is not None and row["context"] == context
+    already = int(row["attempts"]) if same else 0
+    if _over_budget(already + 1):
+        return _exhausted(answer), min(already, ATTEMPT_LIMIT)
+    return answer, already
 
 
 def repeats(conn: sqlite3.Connection, context: str,
@@ -153,4 +194,4 @@ def _record(conn: sqlite3.Connection, mac: str, context: str) -> int | None:
     return int(row["attempts"])
 
 
-__all__ = ["ATTEMPT_LIMIT", "EXHAUSTED", "context_of", "guard", "repeats"]
+__all__ = ["ATTEMPT_LIMIT", "EXHAUSTED", "context_of", "guard", "peek", "repeats"]

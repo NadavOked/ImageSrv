@@ -23,7 +23,7 @@ from server.console import auth, login as console_login, login_guard, mfa as con
 from server.core import capabilities, hostname_rule
 from server.library import minfree
 from server.rounds import drive_rates, nic_speed, room
-from server.agent import identity, inventory, probe, readbackhash, registry
+from server.agent import boot_preview, identity, inventory, probe, readbackhash, registry
 from server.system import backup_target, timezone
 from server.net import dhcp, ports
 from server.disks import (crcwarn, disk_failures, drawer_slots, shrink_records, slot_names,
@@ -103,7 +103,7 @@ BOOLEAN_SETTINGS = {
     "recovery_require_login": "שחזור מהשרת בלי סבב דורש כניסה",
     console_mfa.SETTING: "חיוב אימות דו-שלבי למנהלים",
     "class_deploy_enabled": "הפצה לכיתה ממסך התחנה",
-    "cloner_beep": "צליל בסיום סבב שיכפול",
+    "cloner_beep": "צלילי המשכפל ומחשב הבנייה",
     "update_enabled": "עדכון גרסה מהקונסולה",
     identity.SETTING: "אימות מחשבים לפי כתובת ה-DHCP",
     drive_rates.SETTING: "קצב שידור אוטומטי לפי הכוננים בחדר",
@@ -358,10 +358,20 @@ def create_console_router(
         return {"ok": True}
 
     @router.get("/sessions")
-    def sessions(user=Depends(admin_only)):
-        """‏#1039: מי מחובר לקונסולה — ‏``[{user, ip, since, last_seen}]``.
-        ‏``last_seen`` מדויק עד דקה (``console_presence.TOUCH_SECONDS``)."""
-        return console_presence.active(ctx.conn)
+    def sessions(request: Request, user=Depends(admin_only)):
+        """‏#1039: מי מחובר לקונסולה — ‏``[{sid, user, role, ip, since, last_seen, current,
+        monitor}]`` (‏#2552 הוסיף sid/role/current/monitor). ‏``last_seen`` מדויק עד דקה
+        (``console_presence.TOUCH_SECONDS``). הטוקן והגיבוב המלא אינם יוצאים."""
+        return console_presence.active(ctx.conn, request.cookies.get(auth.COOKIE_NAME))
+
+    @router.delete("/sessions/{sid}")
+    def revoke_session(sid: str, request: Request, user=Depends(admin_only)):
+        """‏#2552: ניתוק סשן בודד לפי ה-``sid`` שב-``GET /sessions``. העוגייה נדחית מיד."""
+        try:
+            return console_presence.revoke_one(
+                ctx.conn, sid, user[0], request.cookies.get(auth.COOKIE_NAME))
+        except console_presence.SessionRefused as refused:
+            raise HTTPException(refused.status, refused.message)
 
     @router.get("/me")
     def me(user=Depends(current_user)):
@@ -637,6 +647,14 @@ def create_console_router(
         if not firmware_image.accept(ctx.conn, canonical, user[0]):
             raise HTTPException(409, "המכונה עוד לא דיווחה על הקושחה — אין מה לשמור")
         return {"ok": True}
+
+    @router.get("/machines/boot-preview")
+    def machines_boot_preview(user=Depends(current_user)):
+        """‏#2550: מה כל מחשב רשום יקבל באתחול הבא — **קריאה בלבד**, בקריאה אחת לכל
+        החדר. מגיע לאותה `decide()` שמגישה את קובץ ה-GRUB, בלי לספור אתחול, בלי
+        להגן לולאה ובלי לרשום ביומן. ‏`current_user` ולא `admin_only`: אין כאן פעולה
+        ואין סוד (‏deploy מסורב בקונסולה עצמה, #1073 — השער הזה אינו משתנה)."""
+        return boot_preview.preview_all(ctx.conn, ctx.library, ctx.store)
 
     @router.get("/machines")
     def machines(group: str | None = None, user=Depends(current_user)):
