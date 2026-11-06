@@ -30,6 +30,7 @@ import sqlite3
 from boot.grub_menu import normalize_mac as lenient_mac
 
 from server.db import _write_lock, journal, now_iso, writing
+from server.disks import smart_history
 
 log = logging.getLogger("imagesrv.shrink_records")
 
@@ -119,12 +120,17 @@ def _partitions(body: dict) -> list[dict]:
     return parts
 
 
-def open_record(conn: sqlite3.Connection, body: dict) -> dict:
+def open_record(conn: sqlite3.Connection, body: dict, require_reported: bool = False) -> dict:
     """רושם את הפריסה המקורית לפני הכיווץ. מחזיר את הרשומה (עם `id`
     ו-`partitions`).
 
     זורק `BadRecord` (‏`bad_mac` / `no_serial` / `bad_layout`) על גוף שאין
     לזכור ממנו, ו-`AlreadyOpen` כשיש רשומה פתוחה על אותו סידורי.
+
+    ‏#2492: ‏``require_reported`` (הסוכן, ‏`api.py`) — הסידורי חייב להיות מה שה-MAC
+    הזה דיווח ל-`dev` הזה ב-hello האחרון (כמו `smart_history.record`); אחרת
+    ‏`BadRecord("serial_not_reported")`. בלעדיו כל מכונה הייתה פותחת רשומה על
+    דיסק של אחרת, ו-hello שלה היה מציע "להחזיר" דיסק שלא כווץ.
     """
     mac = lenient_mac(body.get("mac")) if isinstance(body, dict) else None
     if mac is None:
@@ -133,15 +139,24 @@ def open_record(conn: sqlite3.Connection, body: dict) -> dict:
     if serial is None:
         raise BadRecord("no_serial", "the disk has no serial -- nothing to remember it by")
     parts = _partitions(body)
+    dev = body.get("dev")
+    if require_reported and (not isinstance(dev, str) or smart_history.serial_of(conn, mac, dev) != serial):
+        raise BadRecord("serial_not_reported", "this machine did not report this serial on this disk")
     row = {
         "mac": mac, "serial": serial, "port": _int(body.get("port")),
         "opened_at": now_iso(), **parts[0], "partitions": parts,
         **{k: _text(body.get(k)) for k in _OPTIONAL_TEXT},
     }
+    # ‏#2492: עם ``require_reported`` (הסוכן) — רשומה פתוחה **של המכונה הזו**. ה-hello מציע
+    # למכונה רק את שלה (`open_for`), ולכן רשומה של מכונה אחרת על אותו סידורי אינה
+    # "כבר מכווץ": היא הייתה חוסמת בשקט את רשומת הבעלים. שתיהן גלויות בקונסולה.
+    prior_sql = "SELECT id, opened_at FROM shrink_records WHERE serial = ? AND closed_at IS NULL"
+    prior_args: tuple = (serial,)
+    if require_reported:
+        prior_sql += " AND mac = ?"
+        prior_args = (serial, mac)
     with _write_lock, writing(conn):
-        prior = conn.execute(
-            "SELECT id, opened_at FROM shrink_records WHERE serial = ? AND closed_at IS NULL",
-            (serial,)).fetchone()
+        prior = conn.execute(prior_sql, prior_args).fetchone()
         if prior is not None:
             raise AlreadyOpen(prior["id"], prior["opened_at"])
         cur = conn.execute(
@@ -161,9 +176,11 @@ def open_record(conn: sqlite3.Connection, body: dict) -> dict:
 
 
 def open_owner(conn: sqlite3.Connection, serial: object,
-               record_id: int | None = None) -> str | None:
+               record_id: int | None = None, mac: str | None = None) -> str | None:
     """‏#2413: ה-MAC שפתח את הרשומה הפתוחה של הסידורי (ו-`record_id`, אם ניתן),
-    או None כשאין כזו. ‏`api.py` משווה אותו ל-MAC של הפונה לפני close/note."""
+    או None כשאין כזו. ‏`api.py` משווה אותו ל-MAC של הפונה לפני close/note.
+    ‏#2492: כמה מכונות יכולות להחזיק רשומה פתוחה על אותו סידורי — כשל-`mac` יש
+    אחת מהן, הוא הבעלים שלה (ולא "הראשונה שנמצאה")."""
     if not isinstance(serial, str) or not serial:
         return None
     sql = "SELECT mac FROM shrink_records WHERE serial = ? AND closed_at IS NULL"
@@ -171,6 +188,9 @@ def open_owner(conn: sqlite3.Connection, serial: object,
     if record_id is not None:
         sql += " AND id = ?"
         params.append(record_id)
+    if mac is not None:
+        sql += " ORDER BY mac = ? DESC"
+        params.append(mac)
     row = conn.execute(sql, params).fetchone()
     return row["mac"] if row is not None else None
 
@@ -231,9 +251,15 @@ def _row_dict(r: sqlite3.Row) -> dict:
     return d
 
 
-def open_for(conn: sqlite3.Connection, disks: list | None) -> list[dict]:
+def open_for(conn: sqlite3.Connection, disks: list | None, mac: str | None = None) -> list[dict]:
     """מה ה-hello עונה (ממשק 3): הרשומות הפתוחות שהסידורי שלהן הוא אחד
-    מהדיסקים שהמכונה דיווחה — מכל מכונה שהיא, כי הדיסק נודד."""
+    מהדיסקים שהמכונה דיווחה.
+
+    ‏#2492 (סקירה): ‏`mac` — רק רשומות **שהמכונה הזו פתחה**. הקשירה ב-`shrink-open`
+    נשענת על ה-hello של הפותח, כלומר על מה שהוא טען על עצמו; בלי הסינון כאן מכונה
+    אחרת הייתה גורמת ל-hello שלי להציע "להחזיר" פריסה שהיא כתבה. רק סגירה של
+    הבעלים נקבלת ממילא (#2413), ומאז #1466 הסוכן אינו פותח רשומות. דיסק שנדד —
+    "נקה" בקונסולה."""
     serials = []
     for d in disks or []:
         s = d.get("serial") if isinstance(d, dict) else None
@@ -242,9 +268,11 @@ def open_for(conn: sqlite3.Connection, disks: list | None) -> list[dict]:
     if not serials:
         return []
     marks = ",".join("?" * len(serials))
-    rows = conn.execute(
-        f"SELECT * FROM shrink_records WHERE closed_at IS NULL AND serial IN ({marks})"
-        " ORDER BY opened_at, id", serials).fetchall()
+    sql = f"SELECT * FROM shrink_records WHERE closed_at IS NULL AND serial IN ({marks})"
+    if mac is not None:
+        sql += " AND mac = ?"
+        serials = [*serials, mac]
+    rows = conn.execute(sql + " ORDER BY opened_at, id", serials).fetchall()
     return [_row_dict(r) for r in rows]
 
 

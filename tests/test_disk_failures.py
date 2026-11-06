@@ -167,7 +167,10 @@ def test_the_progress_report_of_a_failed_drawer_lands_in_the_memory(server):
     `ata_log` → רשומה פתוחה בקונסולה, ביומן `disk_failure`. בקרה שלילית: על
     main אין טבלה ואין נקודת קצה — `/api/console/disk-failures` הוא 404."""
     ids = open_session(server, expected=2)
-    hello(server, ids["mac1"])
+    from conftest import hello_body
+    body = hello_body(ids["mac1"])
+    body["disks"][0]["serial"] = "S3TWNE0JB04745"    # #2492: the disk it reported on sda
+    assert server["anon"].post("/api/v1/agent/hello", json=body).status_code == 200
     report = {"session_id": ids["session"], "mac": ids["mac1"], "state": "writing",
               # ‏sdb עם ata_log אך לא failed: רק כשל נרשם.
               "targets": [failed_target(), failed_target(dev="sdb", state="writing", serial="S9")]}

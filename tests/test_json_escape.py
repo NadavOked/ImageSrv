@@ -180,6 +180,27 @@ def test_the_fix_gives_the_same_answer_under_every_awk_here(tmp_path):
         assert json.loads('"' + answers["busybox"] + '"') == value
 
 
+#: #2484 -- bytes that are not valid UTF-8, as printf octal (no invalid byte crosses argv).
+BAD_BYTES = {
+    r"a\377b": "a\ufffdb",
+    r"\327": "\ufffd",                        # truncated Hebrew letter
+    r"\300\200": "\ufffd\ufffd",              # overlong
+    r"\355\240\200": "\ufffd" * 3,            # surrogate
+    r"\344\275\240\377": "\u4f60\ufffd",      # valid CJK, then invalid
+    r"\327\251\327\234\327\225\327\235": "\u05e9\u05dc\u05d5\u05dd",   # valid Hebrew untouched
+}
+
+
+def test_invalid_utf8_gives_valid_json_under_every_awk_here(tmp_path):
+    """#2484: a stray byte (NVMe identify, SMBIOS) used to pass through raw and
+    make the whole hello invalid JSON. Same answer in every engine, busybox included."""
+    for name, path in awk_engines().items():
+        for octal, expected in BAD_BYTES.items():
+            out = bb(tmp_path, source_line("common.sh")
+                     + f"json_escape \"$(printf '{octal}')\"", awk=path)
+            assert json.loads('"' + out + '"') == expected, f"{name}: {octal}"
+
+
 def test_the_pre_fix_escape_is_not_what_the_fix_does(tmp_path):
     """תיעוד, לא אכיפה של "הישן שבור בכל מקום" — כי הוא לא.
 

@@ -30,7 +30,7 @@ from test_machine_identity import (BUILD, IMAGE, MAC1, STATION_IP, STRANGER_IP, 
                                    hello, identity_server, journal_details,
                                    write_leases)
 from test_server_room import CLONER1, cloner_hello
-from test_shrink_records import SERIAL, layout
+from test_shrink_records import SERIAL, layout, report_serial
 
 CREDS = {"username": "labtech", "password": "deploy-pass-1"}
 #: כתובת שיש עליה חכירה — אבל של MAC שאינו רשום בשום קבוצה (מחשב נייד
@@ -150,6 +150,7 @@ def test_shrink_records_from_another_address_are_refused(identity_server):
     station, stranger = identity_server["station"], identity_server["stranger"]
     refused_by_name(stranger.post("/api/v1/agent/shrink-open", json=layout(mac=MAC1)))
     assert identity_server["admin"].get("/api/console/shrink-records").json() == []
+    report_serial(station, MAC1)      # #2492: the disk, reported before the shrink
     rid = station.post("/api/v1/agent/shrink-open", json=layout(mac=MAC1)).json()["id"]
 
     note = {"mac": MAC1, "serial": SERIAL, "id": rid, "note": "why"}

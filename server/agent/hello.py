@@ -223,10 +223,16 @@ def class_deploy_enabled(conn: sqlite3.Connection) -> bool:
     return get_setting(conn, "class_deploy_enabled") == "true"
 
 
+def journal_unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
+                    suffix: str = "") -> None:
+    """שורת `unknown_mac`. ‏`api.py` מרסן אותה לפי MAC ב-hello (‏#2487)."""
+    journal(conn, "unknown_mac", f"{mac} from {client_ip or '?'}{suffix}")
+
+
 def _unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
              off_vlan: bool = False, record_journal: bool = True) -> dict:
     if record_journal:
-        journal(conn, "unknown_mac", f"{mac} from {client_ip or '?'}")
+        journal_unknown(conn, mac, client_ip)
     return {
         "schema": 1,
         "known": False,
@@ -249,7 +255,7 @@ def _unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
 
 def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
                  disk_probe, firmware, secure_boot, agent_version, local_clone,
-                 optical, optical_reported, hw_inventory, hw_probe) -> None:
+                 optical, optical_reported, hw_inventory, hw_probe, history=True) -> None:
     net_seen(conn, mac, ip,
              disks_json=json.dumps(disks) if disks is not None else None,
              monitor_secret=monitor_secret, monitor_auth=monitor_auth,
@@ -260,13 +266,15 @@ def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
              update_optical=optical_reported)
     # ‏#720: המלאי החומרתי (schema 2) נשמר מגורסת — שורה חדשה רק כשהשתנה.
     # ‏None = הסוכן לא שלח (schema 1) או שלח פגום: הגרסה הקודמת נשארת.
+    # ‏#2487: ‏`history=False` (מכונה לא רשומה) — שורה אחת ל-MAC, נדרסת במקום:
+    # ‏hello לא מאומת שמשנה את התוכן בכל פעם אינו מגדל את הטבלה.
     if hw_inventory is not None:
-        inventory.record(conn, mac, hw_inventory)
+        inventory.record(conn, mac, hw_inventory, history=history)
     # ‏#1049 שלב ב' + #1048: בדיקת המכונה (כולל netprobe בתוך אותו JSON)
     # — None = לא נשלח/פגום, הגרסה הקודמת נשארת; רק תוכן יציב שהשתנה
     # פותח גרסה.
     if hw_probe is not None:
-        probe.record(conn, mac, hw_probe)
+        probe.record(conn, mac, hw_probe, history=history)
 
 
 def build_answer(
@@ -307,6 +315,7 @@ def build_answer(
     # יקבע את ה-`ip`/`last_seen` שהשרת "מכיר" עבור אותו MAC — אחרת מכונה
     # כבויה נראית חיה, וכל בינוי זהות עתידי שיסתמך על הכתובת הזו מעגלי.
     # הרישום **אינו מופסק** — הוא רק מותנה בדיוק כמו ספירת האתחול (#536).
+    machine = registry.lookup(conn, mac, all_macs)
     if record_seen:
         try:
             # ‏#2432: הכתובת שנרשמת היא ה-peer של החיבור — זו שעברה את שער הזהות
@@ -315,7 +324,7 @@ def build_answer(
             _record_seen(conn, mac, client_ip, disks, monitor_secret,
                          monitor_auth, prompt, disk_probe, firmware, secure_boot,
                          agent_version, local_clone, optical, optical_reported,
-                         hw_inventory, hw_probe)
+                         hw_inventory, hw_probe, history=machine is not None)
         except sqlite3.OperationalError as exc:
             # ‏#1892: מחיצה מלאה אינה מפילה תשובה שאינה צריכה כתיבה — מכונה לא
             # רשומה מקבלת known:false (עיקרון 1). הכשל נרשם ואדום בבריאות.
@@ -323,7 +332,6 @@ def build_answer(
                 raise
             note_disk_full(f"hello net_seen {mac}")
 
-    machine = registry.lookup(conn, mac, all_macs)
     if machine is None:
         return _unknown(conn, mac, client_ip, off_vlan, record_journal)
     # ‏#2001: "NVMe n" שנוסף ידנית בחלון מקבל את כתובת ה-PCI כשהכונן נראה.
@@ -370,7 +378,7 @@ def build_answer(
         "smart_learned": smart_history.learned_for(conn, disks),
         # ‏#926: דיסק שכווץ בקליטה ולא הוחזר לגודלו — לפי הסידורי שהמכונה
         # שלחה. מחשב הבנייה מציע להחזיר (‏shrinkmem.sh); סוכן ישן מתעלם.
-        "shrink_open": shrink_records.open_for(conn, disks),
+        "shrink_open": shrink_records.open_for(conn, disks, mac),   # #2492: רק מה שפתחה
         # ‏#704: השמות שהמפעיל נתן לחיבורים של המכונה הזו (‏{"sata:1": "דיסק 1"}).
         # מסך מחשב השיכפול מצייר אותם במקום "דיסק N"; ‏{} = אין שמות.
         "slot_names": slot_names.for_mac(conn, mac),

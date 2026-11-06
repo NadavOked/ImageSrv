@@ -55,6 +55,15 @@ def conn(tmp_path: Path):
     return db.connect(tmp_path / "t.db")
 
 
+def report_serial(client, mac: str, serial: str = SERIAL) -> None:
+    """‏#2492: ה-hello של הסוכן לפני הקליטה — הדיסק שיכווץ, לפי dev וסידורי.
+    ‏`shrink-open` מקבל רק סידורי שה-MAC הזה דיווח ל-`dev` הזה."""
+    from conftest import hello_body
+    body = hello_body(mac)
+    body["disks"][0]["serial"] = serial
+    assert client.post("/api/v1/agent/hello", json=body).status_code == 200
+
+
 # --- המודול: פתיחה, סגירה, ומה hello עונה ---------------------------------------
 
 
@@ -126,6 +135,7 @@ def test_open_for_matches_by_serial_only(conn):
 def test_the_agent_opens_before_the_shrink_and_closes_after_the_restore(server):
     ids = open_session(server, expected=2)
     agent = server["anon"]
+    report_serial(agent, ids["mac1"])
     opened = agent.post("/api/v1/agent/shrink-open", json=layout(mac=ids["mac1"]))
     assert opened.status_code == 200 and opened.json()["ok"] is True
     rid = opened.json()["id"]
@@ -161,6 +171,7 @@ def test_the_agent_opens_before_the_shrink_and_closes_after_the_restore(server):
 def test_a_bad_open_is_an_orderly_error_and_writes_nothing(server):
     ids = open_session(server, expected=2)
     agent = server["anon"]
+    report_serial(agent, ids["mac1"])
     assert agent.post("/api/v1/agent/shrink-open", json=layout(mac="nope")).json()["code"] == "bad_mac"
     r = agent.post("/api/v1/agent/shrink-open", json=layout(mac=ids["mac1"], serial=""))
     assert r.status_code == 400 and r.json()["code"] == "no_serial"
@@ -173,6 +184,7 @@ def test_a_bad_open_is_an_orderly_error_and_writes_nothing(server):
 
 def test_clear_from_the_console_is_admin_only_and_once(server):
     ids = open_session(server, expected=2)
+    report_serial(server["anon"], ids["mac1"])
     rid = server["anon"].post("/api/v1/agent/shrink-open", json=layout(mac=ids["mac1"])).json()["id"]
     assert server["deploy"].post(f"/api/console/shrink-records/{rid}/clear").status_code == 403
     assert server["admin"].post(f"/api/console/shrink-records/{rid}/clear").json() == {"ok": True}
@@ -203,6 +215,7 @@ def test_a_note_explains_an_open_record_and_reaches_the_console(server):
     פתוח היא 404, כמו סגירה."""
     ids = open_session(server, expected=2)
     agent = server["anon"]
+    report_serial(agent, ids["mac1"])
     rid = agent.post("/api/v1/agent/shrink-open", json=layout(mac=ids["mac1"])).json()["id"]
     why = "המקור לא הוחזר לגודלו: ntfsresize could not grow the filesystem back"
     r = agent.post("/api/v1/agent/shrink-note", json={"mac": ids["mac1"], "serial": SERIAL, "id": rid, "note": why})
@@ -283,6 +296,7 @@ def test_a_duplicate_index_is_not_a_layout(conn):
 def test_the_hello_and_the_console_carry_the_partitions(server):
     ids = open_session(server, expected=2)
     agent = server["anon"]
+    report_serial(agent, ids["mac1"])
     opened = agent.post("/api/v1/agent/shrink-open", json=two_layout(mac=ids["mac1"]))
     assert opened.status_code == 200 and opened.json()["ok"] is True, opened.text
     from conftest import hello_body

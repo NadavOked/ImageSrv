@@ -158,10 +158,13 @@ def record_readonly(conn: sqlite3.Connection, session_id: str, mac: str, dev: st
     כבר קיימת = לא נרשם שוב. מחזיר אם נרשמה עכשיו."""
     if not serial:
         return False
+    # ‏#2492: אחת **לכל (סידורי, MAC)** — ‏`open_for` מחזיר readonly רק למי שכתב אותה,
+    # ולכן רשומה של מכונה אחרת על אותו סידורי אינה "כבר יש": היא הייתה בולעת בשקט
+    # את הרשומה של הבעלים (‏B קודם, A אחריו). שתיהן גלויות בקונסולה (`list_open`).
     with _write_lock, writing(conn):
         if conn.execute(
-            "SELECT 1 FROM disk_failures WHERE serial = ? AND cause = 'readonly'"
-            " AND cleared_at IS NULL", (serial,),
+            "SELECT 1 FROM disk_failures WHERE serial = ? AND mac = ? AND cause = 'readonly'"
+            " AND cleared_at IS NULL", (serial, mac),
         ).fetchone() is not None:
             return False
         cur = conn.execute(
@@ -201,6 +204,12 @@ def open_for(conn: sqlite3.Connection, mac: str, disks: list | None) -> list[dic
     for r in conn.execute(sql, params).fetchall():
         if _quiet(r):
             continue                      # #1580 / שליפה: אינם צובעים
+        # ‏#2492 (סקירה): ‏`readonly` (אדום — הסוכן מדלג על הדיסק) חוזר רק ל-MAC
+        # שכתב אותו. הקשירה בכתיבה נשענת על ה-hello של הכותב — מה שהוא טען על
+        # עצמו — ולכן מכונה אחרת אינה קובעת מה ה-hello שלי מחזיר. דיסק לקריאה
+        # בלבד שנדד נכשל אצל המכונה החדשה ב-EPERM ונרשם שם (#1742).
+        if r["cause"] == "readonly" and r["mac"] != mac:
+            continue
         out.append({
             "serial": r["serial"],
             "port": r["port"] if r["mac"] == mac else None,

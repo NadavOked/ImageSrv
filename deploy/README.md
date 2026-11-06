@@ -5,7 +5,8 @@
 מה שרץ **על השרת המותקן**: ‏`setup-boot-server.sh` (מתקין את הקוד, ‏dnsmasq,
 ‏TFTP/HTTP ויחידות systemd), יחידות `imagesrv-*.service`/`.timer`
 (שרת, פרוקסי, אשף, ‏DCUI, שחזור רשת), כללי חומת האש
-(`nftables-rules.sh`, ‏`firewall-rules.md`), ‏`verify-boot-payload.sh`
+(`nftables-rules.sh`, ‏`firewall-rules.md`; ‏`nftables-wizard.sh` — השומר
+הזמני של אשף האתחול הראשון, #2490), ‏`verify-boot-payload.sh`
 ו-`console-live.sh` (האם הקונסולה עונה אחרי התקנה/שדרוג).
 
 **מה היא לא:**

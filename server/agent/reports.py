@@ -328,7 +328,7 @@ def ingest(conn: sqlite3.Connection, payload: dict,
         if isinstance(t.get("temp_c"), int) and isinstance(t.get("dev"), str):
             smart_history.record_temp(conn, smart_history.serial_of(conn, mac, t["dev"]), session_id, t["temp_c"], mac)
         if t.get("state") == "failed":
-            disk_failures.record(conn, session_id, mac, t)
+            disk_failures.record(conn, session_id, mac, _bound_serial(conn, session_id, mac, t))
         # ‏#1386: "בוטל" נרשם כשהסוכן דיווח אותו — פעם אחת, במעבר. לא disk_failure:
         # ביטול אינו כשל, ובסבב הבא הדיסק ירוק.
         elif t.get("state") == "cancelled" and isinstance(t.get("dev"), str)                 and t["dev"] not in was_cancelled:
@@ -337,6 +337,24 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     # ‏#1386: בקשות "בטל דיסק זה" מהקונסולה/מחשב הבנייה נמסרות בתשובה הזו.
     cancel = drawer_cancel.pending(conn, session_id, mac)
     return {"ok": True, "cancel": cancel} if cancel else {"ok": True}
+
+
+def _bound_serial(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) -> dict:
+    """‏#2492: היעד כפי שייזכר ב-`disk_failures` — עם הסידורי רק כשהוא של המכונה
+    הזאת: מה שדיווחה ל-`dev` הזה ב-hello האחרון, **או** מה שה-disk_event שלה
+    בסבב הזה נשא עליו (נקשר בזמנו, לפני הכתיבה) — דיסק שנפל מהאפיק כבר אינו
+    ב-hello שאחריו. אחרת הכשל נשאר על החריץ של המכונה, בלי סידורי שנודד איתו."""
+    serial, dev = target.get("serial"), target.get("dev")
+    if not isinstance(serial, str) or not serial or not isinstance(dev, str):
+        return target
+    if smart_history.serial_of(conn, mac, dev) == serial or conn.execute(
+            "SELECT 1 FROM disk_events WHERE session_id = ? AND mac = ? AND disk = ? AND serial = ?",
+            (session_id, mac, dev, serial)).fetchone() is not None:
+        return target
+    # codeql[py/log-injection] false positive: %r מבריח שורה חדשה ותווי בקרה (#291)
+    log.warning("progress from %s on %r: serial %r is not what it reported -- kept without it",
+                mac, dev[:32], serial[:64])
+    return {**target, "serial": None}
 
 
 def _closed_reason(conn: sqlite3.Connection, session_id: str,

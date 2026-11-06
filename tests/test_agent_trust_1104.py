@@ -38,7 +38,7 @@ from server import db
 from server.agent.bootguard import ATTEMPT_LIMIT
 from test_machine_identity import (BUILD, MAC1, STATION_IP, STRANGER_IP,  # noqa: F401
                                    identity_server, journal_details)
-from test_shrink_records import SERIAL, layout
+from test_shrink_records import SERIAL, layout, report_serial
 
 #: 1MiB ועוד — מעל התקרה של `body.MAX_BYTES`, ומתחת לכל מה שהשרת חשש ממנו.
 OVER_CAP = 1024 * 1024 + 1
@@ -198,10 +198,18 @@ def test_the_station_itself_is_still_counted(identity_server):
 # --- #2413: רשומת כיווץ שייכת למכונה שפתחה אותה -------------------------------
 
 
+def _build_reports_its_disk(identity_server) -> None:
+    """‏#2487/#2492: ‏shrink-open — רק ממכונה רשומה, ורק על הסידורי שדיווחה."""
+    from test_capture import setup_build_machine
+    setup_build_machine(identity_server, BUILD)
+    report_serial(identity_server["station"], BUILD)
+
+
 def test_another_machine_cannot_close_or_note_a_shrink_record(identity_server):
     """‏MAC1 ו-BUILD חכורים שניהם ל-STATION_IP — שתיהן עוברות את שער הזהות.
     המעבדה, 04/11: תחנה 2 סגרה את הרשומה של תחנה 1 וקיבלה 200."""
     station = identity_server["station"]
+    _build_reports_its_disk(identity_server)
     opened = station.post("/api/v1/agent/shrink-open", json=layout(mac=BUILD))
     assert opened.status_code == 200, opened.text
     rid = opened.json()["id"]
@@ -221,6 +229,7 @@ def test_another_machine_cannot_close_or_note_a_shrink_record(identity_server):
 def test_the_machine_that_opened_it_still_closes_it(identity_server):
     """בקרה: הבעלים סוגר כמו תמיד, וסגירה שנייה היא 404 (עיקרון 5)."""
     station = identity_server["station"]
+    _build_reports_its_disk(identity_server)
     rid = station.post("/api/v1/agent/shrink-open", json=layout(mac=BUILD)).json()["id"]
     assert station.post("/api/v1/agent/shrink-note", json={
         "mac": BUILD, "serial": SERIAL, "id": rid, "note": "ntfsresize"}).status_code == 200

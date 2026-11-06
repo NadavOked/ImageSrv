@@ -245,6 +245,21 @@ for dhcp_pid in "${dhcp_pids[@]}"; do
     wait "$dhcp_pid" || fail check-error "A temporary DHCP worker failed"
 done
 
+# ‏#2490: ה-apply של האשף אינו דורש הזדהות וקובע את סיסמת המנהל, ולכל כרטיס
+# יש עכשיו כתובת DHCP זמנית. שומר (deploy/nftables-wizard.sh) פותח את 8081 רק
+# על lo ועל כרטיס ההתקנה — נטען ונקרא בחזרה לפני שהאשף עולה; בלי ראיה, האשף
+# לא עולה. חומת האש הקבועה (setup-boot-server, ‏flush ruleset) מחליפה אותו.
+wizard_guard=$(sh "$SRC/deploy/nftables-wizard.sh" --nic-fact "$NIC_FILE") \
+    || fail wizard-guard-failed "Could not build the wizard firewall guard; the wizard was not started"
+printf '%s\n' "$wizard_guard" | nft -f - \
+    || fail wizard-guard-failed "nft could not load the wizard firewall guard; the wizard was not started"
+guard_listed=$(nft list chain inet imagesrv_wizard input) \
+    || fail wizard-guard-failed "The wizard firewall guard is not in the kernel ruleset; the wizard was not started"
+[[ "$guard_listed" == *"tcp dport 8081"*"drop"* ]] \
+    || fail wizard-guard-failed "The wizard firewall guard has no drop rule for port 8081; the wizard was not started"
+guard_summary=${wizard_guard#*"# open on: "}
+log "wizard guard: port 8081 open on ${guard_summary%%$'\n'*}, dropped on every other NIC"
+
 install -m 0644 "$SRC/deploy/imagesrv-wizard.service" /etc/systemd/system/imagesrv-wizard.service
 install -m 0644 "$SRC/deploy/imagesrv-wizard-rerun.service" /etc/systemd/system/imagesrv-wizard-rerun.service
 install -m 0644 "$SRC/deploy/imagesrv-dcui.service" /etc/systemd/system/imagesrv-dcui.service

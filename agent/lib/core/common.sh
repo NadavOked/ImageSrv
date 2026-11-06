@@ -246,25 +246,14 @@ trace_step() {
 # --- misc --------------------------------------------------------------------
 
 json_escape() {
-    # Escape a string for embedding inside a JSON string literal:
-    # backslash, double quote and every control character below 0x20.
-    # Newlines become \n, CR is dropped (as it always was), and any other
-    # control character becomes \u00XX. Everything else -- UTF-8 Hebrew
-    # included -- passes through byte for byte.
-    #
-    # Not gsub(), on purpose. In the *replacement* string of gsub a
-    # backslash is an escape of its own, and gawk, mawk and busybox awk
-    # read those escapes differently. That is what made the previous
-    # version replace every character with itself and escape nothing at
-    # all: it passed under mawk on the workstation and did nothing under
-    # the busybox awk the agent actually runs, so a password or a
-    # partclone error holding a quote produced broken JSON and a 400 that
-    # never reached the password check (#145).
-    #
-    # A lookup table has one meaning in every awk: the value is printed
-    # as it stands, with no second round of interpretation. LC_ALL=C so
-    # the scan is over bytes -- a multi-byte character is copied through
-    # one byte at a time and is never split by a table hit.
+    # Escape a string for a JSON string literal: backslash, double quote and
+    # control characters below 0x20 (newline -> \n, CR dropped, the rest ->
+    # \u00XX). Valid UTF-8 -- Hebrew included -- passes through byte for byte;
+    # any other byte becomes the JSON escape for U+FFFD (#2484: a stray 0xFF in
+    # an NVMe model made the hello invalid JSON -> 400, machine never registered).
+    # No gsub(), on purpose: its replacement-string escapes differ between gawk,
+    # mawk and busybox awk, so the old version escaped nothing there (#145).
+    # LC_ALL=C: the scan is over bytes; hi[] maps a byte >= 0x80 to its value.
     printf '%s' "$1" | LC_ALL=C awk 'BEGIN {
         ORS = ""
         for (i = 1; i < 32; i++) esc[sprintf("%c", i)] = sprintf("\\u%04x", i)
@@ -274,6 +263,7 @@ json_escape() {
         esc[sprintf("%c", 13)] = ""
         esc["\\"] = "\\\\"
         esc["\""] = "\\\""
+        for (i = 128; i < 256; i++) hi[sprintf("%c", i)] = i
     }
     {
         if (NR > 1) printf "%s", "\\n"
@@ -282,11 +272,21 @@ json_escape() {
         for (i = 1; i <= n; i++) {
             c = substr($0, i, 1)
             if (c in esc) out = out esc[c]
+            else if (c in hi) {
+                # Lead byte -> continuation count; E0/ED/F0/F4 narrow the first one.
+                b = hi[c]; need = (b >= 194 && b <= 223) ? 1 : (b >= 224 && b <= 239) ? 2 : (b >= 240 && b <= 244) ? 3 : 0
+                lo = 128; up = 191
+                if (b == 224) lo = 160; else if (b == 237) up = 159; else if (b == 240) lo = 144; else if (b == 244) up = 143
+                s = c; ok = need > 0
+                for (k = 1; ok && k <= need; k++) {
+                    d = substr($0, i + k, 1)
+                    if (!(d in hi) || hi[d] < lo || hi[d] > up) ok = 0
+                    else { s = s d; lo = 128; up = 191 }
+                }
+                if (ok) { out = out s; i += need } else out = out "\\ufffd"
+            }
             else out = out c
-            # Appending to a string costs its whole length in awk, so a
-            # long line would cost the square of it. Flushing a short
-            # buffer keeps that flat: 48KB takes 69ms instead of 210ms,
-            # and a normal field (tens of bytes) is unaffected.
+            # Flush a short buffer: appending costs the whole string, so a long line stays linear.
             if (length(out) >= 256) { printf "%s", out; out = "" }
         }
         printf "%s", out

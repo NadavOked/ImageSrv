@@ -56,7 +56,7 @@ def test_netprobe_sh_stays_under_120_and_agent_stays_300():
     n = sizelimit.assert_within_limit(AGENT / "lib" / "hw" / "netprobe.sh")
     assert n <= 120, n
     assert sizelimit.count_lines(AGENT / "imagesrv-agent") <= 300
-    assert sizelimit.count_lines(AGENT / "lib" / "hw" / "probe.sh") == 271   # #1775: probe_json moved to probe_bg.sh
+    assert sizelimit.count_lines(AGENT / "lib" / "hw" / "probe.sh") == 279   # #1775: probe_json moved to probe_bg.sh; #2484: _dimm_json
 
 
 def test_the_agent_loads_netprobe_sh():

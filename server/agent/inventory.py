@@ -72,8 +72,11 @@ def _text(inventory: dict) -> str:
     return json.dumps(inventory, sort_keys=True, ensure_ascii=False)
 
 
-def record(conn: sqlite3.Connection, mac: str, inventory: dict) -> bool:
+def record(conn: sqlite3.Connection, mac: str, inventory: dict, history: bool = True) -> bool:
     """שומר גרסה חדשה כשהמלאי השתנה. מחזיר האם נכתבה שורה.
+
+    ‏#2487: ‏``history=False`` — מכונה לא רשומה: מלאי שהשתנה דורס את השורה
+    הקיימת במקום לפתוח גרסה (שורה אחת ל-MAC), ואז מוחזר False.
 
     ‏``inventory`` חייב להיות מה ש-`well_formed` החזיר — הקנוניות היא מה
     שהופך "לא השתנה" להשוואת מחרוזות. אותו מסלול נעילות כמו ``net_seen``
@@ -82,13 +85,17 @@ def record(conn: sqlite3.Connection, mac: str, inventory: dict) -> bool:
     """
     text = _text(inventory)
     row = conn.execute(
-        "SELECT inventory_json FROM machine_inventory WHERE mac = ?"
+        "SELECT id, inventory_json FROM machine_inventory WHERE mac = ?"
         " ORDER BY id DESC LIMIT 1", (mac,)
     ).fetchone()
     if row is not None and row["inventory_json"] == text:
         return False
     _settle(conn)
     with _write_lock, writing(conn):
+        if row is not None and not history:
+            conn.execute("UPDATE machine_inventory SET seen_at = ?, inventory_json = ? WHERE id = ?",
+                         (now_iso(), text, row["id"]))
+            return False
         conn.execute(
             "INSERT INTO machine_inventory (mac, seen_at, inventory_json)"
             " VALUES (?, ?, ?)", (mac, now_iso(), text))

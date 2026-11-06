@@ -108,8 +108,11 @@ def stable(probe: dict) -> dict:
     return out
 
 
-def record(conn: sqlite3.Connection, mac: str, probe: dict) -> bool:
+def record(conn: sqlite3.Connection, mac: str, probe: dict, history: bool = True) -> bool:
     """שומר. מחזיר האם נפתחה **גרסה** חדשה (שורה חדשה).
+
+    ‏#2487: ‏``history=False`` — מכונה לא רשומה: גם תוכן יציב שהשתנה מעדכן את
+    השורה הקיימת במקום (שורה אחת ל-MAC), ולא פותח גרסה.
 
     ‏``probe`` חייב להיות מה ש-`well_formed` החזיר. אותו JSON → כלום;
     רק שדות נדיפים השתנו → עדכון השורה האחרונה במקום (``sampled_at``);
@@ -126,7 +129,7 @@ def record(conn: sqlite3.Connection, mac: str, probe: dict) -> bool:
     now = now_iso()
     _settle(conn)
     with _write_lock, writing(conn):
-        if row is not None and _text(stable(json.loads(row["probe_json"]))) == key:
+        if row is not None and (not history or _text(stable(json.loads(row["probe_json"]))) == key):
             conn.execute(
                 "UPDATE machine_probe SET probe_json = ?, sampled_at = ? WHERE id = ?",
                 (text, now, row["id"]))

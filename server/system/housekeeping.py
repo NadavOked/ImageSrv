@@ -51,9 +51,12 @@
   **וגם** הדגימה היומית עצמה: ‏`run` דוגם כל מיקום מחובר (‏`storage_history.sample_all`).
 * ‏`pxe_events` (‏#1887) — ‏`pxe_log.KEEP_DAYS` (14) יום; ‏20000 שורות בכל הכנסה.
 * ‏`ip_history` (‏#1888) — 365 יום, 50 למכונה; ‏`nic_history` — 90 יום, 500 למכונה (בכל הכנסה).
+* ‏`shrink_records` (‏#2487) — רק רשומה **שנסגרה** (‏`closed_at`) לפני 90 יום. אף קורא
+  אינו קורא רשומה סגורה (ההיסטוריה ביומן); רשומה **פתוחה** היא הדרך היחידה לדעת
+  שדיסק בנייה נשאר מכווץ (#926) ולא נמחקת לעולם.
 
 **מה במכוון לא כאן:** טבלאות הפעולות (‏`tasks`, ‏`sessions`,
-‏`session_members`, ‏`room_rounds`, ‏`storage_transfers`, ‏`shrink_records`,
+‏`session_members`, ‏`room_rounds`, ‏`storage_transfers`,
 ‏`drawer_cancels`, ‏`smart_asks`, ‏`power_requests`) — הן גדלות בשורה לכל
 **פעולה של אדם** (קליטה, גל, העברה), לא לכל hello; ‏`work_areas` נשען על
 שורת המשימה כראיה; ורשומת כיווץ פתוחה היא הדרך היחידה לדעת שדיסק בנייה
@@ -203,6 +206,9 @@ def _rules(now: datetime) -> list[tuple[str, str, tuple]]:
         # ‏#1888: היסטוריית IP — שנה; מוני הכרטיס — 90 יום. התקרה בשורות בכל הכנסה.
         ("ip_history", "DELETE FROM ip_history WHERE julianday(at) < julianday(?)", (_iso(now, 365),)),
         ("nic_history", "DELETE FROM nic_history WHERE julianday(at) < julianday(?)", (old,)),
+        ("shrink_records",
+         "DELETE FROM shrink_records WHERE closed_at IS NOT NULL"
+         " AND julianday(closed_at) < julianday(?)", (old,)),
         ("mfa_challenges", "DELETE FROM mfa_challenges WHERE expires_at < ?",
          (now.timestamp(),)),
     ]

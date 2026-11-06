@@ -100,6 +100,8 @@ def test_two_disks_on_one_machine_are_separate_rows(conn):
 # --- דרך ה-HTTP + התצוגה ב-#380 ---------------------------------------------
 
 def test_endpoint_accepts_a_valid_event_and_refuses_a_bad_one(server):
+    from conftest import setup_classroom
+    setup_classroom(server)            # #2487: the mac in `event()` is a registered machine
     anon = server["anon"]
     ok = anon.post("/api/v1/agent/disk-event", json=event())
     assert ok.status_code == 200 and ok.json()["ok"] is True

@@ -881,3 +881,34 @@ def test_the_report_keeps_no_identifier_and_stays_json(tmp_path):
         assert leak not in text, (leak, text)
     assert report["targets"][0]["error"] == "[שורה הוסרה — מזהה דיסק]", report
     assert report["targets"][0]["state"] == "failed" and report["elapsed_s"] == 60   # the rest stays
+
+
+def scrub(tmp_path: Path, serials: str, text: str) -> subprocess.CompletedProcess:
+    (tmp_path / "s.txt").write_text(serials, newline="\n")
+    (tmp_path / "in.txt").write_text(text, newline="\n")
+    # #2483: a loop that never ends is the failure. The awk is capped by `timeout` itself, so a
+    # hang is rc=124 and not an orphan awk spinning on (it would also hold the capture pipe open)
+    cap = '_awk=$(command -v awk); awk() { timeout 5 "$_awk" "$@"; }; '
+    return run(tmp_path, cap + f'usb_scrub {posix(tmp_path / "s.txt")!r} < {posix(tmp_path / "in.txt")!r}', timeout=30)
+
+
+@pytest.mark.parametrize("serial", ["serial", "eria", "<seri", "<serial>"])
+def test_a_serial_inside_the_replacement_word_still_ends_the_scrub(tmp_path, serial):
+    # #2483: the replacement "<serial>" contains the serial, so a loop that re-searched
+    # the line from its start found it again in its own output and never ended
+    out = scrub(tmp_path, serial + "\n", f"usb disk {serial} ABCD and {serial}\n")
+    assert out.returncode == 0, out.stderr
+    assert out.stdout == "usb disk <serial> ABCD and <serial>\n", out.stdout
+
+
+def test_the_scrub_does_not_re_read_its_own_replacement_for_another_serial(tmp_path):
+    out = scrub(tmp_path, "WD-WCC4E1234567\neria\nABCDE\n", "x WD-WCC4E1234567 y ABCDE z eria\nclean\n")
+    assert out.returncode == 0, out.stderr
+    assert out.stdout == "x <serial> y <serial> z <serial>\nclean\n", out.stdout
+
+
+def test_the_scrub_still_drops_id_lines_and_an_empty_list_removes_nothing(tmp_path):
+    out = scrub(tmp_path, "serial\n", "ok serial\nUUID=1234-ABCD x\n")
+    assert out.stdout == "ok <serial>\n[שורה הוסרה — מזהה דיסק]\n", out.stdout
+    out = scrub(tmp_path, "", "keep this\nand serial\n")
+    assert out.returncode == 0 and out.stdout == "keep this\nand serial\n", out.stdout

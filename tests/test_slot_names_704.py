@@ -283,6 +283,7 @@ def test_disk_decision_journal_and_session_view_name_the_slot(room_server):
     from server.disks import disk_events                           # noqa: PLC0415
     admin, ctx = room_server["admin"], room_server["ctx"]
     _put(admin, CLONER1, "serial:NV-1", "דיסק מיוחד")
+    _hello(admin, CLONER1, [_disk("nvme0n1", "NV-1")])     # #2492: the serial is the one it reported
     assert disk_events.ingest(ctx.conn, {
         "session_id": "ses_1", "mac": CLONER1, "disk": "nvme0n1", "serial": "NV-1",
         "smart": {"verdict": "fail"}, "decision": "skip"})["ok"]

@@ -88,22 +88,30 @@ probe_cpu() {
         "$_mj" "$_cores" "$_uj" "$_vuln"
 }
 
+# "size|speed|mfr" lines ($1) -> JSON, empty -> null, text escaped (#2484); for/IFS, not `read` (GUI-only agent).
+_dimm_json() {
+    _c=0; _o=$IFS; IFS='
+'; set -f
+    for _r in $1; do
+        _sz=${_r%%|*}; _t=${_r#*|}; _sp=${_t%%|*}; _mf=${_t#*|}; _mj=null; [ -n "$_mf" ] && _mj=$(_js "$_mf")
+        [ "$_c" = 0 ] || printf ','; _c=1
+        printf '{"size_bytes":%s,"speed_mts":%s,"manufacturer":%s}' "${_sz:-null}" "${_sp:-null}" "$_mj"
+    done; set +f; IFS=$_o; }
+
 probe_memory() {
     _f="$PROC_ROOT/meminfo"; [ -r "$_f" ] || { _pn; return; }
     _kb=$(awk '/^MemTotal:/{print $2; exit}' "$_f")
     _num "$_kb" >/dev/null || { _pe "MemTotal חסר"; return; }
     _dimms=null
     if _have "$DMIDECODE"; then
-        _raw=$("$DMIDECODE" -t 17 2>/dev/null) && _dimms=$(printf '%s\n' "$_raw" | awk '
-            function emit(){ if(sz=="")return; if(n++)printf ",";
-                printf "{\"size_bytes\":%s,\"speed_mts\":%s,\"manufacturer\":%s}",
-                sz,(sp==""?"null":sp),(mf==""?"null":"\"" mf "\"") }
-            /Memory Device/{emit(); sz=""; sp=""; mf=""}
-            /^[[:space:]]*Size:/{ if($2=="No"){sz=""; next}
-                sz=$2; if($3~/GB/)sz=sz*1073741824; else if($3~/MB/)sz=sz*1048576 }
-            /^[[:space:]]*Speed:/{ if($2~/^[0-9]/) sp=$2 }
+        _raw=$("$DMIDECODE" -t 17 2>/dev/null) && _rows=$(printf '%s\n' "$_raw" | awk '
+            function emit(){ if(have) print sz "|" sp "|" mf }
+            /Memory Device/{emit(); have=0; sz=""; sp=""; mf=""}
+            /^[[:space:]]*Size:/{ if($2=="No"){have=0; next} have=1; sz=""
+                if($2~/^[0-9]+$/){ sz=$2; if($3~/GB/)sz=sz*1073741824; else if($3~/MB/)sz=sz*1048576 } }
+            /^[[:space:]]*Speed:/{ if($2~/^[0-9]+$/) sp=$2 }
             /^[[:space:]]*Manufacturer:/{ mf=$2; for(i=3;i<=NF;i++) mf=mf " " $i }
-            END{emit()}') && _dimms="[$_dimms]" || _dimms=$(_pe "dmidecode נכשל")
+            END{emit()}') && _dimms="[$(_dimm_json "$_rows")]" || _dimms=$(_pe "dmidecode נכשל")
     fi
     _ecc=null
     if [ -d "$SYSFS_ROOT/devices/system/edac/mc" ]; then

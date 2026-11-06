@@ -9,6 +9,10 @@ ConditionPathExists=!/var/lib/imagesrv/.firstboot-done
 [Service]
 Type=simple
 WorkingDirectory=/opt/imagesrv-src
+# #2490: apply אינו דורש הזדהות — האשף לא עולה בלי שומר הפורט
+# (deploy/nftables-wizard.sh, ‏firstboot טוען אותו), גם כשמשהו אחר מפעיל
+# את היחידה (Wants= של imagesrv-installer-gui).
+ExecStartPre=/usr/sbin/nft list table inet imagesrv_wizard
 ExecStart=/usr/bin/python3 -m server.wizard --host 0.0.0.0 --port 8081 \
     --data-dir /var/lib/imagesrv \
     --status-file /etc/imagesrv/firstboot.status \

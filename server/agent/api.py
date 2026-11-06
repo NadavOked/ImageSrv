@@ -39,7 +39,7 @@ from server.agent import firmware_image# #2080
 from server.agent import unknown_screen   # #1802
 from server.agent import body as agent_body   # #2410/#2416
 from server.agent.readbackhash import mode as readback_mode
-from server.agent.hello import (build_answer, hello_payload_oversized, login_required,
+from server.agent.hello import (build_answer, hello_payload_oversized, journal_unknown, login_required,
                                 off_deploy_vlan, well_formed_monitor_auth,
                                 well_formed_monitor_secret)
 from server.library.images import ImageLibrary, restore_refusal
@@ -76,6 +76,7 @@ class ServerContext:
     nic_services: object | None = None
     #: ‏#1949: ‏(אירוע, פירוט) → ‏[מתי נרשם, כמה נספרו מאז] — ריסון היומן
     #: של סירובי הזהות (`_identity_repeats`). לכל אפליקציה, לא גלובלי.
+    #: ‏#2487: גם `("unknown_mac", mac)` — שורת ה-hello של מכונה לא רשומה.
     identity_journaled: dict = field(default_factory=dict)
     #: ‏#1973: מנטר ה-UPS (`ups.UpsMonitor`) — ‏`server.main` בלבד; None = אין מנטר.
     ups: object | None = None
@@ -131,8 +132,12 @@ _clock = time.monotonic
 def _identity_repeats(ctx: ServerContext, verdict: identity.Verdict) -> tuple[int, int] | None:
     """‏None = סירוב שכבר נרשם בחלון הנוכחי — נספר ולא נכתב. אחרת
     ‏(כמה נספרו מאז השורה הקודמת, לפני כמה שניות היא נכתבה) — ‏(0, 0) לראשון."""
+    return _journal_repeats(ctx, (verdict.event, verdict.detail))
+
+
+def _journal_repeats(ctx: ServerContext, key: tuple[str, str]) -> tuple[int, int] | None:
+    """‏#1949 לכל שורה חוזרת לפי מפתח; ‏#2487: גם `unknown_mac` של hello, לפי MAC."""
     now = _clock()
-    key = (verdict.event, verdict.detail)
     with _identity_lock:
         seen = ctx.identity_journaled.get(key)
         if seen is not None and now - seen[0] < IDENTITY_JOURNAL_WINDOW_S:
@@ -366,6 +371,8 @@ def create_agent_router(ctx: ServerContext,
             firmware=firmware, secure_boot=secure_boot,
             agent_version=agent_version, local_clone=local_clone, optical=optical,
             optical_reported=True,
+            # ‏#2487: שורת `unknown_mac` נכתבת למטה, מרוסנת לפי MAC.
+            record_journal=False,
             # ‏#1952: מי קיבל את המחיצה הקודמת עד סופה — מהלוג של מחשב הבנייה.
             direct_finished=direct.clean_finished(body),
             # ‏#715: פרמטרי השידור למקור שהוא מחשב בנייה — של המנוע, אם יש.
@@ -405,6 +412,14 @@ def create_agent_router(ctx: ServerContext,
             # ‏#1802 (נדב 04/11): המסך "המחשב הזה לא רשום" נשאר. כמה שניות עד עלייה
             # אוטומטית מהדיסק (0 = כבוי) — הסוכן מחיל אותה ב-UEFI בלבד, לעולם לא ב-BIOS.
             answer[unknown_screen.SETTING] = unknown_screen.autoboot_seconds(ctx.conn)
+            # ‏#2487: מכונה לא רשומה נענית ונרשמת (כך היא נרשמת מהקונסולה), אבל
+            # ‏hello חוזר אינו כותב שורת יומן בכל פעם: אחת לחלון, ואחריה מונה —
+            # כמו סירובי הזהות (#1949). מכונה אמיתית שולחת hello אחד לאתחול.
+            repeats = _journal_repeats(ctx, ("unknown_mac", mac))
+            if repeats is not None:
+                journal_unknown(ctx.conn, mac, client_ip,
+                                f" [+{repeats[0]} identical hellos in the last {repeats[1]}s not journaled]"
+                                if repeats[0] else "")
         log.info("hello from %s (%s): known=%s off_vlan=%s",
                  # codeql[py/log-injection] false positive: MAC מנורמל, client_ip מה-socket, והשאר bool (#291)
                  mac, client_ip, answer["known"], off_vlan)
@@ -586,6 +601,12 @@ def create_agent_router(ctx: ServerContext,
             discard_failed_staging(ctx.conn, ctx.library.root, body["task_id"])   # #1915
         return JSONResponse(result, status_code=200 if (result.get("ok") or result.get("code") == "not_open") else 400)
 
+    def _in_round(session_id: object, mac: str) -> bool:
+        """‏#2487: ה-MAC חבר בסבב הזה — ‏hello צירף אותו, ולכן הוא מכונה רשומה."""
+        return isinstance(session_id, str) and ctx.conn.execute(
+            "SELECT 1 FROM session_members WHERE session_id = ? AND mac = ?",
+            (session_id, mac)).fetchone() is not None
+
     @router.post("/agent/disk-event")
     async def agent_disk_event(request: Request) -> JSONResponse:
         """בריאות SMART וההכרעה על דיסק יעד (#652), לצפייה ולריבוט-החלפה.
@@ -605,6 +626,10 @@ def create_agent_router(ctx: ServerContext,
             refused = identity_gate(ctx, mac, request, "disk-event")
             if refused is not None:
                 return refused
+            # ‏#2487: כמו `open_pull` — MAC לא רשום אינו כותב. חבר בסבב שבגוף הוא
+            # רשום: ‏hello צירף אותו לפי `all_macs` (#524), גם מכרטיס שאינו הרשום.
+            if registry.lookup(ctx.conn, mac) is None and not _in_round(body.get("session_id"), mac):
+                return _error(403, "this mac is not registered", "unknown_mac")
         result = disk_events.ingest(ctx.conn, body)
         return JSONResponse(result, status_code=200 if result.get("ok") else 400)
 
@@ -624,6 +649,8 @@ def create_agent_router(ctx: ServerContext,
         refused = identity_gate(ctx, mac, request, "local-clone")
         if refused is not None:
             return refused
+        if registry.lookup(ctx.conn, mac) is None:      # #2487: כמו `open_pull`
+            return _error(403, "this mac is not registered", "unknown_mac")
         try:
             line = local_clone_report.journal_line(body)
         except local_clone_report.BadReport as exc:
@@ -675,10 +702,13 @@ def create_agent_router(ctx: ServerContext,
             refused = identity_gate(ctx, mac, request, "shrink-open")
             if refused is not None:
                 return refused
+            if registry.lookup(ctx.conn, mac) is None:      # #2487: כמו `open_pull`
+                return _error(403, "this mac is not registered", "unknown_mac")
         try:
-            row = shrink_records.open_record(ctx.conn, body)
+            # ‏#2492: רק סידורי שה-MAC הזה דיווח ל-`dev` הזה (`serial_not_reported`, 403).
+            row = shrink_records.open_record(ctx.conn, body, require_reported=True)
         except shrink_records.BadRecord as exc:
-            return _error(400, str(exc), exc.code)
+            return _error(403 if exc.code == "serial_not_reported" else 400, str(exc), exc.code)
         except shrink_records.AlreadyOpen as exc:
             return JSONResponse({"ok": False, "error": "this disk already has an open shrink record",
                                  "code": "already_open", "id": exc.record_id,
@@ -703,7 +733,7 @@ def create_agent_router(ctx: ServerContext,
         if refused is not None:
             return None, None, refused
         record_id = body.get("id") if isinstance(body.get("id"), int) else None
-        owner = shrink_records.open_owner(ctx.conn, body.get("serial"), record_id)
+        owner = shrink_records.open_owner(ctx.conn, body.get("serial"), record_id, mac)   # #2492
         if owner is None:
             return None, None, _error(404, "no open shrink record for this serial", "not_open")
         if owner != mac:

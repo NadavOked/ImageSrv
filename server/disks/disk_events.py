@@ -59,6 +59,15 @@ def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
     port = payload.get("port")
     port = port if isinstance(port, int) else None
     serial = payload.get("serial") if isinstance(payload.get("serial"), str) else None
+    # ‏#2492: הסידורי נשמר רק כשהוא מה שה-MAC הזה דיווח ל-`disk` הזה ב-hello
+    # האחרון — אותו שער כמו `smart_history.record`. אחרת כל מכונה הייתה מסמנת
+    # דיסק של אחרת כ-readonly (‏hello שלה מחזיר את הסימון, והסוכן מדלג עליו), או
+    # משנה את בסיס ה-CRC שלו. האירוע עצמו נשמר, בלי שם: best-effort של הסוכן.
+    if serial and smart_history.serial_of(conn, mac, disk if isinstance(disk, str) else "") != serial:
+        # codeql[py/log-injection] false positive: %r מבריח שורה חדשה ותווי בקרה (#291)
+        log.warning("disk_event from %s on %r: serial %r is not what it reported -- kept without it",
+                    mac, str(disk)[:32], serial[:64])
+        serial = None
 
     # UPSERT: אירוע חדש על אותו (סבב, מכונה, דיסק) דורס את הקודם — התמונה
     # החיה, לא ארכיון. קודם לכן זו הייתה קריאה-ואז-כתיבה עם מרוץ; כאן

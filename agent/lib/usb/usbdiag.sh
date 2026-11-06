@@ -85,7 +85,12 @@ usb_scrub() {   # $1 = usb_serials' file; stdin -> stdout with each of them as <
     # FILENAME, not NR == FNR: an empty $1 would make every input line a "serial", and print nothing
     awk -v re="$USB_ID_RE" -v gone="$USB_ID_GONE" 'FILENAME == ARGV[1] { if (length($0) >= 4) s[$0]; next }
          tolower($0) ~ re { print gone; next }
-         { for (k in s) while ((i = index($0, k)) > 0) $0 = substr($0, 1, i - 1) "<serial>" substr($0, i + length(k)); print }' "$1" -
+         { out = ""; rest = $0   # one pass, resuming after each hit (#2483: the word "<serial>" may hold a serial)
+           while (1) { b = 0; n = 0
+               for (k in s) if ((i = index(rest, k)) && (!b || i < b || (i == b && length(k) > n))) { b = i; n = length(k) }
+               if (!b) break
+               out = out substr(rest, 1, b - 1) "<serial>"; rest = substr(rest, b + n) }
+           print out rest }' "$1" -
 }
 _h4='[0-9a-f][0-9a-f][0-9a-f][0-9a-f]'; _nb='(^|[^0-9a-z])'; _na='([^0-9a-z]|$)'
 #: what names a disk's contents (lower case; no {n}: mawk): LABEL=/UUID=/PARTUUID=/PARTLABEL=,
