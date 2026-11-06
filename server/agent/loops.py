@@ -29,6 +29,7 @@ from boot.grub_menu import decide
 from server.agent import unknown_screen
 from server.db import _write_lock, journal, now_iso, writing
 from server.rounds.sessions import SessionStore
+from server.system.health_rows import check, last_seen as _last_seen
 
 log = logging.getLogger("imagesrv.agent_loops")
 
@@ -190,13 +191,13 @@ def _count(conn: sqlite3.Connection, mac: str, ts: str) -> int | None:
     if row is None or row["last_at"] != ts:
         # codeql[py/log-injection] false positive: ה-MAC עבר normalize_mac (hex ונקודתיים בלבד) (#291)
         log.error("agent arrival from %s was not recorded", mac)
-        journal(conn, "agent_loop_unverified", mac)
+        journal(conn, "agent_loop_unverified", mac, machine=mac)
         return None
     if row["hits"] == 1:
         # פעם אחת ללולאה, ולא לכל hello. היומן הוא הארכיון: הוא מה
         # שמאפשר לשאול "המחשב הזה עשה את זה שלוש פעמים השבוע" ולזהות
         # דיסק גוסס, הרבה אחרי שהשורה ירדה מהמסך.
-        journal(conn, "agent_loop", mac)
+        journal(conn, "agent_loop", mac, machine=mac)
     return int(row["hits"])
 
 
@@ -248,7 +249,6 @@ def loop_checks(loops: list[dict] | None) -> list[dict]:
     אליו. `check` ו-`_last_seen` נשארים ב-health.py כי הוא כבר מייבא
     את המודול הזה; ייבוא בכיוון ההפוך בראש הקובץ היה יוצר מעגל.
     """
-    from server.system.health import check, _last_seen  # noqa: PLC0415 — נמנע ממעגל ייבוא
     label = "מחשבים שנופלים לסוכן"
     if loops is None:
         return [check("agent_loops", label, "bad",

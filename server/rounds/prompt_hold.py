@@ -92,7 +92,8 @@ def release_overdue(conn: sqlite3.Connection, session_id: str,
                       "UPDATE session_members SET state = 'failed', error = ?, updated_at = ?"
                       " WHERE session_id = ? AND mac = ? AND state = ?",
                       (why, now_iso(), session_id, row["mac"], row["state"])):
-            journal(conn, "prompt_hold_expired", f"{row['mac']} {session_id}")
+            journal(conn, "prompt_hold_expired", f"{row['mac']} {session_id}",
+                    machine=row["mac"], round_id=session_id)
             released.append(row["mac"])
     return released
 

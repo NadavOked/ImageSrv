@@ -27,6 +27,7 @@ from urllib.parse import urlsplit
 
 from server.core.atomicfile import write_atomic
 from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.system.health_rows import check
 
 
 def _tx(conn, sql: str, params: tuple) -> None:
@@ -92,8 +93,10 @@ CLIENT_PARAMS = {
 #: ‏#2468: מערכות הקבצים שמיקום iSCSI מעוגן בהן (ונכתבות ל-fstab).
 FS_TYPES = ("ext4", "xfs", "btrfs")
 #: ‏#2468: הקישור ש-udev יוצר ל-LUN שלם של סשן iSCSI — לא `/dev/sdX`, ולא מחיצה.
+#: ‏CodeQL #866: הפורטל (כתובת IP ופורט) בלי `-` — אחרת `-iscsi-` יכול ליפול בתוך
+#: המקטע הראשון או השני, והחיפוש אחר הגבול ביניהם ריבועי באורך המחרוזת.
 _ISCSI_BY_PATH_RE = re.compile(
-    r"^/dev/disk/by-path/ip-[^\s/\x00-\x1f\x7f]+-iscsi-[^\s/\x00-\x1f\x7f]+-lun-[0-9]+$")
+    r"^/dev/disk/by-path/ip-[^\s/\x00-\x1f\x7f-]+-iscsi-[^\s/\x00-\x1f\x7f]+-lun-[0-9]+$")
 
 
 def client_params(kind: str, params) -> dict:
@@ -1681,7 +1684,6 @@ def _poll(conn, library, hooks: dict) -> None:
 
 def health_checks(ctx) -> list[dict]:
     """שורה לכל מיקום במסך הבריאות — שלושה מצבים גלויים."""
-    from server.system.health import check
     rows = []
     try:
         locations = list_rows(ctx.conn)

@@ -309,9 +309,9 @@ def dependabot_rows(enabled: bool, repo_slug: str) -> list:
     if not shutil.which("gh"):
         return [["dependabot", "-", "-", "-", "-", "not checked (gh not installed here)", "", "", ""]]
     r = subprocess.run(["gh", "api", f"repos/{repo_slug}/dependabot/alerts", "--paginate",
-                        "--jq", '.[] | select(.state=="open") | [.number, .security_advisory.severity,'
-                        ' .dependency.package.name, .dependency.manifest_path,'
-                        ' (.security_advisory.cve_id // .security_advisory.ghsa_id)] | @tsv'],
+                        "--jq", ('.[] | select(.state=="open") | [.number, .security_advisory.severity,'
+                                 ' .dependency.package.name, .dependency.manifest_path,'
+                                 ' (.security_advisory.cve_id // .security_advisory.ghsa_id)] | @tsv')],
                        capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if r.returncode != 0:
         raise Unchecked(f"gh api dependabot: {r.stderr.strip()[:300]}")

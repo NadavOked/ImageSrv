@@ -27,6 +27,7 @@ from typing import Callable
 
 from server.storage import disk_reserve, locations as storage_locations
 from server.db import _settle, _write_lock, now_iso, writing
+from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.storage_history")
 
@@ -185,7 +186,6 @@ def capture_check(conn: sqlite3.Connection, library, name: str, folder: str, mac
 
 def health_checks(conn: sqlite3.Connection) -> list[dict]:
     """שורה לכל מיקום שנדגם: ‏`warn` — מתמלא בעוד פחות מ-`WARN_DAYS` ימים; ‏`ok`; ‏`off` — אין קצב עדיין."""
-    from server.system.health import check                # noqa: PLC0415 — health מייבא אותנו
     try:
         out = []
         for row in conn.execute("SELECT DISTINCT location_id FROM storage_usage ORDER BY location_id"):

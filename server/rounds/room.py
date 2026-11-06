@@ -260,7 +260,7 @@ def wake_check(conn: sqlite3.Connection, mac: str, disks) -> None:
     for port, serial, now in gone:
         journal(conn, "room_drawer_wake_mismatch",
                 f'{round_row["id"]} {row["suffix"] if row else mac} port={port}'
-                f" chosen={serial} found={now or 'missing'}")
+                f" chosen={serial} found={now or 'missing'}", machine=mac, round_id=round_row["id"])
 
 
 def target_ports(round_row: sqlite3.Row | None, mac: str,
@@ -645,7 +645,8 @@ def journal_precheck(conn: sqlite3.Connection, round_row: sqlite3.Row,
     # שורה אחת, בלי תקרת `_one_line`: תשע מגירות לא ייחתכו באמצע (סידורי מה-hello
     # הוא קלט חיצוני — רק שבירות השורה מוחלפות).
     detail = f"{round_row['id']} wave={round_row['wave_number']} " + ", ".join(items)
-    journal(conn, "room_precheck_warned", " ".join(detail.splitlines()), user)
+    journal(conn, "room_precheck_warned", " ".join(detail.splitlines()), user,
+            round_id=round_row["id"])
 
 
 #: ‏#953: "‏256GB" על מדבקת כונן הוא 256×10⁹ — הקונסולה מדברת באותן יחידות.
@@ -870,7 +871,7 @@ def open_round(ctx, image_id: str, target_drives: int, user: str,
             # שסבב שלא נגע בהרחבה לא ייראה כמו החלטה שמישהו קיבל.
             + (f" expand={expand_choice}" if expand_choice != "auto" else "")
             + (f" drivers={len(chosen_drivers)}" if chosen_drivers else ""),
-            user)
+            user, round_id=round_id)
     return {"id": round_id, "wave_session_id": wave_id}
 
 
@@ -948,7 +949,7 @@ def close_round(ctx, user: str, confirm_name: str) -> None:
         raise
     journal(ctx.conn, "room_close",
             f'{round_row["id"]} written={round_row["written_drives"]}'
-            f'/{round_row["target_drives"]}', user)
+            f'/{round_row["target_drives"]}', user, round_id=round_row["id"])
     # ‏#715: המקור מפסיק עם הסבב — המשימה נסגרת, ומחשב הבנייה רואה זאת
     # ב-hello הבא ואינו משדר.
     from server.rounds import direct                 # noqa: PLC0415
@@ -1017,7 +1018,8 @@ def _mark_lost(conn: sqlite3.Connection, store: SessionStore, wave: sqlite3.Row,
     # ‏`update_one` כבר עשה commit לכל שינוי מצב, ו-`journal` נועל וכותב
     # בעצמו (#379) — ולכן אין כאן `conn.commit()` חשוף (#450, #54).
     for m in marked:
-        journal(conn, "client_lost", f'{m["mac"]} in {wave["id"]}')
+        journal(conn, "client_lost", f'{m["mac"]} in {wave["id"]}', machine=m["mac"],
+                round_id=wave["id"])
     return store.members(wave["id"])
 
 
@@ -1039,7 +1041,7 @@ def _rebase_future(conn: sqlite3.Connection, wave: sqlite3.Row,
                     "UPDATE session_members SET updated_at = ?"
                     " WHERE session_id = ? AND mac = ? AND updated_at = ? AND state = ?",
                     (stamp, wave["id"], m["mac"], m["updated_at"], m["state"]))
-    journal(conn, "clock_jump", f'? {wave["id"]}')
+    journal(conn, "clock_jump", f'? {wave["id"]}', round_id=wave["id"])
 
 
 def _utcnow() -> datetime:
@@ -1113,7 +1115,8 @@ def _rewake(conn: sqlite3.Connection, store: SessionStore,
         if age >= (sent + 1) * REWAKE_SECONDS:
             store.on_opened(CLONERS_GROUP, None, unseen)
             journal(conn, "room_rewake",
-                    f'{wave["id"]} {round_row["id"]} n={sent + 1}/{REWAKE_MAX} {names}')
+                    f'{wave["id"]} {round_row["id"]} n={sent + 1}/{REWAKE_MAX} {names}',
+                    round_id=round_row["id"])
         return
     if age >= REWAKE_MAX * REWAKE_SECONDS + REWAKE_BOOT_SECONDS:
         reason = (f"מחשב השיכפול {names} לא חזר לגל — {REWAKE_MAX + 1} הערות WoL"
@@ -1127,7 +1130,8 @@ def _rewake(conn: sqlite3.Connection, store: SessionStore,
         if _fail_round(conn, store, round_row, reason):
             journal(conn, "room_wake_failed",
                     f'{round_row["id"]} {wave["id"]} {names}'
-                    f' written={round_row["written_drives"]}/{round_row["target_drives"]}')
+                    f' written={round_row["written_drives"]}/{round_row["target_drives"]}',
+                    round_id=round_row["id"])
             from server.rounds import direct         # noqa: PLC0415 — כמו ב-`_resume`
             direct.cancel_source_task(conn, round_row, "")
 
@@ -1182,7 +1186,8 @@ def tick(conn: sqlite3.Connection, store: SessionStore) -> None:
             if _fail_round(conn, store, round_row, NOTHING_TO_WRITE_REASON):
                 journal(conn, "room_failed",
                         f'{round_row["id"]} {wave["id"]} אין מגירות לכתוב — כל המגירות אדומות'
-                        f' written={round_row["written_drives"]}/{round_row["target_drives"]}')
+                        f' written={round_row["written_drives"]}/{round_row["target_drives"]}',
+                        round_id=round_row["id"])
                 direct.cancel_source_task(conn, round_row, "")
         else:
             _rewake(conn, store, round_row, wave)         # #1721
@@ -1321,7 +1326,7 @@ def rejoined_mid_stream(conn: sqlite3.Connection, session: sqlite3.Row, mac: str
     if conn.execute(
         "SELECT 1 FROM journal WHERE event = 'room_rejoin' AND detail = ?", (detail,),
     ).fetchone() is None:
-        journal(conn, "room_rejoin", detail)
+        journal(conn, "room_rejoin", detail, machine=mac, round_id=session["id"])
     return True
 
 
@@ -1359,7 +1364,7 @@ def _journal_drawer_changed(conn: sqlite3.Connection, round_id: str,
         "SELECT 1 FROM journal WHERE event = ? AND detail = ?",
         (event, detail),
     ).fetchone() is None:
-        journal(conn, event, detail)
+        journal(conn, event, detail, machine=member["mac"], round_id=round_id)
 
 
 def _held_elsewhere(conn: sqlite3.Connection, round_row: sqlite3.Row,
@@ -1403,7 +1408,8 @@ def _journal_serial_conflict(conn: sqlite3.Connection, round_id: str, member: sq
     detail = f"{round_id} {member['mac']} {dev or '?'} serial={serial} also on {other}"
     if conn.execute("SELECT 1 FROM journal WHERE event = ? AND detail = ?",
                     ("room_drawer_serial_conflict", detail)).fetchone() is None:
-        journal(conn, "room_drawer_serial_conflict", detail)
+        journal(conn, "room_drawer_serial_conflict", detail, machine=member["mac"],
+                round_id=round_id)
 
 
 def _own_serial(target: dict, serial_of: dict) -> str | None:
@@ -1567,7 +1573,8 @@ def _journal_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
                      closed: list[tuple[str, int]]) -> None:
     for mac, port in closed:
         journal(conn, "room_drawer_no_disk",
-                f'{round_row["id"]} {_machine_name(conn, mac)} port={port}')
+                f'{round_row["id"]} {_machine_name(conn, mac)} port={port}',
+                machine=mac, round_id=round_row["id"])
 
 
 def _clear_written_failures(conn: sqlite3.Connection, round_row: sqlite3.Row,
@@ -1654,7 +1661,7 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
         )
         conn.commit()
         journal(conn, "room_done", f'{round_row["id"]} written={total}/{target}'
-                + _skipped_note(skipped, cancelled, no_disk))
+                + _skipped_note(skipped, cancelled, no_disk), round_id=round_row["id"])
         direct.cancel_source_task(conn, round_row, "")
         return
     if wave is not None:
@@ -1662,7 +1669,8 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
         # צריך לראות, גם כשהחדר מתאושש לבדו. שורה אחת, כי התביעה למעלה
         # מצליחה פעם אחת.
         journal(conn, "room_wave_lost",
-                f'{round_row["id"]} {wave["id"]} written={total}/{target}')
+                f'{round_row["id"]} {wave["id"]} written={total}/{target}',
+                round_id=round_row["id"])
     _attach_wave(conn, store, round_row, total)
 
 
@@ -1719,7 +1727,7 @@ def _attach_wave(conn: sqlite3.Connection, store: SessionStore,
     conn.commit()
     journal(conn, "room_wave",
             f'{round_row["id"]} wave={round_row["wave_number"] + 1}'
-            f' written={total}/{round_row["target_drives"]}')
+            f' written={total}/{round_row["target_drives"]}', round_id=round_row["id"])
 
 
 #: ‏#1760 — הסיבה כשכל המגירות שהגל ממתין להן אדומות (‏SMART נכשל / קריאה בלבד).
@@ -1742,7 +1750,7 @@ def _fail_dead_wave(conn: sqlite3.Connection, store: SessionStore,
         return
     journal(conn, "room_failed",
             f'{round_row["id"]} {round_row["wave_session_id"]}'
-            f' written={total}/{round_row["target_drives"]}')
+            f' written={total}/{round_row["target_drives"]}', round_id=round_row["id"])
 
 
 def _fail_round(conn: sqlite3.Connection, store: SessionStore,
@@ -1811,7 +1819,7 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
         _journal_no_disk(conn, round_row, closed)
         journal(conn, "room_done",
                 f'{round_row["id"]} written={total}/{round_row["target_drives"]}'
-                + _skipped_note(skipped, cancelled, no_disk))
+                + _skipped_note(skipped, cancelled, no_disk), round_id=round_row["id"])
         return
 
     # ‏#1728: משכפל שאותחל באמצע הזרם וחזר — הגל הבא, לא סבב שנכשל.
@@ -1869,7 +1877,7 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
     _journal_no_disk(conn, round_row, closed)
     journal(conn, "room_wave",
             f'{round_row["id"]} wave={round_row["wave_number"] + 1}'
-            f' written={total}/{round_row["target_drives"]}')
+            f' written={total}/{round_row["target_drives"]}', round_id=round_row["id"])
 
 
 # --- התצוגה ------------------------------------------------------------------
@@ -2272,7 +2280,8 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
         from server.rounds import room_console           # noqa: PLC0415 — room_console מייבא את room
         room_console.request_power(ctx.conn, [canon], room_console.POWEROFF, user[0], confirmed=confirmed)
         journal(ctx.conn, "room_missing_poweroff",
-                f"{canon} ({name})" + (" local copy confirmed" if confirmed else ""), user[0])
+                f"{canon} ({name})" + (" local copy confirmed" if confirmed else ""), user[0],
+                machine=canon)
         return {"requested": 1, "ttl_s": room_console.POWEROFF_TTL_SECONDS}
 
     @router.post("/wake")
@@ -2351,7 +2360,8 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
         drawer_cancel.request(ctx.conn, wave["id"], mac, dev, user[0], origin)
         named = slot_names.label(ctx.conn, mac, dev=dev) or dev
         journal(ctx.conn, "room_drawer_cancel_requested",
-                f"{round_row['id']} {mac} {named} in {wave['id']} ({origin})", user[0])
+                f"{round_row['id']} {mac} {named} in {wave['id']} ({origin})", user[0],
+                machine=mac, round_id=round_row["id"])
         return {"ok": True}
 
     @router.post("/close")

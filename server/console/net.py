@@ -73,7 +73,7 @@ def create_net_router(ctx: ServerContext) -> APIRouter:
              (body.get("description") or "").strip(), ts, ts),
         )
         ctx.conn.commit()
-        journal(ctx.conn, "net_add", mac, user[0])
+        journal(ctx.conn, "net_add", mac, user[0], machine=mac)
         return {"mac": mac}
 
     @router.put("/net/{mac}")
@@ -87,7 +87,8 @@ def create_net_router(ctx: ServerContext) -> APIRouter:
         ):
             raise HTTPException(404, "התקן לא ברשימה")
         ctx.conn.commit()
-        journal(ctx.conn, "net_describe", f"{canonical} {body.get('description', '')}", user[0])
+        journal(ctx.conn, "net_describe", f"{canonical} {body.get('description', '')}", user[0],
+                machine=canonical)
         return {"ok": True}
 
     @router.delete("/net/{mac}")
@@ -101,7 +102,7 @@ def create_net_router(ctx: ServerContext) -> APIRouter:
         ):
             raise HTTPException(404, "התקן לא ברשימה")
         ctx.conn.commit()
-        journal(ctx.conn, "net_forget", canonical, user[0])
+        journal(ctx.conn, "net_forget", canonical, user[0], machine=canonical)
         return {"ok": True}
 
     return router

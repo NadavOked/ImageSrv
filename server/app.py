@@ -367,7 +367,7 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
                     running.cancel()
                 for running in live["tasks"]:
                     with suppress(asyncio.CancelledError):
-                        await running
+                        _ = await running
                 live["tasks"] = ()
                 watcher = getattr(rt.ctx, "email_alerts", None)
                 if watcher is not None:
@@ -594,9 +594,10 @@ def create_runtime(
     # שמריץ שרת אמיתי בתת-תהליך ולכן אין לאן להזריק לו שולח מזויף. הגנה
     # שאינה תלויה בכך שמישהו יזכור לנקות — פורט שאינו יכול להתנגש (#156).
     def on_sender_event(event: str, detail: str) -> None:
-        journal(conn, event, detail)
         status = sender.status()
         session_id = status.get("session_id") if status else None
+        # ‏#1296: הגל שהמנוע משדר — אותה הנחה כמו `record_stream` למטה. אין סטטוס = NULL.
+        journal(conn, event, detail, round_id=session_id)
         if session_id and event in ("send_done", "send_failed", "send_stopped"):
             # קצב אוטומטי (11/10): מה ש-udp-sender ספר בגל שהסתיים — הגל הבא
             # עולה רק על אפס שידורים חוזרים שנקראו כאן. לעולם אינו זורק.
@@ -618,6 +619,12 @@ def create_runtime(
                 ),
             )
 
+    def wave_bitrate(session):
+        server_io.begin(conn, "wave", session["id"], library.root)
+        return drive_rates.decide(
+            conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
+            sender.max_bitrate, link=sender.link)
+
     sender = SenderEngine(
         library,
         interface=interface,
@@ -633,11 +640,7 @@ def create_runtime(
         # (#1471) והכוננים שבו, לעולם לא מעל `max_bitrate` (בלעדיו — 900m) ולא מעל
         # 90% מהקישור של כרטיס ההפצה (15/10).
         # ‏#1884: באותו רגע — צילום הדיסק של הספרייה ולחץ ה-I/O של השרת (לעולם אינו זורק).
-        wave_bitrate=lambda session: (
-            server_io.begin(conn, "wave", session["id"], library.root),
-            drive_rates.decide(
-                conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
-                sender.max_bitrate, link=sender.link))[1],
+        wave_bitrate=wave_bitrate,
         # ‏#1430: `store` נבנה למטה (הוא צריך את `sender.stop`); הקריאה
         # היא מתהליכון השולח, הרבה אחרי שהפונקציה הזו סיימה.
         live_receivers=lambda session_id: store.live_count(session_id),
@@ -669,7 +672,8 @@ def create_runtime(
         # משדר; מחשב הבנייה רואה `running` ב-hello הבא ומשדר בעצמו.
         # ביומן, כדי שגל שלא יצא ייראה כמה שהוא ולא כ"המנוע לא התחיל".
         if direct.is_direct_wave(conn, session["id"]):
-            journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]}')
+            journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]}',
+                    round_id=session["id"])
             # קצב אוטומטי: גם הזרם ממחשב הבנייה עובר ברשת — אותה פתיחה, אותו
             # גג וירידה לכונן איטי; ‏`task.direct.multicast.max_bitrate` מכאן.
             drive_rates.decide(conn, session["id"],
@@ -682,7 +686,7 @@ def create_runtime(
         if refused and store.fail(
                 session["id"], refused,
                 related=lambda: room.fail_wave(conn, session["id"], refused, commit=False)):
-            journal(conn, "send_failed", refused)
+            journal(conn, "send_failed", refused, round_id=session["id"])
 
     store = SessionStore(
         conn,

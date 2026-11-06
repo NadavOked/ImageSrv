@@ -107,7 +107,8 @@ def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
     if decision is not None:
         journal(conn, "disk_decision",
                 f"{mac} {disk} ({verdict}): {decision}"   # #704: + השם, כשיש
-                + slot_names.journal_suffix(slot_names.label(conn, mac, port=port, serial=serial)))
+                + slot_names.journal_suffix(slot_names.label(conn, mac, port=port, serial=serial)),
+                machine=mac, round_id=session_id)
     return {"ok": True}
 
 

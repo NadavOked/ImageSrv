@@ -22,6 +22,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from server.agent.registry import ROOM_GROUPS
+from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_waits")
 
@@ -96,7 +97,6 @@ def _min(s: int) -> str:
 
 def health_checks(conn: sqlite3.Connection) -> list[dict]:
     """סיכום שבועי. בלי סבב שנסגר בשבוע — אין שורה."""
-    from server.system.health import check                # noqa: PLC0415 — health מייבא אותנו
     try:
         w = week(conn)
         if not w["rounds"]:

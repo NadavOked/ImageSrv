@@ -23,7 +23,8 @@ from pathlib import Path
 
 from . import actions
 from .data import (CLOCK_UNCHECKED, CLOCK_UNSYNCED, CONSOLE_STARTING, FIRST_BOOT_PENDING,
-                   NicInfo, ServiceState, Snapshot)
+                   ISO_MANIFEST, LAB_ISO_LAB, LAB_ISO_UNCHECKED, NicInfo, ServiceState,
+                   Snapshot)
 
 #: A certificate this close to its end is "פגה בקרוב" (orange).  Not a project
 #: constant elsewhere: the console certificate is self-signed for ten years,
@@ -482,6 +483,27 @@ def clock_problem(snapshot: Snapshot, extras: Extras) -> Problem | None:
     return None
 
 
+def lab_iso_problem(snapshot: Snapshot) -> Problem | None:
+    """#1412: a server installed from a lab ISO (``build-iso.sh --lab``) says
+    so, and so does one whose ISO manifest could not answer (principle 5).
+    Orange, never blocking (#2144): the server serves; it does not belong in
+    the college."""
+    if snapshot.lab_iso == LAB_ISO_LAB:
+        return Problem(
+            "warn", "ISO מעבדה — לא למכללה",
+            f"השרת הותקן מ־ISO שנבנה למעבדה ({iso('--lab')}): המתקין שלו כלל גישת מעבדה — "
+            "SSH, מפתחות או hooks.",
+            f"<b>מה לעשות:</b> להתקין את השרת מחדש מ־ISO רגיל, בלי {iso('-lab')} בשם.", ("", ""),
+            "השרת <b>אינו מיועד למכללה</b>.")
+    if snapshot.lab_iso == LAB_ISO_UNCHECKED:
+        return Problem(
+            "warn", "לא נבדק אם השרת הותקן מ־ISO מעבדה",
+            f"{iso(ISO_MANIFEST.as_posix())} לא נקרא, או שאין בו {iso('lab_overlay')} (ISO מלפני הבדיקה).",
+            f"<b>מה לעשות:</b> לבדוק מאיזה ISO הותקן השרת; ISO מעבדה ({iso('-lab')} בשם) לא נשאר במכללה.",
+            ("", ""))
+    return None
+
+
 def blocking(found: list[Problem]) -> bool:
     """#2144 (Nadav 04/11): the header is red only for a problem that stops
     the server's work -- a red card ("bad": the console cannot be reached,
@@ -596,6 +618,9 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
     clock = clock_problem(snapshot, extras)
     if clock is not None:
         found.append(clock)
+    lab = lab_iso_problem(snapshot)
+    if lab is not None:
+        found.append(lab)
     order = {"bad": 0, "warn": 1}
     return sorted(found, key=lambda item: order[item.sev])
 

@@ -36,6 +36,7 @@ import statistics
 from boot.trace import STEP_INDEX, STEPS
 
 from server.db import journal, now_iso
+from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_boot")
 
@@ -102,7 +103,7 @@ def after_record(conn: sqlite3.Connection, mac: str, step: str, seconds: float |
         if got["slow"]:
             journal(conn, "boot_step_slow",
                     f"{mac} {step} {got['seconds']:.1f}s baseline={got['baseline']:.1f}s"
-                    f" ({got['samples']} boots)")
+                    f" ({got['samples']} boots)", machine=mac)
     except Exception:             # noqa: BLE001
         log.exception("boot regression for %s %s failed", mac, step)
 
@@ -136,7 +137,6 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
     """שורה כתומה לכל מכונה שהמעבר האחרון באחד השלבים שלה ארך פי 2 מהבסיס,
     ושורת לפני/אחרי עדכון. בלי מדידות — אין שורה."""
     from server.agent.boottrace import STEP_LABELS          # noqa: PLC0415 — boottrace מייבא אותנו
-    from server.system.health import check                   # noqa: PLC0415
     try:
         pairs = conn.execute("SELECT DISTINCT mac, step FROM boot_step_times"
                              " ORDER BY mac, step").fetchall()

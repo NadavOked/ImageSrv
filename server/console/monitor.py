@@ -738,7 +738,8 @@ class RefusalLog:
     def _write(conn, key: tuple[str, str, str, int, str], more: int) -> None:
         mac, node, user, code, reason = key
         detail = f"{mac} {code} {reason}" + (f" ×{more} נוספים" if more else "")
-        journal(conn, "monitor_refused", detail + (f" node={node}" if node else ""), user)
+        journal(conn, "monitor_refused", detail + (f" node={node}" if node else ""), user,
+                machine=registry.normalize_mac(mac))
 
     def record(self, conn, mac: str, user: str, code: int, reason: str, node: str = "") -> None:
         key = (mac, node, user, code, reason)
@@ -842,7 +843,8 @@ def create_monitor_router(
             if now - at >= CONTROL_REQUEST_SECONDS:
                 holder.request = None
                 outcomes[mac] = {"by": by, "outcome": "timeout"}
-                journal(ctx.conn, "monitor_control_timeout", f"{mac} {by} \u2190 {holder.user}", by)
+                journal(ctx.conn, "monitor_control_timeout", f"{mac} {by} \u2190 {holder.user}", by,
+                        machine=mac)
         grant = grants.get(mac)
         if grant is not None and now >= grant[1]:
             grants.pop(mac, None)
@@ -854,7 +856,7 @@ def create_monitor_router(
         outcomes[mac] = {"by": to, "outcome": outcome}
         holder.evict(WS_HANDED_OVER, f"השליטה במכונה הועברה ל-{to}")
         journal(ctx.conn, "monitor_control_auto" if outcome == "auto" else "monitor_control_approved",
-                f"{mac} {holder.user} \u2192 {to}", to)
+                f"{mac} {holder.user} \u2192 {to}", to, machine=mac)
 
     def reserve(mac: str, user: str) -> tuple[_Holder | None, str]:
         """‏#1852: (המחזיק החדש, "") — או (None, הסיבה ל-4409, עם שם המחזיק)."""
@@ -935,7 +937,8 @@ def create_monitor_router(
                 _hand_over(canonical, holder, who, "auto")
                 return {"outcome": "auto"}
             holder.request = (who, now)
-            journal(ctx.conn, "monitor_control_request", f"{canonical} {who} \u2192 {holder.user}", who)
+            journal(ctx.conn, "monitor_control_request", f"{canonical} {who} \u2192 {holder.user}", who,
+                    machine=canonical)
             return {"outcome": "pending", "seconds_left": CONTROL_REQUEST_SECONDS}
 
     @router.post("/monitor/{mac}/control/answer")
@@ -958,7 +961,8 @@ def create_monitor_router(
                 _hand_over(canonical, holder, by, "approved")
                 return {"outcome": "approved"}
             outcomes[canonical] = {"by": by, "outcome": "denied"}
-            journal(ctx.conn, "monitor_control_denied", f"{canonical} {who} \u2192 {by}", who)
+            journal(ctx.conn, "monitor_control_denied", f"{canonical} {who} \u2192 {by}", who,
+                    machine=canonical)
             return {"outcome": "denied"}
 
     @router.post("/monitor/{mac}/power")
@@ -1002,7 +1006,8 @@ def create_monitor_router(
         writer.write(power_frame(action))
         await writer.drain()
         journal(ctx.conn, "monitor_power", f"{canonical} {action}"
-                + (" — מיידי, באמצע שיכפול מקומי, בלי סימון היעדים" if copying else ""), user[0])
+                + (" — מיידי, באמצע שיכפול מקומי, בלי סימון היעדים" if copying else ""), user[0],
+                machine=canonical)
         return {"ok": True, "action": action}
 
     @router.post("/monitor/{mac}/agent-power")
@@ -1036,7 +1041,8 @@ def create_monitor_router(
             raise HTTPException(409, NOT_IN_LOCAL_COPY)
         count = room_console.request_power(ctx.conn, [canonical], action, user[0], confirmed=True)
         journal(ctx.conn, "monitor_power",
-                f"{canonical} {action} — דרך הסוכן, באישור מעל שיכפול מקומי", user[0])
+                f"{canonical} {action} — דרך הסוכן, באישור מעל שיכפול מקומי", user[0],
+                machine=canonical)
         return {"requested": count, "action": action,
                 "ttl_s": room_console.POWEROFF_TTL_SECONDS}
 
@@ -1154,7 +1160,7 @@ def create_monitor_router(
 
             bridges[canonical] = writer
             refusals.settle(ctx.conn, canonical, found[0])   # ‏#1855: הספירה של הסדרה שקדמה
-            journal(ctx.conn, "monitor_connected", canonical, found[0])
+            journal(ctx.conn, "monitor_connected", canonical, found[0], machine=canonical)
             # ניתוק/ביטול תוך כדי הגשר (ה-runner מבטל את ה-endpoint כשהדפדפן
             # הלך — ראו למטה) = "הדפדפן סגר"; חריגה אחרת = "כשל".
             outcome = "error"
@@ -1167,7 +1173,7 @@ def create_monitor_router(
                 raise
             finally:
                 journal(ctx.conn, "monitor_closed", f"{canonical} {outcome}",
-                        found[0])
+                        found[0], machine=canonical)
         except (WebSocketDisconnect, asyncio.CancelledError):
             # ‏WebSocketDisconnect: הלקוח סגר בצורה מסודרת. ‏CancelledError:
             # ה-ASGI runner מבטל את משימת ה-endpoint בזמן פירוק החיבור —
@@ -1190,7 +1196,7 @@ def create_monitor_router(
                     try:
                         await writer.wait_closed()
                     except OSError:
-                        pass
+                        pass  # החיבור כבר נסגר בצד השני — אין מה להמתין לו
             finally:
                 release(canonical, holder, writer)
                 if task is not None:

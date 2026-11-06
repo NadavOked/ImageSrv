@@ -67,7 +67,8 @@ class Resolver(Protocol):
     והתשובה לכך היא לא לספור אותו — לא לשקר על מה שידוע.
     """
 
-    def __call__(self, mac: str, client_ip: str | None) -> dict: ...
+    def __call__(self, mac: str, client_ip: str | None) -> dict:
+        """חתימת הפרוטוקול בלבד."""
 
 
 def build_config_text(

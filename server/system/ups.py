@@ -33,8 +33,12 @@ from pathlib import Path
 from typing import Callable
 
 from server.db import _write_lock, get_setting, journal, now_iso, set_settings, update_one, writing
+from server.core.logtext import one_line
 
 log = logging.getLogger("imagesrv.ups")
+#: ‏#2510: מה שהקונסולה מקבלת כשהכשל אינו `UpsError` שלנו — הטקסט המקורי ל-log.
+READ_FAILED = "קריאת ה-UPS נכשלה — הפרטים ביומן השרת"
+SHUTDOWN_FAILED = "פקודת הכיבוי נכשלה — הפרטים ביומן השרת"
 
 MODE, TARGET = "ups_mode", "ups_target"
 MODES = ("none", "usb", "net")
@@ -56,6 +60,15 @@ _VAR = re.compile(r'^VAR (\S+) (\S+) "(.*)"$')
 
 class UpsError(RuntimeError):
     """הקריאה מה-UPS לא הצליחה — הסיבה בשמה."""
+
+
+def _our_text(exc: Exception, fallback: str) -> str:
+    """‏#2510: הודעה של `UpsError` (שלנו) עוברת כמו שהיא; כל חריגה אחרת — ל-log,
+    וללקוח `fallback`."""
+    if isinstance(exc, UpsError):
+        return str(exc)
+    log.warning("ups: %s", exc)
+    return fallback
 
 
 @dataclass(frozen=True)
@@ -111,7 +124,8 @@ def read_vars(target: Target, timeout: float = READ_TIMEOUT,
     try:
         sock = connect((target.host, target.port), timeout)
     except OSError as exc:
-        raise UpsError(f"אין חיבור ל-{target.host}:{target.port}: {exc}") from exc
+        log.warning("ups %s: connect failed: %s", one_line(target), exc)
+        raise UpsError(f"אין חיבור ל-{target.host}:{target.port}") from exc
     with sock:
         try:
             sock.sendall(f"LIST VAR {target.name}\n".encode("ascii"))
@@ -128,13 +142,14 @@ def read_vars(target: Target, timeout: float = READ_TIMEOUT,
                     try:
                         sock.sendall(b"LOGOUT\n")
                     except OSError:
-                        pass
+                        pass  # LOGOUT הוא נימוס בלבד; השקע נסגר מיד אחריו
                     return values
                 match = _VAR.match(line)
                 if match and match.group(1) == target.name:
                     values[match.group(2)] = match.group(3).replace('\\"', '"')
         except OSError as exc:
-            raise UpsError(f"הקריאה מ-{target.host} נקטעה: {exc}") from exc
+            log.warning("ups %s: read interrupted: %s", one_line(target), exc)
+            raise UpsError(f"הקריאה מ-{target.host} נקטעה") from exc
     raise UpsError("upsd סגר את החיבור לפני סוף הרשימה")
 
 
@@ -195,7 +210,7 @@ def stop_all_work(ctx, reason: str) -> list[str]:
         if ctx.store.fail(sid, reason,
                           related=lambda sid=sid: room.fail_wave(conn, sid, reason, commit=False)):
             stopped.append(sid)
-            journal(conn, "ups_work_stopped", f"{sid}: {reason}")
+            journal(conn, "ups_work_stopped", f"{sid}: {reason}", round_id=sid)
         if row["kind"] == "multicast":
             ctx.sender.stop(sid)
     for table, where, column in (("room_rounds", "state IN ('active', 'closing')", "failed_reason"),
@@ -251,9 +266,10 @@ class UpsMonitor:
                 raise UpsError("כתובת ה-UPS השמורה אינה תקינה — הגדירו אותה מחדש")
             now = reading(self.read(target))
         except Exception as exc:  # noqa: BLE001 — כל כשל קריאה הוא "לא נקרא", בשמו
+            why = _our_text(exc, READ_FAILED)
             if self.error is None:
-                journal(self.conn, "ups_unreachable", f"{target or mode}: {exc}")
-            self.error = str(exc)
+                journal(self.conn, "ups_unreachable", f"{target or mode}: {why}")
+            self.error = why
             return
         if self.error is not None:
             journal(self.conn, "ups_reachable", f"{target}: {describe(now)}")
@@ -278,8 +294,9 @@ class UpsMonitor:
         try:
             self.poweroff()
         except Exception as exc:  # noqa: BLE001 — כיבוי שנכשל נאמר, ונוסה שוב בדגימה הבאה
-            self.shutdown_error = str(exc)
-            journal(self.conn, "ups_shutdown_failed", str(exc))
+            log.warning("ups shutdown failed: %s", exc)
+            self.shutdown_error = SHUTDOWN_FAILED
+            journal(self.conn, "ups_shutdown_failed", SHUTDOWN_FAILED)
 
     def run_forever(self, stop: threading.Event | None = None,
                     interval: float = POLL_SECONDS) -> None:
@@ -381,7 +398,7 @@ def apply(conn, mode: str, target_text: object, hooks: dict, user: str) -> dict:
         try:
             return {"read": describe(reading(hooks["read"](probe))), "error": None}
         except Exception as exc:  # noqa: BLE001 — נאמר למפעיל, לא נבלע
-            error = str(exc)
+            error = _our_text(exc, READ_FAILED)
         if attempt + 1 < attempts:
             hooks["sleep"](1)
     return {"read": None, "error": error}

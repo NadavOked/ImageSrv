@@ -45,8 +45,9 @@ ESP = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
 BASIC = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 SHA = "a" * 64
 ROWS = [
-    f"1|{ESP}|esp|vfat|2048|{65536 * 512}|p1.img.zst|{SHA}|false||",
-    f"2|{BASIC}|windows|ntfs|67584|{32768 * 512}|p2.img.zst|{SHA}|true||",
+    # #1212 (Nadav 06/11): a Windows image without the unique GUIDs is refused before the disk
+    f"1|{ESP}|esp|vfat|2048|{65536 * 512}|p1.img.zst|{SHA}|false|11111111-1111-1111-1111-111111111111|",
+    f"2|{BASIC}|windows|ntfs|67584|{32768 * 512}|p2.img.zst|{SHA}|true|22222222-2222-2222-2222-222222222222|",
 ]
 
 

@@ -13,7 +13,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server.net import dhcp
+from server.net import dhcp, dhcp_host
 from server.net.dhcp import InterfaceConfig, render, render_proxy, validate
 
 try:
@@ -274,7 +274,7 @@ def test_the_proxy_conf_lives_outside_the_directory_dnsmasq_reads():
     """‏#36 כולו תלוי בזה: קובץ ב-/etc/dnsmasq.d נטען לאינסטנס הראשי,
     וההפרדה מתבטלת בשקט."""
     assert "/etc/dnsmasq.d" not in dhcp.PROXY_CONF
-    assert dhcp.DEFAULT_CONF.startswith("/etc/dnsmasq.d")
+    assert dhcp_host.DEFAULT_CONF.startswith("/etc/dnsmasq.d")
 
 
 # --- #141: רשימת המכונות הרשומות (dhcp-hostsfile) ----------------------------
@@ -283,7 +283,7 @@ def test_the_proxy_conf_lives_outside_the_directory_dnsmasq_reads():
 def test_known_macs_conf_is_not_auto_loaded_from_dnsmasq_d():
     """כמו PROXY_CONF (#36): הקובץ נטען במפורש דרך dhcp-hostsfile
     ב-imagesrv.conf, לא דרך הסריקה האוטומטית של /etc/dnsmasq.d."""
-    assert "/etc/dnsmasq.d" not in dhcp.KNOWN_MACS_CONF
+    assert "/etc/dnsmasq.d" not in dhcp_host.KNOWN_MACS_CONF
 
 
 def test_render_known_macs_lists_one_line_per_registered_mac():

@@ -301,7 +301,7 @@ def write_credential_0600(path, token: str) -> None:
         # codeql[py/path-injection] false positive: הקוראים בונים את הנתיב בעצמם (docstring, #291)
         os.unlink(tmp)
     except FileNotFoundError:
-        pass
+        pass  # הקובץ הזמני כבר איננו — זה מה שהניקוי רצה
     fd = None
     try:
         # codeql[py/path-injection] false positive: הקוראים בונים את הנתיב בעצמם (docstring, #291)
@@ -585,13 +585,26 @@ def _accept_any(*_args) -> bool:
     return True
 
 
-def build_server_tls_context(cert_pem: bytes, key_pem: bytes):
-    """‏context של מאזין ה-enrollment (המשני): TLS 1.3 בלבד, דורש תעודת-לקוח,
-    וקולט אותה גם כשאינה מוכרת (הצמדה בקוד, לא בשרשרת)."""
+def tls13_only_context():
+    """‏``SSL.Context`` של pyOpenSSL שנעול על TLS 1.3 — לכל context בין-שרתי.
+
+    ‏``set_min/max_proto_version`` הם הנעילה בפועל. ‏``OP_NO_*`` אומרים את אותו
+    דבר בצורה ש-CodeQL מזהה (#652/#653: ‏``TLS_METHOD`` לבדו נקרא אצלו כ"מתיר
+    SSLv2"), ובלעדיהם ההתראה נשארת על context שאינו מתיר דבר מלבד 1.3."""
     from OpenSSL import SSL
     ctx = SSL.Context(SSL.TLS_METHOD)
     ctx.set_min_proto_version(SSL.TLS1_3_VERSION)
     ctx.set_max_proto_version(SSL.TLS1_3_VERSION)
+    ctx.set_options(SSL.OP_NO_SSLv2 | SSL.OP_NO_SSLv3 | SSL.OP_NO_TLSv1
+                    | SSL.OP_NO_TLSv1_1 | SSL.OP_NO_TLSv1_2)
+    return ctx
+
+
+def build_server_tls_context(cert_pem: bytes, key_pem: bytes):
+    """‏context של מאזין ה-enrollment (המשני): TLS 1.3 בלבד, דורש תעודת-לקוח,
+    וקולט אותה גם כשאינה מוכרת (הצמדה בקוד, לא בשרשרת)."""
+    from OpenSSL import SSL
+    ctx = tls13_only_context()
     _load_cert_key(ctx, cert_pem, key_pem)
     ctx.set_verify(SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT, _accept_any)
     return ctx
@@ -602,9 +615,7 @@ def build_pinned_client_context(expected_server_spki: str,
     """‏context של הלקוח היוצא (הראשי): מציג תעודת-לקוח, ומצמיד את ה-SPKI
     של המשני. אי-התאמת SPKI מפילה את ה-handshake — hard fail, בלי TOFU."""
     from OpenSSL import SSL
-    ctx = SSL.Context(SSL.TLS_METHOD)
-    ctx.set_min_proto_version(SSL.TLS1_3_VERSION)
-    ctx.set_max_proto_version(SSL.TLS1_3_VERSION)
+    ctx = tls13_only_context()
     _load_cert_key(ctx, cert_pem, key_pem)
     want = (expected_server_spki or "").lower()
 

@@ -16,6 +16,8 @@ RBAC כפול (עיקרון 5 + ההיררכיה החד-כיוונית של #655
 from __future__ import annotations
 
 import logging
+import os
+from contextlib import closing
 import re
 import sqlite3
 from pathlib import Path
@@ -425,12 +427,11 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             except Exception as exc:                         # noqa: BLE001
                 raise _NotSent(interserver_auth.redact_secrets(str(exc)))
             try:
-                return client.send_answer(method, target, token, body,
-                                          {"ImageSrv-Acting-User": user[0]})
+                with closing(client):
+                    return client.send_answer(method, target, token, body,
+                                              {"ImageSrv-Acting-User": user[0]})
             except storage_client.RequestNotSent as exc:
                 raise _NotSent(interserver_auth.redact_secrets(str(exc)))
-            finally:
-                client.close()
 
         try:
             status, answer = await asyncio.to_thread(send)
@@ -751,7 +752,13 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             raise HTTPException(400, f"מזהה משני לא תקין: {secondary_id!r}")
         cred_dir = Path(data_dir) / "secondaries"
         cred_dir.mkdir(parents=True, exist_ok=True)
-        cred_path = cred_dir / f"{secondary_id}.token"
+        # ‏CodeQL #782-787/#791: חגורה שלישית, בצורה שהניתוח מזהה — הנתיב המנורמל
+        # חייב להישאר בתוך `secondaries/`. אחרי `valid_node_id` זה תמיד נכון.
+        cred_root = os.path.normpath(cred_dir)
+        cred_file = os.path.normpath(os.path.join(cred_root, f"{secondary_id}.token"))
+        if not cred_file.startswith(cred_root + os.sep):
+            raise HTTPException(400, f"מזהה משני לא תקין: {secondary_id!r}")
+        cred_path = Path(cred_file)
         # קודם הקובץ העמיד (0600), ורק אחרי שהצליח — רשומת ה-DB.
         interserver_auth.write_credential_0600(cred_path, result["token"])
         try:
@@ -765,7 +772,6 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         except (ValueError, sqlite3.IntegrityError) as exc:
             # הרשומה נכשלה אבל המשני כבר קשור — לא re-enroll שקט: מנקים את
             # הקובץ היתום ומדווחים שהשחזור הוא ניתוק מקומי על המשני.
-            # codeql[py/path-injection] false positive: שם הקובץ עבר valid_node_id (sn_<16 hex>) למעלה (#291)
             cred_path.unlink(missing_ok=True)
             raise HTTPException(
                 409, f"רישום המשני נכשל ({exc}). המשני כבר קשור — נתקו אותו "

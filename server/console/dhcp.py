@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.console import auth, netcfg as console_netcfg
 from server.core import capabilities
+from server.core.logtext import one_line
 from server.net import deploy_net, dhcp, ports
 from server.agent.api import ServerContext
 from server.db import get_setting, journal, set_setting
@@ -114,7 +115,9 @@ def apply_dnsmasq(ctx: ServerContext, hooks: Hooks,
         text, proxy_text = render_dnsmasq(ctx, deploy)
     except ValueError as exc:      # רשומה פסולה שנשמרה לפני #102
         journal(ctx.conn, "dhcp_apply_failed", f"{what} {exc}", user_id)
-        return str(exc)
+        # ‏#2510: הטקסט (גם של ipaddress) ביומן; ללקוח — משפט קבוע.
+        log.warning("dhcp render failed (%s): %s", one_line(what), exc)
+        return "הגדרת DHCP שמורה אינה תקינה ולא הוחלה — הפרטים ביומן השרת"
     errors = [
         hooks["apply"](text),
         hooks["apply_proxy"](proxy_text,
@@ -223,7 +226,9 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 fw_error = (firewall(nic) if firewall is not None
                             else "אין מנגנון אכיפה לחומת האש בתהליך הזה")
             except Exception as exc:                          # noqa: BLE001
-                fw_error = str(exc) or type(exc).__name__
+                # ‏#2510: טקסט החריגה ליומן השרת; ללקוח — משפט קבוע.
+                log.warning("dhcp proxy firewall failed: %s", exc)
+                fw_error = "עדכון חומת האש נכשל — הפרטים ביומן השרת"
             if fw_error:
                 error = " · ".join(e for e in (error, f"חומת אש: {fw_error}") if e)
                 journal(ctx.conn, "dhcp_apply_failed", f"{what} {error}", user_id)

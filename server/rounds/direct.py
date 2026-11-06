@@ -157,7 +157,8 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
         )
     journal(ctx.conn, "room_open_direct",
             f"{round_id} source={mac}:{disk} serial={serial or '-'} task={task_id} target={count}"
-            + (f" drivers={len(chosen_drivers)}" if chosen_drivers else ""), user)
+            + (f" drivers={len(chosen_drivers)}" if chosen_drivers else ""), user,
+            machine=mac, round_id=round_id)
     return {"id": round_id, "wave_session_id": wave_id,
             "task_id": task_id, "image_id": image_id}
 
@@ -215,7 +216,7 @@ def store_live_manifest(conn: sqlite3.Connection, task_row: dict,
     streamed = sum(1 for p in manifest["partitions"] if p.get("file"))
     journal(conn, "direct_manifest",
             f'{task_row["id"]} {task_row["image_id"]} partitions={streamed}'
-            f' bytes={manifest["total_compressed_bytes"]}')
+            f' bytes={manifest["total_compressed_bytes"]}', machine=task_row.get("mac"))
 
 
 def live_manifest(conn: sqlite3.Connection, image_id: str) -> dict | None:
@@ -274,7 +275,8 @@ def _lost_still_receiving(conn: sqlite3.Connection, store, session_id: str,
     still = [ip for ip in store.lost_ips(session_id)
              if finished is None or ip is None or ip in finished]
     if still:
-        journal(conn, "send_counts_lost", f"{session_id} {' '.join(ip or '?' for ip in still)}")
+        journal(conn, "send_counts_lost", f"{session_id} {' '.join(ip or '?' for ip in still)}",
+                round_id=session_id)
     return len(still)
 
 
@@ -317,7 +319,8 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
         wave = conn.execute(
             "SELECT id, state FROM sessions WHERE id = ?", (wave["id"],)
         ).fetchone()
-        journal(conn, "direct_failed", f'{task["id"]} {reason}')
+        journal(conn, "direct_failed", f'{task["id"]} {reason}',
+                machine=round_row["source_mac"], round_id=round_row["id"])
     params = dict(multicast or default_multicast())
     still = (_lost_still_receiving(conn, store, wave["id"], finished)
              if finished_reported and wave is not None and wave["state"] == "running" else 0)
@@ -406,7 +409,8 @@ def cancel_source_task(conn: sqlite3.Connection, round_row: sqlite3.Row,
         )
         cancelled = cur.rowcount == 1
     if cancelled:
-        journal(conn, "direct_cancel", round_row["source_task_id"], user)
+        journal(conn, "direct_cancel", round_row["source_task_id"], user,
+                machine=round_row["source_mac"], round_id=round_row["id"])
 
 
 # --- ה-API של המקור ------------------------------------------------------------
@@ -449,11 +453,11 @@ def create_direct_router(ctx) -> APIRouter:
             manifest = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError, RecursionError):   # #2447: deep JSON is 400, not 500
             snippet = raw[:160].decode("utf-8", "replace")
-            _fail(task_id, f"manifest is not valid JSON: {snippet}")
+            _fail(task_id, f"manifest is not valid JSON: {snippet}", row["mac"])
             raise HTTPException(400, "manifest is not valid JSON")
         problem = validate_live_manifest(manifest)
         if problem:
-            _fail(task_id, problem)
+            _fail(task_id, problem, row["mac"])
             raise HTTPException(400, problem)
         # ‏#381 בנתיב הזה: מניפסט שנושא קשירה למכונה אחת (`machine_mac`)
         # אינו נשפך על מגירות של מכונות אחרות. מחשב בנייה אינו קושר —
@@ -463,7 +467,7 @@ def create_direct_router(ctx) -> APIRouter:
                    if round_row is not None and round_row["target_slots_json"] else None)
         refusal = restore_refusal(manifest, targets)
         if refusal is not None:
-            _fail(task_id, refusal)
+            _fail(task_id, refusal, row["mac"])
             raise HTTPException(400, refusal)
         manifest["id"] = row["image_id"]
         manifest["name"] = row["name"]
@@ -473,12 +477,12 @@ def create_direct_router(ctx) -> APIRouter:
             raise HTTPException(409, str(exc))
         return {"ok": True, "image_id": row["image_id"]}
 
-    def _fail(task_id: str, message: str) -> None:
+    def _fail(task_id: str, message: str, mac: str) -> None:
         with _write_lock, writing(ctx.conn):
             ctx.conn.execute(
                 "UPDATE tasks SET state = 'failed', error = ?, updated_at = ? WHERE id = ?",
                 (message, now_iso(), task_id),
             )
-        journal(ctx.conn, "direct_failed", f"{task_id} {message}")
+        journal(ctx.conn, "direct_failed", f"{task_id} {message}", machine=mac)
 
     return router

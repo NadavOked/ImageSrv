@@ -208,18 +208,19 @@ def create_station_router(ctx: ServerContext,
             # שאין מאחוריו שום פתיחה היה עונה 409 לנכונה ו-401 לשגויה,
             # כלומר בודק סיסמאות לכל מי שבוילן.
             journal(ctx.conn, "class_deploy_refused",
-                    f'{body.get("username", "")} at station round open')
+                    f'{body.get("username", "")} at station round open', machine=opener)
             return _error(409, "הפצה לכיתות כבויה (v1 מהדורת שיכפול)",
                           "class_deploy_disabled")
         # ‏#1282: אותו שער כמו `/agent/login` — ‏login_guard + החלפה כפויה.
         role, refused = agent_credentials(
             ctx, request, body.get("username", ""), body.get("password", ""),
-            f'{body.get("username", "")} at station round open')
+            f'{body.get("username", "")} at station round open', machine=opener)
         if refused is not None:
             return refused
         if role not in ROUND_OPENER_ROLES:
             journal(ctx.conn, "agent_role_refused",
-                    f'{body.get("username", "")} role={role} at station round open')
+                    f'{body.get("username", "")} role={role} at station round open',
+                    machine=opener)
             return _error(403, "התפקיד הזה אינו רשאי לפתוח סבב", "role_not_allowed")
 
         group_id = body.get("group_id", "")

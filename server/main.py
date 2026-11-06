@@ -78,7 +78,7 @@ def _interface_for(server_url: str) -> str | None:
     try:
         candidates |= {info[4][0] for info in socket.getaddrinfo(host, None)}
     except (socket.gaierror, OSError):
-        pass
+        pass  # שם המארח לא נפתר — נשארים עם השם עצמו בהשוואה
     for nic in nics:
         for addr in nic.get("addr_info") or []:
             if addr.get("local") in candidates:

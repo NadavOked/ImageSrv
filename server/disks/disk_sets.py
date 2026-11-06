@@ -301,7 +301,7 @@ def rounds(conn: sqlite3.Connection, limit: int = 40) -> list[dict]:
                 if isinstance(t, dict) and t.get("dev"):
                     targets[t["dev"]] = t.get("state") or ""
         except ValueError:
-            pass
+            pass  # targets_json פגום — מצב היעדים חסר בתצוגה בלבד, לא משפיע על הסבב
         evs = conn.execute(
             "SELECT disk, port, serial FROM disk_events WHERE session_id = ? AND mac = ? AND serial IS NOT NULL"
             " AND serial != '' ORDER BY port, disk", (g["session_id"], g["mac"])).fetchall()

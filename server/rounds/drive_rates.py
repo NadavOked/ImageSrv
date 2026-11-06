@@ -860,7 +860,8 @@ def decide(conn: sqlite3.Connection, session_id: str,
                 + (f" link={nic['interface']}"
                    f" {str(nic['speed_mbps']) + 'Mb/s' if nic['applied'] else nic['why'] or 'unused'}"
                    f" ceiling={chosen['ceiling']}" if nic else "")
-                + _cloner_note(chosen.get("cloner"), chosen.get("cap_by")))
+                + _cloner_note(chosen.get("cloner"), chosen.get("cap_by")),
+                round_id=session_id)
         return chosen["max_bitrate"]
     except Exception as exc:      # noqa: BLE001 — הלמידה אינה מפילה גל
         log.exception("wave rate for %s failed; using the start rate", session_id)

@@ -165,7 +165,8 @@ def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: obje
         lines = len(text.splitlines())
         log_id = _store(conn, mac, session_id or None, reason, text, lines, truncated, signatures)
         journal(conn, "agent_log", f"{mac} {reason} {session_id or '-'} lines={lines}"
-                + (" — " + "; ".join(s["he"] for s in signatures) if signatures else ""))
+                + (" — " + "; ".join(s["he"] for s in signatures) if signatures else ""),
+                machine=mac, round_id=session_id)
         return {"ok": True, "id": log_id, "lines": lines, "signatures": [s["key"] for s in signatures]}
     except Exception:             # noqa: BLE001 — איסוף אינו מפיל את השרת
         log.exception("storing the agent log of %s failed", mac)

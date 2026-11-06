@@ -184,7 +184,7 @@ def ensure_console_cert(data_dir, console_host: str,
             shutil.copy2(cert_path, cert_path.with_name(CERT_NAME + PREV_SUFFIX))
             write_credential_0600(key_path.with_name(KEY_NAME + PREV_SUFFIX),
                                   key_path.read_text(encoding="utf-8"))
-            have_cert = have_key = False
+            have_cert = False
             regenerated = True
     if not have_cert:
         from cryptography.x509.oid import ExtendedKeyUsageOID

@@ -14,6 +14,7 @@
       המפעיל פשוט לא הצליח להגיע כדי לומר זאת. */
 "use strict";
 
+/* global NETCFG */
 /* NETCFG מוצהר ב-console.js — כאן רק ממלאים אותו. redeclaration של let
    בין סקריפטים קלאסיים מפילה את הקובץ ב-SyntaxError. */
 let NETCFG_TICK = null;

@@ -207,6 +207,12 @@ bash "$SCRIPT_DIR/make-pool.sh" --index-only "$ISO_TREE" || die "אינדוקס 
 for comp in main contrib; do
     [[ -s "$ISO_TREE/dists/trixie/$comp/binary-amd64/Packages.gz" ]] || die "אין Packages.gz ל-$comp אחרי האינדוקס"
 done
+# ‏#2520: debootstrap ו-apt בוחרים את הגרסה הגבוהה של כל שם באינדקס הממוזג. תלות-גרסה
+# שאינה מתקיימת שם (apt-utils 3.0.3 של ה-netinst: ‏`apt (= 3.0.3)` מול apt 3.0.4 של ה-pool)
+# היא התקנה שנעצרת ב-45% — נעצרים כאן. ‏0 = עקבי, ‏1 = פער (שורה לכל תלות), ‏2 = לא נבדק.
+pool_check=$(python3 -I "$SCRIPT_DIR/check-pool.py" "$ISO_TREE"/dists/trixie/*/binary-amd64/Packages.gz 2>&1) \
+    || { printf '%s\n' "$pool_check" >&2; die "האינדקס הממוזג אינו עקבי או לא נבדק (check-pool.py) — ההתקנה מה-ISO הייתה נעצרת ב-apt-install"; }
+say "${pool_check#check-pool: }"
 
 # --- הקוד -----------------------------------------------------------------------
 say "מכניס את הקוד ($REF) כ-imagesrv-src/"

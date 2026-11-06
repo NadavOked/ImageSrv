@@ -12,7 +12,6 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from sqlite3 import Connection
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -60,7 +59,7 @@ DISK_PROBE_VALUES = frozenset({"drives", "no_disks", "no_ports", "unchecked", "n
 
 @dataclass
 class ServerContext:
-    conn: Connection
+    conn: sqlite3.Connection
     library: ImageLibrary
     store: SessionStore
     sender: object | None = None      # SenderEngine; None בבדיקות יחידה
@@ -251,7 +250,7 @@ def source_gate(ctx: ServerContext, request: Request, where: str) -> JSONRespons
 
 
 def agent_credentials(ctx: ServerContext, request: Request, username: str,
-                      password: str, failed_detail: str
+                      password: str, failed_detail: str, machine: str | None = None
                       ) -> tuple[str | None, JSONResponse | None]:
     """‏#1282: שער הסיסמה **האחד** של נתיבי הסוכן — ‏`/agent/login`,
     ‏`/agent/pulls` ופתיחת סבב מהתחנה (`station.py`).
@@ -260,7 +259,8 @@ def agent_credentials(ctx: ServerContext, request: Request, username: str,
     כאן רק `/agent/login` עבר דרך `login_guard` ובדק `must_change_password`;
     שני האחרים קראו ל-`users.verify` ישירות — ניחוש סיסמאות בלי השהיה
     ובלי נעילה, ו-admin/admin של התקנה טרייה נכנס לפני שהוחלף.
-    ‏`failed_detail` הוא שורת היומן של `agent_login_failed`."""
+    ‏`failed_detail` הוא שורת היומן של `agent_login_failed`, ו-``machine`` —
+    המכונה שממנה ניסו (#1296), כשהיא ידועה."""
     ip = request.client.host if request.client else "?"
     # ‏#2443 (Fable): תקרת החשבון של פורט הסוכן — נפרדת מזו של הקונסולה.
     try:
@@ -271,7 +271,7 @@ def agent_credentials(ctx: ServerContext, request: Request, username: str,
     role = users.verify(ctx.conn, username, password)
     if role is None:
         login_guard.record_failure(ctx.conn, username, ip, login_guard.AGENT)
-        journal(ctx.conn, "agent_login_failed", failed_detail)
+        journal(ctx.conn, "agent_login_failed", failed_detail, machine=machine)
         return None, _error(401, "wrong username or password", "bad_login")
     login_guard.clear(ctx.conn, username, ip)
     if users.flags(ctx.conn, username)["must_change_password"]:
@@ -499,7 +499,7 @@ def create_agent_router(ctx: ServerContext,
         # ‏#1847: פעם אחת לכל אתחול, לא בכל hello (היה מציף את היומן כל 5 דק').
         if (body.get("wol_armed") is False and answer["known"]
                 and learn_wol.arm_failure_is_new(ctx.conn, mac)):
-            journal(ctx.conn, "wol_arm_failed", mac)
+            journal(ctx.conn, "wol_arm_failed", mac, machine=mac)
         # #1447: the agent has no NTP and the RTC may drift or have a dead
         # battery (cloner 2 ran 13 min ahead on metal 16/10). The server's
         # clock, read last so it is as fresh as the reply; hello.sh sets
@@ -533,10 +533,10 @@ def create_agent_router(ctx: ServerContext,
         if refused is not None:
             return refused
         role, refused = agent_credentials(ctx, request, username, body.get("password", ""),
-                                          f"{username} at {mac}")
+                                          f"{username} at {mac}", machine=mac)
         if refused is not None:
             return refused
-        journal(ctx.conn, "agent_login", f"{username} at {mac}")
+        journal(ctx.conn, "agent_login", f"{username} at {mac}", machine=mac)
         return JSONResponse({"ok": True, "role": role})
 
     @router.post("/agent/pulls")
@@ -601,7 +601,7 @@ def create_agent_router(ctx: ServerContext,
                             off_deploy_vlan(request.scope, server_base)):
             _role, refused = agent_credentials(ctx, request, username,
                                                body.get("password", ""),
-                                               f"{username} at {mac} pull")
+                                               f"{username} at {mac} pull", machine=mac)
             if refused is not None:
                 return refused
 
@@ -713,7 +713,8 @@ def create_agent_router(ctx: ServerContext,
             line = local_clone_report.journal_line(body)
         except local_clone_report.BadReport as exc:
             return _error(400, str(exc), "bad_report")
-        journal(ctx.conn, "local_clone_note" if local_clone_report.has_note(body) else "local_clone", f"{mac}: {line}")   # #2049
+        journal(ctx.conn, "local_clone_note" if local_clone_report.has_note(body) else "local_clone", f"{mac}: {line}",
+                machine=mac)   # #2049
         return JSONResponse({"ok": True})
 
     @router.post("/agent/log")
@@ -797,7 +798,7 @@ def create_agent_router(ctx: ServerContext,
         if owner != mac:
             journal(ctx.conn, "shrink_refused",
                     f"{where}: {mac} is not {owner}, which opened the record of"
-                    f" serial={body.get('serial')}")
+                    f" serial={body.get('serial')}", machine=mac)
             return None, None, _error(403, "this shrink record was opened by another machine",
                                       "not_owner")
         return mac, record_id, None

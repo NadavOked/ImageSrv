@@ -518,7 +518,7 @@ def test_the_real_server_pins_wol_to_the_deployment_vlan(tmp_path, monkeypatch):
 def test_the_counter_still_counts_and_carries_the_reason_with_it(conn):
     """‏WakeResult הוא `int` — כל מי שסופר אותו ממשיך לעבוד בלי לדעת."""
     def dead(_packet):
-        raise OSError("no-carrier: אין carrier על eth0")
+        raise wol.WakeRefused("no-carrier: אין carrier על eth0")
 
     result = wake_group(conn, "grp_LAB1", send=dead)
     assert result == 0                      # נספר כמו קודם
@@ -530,7 +530,7 @@ def test_the_counter_still_counts_and_carries_the_reason_with_it(conn):
 def test_one_cable_gives_one_reason_and_not_twelve(conn):
     """כשכבל אחד מנותק כל הכשלים הם אותו משפט — פעם אחת."""
     def dead(_packet):
-        raise OSError("no-carrier: אין carrier על eth0")
+        raise wol.WakeRefused("no-carrier: אין carrier על eth0")
 
     result = wake_group(conn, "grp_LAB1", send=dead)
     assert len(result.failed) > 1

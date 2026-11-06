@@ -120,4 +120,4 @@ def confirmed(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
     row = existing(conn, session_id, mac, dev)
     who = _who_he(row["source"], row["requested_by"]) if row else ""
     journal(conn, "room_drawer_cancelled", f"{where} in {session_id} — בוטל {who}",
-            (row["requested_by"] or "") if row else "")
+            (row["requested_by"] or "") if row else "", machine=mac, round_id=session_id)

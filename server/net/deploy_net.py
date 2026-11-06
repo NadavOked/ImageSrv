@@ -40,7 +40,10 @@ from pathlib import Path
 from typing import Callable
 
 from server.core.atomicfile import fsync_dir, write_atomic
+from server.core.logtext import one_line
 from server.db import get_setting, set_settings
+
+log = logging.getLogger(__name__)
 
 SETTING_INTERFACE = "deploy:interface"
 SETTING_URL = "deploy:url"
@@ -78,7 +81,9 @@ def primary_ip_of(url: str, resolve: Callable | None = None) -> tuple[str | None
     try:
         infos = (resolve or socket.getaddrinfo)(host, None, socket.AF_INET, socket.SOCK_STREAM)
     except OSError as exc:
-        return None, f"השם {host} של השרת הראשי לא נפתר לכתובת ({exc})"
+        # ‏#2510: טקסט החריגה ליומן השרת; ללקוח — משפט קבוע.
+        log.warning("primary %s did not resolve: %s", one_line(host), exc)
+        return None, f"השם {host} של השרת הראשי לא נפתר לכתובת — הפרטים ביומן השרת"
     for info in infos or ():
         return info[4][0], None
     return None, f"השם {host} של השרת הראשי לא נפתר לכתובת IPv4"
@@ -178,7 +183,8 @@ def write_grub_cfg(url: str, tftp_root: str | Path, password_hash: str = "") -> 
                                                        password_hash=password_hash)),
                      encoding="ascii", mode=0o644)
     except (OSError, ValueError) as exc:
-        return f"לא ניתן לכתוב את {path}: {exc}"
+        log.warning("%s not written: %s", path, exc)
+        return f"לא ניתן לכתוב את {path} — הפרטים ביומן השרת"
     return None
 
 
@@ -200,7 +206,8 @@ def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
     except FileNotFoundError:
         return None
     except (OSError, UnicodeDecodeError) as exc:
-        return f"{path}: could not be read to lock it ({exc}) (#2437)"
+        log.warning("%s could not be read to lock it: %s", path, exc)
+        return f"{path}: could not be read to lock it — details in the server log (#2437)"
     lines = text.splitlines()
     locked = any(line.startswith("set superusers=") for line in lines)
     has_password = any(line.startswith("password_pbkdf2 ") for line in lines)
@@ -284,7 +291,8 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     try:
         write_atomic(candidate, ruleset)   # ‏#1908: עם fsync, לפני ה-replace
     except OSError as exc:
-        return f"לא ניתן לכתוב את {candidate}: {exc}"
+        log.warning("%s not written: %s", candidate, exc)
+        return f"לא ניתן לכתוב את {candidate} — הפרטים ביומן השרת"
     try:
         ok, _out, err = _run(["nft", "-c", "-f", str(candidate)])
         if not ok:
@@ -299,7 +307,8 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
             os.replace(candidate, conf)
             fsync_dir(conf.parent)
         except OSError as exc:
-            return f"חומת האש נטענה אך {conf} לא הוחלף: {exc}"
+            log.warning("firewall loaded but %s not replaced: %s", conf, exc)
+            return f"חומת האש נטענה אך {conf} לא הוחלף — הפרטים ביומן השרת"
         return None
     finally:
         candidate.unlink(missing_ok=True)
@@ -428,7 +437,8 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dic
         try:
             proxy = firewall_proxy_interfaces(conn)
         except Exception as exc:                          # noqa: BLE001
-            result["errors"].append(f"חומת אש: לא ניתן לקרוא הגדרות proxy: {exc}")
+            log.warning("proxy settings for the firewall unreadable: %s", exc)
+            result["errors"].append("חומת אש: לא ניתן לקרוא הגדרות proxy — הפרטים ביומן השרת")
             return result
     steps.append(("חומת אש", lambda: ctx.primary_ip_error or hooks["firewall"](
         ctx.repo_dir, deploy_if=interface, servers_if=ctx.servers_interface,

@@ -510,8 +510,10 @@ def _pool_tools(tmp_path: Path, bindir: Path, *, policy: str = POLICY, sim: str 
     (tmp_path / "policy").write_text(policy, encoding="utf-8", newline="\n")
     (tmp_path / "sim").write_text(sim, encoding="utf-8", newline="\n")
     fake_tool(bindir, "id", "echo 0")
+    # dumpavail: debootstrap's base, which make-pool reads since #2520 (apt + apt-utils = a real read).
     fake_tool(bindir, "apt-cache", f'''
 if [ "$1" = policy ] && [ $# -eq 1 ]; then cat "{posix(tmp_path / "policy")}"; exit 0; fi
+if [ "$1" = dumpavail ]; then printf 'Package: apt\\nPriority: required\\n\\nPackage: apt-utils\\nPriority: important\\n'; exit 0; fi
 echo "  Candidate: 1.0"''')
     fake_tool(bindir, "apt-get", f'''
 case " $* " in
@@ -553,9 +555,10 @@ def test_make_pool_security_packs_the_closure_with_a_valid_lock(tmp_path, bindir
     done = _make_pool(tmp_path, bindir, "--security", "--out", posix(out))
     assert done.returncode == 0, done.stdout + done.stderr
     dl = next(row for row in calls(tmp_path) if row.startswith("apt-get download"))
-    assert dl.split()[2:] == ["libssl3t64=3.5.1-1+deb13u1", "libc6=2.41-12",
-                              "openssh-client=1:10.0p1-7+deb13u1", "dnsmasq-base=2.90-4+deb13u1",
-                              "python3-security=1.0-1", "dnsmasq=2.90-4+deb13u1"], dl
+    # sorted: since #2520 the closure of the list and of debootstrap's base are merged with sort -u.
+    assert sorted(dl.split()[2:]) == sorted(["libssl3t64=3.5.1-1+deb13u1", "libc6=2.41-12",
+                                             "openssh-client=1:10.0p1-7+deb13u1", "dnsmasq-base=2.90-4+deb13u1",
+                                             "python3-security=1.0-1", "dnsmasq=2.90-4+deb13u1"]), dl
     lock = json.loads((out / "security-pool.json").read_text(encoding="utf-8"))
     tar_path = out / lock["asset"]
     raw = tar_path.read_bytes()

@@ -293,9 +293,10 @@ systemctl enable imagesrv-dcui.service   # עולה באתחול הבא; tty1 ע
 
 ```bash
 # על דביאן 13 עם אינטרנט (שרת המעבדה), פעם אחת לגרסה:
-sudo tools/iso/make-pool.sh --out /root/ic-iso-tmp/repo
+sudo tools/iso/make-pool.sh --out /root/ic-iso-tmp/repo --netinst debian-13.7.0-amd64-netinst.iso
 sudo tools/iso/build-iso.sh \
-     --out /root/ic-iso-tmp --pool /root/ic-iso-tmp/repo --ref v0.48.0
+     --out /root/ic-iso-tmp --pool /root/ic-iso-tmp/repo --ref v0.48.0 \
+     --netinst debian-13.7.0-amd64-netinst.iso
 # → imagesrv-v0.48.0-amd64.iso + SHA256SUMS
 ```
 

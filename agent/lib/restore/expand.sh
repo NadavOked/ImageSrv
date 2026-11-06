@@ -109,6 +109,13 @@ plan_preflight() {
     # נושא את הסיבה אל `targets/<dev>/error`, כי "לא הצלחנו לכתוב טבלה"
     # אינו אומר לטכנאי איזו מחיצה ולמה (עיקרון 4).
     manifest_plan "$2" > "$RUN_DIR/gate${PREP_TAG:-}.plan" || return 1
+    # #1212 (Nadav 06/11): a Windows image (a `windows` role -- capture's rule, unique_guid_gate)
+    # with a partition captured before its unique GUID was kept: sgdisk would invent one and the
+    # BCD loses it (0xc000000e). Refused before any write, sgdisk --pretend included; awk itself failing refuses too.
+    awk -F'|' '$3 == "windows" { w = 1 } $10 == "" { g = 1 } END { if (w && g) exit 3 }' "$RUN_DIR/gate${PREP_TAG:-}.plan"
+    case $? in 0) ;; 3) PLAN_ERROR="האימג' נקלט לפני שמירת מזהי המחיצות — Windows לא יעלה ממנו. קלטו את האימג' מחדש. הדיסק לא שונה."
+        printf windows_no_partition_guid > "$RUN_DIR/targets/$1/plan_why"; log "$1: refused: windows_no_partition_guid"; return 1 ;;
+        *) PLAN_ERROR="לא ניתן לבדוק את מזהי המחיצות של האימג' — הדיסק לא שונה"; log "$1: $PLAN_ERROR"; return 1 ;; esac
     validate_restore_plan "$1" "$2" || return 1
     _bad=$(awk -F'|' '$4 != "swap" && ($7 == "" || $7 == "null") {
         printf "%s%s (%s)", (n++ ? ", " : ""), $1, $4 }' "$RUN_DIR/gate${PREP_TAG:-}.plan")

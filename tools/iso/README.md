@@ -12,20 +12,22 @@
 | קובץ | תפקיד |
 |---|---|
 | `packages.txt` | **האיחוד** של כל רשימות ה-apt: ‏`PKGS` של המתקין, הבסיס/GUI/toolbox של `build_initramfs.sh`, ומה שרק ה-ISO מוסיף. ‏`tests/test_iso_build.py` נופל אם רשימה זזה בלי הקובץ הזה |
-| `make-pool.sh` | ‏`apt-get download` של הרשימה **וכל התלויות** (מול status ריק — כלום לא "כבר מותקן") → `pool/{main,contrib}/imagesrv/`, ואינדקסי `dists/` (‏`--index-only` מאנדקס עץ ISO). נכשל בלי `trixie-security` במקורות של המארח (‏#1411). ‏`--security`: רק חבילות trixie-security של הסגירה, כ-tar + `security-pool.json` לכפתור העדכון |
+| `make-pool.sh` | ‏`apt-get download` של הרשימה **וכל התלויות**, ושל הבסיס של debootstrap (‏Priority required+important, ‏#2520), ועם `--netinst` גם חבילות ה-netinst שתלויות בדיוק בגרסה שהעלינו (vim מול vim-common) (מול status ריק — כלום לא "כבר מותקן") → `pool/{main,contrib}/imagesrv/`, ואינדקסי `dists/` (‏`--index-only` מאנדקס עץ ISO). נכשל בלי `trixie-security` במקורות של המארח (‏#1411). ‏`--security`: רק חבילות trixie-security של הסגירה, כ-tar + `security-pool.json` לכפתור העדכון |
 | `preseed.cfg` | ‏d-i אוטומטי: mirror כבוי, חבילות מה-ISO (מסלול ה-cdrom של d-i), הדיסק הראשון שאינו USB, root בלבד, `late_command` |
 | `late-command.sh` | רץ **בתוך המתקין**: מעתיק את הקוד ל-`/opt/imagesrv-src`, מתקין את היחידה, ורושם ל-`/etc/imagesrv/` **עובדות** — הכרטיס ש-d-i הגדיר (‏`installer-nic`), התפקיד (‏`installer-role`), המניפסט (‏`iso-release.json`) |
 | `firstboot.sh` + `imagesrv-firstboot.service` | האתחול הראשון: בונה `initrd.img`/`initrd.img.gui`/`vmlinuz`, ואז מפעיל את אשף ה-HTTPS עם עובדות הכרטיס והתפקיד כברירות מחדל |
 | `build-iso.sh` | ‏netinst רשמי (מאומת sha256) + pool + קוד (`git archive` של ה-ref) + preseed + תפריט → ISO hybrid ב-`xorriso -boot_image any replay`; מדפיס `-report_el_torito` |
 | `test-iso.sh` | ‏QEMU/OVMF עם Secure Boot, שני שלבים (התקנה → אתחול ראשון) — **טרם הורץ** (אין KVM במעבדה) |
+| `check-pool.py` | ‏#2520: האינדקס הממוזג עקבי — כל תלות-גרסה מתקיימת בגרסה הגבוהה של היעד (מה ש-debootstrap ו-apt בוחרים). ‏`build-iso.sh` נעצר בלעדיו |
+| `install-test.py` | ‏#2520: התקנה **מלאה** מה-ISO ב-QEMU (הקרנל וה-initramfs שלו, מעטפת על הסריאלי, המנוע עם תשובות) עד `state=done`. שלב חובה בשרשרת הגרסה (‏CONTRIBUTING, "גרסאות") |
 
 ## בנייה (על דביאן 13 עם אינטרנט — Testrunner)
 
 ```bash
-sudo tools/iso/make-pool.sh --out /srv/iso/repo                        # פעם אחת; ~600 קבצים, ~400MB
+sudo tools/iso/make-pool.sh --out /srv/iso/repo --netinst /srv/iso/debian-13.7.0-amd64-netinst.iso   # אותו netinst כמו ל-build-iso (#2520)
 sudo apt-get install linux-image-amd64                                  # הקרנל שמודולי ה-initramfs נבנים מולו = זה שב-pool
 sudo tools/build_initramfs.sh --installer --with-gui --output /srv/iso/live.img   # המתקין החי (#1190)
-sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v0.53.0 --live-initrd /srv/iso/live.img
+sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v0.53.0 --live-initrd /srv/iso/live.img --netinst /srv/iso/debian-13.7.0-amd64-netinst.iso
 ```
 
 **סיסמת root אינה חלק מה-ISO** (‏#1632, הכרעת נדב 24/10): המפעיל בוחר אותה

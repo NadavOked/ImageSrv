@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import re
-import socket
 import stat
 import subprocess
 import urllib.request
@@ -21,6 +20,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, Response
 
 import hashlib
+import logging
 import shutil
 
 from server.agent import loops as agent_loops, hello, identity
@@ -33,6 +33,9 @@ from server.db import last_disk_full, now_iso
 from server import auto_reboot
 from server.system import backup_job
 from server.system import raid_status
+from server.system.health_rows import check
+
+log = logging.getLogger("imagesrv.health")
 
 #: ‏#1000: מתי `/health` נמדד — כותרת HTTP (ISO, שעון השרת), כי הגוף הוא
 #: מערך ש-`HOME`, ‏`updateAlertBadge` וטסטי node קוראים כמות שהוא; מעטפת
@@ -258,10 +261,6 @@ def port_owner(ss_output: str, port: int) -> str | None:
     return None
 
 
-def check(check_id: str, label: str, state: str, detail: str) -> dict:
-    return {"id": check_id, "label": label, "state": state, "detail": detail}
-
-
 def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
     # Compatibility for callers from before #1773; the live route uses the
     # structured measurement above, including its explicit unknown state.
@@ -377,7 +376,9 @@ def tftp_file_problems(root: Path) -> list[str]:
             missing.append(name)     # the pre-#1817 message, by name
             continue
         except (OSError, RuntimeError) as exc:
-            problems.append(f"לא ניתן לבדוק {path}: {exc}")
+            # ‏#2510: ה-strerror ליומן השרת; בשורת הבריאות — הנתיב שלנו ומשפט קבוע.
+            log.warning("tftp check of %s: %s", path, exc)
+            problems.append(f"לא ניתן לבדוק {path} — הפרטים ביומן השרת")
         for directory in directories:
             if directory in checked_dirs:
                 continue
@@ -385,7 +386,8 @@ def tftp_file_problems(root: Path) -> list[str]:
             try:
                 mode = directory.stat().st_mode
             except OSError as exc:
-                problems.append(f"לא ניתן לבדוק {directory}: {exc}")
+                log.warning("tftp check of %s: %s", directory, exc)
+                problems.append(f"לא ניתן לבדוק {directory} — הפרטים ביומן השרת")
                 continue
             if not stat.S_ISDIR(mode) or not mode & stat.S_IXOTH:
                 problems.append(
@@ -394,7 +396,8 @@ def tftp_file_problems(root: Path) -> list[str]:
         try:
             mode = path.stat().st_mode
         except OSError as exc:
-            problems.append(f"לא ניתן לבדוק {path}: {exc}")
+            log.warning("tftp check of %s: %s", path, exc)
+            problems.append(f"לא ניתן לבדוק {path} — הפרטים ביומן השרת")
             continue
         if not stat.S_ISREG(mode) or not mode & stat.S_IROTH:
             problems.append(
@@ -658,15 +661,6 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         strangers, urlsplit(server_base).hostname or server_base))
 
     return results
-
-
-def _last_seen(seconds: int) -> str:
-    """שימוש: `agent_loops.loop_checks` ו-`foreign_vlan.vlan_checks`, שתיהן
-    מייבאות מכאן בגוף הפונקציה (לא בראש הקובץ) כדי לא ליצור מעגל ייבוא —
-    שני המודולים האלה כבר מיובאים כאן, בראש הקובץ."""
-    if seconds < 60:
-        return "נראה לאחרונה לפני פחות מדקה"
-    return f"נראה לאחרונה לפני {seconds // 60} דק'"
 
 
 #: הפורטים של השרת עצמו כשאין מנהל מאזינים בתהליך (‏create_app של

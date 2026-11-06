@@ -519,3 +519,26 @@ def test_an_engine_refusal_of_the_root_password_lands_on_its_field():
                              capture_output=True, text=True, stdin=subprocess.DEVNULL)
         assert got.returncode == 0, got.stderr
         assert got.stdout == "root_password|סיסמת ה-root לא יכולה להיות ריקה", got.stdout
+
+
+# #1412: the install medium's own answer -- build-iso.sh's lab_overlay in
+# imagesrv-iso.json -- for the GUI's strip. Only a JSON boolean is an answer;
+# everything else is "unchecked", never "clean" (principle 5).
+@pytest.mark.parametrize("manifest,state", [
+    ('{"imagesrv_tag": "v0.85.0-lab", "lab_overlay": true}', "lab"),
+    ('{"imagesrv_tag": "v0.85.0", "lab_overlay": false}', "clean"),
+    ('{"imagesrv_tag": "v0.74.2"}', "unchecked"),            # an ISO from before the field
+    ('{"lab_overlay": "false"}', "unchecked"),
+    ('{"lab_overlay": null}', "unchecked"),
+    ('[{"lab_overlay": false}]', "unchecked"),
+    ('{not json', "unchecked"),
+    (None, "unchecked"),                                     # no manifest on the medium
+])
+def test_inventory_reports_the_media_lab_overlay_and_only_a_boolean_answers(tmp_path, manifest, state):
+    m = _machine(tmp_path)
+    cdrom = tmp_path / "cdrom"; cdrom.mkdir()
+    if manifest is not None:
+        (cdrom / "imagesrv-iso.json").write_text(manifest)
+    rc, out, err = bridge(m, "inventory", CDROM=str(cdrom))
+    assert rc == 0, err
+    assert out["lab_overlay"] == [state]

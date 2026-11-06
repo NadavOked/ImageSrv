@@ -158,6 +158,12 @@ def _bind_machine(conn, manifest: dict, mac: str) -> None:
     manifest[MACHINE_MAC] = mac
 
 
+def _task_mac(conn, task_id: str) -> str | None:
+    """‏#1296: המכונה של המשימה — היעד המבני של שורות היומן שלה. ‏None = אין שורה."""
+    row = conn.execute("SELECT mac FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    return row["mac"] if row is not None else None
+
+
 def _fail(conn, library_root: Path, task_id: str, message: str) -> None:
     """המשימה נכשלת בשם, ואזור העבודה שלה נמחק — כמו בביטול ובאימות שנכשל.
 
@@ -170,7 +176,7 @@ def _fail(conn, library_root: Path, task_id: str, message: str) -> None:
     )
     conn.commit()
     shutil.rmtree(staging_dir(library_root, task_id), ignore_errors=True)
-    journal(conn, "capture_failed", f"{task_id} {message}")
+    journal(conn, "capture_failed", f"{task_id} {message}", machine=_task_mac(conn, task_id))
 
 
 def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
@@ -296,7 +302,7 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
             if type(free) is not int or free < 0:
                 free = None
         except OSError:
-            pass
+            pass  # המקום הפנוי לא נמדד — free נשאר None והבדיקה מדווחת כלא-נבדקה
         if free is None:
             unchecked.append("מקום פנוי באחסון השרת (loc_local)")
         if unchecked:
@@ -327,7 +333,7 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
             if not changed:
                 raise HTTPException(409, "המשימה כבר אינה פתוחה")
             journal(ctx.conn, "capture_space_warning" if status == "warning" else "capture_failed",
-                    f"{task_id} {reason}")
+                    f"{task_id} {reason}", machine=_task_mac(ctx.conn, task_id))
         return {"status": status, "reason": reason, "used_bytes": used,
                 "free_bytes": free, "location_id": storage_locations.LOCAL_ID}
 
@@ -474,7 +480,8 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         if not opened:
             raise HTTPException(409, "the task is no longer open")
         journal(ctx.conn, "capture_verifying",
-                f'{task_id} {row["image_id"]} "{row["name"]}" {verify_total} bytes')
+                f'{task_id} {row["image_id"]} "{row["name"]}" {verify_total} bytes',
+                machine=_task_mac(ctx.conn, task_id))
         start_verification(ctx.conn, ctx.library.root, task_id)
         return {"ok": True, "image_id": row["image_id"], "state": "verifying"}
 
@@ -732,7 +739,7 @@ def _verify(conn, library_root: Path, task_id: str) -> str:
     seconds = time.monotonic() - started
     journal(conn, "capture_done",
             f'{row["image_id"]} "{row["name"]}" verified {total} bytes in {seconds:.1f}s',
-            row["created_by"])
+            row["created_by"], machine=_task_mac(conn, task_id))
     readbackhash.kick()   # #1805: the read-back digest of the new image -- now, not in ten minutes
     return "done"
 
@@ -758,7 +765,7 @@ def _verify_failed(conn, library_root: Path, task_id: str, reason: str) -> str:
     if not changed:
         return "gone"
     shutil.rmtree(staging_dir(library_root, task_id), ignore_errors=True)
-    journal(conn, "capture_failed", f"{task_id} {reason}")
+    journal(conn, "capture_failed", f"{task_id} {reason}", machine=_task_mac(conn, task_id))
     return "failed"
 
 
@@ -826,10 +833,12 @@ def order_capture(ctx: ServerContext, body: dict, created_by: str, origin: str) 
     storage_history.sample_local(ctx.conn, ctx.library, "capture")
     space = storage_history.capture_check(ctx.conn, ctx.library, name, folder, mac, free)
     if space["status"] == "refused":
-        journal(ctx.conn, "capture_space_refused", f'{mac} "{name}" — {space["reason"]}', created_by)
+        journal(ctx.conn, "capture_space_refused", f'{mac} "{name}" — {space["reason"]}', created_by,
+                machine=mac)
         raise HTTPException(409, space["reason"])
     if space["status"] == "warning":
-        journal(ctx.conn, "capture_space_unchecked", f'{mac} "{name}" — {space["reason"]}', created_by)
+        journal(ctx.conn, "capture_space_unchecked", f'{mac} "{name}" — {space["reason"]}', created_by,
+                machine=mac)
 
     # ‏#1901: הזהות של הדיסק שנבחר, לא רק שמו — סדר `sda`/`sdb` מתחלף בין אתחולים.
     serial = _reported_serial(ctx.conn, mac, disk)
@@ -848,7 +857,8 @@ def order_capture(ctx: ServerContext, body: dict, created_by: str, origin: str) 
              folder, created_by, now, now, new_token(), origin),
         )
     journal(ctx.conn, "capture_start",
-            f'{task_id} {mac} disk={disk} serial={serial or "-"} "{name}"', created_by)
+            f'{task_id} {mac} disk={disk} serial={serial or "-"} "{name}"', created_by,
+            machine=mac)
     # ‏**האסימון אינו מוחזר כאן.** הוא נמסר רק ב-hello, ורק למכונה
     # שה-MAC שלה תואם — אחרת הוא היה יוצא לקונסולה, ליומן ולכל
     # מי שרואה את התשובה.
@@ -929,7 +939,7 @@ def create_console_capture_router(ctx: ServerContext) -> APIRouter:
             raise HTTPException(409, "המשימה כבר אינה פתוחה")
         ctx.conn.commit()
         shutil.rmtree(staging_dir(ctx.library.root, task_id), ignore_errors=True)
-        journal(ctx.conn, "capture_cancel", task_id, user[0])
+        journal(ctx.conn, "capture_cancel", task_id, user[0], machine=_task_mac(ctx.conn, task_id))
         return {"ok": True}
 
     return router

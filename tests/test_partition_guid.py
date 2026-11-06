@@ -263,9 +263,11 @@ def test_a_disk_guid_the_disk_did_not_keep_names_the_reason(tmp_path):
 
 
 def test_a_partition_without_a_guid_in_the_manifest_is_logged_not_checked(tmp_path):
-    """אימג' ישן — או לינוקס שנפטר בקליטה — אינו נכשל, אבל "לא נבדק"
-    נרשם בשמו ואינו נספר כ"נבדק, תואם"."""
+    """לינוקס שנפטר בקליטה אינו נכשל, אבל "לא נבדק" נרשם בשמו ואינו נספר
+    כ"נבדק, תואם". אימג' Windows ישן בלי GUID נדחה לפני הדיסק — נדב 06/11,
+    ‏test_refuse_no_guid_1212.py."""
     fields = PLAN[1].split("|")
+    fields[1], fields[2], fields[3] = LINUX_TYPE, "linux", "ext4"
     fields[9] = ""
     box, run, prelude = build_box(tmp_path, plan=[PLAN[0], "|".join(fields), PLAN[2]])
     out = sh(restore_run(prelude))

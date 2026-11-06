@@ -17,11 +17,28 @@ void install_card(cairo_t *cr,const Theme *t,Rect r){draw_fill_rrect(cr,r,t->rad
 #define APPLY_STEP (INSTALL_STEPS-1)   /* "החלה": the summary, the progress and a failed apply */
 static int current_step(const InstallState *s){if(s->view==INSTALL_PROGRESS||s->view==INSTALL_FAILED)return APPLY_STEP;if(s->view==INSTALL_DONE)return INSTALL_STEPS;return s->view;}
 
+/* #1412: an ISO built with --lab (its initrd carries lab access) says so above
+ * every step -- red on the manifest's own "true"; orange when lab_overlay could
+ * not be read, since "not checked" is not "clean" (principle 5). No strip on a
+ * clean ISO. Returns the strip's height; the page below moves down by it. */
+#ifndef RLM
+#define RLM "\xE2\x80\x8F"   /* the line starts with "ISO": keep its paragraph RTL */
+#endif
+#define INSTALL_LAB_YES_M RLM "<b>ISO מעבדה — לא למכללה.</b> המתקין הזה כולל גישת מעבדה (SSH, מפתחות או hooks)."
+#define INSTALL_LAB_UNCHECKED_M RLM "<b>לא נבדק אם זה ISO מעבדה.</b> לא הצלחנו לקרוא את lab_overlay מ-imagesrv-iso.json שבמדיה. לא להתקין במכללה לפני שבודקים את ה-ISO."
+static double lab_banner(App *a,cairo_t *cr,double cw,double right,double col){const Theme *t=a->theme;int lab=a->install.lab;if(lab==INSTALL_LAB_CLEAN)return 0;
+    Text m=text_make_markup(cr,FONT_SANS,13,400,lab==INSTALL_LAB_YES?INSTALL_LAB_YES_M:INSTALL_LAB_UNCHECKED_M,(int)col,DIR_RTL);double h=m.h+16;
+    if(lab==INSTALL_LAB_YES)draw_fill_rrect(cr,(Rect){0,0,cw,h},0,t->danger_fill);   /* white on it: >= 4.5:1 in both themes */
+    else{draw_fill_rrect(cr,(Rect){0,0,cw,h},0,t->warning_bg);cairo_rectangle(cr,0,h-2,cw,2);draw_set(cr,t->warning_line);cairo_fill(cr);}
+    text_draw_r(cr,&m,right,8,lab==INSTALL_LAB_YES?t->on_ink:t->warning_ink);text_free(&m);return h;}
+
 /* mockup 10/10 ("מתקין"): one column of one width on every step, centred in
  * the page -- it was 1556 / 760 / 720 / 650 wide, step by step. */
 #define INSTALL_COL_W 760.0
-InstallLayout install_frame(App *a,cairo_t *cr,double W,double H){const Theme *t=a->theme;double rw=W<1500?250:300,cw=W-rw,col=fmin(INSTALL_COL_W,cw-64),cx=(cw-col)/2;InstallLayout l={{0,0,cw,H},{cx,105,col,H-185},{0,H-64,cw,64},{W-rw,0,rw,H},cx+col};
-    draw_fill_rrect(cr,(Rect){0,0,W,H},0,t->porcelain);draw_fill_rrect(cr,l.rail,0,t->header);
+InstallLayout install_frame(App *a,cairo_t *cr,double W,double H){const Theme *t=a->theme;double rw=W<1500?250:300,cw=W-rw,col=fmin(INSTALL_COL_W,cw-64),cx=(cw-col)/2;
+    draw_fill_rrect(cr,(Rect){0,0,W,H},0,t->porcelain);double top=lab_banner(a,cr,cw,cx+col,col);   /* #1412 */
+    InstallLayout l={{0,0,cw,H},{cx,105+top,col,H-185-top},{0,H-64,cw,64},{W-rw,0,rw,H},cx+col};
+    draw_fill_rrect(cr,l.rail,0,t->header);
     draw_brand_lockup_r(cr,l.rail.x+l.rail.w-28,28+(30-brand_symbol_height(5))/2,5,1,0);   /* #1302: the rail is the header colour */
     install_text_r(cr,t,"התקנת השרת",13,400,l.rail.x+l.rail.w-28,72,l.rail.w-56,t->header_text);
     int cur=current_step(&a->install);double y=124;
@@ -40,7 +57,7 @@ InstallLayout install_frame(App *a,cairo_t *cr,double W,double H){const Theme *t
     }
     const char *titles[]={"","בחירת דיסק להתקנה","תפקיד השרת במערכת","כתובת השרת","שם השרת","שעון השרת","חשבון הניהול","סיכום לפני החלה","סיום ההתקנה","מתקין את ImageSrv…","ההתקנה נכשלה"};
     const char *subs[]={"","הדיסק שנבחר יימחק וישמש את שרת ImageSrv.","התפקיד נבחר בתפריט ההתקנה. אפשר לאשר או לשנות לפני ההחלה.","הכרטיס שדרכו מגיעים לקונסולה; רשת ההפצה מוגדרת אחר כך מהקונסולה","השם שיופיע בקונסולה, במסך השרת ובתעודת TLS.","מאיפה השרת מקבל את השעה. אפשר לשנות אחר כך בקונסולה.","המשתמש הראשון בקונסולה. משתמשים נוספים מוגדרים אחרי ההתקנה.","מה שיוחל על השרת. כל שורה ניתנת לשינוי.","הסר את מדיית ההתקנה והפעל מחדש.","אל תכבה את השרת בזמן ההתקנה.","מה נכשל כתוב למטה; הפלט המלא בפרטים הטכניים."};
-    install_text_r(cr,t,titles[a->install.view],26,600,l.right,28,l.body.w,t->ink);install_text_r(cr,t,subs[a->install.view],14,400,l.right,65,l.body.w,t->muted);if(a->install.error[0]&&a->install.view!=INSTALL_FAILED&&a->install.view!=INSTALL_PROGRESS)install_text_r(cr,t,a->install.error,11,600,l.right,87,l.body.w,t->danger_fg);
+    install_text_r(cr,t,titles[a->install.view],26,600,l.right,28+top,l.body.w,t->ink);install_text_r(cr,t,subs[a->install.view],14,400,l.right,65+top,l.body.w,t->muted);if(a->install.error[0]&&a->install.view!=INSTALL_FAILED&&a->install.view!=INSTALL_PROGRESS)install_text_r(cr,t,a->install.error,11,600,l.right,87+top,l.body.w,t->danger_fg);
     cairo_rectangle(cr,0,l.footer.y,l.footer.w,1);draw_set(cr,t->hair);cairo_fill(cr);draw_fill_rrect(cr,l.footer,0,t->surface);return l;}
 
 void install_field_draw(App *a,cairo_t *cr,Rect r,const char *label,const char *value,int mask,int id,int enabled){const Theme *t=a->theme;install_text_r(cr,t,label,12,500,r.x+r.w,r.y,r.w,enabled?t->ink:t->muted);   /* .win .n-f>label: --clr-text, 12px 500 */Rect f={r.x,r.y+19,r.w,36};draw_field_box(cr,t,f,a->focus==id&&enabled);   /* .win .n-in and :focus (border + 3px ring) */
@@ -82,11 +99,12 @@ void screen_install(App *a,cairo_t *cr,double W,double H){InstallLayout l=instal
 
 /* #1310: the role step in its three states -- green (the demo), not yet
  * checked (next disabled), and a real failure with its reason. */
-static void role_variant(InstallState *s,const char *name){if(strstr(name,"-unchosen")){s->disk=-1;s->disk_ack=0;return;}   /* #2147: two disks, none chosen yet */
+static void role_variant(InstallState *s,const char *name){if(strstr(name,"-lab-unknown")){s->lab=INSTALL_LAB_UNCHECKED;return;}if(strstr(name,"-lab")){s->lab=INSTALL_LAB_YES;return;}   /* #1412: the strip, on the shortest and the longest steps */
+    if(strstr(name,"-unchosen")){s->disk=-1;s->disk_ack=0;return;}   /* #2147: two disks, none chosen yet */
     if(strstr(name,"-time-org")){s->ntp_org=1;return;}   /* #2144: the mockup's five states */
     if(strstr(name,"-done-unsynced")){s->clock=INSTALL_CLOCK_UNSYNCED;s->clock_offset[0]=0;return;}
     if(strstr(name,"-done-unchecked")){s->clock=INSTALL_CLOCK_UNCHECKED;s->clock_offset[0]=0;return;}
     if(strstr(name,"-unchecked")){s->primary_checked=s->primary_ok=0;}
     else if(strstr(name,"-failed")){s->primary_checked=1;s->primary_ok=0;snprintf(s->primary_error,sizeof s->primary_error,"אין תשובה מ-192.168.68.250 בפורט 8443 תוך 5 שניות (timeout): חומת אש חוסמת בשקט, או שהכתובת שגויה");}}
-int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
+int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE},{"install-0c-disk-lab",INSTALL_DISK},{"install-0d-disk-lab-unknown",INSTALL_DISK},{"install-4b-admin-lab",INSTALL_ADMIN},{"install-5d-summary-lab",INSTALL_SUMMARY}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
     for(size_t i=0;i<sizeof cards/sizeof cards[0];i++){for(int t=0;t<2;t++){install_demo(a,cards[i].view);role_variant(&a->install,cards[i].name);a->theme=themes[t];cairo_surface_t *sf=cairo_image_surface_create(CAIRO_FORMAT_RGB24,w,h);cairo_t *cr=cairo_create(sf);double s=ui_scale(h);a->scale=s;cairo_scale(cr,s,s);screen_install(a,cr,w/s,h/s);cairo_destroy(cr);   /* the scale app_draw uses */char path[512];snprintf(path,sizeof path,"%s-%s-%s.png",prefix,cards[i].name,themes[t]->id);cairo_status_t st=cairo_surface_write_to_png(sf,path);cairo_surface_destroy(sf);if(st!=CAIRO_STATUS_SUCCESS){fprintf(stderr,"native-gui: %s: %s\n",path,cairo_status_to_string(st));return 1;}}}return 0;}

@@ -8,7 +8,7 @@
 # the GUI says "the installer is not available (<action>)", never "ok".
 #
 #   inventory      disk= lines (imagesrv-install --inventory) + nic= lines
-#                  + virt= and raid_default= (#1989)
+#                  + virt= and raid_default= (#1989) + lab_overlay= (#1412)
 #   validate       the form (+ step) -> errors.<field>=... or nothing
 #   apply          writes the answers (0600), starts the engine, job=
 #   progress       the engine's state file, plus output= for the log tail
@@ -34,6 +34,7 @@ ENGINE_LOG="${ENGINE_LOG:-$RUN_DIR/install.log}"
 DHCP_DIR="${DHCP_DIR:-$RUN_DIR/dhcp}"
 SYSROOT="${SYSROOT:-}"
 MEDIA_FILE="${MEDIA_FILE:-$RUN_DIR/install-media}"
+CDROM="${CDROM:-/cdrom}"   # imagesrv-installer's mount point of the install medium
 # #1310: the last GREEN check (url/name/version/fingerprint). Only this file
 # puts primary_fingerprint into the answers -- never the form the GUI sent.
 PRIMARY_CHECK="${PRIMARY_CHECK:-$RUN_DIR/primary-check}"
@@ -131,6 +132,15 @@ engine_validate() {
     return 1
 }
 
+# #1412: what the ISO says of its own initrd -- build-iso.sh writes lab_overlay
+# (true only with --lab). lab / clean from a JSON boolean only; no file, bad
+# JSON, no key or any other type is "unchecked", never clean (principle 5).
+lab_overlay_state() {
+    _lo=$(jq -r 'if (.lab_overlay | type | IN("boolean")) then (if .lab_overlay then "lab" else "clean" end)
+                 else "unchecked" end' "$CDROM/imagesrv-iso.json" 2>/dev/null) || _lo=unchecked
+    case "$_lo" in lab|clean) printf '%s' "$_lo" ;; *) printf unchecked ;; esac
+}
+
 do_inventory() {
     _di_inv=$("$ENGINE" --inventory) || { echo 'gui-bridge: engine inventory failed' >&2; return 4; }
     printf '%s
@@ -141,6 +151,7 @@ do_inventory() {
     _di_virt=$(virt_kind); _di_n=$(printf '%s
 ' "$_di_inv" | raid_eligible_count)
     emit virt "$_di_virt"; emit raid_default "$(raid_default "$_di_n" "$_di_virt")"
+    emit lab_overlay "$(lab_overlay_state)"
     _di_role=standalone; _di_if=
     for _d in "$SYSROOT"/sys/class/net/*; do _n=${_d##*/}; [ "$_n" = lo ] && continue
         [ -r "$DHCP_DIR/$_n" ] && grep -q '^state=lease$' "$DHCP_DIR/$_n" && { _di_if=$_n; break; }; done

@@ -12,12 +12,15 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from server.system.health_rows import check
 
 MDSTAT_PATH = Path("/proc/mdstat")
 RAID_FACT_PATH = Path("/etc/imagesrv/raid")
+log = logging.getLogger("imagesrv.raid")
 
 _HEAD = re.compile(r"^(md[\w/]+)\s*:\s*(active|inactive)\s*(?:\(\w[\w-]*\)\s*)?(\S+)?\s*(.*)$")
 _MEMBER = re.compile(r"(\S+?)\[\d+\](\([FSRW]\))?")
@@ -132,13 +135,15 @@ def array_check(array: Array) -> tuple[str, str]:
 def health_checks(read_mdstat, read_declared) -> list[dict]:
     """שורה לכל מערך. ‏`read_*` מחזירים טקסט, ‏None (אין קובץ) או זורקים.
     hook שלא הוזרק (None) = אין שורה — כמו `vm_host` ב-health.py."""
-    from server.system.health import check
     if read_mdstat is None or read_declared is None:
         return []
     try:
         declared_text = read_declared()
     except OSError as exc:
-        return [check("raid", "מערך RAID", "unknown", f"לא ניתן לקרוא {RAID_FACT_PATH}: {exc}")]
+        # ‏#2510: ה-strerror ליומן השרת; בשורת הבריאות — משפט קבוע.
+        log.warning("raid: %s unreadable: %s", RAID_FACT_PATH, exc)
+        return [check("raid", "מערך RAID", "unknown",
+                      f"לא ניתן לקרוא {RAID_FACT_PATH} — הפרטים ביומן השרת")]
     declared = parse_fact(declared_text) if declared_text else {}
     want_level = declared.get("level", "none")
     want_array = (declared.get("array") or "/dev/md0").removeprefix("/dev/")
@@ -146,10 +151,13 @@ def health_checks(read_mdstat, read_declared) -> list[dict]:
     try:
         mdstat = read_mdstat()
     except OSError as exc:
+        log.warning("raid: /proc/mdstat unreadable: %s", exc)
         if not expected:
-            return [check("raid", "מערך RAID", "unknown", f"לא ניתן לקרוא /proc/mdstat: {exc}")]
+            return [check("raid", "מערך RAID", "unknown",
+                          "לא ניתן לקרוא /proc/mdstat — הפרטים ביומן השרת")]
         return [check("raid", "מערך RAID", "bad",
-                      f"המתקין יצר {LEVEL_LABELS.get(want_level, want_level)}, אבל /proc/mdstat לא נקרא: {exc}")]
+                      f"המתקין יצר {LEVEL_LABELS.get(want_level, want_level)}, אבל /proc/mdstat "
+                      "לא נקרא — הפרטים ביומן השרת")]
     arrays = parse_mdstat(mdstat) if mdstat else []
     rows = [check(f"raid_{a.name}", f"מערך RAID {a.name}", *array_check(a)) for a in arrays]
     if expected and not any(a.name == want_array for a in arrays):

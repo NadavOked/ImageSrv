@@ -97,6 +97,7 @@ def wait_until(fn, label: str, timeout: float = 15.0, detail=None):
         time.sleep(0.1)
     extra = f" | {detail()}" if detail else ""
     check(label, False, f"לא קרה תוך {timeout} שניות{extra}")
+    return None
 
 
 def sha(data: bytes) -> str:
@@ -225,8 +226,8 @@ def start_server(workdir: Path) -> tuple[subprocess.Popen, Path, Path]:
         # כבוי (v1). שלבי הכיתה (6-8) בודקים את זרימת v1.2, ולכן השרת כאן
         # עולה עם היכולת דלוקה — המקבילה של monkeypatch לתהליך-בן.
         [sys.executable, "-c",
-         "import server.core.capabilities as c; c.CLASSROOMS = True; "
-         "from server.main import main; main()",
+         ("import server.core.capabilities as c; c.CLASSROOMS = True; "
+          "from server.main import main; main()"),
          "--server-url", BASE,
          "--data-dir", str(data_dir), "--images", str(images),
          "--host", "127.0.0.1", "--port", str(PORT),

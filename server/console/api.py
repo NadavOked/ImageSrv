@@ -258,7 +258,6 @@ def _drawer_count(raw):
 
 def _reported_drawer_count(conn, mac: str) -> int | None:
     """Use the last positive hello inventory as a registration default."""
-    import json
     canonical = registry.normalize_mac(mac)
     if canonical is None:
         return None
@@ -775,7 +774,7 @@ def create_console_router(
                     (drawer_count, mac),
                 )
             journal(ctx.conn, "machine_drawer_count",
-                    f"{mac} count={drawer_count}", user[0])
+                    f"{mac} count={drawer_count}", user[0], machine=mac)
         return {"mac": mac, "network": _sync_known_macs(user[0])}
 
     @router.put("/machines/{mac}")
@@ -839,7 +838,8 @@ def create_console_router(
                 ):
                     raise HTTPException(404, "מכונה לא קיימת")
             journal(ctx.conn, "machine_drawer_count",
-                    f"{registry.normalize_mac(mac)} count={drawer_count}", user[0])
+                    f"{registry.normalize_mac(mac)} count={drawer_count}", user[0],
+                    machine=registry.normalize_mac(mac))
         if mapping_sent:
             with _write_lock, writing(ctx.conn):
                 if not update_one(
@@ -849,12 +849,13 @@ def create_console_router(
                     raise HTTPException(404, "מכונה לא קיימת")
             journal(ctx.conn, "machine_drawer_slots",
                     f"{canonical} " + (",".join(mapping) if mapping is not None else "default"),
-                    user[0])
+                    user[0], machine=canonical)
         if "nic_speed_mbps" in body:
             canonical = registry.normalize_mac(mac)
             nic_speed.set_manual(ctx.conn, canonical, speed)
             journal(ctx.conn, "machine_nic_speed",
-                    f"{canonical} " + (f"{speed}Mb/s" if speed else "auto"), user[0])
+                    f"{canonical} " + (f"{speed}Mb/s" if speed else "auto"), user[0],
+                    machine=canonical)
         return {"ok": True}
 
     @router.put("/machines/{mac}/slot-names")
@@ -877,7 +878,8 @@ def create_console_router(
         except LookupError as exc:
             raise HTTPException(404, str(exc))
         journal(ctx.conn, "machine_slot_name",
-                f"{canonical} {slot} " + (f'name="{name}"' if name else "cleared"), user[0])
+                f"{canonical} {slot} " + (f'name="{name}"' if name else "cleared"), user[0],
+                machine=canonical)
         return {"ok": True, "slot": slot, "name": name}
 
     @router.put("/machines/{mac}/slot-map")
@@ -921,7 +923,8 @@ def create_console_router(
         target = f"model={done['model']} machines={len(done['machines'])}"             if done["scope"] == "model" else canonical
         what = ("default" if slots is None else ",".join(
             k + (f'="{names[k]}"' if k in names else "") for k in slots))
-        journal(ctx.conn, "machine_slot_map", f"{target} {what}", user[0])
+        journal(ctx.conn, "machine_slot_map", f"{target} {what}", user[0],
+                machine=canonical if done["scope"] == "machine" else None)
         return {"ok": True, **done}
 
     @router.delete("/machines/{mac}")
@@ -936,8 +939,8 @@ def create_console_router(
             # journal() owns its own lock/transaction, so insert here atomically;
             # a failed record must roll back the deletion and fail visibly.
             ctx.conn.execute(
-                "INSERT INTO journal (ts, user, event, detail) VALUES (?, ?, ?, ?)",
-                (now_iso(), user[0], "machine_delete", canonical),
+                "INSERT INTO journal (ts, user, event, detail, machine) VALUES (?, ?, ?, ?, ?)",
+                (now_iso(), user[0], "machine_delete", canonical, canonical),
             )
         return {"ok": True, "network": _sync_known_macs(user[0])}
 
@@ -1292,17 +1295,21 @@ def create_console_router(
             if scanned > scan_cap:
                 response.headers["X-Journal-Search-Truncated"] = "true"
         rows = ctx.conn.execute(
-            f"SELECT id, ts, user, event, detail FROM journal {where} "
+            f"SELECT id, ts, user, event, detail, machine, round_id, class_id FROM journal {where} "
             "ORDER BY id DESC LIMIT ?",
             (*params, scan_cap),
         ).fetchall()
         translator = JournalTranslator(ctx.conn, ctx.library)
         machine_q = machine.strip().lower()
+        # ‏#1296: MAC בסינון תואם גם את היעד המבני — שורה שהטקסט שלה נושא את שם
+        # המחשב ולא את ה-MAC נמצאת. שורה בלי יעד (מלפני המיגרציה) — בטקסט, כמו קודם.
+        machine_mac = registry.normalize_mac(machine) if machine_q else None
         text_q = q.strip().lower()
         result = []
         for r in rows:
             label, text = translator.translate(r["event"], r["detail"])
-            if machine_q and machine_q not in text.lower() and machine_q not in r["detail"].lower():
+            if (machine_q and not (machine_mac and r["machine"] == machine_mac)
+                    and machine_q not in text.lower() and machine_q not in r["detail"].lower()):
                 continue
             if text_q and not any(
                 text_q in field.lower() for field in (label, text, r["user"])
@@ -1316,6 +1323,8 @@ def create_console_router(
                 # ‏#968: החומרה נקבעת בשרת לצד התרגום (journal_he.severity),
                 # לא בהיוריסטיקה על שם ה-event בקונסולה.
                 "severity": severity(r["event"]),
+                # ‏#1296: היעד המבני — ‏null = לא נרשם (שורה ישנה / אירוע בלי יעד).
+                "machine": r["machine"], "round_id": r["round_id"], "class_id": r["class_id"],
             })
             if len(result) >= limit:
                 break

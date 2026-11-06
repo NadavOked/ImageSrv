@@ -578,7 +578,8 @@ def test_1804_removing_second_card_removes_module_file(lab):
     assert lab.m.nics["eth1"] == ["10.44.9.1/24"]
 
 
-def test_1804_failed_module_write_rolls_back(lab, monkeypatch):
+def test_1804_failed_module_write_rolls_back(lab, monkeypatch, caplog):
+    caplog.set_level("WARNING", logger="imagesrv.netcfg_host")
     before = dict(lab.m.confs)
 
     def fail_write(path, text):
@@ -588,7 +589,10 @@ def test_1804_failed_module_write_rolls_back(lab, monkeypatch):
     result = _second(lab, "eth1", "eth2").json()
     assert result["ok"] is False, result
     assert "imagesrv-bond.conf" in result["apply_error"]
-    assert "module file write failed" in result["apply_error"]
+    # ‏#2510: טקסט ה-OSError ביומן השרת; בתשובה — הנתיב שלנו ומשפט קבוע.
+    assert "module file write failed" not in result["apply_error"]
+    assert "הפרטים ביומן השרת" in result["apply_error"]
+    assert any("module file write failed" in r.getMessage() for r in caplog.records)
     assert ("apply", "bond0") not in lab.m.calls
     _assert_1804_rolled_back(lab, before, result)
 
@@ -602,7 +606,8 @@ def test_1804_unreadable_module_file_stops_before_network_changes(lab):
     assert lab.m.nics["eth1"] == ["10.44.9.1/24"]
 
 
-def test_1804_failed_removal_restores_module_file_and_bond(lab, monkeypatch):
+def test_1804_failed_removal_restores_module_file_and_bond(lab, monkeypatch, caplog):
+    caplog.set_level("WARNING", logger="imagesrv.netcfg_host")
     assert _second(lab, "eth1", "eth2").json()["ok"]
     lab.module_conf.parent.mkdir(parents=True, exist_ok=True)
     original = "# existing boot configuration\nbonding\n"
@@ -618,7 +623,9 @@ def test_1804_failed_removal_restores_module_file_and_bond(lab, monkeypatch):
     monkeypatch.setattr(Path, "unlink", fail_removal)
     result = _second(lab, "bond0", "").json()
     assert result["ok"] is False, result
-    assert "module file removal failed" in result["apply_error"]
+    assert "module file removal failed" not in result["apply_error"]      # ‏#2510
+    assert "הפרטים ביומן השרת" in result["apply_error"]
+    assert any("module file removal failed" in r.getMessage() for r in caplog.records)
     assert "הוחזרה ואומתה" in result["apply_error"]
     assert lab.module_conf.read_text(encoding="utf-8") == original
     assert lab.m.confs == before and lab.m.nics["bond0"] == ["10.44.9.1/24"]

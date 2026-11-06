@@ -204,7 +204,7 @@ def add_machine(
             "INSERT INTO machines (mac, suffix, group_id, added_at) VALUES (?, ?, ?, ?)",
             (mac, name, group_id, now_iso()),
         )
-    journal(conn, "machine_add", f"{mac} name={name} group={group_id}", user)
+    journal(conn, "machine_add", f"{mac} name={name} group={group_id}", user, machine=mac)
     return mac
 
 
@@ -232,7 +232,7 @@ def update_machine(
             "UPDATE machines SET suffix = ?, group_id = ? WHERE mac = ?",
             (name, target_group, mac),
         )
-    journal(conn, "machine_edit", f"{mac} name={name} group={target_group}", user)
+    journal(conn, "machine_edit", f"{mac} name={name} group={target_group}", user, machine=mac)
 
 
 class MacBusy(Exception):
@@ -275,7 +275,7 @@ def change_mac(conn: sqlite3.Connection, mac_raw: str, new_raw: object,
     except sqlite3.IntegrityError:
         # נרשמה בין הבדיקה לכתיבה — אותה תשובה, לא 500.
         raise MacBusy("הכתובת כבר רשומה למכונה אחרת") from None
-    journal(conn, "machine_mac_edit", f"{mac} -> {new}", user)
+    journal(conn, "machine_mac_edit", f"{mac} -> {new}", user, machine=new)
     return new, True
 
 

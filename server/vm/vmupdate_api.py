@@ -263,7 +263,7 @@ def create_vmupdate_viewer_router(ctx: ServerContext, engine: VmUpdate, *,
                 try:
                     await writer.wait_closed()
                 except OSError:
-                    pass
+                    pass  # החיבור כבר נסגר בצד השני
             async with lock:
                 viewers.discard(name)
             if task is not None:

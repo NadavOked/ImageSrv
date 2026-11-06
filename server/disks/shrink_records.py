@@ -171,7 +171,8 @@ def open_record(conn: sqlite3.Connection, body: dict, require_reported: bool = F
         row["id"] = cur.lastrowid
     journal(conn, "shrink_open",
             f"{mac} {row['dev'] or '?'} serial={serial} port={row['port'] if row['port'] is not None else '?'}"
-            " partitions " + ", ".join(f"{p['idx']}: {p['size_sectors']} sectors" for p in parts))
+            " partitions " + ", ".join(f"{p['idx']}: {p['size_sectors']} sectors" for p in parts),
+            machine=mac)
     return row
 
 
@@ -216,7 +217,7 @@ def close_record(conn: sqlite3.Connection, serial: str, record_id: int | None = 
         done = conn.execute(sql, params).rowcount == 1
     if done:
         journal(conn, event, f"serial={serial}" + (f" #{record_id}" if record_id is not None else ""),
-                user="" if by == "agent" else by)
+                user="" if by == "agent" else by, machine=mac)
     return done
 
 
@@ -239,7 +240,8 @@ def note_record(conn: sqlite3.Connection, serial: str, record_id: int | None,
     with _write_lock, writing(conn):
         done = conn.execute(sql, params).rowcount == 1
     if done:
-        journal(conn, "shrink_note", f"serial={serial}: {note.strip()[:NOTE_MAX_CHARS]}")
+        journal(conn, "shrink_note", f"serial={serial}: {note.strip()[:NOTE_MAX_CHARS]}",
+                machine=mac)
     return done
 
 

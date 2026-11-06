@@ -504,3 +504,22 @@ def test_the_offered_list_counts_the_minimum_free_space(identity_server, used):
         **hello_body(MAC1), "disks": json.loads(srv["ctx"].conn.execute(
             "SELECT disks_json FROM net_devices WHERE mac = ?", (MAC1,)).fetchone()["disks_json"])}).json()
     assert tight["id"] in answer["allowed_images"]
+
+
+def test_a_python_type_error_reaches_the_agent_as_a_fixed_sentence(identity_server, monkeypatch,
+                                                                     caplog):
+    """‏#2510 (CodeQL #859): ‏`TypeError` הוא טקסט של פייתון, לא הודעה שלנו —
+    לסוכן "בקשה לא תקינה", והטקסט ליומן השרת. ‏`ValueError` של ולידציה עובר כמו קודם."""
+    srv = identity_server
+    cloner(srv)
+    caplog.set_level("WARNING", logger="imagesrv.cloner_round")
+
+    def broken(*_a, **_k):
+        raise TypeError("'<' not supported between instances of 'fake-internal' and 'int'")
+
+    monkeypatch.setattr(cloner_round, "open_round", broken)
+    r = ask(srv)
+    assert r.status_code == 400 and r.json()["code"] == "bad_round", r.text
+    assert "fake-internal" not in r.text
+    assert r.json()["error"] == "בקשה לא תקינה"
+    assert any("fake-internal" in rec.getMessage() for rec in caplog.records)

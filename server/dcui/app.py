@@ -10,8 +10,8 @@ from server.net import netcfg_rollback
 from server.db import connect
 
 from . import actions, pairing
-from .data import (DATA_DIR, NicInfo, Snapshot, collect_snapshot,
-                   demo_snapshot)
+from .data import (DATA_DIR, LAB_ISO_LAB, LAB_ISO_UNCHECKED, NicInfo, Snapshot,
+                   collect_snapshot, demo_snapshot)
 
 WIDTH = 80
 HEIGHT = 25
@@ -23,6 +23,11 @@ MENU_ITEMS = (
     "Primary-Visible Address",
     "Add Disk",                       # #1988
 )
+#: #1412: row 3 of the main screen; a clean ISO, or none, prints nothing.
+LAB_ISO_TEXT = {
+    LAB_ISO_LAB: "!! LAB ISO - NOT FOR THE COLLEGE: installed with lab access (SSH/hooks) !!",
+    LAB_ISO_UNCHECKED: "!! NOT CHECKED for a lab ISO: no readable lab_overlay in iso-release.json !!",
+}
 
 
 class Canvas:
@@ -89,6 +94,9 @@ def render_main(snapshot: Snapshot, message: str = "") -> list[str]:
         footer,
     )
     fp1, fp2 = _fingerprint_lines(snapshot.fingerprint)
+    lab = LAB_ISO_TEXT.get(snapshot.lab_iso)   # #1412: the graphical screen's orange card
+    if lab:
+        canvas.put(3, 2, lab, 76)
     canvas.put(4, 4, "Hostname:")
     canvas.put(4, 23, snapshot.hostname)
     canvas.put(5, 4, "Console:")
@@ -1071,7 +1079,7 @@ def _draw(stdscr, lines: list[str], curses_module) -> None:
         try:
             stdscr.addstr(0, 0, message[:max(0, width - 1)])
         except curses_module.error:
-            pass
+            pass  # מסך קטן מדי לכתיבת ההודעה — ממילא חוזרים מיד
         stdscr.refresh()
         return
     top, left = (height - HEIGHT) // 2, (width - WIDTH) // 2

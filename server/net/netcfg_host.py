@@ -21,6 +21,7 @@ hooks ולעולם לא לגעת ברשת האמיתית, בדיוק כמו `dhc
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import subprocess
 import time
@@ -29,6 +30,15 @@ from pathlib import Path
 
 from server.net import netcfg
 from server.core.atomicfile import write_atomic
+from server.core.logtext import one_line
+
+log = logging.getLogger("imagesrv.netcfg_host")
+
+
+def _os_failure(sentence: str, exc: BaseException) -> str:
+    """‏#2510: טקסט החריגה (strerror) ל-log; מה שחוזר לקונסולה ולמתקין — המשפט שלנו."""
+    log.warning("%s: %s", one_line(sentence), exc)
+    return f"{sentence} — הפרטים ביומן השרת"
 
 INTERFACES_DIR = "/etc/network/interfaces.d"
 INTERFACES_MAIN = "/etc/network/interfaces"
@@ -75,7 +85,7 @@ def write_conf(name: str, text: str | None,
             path.parent.mkdir(parents=True, exist_ok=True)
             write_atomic(path, text)   # ‏#1908
     except OSError as exc:
-        return f"לא ניתן לכתוב את {path}: {exc.strerror or exc}"
+        return _os_failure(f"לא ניתן לכתוב את {path}", exc)
     return None
 
 
@@ -83,7 +93,7 @@ def write_resolv(text: str, path: str | Path = RESOLV_CONF) -> str | None:
     try:
         write_atomic(path, text)   # ‏#1908
     except OSError as exc:
-        return f"לא ניתן לכתוב את {path}: {exc.strerror or exc}"
+        return _os_failure(f"לא ניתן לכתוב את {path}", exc)
     return None
 
 
@@ -106,7 +116,7 @@ def write_bond_module(text: str | None,
             path.parent.mkdir(parents=True, exist_ok=True)
             write_atomic(path, text)
     except OSError as exc:
-        return f"לא ניתן לכתוב את {path}: {exc.strerror or exc}"
+        return _os_failure(f"לא ניתן לכתוב את {path}", exc)
     return None
 
 
@@ -150,7 +160,7 @@ def foreign_manager(netplan_dir: str | Path = NETPLAN_DIR,
         except FileNotFoundError:
             continue
         except OSError as exc:
-            return f"לא ניתן לבדוק אם הרשת מנוהלת ב-{who} ({directory}: {exc.strerror or exc})"
+            return _os_failure(f"לא ניתן לבדוק אם הרשת מנוהלת ב-{who} ({directory})", exc)
         if found:
             more = f" ועוד {len(found) - 1}" if len(found) > 1 else ""
             return f"הרשת בשרת הזה מנוהלת ב-{who} ({directory}/{found[0]}{more})"
@@ -158,7 +168,7 @@ def foreign_manager(netplan_dir: str | Path = NETPLAN_DIR,
         try:
             target = os.readlink(resolv)
         except OSError as exc:
-            return f"לא ניתן לקרוא את {resolv} ({exc.strerror or exc})"
+            return _os_failure(f"לא ניתן לקרוא את {resolv}", exc)
         if "systemd/resolve" in target:
             return f"‏{resolv} מנוהל ב-systemd-resolved (‏→ {target})"
     return None
@@ -227,7 +237,7 @@ def adopt_interface(name: str, text: str, *, main: str | Path = INTERFACES_MAIN,
     except FileNotFoundError:
         main_text = ""
     except OSError as exc:
-        return notes, f"לא ניתן לקרוא את {main_path}: {exc.strerror or exc}"
+        return notes, _os_failure(f"לא ניתן לקרוא את {main_path}", exc)
     new_text, stanza_changed = comment_out_stanzas(main_text, name)
     changed = stanza_changed
     marker = str(root).rstrip("/")
@@ -245,13 +255,13 @@ def adopt_interface(name: str, text: str, *, main: str | Path = INTERFACES_MAIN,
                 # מקור שהמנהל נעל (‏wpa-psk וכו') היה מקבל עותק קריא לכולם.
                 write_atomic(backup, main_text, mode=0o600)   # ‏#1908
             except OSError as exc:
-                return notes, f"לא ניתן לגבות את {main_path}: {exc.strerror or exc}"
+                return notes, _os_failure(f"לא ניתן לגבות את {main_path}", exc)
             notes.append(f"{main_path}: גיבוי ב-{backup.name}")
         try:
             main_path.parent.mkdir(parents=True, exist_ok=True)
             write_atomic(main_path, new_text)   # ‏#1908
         except OSError as exc:
-            return notes, f"לא ניתן לכתוב את {main_path}: {exc.strerror or exc}"
+            return notes, _os_failure(f"לא ניתן לכתוב את {main_path}", exc)
         if stanza_changed:
             notes.append(f"{main_path}: ההגדרה של {name} הועברה להערה")
     error = write_conf(name, text, root)
@@ -269,7 +279,7 @@ def _run(cmd: list[str], timeout: int = 40) -> tuple[int | None, str]:
                               timeout=timeout, check=False,
                               stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as exc:
-        return None, str(exc)
+        return None, _os_failure(f"הפקודה {cmd[0]} לא הצליחה לרוץ", exc)
     return done.returncode, (done.stderr or done.stdout or "").strip()
 
 
@@ -460,7 +470,7 @@ def read_state(resolv: str | Path = RESOLV_CONF) -> LiveState:
         resolv_text = Path(resolv).read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         resolv_text = ""
-        problems.append(f"{resolv}: {exc.strerror or exc}")
+        problems.append(_os_failure(f"{resolv} לא נקרא", exc))
     if problems:
         return LiveState(False, reason=" · ".join(problems))
     return LiveState(True, parse_addr(addr_text), parse_routes(route_text),
@@ -589,7 +599,7 @@ def read_bond(name: str, root: str | Path = BONDING_DIR) -> BondState:
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
-        return BondState(False, reason=f"{path}: {exc.strerror or exc}")
+        return BondState(False, reason=_os_failure(f"{path} לא נקרא", exc))
     return parse_bonding(text)
 
 

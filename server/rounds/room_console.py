@@ -90,11 +90,12 @@ def take_power(conn: sqlite3.Connection, mac: str,
         return None, False                # חותמת שאינה נקראת — לא מכבים
     age = (now or datetime.now(timezone.utc)) - at
     if age > timedelta(seconds=POWEROFF_TTL_SECONDS) or age < timedelta(0):
-        journal(conn, "power_expired", f"{mac} {row['action']}")
+        journal(conn, "power_expired", f"{mac} {row['action']}", machine=mac)
         return None, False
     confirmed = bool(row["confirmed"])
     journal(conn, "power_delivered",
-            f"{mac} {row['action']}" + (" (confirmed over a local copy)" if confirmed else ""))
+            f"{mac} {row['action']}" + (" (confirmed over a local copy)" if confirmed else ""),
+            machine=mac)
     if row["action"] == POWEROFF:
         _leave_open_wave(conn, mac)
     return row["action"], confirmed

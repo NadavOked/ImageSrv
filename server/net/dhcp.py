@@ -31,9 +31,6 @@ import re
 from dataclasses import asdict, dataclass, field
 
 from server.net.dhcp_host import (  # noqa: F401  — ה-API של המודול נשאר `dhcp.<שם>`
-    DEFAULT_CONF,
-    INSTALLER_CONF,
-    KNOWN_MACS_CONF,
     PROXY_CONF,
     PROXY_UNIT,
     ProbeResult,

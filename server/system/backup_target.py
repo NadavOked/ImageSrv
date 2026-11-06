@@ -189,6 +189,7 @@ def write_probe(folder: Path) -> None:
             os.fsync(out.fileno())
     except OSError as exc:
         raise TargetError(409, f"כתיבת קובץ הבדיקה ל-{folder} נכשלה: {exc}") from None
+    why = ""            # ‏CodeQL #693: ‏`got is None` רק אחרי ה-except שקובע אותו
     try:
         got = _read_back(probe)
     except OSError as exc:

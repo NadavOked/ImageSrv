@@ -15,12 +15,14 @@
 
 from __future__ import annotations
 
+import errno
 import logging
 import socket
 from pathlib import Path
 from typing import Callable
 
 from server.learn import wol as learn_wol
+from server.core.logtext import one_line
 from server.db import journal
 from server.agent.registry import CLONERS_GROUP, ROOM_GROUPS, normalize_mac
 
@@ -110,6 +112,33 @@ def link_state(interface: str, *, sysfs: str | Path = SYSFS_NET) -> tuple[str, s
         f"(operstate={operstate or 'לא נקרא'}) — נשלח בלי אימות")
 
 
+class WakeRefused(OSError):
+    """שליחה שהשולח שלנו מסרב לה בעצמו — ‏`reason` הוא משפט שאנחנו כתבנו.
+
+    ‏#74: הסיבה עולה למסך. ‏#2510: רק משפט שלנו עולה — ה-strerror של
+    ‏`sendto`/`setsockopt` נשאר ביומן השרת, והמסך מקבל משפט מ-`ERRNO_REASONS`."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+#: ‏#2510: ‏errno של שליחה שנכשלה → המשפט שעל המסך. רשימה סגורה; כל errno אחר
+#: הוא `SEND_FAILED`, והטקסט המלא נכתב ל-log.
+ERRNO_REASONS = {
+    errno.ENODEV: "כרטיס ההפצה לא נמצא בשרת",
+    errno.ENETDOWN: "כרטיס ההפצה כבוי",
+    errno.ENETUNREACH: "אין נתיב מהשרת לרשת ההפצה",
+    errno.EHOSTUNREACH: "אין נתיב מהשרת לרשת ההפצה",
+    errno.EPERM: "מערכת ההפעלה סירבה לשידור (הרשאה או חומת אש)",
+    errno.EACCES: "מערכת ההפעלה סירבה לשידור (הרשאה או חומת אש)",
+    errno.EADDRNOTAVAIL: "כתובת השידור אינה זמינה על כרטיס ההפצה",
+    errno.ENOBUFS: "תור השליחה של כרטיס ההפצה מלא",
+}
+SEND_FAILED = "שליחת חבילת ההערה נכשלה — הפרטים ביומן השרת"
+BAD_MAC = "כתובת MAC לא תקינה"
+
+
 class WakeResult(int):
     """כמה חבילות נשלחו — ולמה השאר לא.
 
@@ -164,14 +193,14 @@ def broadcast_sender(
 
     def send(packet: bytes) -> None:
         if interface and bind_to_device is None:
-            raise OSError(
+            raise WakeRefused(
                 f"לא ניתן להצמיד את Wake-on-LAN לממשק {interface}: SO_BINDTODEVICE "
                 "אינו זמין כאן — לא משדרים על כל הממשקים"
             )
         if interface:
             state, why = link_state(interface, sysfs=sysfs)
             if state == LINK_DOWN:
-                raise OSError(why)
+                raise WakeRefused(why)
             if state == LINK_UNKNOWN:
                 log.warning("wol on %s: %s", interface, why)
         with socket_factory(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -181,7 +210,7 @@ def broadcast_sender(
                                 interface.encode() + b"\0")
             written = sock.sendto(packet, (address, WOL_PORT))
             if written != len(packet):
-                raise OSError(
+                raise WakeRefused(
                     f"short-send: הקרנל קיבל {written} מתוך {len(packet)} "
                     "בייט של חבילת ההערה — היא לא נשלחה שלמה")
 
@@ -192,7 +221,7 @@ def unpinned_sender(packet: bytes) -> None:
     """‏#2428: השולח של שרת שאין לו כרטיס הפצה (רשת ההפצה לא הוגדרה — מצב
     המסירה). בלי כרטיס כפוי השידור היה יוצא לפי טבלת הניתוב, כלומר לרשת
     המכללה. מסרב בשם, וכל מסלול (מכונה, קבוצה, סריקת #1847) מציג את הסיבה."""
-    raise OSError("רשת ההפצה לא הוגדרה — Wake-on-LAN כבוי עד שתוגדר "
+    raise WakeRefused("רשת ההפצה לא הוגדרה — Wake-on-LAN כבוי עד שתוגדר "
                   "(בלי כרטיס הפצה השידור היה יוצא לרשת המכללה)")
 
 
@@ -207,14 +236,22 @@ def _try_send(mac: str, send: Callable[[bytes], None]) -> str | None:
     הסיבה חוזרת כערך ולא נבלעת ולא נזרקת: מי שקורא (מכונה בודדת או
     קבוצה) מחליט איך לאגד אותה ליומן, אבל בשני המסלולים היא מגיעה
     למסך — "נכשל" בלי סיבה שולח את הטכנאי ל-BIOS (#74).
+
+    ‏#2510: הסיבה היא תמיד משפט שלנו — ‏`WakeRefused.reason`, ‏`BAD_MAC`, או
+    ‏`ERRNO_REASONS` לפי ה-errno. טקסט החריגה המקורי נכתב ל-log בלבד.
     """
     try:
         send(magic_packet(mac))
         return None
-    except (OSError, ValueError) as exc:
-        # codeql[py/log-injection] false positive: ה-MAC נקרא מטבלת machines (מנורמל ברישום) (#291)
-        log.error("wol to %s failed: %s", mac, exc)
-        return str(exc)
+    except WakeRefused as exc:
+        log.error("wol to %s refused: %s", one_line(mac), exc.reason)
+        return exc.reason
+    except ValueError:
+        log.error("wol to %s: not a MAC address", one_line(mac))
+        return BAD_MAC
+    except OSError as exc:
+        log.error("wol to %s failed: %s", one_line(mac), exc)
+        return ERRNO_REASONS.get(exc.errno, SEND_FAILED)
 
 
 def wake_machine(
@@ -233,7 +270,7 @@ def wake_machine(
     detail = f"{canonical} failed=1"
     if reason:
         detail += " | " + reason
-    journal(conn, "wol_failed", detail)
+    journal(conn, "wol_failed", detail, machine=canonical)
     return WakeResult(0, [canonical], [reason] if reason else [])
 
 
@@ -297,6 +334,5 @@ def wake_group(
         if reasons:
             detail += " | " + " | ".join(reasons)
         journal(conn, "wol_failed", detail)
-    # codeql[py/log-injection] false positive: group_id קיים ב-DB ועבר grp_[A-Za-z0-9_-] (#291)
-    log.info("wol %s: %d sent, %d failed", group_id, sent, len(failed))
+    log.info("wol %s: %d sent, %d failed", one_line(group_id), sent, len(failed))
     return WakeResult(sent, failed, reasons)

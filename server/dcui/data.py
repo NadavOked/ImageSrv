@@ -118,6 +118,9 @@ class Snapshot:
     #: collect_snapshot always sets one of the three.
     clock: str = ""
     clock_server: str = ""        # the configured source, as the operator chose it
+    #: #1412: the installing ISO's lab_overlay -- LAB_ISO_LAB / LAB_ISO_CLEAN /
+    #: LAB_ISO_UNCHECKED; "" = no ISO manifest (not installed from an ISO)
+    lab_iso: str = ""
 
 
 def _command_text(result: CommandResult) -> str:
@@ -331,6 +334,31 @@ def system_updates_date(data_dir: Path = DATA_DIR,
     return max(dates, default="")
 
 
+LAB_ISO_LAB, LAB_ISO_CLEAN, LAB_ISO_UNCHECKED = "lab", "clean", "unchecked"
+
+
+def lab_iso_state(manifest_file: Path = ISO_MANIFEST) -> str:
+    """#1412: was this server installed from a lab ISO (``build-iso.sh --lab``)?
+
+    The ISO's own manifest, copied by the installer, answers with a JSON
+    boolean ``lab_overlay``.  Anything else -- unreadable, not JSON, not an
+    object, no key (an ISO from before the field), not a boolean -- is
+    "unchecked", never "clean" (principle 5).  No manifest at all is "": the
+    server was not installed from an ISO (``setup-boot-server.sh``), so there
+    is no ISO to ask about.
+    """
+    try:
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return ""
+    except (OSError, ValueError):
+        return LAB_ISO_UNCHECKED
+    value = manifest.get("lab_overlay") if isinstance(manifest, dict) else None
+    if not isinstance(value, bool):
+        return LAB_ISO_UNCHECKED
+    return LAB_ISO_LAB if value else LAB_ISO_CLEAN
+
+
 CLOCK_SYNCED, CLOCK_UNSYNCED, CLOCK_UNCHECKED = "synced", "unsynced", "unchecked"
 #: what chrony uses when the setting is empty ("automatic", timesync.DEBIAN_POOLS)
 AUTO_TIME_SOURCE = "debian.pool.ntp.org"
@@ -506,6 +534,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
         system_updates=system_updates_date(data_dir, manifest_file),
         first_boot_running=first_boot_running(status_file),
         clock=clock, clock_server=clock_server,
+        lab_iso=lab_iso_state(manifest_file),
     )
 
 

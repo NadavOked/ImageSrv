@@ -370,7 +370,7 @@ def test_installer_is_one_centred_column_of_one_width():
     frame = _src("screens_install.c")
     assert "#define INSTALL_COL_W 760.0" in frame
     assert "col=fmin(INSTALL_COL_W,cw-64),cx=(cw-col)/2" in frame
-    assert "{cx,105,col,H-185}" in frame
+    assert "{cx,105+top,col,H-185-top}" in frame   # #1412: the lab strip moves the page down by its height
     setup, forms = _src("screens_install_setup.c"), _src("screens_install_forms.c")
     assert "fmin(720,l.body.w)" not in setup and "fmin(650,l.body.w)" not in forms
 

@@ -177,8 +177,12 @@ def broken_server(tmp_path: Path, images_root):
     from server.console import users
     from server.app import create_app
 
+    from server.net.wol import WakeRefused
+
     def dead(packet: bytes) -> None:
-        raise OSError("no-carrier: אין carrier על eth1")
+        # ‏#2510: "אין carrier" מגיע מ-`link_state` כסירוב שלנו (`WakeRefused`);
+        # ‏OSError גולמי מקבל משפט קבוע — ראה test_a_raw_oserror_is_not_shown_raw.
+        raise WakeRefused("no-carrier: אין carrier על eth1")
 
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
                      wol_send=dead)
@@ -210,6 +214,34 @@ def test_a_failed_send_is_visible_with_its_reason_and_in_the_journal(broken_serv
     assert len(failed) == 1
     assert BUILD in failed[0]["detail"] and "no-carrier" in failed[0]["detail"]
     assert journal_rows(broken_server, "wol_sent") == []
+
+
+def test_a_raw_oserror_is_not_shown_raw(tmp_path: Path, images_root):
+    """‏#2510: טקסט של OSError שאינו שלנו לא מגיע למסך — משפט קבוע במקומו."""
+    from server.app import create_app
+    from server.console import users
+    from server.net.wol import SEND_FAILED
+
+    def dead(packet: bytes) -> None:
+        raise OSError("raw-kernel-text /proc/secret")
+
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+                     wol_send=dead)
+    ctx = app.state.ctx
+    users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test",
+                 is_builtin=True, check_policy=False)
+    admin = TestClient(app)
+    admin.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"})
+    ctx.conn.execute(
+        "INSERT INTO machines (mac, suffix, group_id, added_at)"
+        " VALUES (?, 'INS', 'grp_BUILD', '2026-09-17T00:00:00Z')", (BUILD,))
+    ctx.conn.commit()
+    try:
+        body = admin.post(f"/api/console/machines/{BUILD}/wake").json()
+        assert body["failed"] == 1 and body["reasons"] == [SEND_FAILED]
+        assert "raw-kernel-text" not in str(body)
+    finally:
+        ctx.sender.stop()
 
 
 # --- קבוצה: grp_BUILD ----------------------------------------------------------

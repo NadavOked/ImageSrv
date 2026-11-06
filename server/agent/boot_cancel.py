@@ -66,6 +66,7 @@ def cancel_gui_tasks_on_boot(conn: sqlite3.Connection, store, mac: str) -> list[
                 store.close(wave, "")
             except SessionError:
                 log.warning("boot cancel of %s: its wave %s was already gone", row["id"], wave)
-        journal(conn, "task_boot_cancel", f"{row['id']} {mac} ({row['type']}): {REASON}")
+        journal(conn, "task_boot_cancel", f"{row['id']} {mac} ({row['type']}): {REASON}",
+                machine=mac)
         cancelled.append(row["id"])
     return cancelled

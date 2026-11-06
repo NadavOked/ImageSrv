@@ -367,9 +367,6 @@ EVENTS_HE = {
     "task_token_refused": "אסימון משימה נדחה",
     "settings_backup_downloaded": "גיבוי ההגדרות הורד",
     # ‏#2437: סיסמת עורך ה-GRUB (‏server/app.py `_grub_lock`), ו-#2450: מנהל ראה אותה.
-    "grub_password_created": "נוצרה סיסמה לעורך ה-GRUB",
-    "grub_password_failed": "סיסמת עורך ה-GRUB לא נקראה — התפריטים נעולים בלי סיסמה",
-    "grub_cfg_lock_failed": "קובץ האתחול על ה-TFTP לא ננעל",
     "grub_password_viewed": "סיסמת ה-GRUB הוצגה למנהל",
     "grub_server_lock_failed": "ה-GRUB של השרת לא ננעל בעדכון",   # #2452, tools/server-upgrade.sh
     "grub_password_saved": "מנהל סימן שסיסמת ה-GRUB נשמרה מחוץ לשרת",   # #2454

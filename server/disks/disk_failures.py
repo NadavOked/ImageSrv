@@ -139,7 +139,8 @@ def record(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) ->
             f"{mac} {dev} serial={serial or '?'} port={row['port'] if row['port'] is not None else '?'}"
             f" cause={cause}"
             # ‏#704: השם שהמפעיל נתן לחריץ; בלי שם — השורה כמו היום.
-            + slot_names.journal_suffix(slot_names.label(conn, mac, port=row["port"], serial=serial)))
+            + slot_names.journal_suffix(slot_names.label(conn, mac, port=row["port"], serial=serial)),
+            machine=mac, round_id=session_id)
     return row
 
 
@@ -174,7 +175,8 @@ def record_readonly(conn: sqlite3.Connection, session_id: str, mac: str, dev: st
         )
         inserted = cur.rowcount == 1
     if inserted:
-        journal(conn, "disk_failure", f"{mac} {dev} serial={serial} port=? cause=readonly")
+        journal(conn, "disk_failure", f"{mac} {dev} serial={serial} port=? cause=readonly",
+                machine=mac, round_id=session_id)
     return inserted
 
 
@@ -276,7 +278,8 @@ def clear_written(conn: sqlite3.Connection, serials, round_id: str) -> list[int]
                 cleared.append((r["id"], r["serial"]))
     for failure_id, serial in cleared:
         journal(conn, "disk_failure_cleared",
-                f"#{failure_id} serial={serial} " + AUTO_CLEARED_HE.format(round_id=round_id))
+                f"#{failure_id} serial={serial} " + AUTO_CLEARED_HE.format(round_id=round_id),
+                round_id=round_id)
     return [failure_id for failure_id, _ in cleared]
 
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import logging
 import socket
 import time
 from pathlib import Path
@@ -32,6 +33,8 @@ from server.console import auth
 from server.net import deploy_net, dhcp, netcfg, netcfg_host, netcfg_rollback
 from server.agent.api import ServerContext
 from server.db import get_setting, journal, set_setting, set_settings
+
+log = logging.getLogger("imagesrv.console_netcfg")
 
 Hooks = dict[str, Callable]
 
@@ -784,7 +787,9 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         try:
             module_before = hooks["netcfg_read_bond_module"]()
         except (OSError, UnicodeError) as exc:
-            return f"לא ניתן לקרוא את {netcfg_host.BOND_MODULE_CONF}: {exc}"
+            # ‏#2510: טקסט החריגה ליומן השרת; ללקוח — משפט קבוע.
+            log.warning("%s unreadable: %s", netcfg_host.BOND_MODULE_CONF, exc)
+            return f"לא ניתן לקרוא את {netcfg_host.BOND_MODULE_CONF} — הפרטים ביומן השרת"
         down = hooks["netcfg_down"](old.name)
         text = netcfg.render(new, hostname=hooks["hostname"]())
         errors = [hooks["netcfg_write_conf"](n, text if n == new.name else None,

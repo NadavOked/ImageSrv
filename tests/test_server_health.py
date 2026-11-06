@@ -240,7 +240,8 @@ def test_1817_private_directory_is_red_with_path_and_mode(health_server, level):
     assert stat.S_IMODE(path.stat().st_mode) == 0o700
 
 
-def test_1817_stat_failure_is_red_with_path(health_server, monkeypatch):
+def test_1817_stat_failure_is_red_with_path(health_server, monkeypatch, caplog):
+    caplog.set_level("WARNING", logger="imagesrv.health")
     path = health_server["tftp"] / "grub/grub.cfg"
     real_stat = Path.stat
 
@@ -255,7 +256,9 @@ def test_1817_stat_failure_is_red_with_path(health_server, monkeypatch):
     row = by_id(response.json())["boot_files"]
     assert row["state"] == "bad"
     assert str(path) in row["detail"]
-    assert "permission probe denied" in row["detail"]
+    # ‏#2510: ה-strerror ביומן השרת, לא בשורה שהקונסולה מציגה.
+    assert "permission probe denied" not in row["detail"]
+    assert any("permission probe denied" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX symlinks and modes")

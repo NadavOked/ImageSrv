@@ -43,6 +43,8 @@ import time
 from datetime import datetime, timezone
 
 from server.db import _write_lock, journal, writing
+from server.core.logtext import one_line
+from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_wol")
 
@@ -93,7 +95,7 @@ def sent(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
                 conn.execute("INSERT INTO wol_wakes (mac, sent_at, sent_epoch) VALUES (?,?,?)",
                              (mac, _iso(now), now))
     except Exception:             # noqa: BLE001 — הלמידה אינה מפילה הערה
-        log.exception("recording a wake of %s failed", mac)
+        log.exception("recording a wake of %s failed", one_line(mac))
 
 
 def answered(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
@@ -108,7 +110,7 @@ def answered(conn: sqlite3.Connection, mac: str, now: float | None = None) -> No
                          " WHERE mac = ? AND answered_at IS NULL AND sent_epoch > ?",
                          (_iso(now), now, mac, now - ANSWER_S))
     except Exception:             # noqa: BLE001
-        log.exception("recording the answer of %s failed", mac)
+        log.exception("recording the answer of %s failed", one_line(mac))
 
 
 def stats(conn: sqlite3.Connection, mac: str, now: float | None = None) -> dict:
@@ -149,7 +151,7 @@ def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None
                 conn.execute("UPDATE wol_wakes SET early = 1 WHERE id = ?", (row["id"],))
             journal(conn, "wol_resent",
                     f"{row['mac']} after={int(now - row['sent_epoch'])}s typical={int(typical)}s"
-                    + (f" failed: {reason}" if reason else ""))
+                    + (f" failed: {reason}" if reason else ""), machine=row["mac"])
         for (mac,) in conn.execute("SELECT DISTINCT mac FROM wol_wakes").fetchall():
             got = stats(conn, mac, now)
             if got["streak"] < FAIL_STREAK:
@@ -162,7 +164,8 @@ def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None
                 continue          # פעם אחת לרצף — ההערה האחרונה בו נושאת את הסימן
             with _write_lock, writing(conn):
                 conn.execute("UPDATE wol_wakes SET alerted = 1 WHERE id = ?", (newest["id"],))
-            journal(conn, "wol_no_wake", f"{mac} {NO_WAKE_HE.format(n=got['streak'])}")
+            journal(conn, "wol_no_wake", f"{mac} {NO_WAKE_HE.format(n=got['streak'])}",
+                    machine=mac)
     except Exception:             # noqa: BLE001 — שעון החדר ממשיך
         log.exception("wol sweep failed")
 
@@ -170,7 +173,6 @@ def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None
 def health_checks(conn: sqlite3.Connection, now: float | None = None) -> list[dict]:
     """שורה כתומה לכל מכונה עם רצף של `FAIL_STREAK` הערות בלי תשובה. בלי הערות
     שנמדדו — אין שורה; עם הערות ובלי רצף — שורה ירוקה אחת."""
-    from server.system.health import check     # noqa: PLC0415 — health מייבא אותנו
     now = time.time() if now is None else now
     try:
         macs = [r["mac"] for r in conn.execute("SELECT DISTINCT mac FROM wol_wakes ORDER BY mac")]
@@ -204,5 +206,5 @@ def arm_failure_is_new(conn: sqlite3.Connection, mac: str, now: float | None = N
             "SELECT 1 FROM journal WHERE event = 'wol_arm_failed' AND detail = ?"
             " AND julianday(ts) >= julianday(?) LIMIT 1", (mac, since)).fetchone() is None
     except Exception:             # noqa: BLE001
-        log.exception("wol_arm_failed dedupe for %s failed", mac)
+        log.exception("wol_arm_failed dedupe for %s failed", one_line(mac))
         return True

@@ -1,10 +1,14 @@
 """‏#1973: הגדרת ה-UPS מהקונסולה — ‏GET/POST ‎/api/console/ups (admin)."""
 
+import logging
+
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from server.console import auth
 from server.system import ups
 from server.db import get_setting, journal
+
+log = logging.getLogger("imagesrv.console_ups")
 
 
 def create_ups_router(ctx, supplied_hooks: dict | None = None) -> APIRouter:
@@ -34,8 +38,10 @@ def create_ups_router(ctx, supplied_hooks: dict | None = None) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 — ההחלה נכשלה: נאמר, ולא נשמר
+            # ‏#2510: טקסט החריגה (systemctl, כתיבת קובץ) ליומן השרת; ללקוח — משפט קבוע.
+            log.warning("ups config failed: %s", exc)
             journal(ctx.conn, "ups_config_failed", str(exc), user[0])
-            raise HTTPException(500, f"הגדרת ה-UPS נכשלה ולא נשמרה: {exc}") from exc
+            raise HTTPException(500, "הגדרת ה-UPS נכשלה ולא נשמרה — הפרטים ביומן השרת") from exc
         monitor = getattr(ctx, "ups", None)
         if monitor is not None:
             monitor.tick()       # המצב החדש נקרא עכשיו, לא בדגימה הבאה

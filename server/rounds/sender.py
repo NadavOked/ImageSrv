@@ -664,7 +664,7 @@ class SenderEngine:
         try:
             process.kill()
         except OSError:
-            pass
+            pass  # התהליך כבר מת — הבדיקה הבאה (_reaped) מכריעה
         if _reaped(process, STOP_KILL_WAIT):
             process.wait()
             return None
@@ -1018,7 +1018,7 @@ class SenderEngine:
             try:
                 process.kill()
             except OSError:
-                pass
+                pass  # התהליך כבר מת — _reaped מטה מכריע, וכישלון נרשם בלוג
             if not _reaped(process, STOP_KILL_WAIT):
                 # לא ממתינים לנצח על תהליך שלא מת: ההפעלה הבאה תיכשל על
                 # הפורט התפוס, בשמה (`_port_verdict`), ולא תיתקע כאן.

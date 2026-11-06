@@ -32,7 +32,7 @@ from typing import Iterable
 from server.console import auth
 from server.storage import disk_reserve
 from server.interserver import auth as interserver_auth, storage_nodes
-from server.db import journal, monitor_rekeyed, now_iso
+from server.db import journal, monitor_rekeyed
 
 log = logging.getLogger("imagesrv.interserver")
 
@@ -783,7 +783,8 @@ _ACTING_USER = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
 #: נתיב שעובר כפי שהוא, בלי פענוח אחר-כך: בלי ``%`` (אין ``%2e%2e``/``%2f``/קידוד
 #: כפול שהופכים לנתיב אחר אחרי unquote), בלי ``\``, בלי רווח — רק תווים שאינם
 #: משתנים בפענוח. הבדיקה והבקשה רצות על **אותה** מחרוזת.
-_SAFE_PATH = re.compile(r"(?:/[A-Za-z0-9._~-]+)+")
+#: ‏CodeQL #780/#781: ‏`^` מפורש — ‏`fullmatch` מעגן ממילא, אבל הניתוח קורא את הביטוי לבדו.
+_SAFE_PATH = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+")
 #: תקרה לגוף שהקונסולה של המשני מחזירה, לפני שהוא נאסף לזיכרון.
 MAX_CONSOLE_BODY = 16 * 1024 * 1024
 _QUERY = re.compile(r"^[A-Za-z0-9._~%&=+-]{0,512}$")
@@ -1074,7 +1075,7 @@ def relay_tunnel(tls_conn, raw_sock: socket.socket, machine: socket.socket, *,
                 sent = machine.send(bytes(to_machine))
                 del to_machine[:sent]
             except BlockingIOError:
-                pass
+                pass  # השקע עוד לא מוכן לכתיבה — הלולאה תנסה שוב
             except OSError as exc:
                 return _close_reason("machine send", exc)
         if to_tls and raw_sock in writable:
@@ -1082,7 +1083,7 @@ def relay_tunnel(tls_conn, raw_sock: socket.socket, machine: socket.socket, *,
                 sent = tls_conn.send(bytes(to_tls[:16384]))
                 del to_tls[:sent]
             except (SSL.WantWriteError, SSL.WantReadError):
-                pass
+                pass  # TLS מבקש לנסות שוב — לא כשל
             except (SSL.ZeroReturnError, SSL.SysCallError, SSL.Error, OSError) as exc:
                 return _close_reason("primary send", exc)
 
@@ -1384,11 +1385,11 @@ class InterserverTLSServer:
         try:
             self._sock.shutdown(socket.SHUT_RDWR)
         except OSError:
-            pass
+            pass  # השקע כבר סגור בצד השני
         try:
             self._sock.close()
         except OSError:
-            pass
+            pass  # סגירה במאמץ אחרי shutdown
 
     def _serve(self) -> None:
         from OpenSSL import SSL
@@ -1435,7 +1436,7 @@ class InterserverTLSServer:
                 if not keep or headers.get("connection", "").lower() == "close":
                     break
         except SSL.Error:
-            pass
+            pass  # שגיאת TLS מסיימת את החיבור הזה בלבד; ה-finally סוגר אותו
         finally:
             try:
                 conn.shutdown()
@@ -1563,16 +1564,17 @@ class InterserverTLSServer:
             monitor_rekeyed(self.ctx.conn, mac, secret, rekeyed)
             conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream"
                          b"\r\nConnection: close\r\n\r\n")
-            journal(self.ctx.conn, "storage_monitor_tunnel", mac, "")
+            journal(self.ctx.conn, "storage_monitor_tunnel", mac, "", machine=mac)
             reason = relay_tunnel(conn, raw, machine, initial=rest)
-            journal(self.ctx.conn, "storage_monitor_tunnel_closed", f"{mac}: {reason}", "")
+            journal(self.ctx.conn, "storage_monitor_tunnel_closed", f"{mac}: {reason}", "",
+                    machine=mac)
             log.info("interserver: monitor tunnel to %s closed — %s", mac, reason)
         finally:
             if machine is not None:
                 try:
                     machine.close()
                 except OSError:
-                    pass
+                    pass  # סגירה במאמץ של חיבור שכבר הסתיים
             with _tunnels_lock:
                 _tunnels.discard(mac)
 

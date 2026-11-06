@@ -55,7 +55,7 @@ def note_final(conn: sqlite3.Connection, mac: str, session_id: str, cpu: dict | 
             journal(conn, "cloner_throttled",
                     f"{mac} in {session_id}: throttle +{cpu['throttle_delta']}, max {temp},"
                     f" busy {cpu.get('busy_pct')}% — המשכפל התחמם/הואט (throttle) — בדקו אוורור;"
-                    " הגל לא נכנס ללמידת הקצב")
+                    " הגל לא נכנס ללמידת הקצב", machine=mac, round_id=session_id)
     except Exception:             # noqa: BLE001
         log.exception("cpu note of %s failed", mac)
 

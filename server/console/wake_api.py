@@ -74,7 +74,8 @@ def create_wake_router(
             raise HTTPException(403, CLASSROOM_V2)
         sent = wol.wake_machine(ctx.conn, canonical, **send_kw)
         if sent:
-            journal(ctx.conn, "wol_sent", f"{canonical} count={int(sent)}", user[0])
+            journal(ctx.conn, "wol_sent", f"{canonical} count={int(sent)}", user[0],
+                    machine=canonical)
         return _result(sent)
 
     @router.post("/machines/{mac}/reboot")
@@ -110,7 +111,8 @@ def create_wake_router(
         count = room_console.request_power(ctx.conn, [canonical], room_console.REBOOT, user[0],
                                            confirmed=confirmed)
         journal(ctx.conn, "machine_reboot",
-                canonical + (" local copy confirmed" if confirmed else ""), user[0])
+                canonical + (" local copy confirmed" if confirmed else ""), user[0],
+                machine=canonical)
         return {"requested": count, "ttl_s": room_console.POWEROFF_TTL_SECONDS}
 
     @router.post("/machines/{mac}/poweroff")
@@ -134,7 +136,7 @@ def create_wake_router(
             raise HTTPException(409, "המחשב אינו מחכה ללחיצה על 'כבה' — כיבוי מכאן רק"
                                      " למשכפל שמחזיק תוצאות של דיסק עם בעיה")
         count = room_console.request_power(ctx.conn, [canonical], room_console.POWEROFF, user[0])
-        journal(ctx.conn, "held_poweroff", canonical, user[0])
+        journal(ctx.conn, "held_poweroff", canonical, user[0], machine=canonical)
         return {"requested": count, "ttl_s": room_console.POWEROFF_TTL_SECONDS}
 
     @router.post("/groups/{gid}/wake")

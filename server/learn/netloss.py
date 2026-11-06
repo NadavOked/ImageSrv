@@ -34,6 +34,7 @@ import statistics
 from server.rounds import drive_rates
 from server.learn import server_io
 from server.db import journal
+from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_netloss")
 
@@ -126,7 +127,7 @@ def evaluate(conn: sqlite3.Connection, session_id: str) -> dict | None:
                     f"{session_id} if={got['interface'] or '?'} drawers={got['drawers']}"
                     f" rate={got['rate']} loss={100 * got['loss']:.2f}%"
                     f" baseline={100 * got['baseline']:.2f}% ({got['waves']} waves)"
-                    f" — {JUMP_HE}")
+                    f" — {JUMP_HE}", round_id=session_id)
         return got
     except Exception:             # noqa: BLE001 — הלמידה אינה מפילה את סיום השידור
         log.exception("net loss assessment of %s failed", session_id)
@@ -137,7 +138,6 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
     """שורה במסך הבריאות לכל כרטיס הפצה — לפי הגל האחרון שנמדד עליו.
     ‏`warn` = קפץ; ‏`ok` = בתוך הבסיס; ‏`off` = "לא נבדק" (אין בסיס עדיין).
     בלי אף גל שנמדד — אין שורה. כשל בשאילתה — שורה `off` שאומרת זאת."""
-    from server.system.health import check                # noqa: PLC0415 — health מייבא אותנו
     try:
         rows = conn.execute(
             "SELECT session_id, decision, stream, drops FROM wave_rates"

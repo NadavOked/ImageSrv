@@ -139,10 +139,16 @@ function reconnecting(expired = false) {
   }
 }
 
+// CodeQL #293/#330: the host typed on the form becomes a link only when it is a host name or an IPv4
+// address (letters, digits, "-" and "."). Anything else falls back to the page's own origin.
+function isValidHost(host) {
+  return typeof host === "string" && /^[A-Za-z0-9.-]{1,253}$/.test(host);
+}
+
 function consoleGuess() {
   const current = config();
   const host = current.mode === "static" && current.address ? current.address : current.hostname;
-  return lastProgress.console_url || (host ? `https://${host}:8081` : location.origin);
+  return lastProgress.console_url || (isValidHost(host) ? `https://${host}:8081` : location.origin);
 }
 
 function renderProgress(progressData) {

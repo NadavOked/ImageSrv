@@ -74,7 +74,7 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
                  "sessions_closed": [], "transfers_failed": []}
 
     for row in conn.execute(
-        "SELECT id, image_id, name, created_by FROM tasks"
+        "SELECT id, mac, image_id, name, created_by FROM tasks"
         " WHERE type = 'capture' AND state = 'running'"
     ).fetchall():
         landed = (root / row["image_id"] / "manifest.json").is_file()
@@ -101,10 +101,10 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
             out["tasks_done"].append(row["id"])
             journal(conn, "capture_done",
                     f'{row["image_id"]} "{row["name"]}" (reconciled on start)',
-                    row["created_by"])
+                    row["created_by"], machine=row["mac"])
         else:
             out["tasks_failed"].append(row["id"])
-            journal(conn, "capture_failed", f'{row["id"]} {RESTARTED_TASK}')
+            journal(conn, "capture_failed", f'{row["id"]} {RESTARTED_TASK}', machine=row["mac"])
 
     # ‏#1470: קליטה `verifying` — האימות רץ ברקע בתהליך שמת. **לעולם לא
     # מכניסים בלי אימות:** אימג' שכבר בספרייה עבר אותו (ה-`rename` קורה רק
@@ -112,7 +112,7 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
     # מחדש מההתחלה** (‏`tasks_reverify`, ‏`create_runtime` מפעיל); בלי שניהם
     # אין מה לאמת → ‏`failed` בשם.
     for row in conn.execute(
-        "SELECT id, image_id, name, created_by FROM tasks"
+        "SELECT id, mac, image_id, name, created_by FROM tasks"
         " WHERE type = 'capture' AND state = 'verifying'"
     ).fetchall():
         landed = (root / row["image_id"] / "manifest.json").is_file()
@@ -120,7 +120,8 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
         if staged and not landed:
             out["tasks_reverify"].append(row["id"])
             journal(conn, "capture_verifying",
-                    f'{row["id"]} {row["image_id"]} — the server restarted; verifying again from the start')
+                    f'{row["id"]} {row["image_id"]} — the server restarted; verifying again from the start',
+                    machine=row["mac"])
             continue
         with _write_lock, writing(conn):
             if landed:
@@ -143,10 +144,10 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
             out["tasks_done"].append(row["id"])
             journal(conn, "capture_done",
                     f'{row["image_id"]} "{row["name"]}" (verified before the restart; reconciled on start)',
-                    row["created_by"])
+                    row["created_by"], machine=row["mac"])
         else:
             out["tasks_failed"].append(row["id"])
-            journal(conn, "capture_failed", f'{row["id"]} {RESTARTED_VERIFY}')
+            journal(conn, "capture_failed", f'{row["id"]} {RESTARTED_VERIFY}', machine=row["mac"])
 
     # ‏#2373: העברה בין אתרים רצה בתהליכון של התהליך שמת (‏`start_transfer` /
     # ‏`start_pull`), ואחרי עלייה אין תהליכון לאף שורה. ‏`failed` בשם, עם
@@ -203,5 +204,5 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
             continue
         out["sessions_closed"].append(row["id"])
         journal(conn, "session_orphaned",
-                f'{row["id"]} {RESTARTED_SESSION}; failed={failed}')
+                f'{row["id"]} {RESTARTED_SESSION}; failed={failed}', round_id=row["id"])
     return out

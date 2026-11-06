@@ -270,12 +270,13 @@ class SessionStore:
             # אחרי ה-commit, ובאותו נוסח של `close`: הסגירה נרשמת ביומן
             # ומנוע השידור מקבל את ההודעה. ‏`replaces` הוא מולטיקאסט
             # בהגדרה, ולכן אין כאן את התנאי של `close`.
-            journal(self.conn, "session_close", replaces, opened_by)
+            journal(self.conn, "session_close", replaces, opened_by, round_id=replaces)
             self.on_closed(replaces)
         readbackhash.kick(image_id)   # #1864: a round's image goes to the head of the read-back digest queue
         if kind == UNICAST:
             journal(self.conn, "pull_open",
-                    f"{session_id} {group_id} {image_id} mac={roster[0]}", opened_by)
+                    f"{session_id} {group_id} {image_id} mac={roster[0]}", opened_by,
+                    machine=roster[0], round_id=session_id)
             return session_id
         journal(self.conn, "session_open",
                 f"{session_id} {group_id} {image_id} prefix={prefix}"
@@ -286,7 +287,7 @@ class SessionStore:
                 # נראה כמו החלטה שמישהו קיבל).
                 + (f" expand={expand_partition}"
                    if expand_partition and expand_partition != "auto" else ""),
-                opened_by)
+                opened_by, round_id=session_id)
         # ההערה נשלחת בפתיחה ולא בהתחלה: המחשבים צריכים לעלות ולהצטרף
         # לפני שהשידור מתחיל, לא אחריו. משיכה בודדת מעירה רק את עצמה,
         # והיא כבר ערה — היא זו שביקשה.
@@ -374,7 +375,7 @@ class SessionStore:
         ):
             return False
         self.conn.commit()
-        journal(self.conn, event, session_id, user)
+        journal(self.conn, event, session_id, user, round_id=session_id)
         # רק שידור מודיע למנוע. ‏`SenderEngine.stop` מתעלם ממזהה הסבב
         # שהוא מקבל, ולכן סגירת משיכת יוניקאסט הייתה הורגת את השידור
         # של הכיתה — סבב שאין לו שום קשר אליה.
@@ -434,7 +435,7 @@ class SessionStore:
         if not changed:
             raise SessionError(f"הסבב אינו במצב {from_state}")
         self.conn.commit()
-        journal(self.conn, event, session_id, user)
+        journal(self.conn, event, session_id, user, round_id=session_id)
         if to_state == "running":
             row = self.conn.execute(
                 "SELECT id, image_id, kind FROM sessions WHERE id = ?", (session_id,)

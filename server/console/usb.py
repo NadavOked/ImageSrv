@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import threading
 from pathlib import Path
@@ -33,6 +34,7 @@ MANIFEST = "imagesrv-usb.json"
 _SHA_LINE = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9._+-]+\.img)\n?$")
 _HASHED: dict[tuple, str] = {}
 _HASH_LOCK = threading.Lock()
+log = logging.getLogger("imagesrv.console_usb")
 
 
 def _file_sha256(path: Path) -> str:
@@ -62,20 +64,24 @@ def usb_status(data_dir: Path) -> dict:
     try:
         m = _SHA_LINE.match(sha.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError) as exc:
-        return {"available": False, "reason": f"קובץ ה-SHA256 לא נקרא: {exc}"}
+        # ‏#2510: טקסט החריגה (נתיב, strerror) ליומן השרת; ללקוח — משפט קבוע.
+        log.warning("usb clone: %s unreadable: %s", sha, exc)
+        return {"available": False, "reason": "קובץ ה-SHA256 לא נקרא — הפרטים ביומן השרת"}
     if not m:
         return {"available": False, "reason": "קובץ ה-SHA256 אינו בפורמט '<sha256>  <שם>.img'"}
     try:
         meta = json.loads(man.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        return {"available": False, "reason": f"המניפסט לא נקרא: {exc}"}
+        log.warning("usb clone: %s unreadable: %s", man, exc)
+        return {"available": False, "reason": "המניפסט לא נקרא — הפרטים ביומן השרת"}
     size = img.stat().st_size
     if not isinstance(meta, dict) or meta.get("size") != size or meta.get("sha256") != m.group(1):
         return {"available": False, "reason": "המניפסט אינו תואם לקובץ (גודל או sha256) — בנו מחדש"}
     try:
         real = _file_sha256(img)
     except OSError as exc:
-        return {"available": False, "reason": f"הקובץ לא נקרא: {exc}"}
+        log.warning("usb clone: %s unreadable: %s", img, exc)
+        return {"available": False, "reason": "הקובץ לא נקרא — הפרטים ביומן השרת"}
     if real != m.group(1):
         return {"available": False, "reason": "ה-sha256 של הקובץ אינו זה שנרשם בבנייה — הקובץ פגום, בנו מחדש"}
     return {"available": True, "file": m.group(2), "sha256": m.group(1), "size": size,

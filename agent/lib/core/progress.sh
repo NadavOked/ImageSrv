@@ -40,7 +40,7 @@ target_init() {
     echo "$2" > "$_t/total"
     rm -f "$_t/error" "$_t/crc_delta" "$_t/temp_after" "$_t/ata_log" "$_t/ata_log.json" "$_t/ident" "$_t/evidence_only" \
         "$_t/boot_ca_state" "$_t/boot_ca_reason" "$_t/write_check_state" "$_t/write_check_reason" "$_t/write_check_mbps" \
-        "$_t/write_started" "$_t/foreign" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok"   # #1805; #1883; #1907; #1808/#1898
+        "$_t/write_started" "$_t/foreign" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/plan_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok"   # #1805; #1883; #1907; #1808/#1898
     target_ident_keep "$1"; target_bind "$1"   # #1602: serial|port|ata while it is still in sysfs; #2434: the disk chosen (failmark.sh)
     # ‏#874: מאיפה dmesg נספר בכשל -- ריק (אין /proc/uptime) = מההתחלה.
     cut -d' ' -f1 "$SYSROOT/proc/uptime" > "$_t/since" 2>/dev/null
@@ -166,7 +166,7 @@ build_progress() {
             "$_dev" "$(target_bytes "$_dev")" "$_total" "$_tstate")
         # ‏#435: רק בקליטה (task id). המכנה בציר הבלוקים, לצד bytes_* הדחוסים.
         [ -n "${3:-}" ] && _entry="$_entry$(_source_progress_json "$_dev")$(cd_json 2>/dev/null)"
-        [ -f "$_d/error" ] && _entry="$_entry,\"error\":\"$(json_escape "$(cat "$_d/error")")\""
+        [ -f "$_d/error" ] && _entry="$_entry,\"error\":\"$(json_escape "$(cat "$_d/error")")\""; [ "$(cat "$_d/plan_why" 2>/dev/null)" != windows_no_partition_guid ] || _entry="$_entry,\"plan_why\":\"windows_no_partition_guid\""   # #1212: a fixed code beside the operator's words
         [ -f "$_d/crc_delta" ] && _entry="$_entry,\"crc_delta\":$(cat "$_d/crc_delta")"   # ‏#872: רק כשנמדד; חסר = לא נקרא, לא 0
         case "$(cat "$_d/readback" 2>/dev/null)" in verified|sampled|unverified) _entry="$_entry,\"readback\":\"$(cat "$_d/readback")\",\"readback_reason\":\"$(json_escape "$(cat "$_d/readback_reason" 2>/dev/null)")\""; if [ "$(cat "$_d/readback_why" 2>/dev/null)" = list_not_fetched ]; then _entry="$_entry,\"readback_why\":\"list_not_fetched\""; fi ;; esac   # #1805: absent = not read back (yet); #1907
         case "$(cat "$_d/temp_after" 2>/dev/null)" in ''|*[!0-9]*) ;; *) _entry="$_entry,\"temp_c\":$(cat "$_d/temp_after")" ;; esac   # #1859: after the write

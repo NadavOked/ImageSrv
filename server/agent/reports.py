@@ -136,23 +136,27 @@ def _well_formed_linux(value: object) -> dict | None:
 
 
 def _journal_linux(conn: sqlite3.Connection, outcome: dict | None, where: str,
-                   named: str = "") -> None:
+                   named: str = "", *, machine: str | None = None,
+                   round_id: str | None = None) -> None:
     """‏#1331: יעד לינוקס שה-initramfs שלו לא אומת — שורת יומן, פעם אחת, עם
     המעבר הטרמינלי. ‏`generic` ו-`skipped` אינם נרשמים."""
     linux = outcome.get("linux") if outcome else None
     if linux and linux["state"] in ("hostonly", "unsupported", "failed"):
         journal(conn, "linux_initramfs_warning",
-                f"{where} — {linux['state']}: {linux.get('error', '?')}{named}")
+                f"{where} — {linux['state']}: {linux.get('error', '?')}{named}",
+                machine=machine, round_id=round_id)
 
 
 def _journal_boot(conn: sqlite3.Connection, outcome: dict | None, where: str,
-                  named: str = "") -> None:
+                  named: str = "", *, machine: str | None = None,
+                  round_id: str | None = None) -> None:
     """‏#1331: דרייבר אחסון שלא הוגדר לעלייה — שורת יומן, פעם אחת, עם
     המעבר הטרמינלי. ‏`enabled`/`already` אינם נרשמים: אין בהם מה לעשות."""
     boot = outcome.get("boot") if outcome else None
     if boot and boot["state"] == "failed":
         journal(conn, "boot_storage_failed",
-                f"{where} — {boot.get('service', '?')}: {boot.get('error', '?')}{named}")
+                f"{where} — {boot.get('service', '?')}: {boot.get('error', '?')}{named}",
+                machine=machine, round_id=round_id)
 
 #: ‏`lost` — השרת קבע שחבר לא דיווח כלל מעל הספָּף. ‏**לא** `done` (אין
 #: ראיה שכתב) ו**לא** `failed` (הוא מעולם לא דיווח כישלון): פשוט לא ידוע
@@ -216,7 +220,8 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     session = conn.execute(
         "SELECT state, failed_reason FROM sessions WHERE id = ?", (session_id,)).fetchone()
     if session is None or session["state"] not in ("open", "running"):
-        journal(conn, "report_on_closed_session", f"{mac} for {session_id}{sent_as}")
+        journal(conn, "report_on_closed_session", f"{mac} for {session_id}{sent_as}",
+                machine=mac, round_id=session_id)
         closed = {"ok": False, "error": "this session is no longer open", "code": "not_open"}
         # ‏#1928 (S4): סבב שנכשל אומר למכונה **למה** — "קובץ מחיצה חסר באימג'"
         # ולא רק "השרת סגר את הסבב", כדי שהמפעיל לא ינסה שוב ושוב.
@@ -234,7 +239,8 @@ def ingest(conn: sqlite3.Connection, payload: dict,
         # מדווח שאינו חבר — לא מפוצצים, אבל גם לא סופרים אותו בשקט.
         # ‏`sent_as` נכנס כדי שהיומן יאבחן ולא יסתיר: הצורה הקנונית היא
         # מה שמחפשים בטבלה, והצורה שנשלחה היא מה שמסביר לקוח חריג.
-        journal(conn, "report_from_nonmember", f"{mac} for {session_id}{sent_as}")
+        journal(conn, "report_from_nonmember", f"{mac} for {session_id}{sent_as}",
+                machine=mac, round_id=session_id)
         return {"ok": False, "error": "not a member of this session", "code": "not_member"}
 
     # ‏#771: מצב טרמינלי הוא בלתי-משתנה. חבר שכבר `done`/`failed`/`partial`
@@ -283,17 +289,19 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     conn.commit()
 
     if state != previous and state in TERMINAL:
-        journal(conn, f"client_{state}", f"{mac} in {session_id}" + (f" — {errors}" if errors else ""))
+        target = {"machine": mac, "round_id": session_id}   # ‏#1296
+        journal(conn, f"client_{state}", f"{mac} in {session_id}" + (f" — {errors}" if errors else ""),
+                **target)
         # ‏#720: "הושלם, דרייברים לא הונחו" הוא מצב שהמפעיל צריך לראות ביומן,
         # לא רק בכרטיס — פעם אחת, עם המעבר הטרמינלי.
         if drivers and drivers["state"] == "failed":
             journal(conn, "drivers_failed",
-                    f"{mac} in {session_id} — {drivers.get('error', '?')}")
+                    f"{mac} in {session_id} — {drivers.get('error', '?')}", **target)
         elif drivers and drivers["state"] == "staged":
             journal(conn, "drivers_staged",
-                    f"{mac} in {session_id} — {', '.join(drivers['packages'])}")
-        _journal_boot(conn, drivers, f"{mac} in {session_id}")
-        _journal_linux(conn, drivers, f"{mac} in {session_id}")
+                    f"{mac} in {session_id} — {', '.join(drivers['packages'])}", **target)
+        _journal_boot(conn, drivers, f"{mac} in {session_id}", **target)
+        _journal_linux(conn, drivers, f"{mac} in {session_id}", **target)
         cloner_cpu.note_final(conn, mac, session_id, cpu)   # ‏#1885: throttle שעלה — ביומן
         # ‏#1883: ציר הזמן של כל מגירה — פעם אחת, במעבר הטרמינלי של המכונה.
         for t in targets:
@@ -309,18 +317,19 @@ def ingest(conn: sqlite3.Connection, payload: dict,
                                      or "linux" in outcome) else "")
             if outcome and outcome["state"] == "failed":
                 journal(conn, "drivers_failed", f"{mac} {t.get('dev', '?')} in {session_id}"
-                        f" — {outcome.get('error', '?')}{named}")
+                        f" — {outcome.get('error', '?')}{named}", **target)
             elif outcome and outcome["state"] == "staged":
                 journal(conn, "drivers_staged", f"{mac} {t.get('dev', '?')} in {session_id}"
-                        f" — {', '.join(outcome['packages'])}{named}")
-            _journal_boot(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named)
-            _journal_linux(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named)
+                        f" — {', '.join(outcome['packages'])}{named}", **target)
+            _journal_boot(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named, **target)
+            _journal_linux(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named, **target)
         # ‏#1907 (נדב 22/10): מגירה שהושלמה ולא אומתה כי רשימת הבדיקה לא הורדה — ביומן, בשמה.
         for t in targets:
             if (isinstance(t, dict) and t.get("state") == "done" and t.get("readback") == "unverified"
                     and t.get("readback_why") == "list_not_fetched"):
                 journal(conn, "readback_list_not_fetched", f"{mac} {t.get('dev', '?')} in {session_id}"
-                        + slot_names.journal_suffix(slot_names.label(conn, mac, dev=t.get("dev"))))
+                        + slot_names.journal_suffix(slot_names.label(conn, mac, dev=t.get("dev"))),
+                        **target)
     # ‏#874: יעד שנכשל בכתיבה נכנס לזיכרון הכשלים (סידורי + חריץ + שורות
     # ה-ATA). פעם אחת ליעד — הדיווח חוזר כל 2 שניות, ו-`record` מתעלם מכפול.
     for t in targets:
@@ -538,7 +547,7 @@ def _ingest_task(conn: sqlite3.Connection, task_id: str, mac: str,
         "SELECT state, type FROM tasks WHERE id = ? AND mac = ?", (task_id, mac)
     ).fetchone()
     if row is None:
-        journal(conn, "report_from_nonmember", f"{mac} for {task_id}{sent_as}")
+        journal(conn, "report_from_nonmember", f"{mac} for {task_id}{sent_as}", machine=mac)
         return {"ok": False, "error": "not this machine's task", "code": "not_member"}
     # ‏#855: משימה **פתוחה** משתנה רק בידי מי שמחזיק את האסימון שלה —
     # אותו אסימון שההעלאה דורשת (`capture.task_for`). עד כאן `task_id`
@@ -547,7 +556,8 @@ def _ingest_task(conn: sqlite3.Connection, task_id: str, mac: str,
     # כמו היום, גם בלי אסימון — זה מה ש-`report_final` של הסוכן מקבל
     # אחרי שהמניפסט סגר את המשימה (#127), ואסור שייהפך ל-403.
     if row["state"] in OPEN_STATES and claim_task(conn, task_id, token) is None:
-        journal(conn, "task_token_refused", f"{task_id} progress from {mac}{sent_as}")
+        journal(conn, "task_token_refused", f"{task_id} progress from {mac}{sent_as}",
+                machine=mac)
         return {"ok": False, "error": "this is not your task", "code": "bad_token"}
 
     known_stage = stage if isinstance(stage, str) and stage in CAPTURE_STAGES else None
@@ -587,15 +597,16 @@ def _ingest_task(conn: sqlite3.Connection, task_id: str, mac: str,
         (new_state, written, total, errors or None, json.dumps(targets),
          now, now, known_stage, known_stage, now, known_stage, task_id),
     ):
-        journal(conn, "report_on_closed_task", f"{mac} for {task_id}{sent_as}")
+        journal(conn, "report_on_closed_task", f"{mac} for {task_id}{sent_as}", machine=mac)
         return {"ok": False, "error": "the task is no longer open",
                 "code": "not_open"}
     conn.commit()
     capture_detail.record(task_id, targets, written)   # ‏#1505: דגימה לקצב ול-ETA
     if state == "failed" and row["state"] != "failed":
-        journal(conn, "capture_failed", f"{task_id} {errors or 'agent reported failure'}")
+        journal(conn, "capture_failed", f"{task_id} {errors or 'agent reported failure'}",
+                machine=mac)
     if new_state == "done":
-        journal(conn, "direct_done", task_id)
+        journal(conn, "direct_done", task_id, machine=mac)
     return {"ok": True}
 
 

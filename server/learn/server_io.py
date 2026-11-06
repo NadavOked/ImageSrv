@@ -31,6 +31,8 @@ import time
 from pathlib import Path
 
 from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.core.logtext import one_line
+from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.server_io")
 
@@ -50,7 +52,7 @@ def _device_of(root: str | Path, proc: Path) -> str | None:
             if len(f) >= 3 and f[0] == str(major) and f[1] == str(minor):
                 return f[2]
     except (OSError, AttributeError, ValueError):
-        pass
+        pass  # לא נקרא — החזרה None = "לא ידוע", לא "אפס"
     return None
 
 
@@ -65,7 +67,7 @@ def _diskstats(proc: Path, device: str | None) -> dict:
                 out = {"read_sectors": int(f[5]), "write_sectors": int(f[9]), "io_ms": int(f[12])}
                 break
     except (OSError, ValueError):
-        pass
+        pass  # לא נקרא — out נשאר ריק = "לא ידוע", לא "אפס"
     return out
 
 
@@ -78,7 +80,7 @@ def _psi(proc: Path) -> dict:
             if kind in ("some", "full") and total is not None:
                 out[f"psi_{kind}_us"] = int(total)
     except (OSError, ValueError):
-        pass
+        pass  # לא נקרא — השדות חסרים = "לא ידוע", לא "אפס"
     return out
 
 
@@ -97,7 +99,7 @@ def begin(conn: sqlite3.Connection, kind: str, ref: str, root: str | Path,
             conn.execute("INSERT OR REPLACE INTO server_io (kind, ref, started_at, start_json)"
                          " VALUES (?,?,?,?)", (kind, ref, now_iso(), json.dumps(snap)))
     except Exception:             # noqa: BLE001 — מדידה אינה מפילה גל
-        log.exception("server I/O snapshot of %s %s failed", kind, ref)
+        log.exception("server I/O snapshot of %s %s failed", one_line(kind), one_line(ref))
 
 
 def _delta(a: dict, b: dict, key: str) -> int | None:
@@ -147,10 +149,11 @@ def end(conn: sqlite3.Connection, kind: str, ref: str, root: str | Path,
                          " WHERE kind = ? AND ref = ?",
                          (now_iso(), json.dumps(result), result["basis"], kind, ref))
         if result["basis"] == "server_disk":
-            journal(conn, "server_disk_slow", f"{kind} {ref} {_numbers(result)}")
+            journal(conn, "server_disk_slow", f"{kind} {ref} {_numbers(result)}",
+                    round_id=ref if kind == "wave" else None)
         return result
     except Exception:             # noqa: BLE001
-        log.exception("server I/O result of %s %s failed", kind, ref)
+        log.exception("server I/O result of %s %s failed", one_line(kind), one_line(ref))
         return None
 
 
@@ -175,7 +178,6 @@ def _numbers(r: dict) -> str:
 
 def health_checks(conn: sqlite3.Connection) -> list[dict]:
     """שורה אחת — לפי הגל האחרון שנמדד. בלי גל שנמדד — אין שורה."""
-    from server.system.health import check                # noqa: PLC0415 — health מייבא אותנו
     try:
         row = conn.execute("SELECT ref, result_json FROM server_io WHERE kind = 'wave'"
                            " AND result_json IS NOT NULL ORDER BY ended_at DESC, rowid DESC"

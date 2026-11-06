@@ -128,7 +128,7 @@ static void parse_nic(InstallState *s,char *v){
 static void preselect_only_disk(InstallState *s){int only=-1,n=0;for(int i=0;i<s->ndisks;i++)if(!s->disks[i].iso){only=i;n++;}s->disk=n==1?only:-1;s->disk_ack=0;}
 static void append_output(InstallState *s,const char *line){size_t have=strlen(s->output),add=strlen(line);if(have+add+2>=sizeof s->output)return;memcpy(s->output+have,line,add);s->output[have+add]='\n';s->output[have+add+1]=0;}
 static void parse_lines(InstallState *s,char *text,const char *action){
-    if(!strcmp(action,"inventory")||!strcmp(action,"interfaces")){s->ndisks=s->nnics=0;s->disk=s->nic=-1;s->existing_disk=-1;s->virt=INSTALL_VIRT_UNKNOWN;s->raid=RAID_NONE;}
+    if(!strcmp(action,"inventory")||!strcmp(action,"interfaces")){s->ndisks=s->nnics=0;s->disk=s->nic=-1;s->existing_disk=-1;s->virt=INSTALL_VIRT_UNKNOWN;s->raid=RAID_NONE;s->lab=INSTALL_LAB_UNCHECKED;}
     if(!strcmp(action,"validate")||!strcmp(action,"apply"))memset(s->field_error,0,sizeof s->field_error);
     if(!strcmp(action,"progress")){s->output[0]=0;s->title[0]=0;s->log[0]=0;}
     char *save=NULL;for(char *line=strtok_r(text,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){char *eq=strchr(line,'=');if(!eq)continue;*eq++=0;
@@ -149,7 +149,8 @@ static void parse_lines(InstallState *s,char *text,const char *action){
         else if(!strcmp(line,"clock"))s->clock=!strcmp(eq,"synced")?INSTALL_CLOCK_SYNCED:!strcmp(eq,"unsynced")?INSTALL_CLOCK_UNSYNCED:INSTALL_CLOCK_UNCHECKED;   /* #2144: anything else is "not checked" */
         else if(!strcmp(line,"clock_server"))snprintf(s->clock_server,sizeof s->clock_server,"%s",eq);else if(!strcmp(line,"clock_offset_ms"))snprintf(s->clock_offset,sizeof s->clock_offset,"%s",eq);
         else if(!strcmp(line,"virt"))s->virt=!strcmp(eq,"metal")?INSTALL_VIRT_METAL:!strcmp(eq,"virtual")?INSTALL_VIRT_VIRTUAL:INSTALL_VIRT_UNKNOWN;   /* #1989 */
-        else if(!strcmp(line,"raid_default")){s->raid=RAID_NONE;install_raid_set(s,install_raid_from_level(eq));}}
+        else if(!strcmp(line,"raid_default")){s->raid=RAID_NONE;install_raid_set(s,install_raid_from_level(eq));}
+        else if(!strcmp(line,"lab_overlay"))s->lab=!strcmp(eq,"lab")?INSTALL_LAB_YES:!strcmp(eq,"clean")?INSTALL_LAB_CLEAN:INSTALL_LAB_UNCHECKED;}   /* #1412: anything else is "not checked" */
     if(!strcmp(action,"inventory"))preselect_only_disk(s);
 }
 
@@ -173,6 +174,7 @@ void install_demo(App *a,int view){InstallState *s=&a->install;memset(s,0,sizeof
     snprintf(s->primary_name,sizeof s->primary_name,"imagesrv-ta");snprintf(s->primary_version,sizeof s->primary_version,"v0.52.1");snprintf(s->primary_fingerprint,sizeof s->primary_fingerprint,"3fa3221ea017f9ce3493fe0fe0c180aaa5ea6293a2a399b0f14977280a074915");snprintf(s->phase,sizeof s->phase,"packages");s->progress_pct=52;
     snprintf(s->title,sizeof s->title,"Installing ImageSrv packages");snprintf(s->log,sizeof s->log,"Setting up imagesrv-server");if(view==INSTALL_FAILED)snprintf(s->error,sizeof s->error,"packages-failed: apt returned exit 100");
     snprintf(s->console_url,sizeof s->console_url,"https://10.44.10.37:8081");snprintf(s->user,sizeof s->user,"admin");snprintf(s->output,sizeof s->output,"[10:43:02] bootstrap complete\n[10:43:08] unpacking packages\n[10:43:11] apt returned exit 100\n");s->clock=INSTALL_CLOCK_SYNCED;snprintf(s->clock_server,sizeof s->clock_server,"10.44.0.250");snprintf(s->clock_offset,sizeof s->clock_offset,"3");snprintf(s->ntp_servers,sizeof s->ntp_servers,"10.44.0.250");   /* #2144 */
+    s->lab=INSTALL_LAB_CLEAN;   /* #1412: the mockup's media is a clean ISO; the lab cards set their own */
     a->focus=HIT_INSTALL_ADMIN_USER;if(view==INSTALL_DONE)arm_reboot(s,monotonic_s());}
 
 static int finish_install(App *a,InstallBridge *b){a->install.error[0]=0;if(call(a,b,"finish","{}")){a->install.view=INSTALL_FAILED;return -1;}a->install.view=INSTALL_DONE;arm_reboot(&a->install,monotonic_s());return 0;}

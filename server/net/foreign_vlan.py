@@ -28,6 +28,7 @@ from datetime import datetime, timedelta
 
 from server.agent.loops import SILENCE_SECONDS
 from server.db import _write_lock, journal, now_iso, writing
+from server.system.health_rows import check, last_seen as _last_seen
 
 log = logging.getLogger("imagesrv.foreign_vlan")
 
@@ -120,13 +121,13 @@ def _count(conn: sqlite3.Connection, mac: str, address: str,
     if row is None or row["last_at"] != ts:
         # codeql[py/log-injection] false positive: ה-MAC עבר normalize_mac (hex ונקודתיים בלבד) (#291)
         log.error("off-vlan contact from %s was not recorded", mac)
-        journal(conn, "off_vlan_unverified", mac)
+        journal(conn, "off_vlan_unverified", mac, machine=mac)
         return None
     if row["hits"] == 1:
         # פעם אחת לחלון, ולא לכל hello. היומן הוא הארכיון: הוא מה
         # שמאפשר לשאול "המחשב הזה עשה את זה גם שלשום" הרבה אחרי
         # שהשורה ירדה מהמסך.
-        journal(conn, "off_vlan_contact", f"{mac} from {address}")
+        journal(conn, "off_vlan_contact", f"{mac} from {address}", machine=mac)
     return int(row["hits"])
 
 
@@ -184,7 +185,6 @@ def vlan_checks(contacts: list[dict] | None, deploy_vlan: str) -> list[dict]:
     אליו. `check` ו-`_last_seen` נשארים ב-health.py כי הוא כבר מייבא
     את המודול הזה; ייבוא בכיוון ההפוך בראש הקובץ היה יוצר מעגל.
     """
-    from server.system.health import check, _last_seen  # noqa: PLC0415 — נמנע ממעגל ייבוא
     label = "מחשבים שפונים מרשת אחרת"
     if contacts is None:
         return [check("off_vlan", label, "bad",

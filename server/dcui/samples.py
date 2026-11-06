@@ -140,6 +140,9 @@ def runtimes() -> dict[str, Runtime]:
                                   advert="203.0.113.40:8443"),
         "16-clock-unsynced": _runtime(unsynced, four_minutes),
         "16b-clock-unchecked": _runtime(replace(unsynced, clock="unchecked"), four_minutes),
+        # #1412: installed from a --lab ISO, and from one whose manifest did not answer
+        "17-lab-iso": _runtime(replace(PRIMARY, lab_iso="lab"), PRIMARY_EXTRAS),
+        "17b-lab-iso-unchecked": _runtime(replace(PRIMARY, lab_iso="unchecked"), PRIMARY_EXTRAS),
     }
 
 

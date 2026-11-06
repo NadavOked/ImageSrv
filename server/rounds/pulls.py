@@ -97,7 +97,7 @@ def _resume_or_refuse(conn: sqlite3.Connection, store: SessionStore,
                       row: sqlite3.Row, mac: str, image_id: str) -> str:
     if not _is_the_same_request(store, row, image_id):
         raise SessionError(TAKEN[UNICAST])
-    journal(conn, "pull_retry", f"{mac} — {row['id']}")
+    journal(conn, "pull_retry", f"{mac} — {row['id']}", machine=mac, round_id=row["id"])
     return row["id"]
 
 
@@ -190,7 +190,8 @@ def sweep(store: SessionStore) -> None:
             continue
         reason = _failure(row, members, now)
         if reason is not None and store.fail(row["id"], reason):
-            journal(store.conn, "pull_failed", f"{row['id']} — {reason}")
+            journal(store.conn, "pull_failed", f"{row['id']} — {reason}",
+                    machine=members[0]["mac"] if members else None, round_id=row["id"])
 
 
 def background_sweep(store: SessionStore) -> bool:
@@ -213,4 +214,4 @@ def background_sweep(store: SessionStore) -> bool:
 def journal_refusal(conn: sqlite3.Connection, mac: str, reason: str) -> None:
     """סירוב לפתוח משיכה נרשם. תחנה שאינה מצליחה למשוך היא תקלה שמישהו
     יחפש בקונסולה, ולא אירוע שקורה בשקט."""
-    journal(conn, "pull_refused", f"{mac} — {reason}")
+    journal(conn, "pull_refused", f"{mac} — {reason}", machine=mac)

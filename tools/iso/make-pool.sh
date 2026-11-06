@@ -3,7 +3,7 @@
 # ImageSrv — ה-repo המקומי של ה-ISO (#1139): כל חבילה מ-packages.txt
 # **וכל התלויות שלה**, כקבצי .deb, ואינדקסי apt מעליהם.
 #
-#   sudo tools/iso/make-pool.sh --out /root/ic-iso-tmp/repo
+#   sudo tools/iso/make-pool.sh --out /root/ic-iso-tmp/repo --netinst debian-13.7.0-amd64-netinst.iso
 #   sudo tools/iso/make-pool.sh --index-only <עץ-ISO>
 #   sudo tools/iso/make-pool.sh --security --out /root/ic-security-pool
 #
@@ -29,6 +29,19 @@
 # יותר ממה שהמותקן צריך (הבסיס מגיע מה-netinst עצמו) ואינו מזיק: אותו
 # קובץ באותה גרסה מחליף את עצמו.
 #
+# ‏הבסיס של debootstrap (#2520): המנוע מתקין קודם את מה ש-debootstrap בוחר מה-ISO —
+# ‏Priority required + important — ורק אחר כך את packages.txt. כשה-pool הביא גרסה
+# חדשה של חבילה מהבסיס (apt 3.0.4, ‏trixie-security 04/11) ולא את אחותה שתלויה בה
+# בדיוק (apt-utils: ‏`apt (= 3.0.3)`, רק ב-netinst), שתיהן הותקנו יחד וההתקנה נעצרה
+# ב-45%. לכן גם הבסיס נכנס לסגירה — באותו snapshot כמו השאר — בהורדה **נפרדת**
+# (שתי סגירות עקביות, בלי שקונפליקט בין שתי הרשימות יפיל את שתיהן), ו-build-iso.sh
+# עוצר על כל תלות-גרסה שאינה מתקיימת באינדקס הממוזג (tools/iso/check-pool.py).
+# ‏--netinst (אותו ISO שעובר ל-build-iso.sh): הבסיס לבדו אינו סוגר את הפער. ה-netinst
+# נושא חבילות שאינן בבסיס ולא ברשימה, ותלויות בדיוק באחות שהעלינו — vim 2:9.1.1230-2
+# ‏(`vim-common (= 2:9.1.1230-2)`) מול vim-common ‏+deb13u1 של הבסיס (בניית המעבדה 06/11).
+# לכן אחרי ההורדה מריצים את check-pool.py על ה-netinst + מה שהורד, ומורידים את
+# הגרסה החדשה של כל חבילה שנמצאה תלויה בגרסה שאינה עוד — עד שהאינדקס עקבי.
+#
 # ‏Recommends נכללים ב-pool — אבל **אף התקנה אינה מתקינה אותם** (‏#1987:
 # ‏`--no-install-recommends` בכל מקום, נבדק ב-tests/test_no_install_recommends_1987.py).
 # ה-pool נשאר על-קבוצה בכוונה: שרת רגיל שהותקן לפני #1987 עם Recommends ממשיך
@@ -52,6 +65,7 @@ PACKAGES_FILE="$SCRIPT_DIR/packages.txt"
 OUT=""
 INDEX_ONLY=""
 SECURITY=""
+NETINST=""
 SUITE="trixie"
 ARCH="amd64"
 
@@ -59,12 +73,14 @@ usage() {
     cat <<'EOF'
 ImageSrv — בניית ה-repo המקומי של ה-ISO.
 
-  sudo tools/iso/make-pool.sh --out DIR [--packages FILE]
+  sudo tools/iso/make-pool.sh --out DIR [--packages FILE] [--netinst ISO]
   sudo tools/iso/make-pool.sh --index-only DIR
   sudo tools/iso/make-pool.sh --security --out DIR
 
   --out DIR         לאן להוריד (pool/ + dists/ נכתבים מתחתיו)
   --packages FILE   ברירת מחדל: tools/iso/packages.txt
+  --netinst ISO     ה-netinst שה-ISO נבנה ממנו: גם החבילות שלו שתלויות בדיוק בגרסה
+                    שהעלינו מורדות בגרסתן החדשה (#2520). בלעדיו build-iso.sh עלול להיעצר
   --index-only DIR  רק dists/ מעל DIR/pool קיים (בלי apt)
   --security        כל הסגירה (עם עדכוני trixie-security), כ-tar + security-pool.json (#1411, #1803)
 EOF
@@ -76,6 +92,7 @@ while [[ $# -gt 0 ]]; do
         --packages)   PACKAGES_FILE="${2:?}"; shift 2 ;;
         --index-only) INDEX_ONLY="${2:?}"; shift 2 ;;
         --security)   SECURITY=1; shift ;;
+        --netinst)    NETINST="${2:?}"; shift 2 ;;
         -h|--help)    usage; exit 0 ;;
         *) printf 'unknown option: %s  (try --help)\n' "$1" >&2; exit 2 ;;
     esac
@@ -197,6 +214,19 @@ if (( ${#missing[@]} )); then
     exit 1
 fi
 
+# ‏#2520: הבסיס של debootstrap — Priority required + important במקורות של המארח, אותה
+# הגדרה ש-debootstrap מפעיל על אינדקס ה-ISO. ראיה חיובית: apt ו-apt-utils בתוכו;
+# רשימה ריקה או בלעדיהם = הפענוח נשבר, לא "אין בסיס" (עיקרון 5).
+base_packages() {
+    apt-cache dumpavail | awk -F': ' '/^Package: /{p=$2} /^Priority: (required|important)$/{print p}' \
+        | LC_ALL=C sort -u
+}
+base_out=$(base_packages) || die "apt-cache dumpavail נכשל — הבסיס של debootstrap לא נקרא"
+mapfile -t BASE <<<"$base_out"
+grep -qx apt <<<"$base_out" && grep -qx apt-utils <<<"$base_out" \
+    || die "הבסיס של debootstrap (Priority required/important) לא כולל את apt ו-apt-utils — הפענוח נשבר (${#BASE[@]} שמות)"
+printf 'make-pool: %d חבילות בבסיס של debootstrap (required + important)\n' "${#BASE[@]}"
+
 DL="$OUT/download"
 install -d "$DL/partial" "$OUT/pool"
 EMPTY_STATUS="$OUT/.empty-status"
@@ -230,10 +260,15 @@ if [[ -n "$SECURITY" ]]; then
     sim=$(apt-get -s -o Dir::State::status="$EMPTY_STATUS" -o Debug::NoLocking=1 \
               -o APT::Install-Recommends=true install "${PKGS[@]}" 2>&1) \
         || { printf '%s\n' "$sim" | tail -n 5 >&2; die "apt-get -s על הסגירה המלאה נכשל"; }
+    # ‏#2520: גם הבסיס — שרת מותקן מחזיק את apt-utils, ועדכון של apt בלעדיה נכשל ב---no-remove.
+    sim_base=$(apt-get -s -o Dir::State::status="$EMPTY_STATUS" -o Debug::NoLocking=1 \
+              -o APT::Install-Recommends=true install "${BASE[@]}" 2>&1) \
+        || { printf '%s\n' "$sim_base" | tail -n 5 >&2; die "apt-get -s על הבסיס של debootstrap נכשל"; }
+    sim+=$'\n'"$sim_base"
     # ‏#1803: **כל** הסגירה, בגרסת המועמד (זו של trixie-security כשיש) — כך כפתור העדכון
     # מתקין גם חבילה שנוספה ל-packages.txt אחרי שהשרת הותקן (ifenslave/#1264).
-    mapfile -t ALL < <(sed -nE 's/^Inst ([^ ]+) (\[[^]]*\] )?\(([^ ]+) .*$/\1=\3/p' <<<"$sim")
-    mapfile -t SEC < <(sed -nE 's/^Inst ([^ ]+) (\[[^]]*\] )?\(([^ ]+) [^)]*-[Ss]ecurity[, ][^)]*\).*$/\1=\3/p' <<<"$sim")
+    mapfile -t ALL < <(sed -nE 's/^Inst ([^ ]+) (\[[^]]*\] )?\(([^ ]+) .*$/\1=\3/p' <<<"$sim" | LC_ALL=C sort -u)
+    mapfile -t SEC < <(sed -nE 's/^Inst ([^ ]+) (\[[^]]*\] )?\(([^ ]+) [^)]*-[Ss]ecurity[, ][^)]*\).*$/\1=\3/p' <<<"$sim" | LC_ALL=C sort -u)
     # אפס הוא כמעט בוודאות פענוח שנשבר, לא "אין עדכונים" (עיקרון 5).
     (( ${#SEC[@]} )) || die "אף חבילה בסגירה אינה מ-trixie-security — הפענוח של apt-get -s נשבר, או שהמקור לא נקרא"
     declare -A IN_CLOSURE=()
@@ -283,6 +318,53 @@ apt-get -y --download-only \
     -o APT::Install-Recommends=true \
     install "${PKGS[@]}" \
     || die "apt-get --download-only נכשל"
+# ‏#2520: הבסיס של debootstrap, סגירה משלו לאותה תיקייה (אותו snapshot = אותן גרסאות).
+apt-get -y --download-only \
+    -o Dir::State::status="$EMPTY_STATUS" \
+    -o Dir::Cache::archives="$DL" \
+    -o Debug::NoLocking=1 \
+    -o APT::Install-Recommends=true \
+    install "${BASE[@]}" \
+    || die "apt-get --download-only של הבסיס של debootstrap נכשל"
+
+# ‏#2520: חבילות של ה-netinst שתלויות בדיוק בגרסה שהעלינו (vim מול vim-common). מה שנשאר
+# אחרי חמישה סבבים, או חבילה **שלנו** בפער, הוא בעיה שהורדה לא פותרת — נעצרים.
+if [[ -n "$NETINST" ]]; then
+    [[ -f "$NETINST" ]] || die "אין $NETINST"
+    NI="$OUT/.netinst-dists"
+    rm -rf "$NI"
+    xorriso -osirrox on -indev "$NETINST" -extract /dists "$NI" >/dev/null 2>&1 \
+        || die "xorriso לא חילץ את /dists מ-$NETINST"
+    mapfile -t NI_INDEX < <(find "$NI" -path '*/binary-amd64/Packages.gz' ! -path '*/debian-installer/*' | LC_ALL=C sort)
+    [[ " ${NI_INDEX[*]} " == *"/main/binary-amd64/Packages.gz "* ]] \
+        || die "אין main/binary-amd64/Packages.gz ב-$NETINST — זה לא netinst של דביאן amd64?"
+    for round in 1 2 3 4 5; do
+        ( cd "$OUT" && dpkg-scanpackages -m --arch "$ARCH" download /dev/null ) > "$OUT/.download-Packages" 2>/dev/null \
+            || die "dpkg-scanpackages נכשל על $DL"
+        rc=0
+        chk=$(python3 -I "$SCRIPT_DIR/check-pool.py" "${NI_INDEX[@]}" "$OUT/.download-Packages" 2>&1) || rc=$?
+        (( rc != 2 )) || die "check-pool.py לא בדק את ה-netinst מול ההורדה: $chk"
+        (( rc != 0 )) || break
+        mapfile -t LIFT < <(sed -nE 's/^check-pool: skew: ([^ ]+) .*$/\1/p' <<<"$chk" | LC_ALL=C sort -u)
+        (( ${#LIFT[@]} )) || die "check-pool.py החזיר פער בלי שורות skew: $chk"
+        for p in "${LIFT[@]}"; do
+            if compgen -G "$DL/${p}_*.deb" >/dev/null; then
+                printf '%s\n' "$chk" >&2; die "$p מההורדה שלנו עצמה בפער — הורדה נוספת לא תפתור"
+            fi
+        done
+        printf 'make-pool: סבב %d — חבילות ה-netinst שתלויות בגרסה שהעלינו: %s\n' "$round" "${LIFT[*]}"
+        apt-get -y --download-only \
+            -o Dir::State::status="$EMPTY_STATUS" \
+            -o Dir::Cache::archives="$DL" \
+            -o Debug::NoLocking=1 \
+            -o APT::Install-Recommends=true \
+            install "${LIFT[@]}" \
+            || die "apt-get --download-only של ${LIFT[*]} נכשל"
+    done
+    (( rc == 0 )) || { printf '%s\n' "$chk" >&2; die "ה-netinst וההורדה עדיין בפער אחרי חמישה סבבים"; }
+    printf 'make-pool: מול ה-netinst — %s\n' "${chk#check-pool: }"
+    rm -rf "$NI" "$OUT/.download-Packages"
+fi
 
 # שלב 2 — מיון לרכיבים.
 sort_into_pool

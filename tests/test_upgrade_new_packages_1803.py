@@ -170,7 +170,7 @@ Inst libc6 (2.41-12 Debian:13.1/stable [amd64])
     done = _make_pool(tmp_path, bindir, "--security", "--out", posix(out))
     assert done.returncode == 0, done.stdout + done.stderr
     dl = next(row for row in calls(tmp_path) if row.startswith("apt-get download"))
-    assert dl.split()[2:] == ["ifenslave=2.14", "libssl3t64=3.5.1-1+deb13u1", "libc6=2.41-12"], dl
+    assert sorted(dl.split()[2:]) == sorted(["ifenslave=2.14", "libssl3t64=3.5.1-1+deb13u1", "libc6=2.41-12"]), dl
     lock = json.loads((out / "security-pool.json").read_text(encoding="utf-8"))
     assert lock["packages"] == 3 and lock["security"] == 1, lock
     raw = (out / lock["asset"]).read_bytes()

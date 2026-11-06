@@ -70,7 +70,7 @@ def _acquire(data_dir: Path) -> Path:
             if time.time() - lock.stat().st_mtime > LOCK_STALE_S:
                 lock.unlink()
         except FileNotFoundError:
-            pass
+            pass  # אין קובץ נעילה — אין מה לבדוק אם התיישן
         fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             os.write(fd, str(os.getpid()).encode())
@@ -96,7 +96,7 @@ def _release(lock: Path) -> None:
     try:
         lock.unlink()
     except OSError:
-        pass
+        pass  # שחרור נעילה במאמץ; נעילה שנשארה מתיישנת לבדה (LOCK_STALE_S)
     _thread_lock.release()
 
 

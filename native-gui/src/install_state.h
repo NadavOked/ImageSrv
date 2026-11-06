@@ -19,6 +19,10 @@ enum {
 /* #2144: what the engine's clock check found (installer/lib/clock.sh) */
 enum { INSTALL_CLOCK_UNCHECKED = 0, INSTALL_CLOCK_SYNCED, INSTALL_CLOCK_UNSYNCED };
 
+/* #1412: the install medium's lab_overlay (imagesrv-iso.json, via the bridge's
+ * inventory). Zero is "not checked": a bridge that did not say is never clean. */
+enum { INSTALL_LAB_UNCHECKED = 0, INSTALL_LAB_CLEAN, INSTALL_LAB_YES };
+
 typedef struct {
     char name[32], model[80], mac[32], link[32], current[48], source[96];
     char address[48], netmask[48], gateway[48], dns[96];
@@ -43,6 +47,7 @@ typedef struct {
     int ntp_org;         /* #2144: 0 = automatic (Debian's pools), 1 = the organisation's server */
     char ntp_servers[256];
     int clock;           /* #2144: INSTALL_CLOCK_* -- unchecked until the bridge says otherwise */
+    int lab;             /* #1412: INSTALL_LAB_* -- the banner above every step unless CLEAN */
     char clock_server[256], clock_offset[24];
     int clock_minute;    /* the minute the time step last drew, to redraw on the next */
     char address[48], netmask[48], gateway[48], dns[96];

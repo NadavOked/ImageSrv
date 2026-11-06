@@ -1,5 +1,5 @@
 # ImageSrv -- one entry point for the commands that already exist (#2246).
-# A thin wrapper: every recipe is the command as CLAUDE.md, README.md or
+# A thin wrapper: every recipe is the command as README.md or
 # tools/iso/README.md writes it. `make help` (the default) lists the targets.
 # The pytest settings live nowhere in here -- see tests/conftest.py.
 
@@ -32,8 +32,8 @@ help:
 	@echo "  make usb          sudo tools/build_usb_clone.sh                 ROOT, DEBIAN 13 only"
 	@echo "                    USB_OUT=$(USB_OUT)  USB_ARGS='--publish DATA_DIR ...'"
 	@echo ""
-	@echo "PYTHON=$(PYTHON). On the lab host run the tests through tools/git/lab-run-tests.sh <issue>"
-	@echo "(CONTRIBUTING.md, hariza-bemaabada) -- not a bare make test."
+	@echo "PYTHON=$(PYTHON). Run the tests in a clean, disposable environment,"
+	@echo "not a bare make test on a shared workstation."
 
 test:
 	$(PYTHON) -m pytest tests -q

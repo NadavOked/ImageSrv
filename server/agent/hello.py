@@ -226,7 +226,7 @@ def class_deploy_enabled(conn: sqlite3.Connection) -> bool:
 def journal_unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
                     suffix: str = "") -> None:
     """שורת `unknown_mac`. ‏`api.py` מרסן אותה לפי MAC ב-hello (‏#2487)."""
-    journal(conn, "unknown_mac", f"{mac} from {client_ip or '?'}{suffix}")
+    journal(conn, "unknown_mac", f"{mac} from {client_ip or '?'}{suffix}", machine=mac)
 
 
 def _unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,

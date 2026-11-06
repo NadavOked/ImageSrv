@@ -71,7 +71,7 @@ def guard(conn: sqlite3.Connection, mac: str, answer: dict) -> dict:
         # לא הצלחנו לספור — וזה לא "נספר אחד". עיקרון 5: פעולה שלא
         # הצליחה לבדוק את עצמה נכשלת, והכיוון הבטוח הוא הדיסק המקומי.
         log.error("boot attempt for %s (%s) was not recorded", mac, context)
-        journal(conn, "boot_loop_unverified", f"{mac} {context}")
+        journal(conn, "boot_loop_unverified", f"{mac} {context}", machine=mac)
         return _exhausted(answer)
 
     if attempts <= ATTEMPT_LIMIT:
@@ -79,7 +79,7 @@ def guard(conn: sqlite3.Connection, mac: str, answer: dict) -> dict:
     if attempts == ATTEMPT_LIMIT + 1:
         # פעם אחת, ברגע המעבר: אחרי זה המכונה כבר עולה מהדיסק ואין
         # אירוע חדש לדווח עליו.
-        journal(conn, "boot_loop_local", f"{mac} {context} attempts={attempts}")
+        journal(conn, "boot_loop_local", f"{mac} {context} attempts={attempts}", machine=mac)
     log.warning("boot loop guard sends %s to the local disk (%s, attempt %d)",
                 mac, context, attempts)
     return _exhausted(answer)

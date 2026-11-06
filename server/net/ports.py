@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import signal
 import socket
@@ -53,8 +54,13 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.console import auth
-from server.net import dhcp
+from server.core.logtext import one_line
+from server.net import dhcp, dhcp_host
 from server.db import get_setting, journal, set_setting
+
+log = logging.getLogger("imagesrv.ports")
+#: ‏#2510: מה שהקונסולה מקבלת כשפתיחה/סגירה נכשלה בחריגה שאינה שלנו.
+TOGGLE_FAILED = "פתיחת הפורט או סגירתו נכשלה — הפרטים ביומן השרת"
 
 SETTING_PREFIX = "port:"
 
@@ -390,7 +396,9 @@ class Listeners:
             try:
                 self._threads[port_id] = start()
             except OSError as exc:
-                raise ListenerError(f"{port_id}: {exc}") from exc
+                # ‏#2510: ה-strerror ליומן השרת; ב-ListenerError — משפט שלנו.
+                log.warning("listener %s did not start: %s", one_line(port_id), exc)
+                raise ListenerError(f"{port_id}: המאזין לא עלה — הפרטים ביומן השרת") from exc
             self._wanted.add(port_id)
             return
         servers = [factory() for factory in self._factories[port_id]]
@@ -549,14 +557,14 @@ def tftp_switch(conn, installer_conf: str | None) -> dict:
     """
     if installer_conf is None:
         return {"toggle": "none", "enabled": None,
-                "off_means": (f"אין מתג: קובץ המתקין ({dhcp.INSTALLER_CONF}) לא נקרא, "
+                "off_means": (f"אין מתג: קובץ המתקין ({dhcp_host.INSTALLER_CONF}) לא נקרא, "
                               "ולכן לא ידוע אם enable-tftp עדיין יושב בו — "
                               "כיבוי מכאן היה יכול להיראות ככבוי בזמן ש-69 מאזין. "
                               f"כיבוי = {TFTP_OFF_MEANS}")}
     if dhcp.installer_serves_tftp(installer_conf):
         return {"toggle": "none", "enabled": None,
                 "off_means": (f"אין מתג: enable-tftp עדיין יושב בקובץ המתקין "
-                              f"({dhcp.INSTALLER_CONF}) ו-dnsmasq אינו יודע לבטלו "
+                              f"({dhcp_host.INSTALLER_CONF}) ו-dnsmasq אינו יודע לבטלו "
                               "מקובץ אחר. הריצו את המתקין מחדש (מגרסה זו הוא אינו "
                               "כותב את השורה, והשרת כותב אותה בקובץ שלו) — ואז "
                               f"המתג יעבוד. כיבוי = {TFTP_OFF_MEANS}")}
@@ -832,8 +840,11 @@ def create_ports_router(ctx, snapshot: Callable[[], list[dict]],
             try:
                 listeners.request(port_id, want)
                 applied = True
-            except (ListenerError, Exception) as exc:         # noqa: BLE001
+            except ListenerError as exc:
                 detail = str(exc)
+            except Exception as exc:                          # noqa: BLE001
+                log.warning("port %s toggle failed: %s", one_line(port_id), exc)
+                detail = TOGGLE_FAILED
         row = row_of(port_id)
         verified = row["listening"] is want
         if not (applied and verified):

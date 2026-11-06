@@ -3116,7 +3116,6 @@ function roomNewWindow(kids) {
   const builders = (MACHINES || []).filter((m) => machineRole(m) === "build" && Array.isArray(m.disks) && m.disks.length);
   const builder = builders.find((m) => m.mac === f.builder) || builders[0] || null;
   const direct = f.src === "build_disk";
-  const nsel = roomSelected(kids).length;
   const dflt = roomTargetDefault(kids), target = f.target !== "" ? f.target : String(dflt.n);
   const source = `<div class="n-seg rn-src" role="group" aria-label="מקור הסבב"><button type="button" aria-pressed="${!direct}" onclick="roomFormSet('src','library')">מהשרת (הספרייה)</button><button type="button" aria-pressed="${direct}" onclick="roomFormSet('src','build_disk')"${builders.length ? "" : " disabled"}>מדיסק מחשב בנייה (הפצה ישירה)</button></div>${builders.length ? "" : `<div class="muted">אין מחשב בנייה שדיווח על דיסקים</div>`}`;
   const fields = direct && builder
@@ -7529,7 +7528,6 @@ function portNicHtml(nic) {
   if (Array.isArray(nic)) {
     if (!nic.length) return `<span class="muted">—</span>`;
     const main = nic.filter((a) => !a.startsWith("[fe80") && !a.startsWith("[::1]"));
-    const rest = nic.filter((a) => !main.includes(a));
     const shown = (main.length ? main : nic).slice(0, 4);
     const hidden = nic.filter((a) => !shown.includes(a));
     const more = hidden.length

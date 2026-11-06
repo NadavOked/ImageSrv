@@ -30,7 +30,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
+import posixpath
 import re
 import secrets
 import sqlite3
@@ -48,6 +50,7 @@ TIMER_UNIT = "imagesrv-backup.timer"
 _NAME = re.compile(r"^imagesrv-(\d{8}-\d{6})\.db$")
 _STAMP = "%Y%m%d-%H%M%S"
 LABEL = "גיבוי המסד"
+log = logging.getLogger("imagesrv.backup")
 
 
 def check_dest(value: object) -> tuple[str | None, str | None]:
@@ -60,10 +63,13 @@ def check_dest(value: object) -> tuple[str | None, str | None]:
     path = value.strip()
     if path == "":
         return "", None
-    if (len(path) > 255 or not path.startswith("/") or any(ord(c) < 32 for c in path)
-            or ".." in path.split("/")):
+    if len(path) > 255 or any(ord(c) < 32 for c in path) or ".." in path.split("/"):
         return None, "יעד הגיבוי: נתיב מוחלט לתיקייה, למשל /mnt/backup"
-    path = "/" + "/".join(p for p in path.split("/") if p)
+    # ‏CodeQL #616-618: נרמול ואז בדיקת prefix — הצורה שהניתוח מזהה כבדיקת נתיב.
+    path = posixpath.normpath(path)
+    if not path.startswith("/"):
+        return None, "יעד הגיבוי: נתיב מוחלט לתיקייה, למשל /mnt/backup"
+    path = "/" + path.lstrip("/")
     if path == "/":
         return None, "יעד הגיבוי: לא שורש מערכת הקבצים — דיסק אחר או NAS מעוגן"
     if not os.path.isdir(path):
@@ -220,8 +226,9 @@ def run(data_dir: Path, dest: str, now: datetime | None = None, network: bool = 
         status["last_ok"] = status["at"]
     except Exception as exc:                  # noqa: BLE001 — כל כשל נכתב בשמו, ויציאה 1
         status["error"] = f"{type(exc).__name__}: {exc}"
+    # ‏CodeQL #860: ‏0600 כמו עותק המסד — הקורא היחיד (`read_status` בשרת) רץ כ-root.
     _atomic_write(data_dir / STATUS_NAME,
-                  (json.dumps(status, ensure_ascii=False, indent=1) + "\n").encode("utf-8"), 0o644)
+                  (json.dumps(status, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
     return status
 
 
@@ -291,7 +298,9 @@ def health_check(conn: sqlite3.Connection, data_dir: Path | None, timer_state: s
     try:
         status = read_status(data_dir)
     except (OSError, ValueError) as exc:
-        return row("bad", f"קובץ הסטטוס של הגיבוי לא נקרא: {exc}")
+        # ‏#2510: טקסט החריגה ליומן השרת; בשורת הבריאות — משפט קבוע.
+        log.warning("backup status %s unreadable: %s", data_dir / STATUS_NAME, exc)
+        return row("bad", "קובץ הסטטוס של הגיבוי לא נקרא — הפרטים ביומן השרת")
     if status is None or status.get("dest") != dest:
         return row("warn", f"עוד לא רץ גיבוי אל {dest} — הגיבוי רץ כל שעה")
     last_ok = status.get("last_ok")

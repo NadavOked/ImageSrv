@@ -152,7 +152,8 @@ def record(conn: sqlite3.Connection, mac: str, hello: dict) -> None:
     if prev is not None:
         changes = diff(prev, cur)
         if changes:
-            journal(conn, "fw_changed", f"{mac}: " + " · ".join(c["text"] for c in changes))
+            journal(conn, "fw_changed", f"{mac}: " + " · ".join(c["text"] for c in changes),
+                    machine=mac)
 
 
 def change_counts(conn: sqlite3.Connection) -> dict[str, int]:
@@ -225,5 +226,5 @@ def accept(conn: sqlite3.Connection, mac: str, user: str) -> bool:
         conn.execute("INSERT INTO fw_baseline (mac, at, snap_json, by) VALUES (?, ?, ?, ?)"
                      " ON CONFLICT (mac) DO UPDATE SET at = excluded.at, snap_json = excluded.snap_json, by = excluded.by",
                      (mac, now_iso(), json.dumps(rows[0][1], sort_keys=True, ensure_ascii=False), user))
-    journal(conn, "fw_accepted", mac, user)
+    journal(conn, "fw_accepted", mac, user, machine=mac)
     return True

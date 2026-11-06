@@ -1122,6 +1122,12 @@ ADDED_COLUMNS = [
     ("wave_rates", "delivered", "TEXT"),
     # ‏#2443 (Fable): התקרה לפי חשבון נספרת לכל משטח בנפרד. שורות שקדמו = הקונסולה.
     ("login_account_failures", "surface", "TEXT NOT NULL DEFAULT 'console'"),
+    # ‏#1296: היעד המבני של שורת יומן — המכונה (MAC קנוני, כמו `machines.mac`), הסבב
+    # (‏`sessions.id` או `room_rounds.id`) והכיתה (‏`groups.id`; ריקה עד v2). NULL = היעד
+    # לא נרשם — שורה מלפני המיגרציה, או אירוע שאין לו יעד כזה — **לא** "אף מכונה".
+    ("journal", "machine", "TEXT"),
+    ("journal", "round_id", "TEXT"),
+    ("journal", "class_id", "TEXT"),
 ]
 
 
@@ -1356,7 +1362,7 @@ def _close_duplicate_actives(conn: sqlite3.Connection) -> None:
                 "UPDATE sessions SET state = 'closed', closed_at = ? WHERE id = ?",
                 (now_iso(), row["id"]),
             )
-            journal(conn, "session_dedupe", f"{row['id']} — {name}")
+            journal(conn, "session_dedupe", f"{row['id']} — {name}", round_id=row["id"])
         conn.commit()
 
 
@@ -1409,7 +1415,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 10  # ‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 11  # ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:
@@ -1805,7 +1811,7 @@ def net_seen(
                          " FROM ip_history WHERE mac = ? ORDER BY rowid DESC LIMIT ?)",
                          (mac, mac, KEEP_IPS))
     if moved and row is not None and row["ip"]:
-        journal(conn, "ip_changed", f"{mac} {row['ip']} → {ip}")
+        journal(conn, "ip_changed", f"{mac} {row['ip']} → {ip}", machine=mac)
 
 
 def monitor_rekeyed(conn: sqlite3.Connection, mac: str, used: str,
@@ -1925,8 +1931,15 @@ def last_disk_full() -> dict | None:
     return dict(_last_full) or None
 
 
-def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = "") -> None:
+def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = "", *,
+            machine: str | None = None, round_id: str | None = None,
+            class_id: str | None = None) -> None:
     """שורת יומן. נובע ישירות מריבוי המשתמשים — מי עשה מה ומתי.
+
+    ‏#1296: ``machine``/``round_id``/``class_id`` — היעד המבני של השורה, כשהכותב
+    יודע אותו (‏MAC קנוני; ‏`sessions.id`/`room_rounds.id`; ‏`groups.id`). ריק או
+    ``None`` נשמר NULL = "לא נרשם", לא "אין מכונה". ‏``detail`` לא משתנה — התרגום
+    לעברית ממשיך לקרוא אותו.
 
     נעול, כי זו הכתיבה היחידה שמגיעה גם מתהליכון הרקע של השידור.
 
@@ -1948,8 +1961,10 @@ def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = 
     try:
         with _write_lock, writing(conn):
             conn.execute(
-                "INSERT INTO journal (ts, user, event, detail) VALUES (?, ?, ?, ?)",
-                (now_iso(), user, event, detail),
+                "INSERT INTO journal (ts, user, event, detail, machine, round_id, class_id)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (now_iso(), user, event, detail, machine or None, round_id or None,
+                 class_id or None),
             )
     except sqlite3.OperationalError as exc:
         # ‏#1892: מחיצה מלאה — היומן אינו מפיל את המסלול שקרא לו (hello של

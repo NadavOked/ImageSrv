@@ -293,7 +293,7 @@ def _listen(tap: socket.socket, iface: str, xid: bytes, timeout: float) -> Probe
             elif found[1] not in seen:
                 seen.append(found[1])
     except socket.timeout:
-        pass
+        pass  # חלון ההאזנה נגמר — זה סיום הרגיל של הסריקה, לא כשל
     except OSError as exc:
         # שגיאה באמצע ההאזנה: מי שכבר ענה נספר, אבל שקט כאן אינו ראיה.
         return ProbeResult(bool(seen), tuple(seen), "" if seen else

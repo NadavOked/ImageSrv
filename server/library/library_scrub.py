@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
 
 from server.db import _settle, _write_lock, now_iso, writing
@@ -10,6 +11,9 @@ from server.library.images import (ImageLibrary, guarded_image_path, streamed_pa
                                    valid_image_id)
 
 CHUNK = 1024 * 1024
+#: ‏#2510: what the console shows for a file that could not be read; the OS text goes to the log.
+UNREADABLE = "הקובץ לא נקרא — הפרטים ביומן השרת"
+log = logging.getLogger("imagesrv.library_scrub")
 
 
 def _sha256(path: Path) -> str:
@@ -46,8 +50,9 @@ def _scrub_image(manifest: dict) -> dict:
                 result["actual_sha256"] = actual
                 result["state"] = "ok" if actual == expected else "mismatch"
         except OSError as exc:
+            log.warning("scrub of %s: %s unreadable: %s", manifest["id"], part["file"], exc)
             result["state"] = "unreadable"
-            result["error"] = str(exc)
+            result["error"] = UNREADABLE
         files.append(result)
     return {
         "id": manifest["id"],

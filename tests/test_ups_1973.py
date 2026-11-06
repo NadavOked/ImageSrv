@@ -199,8 +199,9 @@ def test_an_unreadable_ups_never_powers_the_server_off(conn):
     assert m.health()[0] == "ok"
 
 
-def test_a_failed_poweroff_is_said_and_retried(conn):
+def test_a_failed_poweroff_is_said_and_retried(conn, caplog):
     script = Script(OB_LB, OB_LB)
+    caplog.set_level("WARNING", logger="imagesrv.ups")
 
     def broken():
         script.order.append(("poweroff",))
@@ -209,7 +210,9 @@ def test_a_failed_poweroff_is_said_and_retried(conn):
     m = ups.UpsMonitor(conn, stop_work=script.stop_work, poweroff=broken, read=script.read)
     m.tick()
     state, detail = m.health()
-    assert state == "bad" and "הכיבוי נכשל" in detail and "Access denied" in detail
+    # ‏#2510: הכישלון גלוי בשורת הבריאות; הטקסט של systemctl — ביומן השרת.
+    assert state == "bad" and "הכיבוי נכשל" in detail and "Access denied" not in detail
+    assert any("Access denied" in r.getMessage() for r in caplog.records)
     m.tick()
     assert [s[0] for s in script.order].count("poweroff") == 2
     assert events(conn).count("ups_low_battery") == 1

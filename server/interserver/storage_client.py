@@ -194,7 +194,6 @@ class PinnedMTLSClient:
         # ‏#1286: לא-חוסם, וכל המתנה דרך ``_TimedConn`` (select) — לא
         # ``settimeout(None)``, שבו משני שקיבל TCP ונתקע חסם לנצח.
         raw.setblocking(False)
-        # codeql[py/insecure-protocol] false positive: build_pinned_client_context קובע min=max=TLS 1.3, ונבדק שוב אחרי ה-handshake (#291)
         ssl_conn = SSL.Connection(ctx, raw)
         ssl_conn.set_connect_state()
         conn = _TimedConn(ssl_conn, raw)
@@ -401,7 +400,6 @@ class PinnedMTLSClient:
                     piece = rest[:length]
                     handle.write(piece)
                     got += len(piece)
-                    rest = rest[len(piece):]
                 while got < length:
                     chunk = self._conn.recv(min(1024 * 1024, length - got))
                     if not chunk:
@@ -545,9 +543,7 @@ def fetch_server_spki(host: str, port: int, *, timeout: float = 10.0) -> str:
     """קורא את תעודת השרת (בלי הצמדה ובלי תעודת-לקוח) ומחזיר את ה-SPKI שלה,
     כדי שהמנהל יַשווה אותו מול מה שהמשני מציג לפני שהוא שולח את הקוד."""
     from OpenSSL import SSL
-    ctx = SSL.Context(SSL.TLS_METHOD)
-    ctx.set_min_proto_version(SSL.TLS1_3_VERSION)
-    ctx.set_max_proto_version(SSL.TLS1_3_VERSION)
+    ctx = interserver_auth.tls13_only_context()
     ctx.set_verify(SSL.VERIFY_NONE, lambda *a: True)
     raw = socket.create_connection((host, port), timeout=timeout)
     # ‏#902: socket עם timeout הוא non-blocking ל-pyOpenSSL, ו-``do_handshake``
@@ -556,7 +552,6 @@ def fetch_server_spki(host: str, port: int, *, timeout: float = 10.0) -> str:
     # תקע את ה-preview לנצח (#1292). כאן, כמו ב-``open``: לא-חוסם, וכל
     # המתנה דרך ``_TimedConn`` (select) עם תקרה כוללת ל-handshake.
     raw.setblocking(False)
-    # codeql[py/insecure-protocol] false positive: set_min/max_proto_version נועלים על TLS 1.3 למעלה (#291)
     ssl_conn = SSL.Connection(ctx, raw)
     ssl_conn.set_connect_state()
     conn = _TimedConn(ssl_conn, raw)

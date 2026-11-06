@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from server.db import _settle, _write_lock, get_setting, now_iso, set_setting, writing
+from server.core.logtext import one_line
 
 log = logging.getLogger("imagesrv.pxe_log")
 
@@ -183,7 +184,7 @@ def verdict(conn: sqlite3.Connection, mac: str, since: str | None = None) -> dic
             state = "no_tftp"
         return {"state": state, "he": STATES_HE[state], "since": since, "events": events[-20:]}
     except Exception:             # noqa: BLE001
-        log.exception("pxe verdict of %s failed", mac)
+        log.exception("pxe verdict of %s failed", one_line(mac))
         return {"state": "unchecked", "he": STATES_HE["unchecked"], "since": since, "events": []}
 
 

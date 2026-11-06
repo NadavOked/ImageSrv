@@ -50,7 +50,7 @@ def note(conn: sqlite3.Connection, mac: str, raw: object, *, known: bool) -> boo
     if report["boot_next"] != "set" and report["detail"]:
         text += f": {report['detail']}"
     try:
-        journal(conn, "gui_failed", text)
+        journal(conn, "gui_failed", text, machine=mac)
     except sqlite3.Error:
         # ‏#1535: ה-MAC מגיע מה-hello — שבירת שורה אינה מגיעה ליומן.
         log.exception("gui_failed for %s was not journaled",
