@@ -112,6 +112,9 @@ def test_check_of_an_unreachable_secondary_records_the_failure_not_a_5xx(server,
     assert body["node_id"] is None and body["protocol_version"] is None
     assert body["last_error"] == body["error"] and ISO.match(body["last_error_at"])
     assert body["last_seen_at"] == seen, "when it last answered is kept alongside the failure"
+    # ‏#595: טקסט ה-OSError (‏refused/WinError/Errno) ליומן; ללקוח — המשפט של #1016.
+    assert "שרת המשנה לא עונה" in body["error"], body["error"]
+    assert not re.search(r"WinError|refused|Errno", body["error"], re.I), body["error"]
     row = _row(server, paired)
     assert row["last_error"] == body["error"] and row["last_seen_at"] == seen
 

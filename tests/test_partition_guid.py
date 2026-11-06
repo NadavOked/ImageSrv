@@ -28,7 +28,7 @@ from native import requires_native
 from test_agent import BASH, posix, sh
 from test_capture_refusals import CURL_SINK, ONE_PARTITION, capture_run, refusal_reason
 from test_restore_evidence import (
-    PLAN, build_box, log_of, rc_of, restore_run, state_of, target_error, wrote,
+    DISK_GUID, LIE_GUID, PLAN, build_box, log_of, rc_of, restore_run, state_of, target_error, wrote,
 )
 from test_timeouts import log_of as capture_log
 
@@ -41,13 +41,15 @@ SOURCE_UGUID = "4C7B1E00-0000-4000-8000-000000000002"
 UGUID_LINE = f'  echo "Partition unique GUID: {SOURCE_UGUID}"\n'
 
 
-def source_disk(type_guid: str, *, uguid_line: str = UGUID_LINE, i_rc: int = 0) -> str:
+def source_disk(type_guid: str, *, uguid_line: str = UGUID_LINE, i_rc: int = 0,
+                i_call: int = 2) -> str:
     """‏`ONE_PARTITION` עם סוג מחיצה אחר, שורת GUID ייחודי אחרת, או `-i` שנכשל.
 
-    ‏`i_rc` מפיל את קריאת ה-`-i` **השנייה** בלבד — זו של ה-GUID הייחודי
-    (‏capture.sh קורא סוג, GUID ייחודי, סקטור ראשון וגודל, בסדר הזה). כש-
-    `-i` נכשל כולו, ‏`_shrink_entry` כבר דוחה את הקליטה על הדגלים — מסלול
-    אחר, שקיים גם ב-main. כאן נבדק הכשל של הקריאה הזו בדיוק."""
+    ‏`i_rc` מפיל את קריאת ה-`-i` מספר `i_call` בלבד. ‏capture.sh קורא את
+    המחיצה קודם לסוג, לסקטור הראשון ולגודל (קריאה אחת מאז #1212), ואחר כך
+    ל-GUID הייחודי (‏read_unique_guid, המשותף לשחזור) — זו הקריאה השנייה.
+    כש-`-i` נכשל כולו, ‏`_shrink_entry` כבר דוחה את הקליטה על הדגלים —
+    מסלול אחר, שקיים גם ב-main. כאן נבדק הכשל של הקריאה הזו בדיוק."""
     stub = (ONE_PARTITION
             .replace("C12A7328-F81F-11D2-BA4B-00A0C93EC93B (EFI)", f"{type_guid} (x)")
             .replace(UGUID_LINE, uguid_line))
@@ -57,7 +59,7 @@ def source_disk(type_guid: str, *, uguid_line: str = UGUID_LINE, i_rc: int = 0) 
             'if [ "$1" = "-i" ]; then\n',
             'if [ "$1" = "-i" ]; then\n'
             '  n=$(cat "$0.n" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$0.n"\n'
-            f'  [ "$n" -eq 2 ] && exit {i_rc}\n')
+            f'  [ "$n" -eq {i_call} ] && exit {i_rc}\n')
     return stub
 
 
@@ -130,6 +132,59 @@ def test_a_unique_guid_that_is_not_a_guid_fails_the_capture_on_any_image(tmp_pat
     assert not (run / "new-manifest.json").exists()
 
 
+#: שורת ה-GUID של הדיסק ש-`ONE_PARTITION` מדפיס ב-`sgdisk -p`.
+DISK_LINE = 'echo "Disk identifier (GUID): 4C7B1E00-0000-4000-8000-000000000001"\n'
+
+
+@pytest.mark.parametrize("type_guid", [WINDOWS_TYPE, LINUX_TYPE], ids=["windows", "linux"])
+def test_a_failed_table_read_fails_the_capture_by_its_exit_code(tmp_path, type_guid):
+    """‏`sgdisk -p` שנכשל נבלע עד כאן ב-`2>/dev/null | awk`: ה-GUID של הדיסק
+    יצא ריק, רשימת המחיצות ריקה, והסיבה הייתה "לא נמצאו מחיצות" — ניחוש
+    במקום קוד היציאה של הכלי (עיקרון 5א, ‏#51).
+
+    הקריאה הראשונה של `-p` עוברת: היא של שער סימן-הכתיבה (#1798), שכבר
+    נכשל בגלוי כשהטבלה לא נקראה. כאן נכשלת קריאת הטבלה של הקליטה עצמה."""
+    stub = source_disk(type_guid).replace(
+        DISK_LINE,
+        'p=$(cat "$0.p" 2>/dev/null || echo 0); p=$((p + 1)); echo "$p" > "$0.p"\n'
+        '[ "$p" -ge 2 ] && exit 3\n' + DISK_LINE)
+    box, run, out = capture(tmp_path, stub)
+    reason = refusal_reason(box, run, out)
+    assert "sgdisk -p" in reason and "rc=3" in reason, reason
+    assert not (run / "new-manifest.json").exists()
+
+
+@pytest.mark.parametrize("type_guid", [WINDOWS_TYPE, LINUX_TYPE], ids=["windows", "linux"])
+@pytest.mark.parametrize("line", ["", 'echo "Disk identifier (GUID): not-a-guid"\n'],
+                         ids=["missing", "garbage"])
+def test_a_disk_guid_that_was_not_read_fails_the_capture_on_any_image(tmp_path, type_guid, line):
+    """עד כאן: ‏rc=0 ו-`"disk_guid":""` במניפסט. השרת דוחה ‏`""` בכל אימג'
+    (‏`ImageLibrary._validate`: ‏"must be a canonical GUID") — אבל רק אחרי
+    שכל הדיסק כבר עבר ברשת. כאן זה נדחה לפני הבייט הראשון, בכל אימג'."""
+    box, run, out = capture(tmp_path, source_disk(type_guid).replace(DISK_LINE, line))
+    reason = refusal_reason(box, run, out)
+    assert "GUID של הדיסק" in reason, reason
+    assert not (run / "new-manifest.json").exists()
+
+
+def test_a_type_guid_that_is_not_a_guid_fails_the_capture(tmp_path):
+    """סוג המחיצה נקרא עד כאן ב-`sgdisk -i ... 2>/dev/null` ונכתב למניפסט
+    בלי בדיקה. ‏validate_restore_plan דוחה אותו — בשחזור, מול כיתה."""
+    box, run, out = capture(tmp_path, source_disk("not-a-guid"))
+    reason = refusal_reason(box, run, out)
+    assert "מחיצה 1" in reason and "סוג" in reason, reason
+    assert not (run / "new-manifest.json").exists()
+
+
+def test_a_failed_partition_read_fails_the_capture_by_its_exit_code(tmp_path):
+    """הקריאה הראשונה של `-i` (סוג, סקטור ראשון, גודל) נכשלת. עד כאן קוד
+    היציאה נבלע בצינור, וכל שלושת הערכים יצאו ריקים."""
+    box, run, out = capture(tmp_path, source_disk(WINDOWS_TYPE, i_rc=4, i_call=1))
+    reason = refusal_reason(box, run, out)
+    assert "מחיצה 1" in reason and "rc=4" in reason, reason
+    assert not (run / "new-manifest.json").exists()
+
+
 # --- השחזור: הקריאה בחזרה -------------------------------------------------------
 
 
@@ -181,6 +236,30 @@ def test_a_unique_guid_that_could_not_be_read_back_fails_the_restore(tmp_path, m
     assert wrote(run) == []
     err = target_error(run)
     assert "מחיצה 2" in err and "לא הצלחנו לקרוא בחזרה" in err and expect in err, err
+
+
+def test_a_failed_disk_guid_readback_fails_the_restore_by_its_exit_code(tmp_path):
+    """‏verify_table קרא את ה-GUID של הדיסק ב-`sgdisk -p 2>/dev/null | awk`:
+    כשל נכשל-סגור (ריק ≠ המניפסט), אבל הסיבה הייתה "על הדיסק: empty" —
+    ניחוש, וליעד הגיע "לא הצלחנו לכתוב את טבלת המחיצות" בלי שם (עיקרון 4)."""
+    box, run, prelude = build_box(tmp_path, disk_guid=DISK_GUID, sgdisk_fail=["-p *"])
+    out = sh(restore_run(prelude))
+    assert rc_of(out) == "rc=1", out
+    assert state_of(run) == "failed"
+    assert wrote(run) == []
+    err = target_error(run)
+    assert "GUID של הדיסק" in err and "rc=2" in err, err
+
+
+def test_a_disk_guid_the_disk_did_not_keep_names_the_reason(tmp_path):
+    """‏#572 נכשל-סגור כבר מ-main; כאן נוסף שהיעד יודע **למה**. ‏#1924: בלי
+    הערכים עצמם בשגיאה — הם ביומן."""
+    box, run, prelude = build_box(tmp_path, disk_guid=DISK_GUID, guid_lie=LIE_GUID)
+    out = sh(restore_run(prelude))
+    assert rc_of(out) == "rc=1", out
+    err = target_error(run)
+    assert "GUID של הדיסק" in err and "אינו של האימג'" in err, err
+    assert DISK_GUID not in err and LIE_GUID not in err, err
 
 
 def test_a_partition_without_a_guid_in_the_manifest_is_logged_not_checked(tmp_path):

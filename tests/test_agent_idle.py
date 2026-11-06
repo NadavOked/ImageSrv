@@ -39,6 +39,15 @@ def _since(tmp_path: Path, ago: int) -> str:
     return f'printf "%s\\n" "$(( $(date +%s) - {ago} ))" > "$RUN_DIR/idle.since"'
 
 
+# #2457: what happens "while the window is up" was a background `sleep 0.3` (or 1)
+# racing idle_check: under load it landed before the window was up, or after its
+# count. Now it runs inside the window's own tick -- idle.warn is the evidence that
+# the window is up -- whatever the host's speed. (#2480: here too; shared with
+# test_idle_window_f1_10.)
+def _in_window(action: str) -> str:
+    return f'; sleep() {{ if [ -f "$RUN_DIR/idle.warn" ]; then {action}; fi; command sleep "$@"; }}'
+
+
 def test_idle_past_the_threshold_warns_then_powers_off(tmp_path):
     out, calls = run_idle(tmp_path, _since(tmp_path, 10), "idle_check")
     assert "power-off in 1s unless a key is pressed" in out
@@ -48,9 +57,10 @@ def test_idle_past_the_threshold_warns_then_powers_off(tmp_path):
 
 def test_a_key_press_during_the_countdown_cancels_it(tmp_path):
     # the kiosk touches idle.touch (the GUI's "touch" token); newer than the
-    # clock = activity -- simulated by a touch after the warning began
-    out, calls = run_idle(tmp_path, _since(tmp_path, 10),
-                          '(sleep 0.3; touch "$RUN_DIR/idle.touch") & idle_check; wait')
+    # clock = activity -- a touch inside the window's own tick (#2480: it was a
+    # background `sleep 0.3` racing the one-second window)
+    out, calls = run_idle(tmp_path, _since(tmp_path, 10) + _in_window('touch "$RUN_DIR/idle.touch"'),
+                          "idle_check")
     assert "cancelled by activity" in out
     assert not calls.exists()
     assert not (tmp_path / "run" / "idle.warn").exists()

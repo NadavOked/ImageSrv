@@ -7,9 +7,17 @@
 
 **שרת אימג'ים ופריסה למחשבים במכללות ובמעבדות**
 
+[![tests](https://github.com/NadavOked/ImageSrv/actions/workflows/tests.yml/badge.svg)](https://github.com/NadavOked/ImageSrv/actions/workflows/tests.yml)
+[![CodeQL](https://github.com/NadavOked/ImageSrv/actions/workflows/codeql.yml/badge.svg)](https://github.com/NadavOked/ImageSrv/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/NadavOked/ImageSrv)](https://github.com/NadavOked/ImageSrv/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)
+
 </div>
 
 <div dir="rtl">
+
+בפיתוח פעיל · בשימוש במעבדה · [הגרסה האחרונה (ISO ו-USB להורדה)](https://github.com/NadavOked/ImageSrv/releases/latest)
 
 ImageSrv קולט אימג'י דיסק, מפיץ אותם במולטיקאסט לכל מחשבי השיכפול במקביל,
 ומנהל את הספרייה, הגרסאות והסבבים מקונסולה אחת בעברית.

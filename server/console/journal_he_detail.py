@@ -37,7 +37,16 @@ _NET_NAME = r"^(\S+) "
 RULES: dict[str, list[tuple[str, str]]] = {
     "task_token_refused": _FROM,
     "off_vlan_contact": _FROM,
-    "unknown_mac": _FROM,
+    # ‏#2487/#2498: "<mac> from <ip>[ [+N identical requests in the last Ss not journaled]]"
+    "unknown_mac": _FROM + [(r" \[\+(\d+) identical requests in the last (\d+)s not journaled\]$",
+                             r" [ועוד \1 בקשות זהות ב-\2 השניות האחרונות שלא נרשמו]")],
+    # ‏#2498: "<event>: over <K> different in <W>s -- the rest are counted, not journaled one by one"
+    #         "<event>: +<N> more different not journaled one by one in the last <S>s"
+    "journal_flood": [
+        (r"^(\S+): over (\d+) different in (\d+)s -- the rest are counted, not journaled one by one$",
+         r"\1: יותר מ-\2 מקורות שונים ב-\3 שניות — השאר נספרים ולא נרשמים אחד-אחד"),
+        (r"^(\S+): \+(\d+) more different not journaled one by one in the last (\d+)s$",
+         r"\1: עוד \2 מקורות שונים שלא נרשמו אחד-אחד ב-\3 השניות האחרונות")],
     "report_on_closed_session": _FOR,
     "report_from_nonmember": _FOR,
     "report_on_closed_task": _FOR,
@@ -119,6 +128,10 @@ RULES: dict[str, list[tuple[str, str]]] = {
     "login_attempts_trimmed": [
         (r"^(\d+) keys — over (\d+) \(last ip=(\S+)\)$",
          r"נמחקו \1 רשומות ניסיונות כניסה — הטבלה עברה \2 (הכתובת האחרונה: \3)")],
+    # ‏#2478: "<N> rows — over <MAX> (last ip=<ip>)"
+    "login_account_failures_trimmed": [
+        (r"^(\d+) rows — over (\d+) \(last ip=(\S+)\)$",
+         r"נמחקו \1 רשומות כשלי כניסה לפי חשבון — הטבלה עברה \2 (הכתובת האחרונה: \3)")],
     # ‏#2442: "mac=<mac> ip=<ip> kind=offer|proxy nic=<כרטיס>[ as=server]"
     "foreign_dhcp_seen": [
         (r" as=server$", " · מתחזה לשרת (הכתובת שלו במסגרת)"),

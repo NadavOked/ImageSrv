@@ -15,19 +15,18 @@ Source: ``C:\\ImageCtl-Lab\\evening-1015\\time-budget-1017.md`` (server journal,
   end of a process is now seen within a 0.1 s tick (``_nap``, waits.sh); the
   sampling of counters, logs and dmesg stays once per ``WAIT_POLL_S``.
 
-Every timing here is a **difference against a baseline run** of the same prelude,
-with delays the stubs make (``sleep``), so the number is the code's waiting and
-not the host's speed. The old code cannot meet any of the bounds: its sleeps
-alone exceed them.
+#2480: no test here decides by the wall clock. A difference against a baseline
+run still measured the host: three tables took 6.70 s on Windows (05/11) against
+a 4.5 s bound. Each test now reads what the code itself did -- the tables meet
+at a barrier only jobs that run at once can pass; the waits' own ``sleep`` calls
+are recorded with their seconds; the hung drawer leaves a mark only if its table
+came back. A clock is left only as a ceiling against a hang.
 """
 
 from __future__ import annotations
 
 import hashlib
-import time
 from pathlib import Path
-
-import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
@@ -42,19 +41,6 @@ LIBS = ("common", "waits", "jsonq", "sysinfo", "progress", "restore", "expand", 
         "writemark")   # #1877: finish_grow -> writemark_release (writemark.sh) -> writemark_clear (stubbed)
 
 
-def _timed(script: str, timeout: int = 90) -> tuple[str, float]:
-    started = time.monotonic()
-    out = run_sh(script, timeout=timeout)
-    return out, time.monotonic() - started
-
-
-def _extra(prelude: str, body: str, timeout: int = 90) -> tuple[str, float]:
-    """The body's own seconds: the same prelude without the body is the baseline."""
-    _, base = _timed(prelude + ":", timeout)
-    out, spent = _timed(prelude + body, timeout)
-    return out, spent - base
-
-
 def _room(tmp_path: Path, apply_gpt: str, drawers=("sda", "sdb", "sdc"), **env) -> tuple[Path, str]:
     """run_restore_drawers around stubbed table/stream steps; ``apply_gpt`` is the
     stub's body. Everything after the tables (the stream) is a no-op here."""
@@ -67,7 +53,7 @@ def _room(tmp_path: Path, apply_gpt: str, drawers=("sda", "sdb", "sdc"), **env) 
         + "log() { :; }; disk_fits() { return 0; }; write_check() { return 0; }; boot_hidden_disk() { return 0; }; "   # #2015
         "write_speed_verdict() { return 0; }; readback_drawers() { :; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
         f"apply_gpt() {{ {apply_gpt} }}; plan_gate() {{ return 0; }}; "   # #2412: the table is stubbed, so is the check of its plan
-        "expand_last() { sleep 1; return 0; }; "
+        "expand_last() { return 0; }; "
         "manifest_plan() { echo '1|G|win|ntfs|2048|1024|p1.zst|sha|false|UG|'; }; "
         "restore_partition_drawers() { return 0; }; "
         + "".join(f"target_init {d} 100; " for d in drawers)
@@ -87,18 +73,28 @@ def _error(run: Path, dev: str) -> str:
 # --- #1704: the drawers' tables at once ----------------------------------------
 
 
-# #2302: a wall-clock bound of 4.5 s; in a full gate under `-n auto` it measured
-# 6.07 s (load5 4.66 -> 8.8) and passes alone (10/10, 2.06-2.21 s). Serial phase,
-# same bound -- like #2118 below.
-@pytest.mark.serial
+#: #2480: a ceiling against a hang, never the verdict -- the tenths of a second
+#: a table waits at the barrier for the other two (>= 20 s whatever the host).
+BARRIER_TENTHS = 200
+
+
 def test_three_drawers_write_their_tables_in_the_time_of_one(tmp_path):
-    """Each drawer's table costs 2 s here (apply_gpt 1 s + expand_last 1 s, the
-    stubs' sleeps). One after another that is >= 6 s; at once, ~2 s."""
-    run, prelude = _room(tmp_path, f'sleep 1; echo "$1 ${{PREP_TAG:-none}}" >> {posix(tmp_path)!r}/calls; return 0;')
-    out, extra = _extra(prelude, 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"')
+    """The tables are written at once (#1704), shown without a clock: each
+    drawer's table waits at a barrier until all three have started. Jobs at once
+    meet there; one after another, the first waits alone past the barrier's
+    ceiling and fails its drawer. (#2302/#2480: this was a wall-clock bound of
+    4.5 s over a baseline run -- 6.07 s in a loaded gate, 6.70 s on Windows.)"""
+    t = repr(posix(tmp_path))
+    run, prelude = _room(tmp_path, (
+        f'echo "$1" >> {t}/started; _n=0; '
+        f"until [ \"$(awk 'END {{ print NR }}' {t}/started)\" -ge 3 ]; do "
+        f'_n=$((_n + 1)); [ "$_n" -lt {BARRIER_TENTHS} ] || {{ PLAN_ERROR="$1 waited alone at the barrier"; return 1; }}; '
+        'sleep 0.1; done; '
+        f'echo "$1 ${{PREP_TAG:-none}}" >> {t}/calls; return 0;'))
+    out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"',
+                 timeout=120)
     assert out.strip().endswith("rc=0"), out
-    assert extra < 4.5, f"{extra:.2f}s for three tables -- one after another is >= 6 s"
-    print(f"#1704: three drawers' tables took {extra:.2f}s over the baseline (serial: >= 6 s)")
+    assert [_error(run, d) for d in ("sda", "sdb", "sdc")] == ["", "", ""], "the tables were not written at once"
     # every drawer's job saw its own scratch-file tag
     calls = sorted((tmp_path / "calls").read_text(encoding="utf-8").split("\n"))
     assert [c for c in calls if c] == ["sda .sda", "sdb .sdb", "sdc .sdc"], calls
@@ -121,12 +117,17 @@ def test_a_drawer_whose_table_is_refused_fails_alone_and_by_its_own_reason(tmp_p
 
 def test_a_hung_table_fails_its_drawer_by_name_and_the_others_go_on(tmp_path):
     """A drawer whose sgdisk never returns: past WAIT_DRAWER_S that drawer alone is
-    failed by name. One after another, the whole machine waited for it."""
-    run, prelude = _room(tmp_path, '[ "$1" = sdb ] && sleep 40; return 0;',
-                         WAIT_DRAWER_S=2)
-    out, extra = _extra(prelude, 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"')
+    failed by name. One after another, the whole machine waited for it.
+    #2480: "did not wait for it" is read from the hung table, not the clock: its
+    job is killed at the ceiling, so the line after its sleep is never written. A
+    machine that waited it out has that line (the 40 s only end a hang)."""
+    t = repr(posix(tmp_path))
+    run, prelude = _room(tmp_path, f'[ "$1" = sdb ] && {{ sleep 40; echo back > {t}/sdb.back; }}; return 0;',
+                         WAIT_DRAWER_S=5)
+    out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"',
+                 timeout=120)
     assert out.strip().endswith("rc=0"), out
-    assert extra < 15, f"{extra:.2f}s -- the hung drawer held the machine"
+    assert not (tmp_path / "sdb.back").exists(), "the machine waited for the hung table to come back"
     assert _state(run, "sdb") == "failed"
     assert "פג הזמן — טבלת המחיצות" in _error(run, "sdb"), _error(run, "sdb")
     assert _state(run, "sda") == "done" and _state(run, "sdc") == "done"
@@ -174,37 +175,63 @@ def test_every_scratch_file_of_the_table_step_is_per_drawer():
 # --- #1705: a process's end is seen at once --------------------------------------
 
 
-def _waits(tmp_path: Path) -> str:
+def _waits(tmp_path: Path, *, real: bool = True, poll_s: int = 10) -> str:
+    """waits.sh with a `sleep` that records every sleep the code asks for (#2480,
+    as #2457 below): the waiting is read from the code, not the clock. What the
+    tests wait ON uses `command sleep`, so only the waits are in the record.
+    real=False records without sleeping. poll_s = WAIT_POLL_S (10 by default,
+    as WAITS_POLL_S below: a wait that sleeps a period out is then >= 10 s)."""
     box = tmp_path / "box"
     box.mkdir()
-    return (f"export RUN_DIR={posix(box)!r}; . {posix(AGENT)}/lib/core/common.sh; "
-            f". {posix(AGENT)}/lib/core/waits.sh; log() {{ :; }}; ")
+    then = 'command sleep "$@"' if real else ":"
+    return (f"export RUN_DIR={posix(box)!r} WAIT_POLL_S={poll_s}; . {posix(AGENT)}/lib/core/common.sh; "
+            f". {posix(AGENT)}/lib/core/waits.sh; log() {{ :; }}; "
+            f'sleep() {{ echo "$1" >> {posix(box)!r}/slept; {then}; }}; ')
+
+
+def _slept(tmp_path: Path) -> list[float]:
+    f = tmp_path / "box" / "slept"
+    slept = [float(s) for s in f.read_text(encoding="utf-8").split()] if f.exists() else []
+    assert slept, "no wait slept at all -- the recording broke, not a pass"
+    return slept
+
+
+def _looked_every_tick(tmp_path: Path, what: str) -> None:
+    """Every sleep is one tick, and all of them together are less than ONE poll
+    period: a wait that sleeps a period out before it looks is >= WAITS_POLL_S
+    alone. Ticks while a helper is still alive are honest waiting; a slow host
+    adds a few, never a period."""
+    slept = _slept(tmp_path)
+    assert max(slept) <= 0.1, f"{what}: a sleep of {max(slept)} s at once -- a wait sleeps a tick, then looks"
+    assert sum(slept) < WAITS_POLL_S, f"{what}: {sum(slept):.1f}s of ticks -- a wait slept a poll period out"
+    print(f"#1705: {what} slept {sum(slept):.1f}s in {len(slept)} ticks (one poll period: {WAITS_POLL_S} s)")
 
 
 def test_wait_pid_returns_when_the_process_ends_not_a_second_later(tmp_path):
-    """Three helpers of 0.2 s: the old loop slept a whole second before it looked
-    (>= 3 s); now ~0.6 s. The writecheck of every drawer waits through this."""
-    out, extra = _extra(_waits(tmp_path),
-                        'for i in 1 2 3; do sleep 0.2 & wait_pid $! 30 helper || echo late; done; echo ok')
+    """Three helpers of 0.2 s: the old loop slept a whole poll period before it
+    looked. The writecheck of every drawer waits through this."""
+    out = run_sh(_waits(tmp_path)
+                 + 'for i in 1 2 3; do command sleep 0.2 & wait_pid $! 30 helper || echo late; done; echo ok')
     assert out.strip() == "ok", out
-    assert extra < 2.0, f"{extra:.2f}s for three 0.2 s helpers (old: >= 3 s)"
-    print(f"#1705: three 0.2 s helpers waited {extra:.2f}s over the baseline (old: >= 3 s)")
+    _looked_every_tick(tmp_path, "three 0.2 s helpers")
 
 
 def test_wait_progress_returns_when_the_stream_ends_not_a_second_later(tmp_path):
     t = posix(tmp_path)
-    out, extra = _extra(_waits(tmp_path),
-                        f': > {t}/c; for i in 1 2 3; do ( echo 5 >> {t}/c; sleep 0.2 ) & '
-                        f'wait_progress $! {t}/c 30 30 stream || echo late; done; echo ok')
+    out = run_sh(_waits(tmp_path)
+                 + f': > {t}/c; for i in 1 2 3; do ( echo 5 >> {t}/c; command sleep 0.2 ) & '
+                 f'wait_progress $! {t}/c 30 30 stream || echo late; done; echo ok')
     assert out.strip() == "ok", out
-    assert extra < 2.0, f"{extra:.2f}s for three 0.2 s streams (old: >= 3 s)"
+    _looked_every_tick(tmp_path, "three 0.2 s streams")
 
 
 def test_a_ceiling_is_still_a_ceiling_in_tenths(tmp_path):
-    """The ceiling counts what was slept, in tenths: 2 s is ~2 s, never 0.2 s."""
-    out, extra = _extra(_waits(tmp_path), 'sleep 30 & wait_pid $! 2 stuck; echo "rc=$?"')
+    """The ceiling counts what was slept, in tenths: 2 s is 20 ticks of 0.1 s,
+    never 2. Read from the sleeps the wait asked for (recorded, not slept), at
+    the default WAIT_POLL_S of 1: the ceiling is looked at once a period."""
+    out = run_sh(_waits(tmp_path, real=False, poll_s=1) + 'command sleep 30 & wait_pid $! 2 stuck; echo "rc=$?"')
     assert out.strip().endswith("rc=1"), out
-    assert 1.5 <= extra <= 5.0, extra
+    assert _slept(tmp_path) == [0.1] * 20
 
 
 # #2457: this was a wall-clock bound (< 0.9 s a partition over a baseline run).

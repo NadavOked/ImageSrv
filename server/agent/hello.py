@@ -511,7 +511,8 @@ def build_answer(
 
 def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
                   store: SessionStore, server_base: str | None = None,
-                  *, identity_ok: Callable[[str, str | None], bool] | None = None):
+                  *, identity_ok: Callable[[str, str | None], bool] | None = None,
+                  unknown_journal: Callable[[str, str | None, bool], None] | None = None):
     """ה-Resolver ש-boot/http.py מצפה לו: (mac, client_ip) → ממשק 3.
 
     בלי הצטרפות ובלי דיסקים — תפריט אתחול רק שואל, לא מחייב.
@@ -520,6 +521,10 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
     **איזו** מכתובות השרת היא התקבלה (‏#536), והאם היא הבדיקה העצמית של
     השרת (‏#976, ‏`self_probe`). מי שמעביר אותו הוא `server/app.py`,
     שקושר את ה-resolver מחדש בכל בקשה.
+
+    ‏#2498: ‏`unknown_journal(mac, client_ip, lease_matched)` כותב את שורת
+    ‏`unknown_mac` במקום `build_answer` — מרוסנת (‏`api.boot_journal_unknown`).
+    בלעדיו (בדיקות שבונות resolver ביד) — השורה נכתבת כמו קודם.
     """
 
     def resolve(mac: str, client_ip: str | None,
@@ -539,6 +544,10 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
         # (lab 04/11: identity_refused journaled, attempts 1 -> 5).
         identity_verified = (do_not_record or identity_ok is None
                              or identity_ok(mac, client_ip))
+        # ‏#2498: שורת `unknown_mac` — לא לבדיקה העצמית, לא לשרת ולא ל-MAC פגום (כמו
+        # קודם), וגם לא לפונה שהזהות שלו נדחתה בוילן (`identity_refused` כבר נרשם
+        # בשמו). מחוץ לוילן אין חכירה לבדוק, ושם השורה נשארת (#141) — מרוסנת.
+        journal_unknown_line = not (probe or local_request or invalid_mac) and identity_verified
         if not do_not_record and identity_verified:
             # ‏#1576: אתחול שנספר (אותו תנאי כמו net_seen והספירה של #75)
             # מבטל משימת גואי שלא התחילה -- **לפני** בניית התשובה, כדי שהתפריט
@@ -552,8 +561,10 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
             # ‏#976: וגם לא הבדיקה העצמית של השרת — היא אינה המכונה.
             # ‏#2411: וגם לא פונה שהזהות שלו לא אומתה מול החכירה.
             record_seen=not do_not_record and identity_verified,
-            record_journal=not (probe or local_request or invalid_mac),
+            record_journal=journal_unknown_line and unknown_journal is None,
         )
+        if journal_unknown_line and unknown_journal is not None and answer.get("known") is not True:
+            unknown_journal(mac, client_ip, not do_not_record)
         if local_request or invalid_mac:
             reason = "server source" if local_request else "invalid MAC"
             _debug_boot_skip_once(reason, mac, client_ip)

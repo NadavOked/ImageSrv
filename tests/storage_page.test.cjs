@@ -485,3 +485,31 @@ test('#1988 add disk: a list that could not be read says so — it is not "no em
   assert.match(html, /lsblk/);
   assert.doesNotMatch(html, /name="st-pick-disk"/);
 });
+
+test('#2460: a restored location whose secret is not in the backup asks for it in the drawer, and התחבר posts it', async () => {
+  const SMB = {...NAS, id: 'loc_dddd0004', name: 'fs01-images', type: 'smb', type_label: 'SMB', target: '//fs01/images', state: 'unreachable',
+    state_label: 'לא נגיש', state_detail: 'המיקום אינו מעוגן', secret_missing: true, params: {server: 'fs01', share: 'images', username: 'imagesrv'}};
+  const back = {...SMB, state: 'connected', state_label: 'מחובר', secret_missing: false};
+  const {run, requests, toasts} = setup({...BASE, '/storage-locations': {...LIST, locations: [LOCAL, SMB, {...SAN, secret_missing: true}, {...NAS, secret_missing: true}]},
+    'POST /storage-locations/loc_dddd0004/connect': back});
+  await run('loadStorage()');
+  run(`storageOpenDrawer('loc_dddd0004')`);
+  const d = run('drawer');
+  assert.match(d, /הסיסמה של המיקום אינה בגיבוי — הקלד אותה מחדש/);
+  assert.match(d, /<input id="st-resecret" type="password" dir="ltr" autocomplete="off">/);
+  assert.match(d, /storageConnectSecret\('loc_dddd0004'\)">התחבר/);
+  assert.doesNotMatch(d, /2460/, 'no issue number in front of the operator');
+  run(`storageOpenDrawer('loc_bbbb0002')`);
+  assert.match(run('drawer'), /סוד ה-CHAP של המיקום אינו בגיבוי — הקלד אותו מחדש/);
+  run(`storageOpenDrawer('loc_aaaa0001')`);
+  assert.doesNotMatch(run('drawer'), /st-resecret/, 'a connected location is not asked');
+  run(`document.getElementById = () => ({value: ''})`);
+  await run(`storageConnectSecret('loc_dddd0004')`); await settle();
+  assert.equal(requests.filter(r => r.url.endsWith('/connect')).length, 0, 'an empty field posts nothing');
+  assert.match(toasts.at(-1), /יש להקליד את הסיסמה/);
+  run(`document.getElementById = () => ({value: 'n3w-pass'})`);
+  await run(`storageConnectSecret('loc_dddd0004')`); await settle();
+  const sent = requests.filter(r => r.url.endsWith('/connect'));
+  assert.deepEqual(sent.map(r => [r.url, r.method, r.body]), [['/storage-locations/loc_dddd0004/connect', 'POST', {secret: 'n3w-pass'}]]);
+  assert.match(toasts.at(-1), /fs01-images: מחובר/);
+});

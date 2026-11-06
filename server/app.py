@@ -40,7 +40,7 @@ from server.net import pxe_log   # #1887
 from server.agent import timing as agent_timing   # #2056
 from server.system import timezone, timesync   # #1447, #1773
 from server.system import dnsmasq_dropin as dnsmasq_dropin_mod   # #2174
-from server.agent.api import ServerContext, boot_identity_ok, create_agent_router
+from server.agent.api import ServerContext, boot_identity_ok, boot_journal_unknown, create_agent_router
 from server.agent import body as agent_body   # #2410
 from server.console.api import create_console_router
 from server.console.data import create_console_data_router   # #1882-#1889
@@ -904,7 +904,10 @@ def _boot_asgi(rt: ServerRuntime):
     conn = rt.conn
     resolve = make_resolver(
         conn, rt.library, rt.store, rt.server_base,
-        identity_ok=lambda mac, client_ip: boot_identity_ok(rt.ctx, mac, client_ip))
+        identity_ok=lambda mac, client_ip: boot_identity_ok(rt.ctx, mac, client_ip),
+        # ‏#2498: שורת `unknown_mac` של התפריט — מרוסנת, כמו ב-hello (#2487).
+        unknown_journal=lambda mac, client_ip, lease_matched: boot_journal_unknown(
+            rt.ctx, mac, client_ip, lease_matched))
 
     async def boot_asgi(scope, receive, send):
         # ‏#584: שביל הפירורים (#400) נרשם רק אם הבקשה התקבלה על וילן

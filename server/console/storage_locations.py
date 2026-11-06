@@ -11,7 +11,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
@@ -421,10 +421,30 @@ def create_storage_locations_router(
                 f"{loc_id} {row['name']}", user[0])
         return sl.public_row(sl.get(ctx.conn, loc_id), ctx.library)
 
+    def _typed_secret(row: dict, params: dict, body) -> bool:
+        """‏#2460: סוד שהמפעיל הקליד מחדש (`{"secret": ...}`) — אחרי שחזור, או כשהוחלף ב-NAS.
+        נכנס ל-`params` (בזיכרון; נשמר רק אחרי עיגון מוצלח). מחזיר אם הוקלד."""
+        if body is None or not isinstance(body, dict) or "secret" not in body:
+            return False
+        keys = sl.SECRET_OF.get(row["type"])
+        if keys is None or not params.get(keys[0]):
+            raise HTTPException(400, "למיקום הזה אין משתמש — אין סיסמה להקליד")
+        secret = body.get("secret")
+        if not isinstance(secret, str) or not secret:
+            raise HTTPException(400, "הסיסמה ריקה")
+        params[keys[1]] = secret
+        reason = sl.validate_params(row["type"], params)
+        if reason:
+            raise HTTPException(400, reason)
+        return True
+
     @router.post("/{loc_id}/connect")
-    def connect(loc_id: str, user=Depends(admin_only)):
+    def connect(loc_id: str, body: dict | None = Body(default=None), user=Depends(admin_only)):
         row = _row(loc_id)
         params = sl.params_of(row)
+        typed = _typed_secret(row, params, body)
+        if typed:
+            row = {**row, "params_json": json.dumps(params, ensure_ascii=False)}
         if row["type"] == "iscsi":
             chap = None
             if params.get("chap_user"):
@@ -434,14 +454,20 @@ def create_storage_locations_router(
                 params.get("iqn") or "", params.get("portal") or "",
                 chap, bool(params.get("auto", True)))
             if logged.status != sl.OK:
-                raise HTTPException(409, logged.reason or "ההתחברות נכשלה")
+                why = logged.reason or "ההתחברות נכשלה"
+                if sl.secret_missing("iscsi", params):   # ‏#2460: הסיבה הסבירה, בשם
+                    why = f"{sl.SECRET_OF['iscsi'][2]} · {why}"
+                raise HTTPException(409, why)
             if sl.valid_iscsi_device((logged.payload or {}).get("device_by_path")):   # ‏#2468
                 params["device_by_path"] = logged.payload["device_by_path"]
-                sl.save_params(ctx.conn, loc_id, params)
-                row = sl.get(ctx.conn, loc_id)
+                row = {**row, "params_json": json.dumps(params, ensure_ascii=False)}
+                if not typed:
+                    sl.save_params(ctx.conn, loc_id, params)
         mounted = sl.apply_mount(row, hooks)
         if mounted.status != sl.OK:
             raise HTTPException(409, mounted.reason or "העיגון נכשל")
+        if typed:   # ‏#2460: נשמר רק אחרי שעבד — סיסמה שגויה אינה מחליפה את הקיימת
+            sl.save_params(ctx.conn, loc_id, params)
         _fstab_or_unmount(row)
         sl.set_state(ctx.conn, loc_id, "connected", "", force_since=True)
         space = hooks["df"](row["mount_point"])

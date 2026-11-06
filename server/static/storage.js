@@ -514,12 +514,28 @@ function storageReplace(row) {
   if (i >= 0) STORAGE.locations[i] = row; else STORAGE.locations.push(row);
   if (current === "storage") renderCurrent();
 }
-async function storageConnect(id) {
+async function storageConnect(id, body = {}) {
   try { id = decodeURIComponent(id); } catch (e) {}
   try {
-    const row = await post(`${SL}/${encodeURIComponent(id)}/connect`, {});
+    const row = await post(`${SL}/${encodeURIComponent(id)}/connect`, body);
     toast(`${row.name}: ${row.state_label}`); closeDrawer(); await loadStorage();
   } catch (e) { toast("החיבור נכשל: " + e.message); }
+}
+/* #2460: הסוד אינו בגיבוי — אחרי שחזור המיקום מבקש אותו כאן, בשדה בתוך המגירה. */
+const STORAGE_SECRET_TEXT = {
+  smb: ["סיסמה", "הסיסמה של המיקום אינה בגיבוי — הקלד אותה מחדש"],
+  iscsi: ["סוד CHAP", "סוד ה-CHAP של המיקום אינו בגיבוי — הקלד אותו מחדש"],
+};
+function storageSecretHtml(loc, idEnc) {
+  const text = STORAGE_SECRET_TEXT[loc.type];
+  if (!loc.secret_missing || !text || loc.state === "connected") return "";
+  return `<div style="margin-top:8px">${UI.note("warn", text[1])}<div class="field" style="margin-top:6px"><label for="st-resecret">${text[0]}</label><input id="st-resecret" type="password" dir="ltr" autocomplete="off"></div><div style="display:flex;gap:6px;margin-top:6px"><button class="btn primary" onclick="storageConnectSecret('${idEnc}')">התחבר</button></div></div>`;
+}
+async function storageConnectSecret(id) {
+  const field = document.getElementById("st-resecret");
+  const secret = field ? field.value : "";
+  if (!secret) { toast("יש להקליד את הסיסמה"); return; }
+  await storageConnect(id, { secret });
 }
 function storageDisconnect(id) {
   try { id = decodeURIComponent(id); } catch (e) {}
@@ -574,5 +590,5 @@ function storageDrawerHtml(loc) {
     else buttons.push(`<button class="btn" onclick="storageConnect('${idEnc}')">נסה שוב</button>`, `<button class="btn" onclick="storageDisconnect('${idEnc}')">נתק</button>`);
   }
   buttons.push(`<button class="btn flat" onclick="selectPageById('logs')">פתח ביומן</button>`);
-  return `<div class="page drw">${head}<div><div class="sec">${loc.state === "connected" ? "המצב" : "הסיבה"}</div>${reason}</div><div><div class="sec">אימג'ים על המיקום (${loc.images}${loc.unavailable_images ? ` · ${loc.unavailable_images} לא זמינים` : ""})</div>${affected}${loc.unavailable_images ? `<div class="cap" style="margin-top:6px">הם רשומים בספרייה ולא נמחקו. כשהמיקום יחזור — יחזרו להיות זמינים בלי פעולה.</div>` : ""}</div>${round}${loc.removable ? `<div><div class="sec">ההבדל בין הכפתורים</div>${kv}</div>` : ""}<div style="display:flex;gap:6px;flex-wrap:wrap">${buttons.join("")}</div></div>`;
+  return `<div class="page drw">${head}<div><div class="sec">${loc.state === "connected" ? "המצב" : "הסיבה"}</div>${reason}${storageSecretHtml(loc, idEnc)}</div><div><div class="sec">אימג'ים על המיקום (${loc.images}${loc.unavailable_images ? ` · ${loc.unavailable_images} לא זמינים` : ""})</div>${affected}${loc.unavailable_images ? `<div class="cap" style="margin-top:6px">הם רשומים בספרייה ולא נמחקו. כשהמיקום יחזור — יחזרו להיות זמינים בלי פעולה.</div>` : ""}</div>${round}${loc.removable ? `<div><div class="sec">ההבדל בין הכפתורים</div>${kv}</div>` : ""}<div style="display:flex;gap:6px;flex-wrap:wrap">${buttons.join("")}</div></div>`;
 }

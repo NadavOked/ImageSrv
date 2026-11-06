@@ -209,6 +209,8 @@ valid_guid() {
     [ "${#1}" -eq 36 ] && printf '%s\n' "$1" \
         | LC_ALL=C grep -Eqx '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}'
 }
+# $1 = sgdisk -p/-i output, $2 = a label. The first word after "<label>: ", on the line that IS that label (a name can say anything).
+sgdisk_field() { printf '%s\n' "$1" | awk -F': ' -v k="$2" '$1 == k { split($2, w, " "); print w[1]; exit }'; }
 
 read_unique_guid() {
     # $1 = disk node, $2 = partition index. rc 0: stdout is the GUID.
@@ -219,8 +221,7 @@ read_unique_guid() {
     _rg_out=$(sgdisk -i "$2" "$1" 2>> "$LOG_FILE")
     _rg_rc=$?
     [ "$_rg_rc" -eq 0 ] || { echo "sgdisk -i $2 נכשל (rc=$_rg_rc)"; return 1; }
-    _rg=$(printf '%s\n' "$_rg_out" \
-        | awk -F': ' '/Partition unique GUID/ { print $2; exit }' | awk '{print $1}')
+    _rg=$(sgdisk_field "$_rg_out" 'Partition unique GUID')
     [ -n "$_rg" ] || { echo "sgdisk -i $2 לא הדפיס GUID ייחודי"; return 2; }
     valid_guid "$_rg" || { echo "sgdisk -i $2 הדפיס '$_rg', שאינו GUID"; return 3; }
     echo "$_rg"

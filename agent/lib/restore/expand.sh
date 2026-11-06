@@ -59,11 +59,11 @@ verify_table() {
     # מניפסט בלי GUID (null/ריק) מדלג, כמו apply_gpt — זה #571, לא כאן.
     _want_guid=$(json_get "$2" ".disk_guid")
     if [ -n "$_want_guid" ] && [ "$_want_guid" != "null" ]; then
-        _got_guid=$(sgdisk -p "$DEVROOT/$1" 2>/dev/null \
-            | awk -F': ' '/Disk identifier/ { print $2 }' | awk '{print $1}')
+        _got_guid=$(sgdisk -p "$DEVROOT/$1" 2>> "$LOG_FILE") || { PLAN_ERROR="sgdisk -p נכשל (rc=$?) — ה-GUID של הדיסק לא נקרא בחזרה"; log "$1: $PLAN_ERROR"; return 1; }
+        _got_guid=$(sgdisk_field "$_got_guid" 'Disk identifier (GUID)')   # #1212: the exit code above, not swallowed in a pipe
         if [ "$_got_guid" != "$_want_guid" ]; then
             log "$1: disk GUID on the disk is ${_got_guid:-empty}, not $_want_guid"
-            return 1
+            PLAN_ERROR="ה-GUID של הדיסק אינו של האימג' (#26)"; return 1   # #1924: the values in the log only
         fi
         log "$1: disk GUID $_got_guid came back from the disk"
     fi

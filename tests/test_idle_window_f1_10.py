@@ -14,19 +14,11 @@ from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH
-from test_agent_idle import _since, run_idle
+from test_agent_idle import _in_window, _since, run_idle
 from test_cloner_gui import _build_gui, _count_color, _png, _png_rgb, _token
 from test_failure_screen_1569 import GUI_BUILD
 
 pytestmark = requires_native(("bash", BASH))
-
-
-# #2457: what happens "while the window is up" was a background `sleep 0.3` (or 1)
-# racing idle_check: under load it landed before the window was up, or after its
-# count. Now it runs inside the window's own tick -- idle.warn is the evidence that
-# the window is up -- whatever the host's speed.
-def _in_window(action: str) -> str:
-    return f'; sleep() {{ if [ -f "$RUN_DIR/idle.warn" ]; then {action}; fi; command sleep "$@"; }}'
 
 
 def test_the_warning_says_how_long_the_machine_waited(tmp_path):

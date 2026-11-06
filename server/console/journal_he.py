@@ -27,6 +27,7 @@ EVENTS_HE = {
     "mfa_disable_failed": "ביטול MFA נדחה — קוד שגוי",   # נדב 18/10: ביטול עצמי
     "mfa_backup_codes_failed": "קודי גיבוי חדשים נדחו — סיסמה או קוד שגויים",   # #2470
     "login_attempts_trimmed": "מוני ניסיונות כניסה ישנים פונו — יותר מדי שמות שונים (#2459)",
+    "login_account_failures_trimmed": "רשומות כשלי כניסה לפי חשבון פונו — יותר מדי שמות שונים (#2478)",
     "mfa_reset": "אימות דו-שלבי אופס למשתמש",   # נדב 18/10: מנהל איפס למשתמש אחר; הפירוט = למי
     "sessions_revoked": "הפעלות בוטלו",
     "agent_login": "כניסה ממסך תחנה",
@@ -142,6 +143,7 @@ EVENTS_HE = {
     "direct_cancel": "השידור ממחשב הבנייה בוטל",
     "task_boot_cancel": "משימה מהגואי בוטלה: המכונה אותחלה לפני תחילתה",
     "unknown_mac": "מחשב לא רשום ניסה לעלות",
+    "journal_flood": "הצפה ביומן — אירועים ממקורות שונים נספרים ולא נרשמים אחד-אחד (#2498)",
     "disk_failure": "דיסק נכשל בכתיבה — נרשם לזיכרון הכשלים",
     "disk_failure_cleared": "רשומת כשל דיסק נוקתה",
     "boot_loop_local": "מחשב אתחל שוב ושוב — נשלח לדיסק המקומי",
@@ -440,6 +442,7 @@ _SEVERITY_ERR = {
 _SEVERITY_WARN = {
     "fw_changed",   # #2080
     "login_attempts_trimmed",   # #2459
+    "login_account_failures_trimmed", "journal_flood",   # #2478, #2498
     "unknown_mac", "drive_rates_failed", "boot_loop_local", "boot_loop_unverified", "agent_loop",
     "agent_loop_unverified", "report_from_nonmember", "identity_unverifiable", "room_rejoin",
     "capture_cancel", "direct_cancel", "task_boot_cancel", "send_stopped", "dhcp_proxy_risk",

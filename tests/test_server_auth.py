@@ -76,6 +76,31 @@ def test_a_missing_secret_refuses_to_issue_a_new_cookie(server):
     assert "imagesrv_session" not in r.cookies
 
 
+@pytest.mark.parametrize("value", [None, "", "zznothex", "00"])
+def test_the_secret_error_does_not_send_the_operator_to_a_backup(server, value):
+    """#2473: מאז #2424 הגיבוי אינו מכיל את ``console_secret``, ולכן ההודעה
+    ‏"שחזרו מגיבוי" שלחה את המפעיל לפעולה שאין בה מה למצוא. ההודעה אומרת
+    מה כן עושים: מוחקים את השורה ומפעילים מחדש — והמתכון הזה עובד."""
+    from server import db
+    from server.console import auth
+    conn = server["ctx"].conn
+    if value is None:
+        drop_secret(server)
+    else:
+        db.set_setting(conn, auth.SECRET_KEY, value)
+    with pytest.raises(auth.SecretUnusable) as err:
+        auth.assert_secret(conn)
+    message = str(err.value)
+    assert "שחזרו" not in message and "מגיבוי" not in message
+    assert "DELETE FROM settings WHERE key='console_secret'" in message
+    assert "הפעילו" in message and "מחדש" in message
+    # המתכון שההודעה נותנת: מחיקת השורה ואתחול -> סוד חדש ותקין.
+    conn.execute("DELETE FROM settings WHERE key = ?", (auth.SECRET_KEY,))
+    conn.commit()
+    db._initialize(conn)
+    auth.assert_secret(conn)
+
+
 @pytest.mark.parametrize("value", ["", "   ", "zznothex", "00", "aabbccdd"])
 def test_a_corrupt_or_short_secret_is_refused(server, value):
     """‏hex לא תקין, וסוד קצר מדי שהוא שריד ולא סוד."""

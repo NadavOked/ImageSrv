@@ -14,6 +14,7 @@ dnsmasq ו-dnsmasq מופעל מחדש.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,8 @@ from server.agent.api import ServerContext
 from server.db import get_setting, journal, set_setting
 
 Hooks = dict[str, Callable]
+
+log = logging.getLogger("imagesrv.console_dhcp")
 
 #: ‏#1121 ס' 4: נעילה סביב ההדלקה הראשונה של DHCP (השלמת ההתקנה) — תהליכית,
 #: כי כל הראוטרים באותו תהליך; שתי בקשות מקבילות לא ישלימו פעמיים.
@@ -336,7 +339,9 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         try:
             rows = ctx.leases.rows()
         except OSError as exc:
-            return unchecked(f"{path}: {exc.strerror or exc}", path)
+            # ‏#595: טקסט של OSError (נתיב, strerror) נשאר ביומן השרת; ללקוח — משפט קבוע.
+            log.warning("dhcp leases %s unreadable: %s", path, exc)
+            return unchecked("קובץ החכירות של dnsmasq לא נקרא — הפרטים ביומן השרת", path)
         mine = [dict(row, expires=_lease_expiry(row["expires"])) for row in rows
                 if any(ipaddress.IPv4Address(row["ip"]) in n for n in networks)]
         return {"interface": name, "checked": True, "reason": "", "path": path,

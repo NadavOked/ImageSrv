@@ -14,7 +14,8 @@
 #                         קריא, לא רק שנכתב (עיקרון 5). ‏sqlite3 (ה-CLI)
 #                         אינו מותקן על השרת — python3 כן, ואותו API.
 #   data/                 שאר תיקיית הנתונים: תעודת הקונסולה, netcfg,
-#                         known_hosts — בלי imagesrv.db*, בלי נקודות העיגון
+#                         known_hosts — בלי שום imagesrv.db* (גם לא עותק
+#                         ה-pre-upgrade, ‏#2504), בלי נקודות העיגון
 #                         של האחסון (‏storage/, ‏storage-test/), ובלי branding/
 #                         (לוגו מוסד מלפני #1302 — שארית, לא הגדרה).
 #   system/<ts>/          קובצי המערכת של ImageSrv: dnsmasq, nftables,
@@ -139,9 +140,20 @@ print(f"backup-server: DB ok — {len(data)} bytes, {tables} tables, integrity_c
 PYEOF
 
 # --- 2. שאר תיקיית הנתונים -----------------------------------------------
+# ‏#2504: ‏imagesrv.db* — תבנית, לא רשימת שמות. ה-DB נכנס רק דרך db/ (עותק בלי
+# ‏console_secret); עותק שלפני עדכון (imagesrv.db.pre-upgrade, ‏#1894) נושא את הסוד
+# כמות שהוא. ‏data/ היא מראה מתגלגלת בלי --delete, ולכן עותק שריצה ישנה השאירה
+# שם נמחק כאן — ואחר כך ראיה שאין אף אחד (עיקרון 5).
 say "data_dir → $DEST/data/"
-sync_dir "$DATA_DIR" "$DEST/data" 'imagesrv.db' 'imagesrv.db-wal' 'imagesrv.db-shm' \
-    'imagesrv.db-journal' 'storage' 'storage-test' 'branding'
+sync_dir "$DATA_DIR" "$DEST/data" 'imagesrv.db*' 'storage' 'storage-test' 'branding'
+for stale in "$DEST/data"/imagesrv.db*; do
+    [[ -e "$stale" ]] || continue
+    rm -f -- "$stale"
+    say "הוסר מ-data/ עותק DB מריצה קודמת (#2504): ${stale##*/}"
+done
+for leaked in "$DEST/data"/imagesrv.db*; do
+    [[ ! -e "$leaked" ]] || die "עותק DB נשאר ב-data/: $leaked"
+done
 
 # --- 3. קובצי המערכת של ImageSrv ------------------------------------------
 SYS="$DEST/system/$TS"

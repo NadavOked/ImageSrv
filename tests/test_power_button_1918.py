@@ -176,17 +176,29 @@ def test_stop_and_power_off_stops_the_local_clone_by_its_own_stop_then_powers_of
     assert "the localclone stopped" in out, out
 
 
+#: #2480/#2500: `during` waits for the listener's own files, not for a second of
+#: the clock. The ceiling (tenths) only ends a hang: under load the listener took
+#: more than the 1 s this test slept, the drawers were already "cancelled", and no
+#: cancel was written (full run, 06/11).
+UNTIL = ('_until() { _u=0; until eval "$1"; do _u=$((_u + 1)); '
+         '[ "$_u" -lt 300 ] || { echo "CEILING: $1"; return 1; }; sleep 0.1; done; }; ')
+
+
 @BASH_ONLY
 def test_stop_and_power_off_cancels_every_writing_drawer_and_takes_the_rounds_end(tmp_path):
     setup = ('for d in sdb sdc; do mkdir -p "$RUN_DIR/targets/$d"; echo writing > "$RUN_DIR/targets/$d/state"; done; '
              'mkdir -p "$RUN_DIR/targets/sdd"; echo done > "$RUN_DIR/targets/sdd/state"')
-    during = ('printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; sleep 1; '
+    during = (UNTIL + '_until \'[ -s "$RUN_DIR/power.ask" ]\'; '            # the question is on the screen
+              'printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; '
+              '_until \'[ -f "$RUN_DIR/targets/sdb/cancel" ] && [ -f "$RUN_DIR/targets/sdc/cancel" ]\'; '
               'grep -c "powering off" "$LOG_FILE" > "$RUN_DIR/off.before" || :; '
               # cancel_drawer's end (verdict.sh): the table wiped, then "cancelled"
               'for d in sdb sdc; do echo cancelled > "$RUN_DIR/targets/$d/state"; done; '
-              'echo "$(( $(date +%s) + 20 ))|partial|1|3|0" > "$RUN_DIR/end.poweroff"; sleep 1')
-    out, run_dir = run(tmp_path, setup, during)
+              'echo "$(( $(date +%s) + 20 ))|partial|1|3|0" > "$RUN_DIR/end.poweroff"; '
+              '_until \'[ -f "$RUN_DIR/end.now" ]\'')                   # the round's end count was told
+    out, run_dir = run(tmp_path, setup, during, timeout=150)
     for d in ("sdb", "sdc"):
+        assert (run_dir / "targets" / d / "cancel").is_file(), out
         assert (run_dir / "targets" / d / "cancel").read_text(encoding="utf-8").strip() == "מכפתור ההפעלה של המחשב", out
     assert not (run_dir / "targets" / "sdd" / "cancel").exists()          # a finished drawer is left alone
     assert (run_dir / "off.before").read_text().strip() == "0", out

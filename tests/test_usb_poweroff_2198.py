@@ -52,11 +52,14 @@ def finish(tmp_path: Path, *, problem=None, press=3700, mode="usbclone", then=""
     (tmp_path / "run/lc/run/targets").write_text("sdb\n", newline="\n")
     # No wall-clock waiting: each sleep advances one deterministic second.
     # date is fixed so both the published deadline and the off tick are testable.
+    # #2500: the beat is kept in the shell and written once at the end -- a file
+    # rewritten on each of up to 3700 ticks was the only I/O of the loop, and the
+    # zero test ran past run()'s 60 s once in a loaded full run (0.41 s alone).
     script = r'''
 tick=0
 date() { echo 1000; }
 finish_and_stop() { echo "OFF=$tick"; }
-watchdog_beat() { echo "$tick" > "$RUN_DIR/watchdog"; }
+watchdog_beat() { _wd=$tick; }
 held_beat_start() { :; }
 attended_power_check() { :; }
 sleep() {
@@ -69,7 +72,8 @@ sleep() {
 }
 '''
     out = boot(tmp_path, f'press={press}; abort={int(abort)}; IMAGESRV_MODE={mode}; '
-               + script + then + 'lc_end_count; echo "RC=$? VALUE=${USB_POWEROFF_S:-unset}"; ')
+               + script + then + 'lc_end_count; echo "RC=$? VALUE=${USB_POWEROFF_S:-unset}"; '
+               'echo "${_wd:-}" > "$RUN_DIR/watchdog"; ')
     return out.stdout, (tmp_path / "run/seen").read_text().strip().split("|")
 
 

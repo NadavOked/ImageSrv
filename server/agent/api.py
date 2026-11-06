@@ -78,6 +78,9 @@ class ServerContext:
     #: של סירובי הזהות (`_identity_repeats`). לכל אפליקציה, לא גלובלי.
     #: ‏#2487: גם `("unknown_mac", mac)` — שורת ה-hello של מכונה לא רשומה.
     identity_journaled: dict = field(default_factory=dict)
+    #: ‏#2498: אירוע → ‏[תחילת החלון, כמה מפתחות שונים נרשמו, כמה נספרו בלבד]
+    #: (`_spend_journal_budget`).
+    journal_budget: dict = field(default_factory=dict)
     #: ‏#1973: מנטר ה-UPS (`ups.UpsMonitor`) — ‏`server.main` בלבד; None = אין מנטר.
     ups: object | None = None
 
@@ -127,28 +130,66 @@ IDENTITY_JOURNAL_WINDOW_S = 300
 _IDENTITY_KEYS_PRUNE_AT = 256
 _identity_lock = threading.Lock()
 _clock = time.monotonic
+#: ‏#2498: הריסון לפי מפתח (#1949) אינו עוצר MAC אחר בכל בקשה — כל אחד הוא מפתח
+#: חדש. לכן לכל אירוע מרוסן נרשמים אחד-אחד לכל היותר כל כך הרבה מפתחות **שונים**
+#: בחלון; מעבר לזה הם נספרים, ושורת `JOURNAL_FLOOD` אחת אומרת שזה התחיל ואחת בחלון
+#: הבא אומרת כמה (עיקרון 5). ‏32 — כמו `rogue_dhcp.MAX_SOURCES` (#2442): כיתה שלמה.
+JOURNAL_KEYS_PER_WINDOW = 32
+JOURNAL_FLOOD = "journal_flood"
 
 
 def _identity_repeats(ctx: ServerContext, verdict: identity.Verdict) -> tuple[int, int] | None:
     """‏None = סירוב שכבר נרשם בחלון הנוכחי — נספר ולא נכתב. אחרת
-    ‏(כמה נספרו מאז השורה הקודמת, לפני כמה שניות היא נכתבה) — ‏(0, 0) לראשון."""
-    return _journal_repeats(ctx, (verdict.event, verdict.detail))
+    ‏(כמה נספרו מאז השורה הקודמת, לפני כמה שניות היא נכתבה) — ‏(0, 0) לראשון.
+    ‏#2498: סירוב הוא תמיד פונה שלא הוכח — נספר גם בתקרת המפתחות השונים."""
+    return _journal_repeats(ctx, (verdict.event, verdict.detail), budgeted=True)
 
 
-def _journal_repeats(ctx: ServerContext, key: tuple[str, str]) -> tuple[int, int] | None:
-    """‏#1949 לכל שורה חוזרת לפי מפתח; ‏#2487: גם `unknown_mac` של hello, לפי MAC."""
+def _journal_repeats(ctx: ServerContext, key: tuple[str, str],
+                     budgeted: bool = False) -> tuple[int, int] | None:
+    """‏#1949 לכל שורה חוזרת לפי מפתח; ‏#2487: גם `unknown_mac` של hello, לפי MAC.
+    ‏#2498: ‏``budgeted`` — המפתח נספר גם ב-`JOURNAL_KEYS_PER_WINDOW` של האירוע
+    (‏`key[0]`); מעבר לה ‏None, כמו חוזר."""
     now = _clock()
+    flood = None
     with _identity_lock:
         seen = ctx.identity_journaled.get(key)
         if seen is not None and now - seen[0] < IDENTITY_JOURNAL_WINDOW_S:
             seen[1] += 1
             return None
+        admitted, flood = _spend_journal_budget(ctx, key[0], now) if budgeted else (True, None)
+        # גם מפתח שלא נרשם נזכר: החוזרים שלו בחלון נספרים כחוזרים, ולא שוב בתקרה.
         ctx.identity_journaled[key] = [now, 0]
         if len(ctx.identity_journaled) > _IDENTITY_KEYS_PRUNE_AT:
             for old in [k for k, (at, _n) in ctx.identity_journaled.items()
                         if now - at >= IDENTITY_JOURNAL_WINDOW_S]:
                 del ctx.identity_journaled[old]
+    if flood is not None:
+        journal(ctx.conn, JOURNAL_FLOOD, flood)
+    if not admitted:
+        return None
     return (seen[1], int(now - seen[0])) if seen is not None else (0, 0)
+
+
+def _spend_journal_budget(ctx: ServerContext, event: str, now: float) -> tuple[bool, str | None]:
+    """‏#2498: ‏(נרשם אחד-אחד?, שורת `JOURNAL_FLOOD` לכתוב או None). הקורא מחזיק
+    את `_identity_lock`. ‏`ctx.journal_budget[event]` = ‏[תחילת החלון, כמה נרשמו,
+    כמה נספרו בלבד]. השורה הראשונה בחלון חדש נושאת את המונה של הקודם."""
+    budget = ctx.journal_budget.get(event)
+    line = None
+    if budget is None or now - budget[0] >= IDENTITY_JOURNAL_WINDOW_S:
+        if budget is not None and budget[2]:
+            line = (f"{event}: +{budget[2]} more different not journaled one by one"
+                    f" in the last {int(now - budget[0])}s")
+        budget = ctx.journal_budget[event] = [now, 0, 0]
+    if budget[1] < JOURNAL_KEYS_PER_WINDOW:
+        budget[1] += 1
+        return True, line
+    budget[2] += 1
+    if budget[2] == 1:
+        line = (f"{event}: over {JOURNAL_KEYS_PER_WINDOW} different in"
+                f" {IDENTITY_JOURNAL_WINDOW_S}s -- the rest are counted, not journaled one by one")
+    return False, line
 
 
 def identity_gate(ctx: ServerContext, mac: str, request: Request,
@@ -177,6 +218,22 @@ def boot_identity_ok(ctx: ServerContext, mac: str, client_ip: str | None) -> boo
         return True
     verdict = identity.verify(ctx.conn, ctx.leases, mac, client_ip)
     return _identity_refusal(ctx, verdict, "boot-cancel") is None
+
+
+def boot_journal_unknown(ctx: ServerContext, mac: str, client_ip: str | None,
+                         lease_matched: bool) -> None:
+    """‏#2498: שורת `unknown_mac` של `GET /boot/menu` — מרוסנת כמו זו של ה-hello
+    (#2487, אותו מפתח): אחת ל-MAC בחלון, ואחריה מונה. ‏``lease_matched`` = הבקשה
+    על וילן ההפצה ועברה את בדיקת החכירה; רק כשהשומר באמת מותקן ודלוק זו ראיה,
+    ואז המכונה אינה נספרת בתקרת המפתחות השונים — מחשב לא רשום אמיתי נרשם גם
+    בזמן הצפה. כל השאר (מחוץ לוילן, שומר כבוי) — נספר בה: ‏MAC אקראי בכל בקשה
+    אינו מגדל את היומן. התשובה עצמה אינה תלויה בזה (עיקרון 1)."""
+    proven = lease_matched and ctx.leases is not None and identity.enabled(ctx.conn)
+    repeats = _journal_repeats(ctx, ("unknown_mac", mac), budgeted=not proven)
+    if repeats is not None:
+        journal_unknown(ctx.conn, mac, client_ip,
+                        f" [+{repeats[0]} identical requests in the last {repeats[1]}s not journaled]"
+                        if repeats[0] else "")
 
 
 def source_gate(ctx: ServerContext, request: Request, where: str) -> JSONResponse | None:
@@ -415,10 +472,11 @@ def create_agent_router(ctx: ServerContext,
             # ‏#2487: מכונה לא רשומה נענית ונרשמת (כך היא נרשמת מהקונסולה), אבל
             # ‏hello חוזר אינו כותב שורת יומן בכל פעם: אחת לחלון, ואחריה מונה —
             # כמו סירובי הזהות (#1949). מכונה אמיתית שולחת hello אחד לאתחול.
+            # ‏#2498: אותו מפתח כמו תפריט האתחול — בקשה ו-hello של אותו אתחול הם שורה אחת.
             repeats = _journal_repeats(ctx, ("unknown_mac", mac))
             if repeats is not None:
                 journal_unknown(ctx.conn, mac, client_ip,
-                                f" [+{repeats[0]} identical hellos in the last {repeats[1]}s not journaled]"
+                                f" [+{repeats[0]} identical requests in the last {repeats[1]}s not journaled]"
                                 if repeats[0] else "")
         log.info("hello from %s (%s): known=%s off_vlan=%s",
                  # codeql[py/log-injection] false positive: MAC מנורמל, client_ip מה-socket, והשאר bool (#291)

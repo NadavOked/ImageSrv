@@ -38,7 +38,9 @@ def _derive(password: str, salt: str, iterations: int) -> str:
 
 
 #: אנגלית בלבד, לפי הכרעת נדב (#111) ועדכון #1085: בלי רווח, 2–50.
-_USERNAME_RE = re.compile(r"[a-z0-9._-]{2,50}", re.IGNORECASE)
+#: ‏#2505: מחלקה מפורשת **בלי** ‏IGNORECASE — על תבנית ‏str הדגל מקפל לפי
+#: יוניקוד, ו-`[a-z]` קיבל גם ‏`ſ` (U+017F) ו-‏`K` (U+212A), שאינם latin-1.
+_USERNAME_RE = re.compile(r"[A-Za-z0-9._-]{2,50}")
 
 #: תו מיוחד — אותם תווים ואותה הודעה כמו באלפון (`users_helpers.validate_password`).
 _PASSWORD_SPECIAL = re.compile(r'[!@#$%^&*(),.?":{}|<>]')

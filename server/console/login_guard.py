@@ -20,6 +20,10 @@
 
 ‏#2459 — ‏`login_attempts` תחומה ב-`MAX_KEYS` מפתחות (‏`_trim_keys`). מתחת לתקרה
 שום דבר לא השתנה; הספים, הנעילות והתקרה לפי חשבון — כמו שהם.
+
+‏#2478 — וכך גם ‏`login_account_failures`: לכל (שם, משטח) נשמרות רק `ACCOUNT_LIMIT`
+השורות האחרונות — יותר מזה `_check_account` אינו קורא ממילא — ובכל הטבלה לכל היותר
+`MAX_ACCOUNT_ROWS` (‏`_trim_account_rows`). ההכרעה לפי חשבון אינה משתנה.
 """
 
 from __future__ import annotations
@@ -44,6 +48,9 @@ ACCOUNT_CAPPED = "login_account_capped"
 #: הרגיל (‏housekeeping) הוא 90 יום — בלי תקרה, ניחוש שמות אקראיים מנפח את ה-DB.
 #: מעל התקרה מפנים `MAX_KEYS // 10` בבת אחת, כדי שהמיון לא ירוץ בכל כשל.
 MAX_KEYS = 10_000
+#: ‏#2478: אותה תקרה ל-`login_account_failures` (שורה לכל כשל; נמחקת אחרי 30 דקות).
+#: שם אקראי לכל ניסיון היה מוסיף שורה לכל בקשה עד שהחלון פג. מעל התקרה מפנים עשירית.
+MAX_ACCOUNT_ROWS = 10_000
 
 
 class LoginBlocked(Exception):
@@ -159,9 +166,13 @@ def record_failure(conn: sqlite3.Connection, username: str, ip: str,
         locked = failures == LOCK_AFTER
         capped = _record_account_failure(conn, username, t, surface)
         trimmed = _trim_keys(conn, t) if row is None else 0
+        trimmed_rows = _trim_account_rows(conn)
     if trimmed:
         journal(conn, "login_attempts_trimmed",
                 f"{trimmed} keys — over {MAX_KEYS} (last ip={ip})", username.strip())
+    if trimmed_rows:
+        journal(conn, "login_account_failures_trimmed",
+                f"{trimmed_rows} rows — over {MAX_ACCOUNT_ROWS} (last ip={ip})", username.strip())
     if locked:
         journal(conn, "login_lockout", f"{username.strip()} ip={ip}", username.strip())
     if capped:
@@ -173,7 +184,11 @@ def record_failure(conn: sqlite3.Connection, username: str, ip: str,
 
 def _record_account_failure(conn: sqlite3.Connection, username: str, t: float,
                             surface: str) -> bool:
-    """שורה לכשל, וניקוי כל מה שמעבר לחלון. ‏True רק בכשל שמגיע בדיוק לתקרה."""
+    """שורה לכשל, וניקוי כל מה שמעבר לחלון. ‏True רק בכשל שמגיע בדיוק לתקרה.
+
+    ‏#2478: אחרי הספירה נשארות רק `ACCOUNT_LIMIT` השורות האחרונות של (שם, משטח) —
+    בדיוק מה ש-`_check_account` קורא. מתחתיהן אין שורה בחלון שאינה בין האחרונות,
+    ולכן גם ההגעה לתקרה (‏`count == ACCOUNT_LIMIT`) נספרת כמו קודם."""
     name = _account(username)
     if not name:
         return False
@@ -184,6 +199,11 @@ def _record_account_failure(conn: sqlite3.Connection, username: str, t: float,
     count = conn.execute(
         "SELECT COUNT(*) FROM login_account_failures WHERE username = ? AND surface = ? AND at > ?",
         (name, surface, t - ACCOUNT_WINDOW)).fetchone()[0]
+    conn.execute(
+        "DELETE FROM login_account_failures WHERE username = ? AND surface = ? AND rowid NOT IN"
+        " (SELECT rowid FROM login_account_failures WHERE username = ? AND surface = ?"
+        " ORDER BY at DESC LIMIT ?)",
+        (name, surface, name, surface, ACCOUNT_LIMIT))
     return count == ACCOUNT_LIMIT
 
 
@@ -200,6 +220,25 @@ def _trim_keys(conn: sqlite3.Connection, t: float) -> int:
         "DELETE FROM login_attempts WHERE key IN (SELECT key FROM login_attempts"
         " ORDER BY COALESCE(locked_until, 0) > ?, failures, last_at LIMIT ?)",
         (t, excess),
+    )
+    return cur.rowcount
+
+
+def _trim_account_rows(conn: sqlite3.Connection) -> int:
+    """‏#2478: מעל `MAX_ACCOUNT_ROWS` — מפנה עד `MAX_ACCOUNT_ROWS` פחות עשירית. קודם
+    השורות של (שם, משטח) עם הכי מעט שורות, ובתוכן מהישנה לחדשה: הצפה בשמות אקראיים
+    (שורה אחת לשם) מפנה את עצמה, וחשבון שננעל (‏`ACCOUNT_LIMIT` שורות) מתפנה אחרון.
+    מתחת לתקרה — לא נוגע בכלום."""
+    count = conn.execute("SELECT COUNT(*) FROM login_account_failures").fetchone()[0]
+    if count <= MAX_ACCOUNT_ROWS:
+        return 0
+    excess = count - (MAX_ACCOUNT_ROWS - MAX_ACCOUNT_ROWS // 10)
+    cur = conn.execute(
+        "DELETE FROM login_account_failures WHERE rowid IN (SELECT f.rowid"
+        " FROM login_account_failures AS f JOIN (SELECT username, surface, COUNT(*) AS n"
+        " FROM login_account_failures GROUP BY username, surface) AS g"
+        " ON g.username = f.username AND g.surface = f.surface ORDER BY g.n, f.at LIMIT ?)",
+        (excess,),
     )
     return cur.rowcount
 

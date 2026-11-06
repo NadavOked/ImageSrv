@@ -24,10 +24,14 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-#: קבצים שאינם נכנסים לארכיון: ה-DB עצמו (נכנס דרך `.backup`), קובצי ה-WAL
-#: שלו, ומה שאינו הגדרה (בדיקות אחסון זמניות; ‏`branding/` — לוגו מוסד
-#: שהועלה לפני שהיכולת הוסרה, #1302 — שארית שאיש אינו קורא).
-SKIP_NAMES = {"imagesrv.db", "imagesrv.db-wal", "imagesrv.db-shm", "imagesrv.db-journal"}
+#: קבצים שאינם נכנסים לארכיון: **כל** קובץ ששמו מתחיל ב-``imagesrv.db`` — ה-DB
+#: עצמו (נכנס רק דרך `consistent_db_copy`, בלי ``console_secret``), קובצי ה-WAL שלו,
+#: ועותק ה-DB שלפני עדכון (``imagesrv.db.pre-upgrade`` ו-``.tmp`` שלו, ‏#1894) שנושא
+#: את הסוד כמות שהוא (#2504). תבנית ולא רשימת שמות: עותק DB שיתווסף מחר ל-data_dir
+#: לא ייכנס לגיבוי בלי שאיש החליט על כך. ‏`tools/backup-server.sh` מדלג על אותה תבנית.
+#: ומה שאינו הגדרה (בדיקות אחסון זמניות; ‏`branding/` — לוגו מוסד שהועלה לפני
+#: שהיכולת הוסרה, #1302 — שארית שאיש אינו קורא).
+DB_PREFIX = "imagesrv.db"
 SKIP_DIRS = {"storage-test", "storage", "branding"}
 #: ‏#2424: ``server.console.auth.SECRET_KEY`` — חותם העוגיות, שאינו נכנס לשום גיבוי.
 SECRET_SETTING = "console_secret"
@@ -41,11 +45,36 @@ def _integrity(conn: sqlite3.Connection) -> str:
 
 def _drop_console_secret(copy: sqlite3.Connection) -> None:
     """‏#2424: הסוד יוצא מהעותק — לא מהמקור — ו-`VACUUM` בונה את הקובץ מחדש, כך
-    שה-hex אינו נשאר בדף שהשורה התפנתה ממנו. DB בלי טבלת `settings` (בדיקות) — כמות שהוא."""
-    if copy.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'").fetchone():
-        with copy:   # עותק פרטי; ה-context manager עושה commit, או rollback בחריגה (#54)
+    שה-hex אינו נשאר בדף שהשורה התפנתה ממנו. DB בלי טבלת `settings` (בדיקות) — כמות שהוא.
+
+    ‏#2460 (הכרעת נדב 06/11): באותו מעבר יוצאים גם הסודות של מיקומי האחסון — סיסמת SMB
+    וסוד CHAP (‏`storage.locations.SECRET_KEYS`) — מ-`params_json` של כל מיקום. אחרי שחזור
+    המיקום מבקש אותם מחדש (‏`secret_missing`). ‏`params_json` שאינו JSON נקרא — אין דרך לדעת
+    מה יש בו, ולכן הוא אינו נשמר (`{}`); מיקום כזה ממילא לא עבד (`params_of` מחזיר `{}`)."""
+    import json   # noqa: PLC0415
+    from server.storage.locations import SECRET_KEYS   # noqa: PLC0415 — מקור אחד לרשימת הסודות
+
+    tables = {name for (name,) in copy.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if not tables & {"settings", "storage_locations"}:
+        return
+    with copy:   # עותק פרטי; ה-context manager עושה commit, או rollback בחריגה (#54)
+        if "settings" in tables:
             copy.execute("DELETE FROM settings WHERE key = ?", (SECRET_SETTING,))
-        copy.execute("VACUUM")
+        if "storage_locations" in tables:
+            for loc_id, raw in copy.execute("SELECT id, params_json FROM storage_locations").fetchall():
+                try:
+                    params = json.loads(raw or "{}")
+                except ValueError:
+                    params = None
+                if not isinstance(params, dict):
+                    kept = {}
+                elif any(key in params for key in SECRET_KEYS):
+                    kept = {k: v for k, v in params.items() if k not in SECRET_KEYS}
+                else:
+                    continue
+                copy.execute("UPDATE storage_locations SET params_json = ? WHERE id = ?",
+                             (json.dumps(kept, ensure_ascii=False), loc_id))
+    copy.execute("VACUUM")
 
 
 def consistent_db_copy(conn: sqlite3.Connection) -> bytes:
@@ -96,7 +125,7 @@ def build_archive(conn: sqlite3.Connection, data_dir: Path, version: str | None,
         # ‏#2426: ‏symlink אינו נארז — הוא היה מכניס לארכיון תוכן מחוץ ל-data_dir.
         for path in sorted(p for p in data_dir.rglob("*") if p.is_file() and not p.is_symlink()):
             rel = path.relative_to(data_dir)
-            if rel.name in SKIP_NAMES or rel.parts[0] in SKIP_DIRS:
+            if rel.name.startswith(DB_PREFIX) or rel.parts[0] in SKIP_DIRS:
                 continue
             add_bytes(f"data/{rel.as_posix()}", path.read_bytes())
         manifest = (

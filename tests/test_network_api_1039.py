@@ -218,6 +218,16 @@ def test_unreadable_lease_file_is_not_an_empty_list(net):
     assert body["leases"] is None
 
 
+def test_unreadable_lease_file_keeps_the_os_text_in_the_server_log_595(net, caplog):
+    """‏#595: הנתיב ו-strerror של ה-OSError ליומן השרת; ללקוח — משפט קבוע."""
+    caplog.set_level("WARNING", logger="imagesrv.console_dhcp")
+    net["lease_path"].unlink()
+    body = net["admin"].get("/api/console/net/interfaces/eth0/leases").json()
+    assert body["checked"] is False and body["leases"] is None
+    assert body["reason"] == "קובץ החכירות של dnsmasq לא נקרא — הפרטים ביומן השרת"
+    assert any(str(net["lease_path"]) in r.getMessage() for r in caplog.records)
+
+
 def test_file_read_but_no_lease_on_this_network_is_an_empty_list(net):
     net["lease_path"].write_text("1790000500 11:22:33:44:55:66 192.168.7.20 office *\n",
                                  encoding="utf-8", newline="\n")

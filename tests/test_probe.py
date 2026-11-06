@@ -69,6 +69,24 @@ def probe_of(sysroot: Path, extra: str = "", stubs: Path | None = None,
     return json.loads(out)["probe"]
 
 
+#: #2500: only a ceiling against a hang. The job kills itself at PROBE_MAX_S (35 s,
+#: probe_bg.sh); this is never what decides the test.
+PROBE_DONE_CEILING_S = 60
+
+
+def _probe_done(run: Path) -> None:
+    """#2500: wait for the background probe's own end marker. probe.json.running
+    goes when its job exits (trap EXIT) -- after probe.json is moved in AND
+    probe.json.at is written. probe.json alone is not the end: it is there before
+    .at, and a probe_json in between prints nothing (no .at = no fresh sample, the
+    marker = still in flight). Waiting for probe.json was the KeyError: 'probe' of
+    a loaded full run (06/11)."""
+    deadline = time.monotonic() + PROBE_DONE_CEILING_S
+    while (run / "probe.json.running").exists():
+        assert time.monotonic() < deadline, f"the background probe never ended ({PROBE_DONE_CEILING_S}s)"
+        time.sleep(0.05)
+
+
 def _agent_hello(fake_machine, libs: str) -> dict:
     return json.loads(sh(
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
@@ -410,10 +428,7 @@ def test_hello_schema_2_carries_probe(fake_machine):
     first = _agent_hello(fake_machine, libs)
     assert first["schema"] == 2
     assert "probe" not in first
-    for _ in range(100):
-        if (fake_machine["run"] / "probe.json").exists():
-            break
-        time.sleep(0.05)
+    _probe_done(fake_machine["run"])
     hello = _agent_hello(fake_machine, libs)
     assert "probe" in hello
     assert isinstance(hello["probe"]["probe_seconds"], int)
@@ -441,10 +456,7 @@ def test_probe_is_cached_in_run_dir_between_hellos(fake_machine):
     sh(run + f'export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/core/common.sh; '
        f'. {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; '
        f'. {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
-    for _ in range(100):
-        if (fake_machine["run"] / "probe.json").exists():
-            break
-        time.sleep(0.05)
+    _probe_done(fake_machine["run"])
     assert probe_of(sysroot, extra=run)["power"] == {"on_battery": False, "supply": "AC"}
     assert (fake_machine["run"] / "probe.json").exists()
     (ac / "online").write_text("0\n"); (bat / "status").write_text("Discharging\n")   # נותק מהחשמל
@@ -453,10 +465,7 @@ def test_probe_is_cached_in_run_dir_between_hellos(fake_machine):
     sh(run + f'export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/core/common.sh; '
        f'. {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; '
        f'. {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
-    for _ in range(100):
-        if not (fake_machine["run"] / "probe.json.running").exists():
-            break
-        time.sleep(0.05)
+    _probe_done(fake_machine["run"])
     assert probe_of(sysroot, extra=run)["power"] == {"on_battery": True, "supply": "BAT0"}
 
 

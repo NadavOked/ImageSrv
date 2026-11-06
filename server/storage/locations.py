@@ -43,6 +43,13 @@ LOCAL_NAME = "מקומי"
 TYPES = ("local", "nfs", "smb", "iscsi")
 STATES = ("connected", "unreachable", "disconnected", "unchecked")
 SECRET_KEYS = ("secret", "chap_secret")
+#: ‏#2460: הסודות יוצאים מכל עותק גיבוי של ה-DB (‏`backup._drop_console_secret`). על שרת
+#: ששוחזר יש משתמש ואין סיסמה — והמפעיל מקליד אותה מחדש ב-`/connect`. לכל סוג: (המשתמש,
+#: הסוד, ההודעה שהמפעיל רואה).
+SECRET_OF = {
+    "smb": ("username", "secret", "הסיסמה של המיקום אינה בגיבוי — הקלד אותה מחדש"),
+    "iscsi": ("chap_user", "chap_secret", "סוד ה-CHAP של המיקום אינו בגיבוי — הקלד אותו מחדש"),
+}
 TYPE_LABELS = {"local": "תיקייה", "nfs": "NFS", "smb": "SMB", "iscsi": "iSCSI"}
 STATE_LABELS = {
     "connected": "מחובר",
@@ -910,6 +917,21 @@ def creds_write(path: str, creds: dict) -> HookResult:
     return HookResult(OK, payload={"path": str(target)})
 
 
+def creds_password_present(path: str) -> HookResult:
+    """‏#2460: יש בקובץ שורת `password=` לא ריקה? ‏ok = כן · failed = אין קובץ או אין סיסמה ·
+    unchecked = הקובץ קיים ולא נקרא. שחזור על אותה מכונה משאיר את הקובץ, וה-DB בלי הסיסמה."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return HookResult(FAILED, f"אין קובץ credentials: {path}")
+    except (OSError, UnicodeDecodeError) as exc:
+        return HookResult(UNCHECKED, f"לא הצלחנו לקרוא את קובץ ה-credentials: {exc}")
+    if any(line.startswith("password=") and line[len("password="):].strip()
+           for line in text.splitlines()):
+        return HookResult(OK)
+    return HookResult(FAILED, f"אין סיסמה בקובץ ה-credentials: {path}")
+
+
 def creds_remove(path: str) -> HookResult:
     """מחיקת הקובץ. "כבר איננו" הוא המצב הרצוי — לא כשל."""
     target = Path(path)
@@ -948,6 +970,7 @@ def default_hooks() -> dict:
         "fstab_write": fstab_write,
         "creds_write": creds_write,
         "creds_remove": creds_remove,
+        "creds_password_present": creds_password_present,   # ‏#2460
         "df": df,
         "interfaces": lambda: [],
         "blank_disks": list_blank_disks,     # ‏#1988
@@ -1007,6 +1030,12 @@ def params_of(row: dict) -> dict:
 def public_params(params: dict) -> dict:
     """סודות לא נחשפים ב-GET."""
     return {k: v for k, v in params.items() if k not in SECRET_KEYS}
+
+
+def secret_missing(kind: str, params: dict) -> bool:
+    """‏#2460: יש משתמש (SMB) או משתמש CHAP (iSCSI), ואין סוד ב-DB — שרת ששוחזר מגיבוי."""
+    keys = SECRET_OF.get(kind)
+    return bool(keys and params.get(keys[0]) and not params.get(keys[1]))
 
 
 def set_state(conn, loc_id: str, state: str, detail: str = "", *,
@@ -1171,6 +1200,7 @@ def public_row(row: dict, library) -> dict:
         "unavailable_images": unavailable,
         "subtitle": subtitle_of(row),
         "params": public_params(params),
+        "secret_missing": secret_missing(row["type"], params),   # ‏#2460
         "removable": row["id"] != LOCAL_ID,
         "created_at": row["created_at"],
         "created_by": row["created_by"],
@@ -1486,7 +1516,15 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
         source = f"//{params.get('server')}/{params.get('share')}"
         creds = smb_creds(params)
         creds_file = creds_path(row["id"]) if creds else ""
-        if creds_file:
+        if creds_file and secret_missing(kind, params):
+            # ‏#2460: הסיסמה לא שוחזרה מהגיבוי. קובץ מלפני השחזור (אותה מכונה) שיש בו
+            # סיסמה — נשאר כמו שהוא; בלעדיו — כישלון בשם, לא mount.cifs בלי סיסמה.
+            kept = hooks["creds_password_present"](creds_file)
+            if kept.status == UNCHECKED:
+                return HookResult(UNCHECKED, f"{SECRET_OF['smb'][2]} · {kept.reason}")
+            if kept.status != OK:
+                return HookResult(FAILED, SECRET_OF["smb"][2])
+        elif creds_file:
             written = hooks["creds_write"](creds_file, creds)
             if written.status != OK:
                 return written

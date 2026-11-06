@@ -206,6 +206,29 @@ def test_a_hebrew_username_is_refused_cleanly_instead_of_500_on_login(server):
     assert "אנגליות" in r.json()["detail"]     # הודעה שאומרת מה לעשות
 
 
+@pytest.mark.parametrize("name", ["aſ", "aK", "Kelvin", "teſt"])
+def test_a_unicode_fold_of_an_english_letter_is_refused(server, name):
+    """‏#2505: ‏`re.IGNORECASE` על תבנית ‏str מקפל לפי יוניקוד, ולכן `[a-z]`
+    קיבל ‏`ſ` (U+017F) ו-‏`K` (U+212A, קלווין). אינם latin-1 — אותו 500 על
+    סיסמה נכונה של #111."""
+    r = server["admin"].post(
+        "/api/console/users",
+        json={"username": name, "password": "Some-pass-123!", "role": "deploy"},
+    )
+    assert r.status_code == 400
+    assert "אנגליות" in r.json()["detail"]
+    assert server["ctx"].conn.execute(
+        "SELECT COUNT(*) AS n FROM users WHERE username = ?", (name,)
+    ).fetchone()["n"] == 0
+
+
+@pytest.mark.parametrize("name", ["ab", "Rina.C", "LAB-TECH_2", "Kelvin", "x" * 50])
+def test_english_usernames_in_either_case_still_pass(name):
+    """הצד החיובי של #2505: אותיות גדולות מותרות היום (`Rina.C`) ונשארות."""
+    from server.console import users
+    users._check_username(name)
+
+
 def test_a_created_user_can_actually_sign_in(server):
     """הצד החיובי של #93: שם תקין נוצר — ומתחבר. נקודה מותרת, רווח לא (#1085).
     (‏admin: ‏#1073 — משתמש deploy אינו נכנס לקונסולה, ו-/me סגור בפניו.)"""

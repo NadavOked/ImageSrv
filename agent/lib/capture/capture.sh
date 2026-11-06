@@ -78,20 +78,17 @@ capture_disk() {
     # ה-GUID הייחודי של הדיסק ושל כל מחיצה חייבים לשרוד את השחזור:
     # ה-BCD של Windows מאתר את מחיצת המערכת לפי הזוג הזה, וטבלה עם
     # GUIDים חדשים = ‏winload.efi 0xc000000e על כל מחשב משוחזר (#26). GUID מחיצה שלא נקרא — unique_guid_gate (#1212).
-    _disk_guid=$(sgdisk -p "$_node_base" 2>/dev/null \
-                 | awk -F': ' '/Disk identifier/ { print $2 }' | awk '{print $1}')
-    # index:start:size:type-guid, from the partition table itself.
-    sgdisk -p "$_node_base" 2>/dev/null | awk '/^ *[0-9]+ / { print $1 }' > "$RUN_DIR/idx.txt"
+    # ‏#1212: קוד היציאה של sgdisk נבדק כאן ולא נבלע בצינור, וכל GUID נבדק כ-GUID — "" אינו נכנס למניפסט.
+    _table=$(sgdisk -p "$_node_base" 2>> "$LOG_FILE") || { _capture_failed "$_disk" "sgdisk -p נכשל (rc=$?) — טבלת המחיצות לא נקראה, לא נקלט"; return 1; }
+    _disk_guid=$(sgdisk_field "$_table" 'Disk identifier (GUID)')
+    printf '%s\n' "$_table" | awk '/^ *[0-9]+ / { print $1 }' > "$RUN_DIR/idx.txt"   # the indexes, from the table itself
     : > "$_parts"; : > "$RUN_DIR/partition.attrs"; : > "$RUN_DIR/uguid.fail"
     while read -r _idx; do
         [ -n "$_idx" ] || continue
-        _guid=$(sgdisk -i "$_idx" "$_node_base" 2>/dev/null \
-                | awk -F': ' '/Partition GUID code/ { print $2 }' | awk '{print $1}')
+        _info=$(sgdisk -i "$_idx" "$_node_base" 2>> "$LOG_FILE") || { _capture_failed "$_disk" "מחיצה $_idx: sgdisk -i נכשל (rc=$?) — לא נקלט"; return 1; }
+        _guid=$(sgdisk_field "$_info" 'Partition GUID code'); _first=$(sgdisk_field "$_info" 'First sector'); _size=$(sgdisk_field "$_info" 'Partition size')
+        valid_guid "$_guid" || { _capture_failed "$_disk" "מחיצה $_idx: סוג ה-GPT שנקרא ('$_guid') אינו GUID — לא נקלט"; return 1; }
         _uguid=$(read_unique_guid "$_node_base" "$_idx") || { echo "$_idx|$?|$_uguid" >> "$RUN_DIR/uguid.fail"; _uguid=""; }
-        _first=$(sgdisk -i "$_idx" "$_node_base" 2>/dev/null \
-                 | awk -F': ' '/First sector/ { print $2 }' | awk '{print $1}')
-        _size=$(sgdisk -i "$_idx" "$_node_base" 2>/dev/null \
-                 | awk -F': ' '/Partition size/ { print $2 }' | awk '{print $1}')
         _shrink_entry "$_disk" "$_idx" > "$RUN_DIR/partition.entry" \
             || { _capture_failed "$_disk" "$SHRINK_ERROR"; return 1; }
         printf '%s|%s\n' "$_idx" "$(awk -F'|' '{print $NF}' "$RUN_DIR/partition.entry")" >> "$RUN_DIR/partition.attrs"
@@ -99,6 +96,7 @@ capture_disk() {
     done < "$RUN_DIR/idx.txt"
     # כותרת GPT תקינה וטבלה ריקה — מצב אחר לגמרי מ"אינו GPT" (עיקרון 5).
     [ -s "$_parts" ] || { _capture_failed "$_disk" "לא נמצאו מחיצות על /dev/$_disk"; return 1; }
+    valid_guid "$_disk_guid" || { _capture_failed "$_disk" "ה-GUID של הדיסק לא נקרא מ-sgdisk -p ('$_disk_guid') — לא נקלט (#26)"; return 1; }   # every image: the server refuses "" too
     _why=$(unique_guid_gate "$_parts" "$RUN_DIR/uguid.fail"); [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; }
 
     while IFS='|' read -r _idx _guid _uguid _first _sizesec; do

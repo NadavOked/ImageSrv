@@ -43,6 +43,28 @@ def secondary_unreachable(exc: BaseException, port=None) -> str:
             f"{port if port else 8443} וחומת אש")
 
 
+def contact_failure(exc: BaseException, port=None) -> str:
+    """‏#595: מה הלקוח רואה כשהפנייה למשני נכשלה. הודעה עוברת רק מחריגה
+    שאנחנו כותבים (ערוץ, קובץ אישורים, זהות — אחרי ``redact_secrets``);
+    ‏``OSError`` — המשפט של #1016; כל חריגה אחרת — משפט קבוע, והפרטים ליומן."""
+    if isinstance(exc, (storage_client.InterserverClientError, interserver_auth.CredentialFileError,
+                        interserver_auth.InterserverURLError, storage_nodes.IdentityError)):
+        return interserver_auth.redact_secrets(str(exc))
+    if isinstance(exc, OSError):
+        return secondary_unreachable(exc, port)
+    log.warning("secondary contact failed: %s: %s", type(exc).__name__,
+                interserver_auth.redact_secrets(str(exc)))
+    return "הפנייה לשרת המשנה נכשלה — הפרטים ביומן השרת"
+
+
+def _node_port(node) -> int | None:
+    """הפורט מכתובת הרשומה, להודעה של #1016; כתובת שלא נקראת — ברירת המחדל."""
+    try:
+        return interserver_auth.parse_interserver_url(node["base_url"])[1]
+    except interserver_auth.InterserverURLError:
+        return None
+
+
 class _NotSent(Exception):
     """‏#1179 שלב 2: הכתיבה לא יצאה מהראשי (אין זהות/טוקן, החיבור לא נפתח)."""
 
@@ -221,7 +243,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             with client:
                 answer = client.ping(token)
         except Exception as exc:                             # noqa: BLE001
-            error = interserver_auth.redact_secrets(str(exc))
+            error = contact_failure(exc, _node_port(node))      # #595
             return {"connected": False, "error": error, "checked_at": now_iso(),
                     "node_id": None, "protocol_version": None,
                     **_contact(node, error)}
@@ -250,7 +272,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             with client:
                 answer = client.get_json("/images", token)
         except Exception as extra:                           # noqa: BLE001
-            error = interserver_auth.redact_secrets(str(extra))
+            error = contact_failure(extra, _node_port(node))    # #595
             return {"connected": False, "error": error, "images": [],
                     **_contact(node, error)}
         if not isinstance(answer, list):
@@ -280,7 +302,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             with client:
                 answer = client.get_json("/machines", token)
         except Exception as exc:                             # noqa: BLE001
-            error = interserver_auth.redact_secrets(str(exc))
+            error = contact_failure(exc, _node_port(node))      # #595
             return {"connected": False, "error": error, "machines": [],
                     **_contact(node, error)}
         machines = answer.get("machines")

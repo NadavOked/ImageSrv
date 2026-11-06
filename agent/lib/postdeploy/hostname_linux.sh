@@ -23,7 +23,10 @@ _mount_linux() {
     fi
     # ‏#1899: השורש שהקליטה סימנה ("system": true) — לא "הראשונה", שהיא /boot
     # כשהוא נפרד. מניפסט בלי סימון (לפני #1899): כמו קודם, הראשונה.
-    _idx=$(jq -r '[.partitions[] | select(.role == "linux" and .system == true)][0].index // empty' "$2" 2>> "$LOG_FILE")
+    # רק מבין השורות של התוכנית שהתקבלה: תוכנית של מחיצה אחת (‏#1979,
+    # ‏_write_hostname_linux) מעגנת את המחיצה הזו — לא את המסומנת הראשונה.
+    _idx=$(awk -F'|' -v m=" $(_linux_marked "$2" | tr '\n' ' ')" \
+        '$3 == "linux" && index(m, " " $1 " ") { print $1; exit }' "$_mount_plan") || return 1
     [ -n "$_idx" ] || _idx=$(awk -F'|' '$3 == "linux" { print $1; exit }' "$_mount_plan") || return 1
     [ -n "$_idx" ] || { log "no linux partition in the manifest" >&2; return 1; }
     _fs=$(awk -F'|' -v i="$_idx" '$1 == i { print $4 }' "$_mount_plan") || return 1
@@ -76,9 +79,47 @@ _write_linux_files() {
     fi
 }
 
+_linux_marked() {
+    # $1 = manifest. The index of every linux root the capture marked
+    # ("system": true, #1899) -- every one: a disk with two distributions
+    # carries two marks. Empty for a manifest from before the mark.
+    jq -r '.partitions[] | select(.role == "linux" and .system == true) | .index' "$1" 2>> "$LOG_FILE"
+}
+
 _write_hostname_linux() {
     # $1 = disk, $2 = manifest, $3 = name, $4 = verified plan (optional).
-    # Emits the section 5 result.
+    # Emits the section 5 result. Every linux root on the disk is named --
+    # until now only the first marked one was, and a second distribution came
+    # up with the image's name: #107's failure between two Linuxes. A root
+    # that failed is named by its partition, and the others are written all
+    # the same (עיקרון 5). One root, or none marked: the single path below.
+    _wl_roots=$(_linux_marked "$2")
+    case "$_wl_roots" in
+        *[!0-9]*) ;;   # more than one index (a newline between them)
+        *) _write_linux_root "$1" "$2" "$3" "${4:-}"; return $? ;;
+    esac
+    _wl_plan="${4:-$RUN_DIR/hostname-linux.plan}"
+    if [ -z "${4:-}" ] && ! manifest_plan "$2" > "$_wl_plan"; then
+        printf '{"ok":false,"error":"לא הצלחנו לקרוא את תוכנית המחיצות","code":"manifest_plan_failed"}\n'
+        return 1
+    fi
+    _wl_bad=""; _wl_code=""
+    for _wl_i in $_wl_roots; do
+        awk -F'|' -v i="$_wl_i" '$1 == i' "$_wl_plan" > "$_wl_plan.one"
+        _wl_r=$(_write_linux_root "$1" "$2" "$3" "$_wl_plan.one") && continue
+        [ -n "$_wl_code" ] || _wl_code=$(printf '%s' "$_wl_r" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+        _wl_bad="${_wl_bad:+$_wl_bad; }מחיצה $_wl_i: $(printf '%s' "$_wl_r" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')"
+    done
+    if [ -n "$_wl_bad" ]; then
+        printf '{"ok":false,"error":"%s","code":"%s"}\n' "$_wl_bad" "${_wl_code:-hostname_write_failed}"
+        return 1
+    fi
+    printf '{"ok":true,"hostname":"%s","method":"%s"}\n' "$3" "$HOSTNAME_METHOD_LINUX"
+}
+
+_write_linux_root() {
+    # $1 = disk, $2 = manifest, $3 = name, $4 = verified plan (optional).
+    # Names the one root _mount_linux finds in the plan; emits the section 5 result.
     _root=$(_mount_linux "$1" "$2" "${4:-}")
     case $? in
         0) ;;
