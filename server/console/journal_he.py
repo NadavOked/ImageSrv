@@ -25,6 +25,8 @@ EVENTS_HE = {
     "mfa_enabled": "MFA הופעל",
     "mfa_disabled": "MFA נוטרל",
     "mfa_disable_failed": "ביטול MFA נדחה — קוד שגוי",   # נדב 18/10: ביטול עצמי
+    "mfa_backup_codes_failed": "קודי גיבוי חדשים נדחו — סיסמה או קוד שגויים",   # #2470
+    "login_attempts_trimmed": "מוני ניסיונות כניסה ישנים פונו — יותר מדי שמות שונים (#2459)",
     "mfa_reset": "אימות דו-שלבי אופס למשתמש",   # נדב 18/10: מנהל איפס למשתמש אחר; הפירוט = למי
     "sessions_revoked": "הפעלות בוטלו",
     "agent_login": "כניסה ממסך תחנה",
@@ -423,6 +425,7 @@ EVENTS_HE = {
 SEVERITY_LEVELS = ("info", "ok", "warn", "err")
 _SEVERITY_ERR = {
     "login_failed", "login_refused_console", "login_lockout", "login_account_lockout",
+    "mfa_backup_codes_failed",   # #2470
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
     "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
     "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure",
@@ -436,6 +439,7 @@ _SEVERITY_ERR = {
 }
 _SEVERITY_WARN = {
     "fw_changed",   # #2080
+    "login_attempts_trimmed",   # #2459
     "unknown_mac", "drive_rates_failed", "boot_loop_local", "boot_loop_unverified", "agent_loop",
     "agent_loop_unverified", "report_from_nonmember", "identity_unverifiable", "room_rejoin",
     "capture_cancel", "direct_cancel", "task_boot_cancel", "send_stopped", "dhcp_proxy_risk",

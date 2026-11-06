@@ -21,26 +21,33 @@ from test_failure_screen_1569 import GUI_BUILD
 pytestmark = requires_native(("bash", BASH))
 
 
+# #2457: what happens "while the window is up" was a background `sleep 0.3` (or 1)
+# racing idle_check: under load it landed before the window was up, or after its
+# count. Now it runs inside the window's own tick -- idle.warn is the evidence that
+# the window is up -- whatever the host's speed.
+def _in_window(action: str) -> str:
+    return f'; sleep() {{ if [ -f "$RUN_DIR/idle.warn" ]; then {action}; fi; command sleep "$@"; }}'
+
+
 def test_the_warning_says_how_long_the_machine_waited(tmp_path):
-    out, _ = run_idle(tmp_path, _since(tmp_path, 10) + "; touch() { :; }",
-                      '(sleep 0.3; cp "$RUN_DIR/idle.warn" "$RUN_DIR/seen") & idle_check; wait')
+    out, _ = run_idle(tmp_path, _since(tmp_path, 10) + "; touch() { :; }"
+                      + _in_window('cp "$RUN_DIR/idle.warn" "$RUN_DIR/seen"'), "idle_check")
     at, idle_s = (tmp_path / "run" / "seen").read_text(encoding="utf-8").strip().split("|")
     assert at.isdigit() and idle_s == "2"   # IDLE_POWEROFF_S of the harness
 
 
 def test_power_off_now_ends_the_count_at_once(tmp_path):
-    import time
-    t0 = time.monotonic()
-    out, calls = run_idle(tmp_path, _since(tmp_path, 10) + "; export IDLE_WARN_S=20",
-                          '(sleep 1; : > "$RUN_DIR/idle.now") & idle_check; wait')
+    out, calls = run_idle(tmp_path, _since(tmp_path, 10) + "; export IDLE_WARN_S=20"
+                          + _in_window('printf x >> "$RUN_DIR/ticks"; : > "$RUN_DIR/idle.now"'), "idle_check")
     assert "'כבה עכשיו' pressed" in out, out
     assert calls.read_text(encoding="utf-8") == "POWEROFF -f\n"
-    assert time.monotonic() - t0 < 12, "the 20 s count ran out instead"
+    # the window's seconds, counted -- not the wall clock: one, not the 20 of the count
+    assert (tmp_path / "run" / "ticks").read_text() == "x", "the 20 s count ran out instead"
 
 
 def test_a_stale_press_from_before_the_window_powers_nothing_off(tmp_path):
-    out, calls = run_idle(tmp_path, _since(tmp_path, 10) + '; : > "$RUN_DIR/idle.now"',
-                          '(sleep 0.3; touch "$RUN_DIR/idle.touch") & idle_check; wait')
+    out, calls = run_idle(tmp_path, _since(tmp_path, 10) + '; : > "$RUN_DIR/idle.now"'
+                          + _in_window('touch "$RUN_DIR/idle.touch"'), "idle_check")
     assert "cancelled by activity" in out and not calls.exists(), out
 
 

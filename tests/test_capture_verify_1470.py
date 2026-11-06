@@ -208,8 +208,16 @@ def test_a_file_that_reads_back_wrong_from_disk_keeps_the_image_out_by_name(
     assert "sha256 mismatch on p3.windows.pcl.zst" in row["error"], row
     assert "server disk" in row["error"], row
     assert not (images_root / image_id).exists()
-    assert not staging_dir(images_root, tid).exists()
+    # #2457: _verify_failed commits 'failed', then removes the staging area, and only
+    # then journals capture_failed (capture.py) -- wait_verified can return before
+    # either. Wait for the line itself (the last of the three), with a ceiling, as
+    # capture_done above; the staging area is checked after it.
+    deadline = time.monotonic() + 15
+    while (not any(tid in d for d in _journal(server["ctx"], "capture_failed"))
+           and time.monotonic() < deadline):
+        time.sleep(0.05)
     assert any(tid in d for d in _journal(server["ctx"], "capture_failed"))
+    assert not staging_dir(images_root, tid).exists()
 
 
 # --- #1470: ה-sha256 מזמן הקבלה ------------------------------------------------

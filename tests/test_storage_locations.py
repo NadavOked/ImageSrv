@@ -18,6 +18,8 @@ from server.storage.locations import FAILED, OK, UNCHECKED, HookResult
 
 IQN = "iqn.2005-10.org.freenas.ctl:images"
 PORTAL = "10.44.3.75:3260"
+#: ‏#2468: מה ש-`iscsi_login` מחזיר — קישור by-path של ה-LUN, לא `/dev/sdX`.
+DEVICE = f"/dev/disk/by-path/ip-{PORTAL}-iscsi-{IQN}-lun-0"
 
 
 class FakeHooks:
@@ -40,7 +42,7 @@ class FakeHooks:
         self.make_fs_status = OK
         self.disk_status = "empty"
         self.disk_reason = "Input/output error"
-        self.device = "/dev/sdb"
+        self.device = DEVICE
         self.fs_type = "ext4"
         self.fs_label = "images"
         self.fs_size = 800_000_000_000
@@ -369,7 +371,7 @@ def test_iscsi_discover_login_unknown_disk_refuses_format(env):
     loc_id = created.json()["id"]
     login = env["admin"].post(f"/api/console/storage-locations/{loc_id}/iscsi-login")
     assert login.status_code == 200
-    assert login.json()["device_by_path"] == "/dev/sdb"
+    assert login.json()["device_by_path"] == DEVICE
     env["fake"].disk_status = "unknown"
     disk = env["admin"].get(f"/api/console/storage-locations/{loc_id}/disk").json()
     assert disk["disk_status"] == "unknown"
@@ -400,8 +402,8 @@ def test_empty_disk_format_requires_exact_iqn_then_makes_fs_mounts_fstab(env):
         "confirm": IQN,
     })
     assert ok.status_code == 200, ok.text
-    assert env["fake"].make_fs_calls == [("/dev/sdb", "san-lun1")]
-    assert any(m[1] == "/dev/sdb" for m in env["fake"].mounts)
+    assert env["fake"].make_fs_calls == [(DEVICE, "san-lun1")]
+    assert any(m[1] == DEVICE for m in env["fake"].mounts)
     assert env["fake"].fstab
     assert ok.json()["state"] == "connected"
 
@@ -416,7 +418,7 @@ def test_disk_with_fs_mounts_without_format(env):
     })
     assert mounted.status_code == 200, mounted.text
     assert env["fake"].make_fs_calls == []
-    assert any(m[1] == "/dev/sdb" for m in env["fake"].mounts)
+    assert any(m[1] == DEVICE for m in env["fake"].mounts)
     assert mounted.json()["state"] == "connected"
 
 

@@ -28,7 +28,9 @@ def create_storage_locations_router(
     hooks: dict | None = None,
     data_dir: str | Path | None = None,
     server_base: str = "",
+    boot_trees: tuple = (),
 ) -> APIRouter:
+    """‏`boot_trees` (‏#2462): ‏`--boot-dir` ו-`--tftp-root` בפועל — אסורים למיקום `local`."""
     router = APIRouter(prefix="/api/console/storage-locations")
     current_user, admin_only = auth.dependencies(ctx.conn)
     del current_user
@@ -50,7 +52,7 @@ def create_storage_locations_router(
             # ‏#2444: ביצירה ובבדיקה בלבד — מיקום שמור אינו עובר כאן.
             path = params.get("path") or params.get("mount_point")
             if path:
-                reason = sl.local_path_problem(path, data_dir, hooks["is_mount"])
+                reason = sl.local_path_problem(path, data_dir, hooks["is_mount"], boot_trees)
                 if reason:
                     raise HTTPException(400, reason)
 
@@ -112,9 +114,9 @@ def create_storage_locations_router(
         del user
         body = await request.json()
         kind = body.get("type")
-        params = body.get("params") or {}
         if kind not in sl.TYPES:
             raise HTTPException(400, "סוג לא מוכר")
+        params = sl.client_params(kind, body.get("params") or {})   # ‏#2468
         _validate(kind, params)
         tmp = data_dir / "storage-test"
         outcome = sl.test_connection(
@@ -135,9 +137,10 @@ def create_storage_locations_router(
             raise HTTPException(422, "אין יצירה בלי בדיקת חיבור מוצלחת באותה בקשה")
         kind = body.get("type")
         name = (body.get("name") or "").strip()
-        params = dict(body.get("params") or {})
         if kind not in sl.TYPES:
             raise HTTPException(400, "סוג לא מוכר")
+        # ‏#2468: רק המפתחות שהלקוח רשאי לקבוע — ‏device_by_path/fs_*/uuid נקבעים בשרת.
+        params = sl.client_params(kind, body.get("params") or {})
         if not name:
             raise HTTPException(400, "חסר שם תצוגה")
         _validate(kind, params)
@@ -252,12 +255,12 @@ def create_storage_locations_router(
             status = 503 if result.status == sl.UNCHECKED else 409
             raise HTTPException(status, result.reason or "ההתחברות נכשלה")
         payload = result.payload or {}
-        if payload.get("device_by_path"):
+        if sl.valid_iscsi_device(payload.get("device_by_path")):   # ‏#2468
             params["device_by_path"] = payload["device_by_path"]
         sl.save_params(ctx.conn, loc_id, params)
         journal(ctx.conn, "storage_iscsi_login",
                 f"{loc_id} {params.get('iqn')}", user[0])
-        return {"ok": True, "device_by_path": params.get("device_by_path") or "",
+        return {"ok": True, "device_by_path": sl.iscsi_device(params),
                 "iqn": params.get("iqn"), "portal": params.get("portal")}
 
     @router.get("/{loc_id}/disk")
@@ -265,7 +268,7 @@ def create_storage_locations_router(
         del user
         row = _row(loc_id)
         params = sl.params_of(row)
-        device = params.get("device_by_path")
+        device = sl.iscsi_device(params)   # ‏#2468
         if not device:
             raise HTTPException(409, "אין התקן — יש להתחבר ליעד קודם")
         result = hooks["disk_probe"](device)
@@ -293,7 +296,7 @@ def create_storage_locations_router(
         if body.get("format"):
             raise HTTPException(400, "עיגון עם פירמוט עובר ב-/format")
         params = sl.params_of(row)
-        device = params.get("device_by_path")
+        device = sl.iscsi_device(params)   # ‏#2468
         if row["type"] == "iscsi":
             if not device:
                 raise HTTPException(409, "אין התקן — יש להתחבר ליעד קודם")
@@ -304,6 +307,9 @@ def create_storage_locations_router(
                 raise HTTPException(409, "לא הצלחנו לקרוא את הדיסק — אין עיגון")
             if status == "empty" or not payload.get("fs_type"):
                 raise HTTPException(409, "אין מערכת קבצים על הדיסק — עיגון בלי פירמוט רק כשיש FS")
+            if payload.get("fs_type") not in sl.FS_TYPES:   # ‏#2468: נכתב ל-fstab
+                raise HTTPException(409, f"מערכת הקבצים {payload.get('fs_type')} אינה נתמכת"
+                                         f" — {' / '.join(sl.FS_TYPES)} בלבד")
             params["fs_type"] = payload.get("fs_type")
             params["fs_label"] = payload.get("fs_label")
             params["fs_size"] = payload.get("fs_size")
@@ -333,7 +339,7 @@ def create_storage_locations_router(
             raise HTTPException(422, "פירמוט דורש הקלדת ה-IQN")
         if confirm != iqn:
             raise HTTPException(403, "ה-IQN שהוקלד אינו זהה ליעד")
-        device = params.get("device_by_path")
+        device = sl.iscsi_device(params)   # ‏#2468: רק קישור by-path של LUN מגיע לפירמוט
         if not device:
             raise HTTPException(409, "אין התקן — יש להתחבר ליעד קודם")
         probed = hooks["disk_probe"](device)
@@ -429,7 +435,7 @@ def create_storage_locations_router(
                 chap, bool(params.get("auto", True)))
             if logged.status != sl.OK:
                 raise HTTPException(409, logged.reason or "ההתחברות נכשלה")
-            if (logged.payload or {}).get("device_by_path"):
+            if sl.valid_iscsi_device((logged.payload or {}).get("device_by_path")):   # ‏#2468
                 params["device_by_path"] = logged.payload["device_by_path"]
                 sl.save_params(ctx.conn, loc_id, params)
                 row = sl.get(ctx.conn, loc_id)

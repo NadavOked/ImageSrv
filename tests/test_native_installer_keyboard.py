@@ -17,7 +17,7 @@
 
 הדרייבר כולל את `install.c` ישירות (‏`#include`), כמו
 ‏`test_native_gui_input.py` עם `input.c`, ומזין אירועים ל-`install_handle`
-על מצב ה-demo. הגשר הוא `echo >>LOG` — כל פעולה שהמתקין שלח נרשמת.
+על מצב ה-demo. הגשר הוא `cat >/dev/null; echo >>LOG` — כל פעולה שהמתקין שלח נרשמת.
 ‏cc + כותרות cairo = לינוקס בלבד; בווינדוס זה דילוג, לא מעבר.
 """
 
@@ -168,7 +168,9 @@ def _press(driver: Path, tmp_path: Path, view: int, *tokens: str) -> tuple[list[
     """מריץ את הרצף ומחזיר (מצב אחרי כל מקש, פעולות הגשר שנשלחו)."""
     log = tmp_path / "bridge.log"
     log.write_text("")
-    proc = subprocess.run([str(driver), f'echo >>"{log}"', str(view), *tokens],
+    # #2415: the bridge reads its stdin before it leaves. One that does not closes the
+    # pipe, the installer's write may get EPIPE, and #2108's 'sent' fails the call.
+    proc = subprocess.run([str(driver), f'cat >/dev/null; echo >>"{log}"', str(view), *tokens],
                           capture_output=True, text=True, timeout=30,
                           stdin=subprocess.DEVNULL)
     assert proc.returncode == 0, proc.stderr
@@ -384,7 +386,7 @@ def _press_inventory(driver: Path, tmp_path: Path, inventory: tuple[str, ...], *
     log.write_text("")
     inv.write_text("\n".join(inventory) + "\n", encoding="utf-8", newline="\n")
     script = tmp_path / "bridge.sh"
-    script.write_text(f'echo "$1" >> "{log}"\n[ "$1" = inventory ] && cat "{inv}"\nexit 0\n',
+    script.write_text(f'cat >/dev/null\necho "$1" >> "{log}"\n[ "$1" = inventory ] && cat "{inv}"\nexit 0\n',   # #2415
                       encoding="utf-8", newline="\n")
     proc = subprocess.run([str(driver), f"sh {script}", str(DISK), "inventory", *tokens],
                           capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)

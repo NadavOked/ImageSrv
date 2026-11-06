@@ -17,6 +17,9 @@
 שחיה גם שם). אחרת חמש תחנות ברשת ההפצה נעלו את המנהל מחוץ לקונסולה בתוך
 דקה. ניחוש מבוזר בפורט הסוכן עדיין נעצר — בתקרה של המשטח שלו. התקרה לפי
 (שם, IP) משותפת לשני המשטחים: הכתובות בשתי הרשתות שונות ממילא.
+
+‏#2459 — ‏`login_attempts` תחומה ב-`MAX_KEYS` מפתחות (‏`_trim_keys`). מתחת לתקרה
+שום דבר לא השתנה; הספים, הנעילות והתקרה לפי חשבון — כמו שהם.
 """
 
 from __future__ import annotations
@@ -37,6 +40,10 @@ CONSOLE = "console"
 AGENT = "agent"
 #: ‏#2443: ‏`error` בגוף ה-429 של התקרה לפי חשבון — הקונסולה מציגה את המשפט של השרת.
 ACCOUNT_CAPPED = "login_account_capped"
+#: ‏#2459: תקרה למספר המפתחות ב-`login_attempts`. כל שם אקראי מוסיף שורה, והניקוי
+#: הרגיל (‏housekeeping) הוא 90 יום — בלי תקרה, ניחוש שמות אקראיים מנפח את ה-DB.
+#: מעל התקרה מפנים `MAX_KEYS // 10` בבת אחת, כדי שהמיון לא ירוץ בכל כשל.
+MAX_KEYS = 10_000
 
 
 class LoginBlocked(Exception):
@@ -151,6 +158,10 @@ def record_failure(conn: sqlite3.Connection, username: str, ip: str,
         )
         locked = failures == LOCK_AFTER
         capped = _record_account_failure(conn, username, t, surface)
+        trimmed = _trim_keys(conn, t) if row is None else 0
+    if trimmed:
+        journal(conn, "login_attempts_trimmed",
+                f"{trimmed} keys — over {MAX_KEYS} (last ip={ip})", username.strip())
     if locked:
         journal(conn, "login_lockout", f"{username.strip()} ip={ip}", username.strip())
     if capped:
@@ -174,6 +185,23 @@ def _record_account_failure(conn: sqlite3.Connection, username: str, t: float,
         "SELECT COUNT(*) FROM login_account_failures WHERE username = ? AND surface = ? AND at > ?",
         (name, surface, t - ACCOUNT_WINDOW)).fetchone()[0]
     return count == ACCOUNT_LIMIT
+
+
+def _trim_keys(conn: sqlite3.Connection, t: float) -> int:
+    """‏#2459: מעל `MAX_KEYS` — מפנה את המפתחות שהכי פחות חשובים, עד `MAX_KEYS`
+    פחות עשירית. קודם מפתח בלי נעילה בתוקף, ובתוכם מהמעט-כשלונות לרב ומהישן לחדש:
+    הצפה בשמות אקראיים (כשלון אחד לכל שם) מפנה את עצמה, ולא מוחקת נעילה של מישהו.
+    מתחת לתקרה — לא נוגע בכלום. ‏התקרה לפי חשבון (‏`login_account_failures`) אינה כאן."""
+    count = conn.execute("SELECT COUNT(*) FROM login_attempts").fetchone()[0]
+    if count <= MAX_KEYS:
+        return 0
+    excess = count - (MAX_KEYS - MAX_KEYS // 10)
+    cur = conn.execute(
+        "DELETE FROM login_attempts WHERE key IN (SELECT key FROM login_attempts"
+        " ORDER BY COALESCE(locked_until, 0) > ?, failures, last_at LIMIT ?)",
+        (t, excess),
+    )
+    return cur.rowcount
 
 
 def clear(conn: sqlite3.Connection, username: str, ip: str) -> None:

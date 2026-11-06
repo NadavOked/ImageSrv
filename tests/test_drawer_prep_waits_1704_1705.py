@@ -207,16 +207,29 @@ def test_a_ceiling_is_still_a_ceiling_in_tenths(tmp_path):
     assert 1.5 <= extra <= 5.0, extra
 
 
-# #2118: a wall-clock bound under one second; under `-n auto` it measured
-# 8.2 s and 9.0 s (2/2) and passes alone (3/3). Serial phase, same bound.
-@pytest.mark.serial
+# #2457: this was a wall-clock bound (< 0.9 s a partition over a baseline run).
+# Under load it measured 8.2/9.0 s (#2118, `-n auto`) and failed again in the
+# serial phase (05/11, an ISO build and QEMU on the testrunner); 6.1 s on an idle
+# Windows. The host's speed, not the code's waiting. Now the waiting is read from
+# the code itself: every `sleep` it asks for, by caller -- no clock at all.
+WAITS_POLL_S = 10   # one poll period; a wait that sleeps one out is >= 10 s of sleep
+
+
 def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
     """restore_partition_drawers end to end with a stream that is over at once
     (64 KB, the counting fanout of test_drawer_progress): what is left is the
     waiting between "the bytes ended" and "the next partition may start" -- the
-    3 s of every transition on metal. Old: wait_progress alone slept >= 1 s (the
-    stream is alive at its first look), then the watcher's and the drawers' waits,
-    up to a second each. Measured over two partitions."""
+    3 s of every transition on metal. Old: every wait slept a whole WAIT_POLL_S
+    before it looked (wait_progress, the watcher, the drawers' wait_pid), so at
+    WAIT_POLL_S=1 a partition waited >= 1 s whatever the host.
+
+    The proof, by what the code asked to sleep (a `sleep` that records its caller
+    and its seconds) at WAIT_POLL_S=10 -- two partitions:
+    1. every sleep of the waits is one tick (<= 0.1 s), never a poll period;
+    2. all their ticks together are less than ONE poll period: a wait that ticks
+       a period out without looking (a `_nap` with no kill -0) is >= 10 s alone.
+    Ticks while a process is still alive are honest waiting; a slow host adds a
+    few of them (3.0 s in all on a loaded Windows, 05/11), never a period."""
     box = tmp_path / "box"
     run = box / "run"
     payload = box / "part.bin"
@@ -228,16 +241,27 @@ def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
     prelude = (
         make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
+        f"WAIT_POLL_S={WAITS_POLL_S} WAIT_DRAWER_S=60 WAIT_HELPER_S=60 WAIT_STREAM_START_S=60 WAIT_STREAM_STALL_S=60; "
         + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
                         "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "target_init sda 131072; target_init sdb 131072; "
         f"stream_source() {{ cat {posix(payload)!r}; }}; "
+        # every sleep the code asks for, with the function that asked (bash's FUNCNAME;
+        # subshells inherit it); the real sleep still runs
+        f'sleep() {{ printf "%s %s\\n" "${{FUNCNAME[1]:-main}}" "$1" >> {posix(box)!r}/slept; command sleep "$@"; }}; '
     )
     one = (f"restore_partition_drawers unicast http://s img 3 dd part.zst {sha} '' sda sdb "
            f">> {posix(box)}/pipe.out 2>&1 || echo bad; ")
-    out, extra = _extra(prelude, one + one + "echo ok")
+    out = run_sh(prelude + one + one + "echo ok", timeout=180)
     assert out.strip().endswith("ok") and "bad" not in out.split(),         out + (box / "pipe.out").read_text(encoding="utf-8", errors="replace")
-    per = extra / 2
-    print(f"#1705: one partition in the room took {per:.2f}s over the baseline (old: >= 1 s)")
-    assert per < 0.9, f"{per:.2f}s a partition -- the old first wait alone was >= 1 s"
+    slept = [line.split() for line in (box / "slept").read_text(encoding="utf-8").splitlines()]
+    # writeback_watch's fsync period runs beside the pipe and nobody waits on it
+    # (the pipe kills it at its end) -- not waiting, so not counted
+    waits = [(who, float(s)) for who, s in slept if who != "writeback_watch"]
+    assert waits, f"no wait slept at all -- the recording broke, not a pass: {slept}"
+    longest = max(waits, key=lambda w: w[1])
+    assert longest[1] <= 0.1, f"{longest[0]} slept {longest[1]} s at once -- a wait sleeps a tick, then looks"
+    total = sum(s for _, s in waits)
+    print(f"#1705: the room's waits slept {total:.1f}s in {len(waits)} ticks over two partitions "
+          f"(one poll period: {WAITS_POLL_S} s)")
+    assert total < WAITS_POLL_S, f"{total:.1f}s of ticks over two partitions -- a wait slept a poll period out"

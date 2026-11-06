@@ -108,23 +108,34 @@ def _check_with(verify_tag):
     return update_mod.check_update(hooks, "/repo", "https://example/pub.git")
 
 
-@pytest.mark.parametrize("state", ["signed", "unsigned", "unchecked"])
-def test_check_update_carries_each_signature_state_as_is(state):
+def test_check_update_carries_a_signed_state_as_is():
+    result = _check_with(lambda *_: {"state": "signed", "detail": "d"})
+    assert result["signature"] == {"state": "signed", "detail": "d"}
+    assert result["available"] is True
+
+
+# ‏#2469: תג שאינו ``signed`` אינו מוצע — מצבו נשמר כמו שהוא ב-``skipped``.
+@pytest.mark.parametrize("state", ["unsigned", "unchecked"])
+def test_check_update_carries_each_unsigned_state_as_is_without_an_offer(state):
     result = _check_with(lambda *_: {"state": state, "detail": "d"})
-    assert result["signature"] == {"state": state, "detail": "d"}
-    assert result["available"] is True          # החתימה אינה מסתירה את הגרסה — השער הוא הסקריפט
+    assert result["skipped"] == [{"tag": "v0.25.0", "state": state, "detail": "d"}]
+    assert result["available"] is False and result["latest"] is None
 
 
 def test_a_verifier_that_raised_is_unchecked_not_signed():
     def boom(*_):
         raise RuntimeError("cannot run")
-    signature = _check_with(boom)["signature"]
+    result = _check_with(boom)
+    signature = result["skipped"][0]
     assert signature["state"] == "unchecked" and "cannot run" in signature["detail"]
+    assert result["available"] is False
 
 
 @pytest.mark.parametrize("answer", [None, {}, {"state": "ok"}, {"state": "SIGNED"}, "signed"])
 def test_an_unknown_verifier_answer_is_unchecked(answer):
-    assert _check_with(lambda *_: answer)["signature"]["state"] == "unchecked"
+    result = _check_with(lambda *_: answer)
+    assert result["skipped"][0]["state"] == "unchecked"
+    assert result["available"] is False
 
 
 def test_no_signature_is_checked_when_there_is_nothing_to_install():

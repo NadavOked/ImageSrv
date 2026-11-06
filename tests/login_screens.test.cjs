@@ -305,6 +305,19 @@ test('#1268: "שנה סיסמה" in my account — current + new + confirm, POST
   assert.equal(run('flow.join(",")'), 'login,setup:nadav');
 });
 
+test('#2470: "קודי גיבוי חדשים" asks for the current password and the app code, and sends both', async () => {
+  const {run, ctx} = setup();
+  const calls = [];
+  ctx.fetch = async (url, o = {}) => { calls.push({url, body: o.body ? JSON.parse(o.body) : null}); return {status: 200, ok: true, headers: {get: () => null}, json: async () => ({mfa_enabled: true, backup_codes: ['A']})}; };
+  run('ME={username:"nadav",role:"admin",is_builtin:false,mfa_enabled:true}; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); showBackupCodesDrawer=()=>{};');
+  run('accountNewBackupCodes()');
+  const s = run('sheets.at(-1)');
+  assert.deepEqual(JSON.parse(JSON.stringify(s.fields.map((f) => [f.id, f.type || '', f.autocomplete || '']))), [
+    ['current_password', 'password', 'current-password'], ['code', '', '']]);
+  await s.onSubmit({current_password: 'Aa12345!', code: '123456'});
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{url: '/api/console/me/mfa/enable', body: {current_password: 'Aa12345!', code: '123456'}}]);
+});
+
 test('2443: the per-account cap shows the server sentence — what happened and when it opens', () => {
   const {run} = setup();
   const msg = 'החשבון חסום זמנית לכניסה מכתובת חדשה: 50 ניסיונות כניסה כושלים ב-15 הדקות האחרונות, מכמה כתובות. החסימה נפתחת לבד בעוד 12 דקות.';

@@ -168,6 +168,17 @@ def _qr_svg(otpauth_url: str) -> str:
 def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tls) -> None:
     """מוסיף את נתיבי ה-MFA לראוטר הקונסולה הקיים — מיזוג קל מול #1073."""
 
+    def guarded_ip(request: Request, username: str) -> str:
+        """‏#2470: ‏`verify`/`enable` עוברים באותו מונה ובאותם ספים כמו `/login/mfa`
+        (‏login_guard — שם משתמש + IP): בלעדיו עוגייה גנובה מנחשת TOTP בלי הגבלה."""
+        ip = request.client.host if request.client else "?"
+        try:
+            login_guard.check(ctx.conn, username, ip)
+        except login_guard.LoginBlocked as exc:
+            headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else {}
+            raise HTTPException(exc.status, exc.message, headers=headers)
+        return ip
+
     @router.post("/me/mfa/setup")
     def mfa_setup(user=Depends(current_user)):
         username, role = user
@@ -218,8 +229,12 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             raise HTTPException(403, "builtin_no_mfa")
         if not info["mfa_secret"]:
             raise HTTPException(400, "יש לקרוא ל-setup קודם")
-        if totp.verify_totp(info["mfa_secret"], body.get("code", "")) is None:
+        ip = guarded_ip(request, username)
+        if totp.verify_totp(info["mfa_secret"], str(body.get("code") or "")) is None:
+            login_guard.record_failure(ctx.conn, username, ip)
             raise HTTPException(401, "קוד שגוי, נסה שוב")
+        # הצלחה אינה מאפסת את המונה: הבדיקה אינה צורכת את הקוד, ואיפוס כאן היה מאפשר
+        # לשלב ניחושי סיסמה (‏`enable` כש-MFA פעיל) עם קוד ידוע. ‏`enable` מאפס.
         return {"verified": True}
 
     @router.post("/me/mfa/enable")
@@ -232,9 +247,21 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             raise HTTPException(403, "builtin_no_mfa")
         if not info["mfa_secret"]:
             raise HTTPException(400, "יש לקרוא ל-setup קודם")
-        step = totp.verify_totp(info["mfa_secret"], body.get("code", ""))
-        if step is None:
+        ip = guarded_ip(request, username)
+        # ‏#2470: כש-MFA כבר פעיל, זה "קודי גיבוי חדשים" (‏accountNewBackupCodes) — הקודים
+        # הישנים נפסלים ונמסרים חדשים. לכן כמו ב-`/me/mfa/disable`: הסיסמה הנוכחית **וגם**
+        # קוד TOTP שלא נצרך (‏#2414). הקוד נבדק רק אחרי סיסמה נכונה.
+        renew = bool(info["mfa_enabled"])
+        password_ok = (not renew or users.verify(
+            ctx.conn, username, str(body.get("current_password") or "")) is not None)
+        step = totp.verify_totp(info["mfa_secret"], str(body.get("code") or "")) if password_ok else None
+        if step is None or (renew and _replayed(step, info["mfa_last_step"])):
+            login_guard.record_failure(ctx.conn, username, ip)
+            if renew:
+                journal(ctx.conn, "mfa_backup_codes_failed", username, username)
+                raise HTTPException(401, "סיסמה או קוד שגויים — לא נוצרו קודים חדשים")
             raise HTTPException(401, "קוד שגוי, לא ניתן להפעיל MFA")
+        login_guard.clear(ctx.conn, username, ip)
         codes = _new_backup_codes(ctx.conn, username)
         with _write_lock, writing(ctx.conn):
             # ‏#2414: הקוד שהפעיל את ה-MFA נצרך — אחרת הוא נכנס שוב ב-`/login/mfa`.

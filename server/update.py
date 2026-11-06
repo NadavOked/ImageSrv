@@ -241,6 +241,11 @@ def _run_upgrade_script(repo_dir: str | Path, tag: str) -> tuple[bool, str]:
 #: אינם "חתום" (עיקרון 5). השער עצמו הוא ``tools/server-upgrade.sh``; כאן
 #: המנהל רואה את התוצאה **לפני** שהוא לוחץ "החל".
 SIGNATURE_STATES = ("signed", "unsigned", "unchecked")
+_SIGNATURE_WORDS = {"signed": "חתום", "unsigned": "לא חתום", "unchecked": "לא נבדק"}
+
+#: ‏#2469: כמה תגים חדשים לכל היותר נבדקים בחיפוש החתום הגבוה ביותר. כל בדיקה
+#: היא הורדת תג והרצת המאמת (עד 60+60 ש'); מה שמעבר לתקרה נאמר בהודעה, לא נבלע.
+MAX_SIGNATURE_CHECKS = 5
 
 
 def _verify_remote_tag(url: str, tag: str, repo_dir: str | Path) -> dict:
@@ -396,13 +401,41 @@ def check_update(hooks: Hooks, repo_dir: str | Path, public_url: str) -> dict:
     if not tags:
         return {"current": current, "latest": None, "available": False,
                 "reason": "אין גרסאות (tags) בריפו הציבורי"}
-    latest = tags[-1]
     base = _base_version(current)
-    available = base is None or (semver_key(latest) or ()) > (semver_key(base) or ())
-    result = {"current": current, "latest": latest, "available": available, "reason": None}
-    if available:
-        result["signature"] = tag_signature(hooks, public_url, latest, repo_dir)
-    return result
+    newer = [t for t in tags if base is None or semver_key(t) > semver_key(base)]
+    if not newer:
+        return {"current": current, "latest": tags[-1], "available": False, "reason": None}
+    # ‏#2469: מהגבוה לנמוך, וההצעה היא הגבוה ביותר שמצבו ``signed`` — תג לא
+    # חתום (או שבדיקתו נכשלה) מעליו אינו מסתיר אותו, ומוצג רק כאזהרה.
+    skipped = []
+    for tag in reversed(newer[-MAX_SIGNATURE_CHECKS:]):
+        signature = tag_signature(hooks, public_url, tag, repo_dir)
+        if signature["state"] == "signed":
+            result = {"current": current, "latest": tag, "available": True, "reason": None,
+                      "signature": signature}
+            if skipped:
+                result["skipped"] = skipped
+            return result
+        skipped.append({"tag": tag, **signature})
+    # אף תג חדש לא אומת כחתום: אין הצעה. "לא נבדק" אינו "חתום" (עיקרון 5).
+    names = ", ".join(f"{s['tag']} ({_SIGNATURE_WORDS[s['state']]})" for s in skipped)
+    unchecked = len(newer) - len(skipped)
+    if unchecked:
+        # התקרה הושגה ונשארו תגים שלא נבדקו: ייתכן שעדכון חתום ביניהם. זה אינו
+        # "אין עדכון" — זה סימן שמישהו דוחף תגים לא חתומים לריפו הציבורי.
+        reason = "too_many_unsigned"
+        message = (f"יותר מ-{MAX_SIGNATURE_CHECKS} גרסאות מעל הגרסה המותקנת בריפו הציבורי "
+                   "אינן מאומתות כחתומות במפתח השחרור — ייתכן שמישהו דוחף לשם תגים לא "
+                   f"חתומים. נבדקו: {names}. עוד {unchecked} גרסאות ישנות יותר לא נבדקו, "
+                   "ועדכון חתום ביניהן לא יוצע עד שהתגים האלה יוסרו מהריפו הציבורי")
+    else:
+        reason = "no_signed"
+        message = ("נמצאו גרסאות חדשות יותר בריפו הציבורי, ואף אחת מהן לא אומתה כחתומה "
+                   f"במפתח השחרור — לא מוצע עדכון: {names}")
+    return {"current": current, "latest": None, "available": False, "reason": reason,
+            "message": message,
+            "detail": " · ".join(f"{s['tag']}: {s['detail']}" for s in skipped),
+            "skipped": skipped}
 
 
 def tag_signature(hooks: Hooks, public_url: str, tag: str, repo_dir: str | Path) -> dict:

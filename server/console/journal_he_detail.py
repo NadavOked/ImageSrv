@@ -115,6 +115,10 @@ RULES: dict[str, list[tuple[str, str]]] = {
          r" — \1 ניסיונות כושלים ב-\2 דקות מכמה כתובות, \3 (האחרונה: \4)"),
         (r" — (\d+) failures in (\d+) min from many addresses \(last ip=(\S+)\)$",
          r" — \1 ניסיונות כושלים ב-\2 דקות מכמה כתובות (האחרונה: \3)")],
+    # ‏#2459: "<N> keys — over <MAX> (last ip=<ip>)"
+    "login_attempts_trimmed": [
+        (r"^(\d+) keys — over (\d+) \(last ip=(\S+)\)$",
+         r"נמחקו \1 רשומות ניסיונות כניסה — הטבלה עברה \2 (הכתובת האחרונה: \3)")],
     # ‏#2442: "mac=<mac> ip=<ip> kind=offer|proxy nic=<כרטיס>[ as=server]"
     "foreign_dhcp_seen": [
         (r" as=server$", " · מתחזה לשרת (הכתובת שלו במסגרת)"),

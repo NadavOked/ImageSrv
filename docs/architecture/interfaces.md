@@ -4712,7 +4712,7 @@ deploy (403) ושרת משני (409) — אין צמתים, לא שגיאה. מ�
 | `/update` | GET | `{current, enabled, previous, server_name, last_check}` — תמיד, גם כשהמתג כבוי. ‏`last_check` (‏#1000, סעיף 29): המסמך של הבדיקה האחרונה או `null` |
 | `/me` | GET | (‏#915, **לכל משתמש מחובר**, לא רק admin) מחזיר גם `server_name` (‏#936, סעיף 18), ‏`version` ו-`version_verified`. ‏`version` הוא אותו ערך כמו `current` למעלה; `version_verified:false` אומר שזה fallback של `git describe`, והקונסולה וה-DCUI מציגים לידו "לא מאומת". `null` נשאר רק כשגם `git describe` אינו מחזיר גרסה. גם `theme` (‏#1093, סעיף 24), ו-`uptime_seconds`/`deploy_ip` (‏#968, סעיף 29) |
 | `/update/status` | GET | מצב ההרצה האחרונה + `verified` + `now` (ראו למטה; השדות של #1301 — "מסמך הסטטוס") |
-| `/update/check` | POST | `{at, current, latest, available, reason, message?, detail?, signature?}` — נשמר ב-`settings.update_last_check` (‏#1000). בכשל רשת `reason="no_network"`, ‏`message` הוא הנחיית חומת-האש בעברית ו-`detail` הוא פלט git/החריגה; בכשל אחר `reason="failed"`, והטקסט הקודם נשמר ב-`message` לצד `detail`. כשל תמיד מחזיר `available=false` ו-`latest=null`. ‏**`signature`** (‏#1277) — רק כש-`available=true`: `{state, detail}` על התג `latest`, ‏`state` ∈ `signed` (‏`detail` = `<principal> SHA256:<טביעה>`) · ‏`unsigned` (נבדק ואינו חתום במפתח מ-`deploy/release-signers`; ‏`detail` = הסיבה) · ‏`unchecked` (הבדיקה לא רצה — הורדת התג, המאמת, או תשובה לא מוכרת; ‏`detail` = הסיבה). ‏`signature` חסר ב-`available=true` (בדיקה שנשמרה לפני #1277) = "לא נבדק", **לא** "חתום". **404** אם `update_enabled` כבוי |
+| `/update/check` | POST | `{at, current, latest, available, reason, message?, detail?, signature?, skipped?}` — נשמר ב-`settings.update_last_check` (‏#1000). בכשל רשת `reason="no_network"`, ‏`message` הוא הנחיית חומת-האש בעברית ו-`detail` הוא פלט git/החריגה; בכשל אחר `reason="failed"`, והטקסט הקודם נשמר ב-`message` לצד `detail`. כשל תמיד מחזיר `available=false` ו-`latest=null`. ‏**`signature`** (‏#1277) — רק כש-`available=true`: `{state, detail}` על התג `latest`, ‏`state` ∈ `signed` (‏`detail` = `<principal> SHA256:<טביעה>`) · ‏`unsigned` (נבדק ואינו חתום במפתח מ-`deploy/release-signers`; ‏`detail` = הסיבה) · ‏`unchecked` (הבדיקה לא רצה — הורדת התג, המאמת, או תשובה לא מוכרת; ‏`detail` = הסיבה). ‏`signature` חסר ב-`available=true` (בדיקה שנשמרה לפני #1277) = "לא נבדק", **לא** "חתום". ‏**‏#2469:** התגים החדשים מהמותקן נבדקים מהגבוה לנמוך, עד `MAX_SIGNATURE_CHECKS` (‏5) בדיקות, ו-`latest` הוא הגבוה ביותר שמצבו `signed` — מאז, `available=true` תמיד עם `signature.state="signed"`. תג גבוה ממנו שאינו `signed` נרשם ב-**`skipped`** ‏(`[{tag, state, detail}]`, מהגבוה לנמוך) והקונסולה מציגה אותו כאזהרה ליד ההצעה. אף תג חדש לא `signed` (כולל `unchecked` — כשל הבדיקה אינו הצעה) → ‏`available=false`, ‏`latest=null`, ‏`reason="no_signed"`, ‏`message` בעברית עם התגים שנבדקו, ‏`detail` הסיבות ו-`skipped`. התקרה הושגה ונשארו תגים חדשים שלא נבדקו → ‏`reason="too_many_unsigned"` (לא "אין עדכון": ייתכן עדכון חתום ביניהם, וההודעה אומרת למנהל שיש יותר מ-5 תגים לא מאומתים מעל הגרסה — כלומר שמישהו דוחף תגים לריפו הציבורי). **404** אם `update_enabled` כבוי |
 | `/update/apply` | POST | `{tag, force?}` (בלי הקלדת שם — עדכון הפיך, ‏#1192); **400** תג לא תקין · **404** כבוי · **409** `{detail, code: "update_busy", busy}` כשהשרת עסוק לפי `auto_reboot.busy_reason` (סבב, סבב חדר גם בין גלים, קליטה רצה, העברה בין אתרים (`storage_transfers` ‏queued/sending/verifying), העלאת אימג' מהקונסולה, קבלת אימג' משרת אחר, עדכון VM, שיכפול מקומי שמחשב **רשום** דיווח בחלון הטרי; DB שלא נקרא = עסוק) — ‏#1891. ‏`force: true` = "עדכן בכל זאת" של המנהל: עובר, נרשם ביומן `update_forced`, והסקריפט אינו מסרב שוב; האתחול המתוזמן אינו עוקף · **409** תג ישן מהגרסה המותקנת (‏#2419; גם עם `force`) — ירידת גרסה רק ב-`/update/revert`. אותה גרסה, או גרסה מותקנת שלא נקראה — עובר |
 | `/update/revert` | POST | בלי גוף — לגרסה ב-`update_previous` (בלי הקלדת שם — ‏#1778, הכרעת #1270; ‏`confirm_name` שנשלח מקונסולה ישנה מתעלמים ממנו). אותו מסלול כמו `apply`, ולכן הפיך: `update_previous` מקבל את הגרסה שממנה חזרנו. **404** אם אין גרסה קודמת או כבוי · **409** עסוק (`update_busy`, כמו `apply`; גוף אופציונלי `{force: true}`) או עדכון שכבר רץ |
 | `/update/backup` | GET | (‏#1128) `application/gzip`, ‏`Content-Disposition: attachment; filename="imagesrv-settings-<ts>.tar.gz"`, ‏`Cache-Control: no-store`. תוכן: `data/imagesrv.db` (עותק עקבי דרך backup API, ‏`integrity_check`=ok, ‏journal_mode=DELETE; **בלי `settings.console_secret`** — ‏#2424: שרת משוחזר מייצר סוד חדש וכל המחוברים נכנסים מחדש), שאר `data_dir` תחת `data/` (בלי `imagesrv.db*`, ‏`storage/`, ‏`storage-test/`, ובלי symlink — ‏#2426: לא נארז תוכן מחוץ ל-`data_dir`), ‏`MANIFEST.txt` (‏`version=`, ‏`created=`, ‏`warning=`), ‏`SHA256SUMS`. **בלי אימג'ים.** **לא תלוי** ב-`update_enabled`. יומן: `settings_backup_downloaded`. **503** כשלשרת אין `data_dir` (בדיקות בלבד) |
@@ -5778,10 +5778,23 @@ iSCSI שהמפעיל חיבר. **לא** לערבב עם `storage_nodes` (היר�
 
 `params` לפי סוג:
 
+* **local** — `{path}` (‏`mount_point` כשם חלופי)
 * **nfs** — `{server, export, version, readonly}`
-* **smb** — `{server, share, username, secret, domain}` (`secret` לא נחשף ב-GET)
+* **smb** — `{server, share, username, secret, domain, readonly}` (`secret` לא נחשף ב-GET)
 * **iscsi** — `{portal, iqn, chap_user, chap_secret, auto}` ואחרי login
   `{device_by_path, fs_type, fs_label, fs_size}`
+
+‏**מה הלקוח קובע ומה השרת קובע (#2468).** ‏`/test` והיצירה שומרים רק את
+המפתחות שלמעלה לכל סוג (‏`storage_locations.CLIENT_PARAMS`); כל השאר נזרק.
+‏`device_by_path`, ‏`fs_type`, ‏`fs_label`, ‏`fs_size` ו-`uuid` נקבעים **בשרת
+בלבד** — הם מגיעים לפירמוט ול-`/etc/fstab` כ-root:
+
+* ‏`device_by_path` — רק מתשובת `iscsi_login`: הקישור
+  `/dev/disk/by-path/ip-<portal>-iscsi-<iqn>-lun-<n>` של LUN שלם (לא `/dev/sdX`
+  ולא `-partN`). ערך שמור שאינו בצורה הזו (שורה מלפני התיקון) נחשב "אין
+  התקן" — אין פירמוט, אין עיגון ואין שורת fstab עד login.
+* ‏`fs_type` — מ-`blkid` של הדיסק, ורק `ext4` / `xfs` / `btrfs`; אחרת `409`.
+* ‏`fstab_write` מסרב לבלוק כולו כששדה ריק או מכיל רווח או תו בקרה.
 
 ### validation לשמות רשת (‏#1123) — ‏`400` בשם השדה, לפני שכלי כלשהו רץ
 
@@ -5815,6 +5828,11 @@ iSCSI שהמפעיל חיבר. **לא** לערבב עם `storage_nodes` (היר�
 (2) תחת ענף אסור, **לפי prefix אחרי `realpath`** → ‏`400`, גם כש-`/var` מעוגן בנפרד וגם
 תחת `/srv` המותר; (3) רק אז `/srv` ונקודת עיגון. בלי זה `/var` מעוגן בנפרד פתח את
 `/var/lib/dpkg` ו-`/var/spool/cron`, ו-`/srv` פתח את עצי האתחול של השרת עצמו.
+**‏#2462 — לפני שלב (1):** עצי האתחול נדחים לפי הערכים **בפועל** של `--boot-dir`
+ו-`--tftp-root` (ה-router מקבל אותם מ-`create_app`), בנוסף לברירות המחדל, וגם כשהם
+בתוך `data_dir`; וכך גם מה שהשרת מחזיק בתוך `data_dir` (‏`DATA_DIR_RESERVED`: ה-DB
+וקובצי ה-WAL שלו, ‏`console-tls/`, ‏`interserver/`, ‏`email-accounts/`, ‏`secondaries/`,
+‏`netcfg/`, ‏`storage/` ועוד). ‏`data_dir` עצמו ותיקייה חדשה בתוכו נשארים מותרים.
 נתיב יחסי, ריק, או עם תווי בקרה — `400`. **אינו משפיע על `backup-target`** (שמשתמש
 ב-`validate_params` בלבד ומקבל נתיבי גיבוי כמו `/mnt/backup`), ולא על "הוסף כונן" (#1988).
 
@@ -6225,6 +6243,11 @@ console|agent (last ip=…)`.
 או 15 דקות (`PENDING_TTL`; החותמת בזיכרון השרת, בלי שינוי סכמה — אתחול שרת מגריל סוד חדש); אחריהן סוד חדש. `POST /me/mfa/verify {code}` מאמת מול
 הסוד הזמני. `POST /me/mfa/enable {code}` → `mfa_enabled=1`, 8 קודי גיבוי
 בני 10 תווים (מוצגים פעם אחת, נשמרים כ-hash), ומסיים את מצב ה-enrollment.
+**‏#2470:** שניהם מוגבלים כמו `/login/mfa` (‏login_guard, שם משתמש + IP — `429`/`403` +
+`Retry-After`; קוד שגוי נספר). הצלחה ב-`enable` מאפסת; ב-`verify` — לא (אינו צורך את הקוד).
+כש-MFA **כבר פעיל**, `enable` הוא "קודי גיבוי חדשים" ודורש
+`{current_password, code}`: הסיסמה הנוכחית וקוד TOTP שלא נוצל (‏#2414); אחרת `401`
+ויומן `mfa_backup_codes_failed`, והקודים הקיימים נשארים.
 `POST /users/{u}/mfa/disable` (admin, לא על builtin) — **"איפוס אימות דו-שלבי"** (נדב 18/10, תפריט ⋯
 בדף "משתמשים והרשאות", כפתור אדום בלי הקלדת מילה): `mfa_secret` נמחק, `mfa_enabled=0`, קודי הגיבוי
 נמחקים, וכל ה-sessions של המשתמש מבוטלים (`bump_auth_epoch`). יומן `mfa_reset` — `user` = מי איפס,
@@ -6259,6 +6282,11 @@ TOTP: RFC 6238, HMAC-SHA1, 30 שניות, 6 ספרות, stdlib בלבד.
 (‏TOTP/גיבוי נכון, או דפדפן זכור) מאפסת; אחרת "קוד שגוי → כניסה
 מחדש" היה מאפס בכל סיבוב ונעילה לא הייתה מצטברת לעולם. למשתמש בלי
 MFA, בקיוסק, ובהחלפה כפויה — הסיסמה הנכונה מאפסת כמו קודם.
+**תקרה לגודל הטבלה** (‏#2459): כל שם אקראי מוסיף שורה, והניקוי הרגיל הוא 90 יום.
+מעל `login_guard.MAX_KEYS` (10,000) מפתחות, מפתח חדש מפנה עשירית מהטבלה —
+קודם מפתחות בלי נעילה בתוקף, מהמעט-כשלונות לרב, ומהישן לחדש — ויומן
+`login_attempts_trimmed`. מתחת לתקרה ההתנהגות לא השתנתה, וגם התקרה לפי חשבון
+(‏`login_account_failures`) אינה מושפעת.
 `POST /api/console/sessions/revoke {"username"}` (admin) מבטל את כל
 ה-sessions (‏`auth_epoch`) ואת הדפדפנים הזכורים של המשתמש.
 
@@ -6476,7 +6504,7 @@ SPKI+thumbprint של תעודת-הלקוח — ‏`TlsPeer` אינו נושא כ
 
 | נתיב | מה | `null` / היעדר פירושו |
 |---|---|---|
-| `POST /api/console/update/check` | מחזיר **ושומר** `{at, current, latest, available, reason, message?, detail?, signature?}` ב-`settings.update_last_check` (‏`signature` — ‏#1277, ראו סעיף 18; הקונסולה: "חתימה: חתום / לא חתום / לא נבדק", ו"החל" כבוי על `unsigned`). ‏`at` = `now_iso()` של השרת ברגע הבדיקה. timeout, סירוב חיבור, כשל DNS או network unreachable מסווגים `reason="no_network"`; הקונסולה מציגה את `message` בעברית כשורה הראשית ואת `detail` הטכני כשורה משנית ומוחלשת. כשל אחר הוא `reason="failed"`. | — |
+| `POST /api/console/update/check` | מחזיר **ושומר** `{at, current, latest, available, reason, message?, detail?, signature?, skipped?}` ב-`settings.update_last_check` (‏`signature` — ‏#1277, ראו סעיף 18; הקונסולה: "חתימה: חתום / לא חתום / לא נבדק", ו"החל" כבוי על `unsigned`. ‏#2469: ‏`latest` הוא התג החתום הגבוה ביותר; תג גבוה ממנו שאינו חתום — ב-`skipped`, ואזהרה צהובה ליד ההצעה; אף אחד לא חתום — ‏`reason="no_signed"`; התקרה הושגה ונשארו תגים שלא נבדקו — ‏`reason="too_many_unsigned"`). ‏`at` = `now_iso()` של השרת ברגע הבדיקה. timeout, סירוב חיבור, כשל DNS או network unreachable מסווגים `reason="no_network"`; הקונסולה מציגה את `message` בעברית כשורה הראשית ואת `detail` הטכני כשורה משנית ומוחלשת. כשל אחר הוא `reason="failed"`. | — |
 | `GET /api/console/update` → `current_error` (‏#1159) | למה `current` הוא `null`: הסיבה המלאה של `git describe` (נתיב + stderr). ‏admin בלבד; ל-`/health/live` ללא הזדהות מגיעה רק הקטגוריה | `null` = הגרסה נקראה |
 | `GET /api/console/update` → `last_check` | אותו מסמך, כפי שנשמר — הדף מציג "בדיקה אחרונה: היום 06:00 — אין חדש" גם אחרי רענון ובכל דפדפן. ‏`reason` שאינו `null` = **הבדיקה נכשלה**, לא "אין חדש" | `null` = מעולם לא נבדק בשרת הזה (או רשומה פגומה — נקראת כ-`null`, לא כקריסה) |
 | `GET /api/console/health` → כותרת `X-Health-Checked-At` | ‏ISO של השרת, נחתם **אחרי** שהבדיקות רצו. **כותרת ולא מעטפת**: הגוף נשאר מערך `[{id,label,state,detail}]` שכל הקוראים הקיימים (`HOME`, ‏`updateAlertBadge`, טסטי node, `test_server_health`) תלויים בו | כותרת חסרה = "זמן המדידה לא נמסר" — הקונסולה **לא** נופלת לשעון הדפדפן |

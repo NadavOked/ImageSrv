@@ -498,7 +498,8 @@ tftp <כתובת-השרת> -c get bootx64.efi
 (הדיסק הוא מקור האמת, עיקרון 3) — הם מועתקים כקבצים ומאומתים מול
 המניפסט. ה-DB (`/var/lib/imagesrv/imagesrv.db`, ‏sqlite ב-WAL) מחזיק את
 מה שאין לו ייצוג כקבצים: מכונות וקבוצות, משתמשים, סודות MFA,
-‏`console_secret` (חותם את ה-cookies), מיקומי אחסון. **‏`cp imagesrv.db`
+מיקומי אחסון. ‏`console_secret` (חותם את ה-cookies) יושב שם אבל **אינו נכנס
+לגיבוי** (#2424) — ראו "סדר השחזור". **‏`cp imagesrv.db`
 בזמן שהשרת רץ אינו גיבוי** — ב-WAL חלק מהטרנזאקציות יושב ב-`imagesrv.db-wal`,
 והעותק יוצא חסר או לא תקין. הכלים כאן מעתיקים דרך ה-backup API של sqlite
 ובודקים `integrity_check` על העותק; "נכתב" אינו "קריא".
@@ -538,8 +539,11 @@ tftp <כתובת-השרת> -c get bootx64.efi
 2. `systemctl stop imagesrv-server imagesrv-proxy`.
 3. **‏`data_dir`:** ‏`rsync -a <גיבוי>/data/ /var/lib/imagesrv/` ואז
    `cp <גיבוי>/db/imagesrv-<האחרון>.db /var/lib/imagesrv/imagesrv.db`
-   (למחוק `imagesrv.db-wal`/`-shm` ישנים אם יש). התעודה, ‏`console_secret`
-   ו-MFA **משוחזרים, לא נוצרים מחדש** — מי שהיה רשום ממשיך להיכנס.
+   (למחוק `imagesrv.db-wal`/`-shm` ישנים אם יש). התעודה
+   ו-MFA **משוחזרים, לא נוצרים מחדש**. ‏**‏`console_secret` אינו בגיבוי**
+   (#2424): העותק של ה-DB נוצר בלעדיו, והשרת שעולה על DB משוחזר יוצר סוד
+   חדש. לכן כל מי שהיה מחובר ייכנס שוב — סיסמאות ו-MFA נשארים, רק ה-cookies
+   הישנים כבר לא תקפים.
 4. **אימג'ים:** ‏`rsync -a <גיבוי>/images/ /srv/imagesrv/images/` ואז
    `python3 tools/verify-images.py /srv/imagesrv/images` — חייב 0.
 5. **קובצי מערכת — בזהירות:** ‏`system/<ts>/` מכיל שמות כרטיסים
@@ -557,9 +561,8 @@ tftp <כתובת-השרת> -c get bootx64.efi
 6. **‏boot payload:** ‏`tools/build_initramfs.sh` (או ההעתקה מה-ISO), ואז
    `bash deploy/verify-boot-payload.sh --server-url http://<כתובת ההפצה>:8080`.
 7. `systemctl start imagesrv-server` → קונסולה → **בריאות** ירוק.
-8. **ניתוק sessions ישנים:** לכל מנהל — משתמשים → "נתק מכל מקום"
-   (‏`POST /api/console/sessions/revoke`): ‏cookies שנחתמו על השרת הישן
-   תקפים גם כאן (אותו `console_secret`), וזה הרגע לאפס אותם.
+8. **כניסה מחדש:** ‏cookies שנחתמו על השרת הישן לא יעבדו כאן (סוד חדש),
+   ולכן אין צורך לנתק sessions ידנית. כל מנהל נכנס עם הסיסמה וה-MFA שלו.
 
 **הכרעות נעולות (R41 §10):** ‏backup API למחזורי, ‏`VACUUM INTO` לאד-הוק;
 העתקה גולמית של `imagesrv.db` **רק** כשהשרת עצור; תרגיל restore שבועי.

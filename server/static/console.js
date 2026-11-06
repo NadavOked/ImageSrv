@@ -6269,8 +6269,12 @@ function updateActionsHtml() {
   const sig = canApply ? UPDATE_CHECK.signature : null;
   const found = canApply ? UI.note("info", `קיימת גרסה חדשה: <b class="mono">${esc(UPDATE_CHECK.latest)}</b>${UPDATE_CHECK.at ? ` · נבדק ${esc(fmtWhenShort(UPDATE_CHECK.at))}` : ""} · חתימה: ${esc(signatureText(sig))}`
     + (sig && sig.detail ? `<small class="muted" style="display:block;margin-top:3px">${esc(sig.detail)}</small>` : "")) : "";
+  // ‏#2469: גרסה גבוהה יותר שאינה חתומה (או שלא נבדקה) — לא מוצעת, ומוצגת כאזהרה ליד ההצעה החתומה.
+  const skipped = canApply && Array.isArray(UPDATE_CHECK.skipped) ? UPDATE_CHECK.skipped : [];
+  const warn = skipped.length ? UI.note("warn", `לא מוצעת — גרסה חדשה יותר שלא אומתה כחתומה במפתח השחרור: `
+    + skipped.map((s) => `<b class="mono">${esc(s.tag)}</b> (${esc(signatureText(s))})`).join(", ")) : "";
   if (!found && !st && !btns) return "";
-  return `<div class="mupd">${found}${st ? `<div class="mupd-st">${st}</div>` : ""}${btns ? `<div class="macts">${btns}</div>` : ""}</div>`;
+  return `<div class="mupd">${found}${warn}${st ? `<div class="mupd-st">${st}</div>` : ""}${btns ? `<div class="macts">${btns}</div>` : ""}</div>`;
 }
 /* ‏#1301: "מעודכן" — רק כשהעדכון האחרון אומת **וגם** הבדיקה האחרונה לא מצאה גרסה חדשה ממנו. */
 function updateUpToDate() {
@@ -9751,11 +9755,13 @@ function accountDisableMfa() {
 function accountNewBackupCodes() {
   sheet({
     title: "קודי גיבוי חדשים",
-    sub: "הקוד מאפליקציית האימות. הקודים הישנים יבוטלו.",
-    fields: [{ id: "code", label: "הקוד מהאפליקציה", dir: "ltr" }],
+    sub: "הסיסמה הנוכחית והקוד מאפליקציית האימות. הקודים הישנים יבוטלו.",
+    // ‏#2470: כמו בביטול — עוגייה לבדה אינה מנפיקה קודי גיבוי.
+    fields: [{ id: "current_password", label: "הסיסמה הנוכחית", type: "password", autocomplete: "current-password" },
+             { id: "code", label: "הקוד מהאפליקציה", dir: "ltr" }],
     submitLabel: "צור קודים",
     onSubmit: async (v) => {
-      const en = await post("/me/mfa/enable", { code: v.code });
+      const en = await post("/me/mfa/enable", { current_password: v.current_password, code: v.code });
       showBackupCodesDrawer(en.backup_codes || []);
     },
   });

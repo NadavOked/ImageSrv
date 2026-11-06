@@ -1064,7 +1064,9 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
             rt.server_base, rt.deploy.state if rt.deploy else None)))
     include(create_storage_router(ctx, rt.data_dir))   # #727/#740
     include(create_storage_locations_router(
-        ctx, rt.storage_hooks, rt.data_dir, rt.server_base))   # #1066
+        ctx, rt.storage_hooks, rt.data_dir, rt.server_base,   # #1066
+        boot_trees=tuple(str(t) for t in (
+            rt.boot_dir, rt.deploy.tftp_root if rt.deploy else None) if t)))   # ‏#2462
     include(create_backup_target_router(ctx, rt.storage_hooks, rt.data_dir))   # #1956
     include(create_library_router(ctx))
     include(create_console_data_router(ctx))   # #1882-#1889: מה שנאסף על מכונה

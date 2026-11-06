@@ -73,6 +73,40 @@ _IQN_RE = re.compile(
 )
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
+#: ‏#2468: המפתחות שהלקוח רשאי לשלוח ב-`params`, לכל סוג (interfaces.md). כל השאר —
+#: ‏`device_by_path`, ‏`fs_type`, ‏`fs_label`, ‏`fs_size`, ‏`uuid` — נקבע בשרת בלבד:
+#: הם מגיעים לפירמוט ול-`/etc/fstab` כ-root, ולכן נזרקים ביצירה ובבדיקה.
+CLIENT_PARAMS = {
+    "local": ("path", "mount_point"),
+    "nfs": ("server", "export", "version", "readonly"),
+    "smb": ("server", "share", "username", "secret", "domain", "readonly"),
+    "iscsi": ("portal", "iqn", "chap_user", "chap_secret", "auto"),
+}
+#: ‏#2468: מערכות הקבצים שמיקום iSCSI מעוגן בהן (ונכתבות ל-fstab).
+FS_TYPES = ("ext4", "xfs", "btrfs")
+#: ‏#2468: הקישור ש-udev יוצר ל-LUN שלם של סשן iSCSI — לא `/dev/sdX`, ולא מחיצה.
+_ISCSI_BY_PATH_RE = re.compile(
+    r"^/dev/disk/by-path/ip-[^\s/\x00-\x1f\x7f]+-iscsi-[^\s/\x00-\x1f\x7f]+-lun-[0-9]+$")
+
+
+def client_params(kind: str, params) -> dict:
+    """‏#2468: רק המפתחות של `CLIENT_PARAMS[kind]` — מה שהשרת קובע לא מגיע מהלקוח."""
+    if not isinstance(params, dict):
+        return {}
+    keys = CLIENT_PARAMS.get(kind, ())
+    return {key: value for key, value in params.items() if key in keys}
+
+
+def valid_iscsi_device(value) -> bool:
+    return isinstance(value, str) and bool(_ISCSI_BY_PATH_RE.fullmatch(value))
+
+
+def iscsi_device(params: dict) -> str:
+    """‏#2468: ההתקן של מיקום iSCSI, רק אם הוא קישור by-path של LUN; אחרת ריק.
+    ערך ישן (‏`/dev/sdX`, או מה שנשמר מהלקוח לפני התיקון) = "אין התקן" עד login."""
+    device = params.get("device_by_path")
+    return device if valid_iscsi_device(device) else ""
+
 
 def valid_host(value: str) -> bool:
     """‏IP (v4/v6) או hostname לפי RFC 1123. ריק = לא תקין."""
@@ -163,8 +197,20 @@ LOCAL_ROOTS = ("/srv",)
 #: **לפי prefix אחרי realpath, לפני כל כלל היתר**, ולכן `/var` מעוגן בנפרד אינו פותח
 #: את `/var/lib/dpkg`, ו-`/srv` המותר אינו פותח את `/srv/tftp`.
 LOCAL_SYSTEM_TREES = ("/proc", "/sys", "/dev", "/run", "/boot", "/etc", "/usr", "/bin",
-                      "/sbin", "/lib", "/lib32", "/lib64", "/root", "/var", "/tmp", "/opt",
-                      "/srv/imagesrv/boot", "/srv/tftp")
+                      "/sbin", "/lib", "/lib32", "/lib64", "/root", "/var", "/tmp", "/opt")
+#: ‏#2462: עצי האתחול בברירת המחדל. ה-router מוסיף את `--boot-dir`/`--tftp-root` בפועל,
+#: וכולם נדחים **לפני** כל כלל היתר — גם כשהם בתוך `data_dir`.
+DEFAULT_BOOT_TREES = ("/srv/imagesrv/boot", "/srv/tftp")
+#: ‏#2462: מה שהשרת מחזיק בתוך `data_dir` — ה-DB, סודות ותעודות, מצב ונקודות עיגון.
+#: נדחה לפי realpath, לפני ההיתר של `data_dir`. ‏`data_dir` עצמו ותיקייה חדשה בתוכו מותרים.
+#: רשימת דחייה: שם חדש שהשרת יתחיל לכתוב ב-`data_dir` צריך להיכנס גם לכאן.
+DATA_DIR_RESERVED = (
+    "imagesrv.db", "imagesrv.db-wal", "imagesrv.db-shm", "imagesrv.db-journal",
+    "console-tls", "interserver", "wizard", "email-accounts", "secondaries",
+    "netcfg", "drivers", "storage", "storage-test", "usb", "apt-repo", "iso-boot-payload",
+    "security-pool.json", "tools-selection.json", "add-disk.lock", "alive.heartbeat",
+    "last-backup.json", "dnsmasq-proxy.leases", ".firstboot-done", "firstboot.status",
+)
 LOCAL_PATH_REFUSED = ("נתיב לא מורשה למיקום מקומי — רק בתוך תיקיית הנתונים של השרת, "
                       "תחת /srv, או על כונן מעוגן נפרד (לא מערכת הקבצים של השורש)")
 
@@ -178,10 +224,12 @@ def _under(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip("/") + "/")
 
 
-def local_path_problem(path, data_dir, is_mount) -> str | None:
+def local_path_problem(path, data_dir, is_mount, boot_trees=()) -> str | None:
     """‏#2444: ‏None = מותר; מחרוזת = סיבת ה-400. נקרא ביצירה ובבדיקת חיבור בלבד —
     מיקום ששמור ב-DB לא נבדק מחדש, ולכן שרת קיים לא נשבר.
 
+    קודם כול אסור (‏#2462): עצי האתחול (‏`DEFAULT_BOOT_TREES` ו-`boot_trees` — הערכים
+    בפועל) והרשומות של `DATA_DIR_RESERVED` בתוך `data_dir`.
     מותר: בתוך `data_dir`; אחרת אסור כל מה שתחת `LOCAL_SYSTEM_TREES` (לפי prefix, גם
     כשהוא מעוגן); ומהשאר — תחת `/srv`, או על/מתחת לנקודת עיגון קיימת שאינה `/`
     (‏`is_mount` — ההוק, אצל PID 1 וגם אצל השירות). ההשוואה אחרי `realpath`, כלומר
@@ -192,6 +240,11 @@ def local_path_problem(path, data_dir, is_mount) -> str | None:
     real = os.path.realpath(raw)
     where = _posix(real)
     data = _posix(os.path.realpath(str(data_dir)))
+    refused = [_posix(os.path.realpath(str(t))) for t in (*DEFAULT_BOOT_TREES, *boot_trees) if t]
+    if data not in ("", "/"):
+        refused += [data.rstrip("/") + "/" + name for name in DATA_DIR_RESERVED]
+    if any(tree not in ("", "/") and _under(where, tree) for tree in refused):
+        return LOCAL_PATH_REFUSED
     if data not in ("", "/") and _under(where, data):
         return None
     if any(_under(where, tree) for tree in LOCAL_SYSTEM_TREES):
@@ -371,11 +424,11 @@ def _iscsi_by_path(portal: str, iqn: str) -> str:
     needle = f"ip-{host}"
     for entry in entries:
         name = entry.name
-        if needle in name and iqn in name:
-            try:
-                return str(entry.resolve())
-            except OSError:
-                return str(entry)
+        # ‏#2468: הקישור עצמו (יציב בין אתחולים, ומעיד שזה LUN של iSCSI), ורק LUN שלם —
+        # לא `-partN`, ולא `/dev/sdX` אחרי resolve.
+        link = f"{root.as_posix()}/{name}"
+        if needle in name and iqn in name and valid_iscsi_device(link):
+            return link
     return ""
 
 
@@ -770,6 +823,10 @@ def daemon_reload() -> HookResult:
     return _run(["systemctl", "daemon-reload"], timeout=60)
 
 
+#: ‏#2468: רווח או תו בקרה בשדה של fstab = שדה או שורה מוזרקים.
+_FSTAB_UNSAFE = re.compile(r"[\s\x00-\x1f\x7f]")
+
+
 def fstab_write(entries: list[dict]) -> HookResult:
     """כותב את בלוק ImageSrv ב-fstab עם `_netdev,nofail`.
 
@@ -803,10 +860,13 @@ def fstab_write(entries: list[dict]) -> HookResult:
             opts = opts + ",_netdev"
         if "nofail" not in opts:
             opts = opts + ",nofail"
-        block.append(
-            f"{entry['source']} {entry['target']} {entry.get('fstype', 'auto')} "
-            f"{opts} 0 0\n"
-        )
+        fields = (str(entry["source"]), str(entry["target"]),
+                  str(entry.get("fstype", "auto")), opts)
+        # ‏#2468: רווח הוא שדה חדש ושורה חדשה היא רשומה חדשה — לא כותבים כלום.
+        bad = next((f for f in fields if not f or _FSTAB_UNSAFE.search(f)), None)
+        if bad is not None:
+            return HookResult(FAILED, f"שדה לא תקין לשורת fstab (רווח או תו בקרה): {bad!r}")
+        block.append(" ".join(fields) + " 0 0\n")
     block.append(FSTAB_END + "\n")
     new_text = "".join(lines) + ("" if not entries else "".join(block))
     try:
@@ -1432,10 +1492,12 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
                 return written
         result = hooks["mount"]("cifs", source, target, _smb_opts(params, creds_file))
     elif kind == "iscsi":
-        device = params.get("device_by_path")
+        device = iscsi_device(params)   # ‏#2468
         if not device:
             return HookResult(FAILED, "אין התקן — יש להתחבר ליעד קודם")
         fs_type = params.get("fs_type") or "ext4"
+        if fs_type not in FS_TYPES:
+            return HookResult(FAILED, f"מערכת קבצים לא נתמכת: {fs_type}")
         result = hooks["mount"](fs_type, device, target, "")
     else:
         return HookResult(FAILED, f"סוג לא מוכר: {kind}")
@@ -1482,9 +1544,10 @@ def fstab_entries(conn, include: str | None = None) -> list[dict]:
                 "fstype": "cifs",
                 "opts": _smb_opts(params, creds_file) + ",_netdev,nofail",
             })
-        elif row["type"] == "iscsi" and params.get("device_by_path"):
+        elif (row["type"] == "iscsi" and iscsi_device(params)        # ‏#2468
+              and (params.get("fs_type") or "ext4") in FS_TYPES):
             entries.append({
-                "source": params["device_by_path"],
+                "source": iscsi_device(params),
                 "target": row["mount_point"],
                 "fstype": params.get("fs_type") or "ext4",
                 "opts": "defaults,_netdev,nofail",
