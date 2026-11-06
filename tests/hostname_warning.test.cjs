@@ -43,6 +43,50 @@ const WARNING = 'שם המחשב לא נכתב: registry edit <b>failed</b>';
 const member = (over) => ({mac: MAC, hostname: 'LAB1-05', state: 'done', done: true,
   bytes_written: 1, bytes_total: 1, disks: [], drivers: null, ...over});
 
+test('no_linux_partition reaches the operator as the agent Hebrew error', () => {
+  const {spawnSync} = require('node:child_process');
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'imagesrv-2586-text-'));
+  try {
+    const env = {...process.env, RUN_DIR: tmp.replaceAll('\\', '/')};
+    const got = spawnSync('sh', ['-s'], {cwd: path.join(__dirname, '..'), env,
+      encoding: 'utf8', input: `
+PATH=/usr/bin:/bin:$PATH
+LOG_FILE="$RUN_DIR/log"
+. agent/lib/postdeploy/hostname.sh
+. agent/lib/postdeploy/hostname_linux.sh
+log() { printf '%s\\n' "$*" >> "$LOG_FILE"; }
+manifest_plan() { echo '1|guid|data|ext4|2048|4096|p1|sha|false'; }
+_linux_marked() { return 0; }
+assert_target() { return 0; }
+compose_hostname() { echo LAB1-05; }
+json_get() {
+    case "$2" in
+        .session.prefix) echo LAB1;; .group.suffix) echo 05;;
+        .error) sed -n 's/.*"error":"\\([^"]*\\)".*/\\1/p' "$1";;
+        *) return 1;;
+    esac
+}
+target_set() { printf '%s\\n' "$3"; }
+mount() { echo unexpected-mount >&2; return 1; }
+name_this_machine sda sess1
+`});
+    assert.ifError(got.error);
+    assert.equal(got.status, 0, got.stderr);
+    assert.equal(got.stderr, '');
+    const result = JSON.parse(fs.readFileSync(path.join(tmp, 'hostname.json'), 'utf8'));
+    assert.equal(result.code, 'no_linux_partition');
+    const warning = 'שם המחשב לא נכתב: אין מחיצת לינוקס במניפסט';
+    assert.equal(got.stdout.trim(), warning);
+    const run = setup();
+    const html = run(`memberRow(${JSON.stringify(member({error: warning}))}, {})`);
+    assert.ok(html.includes(warning));
+    assert.match(html, /notice warn/);
+  } finally {
+    fs.rmSync(tmp, {recursive: true, force: true});
+  }
+});
+
 test('a done member with a hostname warning is orange, not red, and says why', () => {
   const run = setup();
   const html = run(`memberRow(${JSON.stringify(member({error: WARNING}))}, {})`);

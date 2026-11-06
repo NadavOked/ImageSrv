@@ -160,7 +160,8 @@ apply_gpt() {
         || { log "$1: sgdisk refused the table (one call: partitions, disk GUID, backup to the end): $_gpt -e"; return 1; }
     reread_table "$DEVROOT/$1" \
         || { log "$1: the kernel refused to re-read the partition table"; return 1; }
-    verify_table "$1" "$2"
+    verify_table "$1" "$2" || return 1
+    restore_gpt_boot_code "$1" "$2"
 }
 
 expand_last() {

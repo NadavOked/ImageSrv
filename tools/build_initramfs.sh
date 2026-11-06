@@ -254,6 +254,9 @@ done
 
 # --- real binaries and their libraries ---------------------------------------
 
+# #2585: GPT BIOS boot code is carried as base64; never build without its codec.
+[ -L "$ROOT/bin/base64" ] || { echo "build_initramfs: busybox base64 applet missing" >&2; exit 1; }
+
 copy_libs() {
     # Pull in every shared library the binary needs, keeping paths.
     # ldd on a shell wrapper (hivexget on Debian 13) exits nonzero —

@@ -109,10 +109,23 @@ def test_partclone_mode_matches_the_agent(tmp_path, tool, flag):
 @pytest.mark.parametrize("guid", [
     "C12A7328-F81F-11D2-BA4B-00A0C93EC93B", "e3c9e316-0b5c-4db8-817d-f92df00215ae",
     "DE94BBA4-06D1-4D40-A16A-BFD50179D6AC", "0FC63DAF-8483-4772-8E79-3D69D8477DE4",
+    "4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709", "4f68bce3-e8cd-4db1-96e7-fbcaf984b709",
+    "933AC7E1-2EB4-4F13-B844-0E14E2AEF915",
     "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F", "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
     "21686148-6449-6E6F-744E-656564454649", ""])
 def test_partition_role_matches_the_agent(tmp_path, guid):
     assert call(tmp_path, "_partition_role", guid).out.strip() == vmdisk.partition_role(guid)
+
+
+@pytest.mark.parametrize("guid,role", [
+    ("4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709", "linux"),
+    ("4f68bce3-e8cd-4db1-96e7-fbcaf984b709", "linux"),
+    ("933AC7E1-2EB4-4F13-B844-0E14E2AEF915", "data"),  # 8302: /home
+])
+def test_linux_root_type_has_the_expected_role(tmp_path, guid, role):
+    got = call(tmp_path, "_partition_role", guid)
+    assert got.ok and got.out.strip() == role
+    assert vmdisk.partition_role(guid) == role
 
 
 def _part(index, role, start):

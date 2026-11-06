@@ -1,8 +1,15 @@
 """‏#2001: מיפוי החיבורים לפי דגם — "כל מחשבי הדגם" בחלון "מיפוי חיבורים".
 
 **הדגם** הוא ``dmi.product_name`` מהמלאי האחרון שהמכונה שלחה ב-hello
-(‏`server/agent/inventory.py`) — אותו מפתח שה-USB שומר לפיו (#1962). מכונה בלי
-מלאי, או עם ``product_name`` ריק, אין לה דגם: רק "המחשב הזה".
+(‏`server/agent/inventory.py`) — אותו מפתח שה-USB שומר לפיו (#1962).
+
+**כשאין ``product_name`` שימושי** (ריק, או גנרי כמו "To Be Filled By O.E.M.";
+HP i5-4590, 22/10) נופלים ל-``board_name`` — אבל רק יחד עם ``sys_vendor``
+(מספר לוח לבדו חוזר אצל יצרנים שונים), ובמפתח נפרד ("<יצרן> (board <לוח>)") כדי
+שלא יתנגש בשם דגם אמיתי. מה שנאסף ונשלח הוא רק ארבעת שדות ה-DMI (‏`DMI_FIELDS`)
+ו-PCI בלי subsystem, ולכן אלה כל המקורות. **ערך גנרי אינו מפתח**: הוא היה
+מאחד מכונות שונות לדגם אחד, ומיפוי שגוי של מגירות כותב לדיסק הלא נכון (עיקרון 1
+ו-5). אין שום מקור שימושי — אין דגם: רק "המחשב הזה".
 
 **מיפוי** = החיבורים הפעילים בסדר החיבורים (``drawer_slots.order``) ושם
 לכל אחד (‏``{key: name}``; בלי שם — "דיסק N" לפי הסדר).
@@ -20,10 +27,50 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 
 from server.disks import drawer_slots
 from server.db import _write_lock, now_iso, writing
+
+
+#: ערכי DMI שיצרני לוחות משאירים כשלא מילאו את השדה — מנורמלים (``_norm``).
+#: שמות כאלה זהים בין מכונות שונות לגמרי, ולכן אינם מזהים דגם.
+_GENERIC = frozenset({
+    "default", "defaultstring", "systemproductname", "systemmanufacturer",
+    "systemversion", "systemname", "boardname", "productname", "manufacturer",
+    "baseboard", "baseboardproductname", "baseboardmanufacturer", "oem", "na",
+    "notapplicable", "notspecified", "notavailable", "notset", "none", "null",
+    "unknown", "undefined", "empty", "nodata", "type1productconfigid",
+    "123456789", "1234567890", "xx", "xxx",
+})
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text.casefold())
+
+
+def _specific(value: object) -> str | None:
+    """הערך מקוצץ, או ``None`` כשהוא ריק או גנרי (‏"To Be Filled By O.E.M.")."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    n = _norm(text)
+    if len(n) < 2 or len(set(n)) == 1 or n in _GENERIC or n.startswith("tobefilled"):
+        return None
+    return text
+
+
+def model_key(dmi: object) -> str | None:
+    """מפתח הדגם מתוך ``inventory.dmi``: ``product_name``; בלעדיו ``board_name``
+    יחד עם ``sys_vendor``; אחרת ``None``."""
+    if not isinstance(dmi, dict):
+        return None
+    name = _specific(dmi.get("product_name"))
+    if name:
+        return name
+    vendor, board = _specific(dmi.get("sys_vendor")), _specific(dmi.get("board_name"))
+    return f"{vendor} (board {board})" if vendor and board else None
 
 
 def _product(inventory_json: str | None) -> str | None:
@@ -31,9 +78,7 @@ def _product(inventory_json: str | None) -> str | None:
         inv = json.loads(inventory_json) if inventory_json else None
     except ValueError:
         return None
-    dmi = inv.get("dmi") if isinstance(inv, dict) else None
-    name = dmi.get("product_name") if isinstance(dmi, dict) else None
-    return (name.strip() or None) if isinstance(name, str) else None
+    return model_key(inv.get("dmi") if isinstance(inv, dict) else None)
 
 
 def model_of(conn: sqlite3.Connection, mac: str) -> str | None:

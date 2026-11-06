@@ -184,7 +184,9 @@ def test_mount_helpers_print_nothing_on_failure(tmp_path):
         script, _ = make(tmp_path / name, **over)
         out = sh(script + call)
         # ‏#89: ‏_mount_linux מחזיר קוד שאומר *למה* — 2 = עוגן אבל אין /etc.
-        assert out.returncode == (2 if name == "lin-noetc" else 1), (name, out.stdout, out.stderr)
+        # ‏#2586: 5 = אין מחיצת לינוקס בתוכנית (לא נעשה ניסיון עגינה).
+        want = {"lin-noetc": 2, "lin-noplan": 5}.get(name, 1)
+        assert out.returncode == want, (name, out.stdout, out.stderr)
         assert out.stdout == "", (name, out.stdout)
 
 

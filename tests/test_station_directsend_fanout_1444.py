@@ -78,7 +78,7 @@ def station(tmp_path, sha: str, stubs: dict, env: str = "", setup: str = "") -> 
         + f"export TMPDIR={posix(tmp_path)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_HELPER_S=3 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20 "
         + env + "; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "failmark", "restore", "ntfsboot", "writeback", "drawers")   # #1487: restore_partition calls ntfs_boot_target; #1906: and restore_pipe; #2272: imagesrv-agent's order
+        + agent_sources("common", "gptboot", "sysinfo", "waits", "progress", "failmark", "restore", "ntfsboot", "writeback", "drawers")   # #1487: restore_partition calls ntfs_boot_target; #1906: and restore_pipe; #2272: imagesrv-agent's order
         + f"target_init sda {len(PAYLOAD)}; "
         + setup +
         f"stream_source() {{ cat {posix(payload)!r}; }}; "
@@ -195,7 +195,7 @@ def direct(tmp_path, *, fanout: str | None = None, env: dict | None = None,
     if shutil.which("blkid") is None:   # #1905: a missing blkid is "unreadable"; the real one says rc 2 on these files
         stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
     libs =" ".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh;" if n == "captureview" else f". {posix(flat_lib())}/{n}.sh;" for n in (
-        "common", "sysinfo", "waits", "jsonq", "progress", "failmark", "restore", "manifest",
+        "common", "sysinfo", "waits", "jsonq", "gptboot", "progress", "failmark", "restore", "manifest",
         "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink",
         "directsend", "directrecv", "ui"))   # #1466: lcsnap.sh -- capture_disk reads through lc_src_node; #1901/#1808: the source gates
     started = time.monotonic()

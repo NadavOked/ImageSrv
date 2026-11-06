@@ -251,7 +251,7 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         # ‏manifest.sh (#338) ואז bootca.sh, בדיוק כסדר של
         # `imagesrv-agent`: ‏`capture_disk` קורא לשניהם בשורת המניפסט,
         # ופונקציה שאינה טעונה היא מניפסט פגום — לא שגיאה.
-        f". {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/capture/manifest.sh; "
+        f". {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/capture/manifest.sh; . {posix(AGENT)}/lib/restore/gptboot.sh; "
         f". {posix(AGENT)}/lib/postdeploy/bootca.sh; . {posix(AGENT)}/lib/capture/hibernation.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; "
         # ‏#87: shrink.sh לפני capture.sh כמו בסוכן; הוא עצמו קורא ל-attended
         # (‏#906) ול-ui.sh, ולכן גם הם כאן — פונקציה שאינה טעונה היא כשל שקט.

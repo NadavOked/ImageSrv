@@ -17,37 +17,40 @@ from test_closed_session_report import _session
 from server.agent import reports
 
 WARNING = "שם המחשב לא נכתב: עריכת הרג׳יסטרי נכשלה"
+NO_LINUX_WARNING = "שם המחשב לא נכתב: אין מחיצת לינוקס במניפסט"
 
 
-def _done_with_warning(sid: str, mac: str) -> dict:
+def _done_with_warning(sid: str, mac: str, warning: str = WARNING) -> dict:
     return {"session_id": sid, "mac": mac, "state": "done",
             "targets": [{"dev": "sda", "bytes_written": 4096, "bytes_total": 4096,
-                         "state": "done", "error": WARNING}]}
+                         "state": "done", "error": warning}]}
 
 
-def test_a_done_target_with_a_hostname_warning_is_stored_and_counted_done(server):
+@pytest.mark.parametrize("warning", [WARNING, NO_LINUX_WARNING])
+def test_a_done_target_with_a_hostname_warning_is_stored_and_counted_done(server, warning):
     mac = _session(server, "ses_hn")
     conn = server["app"].state.ctx.conn
-    assert reports.ingest(conn, _done_with_warning("ses_hn", mac))["ok"] is True
+    assert reports.ingest(conn, _done_with_warning("ses_hn", mac, warning))["ok"] is True
     row = conn.execute(
         "SELECT state, done, error FROM session_members WHERE session_id = 'ses_hn'"
     ).fetchone()
     assert row["state"] == "done" and row["done"] == 1      # השחזור הושלם
-    assert row["error"] == f"sda: {WARNING}"                  # והאזהרה לא נבלעה
+    assert row["error"] == f"sda: {warning}"                  # והאזהרה לא נבלעה
     # ביומן — עם המעבר הטרמינלי, פעם אחת, עם הסיבה.
     journal = conn.execute(
         "SELECT detail FROM journal WHERE event = 'client_done'").fetchall()
-    assert any(WARNING in r["detail"] for r in journal), [dict(r) for r in journal]
+    assert any(warning in r["detail"] for r in journal), [dict(r) for r in journal]
 
 
-def test_the_warning_reaches_the_console_next_to_the_member(server):
+@pytest.mark.parametrize("warning", [WARNING, NO_LINUX_WARNING])
+def test_the_warning_reaches_the_console_next_to_the_member(server, warning):
     mac = _session(server, "ses_hn2", state="running")
     conn = server["app"].state.ctx.conn
-    reports.ingest(conn, _done_with_warning("ses_hn2", mac))
+    reports.ingest(conn, _done_with_warning("ses_hn2", mac, warning))
     overview = server["admin"].get("/api/console/overview").json()
     (member,) = [m for m in overview["session"]["members"] if m["mac"] == mac]
     assert member["state"] == "done"
-    assert WARNING in member["error"]
+    assert warning in member["error"]
 
 
 def test_a_clean_done_carries_no_error(server):

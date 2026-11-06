@@ -128,6 +128,7 @@ lc_manifest() {
     # Writes $LC/run/manifest.json. The file field is "local:pN": apply_gpt
     # refuses a non-swap partition without one (#424), and there is no file.
     _mf_r="$LC/run"; _mf_j=""
+    _mf_boot=$(capture_gpt_boot_code "$DEVROOT/$1") || { LC_ERROR="$1: לא הצלחנו לקרוא את קוד האתחול של GPT (440 בתים)"; return 1; }
     _mf_sec=$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null); case "$_mf_sec" in ''|*[!0-9]*) return 1 ;; esac
     _mf_dg=$(sgdisk -p "$DEVROOT/$1" 2>> "$LOG_FILE" | awk -F': ' '/Disk identifier/ { print $2 }' | awk '{print $1}')
     valid_guid "$_mf_dg" || { LC_ERROR="לא הצלחנו לקרוא את ה-GUID של דיסק המקור"; return 1; }
@@ -146,8 +147,8 @@ lc_manifest() {
         _mf_j="$_mf_j{\"index\":$_mf_i,\"type_guid\":\"$_mf_t\",\"unique_guid\":\"$_mf_u\",\"attrs\":\"$(lc_entry "$_mf_i" 3)\",\"uuid\":$_mf_uuid,\"role\":\"$_mf_role\",\"fs\":\"$_mf_fs\",\"start_sector\":$_mf_f,\"size_bytes\":$((_mf_s * 512)),\"used_bytes\":$_mf_used,\"file\":$_mf_file,\"sha256\":null,\"expandable\":false$(shrink_json_extra "$_mf_i" "$_mf_f" "$_mf_s" 512)$(lc_raw_json "$_mf_fs" "$_mf_role" "$_mf_t")},"
     done < "$2"
     _mf_j=$(_mark_expandable "${_mf_j%,}")
-    printf '{"schema":1,"scheme":"gpt","sector_size":512,"disk_guid":"%s","source_disk_bytes":%s,"partitions":[%s]}\n' \
-        "$_mf_dg" "$((_mf_sec * 512))" "$_mf_j" > "$_mf_r/manifest.json"
+    printf '{"schema":1,"scheme":"gpt","sector_size":512,"disk_guid":"%s","source_disk_bytes":%s,"partitions":[%s]%s}\n' \
+        "$_mf_dg" "$((_mf_sec * 512))" "$_mf_j" "$_mf_boot" > "$_mf_r/manifest.json"
     lc_raw_fix "$_mf_r/manifest.json" || { LC_ERROR="לא הצלחנו לסמן את המחיצות שמועתקות גולמית"; return 1; }   # #2017: a raw one never grows
 }
 

@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parent.parent
 LIB = flat_lib()
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
+LIBS = ("common", "jsonq", "gptboot", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
         "writeback", "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
         "shrinkmem", "smart", "guistate", "attended", "lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "lcwait", "idle", "lcgui")   # attended, lcwait, idle: #1367
 

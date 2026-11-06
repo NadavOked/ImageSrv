@@ -13,6 +13,7 @@ _partition_role() {
         E3C9E316-0B5C-4DB8-817D-F92DF00215AE) echo "msr" ;;
         DE94BBA4-06D1-4D40-A16A-BFD50179D6AC) echo "recovery" ;;
         0FC63DAF-8483-4772-8E79-3D69D8477DE4) echo "linux" ;;
+        4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709) echo "linux" ;;
         0657FD6D-A4AB-43C4-84E5-0933C84B4F4F) echo "swap" ;;
         EBD0A0A2-B9E5-4433-87C0-68B6B72699C7) echo "windows" ;;
         *) echo "data" ;;

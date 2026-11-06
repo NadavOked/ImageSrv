@@ -62,7 +62,7 @@ def _parts(p1_start: int) -> list[tuple]:
     ]
 
 
-def _run(tmp_path: Path, p1_start: int, check: str = "lc_table_check sda manifest.json") -> str:
+def _run(tmp_path: Path, p1_start: int, check: str = 'lc_table_check sda "$M"') -> str:
     parts = _parts(p1_start)
     plan = tmp_path / "plan.txt"
     plan.write_text("".join(f"{i}|{t}|{r}|{fs}|{s}|{n * 512}|local:p{i}|{SHA}|false|{u}||{a}\n"
@@ -85,8 +85,9 @@ def _run(tmp_path: Path, p1_start: int, check: str = "lc_table_check sda manifes
         f'DEVROOT="{dev.as_posix()}"; SYSROOT="{tmp_path.as_posix()}"; LC="{(tmp_path / "lc").as_posix()}"\n'
         'LC_GPT_TAIL=262144\n'
         'log() { echo "LOG $*" >> "$LOG_FILE"; }\n'
-        + source_line("waits.sh", "restore.sh", "manifest.sh", "expand.sh", "expandshare.sh",
+        + source_line("waits.sh", "gptboot.sh", "restore.sh", "manifest.sh", "expand.sh", "expandshare.sh",
                       "writemark.sh", "lcplan.sh")
+        + f'M="{(tmp_path / "manifest.json").as_posix()}"; printf "{{}}" > "$M"   # #2585: an old image, no boot code to restore\n'
         + f'manifest_plan() {{ cat "{plan.as_posix()}"; }}\n'
         f'json_get() {{ case "$2" in .sector_size) echo 512 ;; .scheme) echo gpt ;; '
         f'.disk_guid) echo {DISK_GUID} ;; *) echo null ;; esac; }}\n'
@@ -95,8 +96,8 @@ def _run(tmp_path: Path, p1_start: int, check: str = "lc_table_check sda manifes
         'assert_target() { :; }\n'   # #2434: the identity is not what is tested here (test_target_identity_2434.py)
         'verify_table() { :; }   # the partition nodes; the table itself is read below\n'
         'share_tail() { printf "%s\\n" "$4"; }   # nothing was shrunk: test_expand_share_1897.py\n'
-        'apply_gpt sda manifest.json || { echo "FAIL apply"; exit 0; }\n'
-        'EXPAND_OVERRIDE=auto expand_last sda manifest.json || { echo "FAIL expand"; exit 0; }\n'
+        'apply_gpt sda "$M" || { echo "FAIL apply"; exit 0; }\n'
+        'EXPAND_OVERRIDE=auto expand_last sda "$M" || { echo "FAIL expand"; exit 0; }\n'
         f'if {check}; then echo OK; else echo "FAIL check: $LC_ERROR"; fi\n'
     )
     return bb(tmp_path, body).strip()
@@ -141,7 +142,7 @@ def test_the_table_check_takes_the_aligned_start_and_nothing_else(tmp_path):
     longer on the disk, and not with any start: one sector off still fails."""
     moved = (f'sgdisk -d 1 -n 1:{58654720 + 2048}:0 -t 1:{BASIC} '
              f'-u 1:11111111-1111-1111-1111-111111111111 -c 1:imagesrv-incomplete "$DEVROOT/sda" >> "$LOG_FILE" 2>&1 '
-             '&& lc_table_check sda manifest.json')
+             '&& lc_table_check sda "$M"')
     out = _run(tmp_path, FIELD_START, check=moved)
     assert out.startswith("FAIL check: ") and "58656768" in out, out
 
