@@ -581,7 +581,7 @@ def test_network_is_one_object_page_with_the_diagram_nics_and_deploy_tabs():
     for gone in ('data-page="nic"', 'data-page="netdeploy"', "NIC_HIGHLIGHT"):
         assert gone not in page, gone
     for needed in ("function networkPage(", "function loadNetwork(", "function netDiagramModel(", "function netMapSvg(", "function netLaneOpen(", "function netLaneDrawerHtml(", "function networkDiagramTab(",
-                   "function networkNicsTab(", "function networkDeployTab(", "function netServicesOn(", "function netGapStatus(", "function netProbe(", "function openNetwork(",
+                   "function networkNicsTab(", "function networkDeployTab(", "function netServicesOn(", "function netProbe(", "function openNetwork(",
                    'network: { crumb: "רשת", title: "רשת", tabs: NET_TABS, render: (i) => networkPage(i), load: loadNetwork, own: true }',
                    'const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה", "פורטים"];',
                    'width="${W}" height="340" viewBox="0 0 ${W} 340"',   # gotcha: SVG עם height מפורש
@@ -594,7 +594,7 @@ def test_network_is_one_object_page_with_the_diagram_nics_and_deploy_tabs():
                  # ‏#1263: "קבצי dnsmasq" ו"הקובץ של הכרטיס" הוסרו מהקונסולה
                  "previewDnsmasq", "netShowFile", "קבצי dnsmasq", "editNic(", "editAddress("):
         assert gone not in js, gone
-    block = js[js.index("/* ---------- #954 גל 8: רשת כאובייקט"):js.index("function healthCheckById(id) {")]
+    block = js[js.index("/* ---------- #954 גל 8: רשת כאובייקט"):js.index("/* ---------- #1267: רשת › פורטים")]
     assert "prompt(" not in block and "confirm(" not in block.replace("confirmSheet(", ""), "prompt/confirm חסומים — רק sheet()"
     assert "disabled" not in block.replace("disabled_at", ""), "כפתור מנוטרל במקום 'דורש API' (README §8)"
     assert "function routeDeleteSheet(" in (STATIC / "netcfg.js").read_text(encoding="utf-8")

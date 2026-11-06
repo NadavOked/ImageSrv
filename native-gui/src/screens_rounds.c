@@ -165,12 +165,6 @@ const IdleDisk *idle_for_bay(const State *s, int bay) {
     return NULL;
 }
 
-const Drawer *drawer_for_bay(const State *s, int bay) {
-    for (int i = 0; i < s->ndrawers; i++)
-        if (eff_drawer(s->drawers[i].drawer, s->drawers[i].port) == bay) return &s->drawers[i];
-    return NULL;
-}
-
 const COptical *optical_for_bay(const State *s, int bay) {
     for (int i = 0; i < s->ncopticals; i++)
         if (eff_drawer(s->copticals[i].drawer, 0) == bay) return &s->copticals[i];
@@ -392,12 +386,6 @@ ProgLine progline_make(cairo_t *cr, const char *big, const char *small, double w
     p.drop = text_baseline(&p.big) - text_baseline(&p.small);
     p.h = dmax(p.big.h, p.drop + p.small.h);
     return p;
-}
-
-void progline_draw(cairo_t *cr, const Theme *t, ProgLine *p, double x, double y, double w) {
-    text_draw_r(cr, &p->big, x + w, y, t->ink);
-    text_draw(cr, &p->small, x, y + p->drop, t->ink);
-    text_free(&p->big); text_free(&p->small);
 }
 
 /* ---- the folder-first image pickers (owner, 10/10) ---- */

@@ -171,6 +171,7 @@ install_target_packages() {
     must_run firstboot-tty1 "could not reserve tty1 for firstboot progress" chroot "$TARGET" systemctl mask getty@tty1.service
     must_run firstboot-enable "could not enable firstboot service" chroot "$TARGET" systemctl enable imagesrv-firstboot.service
     install_boot_splash
+    install_station_gui
     copy_local_repo
     write_target 0644 /etc/apt/sources.list ""
     write_target 0644 /etc/apt/sources.list.d/imagesrv-iso.list \
@@ -197,6 +198,16 @@ install_boot_splash() {
         progress packages 62 "Installing packages" "no boot screen picture in the installer image: the server boots on the text console until the DCUI"
     fi
     must_run splash-enable "could not enable the boot screen" chroot "$TARGET" systemctl enable imagesrv-boot-splash.service
+}
+
+install_station_gui() {
+    # #2517: an ISO's /opt/imagesrv-src carries the GUI's sources only, and a
+    # first boot that takes the prebuilt payload never compiles them -- the
+    # installer GUI then failed with 203/EXEC, and a failed first boot (#1741,
+    # S3) had nothing to draw with. The binary this live image runs on (the
+    # same Debian pool, its libraries in packages.txt) goes to the target.
+    must_run station-gui "could not copy the GUI binary to the target" install -D -m 0755 \
+        "${GUI_BIN_SRC:-/usr/bin/imagesrv-station-gui}" "$TARGET/usr/bin/imagesrv-station-gui"
 }
 
 # What is mounted under the target, deepest first, as the kernel lists it

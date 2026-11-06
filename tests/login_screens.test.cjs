@@ -175,19 +175,13 @@ test('1085 negative: continue without checkbox must fail this test', () => {
 
 test('1085: MFA column and my-user labels', () => {
   const {run} = setup();
-  assert.equal(run('userMfaLabel({is_builtin:true})'), 'מקומי');
-  assert.equal(run('userMfaLabel({mfa_enabled:true})'), '✓');
-  assert.equal(run('userMfaLabel({})'), '—');
-  run('globalThis.drawn=""; openDrawer=(t,b)=>{ drawn=t+"|"+b; }; closeUserMenu=()=>{};');
   run('ME={username:"nadav",role:"admin",is_builtin:false,mfa_enabled:true}');
-  run('openAccount()');
-  const html = run('drawn');
-  assert.match(html, /המשתמש שלי/);
+  const html = run('accountCardsHtml()');
   assert.match(html, /צור קודי גיבוי חדשים/);
-  run('ME.is_builtin=true; ME.mfa_enabled=false; openAccount()');
-  assert.match(run('drawn'), /מקומי · ללא MFA/);
-  run('ME.is_builtin=false; ME.mfa_enabled=false; openAccount()');
-  assert.match(run('drawn'), />הפעל</);
+  run('ME.is_builtin=true; ME.mfa_enabled=false');
+  assert.match(run('accountCardsHtml()'), /מקומי · ללא MFA/);
+  run('ME.is_builtin=false; ME.mfa_enabled=false');
+  assert.match(run('accountCardsHtml()'), />הפעל</);
 });
 
 test('1085: 401/403/429 mapping does not drop the typed username', () => {
@@ -236,8 +230,7 @@ test('1120: wrong MFA code returns to the login screen with the server message a
 
 test('stage 2: account - the built-in admin has no MFA button and no backup-codes card; a regular admin gets backup codes only while MFA is on', () => {
   const {run} = setup();
-  run('globalThis.drawn=""; openDrawer=(t,b)=>{ drawn=b; }; closeUserMenu=()=>{};');
-  const open = me => { run(`ME=${JSON.stringify(me)}; openAccount()`); return run('drawn'); };
+  const open = me => { run(`ME=${JSON.stringify(me)}`); return run('accountCardsHtml()'); };
   const builtin = open({username: 'admin', role: 'admin', is_builtin: true, mfa_enabled: false});
   assert.match(builtin, /<span class="pill ">מקומי · ללא MFA<\/span>/);
   assert.match(builtin, /בכוונה, כדי שתמיד תהיה דרך להיכנס/, 'one explanatory line');

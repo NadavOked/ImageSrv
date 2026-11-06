@@ -1,0 +1,70 @@
+# lint — בדיקות סטטיות זולות שאינן אבטחה (#315).
+#
+# מה ruff תופס שאף בדיקה אחרת כאן לא תופסת: ייבוא מת, משתנה שאינו נקרא,
+# שם שאינו מוגדר, f-string בלי שדות. ‏pytest מריץ רק מסלולים שנבחרו, ולכן
+# שורה שאין עליה טסט עוברת אותו בשלום גם כשהיא שבורה; ‏CodeQL ו-semgrep
+# מחפשים אבטחה ולא נכונות. רק pyflakes קורא כל שורה בלי להריץ אותה.
+#
+# ── מה נבדק ומה לא, והמספרים (ruff 0.16.6, 06/11, origin/main d8bcd463) ──
+# חוסם: חוקי `F` (pyflakes) על כל הריפו **חוץ מ-`tests/`**. התוצאה אפס.
+# מחוץ לשער, בכוונה: ‏`tests/` — ‏F401 ‏89, ‏F841 ‏10, ‏F541 ‏5, ו-F811 ‏856
+# (דפוס ייבוא ה-fixtures של pytest, שאינו באג). ‏E4/E7 ‏(E741 ‏263, E702 ‏547,
+# E701 ‏45, ועוד) מחוץ לשער כולו: סגנון, לא נכונות.
+# כלי שיש לו ממצאים לא נכנס כחוסם ולא מוסתר ב-`continue-on-error`
+# (שהיה הופך אדום ל"נראה כמו הצלחה", עיקרון 5): הוא נשאר בחוץ עד שהוא נקי.
+#
+# `--isolated`: אין קובץ תצורה של ruff בריפו (‏pyproject.toml מצהיר במכוון
+# שאין בו הגדרות כלים), וערכי ברירת המחדל של ruff נודדים עם הגרסה. כל מה
+# שקובע את סט החוקים כתוב כאן בשורת הפקודה, והגרסה מוצמדת.
+
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# ריצה אחת לכל ענף. דחיפה חדשה בזמן שקודמתה עוד רצה מבטלת אותה —
+# אבל **רק ב-PR**: על main כל ריצה היא הרשומה של מיזוג, ואין לבטל אותה.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RUFF_VERSION: "0.16.6"
+
+jobs:
+  ruff:
+    runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11; נעול עד שנתמוך ב-26.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - run: pip install "ruff==${RUFF_VERSION}"
+
+      - name: ruff F -- zero files is not clean
+        run: |
+          set -euo pipefail
+          ruff --version
+          # ruff יוצא 0 גם כשלא מצא קובץ לבדוק. "לא היה מה לבדוק" ו"נבדק
+          # והכול תקין" הם שני מצבים שונים (עיקרון 5): סופרים לפני, ונכשלים
+          # אם אין. הסף הוא אחד ולא 1,000 כי הוא בודק שהשער רץ, לא כמה גדול הריפו.
+          flags=(--isolated --target-version py312 --select F --extend-exclude tests)
+          files=$(ruff check "${flags[@]}" --show-files | wc -l)
+          echo "python files checked: $files"
+          if [ "$files" -lt 1 ]; then
+            echo "::error::ruff found no python files -- the check did not run"
+            exit 1
+          fi
+          ruff check "${flags[@]}" --output-format=github .
+          echo "ruff F (tests/ excluded): $files files, no findings" >> "$GITHUB_STEP_SUMMARY"

@@ -1304,10 +1304,6 @@ function pagePlaceholder() {
   return '<div class="card"><div class="card-b">טוען נתונים…</div></div>';
 }
 
-function emptyDataCard() {
-  return `<div class="grid"><div class="span-12"><div class="card"><div class="card-b"><div class="empty">אין נתונים להצגה</div></div></div></div></div>`;
-}
-
 function formatGB(bytes) {
   if (bytes == null) return "-";
   const n = Number(bytes);
@@ -1323,30 +1319,6 @@ function fmtBytes(n) {
   let i = 0;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
   return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + " " + units[i];
-}
-
-function librarySize(bytes) {
-  return bytes == null ? "לא ידוע" : fmtBytes(bytes);
-}
-
-/* #953: "נכנס לדיסק מ-X GB" — GB עשרוני (כמו על מדבקת הכונן: 256GB =
-   256×10⁹), מעוגל כלפי **מעלה** — הרצפה, לא קירוב. null = לא ניתן לקבוע. */
-function fitGB(bytes) {
-  const n = Number(bytes);
-  if (bytes == null || !Number.isFinite(n) || n < 0) return null;
-  return Math.ceil(n / 1e9) + " GB";
-}
-
-/* #953: שלושת המספרים של אימג' — לאיזה דיסק הוא נכנס (מ-`min_target_bytes`
-   הנגזר, tooltip בבייטים), כמה תפוס בו (`used_bytes`; null = "לא ידוע",
-   לא 0 — מחיצה שלא נעגנה, #84), וכמה הוא שוקל בשרת. פונקציית רינדור
-   קטנה כדי שתעבור כמו שהיא למסך של #954. */
-function imageSizeCells(img) {
-  const fit = fitGB(img.min_target_bytes);
-  const fitHtml = fit
-    ? `<span title="${esc(String(img.min_target_bytes))} בייט">${esc(fit)}</span>`
-    : "לא ידוע";
-  return `נכנס לדיסק מ-${fitHtml} · בשימוש ${esc(librarySize(img.used_bytes))} · בשרת ${esc(librarySize(img.total_compressed_bytes))}`;
 }
 
 function imageOsLabel(os) {
@@ -6480,12 +6452,6 @@ function findUser(name) {
 }
 function activeAdminCount() { return (USERS || []).filter((u) => u.role === "admin" && !u.disabled).length; }
 
-function userMfaLabel(u) {
-  if (u.is_builtin) return "מקומי";
-  if (u.mfa_enabled) return "✓";
-  return "—";
-}
-
 /* ‏stage 3 (console-full.html P.users): עמודת MFA כפיל. המנהל שנוצר בהתקנה — "מקומי · ללא MFA" (בכוונה, דלת חירום);
    מנהל עם MFA — "פעיל"; מנהל בלי — "כבוי" (אזהרה); משתמש הפצה אינו נכנס לקונסולה, ולכן "—" ולא "כבוי". */
 function userMfaPill(u) {
@@ -6929,14 +6895,6 @@ function netLinkStatus(n) {
   if (n.state === "up") return `<span class="st ok">מחובר${typeof n.speed_mbps === "number" && n.speed_mbps > 0 ? ` · <bdi dir="ltr">${esc(n.speed_mbps)} Mbps</bdi>` : ""}</span>`;
   if (n.state === "down") return UI.status("", "מנותק");
   return UI.status("unk", "לא נקרא");
-}
-/* פער = מצב, לא הערה: לא נקרא (unk) ≠ לא מנוהל (אפור) ≠ תואם (ירוק) ≠ לא תואם (אדום). */
-function netGapStatus(n) {
-  if (!NETCFG) return UI.status("unk", "לא נקרא");
-  const cfg = netCfgRow(n.name);
-  if (!netLiveChecked()) return UI.status("unk", "לא נקרא");
-  if (!cfg || cfg.mode === "manual") return UI.status("", "לא מנוהל");
-  return (cfg.mismatches || []).length ? UI.status("err", cfg.mismatches.join(" · ")) : UI.status("ok", "תואם");
 }
 function netConfiguredText(n) {
   if (!NETCFG) return "לא נקרא";
@@ -7489,10 +7447,6 @@ function refreshNetPages() {
 function wireNetPage() {
   if (current !== "network") return;
   if (typeof startCountdown === "function") startCountdown();
-}
-
-function healthCheckById(id) {
-  return (Array.isArray(HEALTH) ? HEALTH : []).find((c) => c.id === id) || null;
 }
 
 /* ---------- #1267: רשת › פורטים — כרטיס לכל רשת ----------
@@ -8693,23 +8647,6 @@ function selectPageById(id) {
     : document.querySelector(`.inventory-node[data-page="${id}"]`), id);
 }
 
-function selectInventory(el, id) {
-  if (!pageAllowed(id)) return;
-  document.querySelectorAll(".inventory-node").forEach((x) => x.classList.remove("active"));
-  if (el) el.classList.add("active");
-  const page = pages[id];
-  if (!page) return;
-  current = id;
-  currentTab = 0;
-  document.getElementById("content").innerHTML = layout(page, 0);
-  const search = document.getElementById("globalSearch");
-  if (search) search.value = searchQuery || "";
-  if (id === "network") wireNetPage();
-  wireRestoredPage();
-  if (page.load) page.load();
-  closeSidebar();   // ‏#1300: בחירת עמוד מהעץ (גם צומת-משנה) נכנסת לעמוד — השכבה בחלון צר נסגרת
-}
-
 /* הכרעת נדב: סגירת ענף סוגרת גם כל תת-ענף שבתוכו, כך שפתיחה מחדש מציגה רק את הרמה הראשונה סגורה.
    המצב נקרא מה-DOM (sidebarChildOpen), ולכן גם בנייה מחדש של העץ שומרת את אותו כלל. */
 function collapseInventoryDescendants(box) {
@@ -9680,10 +9617,6 @@ function accountCardsHtml(asPage = false) {
 function appearanceCard() {
   const seg = THEME_CYCLE.map((t) => `<button type="button" onclick="setThemePref('${t}')" aria-pressed="${currentTheme() === t}">${esc(THEME_TITLE[t])}</button>`).join("");
   return UI.card({ title: "מראה", cls: "c6", body: `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span>ערכת נושא</span><span class="seg" role="group" aria-label="ערכת נושא">${seg}</span></div><p class="muted" style="margin-top:8px">חל על המשתמש שלך בלבד, בכל מחשב שתיכנס ממנו.</p>` });
-}
-function openAccount() {
-  closeUserMenu();
-  openDrawer("המשתמש שלי", `<div class="page drw">${accountCardsHtml()}</div>`);
 }
 /* ‏"החשבון שלי" כדף בעץ (ניהול), כמו console-full.html P.account — אותם כרטיסים כמו במגירה. */
 function account() {

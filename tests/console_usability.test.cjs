@@ -531,7 +531,6 @@ test('#1300: every way into a page or a drawer from the tree closes the overlay'
   const {run, tree} = setup();
   const side = tree.querySelector('#sidebar');
   const open = () => { run('toggleSidebar(true)'); assert.ok(side.classList.contains('open')); };
-  open(); run('selectInventory(null,"images")'); assert.ok(!side.classList.contains('open'), 'selectInventory (sub-nodes)');
   open(); run('IMAGES=[{id:"i1",name:"x"}]; IMG.manifest={}; api=()=>new Promise(()=>{}); openImageDetail("i1")'); assert.ok(!side.classList.contains('open'), 'a drawer opened from a tree leaf');
   open(); run('toggleInventoryGroup(document.querySelector("#infraTA"),"infraTA")'); assert.ok(side.classList.contains('open'), 'opening/closing a group is not navigation — the overlay stays');
 });

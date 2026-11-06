@@ -88,6 +88,13 @@ ProtectHome=yes
 # ב-"Read-only file system" בשרת חיפה (17/10). ‏/run/lock ולא /run/lock/iscsi:
 # התת-תיקייה אינה קיימת עד ההרצה הראשונה, ומקף היה מדלג עליה בשקט.
 #
+# ‏#2396: יעד גיבוי המסד מסוג "תיקייה" (#1956) נועד לדיסק שני, ודיסק שני מעוגן
+# תחת /mnt (ידנית) או /media (אוטומטית). בלי שני אלה קובץ הבדיקה של הקונסולה
+# נכשל ב-"Read-only file system" והאפשרות שהיא מציעה לא יכולה להצליח. ‏-/mnt
+# ו--/media ולא /: רק שורשי העיגון, לא כל מערכת הקבצים, ו-ProtectSystem=strict
+# נשאר. מקף = אופציונלי. נתיב מחוץ לשניים (‏/home, ‏/opt) נדחה כמקודם, בגלוי,
+# בקובץ הבדיקה. נאכף ב-tests/test_backup_folder_rw_2396.py.
+#
 # ‏#2419 (4): כל נתיב שהשרת כותב תחת /etc רשום כאן בשמו — הרשימה המדויקת,
 # שנאכפת מול הקוד ב-tests/test_unit_etc_writes_2419.py (נתיב חדש בקוד בלי
 # שורה כאן נכשל שם, ולא ב-Read-only file system על שרת מותקן). ‏/etc החשוף
@@ -96,7 +103,7 @@ ProtectHome=yes
 # ‏/etc/fstab, ‏/etc/resolv.conf (גם ה-hooks של dhcpcd תחת ifup) ו-/etc/nftables.conf.
 # הוצאתו ממתינה להכרעה על שלושתם. ‏-/etc/... = אופציונלי: חבילה שלא הותקנה
 # (nut, ‏open-iscsi) לא מפילה את מרחב השמות.
-ReadWritePaths=/var/lib/imagesrv /srv/imagesrv/images /etc/dnsmasq.d -/etc/imagesrv /etc/network/interfaces.d /etc/chrony/conf.d -/etc/chrony/chrony.conf -/etc/modules-load.d -/etc/systemd/system/dnsmasq.service.d -/etc/nut -/etc/iscsi /etc -/srv/tftp -/run/network -/run/dhcpcd -/var/lib/dhcpcd -/run/lock -/var/lib/iscsi
+ReadWritePaths=/var/lib/imagesrv /srv/imagesrv/images /etc/dnsmasq.d -/etc/imagesrv /etc/network/interfaces.d /etc/chrony/conf.d -/etc/chrony/chrony.conf -/etc/modules-load.d -/etc/systemd/system/dnsmasq.service.d -/etc/nut -/etc/iscsi /etc -/srv/tftp -/run/network -/run/dhcpcd -/var/lib/dhcpcd -/run/lock -/var/lib/iscsi -/mnt -/media
 PrivateTmp=yes
 
 [Install]

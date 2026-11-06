@@ -118,8 +118,9 @@ static double draw_header(App *a, cairo_t *cr, double W) {
 
     const int clone=a->force_cloner||a->force_standby||a->screen==SCREEN_CLONER||a->screen==SCREEN_STANDBY||a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL
         ||(a->screen==SCREEN_FAILURE&&a->st.fail_cloner);   /* #1569: the failure record says whose failure it is */
-    const char *role=clone?"מחשב שיכפול":"מחשב בנייה";   /* #1252: the "2" was the mockup's */
-    if(strcmp(a->st.screen,"boot")){   /* #1709: before the hello the role is not known -- no pill, not a guess */
+    const int server=a->screen==SCREEN_FAILURE&&a->st.fail_server;   /* #1741: the server's own screen (failgui.sh) */
+    const char *role=server?(a->st.fail_server==2?"התקנת שרת":"שרת ImageSrv"):clone?"מחשב שיכפול":"מחשב בנייה";   /* #1252: the "2" was the mockup's */
+    if(server||strcmp(a->st.screen,"boot")){   /* #1709: before the hello the role is not known -- no pill, not a guess */
         Text rt=text_make(cr,FONT_SANS,12,400,role,0,DIR_RTL);
         Rect pill={right-rt.w-18,(N_HEADER_H-20)/2,rt.w+18,20};
         draw_set_a(cr,t->header_text,.14); draw_rrect_path(cr,pill,10); cairo_fill(cr);
@@ -127,6 +128,7 @@ static double draw_header(App *a, cairo_t *cr, double W) {
         text_free(&rt);
     }
 
+    if(!server){   /* #1741: no station's machine, server or agent versions on the server's own screen */
     /* #1252: every value from the state file; unknown is said, not invented.
      * #1257: the versions (agent · server) are drawn on their own line below. */
     char srv[160]; server_label(&a->st,srv,sizeof srv);
@@ -171,6 +173,7 @@ static double draw_header(App *a, cairo_t *cr, double W) {
         Text hint=text_make(cr,FONT_SANS,11,600,ord<0?"ה-initrd ישן מהשרת":ord>0?"ה-initrd חדש מהשרת":"ה-initrd לא תואם לשרת",vw,DIR_RTL);
         text_draw_r(cr,&hint,right,N_HEADER_H-hint.h-4,(Rgb){1,.78,.35});
         text_free(&hint);
+    }
     }
     time_t now=time(NULL); struct tm tmv; char clock_s[16]="--:--";
     if(a->fixed_clock) snprintf(clock_s,sizeof clock_s,"12:45");   /* the mockup's clock; --png only */
@@ -327,7 +330,8 @@ static void draw_status(App *a,cairo_t *cr,double W,double H){
     char kb[200];const char *on=status_keys(a,kb,sizeof kb),*off=status_keys_off(a);Text keys;
     if(a->screen==SCREEN_FAILURE){   /* #1569: the key, then IP · MAC · the last hello -- the evidence the server hears the hold */
         keys=text_make(cr,FONT_SANS,12,400,on,0,DIR_RTL);text_draw(cr,&keys,kx,bar.y+(bar.h-keys.h)/2,t->muted);
-        standby_status_info(a,cr,kx+keys.w+3*N_STATUS_GAP,bar.y+bar.h/2);text_free(&keys);return;
+        if(!a->st.fail_server)standby_status_info(a,cr,kx+keys.w+3*N_STATUS_GAP,bar.y+bar.h/2);   /* #1741: a server has no hello, MAC or IP of a station */
+        text_free(&keys);return;
     }
     if(off){                                       /* the off keys at the end of the line, in the paused grey */
         char e1[600],e2[200],m[1000],col[8];Rgb g=t->mark_line;

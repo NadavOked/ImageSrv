@@ -447,7 +447,6 @@ test('stage 3: the users table MFA column is a pill — built-in admin "מקומ
   assert.equal(cell({username:'b',role:'admin',mfa_enabled:true}),'<span class="pill ok">פעיל</span>');
   assert.equal(cell({username:'c',role:'admin'}),'<span class="pill warn">כבוי</span>');
   assert.equal(cell({username:'d',role:'deploy'}),'—');
-  assert.equal(run('userMfaLabel({is_builtin:true})'),'מקומי','the account page keeps its own label');
 });
 
 test('final mockup: every destructive users window is a short question, the subject in the sub, consequences as an icon list, a named red button',async()=>{

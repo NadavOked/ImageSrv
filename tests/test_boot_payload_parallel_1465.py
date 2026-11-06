@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from native import requires_native
-from test_boot_payload_1230 import OLD_KVER, _host, _host_env
+from test_boot_payload_1230 import OLD_KVER, _host, _host_env, install_stub_lab_gate
 from test_installer_1131 import BASH, REPO, posix, run_bash
 
 pytestmark = requires_native(("bash", BASH), why="boot-payload-build.sh is bash")
@@ -57,6 +57,7 @@ def _setup(tmp_path: Path, lines: list[str]):
     (tree / "tools" / "boot-payload-build.sh").write_bytes(
         (REPO / "tools" / "boot-payload-build.sh").read_bytes())
     (tree / "tools" / "build_initramfs.sh").write_text(STUB, encoding="utf-8", newline="\n")
+    install_stub_lab_gate(tree)
     boot = host / "boot"
     for name in ("initrd.img", "initrd.img.gui", "initrd.img.gui2", "vmlinuz"):
         (boot / name).write_text(f"old {name}\n", encoding="utf-8", newline="\n")

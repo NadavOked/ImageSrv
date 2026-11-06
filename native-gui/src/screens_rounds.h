@@ -45,7 +45,6 @@ void card_name(const char *name, int bay, const char *conn, int port, char *out,
 const CUsed *cused_for_dev(const State *s, const char *dev);   /* #2030: NULL = no size read for it */
 int cloner_bay_count(const State *s);
 const IdleDisk *idle_for_bay(const State *s, int bay);
-const Drawer *drawer_for_bay(const State *s, int bay);
 const COptical *optical_for_bay(const State *s, int bay);
 void cloner_bay_conn(const State *s, int bay, char *out, size_t n);
 /* #704: the cloner's label of SATA slot <port> -- its cslot_name, else
@@ -84,7 +83,6 @@ void sb_led(cairo_t *cr, double cx, double cy, double d, Rgb c, Rgb soft, int ri
 double sb_pill(cairo_t *cr, double right, double cy, const char *label, Rgb fg, Rgb bg);
 double sb_bay_pill(cairo_t *cr, double right, double cy, const char *label, Rgb fg, Rgb bg, int emphasis);
 void sb_hatch(cairo_t *cr, const Theme *t, Rect r);
-void progline_draw(cairo_t *, const Theme *, ProgLine *, double, double, double);
 void foot_buttons(App *, cairo_t *, Rect, Text *, const int *, const int *, int);
 int image_options(const App *, const char **, char (*)[168], int);
 

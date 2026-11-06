@@ -1794,12 +1794,21 @@ REAL_BINARIES_USED = {
 
 #: מקומפל מהמקור בבנאי ולכן אינו ברשימת ה-BINARIES שנאספת מהמערכת.
 COMPILED_BINARIES = {"fanout", "hivewrite", "lldpsniff"}
+DIAGNOSTIC_BINARIES = {"smartctl", "efibootmgr", "dmidecode", "lspci", "ntfsfix"}
 
 
 def test_builder_packs_every_binary_the_agent_uses():
     packed = builder_binaries()
     missing = REAL_BINARIES_USED - packed
     assert not missing, f"הסוכן קורא לבינארים שהבנאי לא אורז: {missing}"
+    assert not (DIAGNOSTIC_BINARIES - packed)
+
+
+def test_lspci_names_are_packed_with_the_diagnostic():
+    builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
+    assert "pciutils pci.ids" in builder
+    assert 'PCI_IDS=/usr/share/misc/pci.ids' in builder
+    assert 'install -D -m 0644 "$PCI_IDS" "$ROOT$PCI_IDS"' in builder
 
 
 def test_the_used_list_is_not_stale():

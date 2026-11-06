@@ -11,8 +11,11 @@ source "$SCRIPT_DIR/../initramfs-format.sh"
 
 listing=$(mktemp)
 trap 'rm -f "$listing"' EXIT
+# #1630: every concatenated archive, not only the first -- `cpio -t` stops at the
+# first TRAILER!!!, the kernel unpacks what follows it. A stream the lister cannot
+# read to its end is a failed inspection, not a clean one.
 initramfs_decompress "$INITRD" \
-    | cpio -t >"$listing" 2>/dev/null \
+    | python3 "$SCRIPT_DIR/initrd-list.py" >"$listing" \
     || { echo "build-iso: cannot inspect initrd contents" >&2; exit 1; }
 
 # #1412: what a lab overlay leaves in the image -- the marker build_initramfs.sh

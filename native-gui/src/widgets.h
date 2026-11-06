@@ -48,7 +48,6 @@ Text error_make(cairo_t *cr, const char *s, double w);   /* .error: 12.5px dange
 /* ---- the card (console.css .sheet / .shead / .sbody / .sfoot) ------------ */
 typedef struct { Text h3, p; double h; int logo; } Head;
 Head head_make(cairo_t *cr, const char *h3, const char *p, double inner_w);
-void head_logo(Head *hd);                                /* .native-logo above the title */
 double card_width(double W);                             /* #765: W minus a proportional 12..28px inset */
 /* #765: surface + head, clipped to a card that fills the framebuffer below the
  * header (no 92vh cap, no centring). *body is the content box (overflow is
@@ -62,7 +61,6 @@ double foot_height(cairo_t *cr, double content_h);       /* 1 + 14 + content + 1
 void foot_draw_bg(cairo_t *cr, const Theme *t, Rect foot);
 
 /* ---- station.css pieces ------------------------------------------------- */
-void draw_tray(cairo_t *cr, const Theme *t, double x, double y, int multi);
 enum { ICON_DISK, ICON_WARNING, ICON_SUCCESS };
 void draw_native_icon(cairo_t *cr, const Theme *t, Rect box, int kind);
 /* mockup 10/10: the build menu's four icons, the SVGs' 24-unit paths --
@@ -92,7 +90,6 @@ Text alert_make(cairo_t *cr, const char *s, double w);
 double alert_height(const Text *body);
 void draw_alert(cairo_t *cr, const Theme *t, Rect r, Text *body);
 /* .native-status: the green dot + the screen's own word in the status bar. */
-void draw_status_word(cairo_t *cr, const Theme *t, double x, double cy, const char *s, Rgb dot);
 void draw_cls_bars(cairo_t *cr, const Theme *t, double x, double y, double w, int current);
 void draw_toast(App *a, cairo_t *cr, double W, double H);
 

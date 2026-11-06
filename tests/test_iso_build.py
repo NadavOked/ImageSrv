@@ -396,14 +396,15 @@ def test_firstboot_brings_up_dhcp_then_wizard_gui_and_dcui_fallback_on_the_headl
     assert 'systemctl is-active --quiet imagesrv-dcui.service' in code
     assert "[[ -e /dev/fb0" in code
     assert "ID_INPUT_KEYBOARD=1" in code and "/dev/input/event*" in code
-    assert 'installer gui: started on tty1' in code
+    # #2517: on tty1 only once it drew a frame (test_failure_gui_server_1741.py runs it)
+    assert 'installer gui: on tty1 (it drew a frame)' in code
     assert 'installer gui: no framebuffer/keyboard, DCUI only' in code
 
 
 def test_native_installer_unit_owns_tty1_then_hands_it_to_dcui() -> None:
     unit = INSTALLER_GUI_SERVICE.read_text(encoding="utf-8")
     assert "Conflicts=getty@tty1.service imagesrv-dcui.service" in unit
-    assert "Type=simple" in unit and "Restart=no" in unit
+    assert "Type=exec" in unit and "Restart=no" in unit   # #2517: 203/EXEC is a failed start
     assert "StandardInput=tty" in unit and "TTYPath=/dev/tty1" in unit
     assert "--screen install --wizard-cwd /opt/imagesrv-src" in unit
     assert "ExecStopPost=systemctl start imagesrv-dcui.service" in unit

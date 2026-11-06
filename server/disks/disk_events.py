@@ -31,6 +31,24 @@ def _int(value: object) -> int:
     return value if isinstance(value, int) and value >= 0 else 0
 
 
+def _was_red(conn: sqlite3.Connection, serial: str | None, session_id: str, mac: str,
+             disk: str) -> bool:
+    """האם המדידה האחרונה של הדיסק הזה כבר הייתה אדומה (‏#1751: התראה אחת לאירוע).
+
+    עם סידורי — הדיסק עצמו, בכל סבב ובכל מכונה (הוא נודד בין מגירות). בלי סידורי
+    אין זהות בין סבבים — רק השורה של (סבב, מכונה, דיסק), כלומר שליחה חוזרת.
+    ‏``unchecked`` אינו מדידה (עיקרון 5): הוא לא "כבר לא אדום", ולכן מדלגים עליו."""
+    if serial:
+        row = conn.execute(
+            "SELECT verdict FROM disk_events WHERE serial = ? AND verdict != 'unchecked'"
+            " ORDER BY updated_at DESC, rowid DESC LIMIT 1", (serial,)).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT verdict FROM disk_events WHERE session_id = ? AND mac = ? AND disk = ?"
+            " AND verdict != 'unchecked'", (session_id, mac, disk)).fetchone()
+    return row is not None and row["verdict"] == "fail"
+
+
 def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
     """שומר disk_event אחד. מחזיר {"ok": True} או שגיאה בתבנית המוסכמת."""
     session_id = payload.get("session_id")
@@ -77,6 +95,9 @@ def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
     # שנכשלת בלי rollback נועלת את השרת עד אתחול. הנעילה עוטפת את הכתיבה
     # **בלבד** — `journal` שאחריה נוטל את אותה נעילה בעצמו, והיא `Lock`
     # ולא `RLock`, ולכן הוא יושב מחוצה לה (אותו כלל כמו ב-agent_loops).
+    # ‏#1751: נקרא **לפני** הכתיבה — המדידה הקודמת של הדיסק, לפני שזו דורסת אותה.
+    newly_red = verdict == "fail" and not _was_red(conn, serial, session_id, mac, disk)
+
     with _write_lock, writing(conn):
         conn.execute(
             "INSERT INTO disk_events (session_id, mac, disk, port, serial, verdict,"
@@ -99,8 +120,18 @@ def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
 
     # ‏#1760: דילוג אדום על דיסק לקריאה בלבד נזכר בשרת עם הסיבה שלו — אחרת אחרי
     # אתחול (‏setro נעלם) הדיסק חוזר בלי סימן, ורשומה ישנה עליו צובעת אותו כתום.
-    if verdict == "fail" and smart.get("reason") == "readonly" and decision == "skip":
+    readonly_skip = verdict == "fail" and smart.get("reason") == "readonly" and decision == "skip"
+    if readonly_skip:
         disk_failures.record_readonly(conn, session_id, mac, disk, serial)
+
+    # ‏#1751: SMART אדום — "דיסק אדום" במייל, פעם אחת לכל דיסק שהאדים (``_was_red``).
+    # לקריאה בלבד עם סידורי כבר נרשם כ-``disk_failure`` (גם הוא "דיסק אדום") — לא פעמיים.
+    if newly_red and not (readonly_skip and serial):
+        journal(conn, "smart_red",
+                f"{mac} {disk} serial={serial or '?'} port={port if port is not None else '?'}"
+                f" reason={smart.get('reason') or '?'}"
+                + slot_names.journal_suffix(slot_names.label(conn, mac, port=port, serial=serial)),
+                machine=mac, round_id=session_id)
 
     # רק הכרעה מפורשת נרשמת ביומן — לא כל probe. "החלף"/"דלג" על דיסק
     # פגום הוא מה שהמפעיל צריך לראות בהיסטוריה.

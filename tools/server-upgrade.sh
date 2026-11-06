@@ -456,6 +456,10 @@ enable_timers || rollback "הפעלת $FAILED_TIMER נכשלה (systemctl enable
 # היא כבר פעילה מההתקנה (setup-boot-server.sh) או מהעדכון הקודם. כשל = אזהרה גלויה, לא חזרה.
 systemctl enable imagesrv-upgrade-recover.service \
     || UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }יחידת השחזור של עדכון שנקטע (imagesrv-upgrade-recover) לא הופעלה — הפסקת חשמל בעדכון הבא לא תוחזר באתחול"
+# ‏#1741 (‏S7): מסך האתחול/הכיבוי של השרת (בתוך deploy/*.service שלמעלה) — גם לשרת
+# שהותקן לפניו. כשל = אזהרה גלויה, לא חזרה: בלעדיו האתחול מוצג בטקסט, כמו קודם.
+systemctl enable imagesrv-shutdown-screen@reboot.service imagesrv-shutdown-screen@poweroff.service \
+    || UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }מסך האתחול והכיבוי של השרת (imagesrv-shutdown-screen) לא הופעל — אתחול השרת יוצג בטקסט"
 
 # 3א. ‏#1411: עדכוני האבטחה של Debian — רק מהמאגר שהגרסה החתומה נושאת
 # (deploy/security-upgrade.sh; הגיבוב שלו בעץ התג, שאומת למעלה). לפני בניית

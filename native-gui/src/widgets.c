@@ -256,9 +256,6 @@ Head head_make(cairo_t *cr, const char *h3, const char *p, double inner_w) {
     return hd;
 }
 
-/* .native-logo above the title (login, menu): 56px box + margin-bottom 16 */
-void head_logo(Head *hd) { hd->logo = 1; }
-
 double card_width(double W) {
     return W;
 }
@@ -309,17 +306,6 @@ void foot_draw_bg(cairo_t *cr, const Theme *t, Rect foot) {
 }
 
 /* ---- station.css pieces ---------------------------------------------------------- */
-
-/* .menu-card/.disk-card .tray (52x34, radius 6, ink, LED bottom 6 left 7)
- * and .tray-multi (two hair-coloured copies behind: 4px/-1, 8px/-2). */
-void draw_tray(cairo_t *cr, const Theme *t, double x, double y, int multi) {
-    if (multi) {
-        draw_fill_rrect(cr, (Rect){ x + 8 + 2, y + 8 + 2, 52 - 4, 34 - 4 }, 4, t->hair);
-        draw_fill_rrect(cr, (Rect){ x + 4 + 1, y + 4 + 1, 52 - 2, 34 - 2 }, 5, t->hair);
-    }
-    draw_fill_rrect(cr, (Rect){ x, y, 52, 34 }, 6, t->ink);
-    draw_led(cr, x + 7 + 2.5, y + 34 - 6 - 2.5, 5, t->led_ok);
-}
 
 /* .native-logo / .native-message-icon / .native-done-icon. Unit coordinates
  * describe vector paths, not font glyphs; IBM Plex remains the only font. */
@@ -556,17 +542,6 @@ void draw_alert(cairo_t *cr, const Theme *t, Rect r, Text *body) {
     text_draw(cr, body, r.x + N_ALERT_PAD_X, r.y + N_ALERT_PAD_Y, t->alert_ink);
 }
 
-/* .native-status{display:flex;gap:6px} .native-status i{7px round, --green}.
- * In RTL the dot is the first item, so it sits at the right of the word;
- * <x> is the left edge the pair grows from (the status bar's inline end). */
-void draw_status_word(cairo_t *cr, const Theme *t, double x, double cy, const char *s, Rgb dot) {
-    Text w = text_make(cr, FONT_SANS, N_HEADER_FONT, 400, s, 0, DIR_RTL);
-    text_draw(cr, &w, x, cy - w.h / 2, t->muted);
-    cairo_arc(cr, x + w.w + N_STATUS_GAP + N_STATUS_DOT / 2, cy, N_STATUS_DOT / 2, 0, 2 * M_PI);
-    draw_set(cr, dot); cairo_fill(cr);
-    text_free(&w);
-}
-
 /* .cls-bars: 4 x (height 3, radius 2, hair; .on ink), gap 5, flex:1 */
 void draw_cls_bars(cairo_t *cr, const Theme *t, double x, double y, double w, int current) {
     double bw = (w - 3 * 5) / 4;
@@ -578,7 +553,7 @@ void draw_cls_bars(cairo_t *cr, const Theme *t, double x, double y, double w, in
  * radius 10; 13px; box-shadow 0 10px 30px -8px shadow-strong */
 void draw_toast(App *a, cairo_t *cr, double W, double H) {
     const char *message = a->toast[0] ? a->toast :
-                          a->st.stale ? "הסוכן לא מעדכן מצב" : NULL;
+                          a->st.stale && !a->st.fail_server ? "הסוכן לא מעדכן מצב" : NULL;   /* #1741: written once, by no agent */
     if (!message) return;
     const Theme *t = a->theme;
     Text v = text_make(cr, FONT_SANS, 13, 400, message, (int)(W * 0.8), DIR_RTL);

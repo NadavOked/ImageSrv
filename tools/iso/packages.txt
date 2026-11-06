@@ -78,6 +78,8 @@ libc6-dev
 ethtool
 smartmontools
 dmidecode
+pci.ids
+pciutils
 efibootmgr
 dmsetup             # #1466: שיכפול מקומי/קליטה — מבט copy-on-write בזיכרון על המקור
 

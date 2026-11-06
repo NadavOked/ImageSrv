@@ -1,0 +1,22 @@
+# ImageSrv -- the server going down, on the GUI (#1741, S7; owner 17/10: no
+# black screen). Enabled as @reboot and @poweroff: reboot.target or
+# poweroff.target pulls it in, and it starts at the beginning of that
+# transaction. After= the DCUI: when one unit stops and another starts, the
+# stop comes first, so the DCUI's GUI has left the framebuffer before this
+# one takes it. Display only: nothing waits for it, and it is never stopped
+# by the shutdown itself -- systemd's last kill ends it.
+[Unit]
+Description=ImageSrv shutdown screen (%i)
+DefaultDependencies=no
+After=imagesrv-dcui.service imagesrv-installer-gui.service imagesrv-boot-splash.service
+Before=systemd-%i.service
+ConditionPathExists=/dev/fb0
+
+[Service]
+Type=exec
+ExecStart=/bin/sh /opt/imagesrv/deploy/imagesrv-shutdown-screen.sh %i
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=%i.target

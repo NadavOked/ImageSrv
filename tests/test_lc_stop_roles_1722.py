@@ -111,11 +111,12 @@ def test_back_to_the_boot_choice_and_in_again_after_a_run_proposes_nothing(drive
 
 
 def test_the_first_proposal_needs_a_system_on_the_disk(driver, tmp_path):
-    """Drawer 3 has a table but nothing the inventory recognised: disk 2 (Windows)
-    is proposed. With no system anywhere, no source is proposed at all."""
+    """Drawer 3 has a table but nothing the inventory recognised: no source is
+    proposed -- #1874 (Nadav 20/10): disk 2's Windows is not taken in its place.
+    With no system anywhere, no source is proposed at all."""
     bare3 = "lc_disk=3|sdc|C|S3|500107862016|ok|ok||2|1|500107862016|1|\n"
     out = drive(driver, tmp_path, _local("idle", SDB, bare3), "move:5,5")
-    assert roles(out)[-1] == "sdb:1,sdc:2,", out
+    assert roles(out)[-1] == "sdb:2,sdc:2,", out
     bare2 = SDB.replace("|Windows|", "||")
     out = drive(driver, tmp_path, _local("idle", bare2, bare3), "move:5,5")
     assert ":1," not in roles(out)[-1], out

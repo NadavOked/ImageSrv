@@ -150,7 +150,16 @@
 | WoL: UDP 9, broadcast `255.255.255.255`, מוצמד לכרטיס ההפצה | `server/net/wol.py` (`WOL_PORT`, `broadcast_sender`) |
 | אין IGMP querier בשרת (Issues #1543, #1972) | חיפוש `querier` ב-`server/`, `agent/` — אין תוצאות |
 | ערוץ הבקרה של udpcast ו-כתובת הקבוצה הנגזרת | דף man של `udp-sender` (Debian); לא נקבע בקוד |
-| TCN, תקלות DHCP snooping, EEE, duplex, LACP | `C:\ImageCtl-Lab\evening-1015esearch-new-failures-1022.md` (N01, N02, N05, N07, N09, N28) |
+| TCN, תקלות DHCP snooping, EEE, duplex, LACP | `C:\ImageCtl-Lab\evening-1015
+esearch-new-failures-1022.md` (N01, N02, N05, N07, N09, N28) |
 | ~106MB/s, 1G, 10GbE בחדר השיכפולים | `docs/architecture/imagesrv-spec.md` סעיף 6 ושורה 351 |
+
+## פרק 14: SID כפול (06/11/2026)
+
+| מה | מקור |
+|---|---|
+| המוצר כותב שם מחשב ולא משנה SID; הכרעת נדב 19/10 | Issue #1833; `agent/lib/postdeploy/hostname.sh` |
+| sysprep לפני קליטה כשמצטרפים לדומיין | Issues #1881, #2558; הטענה על `KB5070568` לא אומתה |
+| sysprep דורס את שם המחשב בעלייה ראשונה | Issue #1976 |
 
 </div>

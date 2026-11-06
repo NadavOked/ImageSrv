@@ -306,12 +306,15 @@ def test_view_only_monitor_survives_keyboard_and_pointer_events(tmp_path):
 
 def _reboot_stub(tmp_path: Path) -> tuple[dict, Path]:
     """‏`reboot` מזויף ראשון ב-PATH: כותב את הארגומנטים שלו לקובץ. הקובץ
-    הוא הראיה החיובית ש-run_power רץ — ולא-קיומו הוא הראיה שלא."""
+    הוא הראיה החיובית ש-run_power רץ — ולא-קיומו הוא הראיה שלא.
+    הכתיבה לקובץ זמני ואז `mv`: הקובץ מופיע רק שלם, כך ש"קיים" גורר
+    "הארגומנטים כבר בפנים" (‏`>` לבדו יוצר אותו ריק לפני ה-printf)."""
     stubs = tmp_path / "stubs"
     stubs.mkdir()
     marker = tmp_path / "reboot.called"
     (stubs / "reboot").write_text(
-        '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$REBOOT_MARKER"\n')
+        '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$REBOOT_MARKER.tmp" && '
+        'mv "$REBOOT_MARKER.tmp" "$REBOOT_MARKER"\n')
     (stubs / "reboot").chmod(0o755)
     env = dict(os.environ)
     env["PATH"] = f"{stubs}:{env.get('PATH', '')}"
@@ -371,6 +374,10 @@ def test_monitor_offers_only_the_secret_type_and_rejects_a_wrong_secret(tmp_path
     assert "rejected client" in text, text
 
 
+#: תקרה בלבד: המוניטור מגיע לסטאב בשבריר שנייה בריצה שקטה.
+REBOOT_CEILING_S = 60
+
+
 @NATIVE
 def test_power_cut_text_needs_an_authenticated_session(tmp_path):
     """(א) לקוח עם סוד שגוי שדוחף ClientCutText באותה כתיבה → `reboot`
@@ -389,13 +396,20 @@ def test_power_cut_text_needs_an_authenticated_session(tmp_path):
             f"reboot ran for an unauthenticated client: {marker.read_text()}")
         assert monitor.alive()
 
+        # תקרה נגד תקיעה, לא הכרעה. בין ה-ClientCutText לקובץ יש ‏`sync()`
+        # של כל המערכת (‏run_power), ‏fork ו-exec של מעטפת. תקרה של 5 ש'
+        # נחצתה בשתיים משלוש ריצות מלאות (‏`-n auto`, ‏14 ליבות, 06/11)
+        # ועברה 10/10 לבד. ‏sync() — שממתין לכל מה שה-workers כתבו — הוא
+        # החשוד; זה לא נמדד.
         with monitor.connect() as sock:
             _handshake(sock)
             sock.sendall(_cut_text(POWER_REBOOT))
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + REBOOT_CEILING_S
             while not marker.exists() and time.monotonic() < deadline:
                 time.sleep(0.1)
-        assert marker.exists(), "reboot did not run for the authenticated client"
+        assert marker.exists(), (
+            f"reboot did not run for the authenticated client "
+            f"within {REBOOT_CEILING_S}s")
         assert marker.read_text().split() == ["-f"]
         assert monitor.alive(), "run_power must not take the monitor down"
     finally:

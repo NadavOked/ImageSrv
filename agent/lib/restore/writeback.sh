@@ -32,3 +32,12 @@ writeback_watch() {
     done
 }
 
+writeback_why() {
+    # $1 = disk. The station's twin of verdict.sh's _write_fail (#1841): the partition
+    # loop of run_restore fails the target with "N of M partitions written", and that
+    # line overwrote the reason -- the server saw `unclassified`. Prints "; <the refused
+    # fsync's line>" when this target's last partition was cut by writeback_watch,
+    # nothing otherwise. Its evidence file is rm'd by restore_pipe at every partition.
+    [ -f "$RUN_DIR/targets/$1/writeback.failed" ] || return 0
+    printf '; %s' "$(head -n 1 "$RUN_DIR/targets/$1/writeback.failed")"
+}

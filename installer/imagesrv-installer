@@ -19,9 +19,33 @@ CDROM="${CDROM:-/cdrom}"
 
 note() { printf 'imagesrv installer: %s\n' "$*"; }
 
+# #1741 (S9): with a framebuffer and the GUI binary, the hold's reason is
+# drawn on the GUI, display-only (lib/failgui.sh: the Hebrew, the log's line
+# under it). Shown = the GUI touched its beat; otherwise the text is the screen.
+hold_screen() {
+    [ -c "$FB_DEV" ] || { note "no framebuffer: the text console is the screen"; return 1; }
+    [ -x "$GUI_BIN" ] || return 1
+    [ -f "$INSTALLER_DIR/lib/failgui.sh" ] || { note "lib/failgui.sh is missing: text only"; return 1; }
+    # shellcheck source=installer/lib/failgui.sh
+    . "$INSTALLER_DIR/lib/failgui.sh" || return 1
+    failgui_installer "$1" > "$RUN_DIR/hold.state" || { note "cannot write $RUN_DIR/hold.state: text only"; return 1; }
+    rm -f "$RUN_DIR/hold.beat"
+    FONTCONFIG_FILE=/etc/imagesrv/fonts.conf IMAGESRV_GUI_BEAT="$RUN_DIR/hold.beat" \
+        "$GUI_BIN" --backend fbdev --no-input --theme light --state "$RUN_DIR/hold.state" \
+        < /dev/null > /dev/null 2> "$RUN_DIR/hold-gui.log" &
+    _hs_pid=$!
+    if failgui_beat "$RUN_DIR/hold.beat" "$FAILGUI_WAIT_S" kill -0 "$_hs_pid"; then
+        note "the reason is on the screen (GUI)"; return 0
+    fi
+    kill "$_hs_pid" 2>/dev/null
+    note "the GUI drew no frame (see $RUN_DIR/hold-gui.log): text only"
+    return 1
+}
+
 # Wait forever, loudly: the notice is repeated every minute so that a person
 # who arrives later still sees it, and a reboot never happens by surprise.
 hold() {
+    hold_screen "$*"
     while :; do
         note "$*"
         note "Attach a screen and keyboard and power-cycle, or install from the web wizard image."

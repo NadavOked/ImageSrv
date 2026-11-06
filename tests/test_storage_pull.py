@@ -18,7 +18,7 @@ pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שר�
 
 from conftest import MANIFEST_256, PARTITION_BYTES, write_image
 from server import db
-from server.storage import disk_reserve
+from server.storage import disk_reserve, locations as storage_locations
 from server.interserver import (api as interserver_api, auth as interserver_auth, storage_client, storage_nodes, 
                                 storage_transfer)
 from server.library.images import ImageLibrary
@@ -713,3 +713,135 @@ def test_a_secondary_manifest_that_fails_validate_is_refused_before_any_byte(
     assert "מניפסט המשני נפסל" in row["error"] and "family" in row["error"], row["error"]
     assert dests == []
     assert PULL_ID not in server["ctx"].library.scan()
+
+
+# --- #1781: משיכה למיקום אחסון שנבחר בראשי (הצד השני של #1697/#1719) ----------
+
+PULL_LOC = "loc_1781abcd"
+
+
+def _primary_location(server, tmp_path, state="connected", mkdir=True) -> Path:
+    """מיקום נוסף בראשי (כמו ``_add_location`` של push, רק בצד של הראשי)."""
+    mount = tmp_path / "primary_200gb"
+    if mkdir:
+        mount.mkdir()
+    conn = server["ctx"].conn
+    conn.execute(
+        "INSERT INTO storage_locations (id, name, type, mount_point, state,"
+        " state_since, state_detail, created_by, created_at)"
+        " VALUES (?, 'דיסק 200GB', 'nfs', ?, ?, '', '', 'noc', '')",
+        (PULL_LOC, str(mount), state))
+    conn.commit()
+    return mount
+
+
+def test_pull_lands_in_the_selected_primary_location(server, secondary, paired, tmp_path):
+    """אזור הביניים, הכניסה לספרייה והשורה — כולם במיקום שנבחר, לא ב-``--images``."""
+    mount = _primary_location(server, tmp_path)
+    write_image(secondary["root"], PULL)
+    admin = server["admin"]
+    resp = admin.post(f"/api/console/storage-nodes/{paired}/pull",
+                      json={"image_id": PULL_ID, "location_id": PULL_LOC})
+    assert resp.status_code == 200, resp.text
+    row = _wait(admin, paired, resp.json()["id"])
+    assert row["state"] == "done", row
+    assert row["location_id"] == PULL_LOC
+    landed = mount / "images" / PULL_ID
+    assert (landed / "manifest.json").is_file()
+    assert (landed / "p1.esp.pcl.zst").read_bytes() == \
+        (secondary["root"] / PULL_ID / "p1.esp.pcl.zst").read_bytes()
+    got = server["ctx"].library.scan()
+    assert got[PULL_ID]["_location_id"] == PULL_LOC
+    assert not (Path(server["ctx"].library.root) / PULL_ID).exists()
+    assert not (_incoming(server) / PULL_ID).exists()
+    assert not (mount / "images" / storage_transfer.INCOMING / PULL_ID).exists()
+
+
+def test_pull_without_location_still_lands_in_loc_local(server, secondary, paired):
+    """בלי בחירה — ``loc_local``, כמו בקליטה, בהעלאה וב-push. לא בחירה שקטה."""
+    write_image(secondary["root"], PULL)
+    admin = server["admin"]
+    tid = admin.post(f"/api/console/storage-nodes/{paired}/pull",
+                     json={"image_id": PULL_ID}).json()["id"]
+    row = _wait(admin, paired, tid)
+    assert row["state"] == "done", row
+    assert row["location_id"] == "loc_local"
+    assert (Path(server["ctx"].library.root) / PULL_ID / "manifest.json").is_file()
+
+
+@pytest.mark.system_reserve   # #1737: the real 10GiB (conftest _host_free_space)
+def test_small_loc_local_refuses_with_numbers_and_the_big_location_takes_it(
+        server, secondary, paired, tmp_path, monkeypatch):
+    """הגדרת "גמור" של #1781: ראשי ש-``loc_local`` שלו קטן ויש לו מיקום נוסף גדול.
+    משיכה ל-``loc_local`` נכשלת לפני הבייט הראשון, עם המספרים; אותה משיכה למיקום
+    הנוסף נוחתת שם. בדיקת המקום רצה מול המיקום שנבחר — לא הוחלשה (עיקרון 5)."""
+    mount = _primary_location(server, tmp_path)
+    write_image(secondary["root"], PULL3)
+    local = Path(server["ctx"].library.root)
+    need = _pull_need()
+    asked: list[Path] = []
+
+    def fake_free(path):
+        path = Path(path)
+        asked.append(path)
+        if path == local:
+            return need - 1
+        if path == mount / "images":
+            return 200 * 10 ** 9
+        raise AssertionError(f"free space asked for an unexpected path: {path}")
+
+    monkeypatch.setattr(storage_transfer, "_free_bytes", fake_free)
+    admin = server["admin"]
+    tid = admin.post(f"/api/console/storage-nodes/{paired}/pull",
+                     json={"image_id": PULL3_ID, "location_id": "loc_local"}).json()["id"]
+    row = _wait(admin, paired, tid)
+    assert row["state"] == "failed", row
+    assert str(need) in row["error"] and str(need - 1) in row["error"], row["error"]
+    assert "loc_local" in row["error"], row["error"]
+    assert row["bytes_sent"] == 0
+    assert PULL3_ID not in server["ctx"].library.scan()
+
+    asked.clear()
+    tid = admin.post(f"/api/console/storage-nodes/{paired}/pull",
+                     json={"image_id": PULL3_ID, "location_id": PULL_LOC}).json()["id"]
+    row = _wait(admin, paired, tid)
+    assert row["state"] == "done", row
+    assert set(asked) == {mount / "images"}, asked
+    assert (mount / "images" / PULL3_ID / "manifest.json").is_file()
+    assert not (local / PULL3_ID).exists()
+
+
+@pytest.mark.parametrize(("location", "state", "mkdir", "code", "detail"), [
+    ("loc_0000beef", "connected", True, 404, "לא קיים"),
+    ("../etc", "connected", True, 400, "אינו תקין"),
+    (PULL_LOC, "disconnected", True, 409, "אינו זמין"),
+    (PULL_LOC, "connected", False, 409, "אינו מעוגן"),
+])
+def test_pull_to_an_unusable_location_is_refused_before_it_starts(
+        server, secondary, paired, tmp_path, location, state, mkdir, code, detail):
+    _primary_location(server, tmp_path, state=state, mkdir=mkdir)
+    write_image(secondary["root"], PULL)
+    resp = server["admin"].post(f"/api/console/storage-nodes/{paired}/pull",
+                                json={"image_id": PULL_ID, "location_id": location})
+    assert resp.status_code == code, resp.text
+    assert detail in resp.json()["detail"], resp.text
+    assert server["ctx"].conn.execute(
+        "SELECT COUNT(*) FROM storage_transfers").fetchone()[0] == 0
+
+
+def test_a_location_that_went_away_after_queueing_fails_the_pull_by_name(
+        server, secondary, paired, tmp_path):
+    """הבדיקה חוזרת גם ב-worker: מיקום שנותק בין הפתיחה לריצה = ``failed`` בשמו,
+    לא נפילה בשקט אל ``loc_local``."""
+    _primary_location(server, tmp_path)
+    write_image(secondary["root"], PULL)
+    tid = storage_transfer.start_pull(server["ctx"], tmp_path / "data", paired, PULL_ID,
+                                      ("noc", "admin"), location_id=PULL_LOC,
+                                      run_in_thread=False)
+    storage_locations.set_state(server["ctx"].conn, PULL_LOC, "disconnected")
+    storage_transfer.run_pull(server["ctx"], tmp_path / "data", tid)
+    row = server["ctx"].conn.execute(
+        "SELECT state, error FROM storage_transfers WHERE id = ?", (tid,)).fetchone()
+    assert row["state"] == "failed" and PULL_LOC in row["error"], dict(row)
+    assert PULL_ID not in server["ctx"].library.scan()
+    assert not (Path(server["ctx"].library.root) / PULL_ID).exists()

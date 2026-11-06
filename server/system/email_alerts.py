@@ -11,7 +11,9 @@
 (``JOURNAL_KINDS``). שלושה אירועים נכתבים ליומן מכאן ועוברים באותו מסלול:
 ‏``server_started`` (מהדופק שנשמר לדיסק), ‏``update_available`` (מבדיקת העדכונים
 האחרונה) ו-``peer_unreachable``/``peer_back`` (מחותמות המגע הבין-שרתי).
-‏``low_space`` — נקודת חיבור: אין עדיין מי שרושם אותו.
+‏``low_space`` (מדגימת המקום הפנוי במחיצת הנתונים, ``Watcher._check_space``) — פעם
+אחת לכל ירידה מתחת לרזרבה. ‏``smart_red`` נכתב ב-``disk_events`` (דיסק ש-SMART שלו
+אדום, פעם אחת לכל דיסק שהאדים) ועובר כאן כ"דיסק אדום", כמו ``disk_failure``.
 
 כך **שום endpoint ושום פעולה אינם נחסמים**: מי שיוצר אירוע רק כותב שורת יומן.
 השליחה — ‏SMTP עם תקרת זמן קשיחה — רצה רק בתהליכון הרקע (``Watcher``).
@@ -31,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import smtplib
 import socket
 import ssl
@@ -48,6 +51,7 @@ from server import db
 from server.interserver import auth as interserver_auth
 from server.interserver import storage_nodes
 from server.net import ports
+from server.storage import disk_reserve
 from server.system import email_config, email_oauth, email_text
 from server.system import timezone as tzsetting
 from server.db import get_setting, journal, set_setting
@@ -58,6 +62,7 @@ log = logging.getLogger("imagesrv.email_alerts")
 CURSOR_KEY = "email_alerts_journal_cursor"
 NOTIFIED_UPDATE_KEY = "email_alerts_update_notified"
 PEER_STATE_KEY = "email_alerts_peer_state"
+LOW_SPACE_KEY = "email_alerts_low_space"
 HEARTBEAT_FILE = "alive.heartbeat"
 
 #: אירוע ביומן → (סוג התראה, תנאי על ה-detail או ``None``). הטקסט בשורת המייל
@@ -72,6 +77,7 @@ JOURNAL_KINDS: dict[str, tuple[str, object]] = {
     "auto_reboot": ("auto_reboot", lambda d: d.startswith(("השרת אותחל", "דולג", "תקלה"))),
     "room_failed": ("round_failed", None),
     "disk_failure": ("disk_red", None),
+    "smart_red": ("disk_red", None),
     "low_space": ("low_space", None),
     "peer_unreachable": ("peer", None),
     "peer_back": ("peer", None),
@@ -92,6 +98,10 @@ HEARTBEAT_SECONDS = 60
 #: הדופק של הראשי למשניים הוא 150 שניות (``storage_heartbeat``) — ארבעה
 #: דופקים שהוחמצו לפני שאומרים "לא עונה".
 PEER_SILENT_SECONDS = 600
+#: ‏``low_space`` נדרך שוב רק כשהמקום חזר לרזרבה **ועוד** זה. בלי השוליים, מחיצה
+#: שעומדת על הקו — ‏``StreamGuard`` של הקליטה עוצר בדיוק ברזרבה, ‏journald מוסיף
+#: ומנקה — הייתה "חוצה" אותו בכל דגימה, וכל חציה הייתה מייל.
+LOW_SPACE_CLEAR_MARGIN = 1024 ** 3
 JOURNAL_BATCH = 500
 
 
@@ -656,6 +666,17 @@ def _peer_status(conn, now: datetime) -> dict[str, tuple[bool, str]]:
     return out
 
 
+def data_free_bytes(data_dir) -> int | None:
+    """המקום הפנוי במחיצת הנתונים (ה-DB) — אותה מדידה כמו שורת ``db_space`` בבריאות.
+    ‏``None`` = לא נמדד (עיקרון 5), לא אפס."""
+    if data_dir is None:
+        return None
+    try:
+        return shutil.disk_usage(data_dir).free
+    except OSError:
+        return None
+
+
 class Watcher:
     """תהליכון הרקע: דופק לדיסק, קריאת היומן, בדיקות מצב ושליחה.
 
@@ -666,6 +687,8 @@ class Watcher:
                  tick: float = TICK_SECONDS, http=None):
         self.conn, self.data_dir, self.now, self.sender, self.tick = conn, data_dir, now, sender, tick
         self.http = http
+        #: נקודת ההזרקה של הבדיקות — בלי מדידה של הדיסק של מכונת הבדיקה.
+        self.free_bytes = lambda: data_free_bytes(data_dir)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._started = False
@@ -700,6 +723,7 @@ class Watcher:
         self._step("heartbeat", lambda: self._heartbeat(now))
         self._step("update", self._check_update)
         self._step("peers", lambda: self._check_peers(now))
+        self._step("space", self._check_space)
         self._step("journal", self._tail_journal)
         self._step("deliver", lambda: deliver_due(self.conn, self.data_dir, now=now,
                                                   sender=self.sender, http=self.http))
@@ -760,6 +784,24 @@ class Watcher:
                 new_state[key] = "down"
         if new_state != state:
             set_setting(self.conn, PEER_STATE_KEY, json.dumps(new_state))
+
+    def _check_space(self) -> None:
+        """‏``low_space`` פעם אחת לכל ירידה מתחת לרזרבה (``disk_reserve`` — הסף של שורת
+        הבריאות ``db_space``). המצב נשמר ב-``settings``, כך שהפעלה מחדש אינה שולחת שוב.
+        ‏"לא נמדד" אינו נמוך ואינו חזרה: המצב נשאר כמו שהיה."""
+        free = self.free_bytes()
+        if free is None:
+            return
+        reserve = disk_reserve.reserve()
+        was_low = get_setting(self.conn, LOW_SPACE_KEY) == "low"
+        if free < reserve and not was_low:
+            # היומן קודם: כפול עדיף על אבוד.
+            journal(self.conn, "low_space",
+                    f"{self.data_dir}: נותרו {disk_reserve.gb(free)} ({free} בייט),"
+                    f" פחות מרזרבת המערכת ({disk_reserve.gb(reserve)})")
+            set_setting(self.conn, LOW_SPACE_KEY, "low")
+        elif was_low and free >= reserve + LOW_SPACE_CLEAR_MARGIN:
+            set_setting(self.conn, LOW_SPACE_KEY, "")
 
     def _tail_journal(self) -> None:
         cursor = int(get_setting(self.conn, CURSOR_KEY) or 0)

@@ -13,6 +13,8 @@ mTLS מאומת. ה-hooks של העדכון מזויפים בשני הצדדים
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
@@ -160,3 +162,77 @@ def test_the_relay_waits_for_the_slow_update_calls(server, secondary, paired, mo
     body = {"tag": TAG} if path == "/update/apply" else {"session_wait_seconds": "420"}
     assert server["admin"].post(_url(paired, path), json=body).status_code == 200
     assert seen == [expected]
+
+
+# --- ‏#1776, סעיף 2 במיון 06/11: משני ישן מדי — ההודעה אומרת מה לעשות ----------
+#
+# ‏20/10 על ברזל: ת"א (עם #1776) מול חיפה v0.75.0 קיבל "502 חיפה: הערוץ סירב (404):
+# הפעולה אינה מורשית בערוץ הבין-שרתי". רשימת ההיתרים יושבת **במשני**, וגרסה ישנה
+# אינה מכירה את /update/check. הראשי כבר בדק את הרשימה **שלו** לפני השליחה, ולכן
+# 404 מהערוץ אומר שהמשני ישן ממנו. "משני ישן" מדומה כאן בסירוב של ``console_write``
+# במשני — בדיוק מה ש-v0.75.0 מחזיר.
+
+OLD_DETAIL = "הפעולה אינה מורשית בערוץ הבין-שרתי"     # המחרוזת של v0.75.0, כפי שנמדדה
+
+
+def _old_secondary(monkeypatch, status=404, detail=OLD_DETAIL):
+    def refuse(*_a, **_k):
+        raise interserver_api.PairError(status, detail)
+    monkeypatch.setattr(interserver_api, "console_write", refuse)
+
+
+@pytest.mark.parametrize("path", ["/update/check", "/update/apply"])
+def test_an_older_secondary_says_update_it_once_from_its_own_console(
+        server, secondary, paired, upgrades, monkeypatch, path):
+    _enable(secondary["conn"])
+    _old_secondary(monkeypatch)
+    resp = server["admin"].post(_url(paired, path), json={"tag": TAG})
+    assert resp.status_code == 502, resp.text
+    detail = resp.json()["detail"]
+    assert "HAIFA" in detail, detail
+    assert "שרת המשנה בגרסה ישנה מדי לעדכון מרחוק" in detail, detail
+    assert "עדכנו אותו פעם אחת מהקונסולה שלו" in detail, detail
+    assert OLD_DETAIL in detail, "התשובה של המשני נשארת כראיה (5א)"
+    assert upgrades == []
+    entry = _journal(server["ctx"].conn, "peer_write")[-1]
+    assert entry[0] == "noc" and "ישנה מדי" in entry[1], entry
+    node = server["ctx"].conn.execute(
+        "SELECT last_error FROM storage_nodes WHERE id = ?", (paired,)).fetchone()
+    assert "ישנה מדי" in node["last_error"]
+
+
+def test_an_older_secondary_on_another_write_names_the_operation(
+        server, secondary, paired, monkeypatch):
+    _old_secondary(monkeypatch)
+    resp = server["admin"].post(_url(paired, "/timezone"), json={"timezone": "Asia/Jerusalem"})
+    assert resp.status_code == 502, resp.text
+    detail = resp.json()["detail"]
+    assert "בגרסה ישנה מדי לפעולה הזו מרחוק (POST /timezone)" in detail, detail
+    assert "עדכנו אותו פעם אחת מהקונסולה שלו" in detail, detail
+
+
+def test_a_channel_refusal_that_is_not_404_is_not_called_an_old_version(
+        server, secondary, paired, monkeypatch):
+    """רק 404 מהערוץ הוא "לא מכיר את הפעולה". ‏401 (טוקן) נשאר "הערוץ סירב"."""
+    _enable(secondary["conn"])
+    _old_secondary(monkeypatch, status=401, detail="טוקן שגוי")
+    resp = server["admin"].post(_url(paired, "/update/check"), json={})
+    assert resp.status_code == 502, resp.text
+    detail = resp.json()["detail"]
+    assert "הערוץ סירב (401): טוקן שגוי" in detail and "ישנה מדי" not in detail, detail
+
+
+def test_the_secondary_itself_says_its_allowlist_may_be_older_than_the_primary(monkeypatch):
+    """הצד של המשני: מי שקורא את הסירוב במשני (יומן, ‏curl) רואה את הסיבה הסבירה
+    ואת התיקון — לא רק "אינה מורשית"."""
+    status, _headers, body = interserver_api.run_console_write(
+        None, "POST", "/update/revert", "", "primary:noc", b"")
+    assert status == 404
+    assert "עדכנו את שרת המשנה פעם אחת מהקונסולה שלו" in body["detail"], body
+    monkeypatch.setattr(interserver_api, "authenticate_parent", lambda *_a, **_k: None)
+    with pytest.raises(interserver_api.PairError) as err:
+        interserver_api.console_write(
+            SimpleNamespace(conn=None), object(), None, method="POST", path="/update/revert", query="",
+            acting_user="noc", body=b"", token="t", protocol_version="2.1")
+    assert err.value.status == 404
+    assert "עדכנו את שרת המשנה פעם אחת מהקונסולה שלו" in err.value.detail

@@ -64,12 +64,6 @@ def request_power(conn: sqlite3.Connection, macs: list[str], action: str,
     return len(macs)
 
 
-def take_power_action(conn: sqlite3.Connection, mac: str,
-                      now: datetime | None = None) -> str | None:
-    """הפעולה בלבד (‏`take_power`), לקוראים שלא צריכים את האישור."""
-    return take_power(conn, mac, now)[0]
-
-
 def take_power(conn: sqlite3.Connection, mac: str,
                now: datetime | None = None) -> tuple[str | None, bool]:
     """מה שה-hello של `mac` נושא ב-`power_action`: ‏`"poweroff"`, ‏`"reboot"` או None.

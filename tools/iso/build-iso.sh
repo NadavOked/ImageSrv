@@ -315,7 +315,7 @@ IMAGESRV_MODULES_DIR="$kmodules" IMAGESRV_KERNEL_DIR="$KTMP/boot" \
     IMAGESRV_BUILD_TMPDIR="$WORK" bash "$REPO/tools/boot-payload-build.sh" \
     --iso-default --http-root "$PREBUILT" --manifest "$ISO_TREE/imagesrv-iso.json" \
     --write-flags "$PREBUILT/initrd.flags" --build-log "$WORK/server-payload-build.log" \
-    --version "$payload_version" \
+    --version "$payload_version" "${lab_flag[@]}" \
     || die "בניית מטען השרת המוכן מראש נכשלה — ה-ISO לא ייבנה עם מטען לא מאומת"
 for payload_file in initrd.img initrd.img.gui vmlinuz boot-payload.json; do
     [[ -s "$PREBUILT/$payload_file" ]] || die "מטען השרת חסר: $payload_file"

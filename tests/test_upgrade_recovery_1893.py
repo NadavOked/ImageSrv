@@ -167,3 +167,6 @@ def test_the_upgrade_marks_its_stages_and_leaves_no_marker_when_done(tmp_path, b
     assert at_restart["db_snap_ver"].isdigit() and at_restart["payload_saved"] is True, at_restart
     assert "systemctl enable imagesrv-upgrade-recover.service" in calls(tmp_path)   # with the units, after checkout (#1193)
     assert (tmp_path / "units" / "imagesrv-upgrade-recover.service").exists()
+    # #1741 (S7): a server installed before it gets the shutdown screen from the update
+    assert ("systemctl enable imagesrv-shutdown-screen@reboot.service imagesrv-shutdown-screen@poweroff.service"
+            in calls(tmp_path))

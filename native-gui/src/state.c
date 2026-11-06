@@ -713,6 +713,7 @@ void state_parse(State *s, FILE *fp) {
         else if (KEY("fail")) {
             split(val, f, 5);
             s->fail_warn = !strcmp(f[0], "warn"); s->fail_info = !strcmp(f[0], "inf"); s->fail_hold = num(f[1], 1) != 0; s->fail_cloner = !strcmp(f[4], "cloner");
+            s->fail_server = !strcmp(f[4], "server") ? 1 : !strcmp(f[4], "installer") ? 2 : 0;   /* #1741 */
             cp(s->fail_title, sizeof s->fail_title, f[2]); cp(s->fail_sub, sizeof s->fail_sub, f[3]);
             s->fail_why[0] = s->fail_safe[0] = 0; s->fail_at = 0;
             s->nfail_ctx = s->nfail_rows = s->nfail_steps = s->nfail_code = s->nfail_btns = 0;

@@ -212,7 +212,7 @@ BINARIES=(curl jq zstd pv sgdisk blockdev sha256sum od hdparm ntfsresize openssl
           e2fsck resize2fs btrfs xfs_growfs
           udp-receiver udp-sender partclone.ntfs partclone.fat partclone.ext4
           partclone.btrfs partclone.dd
-          dmidecode efibootmgr dmsetup nice)
+          dmidecode lspci efibootmgr dmsetup nice)
 
 if [ "$SKIP_APT" -eq 0 ]; then
     export DEBIAN_FRONTEND=noninteractive
@@ -220,7 +220,7 @@ if [ "$SKIP_APT" -eq 0 ]; then
         busybox-static zstd partclone udpcast gdisk curl jq pv \
         ntfs-3g libhivex-dev hdparm coreutils util-linux openssl \
         e2fsprogs btrfs-progs xfsprogs cpio gzip gcc libc6-dev ethtool \
-        smartmontools dmidecode efibootmgr dmsetup
+        smartmontools dmidecode pciutils pci.ids efibootmgr dmsetup
     # #1050: the toolbox delta -- only what the selection needs, or nothing.
     if [ "${#TOOL_PKGS[@]}" -gt 0 ]; then
         echo "tools: installing ${TOOL_PKGS[*]}"
@@ -286,6 +286,12 @@ copy_bin() {
 for b in "${BINARIES[@]}"; do
     copy_bin "$b"
 done
+
+# lspci needs Debian's PCI ID table for human-readable vendor/device names
+# (about 1.5 MB installed in Debian 13); a numeric-only diagnostic is incomplete.
+PCI_IDS=/usr/share/misc/pci.ids
+[ -s "$PCI_IDS" ] || { echo "PCI ID table missing: $PCI_IDS" >&2; exit 1; }
+install -D -m 0644 "$PCI_IDS" "$ROOT$PCI_IDS"
 
 # The dynamic loader and the NSS libraries curl resolves hostnames with.
 # Required, not best-effort: `cp ... 2>/dev/null || true` let a missing

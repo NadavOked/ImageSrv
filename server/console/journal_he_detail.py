@@ -47,6 +47,14 @@ RULES: dict[str, list[tuple[str, str]]] = {
          r"\1: יותר מ-\2 מקורות שונים ב-\3 שניות — השאר נספרים ולא נרשמים אחד-אחד"),
         (r"^(\S+): \+(\d+) more different not journaled one by one in the last (\d+)s$",
          r"\1: עוד \2 מקורות שונים שלא נרשמו אחד-אחד ב-\3 השניות האחרונות")],
+    # ‏#1814: "code rejected (setup|enable|login) while the server clock is off by <N>s | is not synchronized"
+    "mfa_clock_skew": [
+        (r"^code rejected \(setup\)", "קוד נדחה בהגדרת MFA"),
+        (r"^code rejected \(enable\)", "קוד נדחה בהפעלת MFA"),
+        (r"^code rejected \(login\)", "קוד נדחה בכניסה"),
+        (r"^code rejected \((\S+)\)", r"קוד נדחה (\1)"),
+        (r" while the server clock is off by (\d+)s$", r" בזמן שהשעון בשרת סוטה ב-\1 שניות"),
+        (r" while the server clock is not synchronized$", " בזמן שהשעון בשרת אינו מסונכרן")],
     "report_on_closed_session": _FOR,
     "report_from_nonmember": _FOR,
     "report_on_closed_task": _FOR,

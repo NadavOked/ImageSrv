@@ -6,9 +6,15 @@ Wants=imagesrv-wizard.service network-online.target
 Conflicts=getty@tty1.service imagesrv-dcui.service
 
 [Service]
-Type=simple
+# #2517: Type=exec -- a binary that is not there (203/EXEC) is a failed start,
+# not an "active" unit; and firstboot calls it started only once the GUI
+# touched the beat below (main.c gui_heartbeat: a frame was presented).
+# The binary is the live installer's copy (installer/lib/bootstrap.sh): an
+# ISO's /opt/imagesrv-src has the sources only.
+Type=exec
+Environment=IMAGESRV_GUI_BEAT=/run/imagesrv-installer-gui.beat
 WorkingDirectory=/opt/imagesrv-src
-ExecStart=/opt/imagesrv-src/native-gui/imagesrv-station-gui --screen install --wizard-cwd /opt/imagesrv-src
+ExecStart=/usr/bin/imagesrv-station-gui --screen install --wizard-cwd /opt/imagesrv-src
 ExecStopPost=systemctl start imagesrv-dcui.service
 Restart=no
 StandardInput=tty

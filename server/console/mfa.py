@@ -165,8 +165,47 @@ def _qr_svg(otpauth_url: str) -> str:
     return img.to_string(encoding="unicode")
 
 
-def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tls) -> None:
-    """מוסיף את נתיבי ה-MFA לראוטר הקונסולה הקיים — מיזוג קל מול #1073."""
+#: ‏#1814: מגבלת ה-TOTP היא ±30 ש' — מסטייה כזו כל קוד נכון נראה "שגוי". זה אותו
+#: סף של שורת "שעון" בבריאות (‏`health.time_sync_check`).
+CLOCK_SKEW_MS = 30_000
+CLOCK_HINT_HE = " — ייתכן שהשעון בשרת לא מדויק; בדקו אותו בדף הבריאות"
+
+
+def clock_problem(clock_status) -> str | None:
+    """‏#1814: למה קוד נכון ייראה שגוי — פירוט אנגלי ליומן, או ‏None כשהשעון תקין.
+
+    רק ראיה חיובית על שעון בעייתי (סטייה מ-30 ש' או "לא מסונכרן") מוסיפה הערה.
+    מדידה שנכשלה או לא הוזרקה אינה הערה: ההודעה נשארת "קוד שגוי" בלבד, כי
+    להאשים את השעון בלי ראיה היה שולח מנהל לחפש תקלה שאולי אינה שם.
+    """
+    if clock_status is None:
+        return None
+    try:
+        status = clock_status() or {}
+    except Exception:
+        return None
+    offset = status.get("offset_ms")
+    if offset is not None and abs(offset) >= CLOCK_SKEW_MS:
+        return f"the server clock is off by {round(abs(offset) / 1000)}s"
+    if status.get("synchronized") is False:
+        return "the server clock is not synchronized"
+    return None
+
+
+def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tls,
+             clock_status=None) -> None:
+    """מוסיף את נתיבי ה-MFA לראוטר הקונסולה הקיים — מיזוג קל מול #1073.
+
+    ‏`clock_status` (#1814): ‏`() -> {"synchronized", "offset_ms"}` — מצב השעון של
+    השרת (health `timesync_status`). כש-TOTP נדחה והשעון בעייתי, ההודעה אומרת זאת."""
+
+    def wrong_code(message: str, username: str, what: str) -> HTTPException:
+        """‏401 של "קוד שגוי" — עם הערת שעון כשיש לה ראיה, ושורת יומן אחת."""
+        problem = clock_problem(clock_status)
+        if problem is None:
+            return HTTPException(401, message)
+        journal(ctx.conn, "mfa_clock_skew", f"code rejected ({what}) while {problem}", username)
+        return HTTPException(401, message + CLOCK_HINT_HE)
 
     def guarded_ip(request: Request, username: str) -> str:
         """‏#2470: ‏`verify`/`enable` עוברים באותו מונה ובאותם ספים כמו `/login/mfa`
@@ -232,7 +271,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
         ip = guarded_ip(request, username)
         if totp.verify_totp(info["mfa_secret"], str(body.get("code") or "")) is None:
             login_guard.record_failure(ctx.conn, username, ip)
-            raise HTTPException(401, "קוד שגוי, נסה שוב")
+            raise wrong_code("קוד שגוי, נסה שוב", username, "setup")
         # הצלחה אינה מאפסת את המונה: הבדיקה אינה צורכת את הקוד, ואיפוס כאן היה מאפשר
         # לשלב ניחושי סיסמה (‏`enable` כש-MFA פעיל) עם קוד ידוע. ‏`enable` מאפס.
         return {"verified": True}
@@ -260,7 +299,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             if renew:
                 journal(ctx.conn, "mfa_backup_codes_failed", username, username)
                 raise HTTPException(401, "סיסמה או קוד שגויים — לא נוצרו קודים חדשים")
-            raise HTTPException(401, "קוד שגוי, לא ניתן להפעיל MFA")
+            raise wrong_code("קוד שגוי, לא ניתן להפעיל MFA", username, "enable")
         login_guard.clear(ctx.conn, username, ip)
         codes = _new_backup_codes(ctx.conn, username)
         with _write_lock, writing(ctx.conn):
@@ -385,7 +424,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             consume_challenge(ctx.conn, raw)
             login_guard.record_failure(ctx.conn, stored, ip)
             journal(ctx.conn, "login_failed", f"{stored} (mfa)")
-            raise HTTPException(401, "קוד שגוי — היכנס מחדש")
+            raise wrong_code("קוד שגוי — היכנס מחדש", stored, "login")
         consume_challenge(ctx.conn, raw)
         login_guard.clear(ctx.conn, stored, ip)
         if step is not None:

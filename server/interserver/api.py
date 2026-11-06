@@ -775,6 +775,12 @@ CONSOLE_WRITES: tuple[tuple[str, str], ...] = (
 #: ‏``/timezone`` (#1932): ‏timedatectl set-timezone (עד 20 ש') ואז קריאה חוזרת (עד 10 ש').
 CONSOLE_WRITE_TIMEOUTS: dict[str, float] = {"/update/check": 180.0, "/update/apply": 60.0,
                                             "/timezone": 45.0}
+#: ‏#1776: סירוב של כתיבה שאינה ב-``CONSOLE_WRITES`` **של המשני הזה**. הראשי שולח רק
+#: מה שברשימה שלו, ולכן הסיבה הסבירה היא משני ישן מהראשי — וזה מה שנאמר, עם התיקון.
+#: הראשי מתרגם את ה-404 הזה בעצמו (``console/storage.py``), כי משני ישן שולח את הנוסח
+#: הישן שלו ("אינה מורשית בערוץ הבין-שרתי").
+WRITE_NOT_ALLOWED = ("הפעולה אינה ברשימת ההיתרים של שרת המשנה בגרסה הזו — אם הראשי חדש "
+                     "ממנו, עדכנו את שרת המשנה פעם אחת מהקונסולה שלו")
 #: תקרה לגוף בקשת כתיבה מהראשי — טופס, לא קובץ.
 MAX_CONSOLE_WRITE_BODY = 64 * 1024
 #: כותרות תשובה שהעמודים קוראים (זמן מדידה, "החיפוש נקטע") — עוברות בשמן.
@@ -820,7 +826,7 @@ def run_console_write(app, method: str, path: str, query: str, user: str,
                       body: bytes) -> tuple[int, dict, object]:
     """‏#1179 שלב 2: כתיבה אחת מהרשימה, בתוך התהליך — אותה זהות, אותו מסלול."""
     if not console_write_allowed(method, path):
-        return 404, {}, {"detail": "הפעולה אינה מורשית בערוץ הבין-שרתי"}
+        return 404, {}, {"detail": WRITE_NOT_ALLOWED}
     if len(body) > MAX_CONSOLE_WRITE_BODY:
         return 413, {}, {"detail": "גוף הבקשה גדול מהתקרה"}
     return _run_console(app, method, path, query, user, body)
@@ -908,7 +914,7 @@ def console_write(ctx, app, peer: TlsPeer, *, method: str, path: str, query: str
     if app is None:
         raise PairError(503, "הקונסולה של שרת המשנה אינה מחוברת לערוץ הבין-שרתי")
     if not console_write_allowed(method, path):
-        raise PairError(404, "הפעולה אינה מורשית בערוץ הבין-שרתי")
+        raise PairError(404, WRITE_NOT_ALLOWED)
     if len(body or b"") > MAX_CONSOLE_WRITE_BODY:
         raise PairError(413, "גוף הבקשה גדול מהתקרה")
     if not _QUERY.fullmatch(query or ""):
@@ -1392,7 +1398,6 @@ class InterserverTLSServer:
             pass  # סגירה במאמץ אחרי shutdown
 
     def _serve(self) -> None:
-        from OpenSSL import SSL
         tls_ctx = interserver_auth.build_server_tls_context(self._cert_pem, self._key_pem)
         while not self._stop.is_set():
             try:

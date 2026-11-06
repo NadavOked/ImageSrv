@@ -255,7 +255,10 @@ static void default_roles(App *a) {
         src = lc_source_index(a);
     } else {
         for (int i = 0; i < l->ndisks; i++) if (eff_drawer(l->disks[i].drawer, l->disks[i].port) == 3 && proposable(&l->disks[i])) src = i;    /* drawer 3 */
-        for (int i = 0; src < 0 && i < l->ndisks; i++) if (proposable(&l->disks[i])) src = i;
+        /* #1874 (Nadav 20/10): on the cloner drawer 3 or no source ("בחרו מקור") -- never another
+         * disk in its place. The stick (#2008, "Enter, Enter") keeps the first disk with a system:
+         * its drawers are the PC's own, and a 3rd is rare -- open with Nadav, not decided here. */
+        for (int i = 0; src < 0 && l->usb && i < l->ndisks; i++) if (proposable(&l->disks[i])) src = i;
         for (int i = 0; i < l->ndisks; i++)
             set_stored(a, l->disks[i].dev, i == src ? LCR_SOURCE : smart_skip(&l->disks[i]) ? LCR_SKIP : LCR_TARGET);
     }

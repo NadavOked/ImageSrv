@@ -290,7 +290,7 @@ run_restore() {
     done 3< "$_plan"
 
     if [ "$_expected" -lt 1 ] || [ "$_written" -ne "$_expected" ]; then
-        fail_written_target "$2" "נכתבו $_written מתוך $_expected מחיצות" "$RESTORE_BLAME"
+        fail_written_target "$2" "נכתבו $_written מתוך $_expected מחיצות$(writeback_why "$2")" "$RESTORE_BLAME"   # #1841
         echo "failed" > "$RUN_DIR/state"
         return 1
     fi

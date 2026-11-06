@@ -268,7 +268,30 @@ def _free_bytes(path: Path) -> int:
     return shutil.disk_usage(path).free
 
 
-def _check_pull_space(root: Path, incoming: Path, files: list[str], total: int) -> None:
+def _pull_root(ctx, location_id: str) -> tuple[Path, str]:
+    """‏#1781: שורש הספרייה של המיקום שנבחר בראשי, ותווית לשגיאות — אותם כללים
+    כמו יעד ה-push במשני (``receive_image_precheck``): מיקום שאינו קיים, אינו
+    מחובר או אינו מעוגן נדחה בשמו; אין נפילה בשקט אל ``loc_local``."""
+    from server.storage import locations as storage_locations
+    if re.fullmatch(r"loc_(?:local|[0-9a-f]{8})", location_id) is None:
+        raise TransferError(400, "מזהה מיקום האחסון אינו תקין")
+    location = storage_locations.get(ctx.conn, location_id)
+    if location is None and location_id == storage_locations.LOCAL_ID:
+        # כמו ב-precheck: אין שורה ל-loc_local (context מבודד) — הוא ``--images``.
+        return Path(ctx.library.root), f'"{storage_locations.LOCAL_NAME}" ({location_id})'
+    if location is None:
+        raise TransferError(404, f"מיקום האחסון {location_id!r} לא קיים בראשי")
+    label = f'"{location["name"]}" ({location_id})'
+    if not storage_locations.location_writable(ctx.conn, location_id):
+        raise TransferError(409, f"מיקום האחסון {label} אינו זמין לקליטה")
+    if location_id != storage_locations.LOCAL_ID \
+            and not Path(location["mount_point"]).is_dir():
+        raise TransferError(409, f"מיקום האחסון {label} אינו מעוגן")
+    return storage_locations.images_dir(location), label
+
+
+def _check_pull_space(root: Path, incoming: Path, files: list[str], total: int,
+                      where: str = "") -> None:
     """‏#1458: לפני הבייט הראשון — האם מה שנשאר להוריד נכנס לספרייה.
 
     ‏``total`` הוא ``size_bytes`` של המשני (סכום קבצי המחיצה). מה שכבר
@@ -287,7 +310,8 @@ def _check_pull_space(root: Path, incoming: Path, files: list[str], total: int) 
     except OSError as exc:
         raise RuntimeError(f"לא ניתן לקרוא את המקום הפנוי בספריית הראשי: {exc}") from exc
     if free < need:
-        raise RuntimeError(f"אין די מקום פנוי בראשי: נדרשים {need} בייטים"
+        place = f" במיקום {where}" if where else ""
+        raise RuntimeError(f"אין די מקום פנוי בראשי{place}: נדרשים {need} בייטים"
                            f" (מתוכם {keep} נשמרים למערכת), פנויים {free}"
                            f" (חסרים {need - free})")
 
@@ -317,9 +341,11 @@ def cancel_transfer(conn, transfer_id: str, user: tuple[str, str]) -> dict:
 
 
 def start_pull(ctx, data_dir, node_id: str, image_id: str,
-               user: tuple[str, str], *, run_in_thread: bool = True) -> str:
-    """מאמת (משני קיים ופעיל, האימג' אינו בראשי, אין העברה פעילה לאותו זוג),
-    רושם שורה ``queued`` עם ``direction=pull`` ומפעיל את המשיכה ברקע."""
+               user: tuple[str, str], *, location_id: str = "loc_local",
+               run_in_thread: bool = True) -> str:
+    """מאמת (משני קיים ופעיל, האימג' אינו בראשי, אין העברה פעילה לאותו זוג, מיקום
+    היעד בראשי קיים ומחובר — #1781), רושם שורה ``queued`` עם ``direction=pull``
+    ו-``location_id``, ומפעיל את המשיכה ברקע."""
     from server.library.images import valid_image_id
     conn = ctx.conn
     storage_nodes.assert_can_manage_nodes(conn, user)
@@ -334,6 +360,7 @@ def start_pull(ctx, data_dir, node_id: str, image_id: str,
         raise TransferError(409, f"האימג' {image_id} כבר קיים בספריית הראשי")
     if data_dir is None:
         raise TransferError(500, "data_dir לא הוגדר — אין זהות TLS בין-שרתית")
+    _pull_root(ctx, location_id)
     transfer_id = uuid.uuid4().hex
     with _write_lock, writing(conn):
         active = conn.execute(
@@ -346,9 +373,10 @@ def start_pull(ctx, data_dir, node_id: str, image_id: str,
         conn.execute(
             "INSERT INTO storage_transfers (id, node_id, image_id, image_name,"
             " state, bytes_sent, bytes_total, error, started_by, created_at,"
-            " updated_at, direction) VALUES (?, ?, ?, ?, 'queued', 0, 0, NULL,"
-            " ?, ?, ?, 'pull')",
-            (transfer_id, node_id, image_id, image_id, user[0], stamp, stamp))
+            " updated_at, direction, location_id) VALUES (?, ?, ?, ?, 'queued', 0, 0,"
+            " NULL, ?, ?, ?, 'pull', ?)",
+            (transfer_id, node_id, image_id, image_id, user[0], stamp, stamp,
+             location_id))
     journal(conn, "storage_transfer_start",
             f'{transfer_id} {image_id} <- {node["label"]}', user[0])
     if run_in_thread:
@@ -362,17 +390,19 @@ def run_pull(ctx, data_dir, transfer_id: str) -> None:
     from server.library.images import inside, valid_image_id
     conn = ctx.conn
     row = conn.execute(
-        "SELECT node_id, image_id, image_name, bytes_total FROM storage_transfers"
-        " WHERE id = ?", (transfer_id,)).fetchone()
+        "SELECT node_id, image_id, image_name, bytes_total, location_id"
+        " FROM storage_transfers WHERE id = ?", (transfer_id,)).fetchone()
     if row is None:
         return
     incoming = None
     image_id = row["image_id"]
-    if valid_image_id(image_id):
-        incoming = inside(Path(ctx.library.root) / INCOMING / image_id,
-                          Path(ctx.library.root))
     try:
-        _pull(ctx, data_dir, transfer_id, row, incoming)
+        # ‏#1781: אזור הביניים בתוך המיקום שנבחר — הכניסה לספרייה היא ``rename``
+        # על אותה מערכת קבצים. מיקום שנעלם מאז הפתיחה נכשל כאן, בשמו.
+        root, where = _pull_root(ctx, row["location_id"])
+        if valid_image_id(image_id):
+            incoming = inside(root / INCOMING / image_id, root)
+        _pull(ctx, data_dir, transfer_id, row, root, where, incoming)
     except Cancelled:
         if incoming is not None:
             _clear_incoming(incoming)
@@ -399,7 +429,8 @@ def run_pull(ctx, data_dir, transfer_id: str) -> None:
             _cancel_flags.pop(transfer_id, None)
 
 
-def _pull(ctx, data_dir, transfer_id: str, row, incoming: Path | None) -> None:
+def _pull(ctx, data_dir, transfer_id: str, row, root: Path, where: str,
+          incoming: Path | None) -> None:
     from server.library.images import (ImageLibrary, inside, safe_partition_filename, streamed_partitions,
                            validate_display_name, valid_image_id)
     conn = ctx.conn
@@ -411,7 +442,6 @@ def _pull(ctx, data_dir, transfer_id: str, row, incoming: Path | None) -> None:
         raise RuntimeError(f"מזהה אימג' לא תקין: {image_id!r}")
     if ctx.library.get(image_id) is not None:
         raise RuntimeError(f"האימג' {image_id} כבר קיים בספריית הראשי")
-    root = Path(ctx.library.root)
     if incoming is None:
         raise RuntimeError("תיקיית הביניים יוצאת משורש הספרייה")
     last = {"mark": 0, "seen": 0}
@@ -469,7 +499,8 @@ def _pull(ctx, data_dir, transfer_id: str, row, incoming: Path | None) -> None:
             if not safe_partition_filename(filename) or inside(
                     incoming / filename, incoming) is None:
                 raise RuntimeError(f"שם קובץ מחיצה לא תקין במניפסט המשני: {filename!r}")
-        _check_pull_space(root, incoming, files, total)
+        root.mkdir(parents=True, exist_ok=True)   # ‏images/ של מיקום נוסף נוצר בכתיבה הראשונה
+        _check_pull_space(root, incoming, files, total, where)
         incoming.mkdir(parents=True, exist_ok=True)
         completed = 0
         for filename in files:

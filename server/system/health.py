@@ -26,7 +26,7 @@ import shutil
 from server.agent import loops as agent_loops, hello, identity
 from server.console import auth, monitor
 from server.core import capabilities
-from server.net import dhcp, foreign_vlan, ports
+from server.net import deploy_net, dhcp, foreign_vlan, ports
 from server.system import timesync
 from server.storage import disk_reserve
 from server.db import last_disk_full, now_iso
@@ -575,7 +575,13 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
 
     # ‏#1810: כרטיס ההפצה נשמר **כשם** (nft, ‏dnsmasq, ‏udp-sender). שם שהשתנה
     # (שדרוג דביאן, vNIC חדש, כרטיס שהוחלף) — הכול נטען ושום דבר לא נתפס.
-    deploy_if = deploy_state.interface if deploy_state is not None         and deploy_state.configured else None
+    # כרטיס שנשמר ב-DB (`deploy:interface`) בלי שהמצב "הוגדר" הוא בדיוק המקרה
+    # שבו השם השתנה באתחול: ‏`resolve` רואה שאין כתובת על אף כרטיס ומחזיר
+    # "לא הוגדר". ‏"לא הוגדר" ו"הוגדר על כרטיס שאינו קיים" הם שני מצבים שונים,
+    # והשני תקלה גלויה (עיקרון 5) — לא נקפל אותו לאזהרה "לא הוגדרה".
+    configured_if = deploy_state.interface if deploy_state is not None and deploy_state.configured else None
+    stored_if = deploy_net.stored(ctx.conn)[0] if unconfigured else None
+    deploy_if = configured_if or stored_if
     names = [n["name"] for n in nics]
     if deploy_if and not nics:
         results.append(check("deploy_nic", "כרטיס ההפצה", "unknown",
@@ -585,9 +591,9 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
                              f"כרטיס ההפצה {deploy_if} לא קיים במערכת (יש: "
                              f"{', '.join(names)}) — DHCP, TFTP וחומת האש מפנים "
                              "לשם שאינו קיים; בחרו כרטיס בלשונית רשת הפצה"))
-    elif deploy_if:
+    elif configured_if:
         results.append(check("deploy_nic", "כרטיס ההפצה", "ok",
-                             f"{deploy_if} קיים במערכת"))
+                             f"{configured_if} קיים במערכת"))
 
     # ‏#1074: חומת האש שהמתקין כותב — שלושה מצבים, לא "חסר = כבוי".
     fw_state, fw_detail = ports.firewall_status(hooks["nft_ruleset"](), names)

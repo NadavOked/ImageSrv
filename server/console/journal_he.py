@@ -26,6 +26,7 @@ EVENTS_HE = {
     "mfa_disabled": "MFA נוטרל",
     "mfa_disable_failed": "ביטול MFA נדחה — קוד שגוי",   # נדב 18/10: ביטול עצמי
     "mfa_backup_codes_failed": "קודי גיבוי חדשים נדחו — סיסמה או קוד שגויים",   # #2470
+    "mfa_clock_skew": "קוד MFA נדחה בזמן שהשעון בשרת לא מדויק (#1814)",
     "login_attempts_trimmed": "מוני ניסיונות כניסה ישנים פונו — יותר מדי שמות שונים (#2459)",
     "login_account_failures_trimmed": "רשומות כשלי כניסה לפי חשבון פונו — יותר מדי שמות שונים (#2478)",
     "mfa_reset": "אימות דו-שלבי אופס למשתמש",   # נדב 18/10: מנהל איפס למשתמש אחר; הפירוט = למי
@@ -400,6 +401,8 @@ EVENTS_HE = {
     "update_available": "יש עדכון זמין",
     "peer_unreachable": "שרת ראשי או שרת משנה לא עונה",
     "peer_back": "שרת ראשי או שרת משנה חזר לענות",
+    "low_space": "מקום פנוי נמוך בשרת — מתחת לרזרבת המערכת",   # #1751
+    "smart_red": "דיסק אדום — SMART תקול",   # #1751
     "email_alert_sent": "התראה נשלחה במייל",
     "email_alert_refused": "נמענים דחו התראה במייל",
     "email_alert_failed": "שליחת התראה במייל נכשלה — תנסה שוב",
@@ -421,7 +424,6 @@ EVENTS_HE = {
 #: אירוע חדש). ארבעה ערכים: ``ok`` הושלם/אושר · ``warn`` דורש תשומת לב ·
 #: ``err`` כשל/סירוב · ``info`` (ברירת המחדל לכל אירוע שאינו ברשימה,
 #: כולל אירוע שאינו ב-EVENTS_HE — לא נופל, לא צובע).
-SEVERITY_LEVELS = ("info", "ok", "warn", "err")
 _SEVERITY_ERR = {
     "login_failed", "login_refused_console", "login_lockout", "login_account_lockout",
     "mfa_backup_codes_failed",   # #2470
@@ -435,8 +437,10 @@ _SEVERITY_ERR = {
     "foreign_dhcp_seen", "foreign_dhcp_more",   # #2442
     "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
     "peer_unreachable", "email_alert_gave_up", "email_alerts_step_failed", "email_oauth_failed",   # #1751
+    "smart_red",   # #1751
 }
 _SEVERITY_WARN = {
+    "mfa_clock_skew",   # #1814
     "fw_changed",   # #2080
     "login_attempts_trimmed",   # #2459
     "login_account_failures_trimmed", "journal_flood",   # #2478, #2498
@@ -454,7 +458,7 @@ _SEVERITY_WARN = {
     "readback_list_not_fetched",   # #1907
     "local_clone_note",   # #2049: a local clone done with a note (ntfs_note) -- orange, not "succeeded"
     "ups_on_battery", "ups_work_stopped",
-    "update_available", "email_alert_failed", "email_alert_refused",   # #1751
+    "update_available", "email_alert_failed", "email_alert_refused", "low_space",   # #1751
     "email_alert_requeued", "email_alerts_password_cleared",
 }
 _SEVERITY_OK = {

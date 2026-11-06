@@ -414,14 +414,6 @@ EXPORTER_LABEL = b"EXPORTER-ImageSrv-Pairing-2.1"
 EXPORTER_LENGTH = 32
 
 
-class ChannelBindingUnavailable(RuntimeError):
-    """אי אפשר לחלץ tls-exporter מהחיבור — יכולת ה-TLS חסרה.
-
-    לא נבלע בשקט: ערוץ בלי channel-binding אינו "ערוץ מאובטח בלי הבדיקה",
-    הוא ערוץ שלא ניתן לאמת (עיקרון 5). מי שקורא ומקבל את החריגה מכשיל
-    את ה-pairing, לא ממשיך בלי הכריכה."""
-
-
 def _to_der(cert) -> bytes:
     """מנרמל תעודה (pyOpenSSL X509 / cryptography Certificate / PEM / DER)
     ל-DER גולמי, כדי שכל חישובי הטביעה יעבדו על אותו ייצוג בדיוק."""
@@ -498,20 +490,6 @@ def can_export_keying_material() -> bool:
     except Exception:                                        # noqa: BLE001
         return False
     return hasattr(SSL.Connection, "export_keying_material")
-
-
-def tls_exporter_binding(conn, *, label: bytes = EXPORTER_LABEL,
-                         context: bytes = b"", length: int = EXPORTER_LENGTH) -> bytes:
-    """מחזיר את ה-tls-exporter (RFC 9266) של החיבור, או חריגה אם אין יכולת.
-
-    עובד על ``OpenSSL.SSL.Connection`` (וגם על כל אובייקט עתידי שיחשוף
-    ``export_keying_material``). ‏begin ו-complete על **אותה** session TLS
-    מקבלים ערך זהה; שתי sessions שונות — ערכים שונים, וזה מה שקושר את
-    שני השלבים לאותו ערוץ (הבקרה "begin על A, complete על B")."""
-    if hasattr(conn, "export_keying_material"):
-        return conn.export_keying_material(label, length, context or None)
-    raise ChannelBindingUnavailable(
-        "לחיבור ה-TLS אין export_keying_material — התקינו pyOpenSSL")
 
 
 #: ‏#2139: כמה אחורה notBefore — מעבר להיסט של RTC בשעון מקומי (עד ‏UTC±14).

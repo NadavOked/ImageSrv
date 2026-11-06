@@ -6,7 +6,7 @@
 
 ‏`python3 -m server.system.backup_job --data-dir /var/lib/imagesrv` — מה ש-`imagesrv-backup.timer`
 מריץ כל שעה (‏`deploy/imagesrv-backup.service`, כ-root ובלי ‏`ProtectSystem=strict`: היעד
-הוא דיסק אחר או NAS, מחוץ ל-`ReadWritePaths` של השרת):
+הוא דיסק אחר או NAS; השרת עצמו כותב ליעד רק תחת `/mnt` ו-`/media`, #2396):
 
 1. היעד נקרא מההגדרה `backup_dest` (‏DB לקריאה בלבד). אין יעד — יציאה 0 בלי לגעת
    בדבר: זה מצב מוצהר, והבריאות אומרת אותו בכתום. יעד SMB/NFS (‏`backup_target`, #1956)

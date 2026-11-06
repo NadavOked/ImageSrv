@@ -66,6 +66,10 @@ static int pill_kind(const char *k) {
 
 const char *failure_status_word(const App *a, Rgb *dot) {
     const State *s = &a->st; const Theme *t = a->theme;
+    if (s->fail_server) {   /* #1741: the server's own screen -- no hello to hear, no station to register */
+        *dot = s->fail_info ? t->indigo : s->fail_warn ? t->warn : t->danger;
+        return s->fail_info ? s->fail_title : "נכשל · המחשב נשאר דלוק";
+    }
     if (standby_conn(s) == STANDBY_OFF) { *dot = t->warn; return "אין קשר עם השרת"; }   /* the hold's heartbeat is not heard */
     if (s->fail_at > 0) { *dot = t->indigo; return s->fail_info ? "עולה מהדיסק המקומי" : "מאתחל"; }
     if (s->fail_info) { *dot = t->indigo; return "לא רשום בשרת"; }   /* #1802: it stays on the screen */

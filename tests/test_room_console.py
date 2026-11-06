@@ -126,7 +126,7 @@ def test_an_expired_request_does_not_power_off_a_machine_that_boots_later(server
     assert server["admin"].post("/api/console/room/poweroff",
                                 json={"confirm_name": LABEL}).status_code == 200
     later = datetime.now(timezone.utc) + timedelta(seconds=room_console.POWEROFF_TTL_SECONDS + 5)
-    assert room_console.take_power_action(server["ctx"].conn, CLONER1, now=later) is None
+    assert room_console.take_power(server["ctx"].conn, CLONER1, now=later)[0] is None
     assert journal(server, "power_expired") == [f"{CLONER1} poweroff"]
     # והבקשה נמחקה — גם ה-hello הבא אינו מכבה.
     assert "power_action" not in hello(server, CLONER1)

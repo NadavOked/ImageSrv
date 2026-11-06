@@ -33,7 +33,9 @@
 # ריק ונדרש למלאו; אין כתובת מומצאת ואין חסימה לפני שהמפעיל רואה מסך.
 #
 # הכישלון גלוי: ‏`systemctl status imagesrv-firstboot` אדום, והיומן
-# אומר באיזה שלב. אין Restart ואין `|| true`.
+# אומר באיזה שלב. אין Restart ואין `|| true`. על tty1 הוא נכתב כשורה, ו-#1741
+# (‏S3) מצייר אותו גם בגואי לתצוגה בלבד מעליה — בלי framebuffer, בלי בינארי,
+# או בלי פריים מוכח (ה-beat), השורה היא המסך.
 
 set -euo pipefail
 
@@ -52,12 +54,59 @@ TTY_PROGRESS=1
 # the picture stays on tty1; a failure (fail) is still printed there.
 SPLASH_MARKER=${IMAGESRV_SPLASH_MARKER:-/run/imagesrv-boot-splash.on}
 if [[ -e "$SPLASH_MARKER" ]]; then TTY_PROGRESS=0; fi
+# #1741 (S3): a failure is also drawn on the GUI, display-only (installer/lib/failgui.sh).
+# The binary is the live installer's copy (#2517, bootstrap.sh), or the one stage A built.
+FAILGUI_LIB="$SRC/installer/lib/failgui.sh"
+FAILGUI_WAIT_S=${FAILGUI_WAIT_S:-20}
+FB_DEV=/dev/fb0
+GUI_BINS="/usr/bin/imagesrv-station-gui $SRC/native-gui/imagesrv-station-gui"
+FAIL_GUI_STATE=/run/imagesrv-firstboot-failure.state
+FAIL_GUI_BEAT=/run/imagesrv-firstboot-failure.beat
+INSTALLER_GUI_BEAT=/run/imagesrv-installer-gui.beat   # deploy/imagesrv-installer-gui.service
 
 log() {
     printf 'imagesrv-firstboot: %s\n' "$*"
     if [[ "$TTY_PROGRESS" == 1 ]]; then
         printf 'ImageSrv: %s\n' "$*" > "$FIRSTBOOT_TTY"
     fi
+}
+tty1_taken() {
+    # 0 = the DCUI or the installer GUI holds tty1, or systemctl gave no
+    # answer: never two GUIs on one framebuffer. 1 = both are down.
+    local unit state
+    for unit in imagesrv-dcui.service imagesrv-installer-gui.service; do
+        state=$(systemctl is-active "$unit") || [[ -n "$state" ]] || return 0
+        case "$state" in inactive|failed) ;; *) return 0 ;; esac
+    done
+    return 1
+}
+gui_drew() {
+    # $1 = beat file, $2 = the unit that runs the GUI. 0 = it presented a
+    # frame (main.c gui_heartbeat) while the unit ran -- not is-active alone (#2517).
+    [[ -f "$FAILGUI_LIB" ]] || { printf 'imagesrv-firstboot: %s is missing\n' "$FAILGUI_LIB" >&2; return 1; }
+    # shellcheck source=installer/lib/failgui.sh
+    . "$FAILGUI_LIB" || return 1
+    failgui_beat "$1" "$FAILGUI_WAIT_S" systemctl is-active --quiet "$2"
+}
+fail_gui() {
+    # #1741 (S3): $1 state, $2 message on the GUI, display-only. 0 = a frame
+    # is on tty1; 1 = not shown, said on stderr -- the text line stays the screen.
+    local bin
+    [[ -e "$FB_DEV" ]] || { printf 'imagesrv-firstboot: failure screen: no framebuffer (%s), text only\n' "$FB_DEV" >&2; return 1; }
+    [[ -f "$FAILGUI_LIB" ]] || { printf 'imagesrv-firstboot: failure screen: %s is missing, text only\n' "$FAILGUI_LIB" >&2; return 1; }
+    # shellcheck source=installer/lib/failgui.sh
+    . "$FAILGUI_LIB" || return 1
+    # shellcheck disable=SC2086 # GUI_BINS is a list of paths
+    bin=$(failgui_bin $GUI_BINS) || { printf 'imagesrv-firstboot: failure screen: no GUI binary (%s), text only\n' "$GUI_BINS" >&2; return 1; }
+    if tty1_taken; then printf 'imagesrv-firstboot: failure screen: tty1 belongs to the DCUI or the installer GUI, text only\n' >&2; return 1; fi
+    failgui_firstboot "$1" "$2" > "$FAIL_GUI_STATE" || return 1
+    rm -f "$FAIL_GUI_BEAT"
+    # its own unit: firstboot's cgroup is stopped when this oneshot exits
+    systemd-run --unit=imagesrv-firstboot-failure --collect --quiet --setenv=IMAGESRV_GUI_BEAT="$FAIL_GUI_BEAT" \
+        -- "$bin" --backend fbdev --no-input --theme light --state "$FAIL_GUI_STATE" \
+        || { printf 'imagesrv-firstboot: failure screen: systemd-run failed, text only\n' >&2; return 1; }
+    gui_drew "$FAIL_GUI_BEAT" imagesrv-firstboot-failure.service \
+        || { printf 'imagesrv-firstboot: failure screen: the GUI drew no frame (journalctl -u imagesrv-firstboot-failure), text only\n' >&2; return 1; }
 }
 fail() {
     # state=<מצב> ואז הסבר; הקובץ נקרא על ידי האשף/המסך, היומן על ידי אדם.
@@ -68,6 +117,8 @@ fail() {
     printf 'imagesrv-firstboot: [%s] %s\n' "$state" "$message" >&2
     printf '\nImageSrv: first boot failed [%s]\n%s\nPress Alt+F2 to log in on tty2.\n' \
         "$state" "$message" > "$FIRSTBOOT_TTY"
+    # #1741 (S3): the same failure on the GUI, over that line; without it the line is the screen
+    if fail_gui "$state" "$message"; then printf 'imagesrv-firstboot: failure screen: on the GUI (tty1)\n'; fi
     exit 1
 }
 unexpected_failure() {
@@ -284,11 +335,12 @@ for event in /dev/input/event*; do
 done
 if [[ -e /dev/fb0 && "$has_keyboard" == 1 ]]; then
     TTY_PROGRESS=0
+    rm -f "$INSTALLER_GUI_BEAT"
     systemctl start imagesrv-installer-gui.service \
-        || fail check-error "Could not start imagesrv-installer-gui.service"
-    systemctl is-active --quiet imagesrv-installer-gui.service \
-        || fail check-error "imagesrv-installer-gui.service is not active after start"
-    log "installer gui: started on tty1"
+        || fail installer-gui-failed "Could not start imagesrv-installer-gui.service; see journalctl -u imagesrv-installer-gui"
+    gui_drew "$INSTALLER_GUI_BEAT" imagesrv-installer-gui.service \
+        || fail installer-gui-failed "imagesrv-installer-gui.service drew no frame on tty1 within ${FAILGUI_WAIT_S}s; see journalctl -u imagesrv-installer-gui"
+    log "installer gui: on tty1 (it drew a frame)"
 else
     TTY_PROGRESS=0
     systemctl restart imagesrv-dcui.service || fail check-error "Could not start imagesrv-dcui.service"

@@ -1341,7 +1341,7 @@ static void after_reload(App *a) {
         snprintf(a->st.msg_sub, sizeof a->st.msg_sub, "הדף נפתח בלי ?mac= — הסוכן אמור לספק אותו.");
     }
     if (a->st.toast[0]) toast(a, a->st.toast);
-    if (a->st.stale) toast(a, "הסוכן לא מעדכן מצב");
+    if (a->st.stale && !a->st.fail_server) toast(a, "הסוכן לא מעדכן מצב");   /* #1741: a server's screen is written once, by no agent */
     if (a->chosen_disk >= a->st.ndisks) a->chosen_disk = -1;
     if (a->folder_sel > a->st.nfolders) a->folder_sel = 0;
     if (a->image_sel > a->st.nimages) a->image_sel = 0;

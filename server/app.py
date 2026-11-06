@@ -43,6 +43,7 @@ from server.system import dnsmasq_dropin as dnsmasq_dropin_mod   # #2174
 from server.agent.api import ServerContext, boot_identity_ok, boot_journal_unknown, create_agent_router
 from server.agent import body as agent_body   # #2410
 from server.console.api import create_console_router
+from server.console.fetch_guard import ConsoleFetchGuard   # #1633
 from server.console.data import create_console_data_router   # #1882-#1889
 from server.console.hostcfg import create_hostcfg_router
 from server.console.timezone import create_timezone_router
@@ -1061,12 +1062,14 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     # ‏#968: ‏uptime מאותו מנגנון הזרקה של מסך הבריאות (health_hooks);
     # ‏deploy_ip מ-server_base — null כשרשת ההפצה טרם הוגדרה (#1088), כי
     # אז server_base הוא 127.0.0.1 ולא כתובת שתחנה רואה.
-    uptime_hook = {**health_default_hooks(), **(rt.health_hooks or {})}["uptime"]
+    _health = {**health_default_hooks(), **(rt.health_hooks or {})}
+    uptime_hook = _health["uptime"]
     include(create_console_router(
         ctx, rt.known_macs_hooks,
         version=lambda: display_version(update_hooks, repo_dir),
         tls=rt.console_tls,
         uptime=uptime_hook,
+        clock_status=_health["timesync_status"],   # ‏#1814: הודעת MFA על שעון סוטה
         deploy_ip=lambda: deploy_net.deploy_ip(
             rt.server_base, rt.deploy.state if rt.deploy else None)))
     include(create_storage_router(ctx, rt.data_dir))   # #727/#740
@@ -1149,6 +1152,10 @@ def create_console_app(rt: ServerRuntime) -> FastAPI:
     app.state.runtime = rt
     app.state.data_dir = rt.data_dir
     _add_console_routes(app, rt)
+    # ‏#1633: ‏X-Frame-Options + ‏Fetch Metadata + סוג גוף — על 8081 בלבד. לא
+    # ב-`_add_console_routes`: במעטפת המשולבת (`create_app`) יושבים גם נתיבי
+    # הסוכן והקיוסק, ושם הלקוח הוא sh/curl ולא דפדפן.
+    app.add_middleware(ConsoleFetchGuard)
     # ‏#456: שעון-הרקע של החדר יושב על הקונסולה — היא האפליקציה שרצה תמיד
     # בייצור, והחדר הוא ממילא מסך ניהול. אפליקציה **אחת** בכל תהליך.
     _install_room_clock(app, rt)

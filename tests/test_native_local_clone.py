@@ -308,12 +308,13 @@ def test_drawer_three_is_the_source_and_a_failing_smart_target_is_skipped(driver
     assert "roles=sda:2,sdb:0,sdc:1," in out[-1], out                       # target, skip, source
 
 
-def test_with_drawer_three_empty_the_first_disk_with_a_system_is_the_source(driver, tmp_path):
+def test_with_no_disk_in_drawer_three_no_source_is_proposed(driver, tmp_path):
+    """#1874 (Nadav 20/10): drawer 3 or nothing -- disk 2's Windows is not taken in its place."""
     state = ("lc_screen=local\nlc_inv=done\nlc_phase=idle\n"
              "lc_disk=1|sda|A|S1|500107862016|ok|ok||0|0|-1|0|אין עליו טבלת מחיצות\n"
              "lc_disk=2|sdb|B|S2|500107862016|ok|ok|Windows|3|1|480103981056|1|\n")
-    out = drive(driver, tmp_path, state, "key:DOWN")
-    assert out[0] == "lc-measure|sdb" and "roles=sda:2,sdb:1," in out[-1], out
+    out = drive(driver, tmp_path, state, "move:5,5")
+    assert not any(l.startswith("lc-measure") for l in out) and ":1," not in out[-1], out
 
 
 def test_a_drawer_that_does_not_fit_cannot_be_made_a_target(driver, tmp_path):

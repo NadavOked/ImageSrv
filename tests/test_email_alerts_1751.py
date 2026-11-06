@@ -697,9 +697,15 @@ def test_a_failed_refresh_fails_the_send_with_the_reason(conn, smtp, tmp_path):
 
 # --- the event sources ---------------------------------------------------------
 
-def watcher(conn, tmp_path, now=T0):
-    clock = {"now": now}
+#: plenty of room -- the tests that are not about low space never measure the test machine's disk
+#: (a lab VM with a nearly full datastore would add a ``low_space`` mail to every one of them).
+PLENTY = 500 * 1024 ** 3
+
+
+def watcher(conn, tmp_path, now=T0, free=PLENTY):
+    clock = {"now": now, "free": free}
     w = ea.Watcher(conn, tmp_path / "data", now=lambda: clock["now"])
+    w.free_bytes = lambda: clock["free"]
     return w, clock
 
 
@@ -727,7 +733,7 @@ def test_the_journal_events_that_become_alerts(conn, tmp_path, smtp):
     w.run_once()
     for event, detail in (("update_apply_done", "v1.0.1"), ("update_apply_failed", "v1.0.2"),
                           ("auto_reboot", "השרת אותחל לפי לוח הזמנים"),
-                          ("disk_failure", "aa:bb sda"), ("low_space", "9GB"),
+                          ("disk_failure", "aa:bb sda"), ("smart_red", "aa:bb sdb"), ("low_space", "9GB"),
                           ("peer_unreachable", "branch-2"), ("update_available", "v1 → v2")):
         journal(conn, event, detail)
     w.run_once()
@@ -814,6 +820,135 @@ def test_on_a_secondary_a_silent_primary_is_an_alert(conn, tmp_path, smtp):
     w, _ = watcher(conn, tmp_path)
     w.run_once()
     assert len(events(conn, "peer_unreachable")) == 1
+
+
+def test_low_space_is_journaled_once_per_crossing_below_the_reserve(conn, tmp_path, smtp):
+    """The same threshold as the health screen's db_space (``disk_reserve``): one ``low_space``
+    when the data partition crosses below it, not one per sample, and it becomes a mail."""
+    from server.storage import disk_reserve
+    configure(conn, smtp)
+    reserve = disk_reserve.reserve()
+    w, clock = watcher(conn, tmp_path, free=reserve + 5 * 1024 ** 3)
+    w.run_once()
+    assert events(conn, "low_space") == []
+    clock["free"] = reserve - 1
+    w.run_once()
+    w.run_once()
+    clock["free"] = reserve - 2 * 1024 ** 3                    # lower still: the same crossing
+    w.run_once()
+    low = events(conn, "low_space")
+    assert len(low) == 1 and disk_reserve.gb(reserve - 1) in low[0]
+    assert "low_space" in {r["kind"] for r in queue(conn)}
+    clock["free"] = reserve + ea.LOW_SPACE_CLEAR_MARGIN // 2   # back over, inside the margin
+    w.run_once()
+    clock["free"] = reserve - 1
+    w.run_once()
+    assert len(events(conn, "low_space")) == 1                 # no flapping on the line
+    clock["free"] = reserve + ea.LOW_SPACE_CLEAR_MARGIN        # really back: armed again
+    w.run_once()
+    clock["free"] = reserve - 1
+    w.run_once()
+    assert len(events(conn, "low_space")) == 2
+
+
+def test_low_space_that_was_already_mailed_is_not_mailed_again_after_a_restart(conn, tmp_path, smtp):
+    from server.storage import disk_reserve
+    w, _ = watcher(conn, tmp_path, free=disk_reserve.reserve() - 1)
+    w.run_once()
+    again, _ = watcher(conn, tmp_path, free=disk_reserve.reserve() - 1)
+    again.run_once()
+    assert len(events(conn, "low_space")) == 1
+
+
+def test_free_space_that_could_not_be_measured_is_neither_low_nor_back(conn, tmp_path, smtp):
+    """Principle 5: "not measured" is not "low" -- and not "fine" either: it does not re-arm."""
+    from server.storage import disk_reserve
+    w, clock = watcher(conn, tmp_path, free=None)
+    w.run_once()
+    assert events(conn, "low_space") == []
+    clock["free"] = disk_reserve.reserve() - 1
+    w.run_once()
+    clock["free"] = None
+    w.run_once()
+    clock["free"] = disk_reserve.reserve() - 1
+    w.run_once()
+    assert len(events(conn, "low_space")) == 1
+
+
+def test_the_free_space_measurement_reads_the_data_partition(tmp_path):
+    assert ea.data_free_bytes(tmp_path) > 0
+    assert ea.data_free_bytes(tmp_path / "missing") is None
+    assert ea.data_free_bytes(None) is None
+
+
+SMART_MAC = "b4:2e:99:07:1a:c4"
+
+
+def _disk_event(conn, session, verdict, *, serial="S1", reason="health_failed", mac=SMART_MAC,
+                disk="sda"):
+    """The agent's disk_event after its SMART gate: red is always sent with decision ``skip``."""
+    from server.disks import disk_events
+    if serial:
+        conn.execute("INSERT OR REPLACE INTO net_devices (mac, disks_json) VALUES (?, ?)",
+                     (mac, json.dumps([{"dev": disk, "serial": serial}])))
+        conn.commit()
+    red = verdict == "fail"
+    assert disk_events.ingest(conn, {
+        "session_id": session, "mac": mac, "disk": disk, "port": 1, "serial": serial,
+        "smart": {"verdict": verdict, "reason": reason},
+        "write_state": "skipped" if red else "pending", "decision": "skip" if red else None,
+    }) == {"ok": True}
+
+
+def test_a_smart_red_disk_becomes_a_red_disk_mail(conn, tmp_path, smtp):
+    configure(conn, smtp)
+    w, _ = watcher(conn, tmp_path)
+    w.run_once()
+    _disk_event(conn, "ses1", "fail")
+    red = events(conn, "smart_red")
+    assert len(red) == 1 and SMART_MAC in red[0] and "S1" in red[0] and "health_failed" in red[0]
+    w.run_once()
+    assert "disk_red" in {r["kind"] for r in queue(conn)}
+
+
+def test_the_same_red_disk_is_one_alert_until_it_is_measured_not_red(conn, tmp_path, smtp):
+    """One alert per event: the event is "this disk turned red", not "a round saw it red". It
+    moves to another machine -- still the same disk. ``unchecked`` is not "no longer red"."""
+    _disk_event(conn, "ses1", "fail")
+    _disk_event(conn, "ses1", "fail")                          # the agent re-sent it
+    _disk_event(conn, "ses2", "fail")                          # next round, same disk
+    _disk_event(conn, "ses3", "fail", mac="b4:2e:99:07:1a:c5") # moved to another cloner
+    _disk_event(conn, "ses4", "unchecked", reason="smart_timeout")
+    _disk_event(conn, "ses5", "fail")
+    assert len(events(conn, "smart_red")) == 1
+    _disk_event(conn, "ses6", "ok", reason="")
+    _disk_event(conn, "ses7", "fail")
+    assert len(events(conn, "smart_red")) == 2
+    _disk_event(conn, "ses8", "fail", serial="S2", disk="sdb")  # another disk
+    assert len(events(conn, "smart_red")) == 3
+
+
+@pytest.mark.parametrize("verdict", ["ok", "warn", "failed_last", "unchecked"])
+def test_only_a_smart_fail_is_a_red_disk(conn, verdict):
+    _disk_event(conn, "ses1", verdict, reason="reallocated")
+    assert events(conn, "smart_red") == []
+
+
+def test_a_read_only_disk_is_alerted_once_through_disk_failure(conn):
+    """#1742/#1760: a read-only red disk with a serial already becomes a ``disk_failure`` (a red
+    disk mail) -- the SMART path does not mail it a second time."""
+    _disk_event(conn, "ses1", "fail", reason="readonly")
+    assert len(events(conn, "disk_failure")) == 1
+    assert events(conn, "smart_red") == []
+
+
+def test_a_red_disk_without_a_serial_is_alerted_once_per_round(conn):
+    """No serial, no identity across rounds -- but never silent: once for its (round, machine, disk)."""
+    _disk_event(conn, "ses1", "fail", serial=None, reason="readonly")
+    _disk_event(conn, "ses1", "fail", serial=None, reason="readonly")
+    assert len(events(conn, "smart_red")) == 1
+    _disk_event(conn, "ses2", "fail", serial=None)
+    assert len(events(conn, "smart_red")) == 2
 
 
 def test_a_failing_step_is_journaled_once_and_the_rest_still_runs(conn, tmp_path, smtp, monkeypatch):

@@ -111,7 +111,6 @@ test('page registry: deploy is an own page with three tabs, the room first; the 
   const {run}=setup();
   assert.equal(run('pages.deploy.own'),true); assert.equal(run('pages.deploy.load===loadDeploy'),true);
   assert.equal(JSON.stringify(run('deployTabs()')),JSON.stringify(['חדר המשכפלים','כיתה','היסטוריה']));
-  assert.equal(run('typeof emptyDataCard'),'function','still used by the network page');
   assert.equal(run('typeof startSelectedRound'),'undefined'); assert.equal(run('typeof openNewDeployment'),'undefined');
   assert.equal(run('typeof roundDrawerOpen'),'undefined','no round drawer any more');
   run('openRoundDetail()'); assert.equal(run('selected'),'deploy'); assert.equal(run('activated'),1,'"details" opens the class tab, not a drawer');

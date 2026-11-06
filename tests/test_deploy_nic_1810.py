@@ -58,7 +58,7 @@ def health(tmp_path: Path, images_root: Path, clock):
     def port_rows():
         return {r["id"]: r for r in admin.get("/api/console/ports").json()}
 
-    yield {"fake": fake, "rows": rows, "ports": port_rows}
+    yield {"fake": fake, "rows": rows, "ports": port_rows, "conn": app.state.ctx.conn}
     app.state.ctx.sender.stop()
 
 
@@ -94,3 +94,34 @@ def test_an_empty_interface_list_is_not_checked_rather_than_ok(health):
     rows = health["rows"]()
     assert rows["deploy_nic"]["state"] == "unknown"
     assert "לא נבדק" in rows["firewall"]["detail"]
+
+
+def test_a_stored_deploy_nic_that_vanished_is_red_not_just_unconfigured(health):
+    """הפער שנמדד במעבדה ב-04/11: אחרי אתחול שבו שם הכרטיס השתנה, ‏`resolve`
+    מחזיר "לא הוגדר" (אף כרטיס אינו נושא את ה-IP) — אבל `deploy:interface` עדיין
+    ב-DB. "לא הוגדר" ו"הוגדר על כרטיס שאינו קיים" הם שני מצבים שונים."""
+    from server.db import set_setting
+    set_setting(health["conn"], "deploy:interface", "ens192")
+    health["fake"]["deploy"] = DeployState("none", None, None)
+    health["fake"]["interfaces"] = [_nic("enp11s0")]
+    rows = health["rows"]()
+    assert rows["deploy_nic"]["state"] == "bad", rows
+    assert "ens192 לא קיים במערכת" in rows["deploy_nic"]["detail"]
+    assert "enp11s0" in rows["deploy_nic"]["detail"]
+    assert rows["deploy_net"]["state"] == "warn"        # האזהרה "לא הוגדרה" נשארת
+
+
+def test_a_stored_nic_that_exists_adds_no_row_while_unconfigured(health):
+    from server.db import set_setting
+    set_setting(health["conn"], "deploy:interface", "ens192")
+    health["fake"]["deploy"] = DeployState("none", None, None)
+    rows = health["rows"]()
+    assert "deploy_nic" not in rows       # אין "תקין" על רשת שלא הוגדרה
+    assert rows["deploy_net"]["state"] == "warn"
+
+
+def test_a_stored_deploy_nic_does_not_override_a_cli_configured_one(health):
+    from server.db import set_setting
+    set_setting(health["conn"], "deploy:interface", "old0")      # שארית ישנה
+    rows = health["rows"]()           # הרשת מוגדרת על ens192 שקיים
+    assert rows["deploy_nic"]["state"] == "ok"

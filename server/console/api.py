@@ -291,6 +291,7 @@ def create_console_router(
     kiosk: bool = False,
     uptime: Callable[[], int | None] | None = None,
     deploy_ip: Callable[[], str | None] | None = None,
+    clock_status: Callable[[], dict] | None = None,
 ) -> APIRouter:
     """‏``tls`` (#703, tracer 5): ‏``console_tls.ConsoleTLS`` כשהקונסולה מוגשת
     ב-HTTPS — העוגייה מקבלת ``Secure`` ו-``/me`` מדווח את טביעת האצבע.
@@ -1430,6 +1431,6 @@ def create_console_router(
             journal(ctx.conn, "setting_change", f"{key}={value}", user[0])
         return {"ok": True}
 
-    console_mfa.register(router, ctx, current_user, admin_only, tls)
+    console_mfa.register(router, ctx, current_user, admin_only, tls, clock_status)
     console_disk_sets.register(router, ctx, admin_only)   # ‏#1857
     return router

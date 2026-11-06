@@ -212,9 +212,13 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
     @router.post("/storage-nodes/{nid}/pull")
     async def start_pull(nid: str, request: Request,
                          user=Depends(require_standalone)):
-        image_id = str((await request.json()).get("image_id") or "")
+        body = await request.json()
+        image_id = str(body.get("image_id") or "")
+        # ‏#1781: מיקום היעד בראשי, כמו ב-``…/transfer``. בלי בחירה — ``loc_local``.
+        location_id = str(body.get("location_id") or "loc_local")
         try:
-            tid = storage_transfer.start_pull(ctx, data_dir, nid, image_id, user)
+            tid = storage_transfer.start_pull(ctx, data_dir, nid, image_id, user,
+                                              location_id=location_id)
         except storage_transfer.TransferError as extra:
             raise HTTPException(extra.status, extra.detail)
         return {"id": tid}
@@ -449,6 +453,14 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                 answer.get("status"), int) or isinstance(answer.get("status"), bool):
             detail = answer.get("detail") if isinstance(answer, dict) else ""
             error = f"הערוץ סירב ({status}): {detail}" if status != 200 else "תשובה לא צפויה משרת המשנה"
+            if status == 404:
+                # ‏#1776: ‏``(method, sub)`` כבר עבר את הרשימה **שלנו** למעלה. ‏404 מהערוץ
+                # = הרשימה של המשני אינה מכירה אותו, כלומר המשני ישן מהראשי (נמדד 20/10:
+                # חיפה v0.75.0 מול /update/check). התשובה שלו נשארת בסוגריים, כראיה.
+                what = ("לעדכון מרחוק" if sub.startswith("/update/")
+                        else f"לפעולה הזו מרחוק ({method} {sub})")
+                error = (f"שרת המשנה בגרסה ישנה מדי {what} — עדכנו אותו פעם אחת "
+                         f"מהקונסולה שלו (הערוץ ענה 404: {detail})")
             _contact(node, error)
             journal(ctx.conn, "peer_write", f"{what} → {error}", user[0])
             raise HTTPException(502, f"{label}: {error}")

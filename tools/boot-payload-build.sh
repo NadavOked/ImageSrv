@@ -24,11 +24,17 @@
 #
 #   boot-payload-build.sh --http-root DIR (--flags-file FILE | --iso-default)
 #                         [--manifest FILE] [--write-flags FILE] [--build-log FILE]
-#                         [--version VER]
+#                         [--version VER] [--lab]
 #
 # ‏--version: המחרוזת שנחתמת ב-initrd (agent-version) במקום `git describe`. רק
 # מי שבונה מטען מוכן מראש ל-Release מעביר אותה: הוא בונה מהעץ הפרטי, שאין בו
 # עדיין התג שיתפרסם (#1788).
+#
+# ‏--lab (#1630): כל initrd שנבנה עובר את tools/iso/initrd-lab-gate.sh לפני שהוא
+# מחליף משהו — אותו שער של ה-ISO ושל ה-USB. גישת מעבדה (overlay, ‏hook, ‏SSH) בלי
+# ‏--lab עוצרת את הבנייה והמטען הקודם נשאר. רק build-iso.sh --lab מעביר אותו;
+# ‏firstboot וכפתור העדכון לעולם לא — ‏IMAGESRV_EXTRA_OVERLAY שנשאר בסביבה שלהם
+# היה מכניס את dropbear ואת מפתח הטכנאי לכל תחנה.
 #
 # משתני סביבה (לבדיקות): IMAGESRV_MODULES_DIR (/lib/modules),
 # ‏IMAGESRV_KERNEL_DIR (/boot), IMAGESRV_BUILD_TMPDIR (/var/tmp).
@@ -48,6 +54,7 @@ MANIFEST=/etc/imagesrv/iso-release.json
 WRITE_FLAGS=""
 BUILD_LOG=""
 VERSION=""
+LAB=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -58,6 +65,7 @@ while [[ $# -gt 0 ]]; do
         --write-flags) WRITE_FLAGS="${2:?}"; shift 2 ;;
         --build-log)   BUILD_LOG="${2:?}"; shift 2 ;;
         --version)     VERSION="${2:?}"; shift 2 ;;
+        --lab)         LAB=1; shift ;;
         *) die "unknown option: $1" ;;
     esac
 done
@@ -195,6 +203,17 @@ if ((${#failures[@]})); then
     die "${failures[0]}$more; the previous payload is untouched"
 fi
 say "built ${#lines[@]} initrd(s) in $((SECONDS - t0)) s (${#parallel[@]} parallel, ${#serial[@]} in the serial queue)"
+
+# --- #1630: שער המעבדה, על כל .new לפני שהוא מחליף משהו -------------------------
+# ‏0 = נקי, או גישת מעבדה עם --lab; כל השאר — גישת מעבדה בלי --lab, או initrd
+# שלא ניתן לבדוק — עוצר, ו-.new לא נשאר ב-HTTP root שממנו התחנות מושכות.
+for out in "${outputs[@]}"; do
+    if bash "$APP_DIR/tools/iso/initrd-lab-gate.sh" "$out.new" ${LAB:+--lab} >/dev/null; then
+        continue
+    fi
+    for o in "${outputs[@]}"; do rm -f "$o.new"; done
+    die "$out: lab access (overlay, site hook or SSH) without --lab, or the initrd could not be inspected; the previous payload is untouched"
+done
 install -m 0644 "$VMLINUZ" "$HTTP_ROOT/vmlinuz.new"
 
 # --- הכול נבנה: מחליפים יחד -----------------------------------------------------

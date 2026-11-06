@@ -58,6 +58,17 @@ printf 'initrd gui=%s kver=%s\\n' "$gui" "$kver" > "$out"
 """
 
 
+#: The lab gate (#1630) reads a real initramfs; the stub above writes text. These
+#: tests are about the build lines, so the gate is a stub that passes -- the gate
+#: itself inside boot-payload-build.sh is tested in test_lab_gate_concat_1630.py.
+STUB_LAB_GATE = "#!/usr/bin/env bash\necho false\n"
+
+
+def install_stub_lab_gate(tree: Path) -> None:
+    (tree / "tools" / "iso").mkdir(parents=True, exist_ok=True)
+    (tree / "tools" / "iso" / "initrd-lab-gate.sh").write_text(STUB_LAB_GATE, encoding="utf-8", newline="\n")
+
+
 def _install_kernel(root: Path, kver: str) -> None:
     (root / "modules" / kver).mkdir(parents=True)
     (root / "kernels").mkdir(exist_ok=True)
@@ -88,6 +99,7 @@ def _with_payload_builder(tree: Path) -> None:
     (tree / "tools").mkdir(parents=True, exist_ok=True)
     shutil.copy(HELPER, tree / "tools" / "boot-payload-build.sh")
     (tree / "tools" / "build_initramfs.sh").write_text(STUB_BUILD, encoding="utf-8", newline="\n")
+    install_stub_lab_gate(tree)
     (tree / "deploy").mkdir(parents=True, exist_ok=True)
     shutil.copy(REPO / "deploy" / "boot-payload.py", tree / "deploy" / "boot-payload.py")
     (tree / "agent").mkdir(exist_ok=True)

@@ -1055,6 +1055,10 @@ run install -m 0644 "$APP_DIR/deploy/imagesrv-dcui.service" \
     /etc/systemd/system/imagesrv-dcui.service
 run install -m 0644 "$APP_DIR/deploy/imagesrv-installer-gui.service" \
     /etc/systemd/system/imagesrv-installer-gui.service
+# ‏#1741 (‏S7): אתחול או כיבוי של השרת בגואי לתצוגה בלבד, במקום tty1 שחור או
+# ‏"A stop job is running" אחרי שה-DCUI נעצר. מופעל למטה, אחרי daemon-reload.
+run install -m 0644 "$APP_DIR/deploy/imagesrv-shutdown-screen@.service" \
+    /etc/systemd/system/imagesrv-shutdown-screen@.service
 # נדב 17/10: "אין מסך שחור". מסך האתחול של השרת (server/system/bootsplash.py) — תמונה
 # סטטית מתחילת האתחול ועד שה-DCUI לוקח את tty1, במקום tty1 שחור עם סמן.
 # התמונה מצוירת ע"י הגואי עצמו (‏--splash-raw), כמו ב-initramfs. בלי בינארי
@@ -1180,6 +1184,7 @@ run systemctl enable imagesrv-upgrade-recover.service   # #1893: after the reloa
 run systemctl mask getty@tty1.service
 run systemctl enable imagesrv-dcui.service
 run systemctl enable imagesrv-boot-splash.service
+run systemctl enable imagesrv-shutdown-screen@reboot.service imagesrv-shutdown-screen@poweroff.service   # #1741
 run systemctl restart imagesrv-dcui.service
 # האשף מחזיק את 8081 בזמן ההתקנה. ממש לפני שהקונסולה עולה הוא משחרר את
 # המאזין ומחזיר אישור על socketpair פרטי; אין סיסמה או נתון משתמש ב-FD הזה.

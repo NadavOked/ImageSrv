@@ -62,6 +62,10 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
     splash = tmp_path / "live-splash"
     splash.mkdir()
     (splash / "splash-640x240.raw").write_bytes(b"\0" * 16)
+    # #2517: the live image's GUI binary, copied to the target's /usr/bin
+    live_gui = tmp_path / "live-gui" / "imagesrv-station-gui"
+    live_gui.parent.mkdir()
+    live_gui.write_bytes(b"\x7fELF fake station gui\n")
     (cdrom / "imagesrv").mkdir()
     (cdrom / "imagesrv" / "boot-payload").mkdir()
     for name in ("initrd.img", "initrd.img.gui", "vmlinuz", "boot-payload.json"):
@@ -80,7 +84,7 @@ def _machine(tmp_path: Path) -> dict[str, Path | dict[str, str]]:
         "SYSROOT": str(root), "DEVROOT": str(dev), "PROC_MOUNTS": str(mounts),
         "CDROM": str(cdrom), "TARGET": str(target), "STATE_FILE": str(state),
         "BOOTSTRAP_LOG": str(tmp_path / "debootstrap.log"), "IMAGESRV_TEST": "1",
-        "SPLASH_SRC_DIR": str(splash),
+        "SPLASH_SRC_DIR": str(splash), "GUI_BIN_SRC": str(live_gui),
     })
     return {"root": root, "dev": dev, "cdrom": cdrom, "target": target,
             "state": state, "mounts": mounts, "env": env}
@@ -318,6 +322,7 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "mount", "mount", "mount", "mount", "write-target", "rm",
         "chroot", "chroot", "cp", "mkdir", "cp", "cp", "chmod", "cp", "chroot", "chroot",
         "install", "install", "install", "chroot",   # #1569: the boot screen
+        "install",        # #2517: the GUI binary to the target
         "mkdir", "cp", "cp", "verify-package-pool", "write-target",
         "write-target", "write-target", "write-target", "cp", "printf",
         "chroot", "chroot", "write-target",

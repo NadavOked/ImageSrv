@@ -38,28 +38,8 @@ function setup() {
 
 const IMAGE = {id: 'img_fit230', name: 'Fits 256', min_target_bytes: 229556000000,
                used_bytes: 84540833792, total_compressed_bytes: 57982058496};
-
-test('fits-from is rounded up to a decimal GB with the bytes in the tooltip', () => {
-  const run = setup();
-  const html = run(`imageSizeCells(${JSON.stringify(IMAGE)})`);
-  assert.match(html, /נכנס לדיסק מ-<span title="229556000000 בייט">230 GB<\/span>/);
-  assert.match(html, /בשימוש 78\.7 GB/);
-  assert.match(html, /בשרת 54\.0 GB/);
-});
-
-test('an unmeasured used_bytes reads "לא ידוע", not 0', () => {
-  const run = setup();
-  const html = run(`imageSizeCells(${JSON.stringify({...IMAGE, used_bytes: null})})`);
-  assert.match(html, /בשימוש לא ידוע/);
-  assert.doesNotMatch(html, /בשימוש 0/);
-});
-
 test('an unknown requirement is a dash and never a number', () => {
   const run = setup();
-  assert.equal(run('fitGB(null)'), null);
-  assert.equal(run('fitGB(-1)'), null);
-  assert.match(run(`imageSizeCells(${JSON.stringify({...IMAGE, min_target_bytes: null})})`),
-               /נכנס לדיסק מ-לא ידוע/);
   assert.match(run(`imgFits(${JSON.stringify({...IMAGE, min_target_bytes: null})})`),
                /class="muted">—<\/span>/);
 });

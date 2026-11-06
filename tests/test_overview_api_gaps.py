@@ -175,7 +175,7 @@ def test_journal_rows_carry_the_server_side_severity(server):
     assert rows["capture_done"]["severity"] == "ok"
     assert rows["machine_add"]["severity"] == "info"
     for row in rows.values():
-        assert row["severity"] in journal_he.SEVERITY_LEVELS
+        assert row["severity"] in ("info", "ok", "warn", "err")
         # ‏#968: "רק להוסיף שדה" — המבנה הקיים לא זז. ‏#1008 הוסיף ``id``, ‏#1296 את היעד.
         assert set(row) == {"id", "ts", "user", "event", "label", "text", "severity",
                             "machine", "round_id", "class_id"}
