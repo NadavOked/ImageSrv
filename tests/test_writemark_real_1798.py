@@ -55,7 +55,8 @@ def _run(tmp_path: Path, commands: str, run_dir: str = "run") -> str:
         f'RUN_DIR="{(tmp_path / run_dir).as_posix()}"; LOG_FILE="{(tmp_path / "log").as_posix()}"\n'
         f'DEVROOT="{(tmp_path / "dev").as_posix()}"; SYSROOT="{tmp_path.as_posix()}"\n'
         'log() { echo "LOG $*" >> "$LOG_FILE"; }\n'
-        + source_line("waits.sh", "restore.sh", "expand.sh", "expandshare.sh", "writemark.sh")
+        + source_line("waits.sh", "gptboot.sh", "restore.sh", "expand.sh", "expandshare.sh", "writemark.sh")
+        + f'M="{(tmp_path / "manifest.json").as_posix()}"; printf "{{}}" > "$M"   # #2585: an old image, no boot code to restore\n'
         + f'manifest_plan() {{ cat "{plan.as_posix()}"; }}\n'
         f'json_get() {{ case "$2" in .sector_size) echo 512 ;; .scheme) echo gpt ;; '
         f'.disk_guid) echo {DISK_GUID} ;; *) echo null ;; esac; }}\n'
@@ -71,7 +72,7 @@ def _run(tmp_path: Path, commands: str, run_dir: str = "run") -> str:
 
 def test_the_mark_is_on_every_partition_and_survives_the_reboot(tmp_path):
     img = _blank(tmp_path / "dev" / "sda")
-    out = _run(tmp_path, 'apply_gpt sda m.json && echo OK; writemark_state sda\n')
+    out = _run(tmp_path, 'apply_gpt sda "$M" && echo OK; writemark_state sda\n')
     assert out.splitlines()[-2:] == ["OK", "incomplete"], (tmp_path / "log").read_text()
     assert [_name(img, i) for i in (1, 2, 3, 4)] == [MARK] * 4
     # the reboot: another process, an empty RUN_DIR -- the disk itself says it
@@ -80,7 +81,7 @@ def test_the_mark_is_on_every_partition_and_survives_the_reboot(tmp_path):
 
 def test_the_expansion_carries_the_mark_on_what_it_rebuilt(tmp_path):
     img = _blank(tmp_path / "dev" / "sda")
-    out = _run(tmp_path, 'apply_gpt sda m.json && expand_last sda m.json && echo OK\n')
+    out = _run(tmp_path, 'apply_gpt sda "$M" && expand_last sda "$M" && echo OK\n')
     assert out.splitlines()[-1] == "OK", (tmp_path / "log").read_text()
     assert (tmp_path / "run" / "targets" / "sda" / "expanded").read_text().strip() == "3|ntfs"
     assert [_name(img, i) for i in (1, 2, 3, 4)] == [MARK] * 4
@@ -91,7 +92,7 @@ def test_the_sources_names_come_back_exactly_and_an_empty_one_too(tmp_path):
     names = tmp_path / "entries"
     names.write_text("1|EFI system partition|0\n2|Microsoft reserved partition|0\n3||0\n"
                      "4|Basic data partition|8000000000000001\n", encoding="utf-8")
-    out = _run(tmp_path, f'apply_gpt sda m.json && writemark_clear sda "{names.as_posix()}" && echo OK; '
+    out = _run(tmp_path, f'apply_gpt sda "$M" && writemark_clear sda "{names.as_posix()}" && echo OK; '
                          'writemark_state sda\n')
     assert out.splitlines()[-2:] == ["OK", "clean"], (tmp_path / "log").read_text()
     assert [_name(img, i) for i in (1, 2, 3, 4)] == [
@@ -100,6 +101,6 @@ def test_the_sources_names_come_back_exactly_and_an_empty_one_too(tmp_path):
 
 def test_a_library_image_gets_empty_names_like_its_manifest(tmp_path):
     img = _blank(tmp_path / "dev" / "sda")
-    out = _run(tmp_path, 'apply_gpt sda m.json && writemark_clear sda && echo OK; writemark_state sda\n')
+    out = _run(tmp_path, 'apply_gpt sda "$M" && writemark_clear sda && echo OK; writemark_state sda\n')
     assert out.splitlines()[-2:] == ["OK", "clean"], (tmp_path / "log").read_text()
     assert [_name(img, i) for i in (1, 2, 3, 4)] == ["", "", "", ""]

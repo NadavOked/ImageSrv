@@ -106,14 +106,15 @@ def _run(tmp_path: Path, call: str, rows: list[str]) -> str:
         'log() { echo "LOG $*" >> "$LOG_FILE"; }\n'
         # waits.sh: apply_gpt rereads through reread_table (#1594). Without it the call is
         # "not found", and the log says the kernel refused -- the agent sources it first.
-        + source_line("waits.sh", "restore.sh", "expand.sh", "writemark.sh")
+        + source_line("waits.sh", "gptboot.sh", "restore.sh", "expand.sh", "writemark.sh")
+        + f'M="{(tmp_path / "manifest.json").as_posix()}"; printf "{{}}" > "$M"   # #2585: an old image, no boot code to restore\n'
         + f'manifest_plan() {{ cat "{plan.as_posix()}"; }}\n'
         'json_get() { case "$2" in .sector_size) echo 512 ;; .scheme) echo gpt ;; *) echo null ;; esac; }\n'
         f'blockdev() {{ case "$1" in --getss) echo 512 ;; --getsz) echo {SECTORS} ;; *) return 0 ;; esac; }}\n'
         'target_write_started() { :; }\n'
         'assert_target() { :; }\n'   # #2434: the identity is not what is tested here (test_target_identity_2434.py)
         'verify_table() { :; }   # הקריאה בחזרה נבדקת למטה עם sgdisk אמיתי\n'
-        f'if {call} sda manifest.json; then echo OK; else echo "FAIL $PLAN_ERROR"; fi\n'
+        f'if {call} sda "$M"; then echo OK; else echo "FAIL $PLAN_ERROR"; fi\n'
     )
     return bb(tmp_path, body).strip()
 

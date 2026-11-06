@@ -43,7 +43,7 @@ pytestmark = requires_native(
     why="a loop disk, mount and partclone as root: the Testrunner",
 )
 
-LIBS = ("common", "sysinfo", "waits", "jsonq", "progress", "failmark", "restore", "manifest", "bootca",
+LIBS = ("common", "sysinfo", "waits", "jsonq", "gptboot", "progress", "failmark", "restore", "manifest", "bootca",
         "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui")   # #1798: capture_disk reads the mark; #1901/#1808: the source gates
 
 #: udp-sender: says it started (as the real one does once receivers joined)

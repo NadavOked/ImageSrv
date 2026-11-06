@@ -43,7 +43,8 @@ PCL = {"vfat": 33554432, "ntfs": 49580892 * 4096}
 PCL_TOTAL = 33554432 + 32768 * 512 + 49580892 * 4096        # MSR whole, swap 0
 
 SETUP = (
-    'mkdir -p "$LC/inv" "$LC/measure" "$LC/run" "$SYSROOT/sys/block/sdc"; echo 1000000000 > "$SYSROOT/sys/block/sdc/size"; '
+    'mkdir -p "$LC/inv" "$LC/measure" "$LC/run" "$SYSROOT/sys/block/sdc" "$DEVROOT"; echo 1000000000 > "$SYSROOT/sys/block/sdc/size"; '
+    'dd if=/dev/zero of="$DEVROOT/sdc" bs=512 count=1 2>/dev/null; '   # #2585: lc_manifest reads the source's boot code (440 bytes); a blank one is a UEFI disk
     f"printf '%s' '{PARTS}' > \"$LC/inv/sdc.parts\"; printf '%s' '{DF}' > \"$LC/inv/sdc.used\"; "
     'cp "$LC/inv/sdc.parts" "$LC/run/parts.txt"; '
     "printf '1|EFI|0\\n2|MSR|0\\n3|Basic data|0\\n4|swap|0\\n' > \"$LC/run/entries\"; "

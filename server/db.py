@@ -1393,7 +1393,53 @@ def _open(path: str) -> sqlite3.Connection:
     # ממתינים על נעילה במקום להיכשל מיד. עם חיבור לכל תהליכון זו כבר
     # לא חגורה תיאורטית: WAL מרשה כותב אחד בכל רגע, והשאר ממתינים כאן.
     conn.execute("PRAGMA busy_timeout = 5000")
+    # ‏#1831: כותב אינו עושה checkpoint לעולם — רק `checkpoint` למטה, כשנעילת הכתיבה
+    # בידו. הקריאה בחזרה היא הראיה: ערך אחר הוא כל כותב כ-checkpointer בלי תיאום.
+    conn.execute("PRAGMA wal_autocheckpoint = 0")
+    found = conn.execute("PRAGMA wal_autocheckpoint").fetchone()[0]
+    if found != 0:
+        conn.close()
+        raise RuntimeError(f"PRAGMA wal_autocheckpoint = 0 did not hold on {path}: {found}")
     return conn
+
+
+#: ‏#1831: אחרי כמה commits דרך ``Database`` רץ `checkpoint`. ‏commit קטן כאן הוא דף עד
+#: כמה דפים, ולכן 200 קרוב לסף של sqlite עצמו (1000 דפים) — ה-WAL אינו גדל יותר מבעבר.
+CHECKPOINT_EVERY_COMMITS = 200
+#: כמה ה-checkpoint ממתין לכותב שבאמצע טרנזאקציה. קצר מ-``busy_timeout``: הוא רץ
+#: בתוך commit של בקשה, ו-checkpoint שדולג ינוסה שוב אחרי ``CHECKPOINT_EVERY_COMMITS``.
+CHECKPOINT_WAIT_MS = 1000
+
+
+def checkpoint(path: str | Path) -> tuple[int, int, int]:
+    """ה-checkpoint היחיד של המסד (#1831). מחזיר ``(busy, log, checkpointed)``.
+
+    באג ה-WAL-reset (sqlite.org/wal.html §11, קיים ב-3.46.1 של דביאן 13 בלי backport):
+    checkpoint שמתחיל בזמן שחיבור אחר מקמט טרנזאקציה שמאפסת את ה-WAL מפספס את
+    האיפוס, והמסד מושחת. לכן כאן חיבור אחד מחזיק את **נעילת הכתיבה של sqlite**
+    (``BEGIN IMMEDIATE``) לכל משך ה-checkpoint, וחיבור שני עושה checkpoint ‏PASSIVE.
+    אף commit — מאף תהליכון ומאף תהליך — אינו יכול לחפוף לו: זו הנעילה האחת שכל
+    כתיבה עוברת בה בכל מקרה, ולא שורה שצריך לזכור בכל אתר קריאה.
+
+    שני חיבורים ולא אחד: checkpoint בתוך טרנזאקציה פתוחה על אותו חיבור נדחה.
+    כותב מבחוץ שמחזיק את הנעילה יותר מ-``CHECKPOINT_WAIT_MS`` — ``database is locked``,
+    ואיש לא עשה checkpoint (עדיף על checkpoint שחופף לו)."""
+    guard = _open(str(path))
+    try:
+        # נפתח **לפני** הנעילה: ‏`_open` מריץ PRAGMA-ים, ואין סיבה שימתינו לנעילה שבידנו.
+        ckpt = _open(str(path))
+        try:
+            guard.execute(f"PRAGMA busy_timeout = {CHECKPOINT_WAIT_MS}")
+            guard.execute("BEGIN IMMEDIATE")
+            try:
+                busy, log_frames, done = ckpt.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+            finally:
+                guard.rollback()
+        finally:
+            ckpt.close()
+    finally:
+        guard.close()
+    return busy, log_frames, done
 
 
 def _restrict_mode(path: str) -> None:
@@ -1507,6 +1553,8 @@ class Database:
         self._local = threading.local()
         self._ready = False
         self._init_lock = threading.Lock()
+        self._commits = 0                       # ‏#1831: עד ה-checkpoint הבא
+        self._commits_lock = threading.Lock()
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -1532,7 +1580,33 @@ class Database:
         return self.connection.executescript(sql)
 
     def commit(self) -> None:
-        self.connection.commit()
+        conn = self.connection
+        wrote = conn.in_transaction
+        conn.commit()
+        if wrote:
+            self._count_commit()
+
+    def _count_commit(self) -> None:
+        """‏#1831: ‏``wal_autocheckpoint = 0`` מעביר את ה-checkpoint לכאן — כל
+        ``CHECKPOINT_EVERY_COMMITS`` commits, **אחרי** ה-commit (בלי טרנזאקציה ביד, #457).
+        כשל אינו מבטל את ה-commit שכבר הצליח; הוא נרשם ביומן השרת בשמו, והמונה
+        ממשיך — הניסיון הבא בעוד ``CHECKPOINT_EVERY_COMMITS``."""
+        with self._commits_lock:
+            self._commits += 1
+            due = self._commits >= CHECKPOINT_EVERY_COMMITS
+            if due:
+                self._commits = 0
+        if not due:
+            return
+        try:
+            busy, log_frames, done = checkpoint(self._path)
+        except (sqlite3.Error, RuntimeError) as exc:   # ‏RuntimeError: ‏`_open` שלא אימת הגדרה
+            log.warning("checkpoint skipped on %s: %s", self._path, exc)
+            return
+        # ‏done < log_frames בלי busy הוא קורא על snapshot ישן — מצב רגיל של WAL, לא כשל.
+        if busy:
+            log.warning("checkpoint on %s busy: log=%s checkpointed=%s",
+                        self._path, log_frames, done)
 
     def rollback(self) -> None:
         self.connection.rollback()

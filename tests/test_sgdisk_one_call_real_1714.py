@@ -106,7 +106,8 @@ def _agent(tmp_path: Path, call: str) -> str:
         'log() { echo "LOG $*" >> "$LOG_FILE"; }\n'
         # waits.sh: apply_gpt/expand_last reread through reread_table (#1594). Without it
         # the call is "not found", and the log says the kernel refused.
-        + source_line("waits.sh", "restore.sh", "expand.sh", "expandshare.sh", "writemark.sh")
+        + source_line("waits.sh", "gptboot.sh", "restore.sh", "expand.sh", "expandshare.sh", "writemark.sh")
+        + f'M="{(tmp_path / "manifest.json").as_posix()}"; printf "{{}}" > "$M"   # #2585: an old image, no boot code to restore\n'
         + f'manifest_plan() {{ cat "{plan.as_posix()}"; }}\n'
         f'json_get() {{ case "$2" in .sector_size) echo 512 ;; .scheme) echo gpt ;; '
         f'.disk_guid) echo {DISK_GUID} ;; *) echo null ;; esac; }}\n'
@@ -115,7 +116,7 @@ def _agent(tmp_path: Path, call: str) -> str:
         'assert_target() { :; }\n'   # #2434: the identity is not what is tested here (test_target_identity_2434.py)
         'verify_table() { :; }   # the read-back is the byte comparison below\n'
         'share_tail() { printf "%s\\n" "$4"; }   # #1897: no shrunk tail here; test_expand_share_1897.py\n'
-        f'if {call} sda manifest.json; then echo OK; else echo FAIL; fi\n'
+        f'if {call} sda "$M"; then echo OK; else echo FAIL; fi\n'
     )
     return bb(tmp_path, body).strip()
 

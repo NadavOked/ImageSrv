@@ -59,6 +59,7 @@ capture_disk() {
         || { _capture_failed "$_disk" "גודל הסקטור הלוגי של /dev/$_disk לא זמין"; return 1; }
     _scheme=$(disk_scheme "$_node_base")
     [ "$_scheme" = "gpt" ] || { _capture_failed "$_disk" "הכונן אינו GPT (נמצא: $_scheme)"; return 1; }
+    _boot_code=$(capture_gpt_boot_code "$_node_base") || { _capture_failed "$_disk" "$_disk: לא הצלחנו לקרוא את קוד האתחול של GPT (440 בתים)"; return 1; }
     case "$(writemark_state "$_disk")" in   # #1798: a write that was cut is never a source (direct send too)
         clean) ;; incomplete) _capture_failed "$_disk" "$WRITEMARK_HE: הכתיבה האחרונה לדיסק נקטעה — לא נקלט"; return 1 ;;
         *) _capture_failed "$_disk" "לא הצלחנו לבדוק אם הכתיבה האחרונה לדיסק הושלמה — לא נקלט"; return 1 ;;
@@ -292,6 +293,6 @@ capture_disk() {
     # מדבר גם הוא ל-stdout, ולכידת $(capture_disk) החזירה פעם בליל
     # שורות לוג במקום נתיב — וה-curl של המניפסט נכשל בשקט (מעבדה, #12).
     printf '{"schema":1,"family":%s,"os":"%s",%s,"source_disk_bytes":%s,"min_target_bytes":%s,"target_floor_bytes":%s,"scheme":"gpt","sector_size":%s,"disk_guid":"%s","partitions":[%s],"total_compressed_bytes":%s,"compression":"zstd-%s"%s}\n' \
-        "$_family" "$_os" "$_bootca" "$_disk_bytes" "$_min_target" "$_floor_json" "$_sector_size" "$_disk_guid" "$_json_parts" "$_total" "$CAPTURE_LEVEL" "$(capture_unhib_json)" \
+        "$_family" "$_os" "$_bootca" "$_disk_bytes" "$_min_target" "$_floor_json" "$_sector_size" "$_disk_guid" "$_json_parts" "$_total" "$CAPTURE_LEVEL" "$(capture_unhib_json)$_boot_code" \
         > "$RUN_DIR/new-manifest.json"
 }

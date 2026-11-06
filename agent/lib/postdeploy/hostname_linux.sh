@@ -14,7 +14,8 @@ _mount_linux() {
     # Echoes the restored system's root (the directory holding etc/), mounted
     # at $RUN_DIR/linux or below it. Fails with a return code that names why:
     #   1 = could not mount, 2 = mounted but no /etc,
-    #   3 = btrfs: no subvolume holds /etc, 4 = btrfs: several do.
+    #   3 = btrfs: no subvolume holds /etc, 4 = btrfs: several do,
+    #   5 = no linux partition in the plan (no mount attempted).
     if [ -n "${3:-}" ]; then
         _mount_plan="$3"
     else
@@ -28,7 +29,7 @@ _mount_linux() {
     _idx=$(awk -F'|' -v m=" $(_linux_marked "$2" | tr '\n' ' ')" \
         '$3 == "linux" && index(m, " " $1 " ") { print $1; exit }' "$_mount_plan") || return 1
     [ -n "$_idx" ] || _idx=$(awk -F'|' '$3 == "linux" { print $1; exit }' "$_mount_plan") || return 1
-    [ -n "$_idx" ] || { log "no linux partition in the manifest" >&2; return 1; }
+    [ -n "$_idx" ] || { log "no linux partition in the manifest" >&2; return 5; }
     _fs=$(awk -F'|' -v i="$_idx" '$1 == i { print $4 }' "$_mount_plan") || return 1
     _node=$(partition_node "$1" "$_idx")
     _mnt="$RUN_DIR/linux"
@@ -126,6 +127,7 @@ _write_linux_root() {
         2) printf '{"ok":false,"error":"אין תיקיית /etc במחיצת הלינוקס","code":"no_etc"}\n'; return 1 ;;
         3) printf '{"ok":false,"error":"אף תת-כרך btrfs אינו מחזיק את /etc","code":"no_root_subvolume"}\n'; return 1 ;;
         4) printf '{"ok":false,"error":"כמה תתי-כרכי btrfs מחזיקים את /etc","code":"ambiguous_root_subvolume"}\n'; return 1 ;;
+        5) printf '{"ok":false,"error":"אין מחיצת לינוקס במניפסט","code":"no_linux_partition"}\n'; return 1 ;;
         *) printf '{"ok":false,"error":"לא הצלחנו לעגן את מחיצת הלינוקס","code":"mount_failed"}\n'; return 1 ;;
     esac
     log "writing hostname $3 into $_root/etc/hostname" >&2
