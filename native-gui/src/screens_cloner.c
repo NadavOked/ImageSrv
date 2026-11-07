@@ -5,6 +5,7 @@
 #include "canceldlg.h"
 #include "lcui.h"
 #include "screens_rounds.h"
+#include "he_time.h"   /* #1503 */
 
 /* #1090 / mockup 10/10 ("מסך מחשב השיכפול"): one card per disk this cloner
  * FOUND -- a drawer of the round or a disk of the idle inventory -- not a
@@ -207,6 +208,78 @@ static void disk_count(char *out, size_t cap, int count, const char *one, const 
     snprintf(out + used, cap - used, "%s%d %s", used > strlen(RLM) ? " · " : "", count, count == 1 ? one : many);
 }
 
+/* #2067 (mockup 08, Nadav 24/10): the stream's outage in words, over the hero. Red while
+ * the bytes stand (roundbeep.sh: no byte for 30 s), green for 5 s after they move again, and
+ * then gone ("החלון הירוק צריך להופיע חמש שניות לעולם"). A moment the agent did not say is
+ * left out of the sentence -- never a guess (principle 5). */
+#define NET_BACK_SHOW_S 5
+#define NET_FIXED_AGE_S 40   /* --png: the mockup's "לפני 40 שניות" */
+
+static void span_words(long long sec, char *out, size_t n) {
+    if (sec < 0) sec = 0;
+    if (sec < 60)          he_secs(sec, out, n);   /* #1503: the singular lives in he_time.c */
+    else if (sec < 120)    snprintf(out, n, "דקה");
+    else if (sec < 3600)   snprintf(out, n, "%lld דקות", sec / 60);
+    else if (sec < 7200)   snprintf(out, n, "שעה");
+    else                   snprintf(out, n, "%lld שעות", sec / 3600);
+}
+
+/* The bar's two texts; returns 0 = no bar. Split from the drawing so a test reads them. */
+static int net_texts(const App *a, char *title, size_t tn, char *body, size_t bn) {
+    const State *s = &a->st; char w[48];
+    long long now = (long long)time(NULL);
+    if (s->net_kind == NET_LOST) {
+        long long age = a->fixed_clock ? NET_FIXED_AGE_S : s->net_since >= 0 ? now - s->net_since : -1;
+        if (age >= 0) { span_words(age, w, sizeof w); snprintf(title, tn, "הרשת נותקה לפני %s", w); }
+        else snprintf(title, tn, "הרשת נותקה");
+        size_t u = (size_t)snprintf(body, bn, "הזרם מהשרת עומד. הדיסקים מחכים ולא נמחקים.");
+        if (s->net_ceiling > 0 && u < bn) {
+            span_words(s->net_ceiling, w, sizeof w);
+            snprintf(body + u, bn - u, " אם הקשר לא חוזר תוך %s, הסבב ייכשל.", w);
+        }
+        return 1;
+    }
+    if (s->net_kind == NET_BACK) {
+        if (!a->fixed_clock && (s->net_at < 0 || now - s->net_at >= NET_BACK_SHOW_S)) return 0;
+        if (s->net_away >= 0) { span_words(s->net_away, w, sizeof w); snprintf(title, tn, "הרשת חזרה אחרי %s", w); }
+        else snprintf(title, tn, "הרשת חזרה");
+        snprintf(body, bn, "הזרם ממשיך מאיפה שעצר.");
+        return 1;
+    }
+    return 0;
+}
+
+/* .alert.bad / .alert.info of the mockup: 12/16 padding, a 24px disc at the start, a 15px
+ * title over a 14px line. Returns the height it took (0 = none), without the gap below. */
+static double net_bar(App *a, cairo_t *cr, double x0, double xr, double y) {
+    char title[96], body[320];
+    if (!net_texts(a, title, sizeof title, body, sizeof body)) return 0;
+    const Theme *t = a->theme; int bad = a->st.net_kind == NET_LOST;
+    Rgb line = bad ? t->danger : t->led_ok, soft = bad ? t->danger_soft : t->success_soft;
+    Rgb ink = bad ? t->danger_fg : t->success_ink;
+    int tw = (int)(xr - x0 - 2 * 16 - 24 - 12);
+    Text h = text_make(cr, FONT_SANS, 15, 600, title, tw, DIR_RTL), b = text_make(cr, FONT_SANS, 14, 400, body, tw, DIR_RTL);
+    Rect r = { x0, y, xr - x0, 2 * 12 + h.h + b.h };
+    draw_fill_rrect(cr, r, RADIUS_SM, soft); draw_border_rrect(cr, r, RADIUS_SM, line, 1);
+    Rect disc = { xr - 16 - 24, y + 13, 24, 24 };
+    draw_fill_rrect(cr, disc, 12, line);
+    /* the mark is stroked, not a font glyph: the kiosk's fonts are the two Plex families only */
+    cairo_save(cr); draw_set(cr, (Rgb){ 1, 1, 1 }); cairo_set_line_width(cr, 2.2);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND); cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    if (bad) {
+        cairo_move_to(cr, disc.x + 12, disc.y + 6); cairo_line_to(cr, disc.x + 12, disc.y + 13); cairo_stroke(cr);
+        cairo_arc(cr, disc.x + 12, disc.y + 17.5, 1.3, 0, 2 * M_PI); cairo_fill(cr);
+    } else {
+        cairo_move_to(cr, disc.x + 7, disc.y + 12.5); cairo_line_to(cr, disc.x + 10.5, disc.y + 16); cairo_line_to(cr, disc.x + 17, disc.y + 8.5);
+        cairo_stroke(cr);
+    }
+    cairo_restore(cr);
+    double tx = xr - 16 - 24 - 12;
+    text_draw_r(cr, &h, tx, y + 12, ink); text_draw_r(cr, &b, tx, y + 12 + h.h, t->ink);
+    double out = r.h; text_free(&h); text_free(&b);
+    return out;
+}
+
 void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     const Theme *t = a->theme; const State *s = &a->st;
     ClonerEntry entries[MAX_DRAWERS + 1]; int n = cloner_entries(s, entries);
@@ -252,6 +325,10 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (e->drawer && e->drawer->bytes > most) { most = e->drawer->bytes; whole = e->drawer->total; }
     }
     int ended = s->ndrawers > 0 && !nw && !pend && !ncg && nd + nf + ns + nc == n;
+
+    /* #2067: the outage bar, over the hero; the cage below gives up the room (bh, further down) */
+    double nbar = net_bar(a, cr, x0, xr, y);
+    if (nbar > 0) y += nbar + 14;
 
     /* the hero */
     char label[400], title[300], s2[620], big[24], left[96], age[64], image[112];
@@ -398,7 +475,8 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     char note[160];
     if (s->idle_poweroff_at > 0) {
         long long l = s->idle_poweroff_at - (long long)time(NULL); if (l < 0) l = 0;
-        snprintf(note, sizeof note, "המחשב יכבה בעוד %lld שניות — כל מקש מבטל.", l);
+        char secs[32]; he_secs(l, secs, sizeof secs);
+        snprintf(note, sizeof note, "המחשב יכבה בעוד %s — כל מקש מבטל.", secs);
     } else snprintf(note, sizeof note, "%s", ended ? "הסבב הסתיים במחשב הזה."
                     : cloner_cancel_picks(a, (CancelPick[MAX_DRAWERS + 1]){ 0 }, MAX_DRAWERS + 1)
                     ? "כשל ביעד אחד לא עוצר את האחרים. לבטל דיסק — המקש של המגירה." : "כשל ביעד אחד לא עוצר את האחרים.");

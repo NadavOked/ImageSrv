@@ -154,7 +154,16 @@ def test_a_relayed_get_is_what_the_secondarys_own_console_answers(server, second
     assert relayed.status_code == 200, relayed.text
     if clock is not None:
         assert relayed.json().get("now") == second, relayed.text
-    assert _stable(relayed.json()) == _stable(peer_safe.defang(own.json()))
+    own_body = own.json()
+    if path == "/sessions":
+        # ‏#2552: ``current`` = "העוגייה של הבקשה הזו". הקונסולה של המשני מכירה את העוגייה
+        # של עצמה; הקריאה המועברת מהראשי באה בלי עוגייה של המשני, ולכן אף סשן שם אינו
+        # "הנוכחי" שלה -- וזה הנכון (הלשונית "סשנים" גם מוסתרת ב-SERVER_CTX). שני הצדדים
+        # מוכחים במפורש, ורק אז ההשוואה על שאר השדות.
+        assert any(r["current"] for r in own_body), own_body
+        assert relayed.json() and not any(r["current"] for r in relayed.json()), relayed.json()
+        own_body = [{**r, "current": False} for r in own_body]
+    assert _stable(relayed.json()) == _stable(peer_safe.defang(own_body))
     assert isinstance(relayed.json(), interserver_api.console_get_type(path))
     for name in interserver_api.CONSOLE_HEADERS:
         if name == "x-health-checked-at":

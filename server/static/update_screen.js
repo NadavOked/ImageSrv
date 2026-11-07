@@ -328,7 +328,7 @@ function updPollHtml() {
   }
   if (u.phase === "run") {
     const ago = u.lastReadAt == null ? null : Math.floor((updClock() - u.lastReadAt) / 1000);
-    return led("", "השרת עונה", ago == null ? "ממתין לתשובה הראשונה" : `השלב נקרא מהשרת לפני ${num(ago)} ש׳`);
+    return led("", "השרת עונה", ago == null ? "ממתין לתשובה הראשונה" : ago === 1 ? "השלב נקרא מהשרת לפני שנייה" : `השלב נקרא מהשרת לפני ${num(ago)} ש׳`);
   }
   if (u.phase === "timeout") {
     return u.stuck

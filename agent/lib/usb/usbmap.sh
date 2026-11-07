@@ -3,7 +3,7 @@
 # The server's #1485 (drawer_slots): drawer k -> the connection it is wired to,
 # "sata:<ataN>" or "nvme:<PCI>" (docs/architecture/interfaces.md s2). The stick has no server,
 # so the mapping lives in the stick's settings.json, BY MACHINE MODEL (Nadav
-# 22/10) -- {"drawer_slots": {"<DMI product_name>": ["sata:2", "sata:1"]}} --
+# 22/10) -- {"drawer_slots": {"<model key>": ["sata:2", "sata:1"]}} (usb_model) --
 # never by a disk's serial: the stick keeps nothing about disks. usb_answer
 # puts the list in force into response.json as a server's hello would, and every
 # screen numbers by it (slotnames.sh drawer_slots_refresh, disk_drawer).
@@ -27,8 +27,32 @@ USBMAP_ROWS=12   # the window's rows at most (dcui.h DCUI_MAX_EL, a 768-line scr
 USBMAP_RESOLVE='def rkey($d; $taken): if test("^nvme#") then (ltrimstr("nvme#") | tonumber) as $n
     | if $n <= ($d | length) and ($taken | index([$d[$n - 1]])) == null then $d[$n - 1] else . end else . end;'
 
-usb_model() {   # this machine's model (DMI product_name), or nothing
-    trim "$(tr -d '\r\n' < "$SYSROOT/sys/class/dmi/id/product_name" 2>/dev/null)"
+#: DMI values a board maker leaves when a field was never filled, normalised (lower case, letters
+#: and digits only). A value like that is never a key: it is the same on different machines, and a
+#: drawer map of one would be put on the other (principle 1). The server's list, _GENERIC in
+#: server/disks/model_slots.py -- tests/test_usb_model_key_2602.py compares the two.
+USBMAP_GENERIC='default defaultstring systemproductname systemmanufacturer systemversion systemname
+    boardname productname manufacturer baseboard baseboardproductname baseboardmanufacturer oem na
+    notapplicable notspecified notavailable notset none null unknown undefined empty nodata
+    type1productconfigid 123456789 1234567890 xx xxx'
+
+_um_dmi() {   # $1 = a file of /sys/class/dmi/id: its one line, or nothing
+    trim "$(tr -d '\r\n' < "$SYSROOT/sys/class/dmi/id/$1" 2>/dev/null)"
+}
+
+usb_model() {
+    # This machine's model key -- the same rule as the server's model_key (#2001): the DMI product_name
+    # when it names a model; else "<sys_vendor> (board <board_name>)" when both are real (a board
+    # number alone repeats across makers); else nothing, and the stick keeps no per-model list.
+    # A generic value ("To Be Filled By O.E.M.") is no name. A key saved under a real product_name
+    # is unchanged. jq failing = no model = the default, never a guess.
+    jq -rn --arg g "$USBMAP_GENERIC" --arg p "$(_um_dmi product_name)" --arg v "$(_um_dmi sys_vendor)" \
+        --arg b "$(_um_dmi board_name)" '
+        def spec: gsub("^\\s+|\\s+$"; "") as $t | ($t | ascii_downcase | gsub("[\\W_]+"; "")) as $n
+            | if ($n | length) < 2 or ($n | test("^(.)\\1*$"; "i")) or ($n | startswith("tobefilled"))
+                or ($n | IN(($g | [scan("\\S+")])[])) then null else $t end;
+        ($p | spec) // (($v | spec) as $x | ($b | spec) as $y | if $x and $y then "\($x) (board \($y))" else null end)
+        // empty' 2> /dev/null
 }
 
 usb_map_json() {

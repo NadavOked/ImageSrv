@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include "screens_rounds.h"
+#include "he_time.h"   /* #1503 */
 #include "lcui.h"   /* #1322 */
 #include "smartdlg.h"   /* 16/10 */
 #include "canceldlg.h"  /* #1386 */
@@ -411,10 +412,10 @@ static void hex_rgb(Rgb c,char *out,size_t n){
  * old pill was green on a server that was down. No hello yet is its own
  * words, not a colour (principle 5). Returns the pill's width. */
 static double menu_server_pill(App *a,cairo_t *cr,double right,double y){
-    const State *s=&a->st;char srv[160],label[240];int kind=PILL_OFF;
+    const State *s=&a->st;char srv[160],label[320],ago[64];int kind=PILL_OFF;   /* 160 + 64 + the words around them */
     server_label(s,srv,sizeof srv);
     if(s->hello_rc==200&&s->hello_age>=0&&s->hello_age<=120){snprintf(label,sizeof label,"שרת %s מחובר",srv);kind=PILL_OK;}
-    else if(s->hello_rc==200){snprintf(label,sizeof label,"שרת %s · ענה לפני %d שנ'",srv,s->hello_age);kind=PILL_WARN;}
+    else if(s->hello_rc==200){he_ago(s->hello_age,ago,sizeof ago);snprintf(label,sizeof label,"שרת %s · ענה %s",srv,ago);kind=PILL_WARN;}
     else if(s->hello_rc>=0){snprintf(label,sizeof label,"שרת %s לא מחובר",srv);kind=PILL_BAD;}
     else snprintf(label,sizeof label,"שרת %s · החיבור טרם נבדק",srv);
     return draw_pill(cr,a->theme,right,y,label,kind,kind!=PILL_OFF);
@@ -634,10 +635,11 @@ static void draw_idle_countdown(App *a,cairo_t *cr,double W,double H){
     const Theme *t=a->theme;
     long long left=a->fixed_clock?30:a->st.idle_poweroff_at-(long long)time(NULL); if(left<0)left=0;
     cairo_rectangle(cr,0,N_HEADER_H,W,H-N_HEADER_H-N_STATUS_H);draw_set_a(cr,(Rgb){0,0,0},.35);cairo_fill(cr);
-    char ttl[96],sub[160],f1[400];
-    snprintf(ttl,sizeof ttl,"המחשב ייכבה בעוד %lld שניות",left);
+    char ttl[96],sub[160],f1[400],secs[32];
+    he_secs(left,secs,sizeof secs);snprintf(ttl,sizeof ttl,"המחשב ייכבה בעוד %s",secs);
     int m=a->st.idle_poweroff_s/60;
-    if(m>0)snprintf(sub,sizeof sub,"%d דקות בלי פעילות. כל מקש משאיר אותו דלוק.",m);
+    if(m==1)snprintf(sub,sizeof sub,"דקה בלי פעילות. כל מקש משאיר אותו דלוק.");
+    else if(m>0)snprintf(sub,sizeof sub,"%d דקות בלי פעילות. כל מקש משאיר אותו דלוק.",m);
     else snprintf(sub,sizeof sub,"אין פעילות במחשב. כל מקש משאיר אותו דלוק.");
     const IdleDisk *fd=NULL;int f1on=app_f1_disk(a,&fd);
     double bw=fmin(560,W-48),in=bw-2*24;

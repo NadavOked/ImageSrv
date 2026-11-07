@@ -194,7 +194,7 @@ def test_the_question_carries_the_disk_the_partition_and_a_minute(tmp_path):
 
 # --- the real lc_stream: which failure is the source's (lccopy.sh) ------------------
 
-def _stream(tmp_path: Path, fs: str, extra: dict[str, str], rescue: bool = False, **envs) -> str:
+def _stream(tmp_path: Path, fs: str, extra: dict[str, str], rescue: bool = False, pre: str = "", **envs) -> str:
     box = tmp_path / "box"; stubs = box / "stubs"; dev = box / "dev"
     dev.mkdir(parents=True)
     (dev / "sdc1").write_bytes(b"imagesrv" * 4096)
@@ -206,6 +206,7 @@ def _stream(tmp_path: Path, fs: str, extra: dict[str, str], rescue: bool = False
     t += 'mkdir -p "$LC/run"; ata_capture() { :; }; target_init sda 100; target_init sdb 100; '
     if rescue:
         t += 'LC_RESCUE=1; LC_RESCUE_BS=4096; '
+    t += pre   # a test's own stubs (#2067: the beep)
     t += f'lc_stream 1 {fs} sdc sda sdb > {posix(box)}/stream.log 2>&1; echo "rc=$? src=$LC_SRC_RC"; '
     t += 'for d in sda sdb; do echo "$d=$(cat $RUN_DIR/targets/$d/state)|$(cat $RUN_DIR/targets/$d/error 2>/dev/null)"; done; '
     t += 'echo "err=$(cat "$LC/run/rescue.err" 2>/dev/null | tr "\\n" " ")"'

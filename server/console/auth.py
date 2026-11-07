@@ -326,12 +326,18 @@ def revoke(conn: sqlite3.Connection, token: str | None) -> None:
         expires = float(token.rpartition("|")[0].split("|")[2])
     except (IndexError, ValueError):
         return
+    revoke_hash(conn, _token_hash(token), expires)
+
+
+def revoke_hash(conn: sqlite3.Connection, token_hash: str, expires: float) -> None:
+    """‏#2552: אותו ביטול לפי הגיבוב — מסך הסשנים של המנהל מכיר רק את ה-sha256
+    של העוגייה (``console_sessions``), לא אותה. ‏``expires`` = תפוגת העוגייה."""
     _settle(conn)
     with _write_lock, writing(conn):
         conn.execute("DELETE FROM revoked_tokens WHERE expires_at < ?", (time.time(),))
         conn.execute(
             "INSERT OR REPLACE INTO revoked_tokens (token_hash, expires_at) VALUES (?, ?)",
-            (_token_hash(token), expires),
+            (token_hash, expires),
         )
 
 

@@ -304,7 +304,15 @@ def build_answer(
     optical: list | None = None,
     optical_reported: bool = False,
     direct_finished: tuple[bool, list[str] | None] = (False, None),
+    read_only: bool = False,
 ) -> dict:
+    # ‏#2550: ‏`read_only` — התשובה שהתפריט היה נותן, **בלי שום תופעת לוואי**: לא
+    # `net_seen`, לא יומן, לא הצטרפות, ולא קידום סבב (`room.pulse`, ‏`maybe_start`).
+    # שימושו היחיד הוא התצוגה בקונסולה של מה שמחשב יקבל באתחול
+    # (`server/agent/boot_preview.py`); היא חייבת להגיע לאותה החלטה שהאתחול האמיתי
+    # מגיע אליה, ולכן היא עוברת בדיוק בקוד הזה ולא בעותק שלו.
+    if read_only:
+        record_seen = record_journal = joining = False
     # כל מגע של המכונה נרשם ברשימת ההתקנים, גם של מכונה שאינה רשומה
     # בטבלה — ככה מתגלה MAC לא מוכר, וזה חלק מעיקרון 1. ‏hello הוא POST
     # שבו המכונה מדווחת על עצמה, ולכן הוא תמיד רושם (ברירת המחדל).
@@ -366,7 +374,9 @@ def build_answer(
         "task": active_task(conn, mac),
         "session": None,
         # ‏#1863: לפי הגודל בלבד, כולל המינימום הפנוי (#1354) — כמו הקונסולה.
-        "allowed_images": library.allowed_for_disks(disks, minfree.min_free_gb(conn)),
+        # ‏#2550: בקריאה בלבד — מדלגים. ההחלטה (`decide`) אינה קוראת אותה, וסריקת
+        # הספרייה לכל מכונה בחדר היא עלות (ודיווח מניפסט פגום ליומן) שהתצוגה אינה צריכה.
+        "allowed_images": [] if read_only else library.allowed_for_disks(disks, minfree.min_free_gb(conn)),
         "ui": _ui(conn, has_open_session=False, off_vlan=off_vlan,
                   role=machine["role"]),
         # ‏#874: הזיכרון בשרת במקום סימון על הדיסק — הרשומות הפתוחות שתואמות
@@ -410,7 +420,8 @@ def build_answer(
         # ‏#715: מחשב הבנייה שהוא המקור מקבל גם את מצב הגל ופרמטרי
         # השידור (‏`task.direct`, ממשק 3). ‏`multicast` הוא של `SenderEngine`
         # (‏api.py); בלעדיו — ברירות המחדל של המנוע.
-        if answer["task"]["type"] == direct.DIRECT_SEND:
+        # ‏#2550: `task_block` יכול לכתוב (גל ישיר שנגמרו לו מקבלים נכשל ונרשם ביומן).
+        if answer["task"]["type"] == direct.DIRECT_SEND and not read_only:
             answer["task"]["direct"] = direct.task_block(
                 conn, store, answer["task"], multicast, *direct_finished)   # #1952
         return answer
@@ -421,9 +432,10 @@ def build_answer(
         # `tick`: קידום הסבב לא מפיל את ה-hello, בדיוק כמו
         # `agent_loops.note` שיושב באותו מסלול — והכישלון נרשם ביומן
         # ולא נבלע (#177).
-        room.pulse(conn, store, mac)
-        # ‏#1954: דיסק שנבחר כשהמשכפל היה כבוי — אותו דיסק נכתב, אחר או חסר מדולג בגלוי.
-        room.wake_check(conn, mac, disks)
+        if not read_only:    # ‏#2550: הדופק מקדם את הסבב; את זה מקדם הרקע (`room.sweep`)
+            room.pulse(conn, store, mac)
+            # ‏#1954: דיסק שנבחר כשהמשכפל היה כבוי — אותו דיסק נכתב, אחר או חסר מדולג בגלוי.
+            room.wake_check(conn, mac, disks)
         if not room.has_fresh_drawers(conn, mac):
             # המגירות של המכונה כבר נכתבו בסבב הזה ולא הוחלפו —
             # היא לא מצטרפת לגל, וממשיכה להמתין (wait_poll).
@@ -440,7 +452,11 @@ def build_answer(
         # דיסק מקומי, כאילו אין סבב.
         return answer
 
-    session = store.maybe_start(session)
+    if not read_only:
+        session = store.maybe_start(session)
+    elif store.would_start(session):
+        # ‏#2550: הסבב היה יוצא עכשיו; לא מתחילים אותו, רק עונים כאילו יצא.
+        session = {**dict(session), "state": "running"}
 
     if store.member_done(session["id"], mac):
         # שחזר וסיים. הסבב לא מוצע שוב — אחרת לולאת שחזור אחרי כל אתחול.

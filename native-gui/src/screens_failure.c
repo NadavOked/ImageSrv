@@ -15,6 +15,7 @@
 #include <string.h>
 #include <time.h>
 #include "screens_rounds.h"
+#include "he_time.h"   /* #1503 */
 
 #define F_WRAP 940.0
 _Static_assert(HIT_FAIL_BTN_LAST - HIT_FAIL_BTN + 1 == MAX_FAIL_BTNS, "one hit id per failure button (ui.h)");
@@ -83,7 +84,8 @@ static void hold_pill(App *a, cairo_t *cr, double left, double y) {
     const char *label; int kind;
     if (s->fail_at > 0) {
         long long n = a->fixed_clock ? 10 : s->fail_at - (long long)time(NULL); if (n < 0) n = 0;
-        snprintf(buf, sizeof buf, "%s %lld שניות", s->fail_info ? "עולה מהדיסק בעוד" : "מאתחל בעוד", n);
+        char secs[32]; he_secs(n, secs, sizeof secs);
+        snprintf(buf, sizeof buf, "%s %s", s->fail_info ? "עולה מהדיסק בעוד" : "מאתחל בעוד", secs);
         label = buf; kind = PILL_INFO;
     } else if (s->fail_hold && s->end_poweroff_at <= 0) { label = "המחשב נשאר דלוק — לא ייכבה לבד"; kind = PILL_WARN; }   /* #2068 */   /* not while #1560 counts to power-off */
     else return;

@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import sqlite3
 import threading
 import time
 from datetime import datetime, timezone
 
-from server.db import _settle, _write_lock, writing
+from server.console import viewer_sessions
+from server.db import _settle, _write_lock, journal, writing
 
 TOUCH_SECONDS = 60
 
@@ -117,18 +119,75 @@ def forget(conn: sqlite3.Connection, token: str | None) -> None:
         conn.execute("DELETE FROM console_sessions WHERE token_hash = ?", (key,))
 
 
-def active(conn: sqlite3.Connection) -> list[dict]:
-    """‏``[{user, ip, since, last_seen}]`` — רק עוגיות שעדיין תקפות: לא פגו,
-    המשתמש קיים ואינו מושבת, וה-``auth_epoch`` שבעוגייה לא בוטל מאז
-    (``users.bump_auth_epoch``, ‏#1075) — אותם שלושה תנאים של
-    ``auth.read_session``, כדי ש"מחובר" לא יכלול עוגייה שהשרת כבר דוחה."""
-    rows = conn.execute(
-        "SELECT s.username, s.ip, s.since, s.last_seen FROM console_sessions s"
+#: ‏#2552: מזהה הסשן על המסך = ששת התווים הראשונים של ה-sha256. הטוקן, והגיבוב
+#: המלא, אינם יוצאים מהשרת.
+SID_LEN = 6
+
+
+def active(conn: sqlite3.Connection, current_token: str | None = None) -> list[dict]:
+    """‏``[{sid, user, role, ip, since, last_seen, current, monitor}]`` — רק
+    עוגיות שעדיין תקפות: לא פגו, המשתמש קיים ואינו מושבת, ה-``auth_epoch``
+    שבעוגייה לא בוטל מאז (``users.bump_auth_epoch``, ‏#1075), והיא לא בוטלה
+    בנפרד (``revoked_tokens`` — יציאה, או ניתוק מהמסך, ‏#2552) — אותם תנאים של
+    ``auth.read_session``, כדי ש"מחובר" לא יכלול עוגייה שהשרת כבר דוחה.
+
+    ‏``sid`` — מזהה קצר (``SID_LEN``) לניתוק בודד. ‏``current`` — העוגייה של הבקשה
+    הזו. ‏``monitor`` — כמה גשרי מוניטור/VM פתוחים על העוגייה."""
+    mine = _hash(current_token) if current_token else None
+    bridges = viewer_sessions.open_by_hash()
+    return [{"sid": r["token_hash"][:SID_LEN], "user": r["username"], "role": r["role"],
+             "ip": r["ip"], "since": r["since"], "last_seen": r["last_seen"],
+             "current": r["token_hash"] == mine,
+             "monitor": bridges.get(r["token_hash"], 0)} for r in _live(conn)]
+
+
+def _live(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT s.token_hash, s.username, u.role, s.ip, s.since, s.last_seen, s.expires_at"
+        " FROM console_sessions s"
         " JOIN users u ON u.username = s.username COLLATE NOCASE"
         " WHERE s.expires_at >= ? AND u.disabled_at IS NULL"
         " AND s.auth_epoch >= COALESCE(u.auth_epoch, 0)"
+        " AND NOT EXISTS (SELECT 1 FROM revoked_tokens r WHERE r.token_hash = s.token_hash)"
         " ORDER BY s.last_seen DESC, s.username",
         (_now(),),
     ).fetchall()
-    return [{"user": r["username"], "ip": r["ip"], "since": r["since"],
-             "last_seen": r["last_seen"]} for r in rows]
+
+
+class SessionRefused(Exception):
+    """ניתוק סשן שלא בוצע, עם הקוד ש-HTTP יחזיר ועם משפט למנהל."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def revoke_one(conn: sqlite3.Connection, sid: str, by: str,
+               current_token: str | None) -> dict:
+    """‏#2552: ניתוק סשן בודד לפי המזהה הקצר: העוגייה שלו נדחית **מיד** (``revoked_tokens``,
+    כמו logout), השורה נמחקת מהרשימה, וגשר מוניטור פתוח שלה נסגר.
+
+    לא מנתקים את הסשן שממנו נשלחה הבקשה (למטרה הזו יש יציאה רגילה). מזהה שאינו
+    מתאים לסשן פעיל אחד בדיוק הוא כשל גלוי — לא ניתוק של "הראשון שנמצא"."""
+    from server.console import auth   # noqa: PLC0415 — כמו ב-``auth._active``: auth טוען אותנו, לא להפך
+    if not re.fullmatch(rf"[0-9a-f]{{{SID_LEN}}}", sid or ""):
+        raise SessionRefused(400, "מזהה סשן לא תקין")
+    mine = _hash(current_token) if current_token else None
+    found = [r for r in _live(conn) if r["token_hash"][:SID_LEN] == sid]
+    if not found:
+        raise SessionRefused(404, "הסשן כבר לא פעיל")
+    if len(found) > 1:
+        raise SessionRefused(409, "המזהה מתאים ליותר מסשן אחד — רענן את הרשימה ונסה שוב")
+    row = found[0]
+    if row["token_hash"] == mine:
+        raise SessionRefused(409, "זה הסשן הנוכחי שלך — להתנתקות ממנו יש \"יציאה\"")
+    auth.revoke_hash(conn, row["token_hash"], float(row["expires_at"]))
+    with _lock:
+        _written.pop(row["token_hash"], None)
+    _settle(conn)
+    with _write_lock, writing(conn):
+        conn.execute("DELETE FROM console_sessions WHERE token_hash = ?", (row["token_hash"],))
+    viewer_sessions.revoke_hash(row["token_hash"])
+    journal(conn, "session_revoked", f"{row['username']} {sid} {row['ip']}".strip(), by)
+    return {"user": row["username"], "sid": sid}

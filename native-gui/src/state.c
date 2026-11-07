@@ -508,6 +508,17 @@ void state_parse(State *s, FILE *fp) {
                 s->drawer_count = (int)count;
         } else if (KEY("server_restarted_wave")) {
             s->server_restarted_wave = !strcmp(val, "1");
+        } else if (KEY("net")) {
+            /* #2067: net=lost|since|ceiling, net=back|away|at. A field that is not a whole
+             * number is -1 (not said); a kind that is neither is no bar (principle 5). */
+            int nf = split(val, f, 3); unsigned long long u;
+            s->net_kind = NET_NONE;
+            if (nf != 3 || (strcmp(f[0], "lost") && strcmp(f[0], "back"))) continue;
+            long long v[2] = { -1, -1 };
+            for (int i = 0; i < 2; i++) if (parse_uint(f[i + 1], &u)) v[i] = (long long)u;
+            s->net_kind = f[0][0] == 'l' ? NET_LOST : NET_BACK;
+            s->net_since = s->net_kind == NET_LOST ? v[0] : -1; s->net_ceiling = s->net_kind == NET_LOST ? v[1] : -1;
+            s->net_away = s->net_kind == NET_BACK ? v[0] : -1; s->net_at = s->net_kind == NET_BACK ? v[1] : -1;
         } else if (KEY("shrink_prompt")) {
             /* nonce|count. The nonce is echoed back on the answer, so it is
              * kept only in the shape the bridge accepts: digits and '-'. */

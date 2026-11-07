@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import threading
 import weakref
 
@@ -52,6 +53,25 @@ def revoke(token: str | None) -> bool:
             _revoked.add(item[2])
     _cancel(items)
     return bool(items)
+
+
+def _sha(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def open_by_hash() -> dict[str, int]:
+    """‏#2552: כמה גשרי צפייה פתוחים לכל עוגייה, לפי ה-sha256 שלה — מסך הסשנים
+    של המנהל מכיר את העוגייה רק כגיבוב. ‏(מנוי שמשימתו כבר הסתיימה אינו נספר.)"""
+    with _lock:
+        return {_sha(t): n for t, items in _tasks.items()
+                if (n := sum(1 for it in items if not it[2].done()))}
+
+
+def revoke_hash(token_hash: str) -> bool:
+    """‏#2552: ``revoke`` לפי הגיבוב — מנתק סשן מהמסך בלי שהעוגייה עצמה ידועה."""
+    with _lock:
+        token = next((t for t in _tasks if _sha(t) == token_hash), None)
+    return revoke(token) if token is not None else False
 
 
 def revoke_user(username: str) -> int:
