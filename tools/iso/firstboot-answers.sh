@@ -81,6 +81,10 @@ firstboot_from_answers() {
     # setting (#1773) -- else the server's start rewrites chrony with "automatic".
     # Empty (automatic) or an older ISO's answers: the setting stays unset.
     if [[ -n "$(answers_get ntp_servers)" ]]; then argv+=(--ntp-servers "$(answers_get ntp_servers)"); fi
+    # #1956: the "גיבוי" step's hour and reserved space become the console's settings.
+    # Empty, or an older ISO's answers: the settings stay unset, and the server's defaults hold.
+    if [[ -n "$(answers_get backup_time)" ]]; then argv+=(--backup-time "$(answers_get backup_time)"); fi
+    if [[ -n "$(answers_get backup_reserve_gb)" ]]; then argv+=(--backup-reserve-gb "$(answers_get backup_reserve_gb)"); fi
     # answers.secret is `admin_pass=<value>` (interfaces.md); setup-boot-server
     # reads fd 3 as the bare password. Feeding it the whole file made the
     # admin password literally "admin_pass=..." (ESXi, 21/09) -- the value

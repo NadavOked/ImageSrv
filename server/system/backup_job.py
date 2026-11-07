@@ -1,24 +1,33 @@
-"""‏#1895 — גיבוי המסד כל שעה, ושורת "גיבוי" בבריאות.
+"""‏#1895/#1956 — גיבוי המסד: יומי בשעה שנבחרה, ומיד אחרי שינוי אימג'; גיזום לפי גודל.
 
-הכרעת נדב, 22/10: יעד הגיבוי נבחר בקונסולה (ובמתקין — Issue המשך); הסטטוס **כתום**
-עד שנבחר יעד; גיבוי שעבר עליו יותר משעתיים הוא **"ישן"**; המסד מגובה כל שעה; גיבויים
-נשמרים 30 יום.
+הכרעת נדב, 06/11 (מוקאפ `1956-installer-backup`): הגיבויים נשמרים על כונן השרת, במקום ששמור להם
+מראש — ‏SMB ו-NFS הם לאחסון האימג'ים בלבד. גיבוי תמיד קיים, ואין "לא נבחר יעד". עותק על כונן אחר
+הוא תיקייה מעוגנת שנבחרת בקונסולה.
 
 ‏`python3 -m server.system.backup_job --data-dir /var/lib/imagesrv` — מה ש-`imagesrv-backup.timer`
-מריץ כל שעה (‏`deploy/imagesrv-backup.service`, כ-root ובלי ‏`ProtectSystem=strict`: היעד
-הוא דיסק אחר או NAS; השרת עצמו כותב ליעד רק תחת `/mnt` ו-`/media`, #2396):
+מריץ **כל דקה** (‏`deploy/imagesrv-backup.service`, כ-root ובלי ‏`ProtectSystem=strict`: תיקייה
+מעוגנת יכולה להיות בכל מקום; השרת עצמו כותב ליעד רק תחת `/mnt` ו-`/media`, #2396). דקה ולא שעה
+קבועה: השעה נבחרת בקונסולה, והריצה עצמה קובעת אם הגיע הזמן (`due`). בלי תור ובלי קובץ מצב:
 
-1. היעד נקרא מההגדרה `backup_dest` (‏DB לקריאה בלבד). אין יעד — יציאה 0 בלי לגעת
-   בדבר: זה מצב מוצהר, והבריאות אומרת אותו בכתום. יעד SMB/NFS (‏`backup_target`, #1956)
-   חייב להיות מעוגן (`ensure_mounted`) — אחרת כשל בשם, לא כתיבה לדיסק המקומי.
-2. עותק עקבי דרך ‏`sqlite3.Connection.backup` (‏`server.system.backup.consistent_db_copy` —
+1. **צריך גיבוי עכשיו?** (`due`) יעד שעוד לא גובה אליו; עברה שעת הגיבוי היומית מאז הניסיון
+   האחרון; שורת יומן של העלאה, קליטה או מחיקת אימג' (`IMAGE_EVENTS`) חדשה מהניסיון האחרון; או
+   ניסיון שנכשל לפני יותר משעה. לא צריך — יציאה 0 בלי לכתוב דבר. שרת שהיה כבוי בשעה שנבחרה מגבה
+   כשהוא עולה. אירוע אימג' אחרי שקט מגבה מיד; אירועים בתוך `COALESCE_SECONDS` מהניסיון האחרון הם
+   גיבוי אחד בסוף החלון — סדרת מחיקות אינה סדרת גיבויים.
+2. **סבב רץ?** (`busy_db.reason`) הגיבוי מחכה: `waiting` בקובץ הסטטוס, והדקה הבאה שואלת שוב — אין
+   דילוג על יום, כי התשובה ל-1 לא משתנה עד שגיבוי רץ.
+3. עותק עקבי דרך ‏`sqlite3.Connection.backup` (‏`server.system.backup.consistent_db_copy` —
    ‏`integrity_check` = ok על העותק), **כתיבה אטומית** ל-`<dest>/db/imagesrv-<ts>.db`: קובץ
-   זמני באותה תיקייה (שם אקראי, ‏`O_EXCL|O_NOFOLLOW` — מי שכותב לשיתוף אינו מפנה את
+   זמני באותה תיקייה (שם אקראי, ‏`O_EXCL|O_NOFOLLOW` — מי שכותב ליעד אינו מפנה את
    ה-root דרך symlink, #2423), ‏`fsync`, ‏`os.replace`, ‏`fsync` לתיקייה — ואז קריאה חוזרת:
    ‏sha256 של מה שעל היעד = של מה שנכתב, ו-`integrity_check` על הקובץ שביעד (עיקרון 5).
-3. גיזום: ‏`imagesrv-<ts>.db` ב-`<dest>/db` שהחותמת **בשמו** מלפני יותר מ-30 יום. רק
-   שמות בצורה הזו — לא שום קובץ אחר ביעד.
-4. ‏`<data-dir>/last-backup.json` (אטומי): מתי, הצליח או לא, היעד, הקובץ, השגיאה,
+4. גיזום לפי גודל (`prune`): המקום השמור (ברירת מחדל 5GB, תקרה 20% מהכונן) — הישן ביותר יוצא
+   **אחרי** שהחדש אומת, ורק `imagesrv-<ts>.db` ב-`<dest>/db`. לעולם לא אימג'ים. **מוגנים תמיד**
+   (`_protected`): החדש, הגיבוי התקין האחרון, והראשון של כל אחד מ-`KEEP_DAILY` הימים האחרונים —
+   אחרת סדרת אירועים דוחקת את כל הגיבויים הטובים, ומה שנשאר הוא רק המצב שאחרי התקלה. אם המוגנים
+   והחדש לא נכנסים — נבדק **לפני** הכתיבה — לא נכתב ושום דבר לא נמחק: `ReserveTooSmall`, כתום עם
+   הסיבה. לא "נכתב ולא נמחק": כך כל אירוע היה מוסיף קובץ, והמקום השמור היה נפרץ בלי גבול.
+5. ‏`<data-dir>/last-backup.json` (אטומי): מתי, הצליח או לא, היעד, הקובץ, השגיאה,
    ומתי ההצלחה האחרונה. כשל = יציאה 1 והשגיאה בקובץ — לא בשקט.
 
 ‏`tools/backup-server.sh` (ידני/לילי, כולל אימג'ים וקובצי מערכת) כותב לאותו `<dest>/db`
@@ -35,17 +44,43 @@ import os
 import posixpath
 import re
 import secrets
+import shutil
 import sqlite3
-import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-#: ההגדרה בקונסולה (`POST /api/console/settings`). ריק / חסר = לא נבחר יעד.
+from server.system import busy_db
+
+#: ההגדרה בקונסולה (`POST /api/console/backup-target`). ריק / חסר = התיקייה הקבועה על כונן השרת.
 SETTING = "backup_dest"
+TARGET_SETTING = "backup_target"
+TIME_SETTING = "backup_time"
+RESERVE_SETTING = "backup_reserve_gb"
 STATUS_NAME = "last-backup.json"
-KEEP_DAYS = 30
-STALE_SECONDS = 2 * 3600
+#: התיקייה הקבועה, תחת `data_dir`: כתיבה מותרת בשתי היחידות (`ReadWritePaths` של השרת ו-
+#: ‏`ProtectSystem=full` של הגיבוי). ‏`backup.SKIP_DIRS`, ‏`backup-server.sh` ו-`DATA_DIR_RESERVED`
+#: מדלגים עליה: עותק DB אינו נכנס לארכיון ההגדרות.
+DEFAULT_DIR = "backups"
+DEFAULT_TIME = "02:00"
+DEFAULT_RESERVE_GB = 5
+MIN_RESERVE_GB = 1
+#: ‏"לא יותר מ-20% מהכונן, כדי שיישאר מקום לאימג'ים" (נדב 06/11).
+CAP_PERCENT = 20
+GB = 10 ** 9
+#: גיבוי יומי + שעתיים: יום בלי גיבוי הוא כבר "ישן", ואיחור של סבב ערב או שעון קיץ עוד לא.
+STALE_SECONDS = 26 * 3600
+RETRY_SECONDS = 3600
+#: חלון קיבוץ של אירועי אימג'. נבחר, לא נמדד: קצר מספיק ל"מיד", וארוך מסדרת מחיקות של מפעיל.
+COALESCE_SECONDS = 15 * 60
+#: כמה ימים אחרונים שומרים מהם גיבוי בכל מצב. נבחר, לא נמדד: לא נמדד גודל מסד בשרת חי, וכל יום
+#: כאן הוא עותק נוסף שהמקום השמור חייב להכיל.
+KEEP_DAILY = 3
+#: יעדי רשת שהוסרו (#1956). הגדרה שמורה כזו נשארת במקומה, והגיבוי עובר לכונן השרת (`effective_dest`).
+LEGACY_KINDS = ("smb", "nfs")
+#: מה ש"העלאה או מחיקה של אימג'" כותבות ליומן. היומן הוא האות — שורה אחת, אחרי שהפעולה הצליחה,
+#: בלי נקודת חיבור בכל מסלול שמכניס אימג' לספרייה.
+IMAGE_EVENTS = ("image_upload", "image_delete", "capture_done", "storage_image_received", "vmupdate_saved")
 TIMER_UNIT = "imagesrv-backup.timer"
 _NAME = re.compile(r"^imagesrv-(\d{8}-\d{6})\.db$")
 _STAMP = "%Y%m%d-%H%M%S"
@@ -54,10 +89,10 @@ log = logging.getLogger("imagesrv.backup")
 
 
 def check_dest(value: object) -> tuple[str | None, str | None]:
-    """(היעד המנורמל, None) או (None, סיבה בעברית). ‏"" = ביטול הבחירה (חוזר לכתום).
+    """(היעד המנורמל, None) או (None, סיבה בעברית). ‏"" = ללא תיקייה (חוזר לכונן השרת).
 
     נתיב מוחלט, בלי `..`, לא `/`, ותיקייה **קיימת** — ראיה חיובית שהיעד שם עכשיו
-    (דיסק שלא עוגן או NAS שנפל נדחים כאן, לא בגיבוי הראשון בעוד שעה)."""
+    (דיסק שלא עוגן נדחה כאן, לא בגיבוי הראשון)."""
     if not isinstance(value, str):
         return None, "יעד הגיבוי: נתיב תיקייה (מחרוזת)"
     path = value.strip()
@@ -71,9 +106,9 @@ def check_dest(value: object) -> tuple[str | None, str | None]:
         return None, "יעד הגיבוי: נתיב מוחלט לתיקייה, למשל /mnt/backup"
     path = "/" + path.lstrip("/")
     if path == "/":
-        return None, "יעד הגיבוי: לא שורש מערכת הקבצים — דיסק אחר או NAS מעוגן"
+        return None, "יעד הגיבוי: לא שורש מערכת הקבצים — תיקייה על כונן מעוגן"
     if not os.path.isdir(path):
-        return None, f"יעד הגיבוי: התיקייה {path} אינה קיימת (דיסק לא מעוגן? NAS לא מחובר?)"
+        return None, f"יעד הגיבוי: התיקייה {path} אינה קיימת (הכונן לא מעוגן?)"
     return path, None
 
 
@@ -136,23 +171,56 @@ def _integrity(payload: bytes) -> str:
         conn.close()
 
 
-def prune(db_dir: Path, now: datetime, keep_days: int = KEEP_DAYS) -> list[str]:
-    """מוחק `imagesrv-<ts>.db` שהחותמת בשמו ישנה מ-`keep_days`. מחזיר את השמות שנמחקו."""
+class ReserveTooSmall(Exception):
+    """עותק אחד של המסד גדול מהמקום השמור: לא נכתב דבר ולא נמחק דבר. כתום, לא אדום."""
+
+
+def _size(value: int) -> str:
+    return f"{value / GB:.1f} GB" if value >= GB else f"{value / 10 ** 6:.1f} MB"
+
+
+def _backups(db_dir: Path) -> list[tuple[Path, int]]:
+    """הגיבויים ביעד, מהישן לחדש (השם הוא החותמת). קישור סמלי אינו גיבוי ואינו נספר (#2423)."""
+    return [(path, path.stat().st_size) for path in sorted(db_dir.iterdir())
+            if _NAME.match(path.name) and path.is_file() and not path.is_symlink()]
+
+
+def _protected(names: list[str], new: str, last_good: str | None) -> set[str]:
+    """מה שלא נמחק גם כשהמקום נגמר: החדש, התקין האחרון, והראשון של כל אחד מ-`KEEP_DAILY` הימים
+    האחרונים. הראשון ולא האחרון: הוא הרחוק ביותר מסדרת אירועים של אותו יום."""
+    first_of_day: dict[str, str] = {}
+    for name in sorted(names):
+        first_of_day.setdefault(name[len("imagesrv-"):][:8], name)
+    days = sorted(first_of_day)[-KEEP_DAILY:]
+    kept = {new, *(first_of_day[day] for day in days)}
+    return kept | {last_good} if last_good in names else kept
+
+
+def prune(db_dir: Path, protected: set[str], reserve: int) -> list[str]:
+    """מוחק את `imagesrv-<ts>.db` הישנים שאינם מוגנים עד שהכול נכנס ב-`reserve` בתים. מחזיר את
+    השמות שנמחקו."""
+    found = _backups(db_dir)
+    total = sum(size for _, size in found)
     gone = []
-    limit = now - timedelta(days=keep_days)
-    for path in sorted(db_dir.iterdir()):
-        m = _NAME.match(path.name)
-        if not m or not path.is_file():
-            continue
-        stamp = datetime.strptime(m.group(1), _STAMP).replace(tzinfo=timezone.utc)
-        if stamp < limit:
+    for path, size in found:
+        if total <= reserve:
+            break
+        if path.name not in protected:
             path.unlink()
+            total -= size
             gone.append(path.name)
     return gone
 
 
-def backup_once(db_path: Path, dest: Path, now: datetime) -> dict:
-    """גיבוי אחד ל-`dest/db`, מאומת. מחזיר {file, bytes, pruned}; כל כשל — חריגה."""
+def drive_cap_bytes(path: Path) -> int:
+    """‏20% מהכונן שעליו `path` (או התיקייה הקיימת הקרובה: התיקייה הקבועה נוצרת בגיבוי הראשון)."""
+    existing = next(p for p in (path, *path.parents) if p.exists())
+    return shutil.disk_usage(existing).total * CAP_PERCENT // 100
+
+
+def backup_once(db_path: Path, dest: Path, now: datetime, reserve_gb: int = DEFAULT_RESERVE_GB,
+                last_good: str | None = None) -> dict:
+    """גיבוי אחד ל-`dest/db`, מאומת. מחזיר {file, bytes, reserve_bytes, pruned}; כל כשל — חריגה."""
     from server.system.backup import consistent_db_copy   # noqa: PLC0415 — כמו ב-backup-server.sh
 
     src = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
@@ -162,7 +230,19 @@ def backup_once(db_path: Path, dest: Path, now: datetime) -> dict:
         src.close()
     db_dir = dest / "db"
     db_dir.mkdir(parents=True, exist_ok=True)
+    # התקרה חלה גם כאן: ערך ישן, או יעד שעבר לכונן קטן יותר, אינם אוכלים את מקום האימג'ים.
+    reserve = min(reserve_gb * GB, drive_cap_bytes(db_dir))
+    if len(data) > reserve:
+        raise ReserveTooSmall(f"המקום השמור ({_size(reserve)}) קטן מגיבוי אחד ({_size(len(data))}) — הגיבוי לא "
+                              "נכתב ושום דבר לא נמחק. מגדילים את המקום השמור בהגדרות")
     target = db_dir / f"imagesrv-{now.strftime(_STAMP)}.db"
+    sizes = {path.name: size for path, size in _backups(db_dir)}
+    protected = _protected([*sizes, target.name], target.name, last_good)
+    needed = len(data) + sum(sizes.get(name, 0) for name in protected - {target.name})
+    if needed > reserve:
+        raise ReserveTooSmall(f"המקום השמור ({_size(reserve)}) קטן ממה שחייב להישמר: הגיבוי החדש, הגיבוי התקין "
+                              f"האחרון וגיבוי מכל אחד מ-{KEEP_DAILY} הימים האחרונים ({_size(needed)}) — הגיבוי לא "
+                              "נכתב ושום דבר לא נמחק. מגדילים את המקום השמור בהגדרות")
     _atomic_write(target, data)
     # ראיה חיובית מהיעד עצמו: מה שנקרא בחזרה הוא מה שנכתב, וה-DB שביעד נפתח ותקין.
     back = _read_back(target)
@@ -171,29 +251,8 @@ def backup_once(db_path: Path, dest: Path, now: datetime) -> dict:
     verdict = _integrity(back)
     if verdict != "ok":
         raise RuntimeError(f"integrity_check על {target}: {verdict}")
-    return {"file": target.name, "bytes": len(data), "pruned": prune(db_dir, now)}
-
-
-def _mount_from_fstab(dest: Path) -> tuple[int, str]:
-    """‏`mount <נקודה>` — לפי השורה ש-#1956 כתב ל-fstab. ‏(קוד, הודעה); כשל הרצה = (‎-1, הסיבה)."""
-    try:
-        proc = subprocess.run(["mount", str(dest)], capture_output=True, text=True, timeout=60,
-                              stdin=subprocess.DEVNULL, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return -1, str(exc)
-    return proc.returncode, (proc.stderr or proc.stdout or "").strip()
-
-
-def ensure_mounted(dest: Path) -> None:
-    """‏#1956: יעד SMB/NFS חייב להיות **מעוגן** — ‏`nofail` ב-fstab משאיר תיקייה ריקה כשה-NAS
-    נפל באתחול, וגיבוי אליה נוחת על הדיסק של השרת ונקרא בחזרה "תקין". לא מעוגן → ‏`mount` אחד
-    מה-fstab, ואם עדיין לא — חריגה בשם (לא כתיבה לדיסק המקומי)."""
-    if os.path.ismount(dest):
-        return
-    code, message = _mount_from_fstab(dest)
-    if not os.path.ismount(dest):
-        raise RuntimeError(f"היעד {dest} אינו מעוגן (SMB/NFS), והעיגון מ-fstab נכשל "
-                           f"({message or f'exit {code}'}) — הגיבוי לא נכתב לדיסק המקומי")
+    return {"file": target.name, "bytes": len(data), "reserve_bytes": reserve,
+            "pruned": prune(db_dir, protected, reserve)}
 
 
 def read_status(data_dir: Path) -> dict | None:
@@ -207,56 +266,152 @@ def read_status(data_dir: Path) -> dict | None:
     return value
 
 
-def run(data_dir: Path, dest: str, now: datetime | None = None, network: bool = False) -> dict:
-    """גיבוי אחד + קובץ הסטטוס. מחזיר את הסטטוס שנכתב (`ok` אומר אם הצליח).
-    ‏`network` — יעד SMB/NFS (#1956): קודם `ensure_mounted`."""
+def _write_status(data_dir: Path, status: dict) -> None:
+    # ‏CodeQL #860: ‏0600 כמו עותק המסד — הקורא היחיד (`read_status` בשרת) רץ כ-root.
+    _atomic_write(data_dir / STATUS_NAME,
+                  (json.dumps(status, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
+
+
+def run(data_dir: Path, dest: str, now: datetime | None = None, reserve_gb: int = DEFAULT_RESERVE_GB) -> dict:
+    """גיבוי אחד + קובץ הסטטוס. מחזיר את הסטטוס שנכתב (`ok` אומר אם הצליח; `too_small` — אם
+    הכישלון הוא מקום שמור קטן מעותק אחד, הכתום)."""
     now = now or datetime.now(timezone.utc)
     try:
         previous = read_status(data_dir) or {}
     except (OSError, ValueError):
         previous = {}
-    status = {"at": now.isoformat(timespec="seconds"), "dest": dest, "ok": False,
-              "file": None, "bytes": None, "error": None, "pruned": [],
-              "last_ok": previous.get("last_ok") if previous.get("dest") == dest else None}
+    same_dest = previous.get("dest") == dest
+    # ‏`file` של הצלחה לפני שהיה `last_good` (עדכון גרסה): גם הוא אומת בזמנו.
+    last_good = (previous.get("last_good") or (previous.get("file") if previous.get("ok") else None)) if same_dest else None
+    status = {"at": now.isoformat(timespec="seconds"), "dest": dest, "ok": False, "too_small": False,
+              "file": None, "bytes": None, "error": None, "pruned": [], "last_good": last_good,
+              "last_ok": previous.get("last_ok") if same_dest else None}
     try:
-        if network:
-            ensure_mounted(Path(dest))
-        status.update(backup_once(data_dir / "imagesrv.db", Path(dest), now))
+        status.update(backup_once(data_dir / "imagesrv.db", Path(dest), now, reserve_gb, last_good))
         status["ok"] = True
         status["last_ok"] = status["at"]
+        status["last_good"] = status["file"]
+    except ReserveTooSmall as exc:
+        status.update(too_small=True, error=str(exc))
     except Exception as exc:                  # noqa: BLE001 — כל כשל נכתב בשמו, ויציאה 1
         status["error"] = f"{type(exc).__name__}: {exc}"
-    # ‏CodeQL #860: ‏0600 כמו עותק המסד — הקורא היחיד (`read_status` בשרת) רץ כ-root.
-    _atomic_write(data_dir / STATUS_NAME,
-                  (json.dumps(status, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
+    _write_status(data_dir, status)
     return status
 
 
-def _dest_from_db(db_path: Path) -> tuple[str, bool]:
-    """(היעד, האם הוא SMB/NFS לפי `backup_target` של #1956)."""
-    conn = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+def parse_time(value: object) -> str | None:
+    """‏"HH:MM" תקין, או None."""
+    return value if isinstance(value, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value) else None
+
+
+def parse_reserve(value: object) -> int | None:
+    """מספר שלם של GB, לפחות `MIN_RESERVE_GB`, או None. התקרה תלויה בכונן — אצל הקורא."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,6}", value):
+        value = int(value)
+    return value if isinstance(value, int) and MIN_RESERVE_GB <= value < 10 ** 6 else None
+
+
+def effective_dest(stored: str | None, raw_target: str | None, data_dir: Path) -> str:
+    """לאן הגיבוי כותב. בלי תיקייה שנבחרה, ועם יעד SMB/NFS שנשמר לפני שהוסרו — התיקייה הקבועה."""
+    stored = (stored or "").strip()
     try:
-        rows = dict(conn.execute("SELECT key, value FROM settings WHERE key IN (?, ?)",
-                                 (SETTING, "backup_target")).fetchall())
-    finally:
-        conn.close()
-    try:
-        kind = (json.loads(rows.get("backup_target") or "null") or {}).get("type")
+        kind = (json.loads(raw_target or "null") or {}).get("type")
     except (ValueError, AttributeError):
         kind = None
-    return (rows.get(SETTING) or "").strip(), kind in ("smb", "nfs")
+    if not stored or kind in LEGACY_KINDS:
+        return (Path(data_dir) / DEFAULT_DIR).as_posix()
+    return stored
+
+
+def _config(data_dir: Path) -> dict:
+    """מה שהריצה צריכה מהמסד, בקריאה בלבד. מסד שלא נקרא — חריגה, לא "אין מה לעשות"."""
+    conn = sqlite3.connect(f"file:{(data_dir / 'imagesrv.db').as_posix()}?mode=ro", uri=True)
+    try:
+        keys = (SETTING, TARGET_SETTING, TIME_SETTING, RESERVE_SETTING)
+        rows = dict(conn.execute(f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(keys))})",
+                                 keys).fetchall())
+        changed = conn.execute(f"SELECT max(ts) FROM journal WHERE event IN ({','.join('?' * len(IMAGE_EVENTS))})",
+                               IMAGE_EVENTS).fetchone()[0]
+        busy = busy_db.reason(conn)
+    finally:
+        conn.close()
+    return {"dest": effective_dest(rows.get(SETTING), rows.get(TARGET_SETTING), data_dir),
+            "time": parse_time(rows.get(TIME_SETTING)) or DEFAULT_TIME,
+            "reserve_gb": parse_reserve(rows.get(RESERVE_SETTING)) or DEFAULT_RESERVE_GB,
+            "changed": changed, "busy": busy}
+
+
+def _moment(value: object) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else None
+
+
+def last_slot(at: str, now: datetime) -> datetime:
+    """המופע האחרון של "HH:MM" בשעון המקומי של השרת שכבר הגיע."""
+    local = now.astimezone()
+    hour, minute = (int(part) for part in at.split(":"))
+    slot = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return slot if slot <= local else slot - timedelta(days=1)
+
+
+def due(status: dict | None, config: dict, now: datetime) -> str | None:
+    """למה צריך גיבוי עכשיו, או None. ‏"הניסיון האחרון" נקבע לפי הקובץ שהריצה עצמה כותבת."""
+    status = status or {}
+    last = _moment(status.get("at"))
+    if last is None or status.get("dest") != config["dest"]:
+        return "first"
+    changed = _moment(config.get("changed"))
+    # ‏`>=`: ‏`at` נלקח לפני העותק, ואירוע באותה שנייה אולי לא נכנס אליו. עדיף גיבוי אחד מיותר.
+    if changed is not None and changed >= last and (now - last).total_seconds() >= COALESCE_SECONDS:
+        return "image"
+    if last < last_slot(config["time"], now):
+        return "daily"
+    if not status.get("ok") and (now - last).total_seconds() >= RETRY_SECONDS:
+        return "retry"
+    return None
+
+
+def _wait(data_dir: Path, status: dict | None, reason: str, now: datetime) -> None:
+    """סבב רץ: נכתב רק כשהסיבה השתנתה, לא כל דקה. שאר הקובץ — וה-`at` שקובע שהגיבוי עוד חייב — נשאר."""
+    status = status or {}
+    if status.get("waiting") != reason:
+        _write_status(data_dir, {**status, "waiting": reason,
+                                 "waiting_since": now.isoformat(timespec="seconds")})
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="ImageSrv: hourly database backup (#1895)")
+    parser = argparse.ArgumentParser(description="ImageSrv: database backup -- daily, and after an image change (#1956)")
     parser.add_argument("--data-dir", default="/var/lib/imagesrv")
+    parser.add_argument("--now", action="store_true", help="back up now: ignore the schedule and a running round")
     args = parser.parse_args(argv)
     data_dir = Path(args.data_dir)
-    dest, network = _dest_from_db(data_dir / "imagesrv.db")
-    if not dest:
-        print("backup_job: no backup destination chosen (console settings) -- nothing to do")
-        return 0
-    status = run(data_dir, dest, network=network)
+    now = datetime.now(timezone.utc)
+    try:
+        previous = read_status(data_dir)
+    except (OSError, ValueError):
+        previous = None                       # הריצה כותבת קובץ תקין מחדש
+    try:
+        config = _config(data_dir)
+    except sqlite3.Error as exc:
+        _write_status(data_dir, {**(previous or {}), "at": now.isoformat(timespec="seconds"), "ok": False,
+                                 "error": f"המסד לא נקרא: {type(exc).__name__}: {exc}"})
+        print(f"backup_job: FAILED to read the database: {exc}", file=sys.stderr)
+        return 1
+    if not args.now:
+        if due(previous, config, now) is None:
+            if previous and "waiting" in previous:      # השעה הוזזה בזמן ההמתנה: אין למה לחכות, והבריאות לא תאמר ש"ממתין"
+                _write_status(data_dir, {k: v for k, v in previous.items() if not k.startswith("waiting")})
+            return 0
+        if config["busy"]:
+            _wait(data_dir, previous, config["busy"], now)
+            return 0
+    dest = config["dest"]
+    status = run(data_dir, dest, now, config["reserve_gb"])
     if not status["ok"]:
         print(f"backup_job: FAILED to {dest}: {status['error']}", file=sys.stderr)
         return 1
@@ -287,13 +442,11 @@ def health_check(conn: sqlite3.Connection, data_dir: Path | None, timer_state: s
         return {"id": "backup", "label": LABEL, "state": state, "detail": detail}
 
     now = now or datetime.now(timezone.utc)
-    dest = (get_setting(conn, SETTING) or "").strip()
-    if not dest:
-        return row("warn", "לא נבחר יעד גיבוי — בוחרים בהגדרות (דיסק אחר או NAS); עד אז המסד אינו מגובה")
     if data_dir is None:
         return row("unknown", "תיקיית הנתונים אינה ידועה — לא נבדק")
+    dest = effective_dest(get_setting(conn, SETTING), get_setting(conn, TARGET_SETTING), data_dir)
     if timer_state and timer_state != "active":
-        return row("bad", f"הגיבוי השעתי אינו מתוזמן ({TIMER_UNIT}: {timer_state}) — "
+        return row("bad", f"הגיבוי אינו מתוזמן ({TIMER_UNIT}: {timer_state}) — "
                           f"systemctl enable --now {TIMER_UNIT}")
     try:
         status = read_status(data_dir)
@@ -301,12 +454,18 @@ def health_check(conn: sqlite3.Connection, data_dir: Path | None, timer_state: s
         # ‏#2510: טקסט החריגה ליומן השרת; בשורת הבריאות — משפט קבוע.
         log.warning("backup status %s unreadable: %s", data_dir / STATUS_NAME, exc)
         return row("bad", "קובץ הסטטוס של הגיבוי לא נקרא — הפרטים ביומן השרת")
+    waiting = f" · ממתין: {status['waiting']}" if status and status.get("waiting") else ""
+    # תיקייה על כונן המסד (או שלא נבדק), או יעד רשת שהוסר — כתום גם כשהגיבוי מצליח.
+    warning = disk_warning(load(conn))
+    prefix = f"{warning} · " if warning else ""
     if status is None or status.get("dest") != dest:
-        return row("warn", f"עוד לא רץ גיבוי אל {dest} — הגיבוי רץ כל שעה")
+        return row("warn", f"{prefix}עוד לא רץ גיבוי אל {dest} — הגיבוי הראשון רץ תוך דקה{waiting}")
     last_ok = status.get("last_ok")
     if not status.get("ok"):
         tail = f" · ההצלחה האחרונה: {last_ok}" if last_ok else " · אין גיבוי מוצלח ליעד הזה"
-        return row("bad", f"הגיבוי האחרון ({status.get('at')}) נכשל: {status.get('error')}{tail}")
+        if status.get("too_small"):
+            return row("warn", f"{status.get('error')}{tail}")
+        return row("bad", f"הגיבוי האחרון ({status.get('at')}) נכשל: {status.get('error')}{tail}{waiting}")
     try:
         age = (now - datetime.fromisoformat(str(last_ok))).total_seconds()
     except (TypeError, ValueError):
@@ -314,11 +473,9 @@ def health_check(conn: sqlite3.Connection, data_dir: Path | None, timer_state: s
     if age < 0:
         return row("warn", f"זמן הגיבוי האחרון ({last_ok}) בעתיד — השעון זז? לא נבדק")
     if age > STALE_SECONDS:
-        return row("warn", f"ישן — הגיבוי האחרון הצליח {_ago(age)} ({status.get('file')}, {dest})")
-    done = f"גובה {_ago(age)} — {status.get('file')} ב-{dest}"
-    # ‏#1956: תיקייה על דיסק המסד (או שלא נבדק) — כתום גם כשהגיבוי מצליח: לא מגן מתקלת דיסק.
-    warning = disk_warning(load(conn))
-    return row("warn", f"{warning} · {done}") if warning else row("ok", done)
+        return row("warn", f"ישן — הגיבוי האחרון הצליח {_ago(age)} ({status.get('file')}, {dest}){waiting}")
+    done = f"גובה {_ago(age)} — {status.get('file')} ב-{dest}{waiting}"
+    return row("warn", f"{prefix}{done}") if warning else row("ok", done)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """#2144 (mockup 2144-time, Nadav 04/11): the native installer's "שעון השרת" step.
 
-* step 5 of eight, after "שם השרת" -- the rail, the titles, the keys;
+* step 5 of nine, after "שם השרת" -- the rail, the titles, the keys;
 * automatic (default) or the organisation's server: "next" stays off until
   the organisation's server has an address; the form sends ``ntp_servers``
   (empty = automatic) with its own step (6 -- the bridge's 4 is "passwords");
@@ -48,14 +48,14 @@ def _c(name: str) -> str:
 
 # --- the source contracts (every machine) ---------------------------------------
 
-def test_the_clock_is_step_five_of_eight_after_the_name():
+def test_the_clock_is_step_five_after_the_name():
     state = _c("install_state.h")
-    assert re.search(r"INSTALL_HOSTNAME, INSTALL_TIME, INSTALL_ADMIN,", state)
-    assert "#define INSTALL_STEPS 8" in state
+    assert re.search(r"INSTALL_HOSTNAME, INSTALL_TIME, INSTALL_BACKUP, INSTALL_ADMIN,", state)
+    assert "#define INSTALL_STEPS 9" in state
     frame = _c("screens_install.c")
-    assert ('STEP_NAMES[INSTALL_STEPS]={"דיסק","תפקיד השרת","כתובת השרת","שם השרת","שעון השרת",'
+    assert ('STEP_NAMES[INSTALL_STEPS]={"דיסק","תפקיד השרת","כתובת השרת","שם השרת","שעון השרת","גיבוי",'
             '"חשבון ניהול","החלה","סיום"};') in frame
-    # the rail: "החלה" is step 7 for the summary, progress and failure; "סיום" is 8
+    # the rail: "החלה" is the summary, progress and failure; "סיום" is the last
     assert "#define APPLY_STEP (INSTALL_STEPS-1)" in frame
     assert "return APPLY_STEP;if(s->view==INSTALL_DONE)return INSTALL_STEPS;" in frame
     assert "bad=a->install.view==INSTALL_FAILED&&i==APPLY_STEP-1;" in frame
@@ -63,7 +63,7 @@ def test_the_clock_is_step_five_of_eight_after_the_name():
     assert titles.split(",")[5] == '"שעון השרת"'
     subs = re.search(r'const char \*subs\[\]=\{(.*?)\};', frame).group(1)
     assert subs.split('","')[5] == "מאיפה השרת מקבל את השעה. אפשר לשנות אחר כך בקונסולה."
-    assert "case INSTALL_ROLE:case INSTALL_TIME:return" in frame, "the role step's keys: two options"
+    assert "case INSTALL_ROLE:case INSTALL_TIME:case INSTALL_BACKUP:return" in frame, "the role step's keys: options"
 
 
 def test_every_new_string_is_the_mockups():
@@ -75,9 +75,9 @@ def test_every_new_string_is_the_mockups():
 def test_the_form_sends_the_source_and_its_own_step():
     control = _c("install.c")
     assert 'json_pair(&p, &n, "ntp_servers", s->ntp_org ? s->ntp_servers : "", 1);' in control
-    assert "(view==INSTALL_TIME?6:view-INSTALL_DISK)" in control
-    assert "&&(s->view!=INSTALL_TIME||install_time_ready(s)))next(a,b);" in control
-    assert '"root_password_confirm","ntp_servers"};for(int i=0;i<18;i++)' in control
+    assert "(view==INSTALL_TIME?6:(view==INSTALL_BACKUP?7:view-INSTALL_DISK))" in control
+    assert "&&(s->view!=INSTALL_TIME||install_time_ready(s))" in control
+    assert '"root_password_confirm","ntp_servers",' in control
     assert "[INSTALL_TIME]={17,17}" in control and "case HIT_INSTALL_NTP_SERVERS:return 17;" in control
 
 
@@ -91,8 +91,8 @@ def test_an_unknown_clock_report_is_not_checked():
 def test_the_summary_has_the_clock_row_and_its_change_opens_step_five():
     final = _c("screens_install_final.c")
     assert '"שעון השרת",s->ntp_org?s->ntp_servers:"אוטומטי",4);' in final
-    assert '"משתמש הניהול",value,5);' in final and '"סיסמת root","נקבעה",5);' in final
-    assert "id<HIT_INSTALL_SUMMARY_BASE+6)" in _c("install.c")
+    assert '"משתמש הניהול",value,6);' in final and '"סיסמת root","נקבעה",6);' in final
+    assert "id<HIT_INSTALL_SUMMARY_BASE+7)" in _c("install.c")
 
 
 def test_the_time_on_the_step_never_carries_another_zones_name():
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[2], "org") && argc > 3) { key(a, &b, KEYSYM_DOWN); key(a, &b, KEYSYM_DOWN); type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER); }
     else if (!strcmp(argv[2], "summary")) {
         a->install.view = INSTALL_SUMMARY; choose(a, &b, HIT_INSTALL_SUMMARY_BASE + 4); printf("row4=%%d\n", a->install.view);
-        a->install.view = INSTALL_SUMMARY; choose(a, &b, HIT_INSTALL_SUMMARY_BASE + 5); printf("row5=%%d\n", a->install.view);
+        a->install.view = INSTALL_SUMMARY; choose(a, &b, HIT_INSTALL_SUMMARY_BASE + 6); printf("row6=%%d\n", a->install.view);
         printf("time=%%d\nadmin=%%d\n", INSTALL_TIME, INSTALL_ADMIN); return 0;
     } else if (!strcmp(argv[2], "report") && argc > 3) {
         char text[512]; snprintf(text, sizeof text, "%%s", argv[3]); parse_lines(&a->install, text, "finish");
@@ -205,7 +205,7 @@ def test_a_refused_address_keeps_the_person_on_the_step(driver, tmp_path):
 @NATIVE
 def test_the_summary_rows_open_the_clock_and_the_admin_steps(driver, tmp_path):
     state, _ = _drive(driver, tmp_path, "summary")
-    assert state["row4"] == state["time"] and state["row5"] == state["admin"]
+    assert state["row4"] == state["time"] and state["row6"] == state["admin"]
 
 
 @NATIVE

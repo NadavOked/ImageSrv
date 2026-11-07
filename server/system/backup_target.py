@@ -1,29 +1,22 @@
-"""‏#1956 — בחירת יעד הגיבוי השעתי של המסד (הכרעת נדב, 22/10).
+"""‏#1956 — לאן גיבוי המסד נכתב, כל כמה מקום שמור לו ובאיזו שעה (הכרעת נדב, 06/11).
 
-שלושה סוגי יעד:
+שני סוגי יעד:
 
-1. **תיקייה מקומית** — ואם היא על הדיסק של המסד: אזהרה כתומה "אותו דיסק — לא מגן מתקלת
-   דיסק" (בתשובה, בשורת ההגדרות ובשורת "גיבוי המסד" בבריאות).
-2. **שיתוף SMB** עם משתמש וסיסמה.
-3. **NFS**.
+1. **כונן השרת** (`default`) — ברירת המחדל, התיקייה הקבועה `<data_dir>/backups`. אין "לא נבחר": הגיבוי
+   תמיד קיים. אזהרה כתומה קבועה "אותו כונן, לא מגן מתקלת כונן" — זו האמת.
+2. **תיקייה מעוגנת** (`local`) — עותק על כונן אחר. על כונן המסד — אותה אזהרה; לא נבדק — כתום "לא נבדק".
 
 בכל אחד מהם נכתב **ונקרא בחזרה** קובץ בדיקה בזמן ההגדרה (`write_probe`) — כשל מתגלה עכשיו,
-לא בגיבוי הראשון בעוד שעה (עיקרון 5: הצלחה = ראיה חיובית).
+לא בגיבוי הראשון (עיקרון 5: הצלחה = ראיה חיובית).
 
-**לא מנגנון חדש** — הכול על התשתית של מיקומי האחסון (#1066/#1123, ‏`storage_locations`):
-אותם hooks מוזרקים (`mount`/`umount`/`fstab_write`/`creds_write`/`creds_remove`, בבדיקות
-מזויפים), אותה בדיקת פרמטרים (`validate_params`), אותן אפשרויות עיגון (`_smb_opts`/`_nfs_opts`),
-ואותו בלוק `# BEGIN imagesrv-storage` ב-fstab — `storage_locations.fstab_entries` מצרף את שורת
-הגיבוי, כך שכל כתיבה מחדש של fstab (גם של מיקום אחסון) שומרת אותה. **סיסמת SMB** נשמרת כמו
-של מיקום אחסון: קובץ `credentials=` ‏0600 ב-`/etc/imagesrv/creds/backup` (‏`creds_path`),
-ולא ב-DB, לא ב-argv ולא באפשרויות העיגון.
+**‏SMB ו-NFS אינם יעד** — הם לאחסון האימג'ים בלבד. שרת שנשמר בו יעד כזה לפני ההכרעה ממשיך בבטחה:
+הגיבוי עובר מיד לכונן השרת (`backup_job.effective_dest`), וההגדרה **נשארת** ב-DB — שורת ה-fstab
+(`fstab_entry`), קובץ ה-credentials והשיתוף עצמו לא נוגעים בהם, והגיבויים הישנים נשארים עליו. ‏`load`
+מחזיר את היעד הישן ב-`legacy`, והבריאות והקונסולה אומרות את זה בכתום עד שהמפעיל בוחר יעד
+בקונסולה. רק הבחירה הזו מפרקת את העיגון (`_leave_network`); מהשיתוף לא נמחק דבר בשום מצב.
 
-נקודת העיגון: `<data_dir>/storage/.db-backup` (ובדיקה: `.db-backup-test`) — תחת `storage/`,
-שגם גיבוי ההגדרות (`backup.SKIP_DIRS`) וגם `tools/backup-server.sh` כבר מדלגים עליה (אחרת
-הגיבוי היה מעתיק את ה-NAS לתוך עצמו).
-
-ההגדרות (key-value, בלי שינוי סכמה): `backup_dest` — הנתיב שהגיבוי כותב אליו (כמו ב-#1895),
-ו-`backup_target` — JSON בלי סוד: `{type, ...פרמטרים ציבוריים, mount_point, same_disk}`.
+ההגדרות (key-value, בלי שינוי סכמה): `backup_dest` — התיקייה שנבחרה (ריק = כונן השרת),
+‏`backup_target` — JSON בלי סוד, ‏`backup_time` ו-`backup_reserve_gb` (`set_policy`).
 """
 
 from __future__ import annotations
@@ -37,18 +30,14 @@ from server.system import backup_job
 from server.storage import locations as sl
 from server.db import get_setting, journal, set_settings
 
-SETTING = "backup_target"
-KINDS = ("none", "local", "smb", "nfs")
-NETWORK = ("smb", "nfs")
-KIND_LABELS = {"none": "לא נבחר", "local": "תיקייה", "smb": "SMB", "nfs": "NFS"}
+SETTING = backup_job.TARGET_SETTING
+KINDS = ("default", "local")
+KIND_LABELS = {"default": "כונן השרת", "local": "תיקייה", "smb": "SMB", "nfs": "NFS"}
 MOUNT_NAME = ".db-backup"
-TEST_NAME = ".db-backup-test"
 CREDS_ID = "backup"
-TEST_CREDS_ID = "backup-test"
-SAME_DISK = "אותו דיסק — לא מגן מתקלת דיסק"
-NOT_CHECKED = "לא נבדק אם התיקייה על דיסק אחר מהמסד"
-PUBLIC_KEYS = {"local": ("path",), "smb": ("server", "share", "username", "domain"),
-               "nfs": ("server", "export", "version")}
+SAME_DISK = "אותו כונן, לא מגן מתקלת כונן"
+NOT_CHECKED = "לא נבדק אם התיקייה על כונן אחר מהמסד"
+NO_NETWORK = "SMB ו-NFS משמשים רק לאחסון האימג'ים. הגיבויים נשמרים על כונן השרת, או בתיקייה מעוגנת"
 
 
 class TargetError(Exception):
@@ -63,46 +52,53 @@ class TargetError(Exception):
 # --- הקריאה ------------------------------------------------------------------------
 
 
-def load(conn) -> dict:
-    """היעד השמור. ‏`backup_dest` בלי `backup_target` (נבחר לפני #1956) = תיקייה שלא נבדק
-    אם היא על דיסק המסד (`same_disk: None`), לא "תקין"."""
-    dest = (get_setting(conn, backup_job.SETTING) or "").strip()
+def _stored(conn) -> dict | None:
     try:
         target = json.loads(get_setting(conn, SETTING) or "null")
     except ValueError:
-        target = None
-    if not isinstance(target, dict) or target.get("type") not in KINDS:
-        target = {"type": "local", "path": dest, "same_disk": None} if dest else {"type": "none"}
+        return None
+    return target if isinstance(target, dict) else None
+
+
+def load(conn) -> dict:
+    """היעד בתוקף. ‏`backup_dest` בלי `backup_target` (נבחר לפני #1956) = תיקייה שלא נבדק אם היא על
+    כונן המסד (`same_disk: None`), לא "תקין". יעד SMB/NFS שנשמר — כונן השרת, והישן ב-`legacy`."""
+    dest = (get_setting(conn, backup_job.SETTING) or "").strip()
+    target = _stored(conn) or {}
+    if target.get("type") in backup_job.LEGACY_KINDS:
+        return {"type": "default", "dest": "", "legacy": target}
     if not dest:
-        target = {"type": "none"}
-    target["dest"] = dest
-    return target
+        return {"type": "default", "dest": ""}
+    if target.get("type") != "local":
+        target = {"type": "local", "path": dest, "same_disk": None}
+    return {**target, "dest": dest}
 
 
-def display(target: dict) -> str:
-    kind = target.get("type")
-    if kind == "smb":
-        return f"//{target.get('server', '')}/{target.get('share', '')}"
-    if kind == "nfs":
-        return f"{target.get('server', '')}:{target.get('export', '')}"
-    return target.get("dest") or target.get("path") or ""
+def legacy_display(legacy: dict) -> str:
+    if legacy.get("type") == "smb":
+        return f"//{legacy.get('server', '')}/{legacy.get('share', '')}"
+    return f"{legacy.get('server', '')}:{legacy.get('export', '')}"
 
 
 def describe(conn) -> dict:
     """מה שהקונסולה רואה (‏`GET /settings` → `backup_target`). אין כאן סוד — אין סוד ב-DB."""
     target = load(conn)
     out = {"type": target["type"], "label": KIND_LABELS[target["type"]], "dest": target["dest"],
-           "display": display(target), "same_disk": target.get("same_disk")}
-    for key in PUBLIC_KEYS.get(target["type"], ()):
-        out[key] = target.get(key) or ""
+           "display": target["dest"], "same_disk": True if target["type"] == "default" else target.get("same_disk")}
+    legacy = target.get("legacy")
+    if legacy:
+        out["legacy"] = {"type": legacy["type"], "label": KIND_LABELS[legacy["type"]],
+                         "display": legacy_display(legacy)}
     return out
 
 
 def disk_warning(target: dict) -> str | None:
-    """האזהרה הכתומה של תיקייה מקומית: על דיסק המסד, או שלא נבדק. ‏None — דיסק אחר / רשת."""
-    if target.get("type") != "local":
-        return None
-    if target.get("same_disk") is True:
+    """האזהרה הכתומה: יעד רשת שהוסר; כונן השרת; תיקייה על כונן המסד, או שלא נבדק. ‏None — כונן אחר."""
+    legacy = target.get("legacy")
+    if legacy:
+        return (f"יעד הגיבוי {KIND_LABELS[legacy['type']]} {legacy_display(legacy)} הוסר: מגבים לכונן השרת. "
+                "הגיבויים הישנים נשארו על השיתוף ולא נמחקו. בוחרים יעד בהגדרות כדי לנתק אותו")
+    if target.get("type") == "default" or target.get("same_disk") is True:
         return SAME_DISK
     if target.get("same_disk") is None:
         return NOT_CHECKED
@@ -110,10 +106,11 @@ def disk_warning(target: dict) -> str | None:
 
 
 def fstab_entry(conn) -> dict | None:
-    """שורת העיגון הקבוע של יעד רשת, בפורמט של `storage_locations.fstab_entries`."""
-    target = load(conn)
+    """שורת העיגון של יעד רשת **שנשמר לפני שהוסרו**, בפורמט של `storage_locations.fstab_entries` —
+    כתיבה מחדש של fstab אינה מנתקת את השיתוף בשקט; הוא יורד רק כשהמפעיל בוחר יעד."""
+    target = _stored(conn) or {}
     point = target.get("mount_point")
-    if target["type"] not in NETWORK or not point:
+    if target.get("type") not in backup_job.LEGACY_KINDS or not point:
         return None
     if target["type"] == "nfs":
         return {"source": f"{target['server']}:{target['export']}", "target": point, "fstype": "nfs",
@@ -210,113 +207,91 @@ def write_probe(folder: Path) -> None:
 # --- ההגדרה ----------------------------------------------------------------------------
 
 
-def _hook(result, what: str) -> None:
-    if result.status == sl.OK:
-        return
-    raise TargetError(503 if result.status == sl.UNCHECKED else 409, f"{what}: {result.reason or result.status}")
-
-
-def _mount_and_probe(kind: str, params: dict, point: Path, creds_id: str, hooks: dict) -> str:
-    """עיגון ל-`point` (‏credentials ‏0600 ל-SMB) + קובץ בדיקה. מחזיר את נתיב ה-credentials ("" בלי).
-    בכשל — מפרק את מה שהקים וזורק."""
-    creds = sl.smb_creds(params) if kind == "smb" else {}
-    creds_file = sl.creds_path(creds_id) if creds else ""
-    if creds_file:
-        _hook(hooks["creds_write"](creds_file, creds), "קובץ ה-credentials לא נכתב")
-    try:
-        point.mkdir(parents=True, exist_ok=True)
-        if kind == "smb":
-            mounted = hooks["mount"]("cifs", f"//{params['server']}/{params['share']}", str(point),
-                                     sl._smb_opts(params, creds_file))
-        else:
-            mounted = hooks["mount"]("nfs", f"{params['server']}:{params['export']}", str(point),
-                                     sl._nfs_opts(params))
-        _hook(mounted, "העיגון נכשל")
-        try:
-            if not hooks["is_mount"](str(point)):
-                raise TargetError(409, f"העיגון דווח כמוצלח אבל {point} אינו נקודת עיגון — "
-                                       "קובץ הבדיקה היה נכתב לדיסק של השרת")
-            write_probe(point)
-        except TargetError:
-            hooks["umount"](str(point))
-            raise
-    except Exception:
-        if creds_file:
-            hooks["creds_remove"](creds_file)
-        raise
-    return creds_file
-
-
-def _leave_network(conn, data_dir: Path, hooks: dict) -> None:
-    """פירוק יעד רשת קודם: umount, שורת ה-fstab (כתיבה מחדש אחרי שההגדרה כבר הוחלפה), credentials."""
-    hooks["umount"](str(Path(data_dir) / "storage" / MOUNT_NAME))
-    sl.rewrite_fstab(conn, hooks)
-    hooks["creds_remove"](sl.creds_path(CREDS_ID))
-
-
-def _public(kind: str, params: dict) -> dict:
-    return {key: str(params.get(key) or "").strip() for key in PUBLIC_KEYS[kind]}
+def _leave_network(conn, data_dir: Path, hooks: dict) -> list[str]:
+    """פירוק יעד רשת שנשמר: umount, שורת ה-fstab (כתיבה מחדש אחרי שההגדרה כבר הוחלפה), credentials.
+    מהשיתוף לא נמחק דבר. מחזיר אזהרה על כל שלב שלא הצליח — ההגדרה כבר הוחלפה, ולכן לא חריגה."""
+    steps = (("הניתוק", hooks["umount"](str(Path(data_dir) / "storage" / MOUNT_NAME))),
+             ("הסרת השורה מ-fstab", sl.rewrite_fstab(conn, hooks)),
+             ("מחיקת קובץ ה-credentials", hooks["creds_remove"](sl.creds_path(CREDS_ID))))
+    return [f"היעד הישן: {what} נכשל: {result.reason or result.status}"
+            for what, result in steps if result.status != sl.OK]
 
 
 def configure(conn, data_dir: Path, body: object, hooks: dict, user: str = "") -> dict:
     """‏`POST /api/console/backup-target`. מחזיר {target, warnings}; סירוב — `TargetError`."""
-    if not isinstance(body, dict) or body.get("type") not in KINDS:
-        raise TargetError(400, "יעד הגיבוי: סוג לא מוכר — none / local / smb / nfs")
-    kind = body["type"]
+    kind = body.get("type") if isinstance(body, dict) else None
+    if kind in backup_job.LEGACY_KINDS:
+        raise TargetError(400, NO_NETWORK)
+    if kind not in KINDS:
+        raise TargetError(400, "יעד הגיבוי: סוג לא מוכר — default / local")
     params = body.get("params") or {}
     if not isinstance(params, dict):
         raise TargetError(400, "יעד הגיבוי: params חייב להיות אובייקט")
     data_dir = Path(data_dir)
-    previous = load(conn)
-    warnings: list[str] = []
+    legacy = load(conn).get("legacy")
 
-    if kind == "none":
-        target, dest = {"type": "none"}, ""
-    elif kind == "local":
+    if kind == "default":
+        folder = data_dir / backup_job.DEFAULT_DIR
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise TargetError(409, f"התיקייה {folder} לא נוצרה: {exc}") from None
+        write_probe(folder)
+        target, dest = {"type": "default"}, ""
+    else:
         dest, why = backup_job.check_dest(params.get("path", ""))
         if why is not None or not dest:
             raise TargetError(400, why or "יעד הגיבוי: חסר נתיב תיקייה")
         write_probe(Path(dest))
         target = {"type": "local", "path": dest, "same_disk": same_disk(Path(dest), data_dir)}
-        warning = disk_warning(target)
-        if warning:
-            warnings.append(warning)
-    else:
-        params = {**params, **{k: str(params.get(k) or "").strip() for k in ("server", "share", "export")}}
-        reason = sl.validate_params(kind, params)   # שרת, שיתוף/ייצוא, בלי תווי בקרה — לפני כל כלי
-        if reason:
-            raise TargetError(400, f"יעד הגיבוי: {reason}")
-        # שלב 1: עיגון בדיקה בנקודה נפרדת — היעד הקודם לא נפגע אם החדש לא עובד.
-        test_point = data_dir / "storage" / TEST_NAME
-        test_creds = _mount_and_probe(kind, params, test_point, TEST_CREDS_ID, hooks)
-        hooks["umount"](str(test_point))
-        if test_creds:
-            hooks["creds_remove"](test_creds)
-        # שלב 2: הנקודה הקבועה.
-        point = data_dir / "storage" / MOUNT_NAME
-        if previous["type"] in NETWORK:
-            hooks["umount"](str(point))
-        _mount_and_probe(kind, params, point, CREDS_ID, hooks)
-        dest = point.as_posix()
-        target = {"type": kind, **_public(kind, params), "mount_point": dest}
-        if kind == "nfs" and not target.get("version"):
-            target["version"] = "4.1"
 
-    before = {backup_job.SETTING: previous["dest"],
-              SETTING: get_setting(conn, SETTING) or ""}
     set_settings(conn, {backup_job.SETTING: dest, SETTING: json.dumps(target, ensure_ascii=False)})
-    if kind in NETWORK:
-        written = sl.rewrite_fstab(conn, hooks)
-        if written.status != sl.OK:
-            hooks["umount"](str(Path(dest)))
-            hooks["creds_remove"](sl.creds_path(CREDS_ID))
-            if before[SETTING]:
-                set_settings(conn, before)
-            else:
-                set_settings(conn, {backup_job.SETTING: before[backup_job.SETTING]}, remove=(SETTING,))
-            lost = " · היעד הקודם נותק — יש לבחור אותו מחדש" if previous["type"] in NETWORK else ""
-            raise TargetError(409, f"העיגון הצליח אבל fstab לא נכתב — בוטל, היעד לא נשמר: {written.reason}{lost}")
-    elif previous["type"] in NETWORK:
-        _leave_network(conn, data_dir, hooks)
-    journal(conn, "setting_change", f"{SETTING}={kind} — {display({**target, 'dest': dest}) or 'ללא'}", user)
+    warning = disk_warning(load(conn))
+    warnings = [warning] if warning else []
+    if legacy:
+        warnings += _leave_network(conn, data_dir, hooks)
+    journal(conn, "setting_change", f"{SETTING}={kind} — {dest or KIND_LABELS[kind]}", user)
     return {"target": describe(conn), "warnings": warnings}
+
+
+# --- המדיניות: שעה ומקום שמור -----------------------------------------------------------
+
+
+def _cap_gb(conn, data_dir: Path | None) -> int | None:
+    """התקרה ב-GB שלמים על הכונן של היעד; ‏None = לא נבדק."""
+    if data_dir is None:
+        return None
+    dest = backup_job.effective_dest(get_setting(conn, backup_job.SETTING), get_setting(conn, SETTING), data_dir)
+    try:
+        return backup_job.drive_cap_bytes(Path(dest)) // backup_job.GB
+    except (OSError, StopIteration):
+        return None
+
+
+def policy(conn, data_dir: Path | None) -> dict:
+    """מה שהקונסולה רואה (‏`GET /settings` → `backup_policy`): הערכים שבתוקף, והתקרה לפי הכונן."""
+    return {"time": backup_job.parse_time(get_setting(conn, backup_job.TIME_SETTING)) or backup_job.DEFAULT_TIME,
+            "reserve_gb": backup_job.parse_reserve(get_setting(conn, backup_job.RESERVE_SETTING))
+            or backup_job.DEFAULT_RESERVE_GB,
+            "min_gb": backup_job.MIN_RESERVE_GB, "cap_gb": _cap_gb(conn, data_dir),
+            "cap_percent": backup_job.CAP_PERCENT}
+
+
+def set_policy(conn, data_dir: Path, body: object, user: str = "") -> dict:
+    """‏`POST /api/console/backup-policy`. סירוב — `TargetError`, ושום דבר לא נשמר."""
+    if not isinstance(body, dict):
+        raise TargetError(400, "מדיניות הגיבוי: נדרש אובייקט")
+    at = backup_job.parse_time(body.get("time"))
+    if at is None:
+        raise TargetError(400, "שעת הגיבוי: נדרש HH:MM")
+    reserve = backup_job.parse_reserve(body.get("reserve_gb"))
+    if reserve is None:
+        raise TargetError(400, f"מקום שמור: מספר שלם של GB, לפחות {backup_job.MIN_RESERVE_GB}")
+    cap = _cap_gb(conn, Path(data_dir))
+    if cap is None:
+        raise TargetError(409, "לא הצלחנו לקרוא את גודל הכונן — לא נשמר")
+    if reserve > cap:
+        raise TargetError(400, f"מקום שמור: לא יותר מ-{backup_job.CAP_PERCENT}% מהכונן (עד {cap} GB)")
+    set_settings(conn, {backup_job.TIME_SETTING: at, backup_job.RESERVE_SETTING: str(reserve)})
+    journal(conn, "setting_change", f"backup_policy={at}, {reserve} GB", user)
+    return {"policy": policy(conn, Path(data_dir))}

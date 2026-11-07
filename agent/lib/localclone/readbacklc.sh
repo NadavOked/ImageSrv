@@ -8,7 +8,7 @@ _rb_raw() {
     # $1 = disk, $2 = work dir, $3 = node function, $4 = `source` (never flushed:
     # this run did not write it, and it is never opened for writing, #1466). A local
     # clone: fanout's own lines for every partition, one after another, to $2/got.
-    : > "$2/got"
+    : > "$2/got"; RB_BASE=0   # #2046: the bar (rbprog.sh) starts each partition where the last one ended
     [ "${4:-}" = source ] || rb_flush "$1" "$3" || { echo "unchecked|$RB_WHY"; return; }
     _rw_x="-x"; [ "$RB_MODE" = full ] || _rw_x="-x -s $RB_SEED $RB_PERMILLE"
     while IFS='|' read -r _rw_i _rw_fs _rw_b <&3; do
@@ -16,6 +16,7 @@ _rb_raw() {
         rb_digest "$("$3" "$1" "$_rw_i")" "$_rw_fs" "$_rw_b" "$2" $_rw_x \
             || { echo "$RB_KIND|מחיצה $_rw_i: $RB_WHY"; return; }
         sed "s/^/$_rw_i /" "$2/rb.out" >> "$2/got"
+        _rw_t=$(rb_total "$2/rb.out") && RB_BASE=$((RB_BASE + ${_rw_t#* }))   # what it really passed, not the estimate
     done 3< "$RB_ALL"
     echo ok
 }
@@ -35,6 +36,7 @@ readback_local() {
             'BEGIN { n = split(x, a, " "); for (i = 1; i <= n; i++) r[a[i]] } !($1 in r)' "$RB_ALL.in" > "$RB_ALL" \
         || { _fail_alive "$*" "$READBACK_NOT_RUN — תוכנית המחיצות לא נקראה"; return 1; }
     _rl_live=$(_rb_live "$@"); [ -n "$_rl_live" ] || return 1
+    RB_TOTAL=$(rb_lc_bytes "$_rl_m" "$RB_ALL")   # #2046: the bar's whole -- an estimate (rbprog.sh)
     log "readback: local clone, mode $RB_MODE, sample seed $RB_SEED, $RB_PERMILLE/1000"
     _rl_t0=$(date +%s); _rb_start "$_rl_src" lc_src_node _rb_raw source; _rl_sp=$RB_PID; _rl_jobs=""
     for _rl_t in $_rl_live; do

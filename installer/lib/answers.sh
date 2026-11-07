@@ -18,6 +18,8 @@ answer_set() {
         raid_spares) ANSWER_RAID_SPARES=$_as_value ;;   # #1989: optional, absent = no RAID
         root_pass) ANSWER_ROOT_PASS=$_as_value ;;   # #1632: the operator's own, from the admin screen
         ntp_servers) ANSWER_NTP_SERVERS=$_as_value ;;   # #2144: optional, absent/empty = automatic
+        backup_time) ANSWER_BACKUP_TIME=$_as_value ;;   # #1956: optional, absent/empty = 02:00
+        backup_reserve_gb) ANSWER_BACKUP_RESERVE_GB=$_as_value ;;   # #1956: optional, absent/empty = 5
         *) fail unknown-key "unknown answer: $_as_key" ;;
     esac
 }
@@ -25,6 +27,7 @@ answer_set() {
 parse_answers() {
     _pa_file=$1; [ -r "$_pa_file" ] || fail answers-unreadable "cannot read answers file: $_pa_file"
     ANSWER_KEYS=; ANSWER_RAID_LEVEL=none; ANSWER_RAID_DISKS=; ANSWER_RAID_SPARES=0; ANSWER_NTP_SERVERS=
+    ANSWER_BACKUP_TIME=; ANSWER_BACKUP_RESERVE_GB=
     while IFS= read -r _pa_line || [ -n "$_pa_line" ]; do
         case "$_pa_line" in *=*) ;; *) fail invalid-line "answer line has no '='" ;; esac
         _pa_key=${_pa_line%%=*}; _pa_value=${_pa_line#*=}
@@ -134,6 +137,7 @@ validate_answers() {
     [ -n "$ANSWER_ROOT_PASS" ] || fail invalid-root-password "root_pass must not be empty"
     validate_raid   # #1989 (raid.sh): no RAID unless the answers ask for it
     validate_ntp_servers   # #2144 (clock.sh): the time source, checked before any disk command
+    validate_backup   # #1956 (backup.sh): the backup's hour and reserved space, same
     export DISK_NAME ANSWER_DISK ANSWER_ROLE ANSWER_PRIMARY_URL ANSWER_PRIMARY_FINGERPRINT ANSWER_SERVERS_IF
     export ANSWER_SERVERS_MAC ANSWER_SERVERS_MODE ANSWER_SERVERS_ADDR ANSWER_SERVERS_MASK
     # #2426: not ANSWER_ADMIN_PASS -- an exported value is in /proc/<pid>/environ of every

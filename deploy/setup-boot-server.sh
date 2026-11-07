@@ -39,6 +39,8 @@ NO_FIREWALL=0
 ADMIN_USER=""
 TIMEZONE=""            # #1447: --timezone; ריק = ההגדרה לא נכתבת (ברירת המחדל של השרת)
 NTP_SERVERS=""         # #2144: --ntp-servers; ריק = אוטומטי (ההגדרה לא נכתבת)
+BACKUP_TIME=""         # #1956: --backup-time; ריק = 02:00 (ההגדרה לא נכתבת)
+BACKUP_RESERVE_GB=""   # #1956: --backup-reserve-gb; ריק = 5 (ההגדרה לא נכתבת)
 ADMIN_PASS=""
 ADMIN_PASS_FD=""
 # Storage Nodes (#655/#723): תפקיד ההתקנה. standalone (ברירת מחדל) או
@@ -310,6 +312,8 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
   --admin-pass-fd FD   קורא את הסיסמה מ-FD שכבר פתוח (האשף משתמש ב-3; אינו argv/env/log)
   --timezone ZONE      אזור הזמן של השרת (tzdata, למשל Asia/Jerusalem) — נכתב להגדרה (#1447)
   --ntp-servers "A B"  שרת הזמן של הארגון (עד 4, ברווח) — ההגדרה של הקונסולה, מקור השעה (#2144)
+  --backup-time HH:MM  שעת גיבוי המסד היומי — ההגדרה של הקונסולה (#1956)
+  --backup-reserve-gb N המקום השמור לגיבויים ב-GB — ההגדרה של הקונסולה (#1956)
   --tftp-root PATH     ברירת מחדל /srv/tftp
   --http-root PATH     ברירת מחדל /srv/imagesrv/boot; מועבר לשרת כ---boot-dir
   --storage-role ROLE  standalone (ברירת מחדל) או secondary (#655/#723)
@@ -342,6 +346,8 @@ while [[ $# -gt 0 ]]; do
         --admin-pass-fd) ADMIN_PASS_FD="${2:?}"; shift 2 ;;
         --timezone)    TIMEZONE="${2:?}"; shift 2 ;;
         --ntp-servers) NTP_SERVERS="${2:?}"; shift 2 ;;
+        --backup-time) BACKUP_TIME="${2:?}"; shift 2 ;;
+        --backup-reserve-gb) BACKUP_RESERVE_GB="${2:?}"; shift 2 ;;
         --tftp-root)   TFTP_ROOT="${2:?}"; shift 2 ;;
         --http-root)   HTTP_ROOT="${2:?}"; shift 2 ;;
         --storage-role) STORAGE_ROLE="${2:?}"; shift 2 ;;
@@ -964,6 +970,30 @@ if get_setting(conn, timesync.SETTING) != value:
 PYEOF
 fi
 
+# ‏#1956: שעת הגיבוי והמקום השמור שנבחרו במתקין הם ההגדרות של הקונסולה. אותו כלל בדיקה
+# (backup_job.parse_time/parse_reserve); ערך שנדחה נכשל כאן בשמו. התקרה נבדקה במתקין מול
+# גודל הדיסק, והגיבוי עצמו אוכף אותה בכל ריצה.
+if [[ -n "$BACKUP_TIME$BACKUP_RESERVE_GB" ]] && (( ! DRY_RUN )); then
+    say "גיבוי המסד: ${BACKUP_TIME:-02:00}, ${BACKUP_RESERVE_GB:-5} GB שמורים"
+    BACKUP_TIME="$BACKUP_TIME" BACKUP_RESERVE_GB="$BACKUP_RESERVE_GB" python3 - <<PYEOF
+import os, sys
+sys.path.insert(0, "$APP_DIR")
+from server.system import backup_job
+from server.db import connect, get_setting, set_setting
+conn = connect("$DATA_DIR/imagesrv.db")
+for key, env, check in ((backup_job.TIME_SETTING, "BACKUP_TIME", backup_job.parse_time),
+                        (backup_job.RESERVE_SETTING, "BACKUP_RESERVE_GB", backup_job.parse_reserve)):
+    value = os.environ[env]
+    if not value:
+        continue
+    if check(value) is None:
+        sys.exit(f"ההגדרה {key}: הערך {value!r} אינו תקין")
+    set_setting(conn, key, value)
+    if get_setting(conn, key) != value:
+        sys.exit(f"ההגדרה {key} לא נקראה בחזרה כפי שנכתבה")
+PYEOF
+fi
+
 # ---------------------------------------------------------------------------
 # ‏#1088: כרטיס השרתים — לקוח DHCP (ברירת מחדל) או סטטי, בקובץ שהקונסולה
 # יודעת לקרוא ולשנות (`interfaces.d/imagesrv-<if>`, server/net/netcfg.py),
@@ -1042,8 +1072,8 @@ run install -m 0644 "$APP_DIR/deploy/imagesrv-netrollback.service" \
     /etc/systemd/system/imagesrv-netrollback.service
 run install -m 0644 "$APP_DIR/deploy/imagesrv-netrollback.timer" \
     /etc/systemd/system/imagesrv-netrollback.timer
-# ‏#1895 (נדב 22/10): גיבוי המסד כל שעה ליעד שנבחר בהגדרות (בלי יעד — לא עושה דבר,
-# והבריאות כתומה). מופעל כאן, כדי שבחירת יעד בקונסולה תספיק.
+# ‏#1895/#1956: גיבוי המסד — הטיימר מקיש כל דקה, והגיבוי עצמו קובע אם הגיע הזמן (השעה
+# שנבחרה, או שינוי אימג'). מופעל כאן: הגיבוי תמיד קיים, גם בלי שאיש נגע בהגדרות.
 run install -m 0644 "$APP_DIR/deploy/imagesrv-backup.service" \
     /etc/systemd/system/imagesrv-backup.service
 run install -m 0644 "$APP_DIR/deploy/imagesrv-backup.timer" \

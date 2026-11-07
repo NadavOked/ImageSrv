@@ -42,6 +42,8 @@ from server.agent import timing as agent_timing
 from server import auto_reboot
 from server.net import igmp_querier
 from server.console import disk_sets as console_disk_sets   # #1857
+from server.console import learning as console_learning   # #2028
+from server.learn import tuning as learn_tuning   # #2028
 from server.agent import firmware_image# #2080
 from server.disks import model_slots   # #2001
 from server.disks import writefloor   # #2338
@@ -81,6 +83,8 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   identity.SETTING,
                   # ‏#447: תקרת הקצב הנלמדת. ‏"false" — התקרה הקבועה בלבד.
                   drive_rates.SETTING,
+                  # ‏#2028 (נדב 23/10): למידה אוטומטית — כבוי כברירת מחדל.
+                  learn_tuning.SETTING,
                   # ‏#1366: סף CRC מוחלט — מעליו המגירה כתומה (0 = כבוי).
                   crcwarn.SETTING,
                   # ‏#1354: מינימום GB פנויים במחיצת המערכת אחרי שחזור (0–500).
@@ -107,6 +111,7 @@ BOOLEAN_SETTINGS = {
     "update_enabled": "עדכון גרסה מהקונסולה",
     identity.SETTING: "אימות מחשבים לפי כתובת ה-DHCP",
     drive_rates.SETTING: "קצב שידור אוטומטי לפי הכוננים בחדר",
+    learn_tuning.SETTING: "למידה אוטומטית של הרשת והמחשבים",
 }
 
 
@@ -688,6 +693,8 @@ def create_console_router(
         model_maps, models = model_slots.all_maps(ctx.conn), model_slots.models_by_mac(ctx.conn)
         crc_limit = crcwarn.threshold(ctx.conn)   # #1366
         fw_counts = firmware_image.change_counts(ctx.conn)   # ‏#2080
+        # ‏#2028: הצעת הלמידה למחשב חדש — מנהל בלבד. ‏null = לא נקרא או אינו מנהל, ואז אין הצעה.
+        learning = learn_tuning.machine_states(ctx.conn) if user[1] == "admin" else None
         result = []
         for r in rows:
             row = dict(r)
@@ -730,6 +737,8 @@ def create_console_router(
             row["local_copy"] = room.local_copy_now(row.pop("local_clone"), row["disks_reported_at"])
             # ‏#2031: "דלוק — מחכה ללחיצה" (#2024): ‏{at, problems} מדיווח held טרי, או None
             row["held"] = held.view(row.pop("held_at"), row.pop("held_json"))
+            row["learning"] = (None if learning is None else learning.get(row["mac"], {
+                "state": "offer", "waves": 0, "ports": 0, "required": learn_tuning.REQUIRED_WAVES}))
             result.append(row)
         return result
 
@@ -1418,9 +1427,11 @@ def create_console_router(
         values[transfer_cap.SETTING] = str(transfer_cap.cap_mbps(ctx.conn))
         # ‏#1864: הערך שבתוקף — "false" (מדגם) כשלא נקבע.
         values[readbackhash.SETTING] = "true" if readbackhash.mode(ctx.conn) == "full" else "false"
-        # ‏#1956: יעד גיבוי המסד — לקריאה בלבד כאן (בלי סוד); בוחרים ב-POST /backup-target, שכותב
+        # ‏#1956: יעד גיבוי המסד — לקריאה בלבד כאן; בוחרים ב-POST /backup-target, שכותב
         # ומקריא קובץ בדיקה. ‏`backup_dest` אינו ב-WRITE_SETTINGS — אין דרך לעקוף את הבדיקה.
         values[backup_target.SETTING] = backup_target.describe(ctx.conn)
+        # הערכים שבתוקף, והתקרה לפי הכונן — גם כאן דרך POST נפרד (`/backup-policy`): התקרה תלויה ביעד.
+        values["backup_policy"] = backup_target.policy(ctx.conn, getattr(ctx, "data_dir", None))
         # ‏#2056/#2059: הערך שבתוקף (ברירת המחדל כשלא נקבע) + כמה מכונות מחוברות החזירו אותו.
         for key in agent_timing.KEYS:
             values[key] = str(agent_timing.seconds(ctx.conn, key))
@@ -1444,11 +1455,14 @@ def create_console_router(
         # ‏#1794: validate the complete request before writing any key. The
         # validator is deliberately exhaustive over WRITE_SETTINGS.
         normalized = _validate_write_settings(body)
+        learning_was_on = learn_tuning.enabled(ctx.conn)
         set_settings(ctx.conn, normalized)
+        learn_tuning.settings_written(ctx.conn, normalized, learning_was_on, user[0])   # ‏#2028
         for key, value in normalized.items():
             journal(ctx.conn, "setting_change", f"{key}={value}", user[0])
         return {"ok": True}
 
     console_mfa.register(router, ctx, current_user, admin_only, tls, clock_status)
     console_disk_sets.register(router, ctx, admin_only)   # ‏#1857
+    console_learning.register(router, ctx, admin_only)   # ‏#2028
     return router

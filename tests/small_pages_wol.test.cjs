@@ -137,7 +137,7 @@ test('settings (סידור 17/10, המוקאפ settings-redesign): four groups, 
   assert.ok(groupOf('שיכפול והפצה').includes('id="srow-igmp_querier"')); assert.match(sw('igmp_querier'),/ checked /,'#1972: missing = on');
   // ‏#1967 (22/10): מתג "צליל בסיום סבב שיכפול" ב"שיכפול והפצה", דלוק כשלא נקבע.
   assert.ok(groupOf('שיכפול והפצה').includes('id="srow-cloner_beep"')); assert.match(sw('cloner_beep'),/ checked /,'#1967: missing = on');
-  assert.equal((html.match(/role="switch"/g)||[]).length,run('classroomsOn()')?10:9,'learned rate · full read-back (20/10) · IGMP querier (22/10) · cloner beep (22/10) · recovery · identity · update · idle logout · MFA for admins (18/10) (+ class deploy with classrooms)');
+  assert.equal((html.match(/role="switch"/g)||[]).length,run('classroomsOn()')?11:10,'learned rate · learning (#2028) · full read-back (20/10) · IGMP querier (22/10) · cloner beep (22/10) · recovery · identity · update · idle logout · MFA for admins (18/10) (+ class deploy with classrooms)');
   // תעודה ותחזוקה — שורה אחת כל אחת
   assert.match(groupOf('אבטחה'),/<dt>תעודת TLS<\/dt><dd><span class="muted">בלי TLS \(loopback בלבד\)<\/span><\/dd>/);
   assert.match(groupOf('עדכונים ותחזוקה'),/<dt title="[^"]*">הפעלה מחדש אוטומטית<\/dt><dd[^>]*><span class="sv">כבוי<\/span> <button[^>]*autoRebootSheet\(\)">שינוי…</);

@@ -434,6 +434,12 @@ void state_parse(State *s, FILE *fp) {
             if (split(val, f, 2) == 2 && !strcmp(f[1], "list_not_fetched"))
                 for (int i = 0; i < s->ndrawers; i++)
                     if (!strcmp(s->drawers[i].dev, f[0])) s->drawers[i].rb_nolist = 1;
+        } else if (KEY("drawer_rbp")) {
+            /* #2046: drawer_rbp=dev|done|total|verdict|rate -- the read-back's bar of that drawer (clonergui.sh) */
+            int nf = split(val, f, 5);
+            if (nf >= 4)
+                for (int i = 0; i < s->ndrawers; i++)
+                    if (!strcmp(s->drawers[i].dev, f[0])) rb_set(&s->drawers[i].rb, f[1], f[2], f[3], nf >= 5 ? f[4] : "-1");
         } else if (KEY("cdisk") && s->nidisks < MAX_DRAWERS) {
             /* cdisk=port|dev|model|size|smart|cause -- the cloner's idle
              * inventory. NOT "disk=" -- that key already holds the build
@@ -500,6 +506,8 @@ void state_parse(State *s, FILE *fp) {
                 cp(s->disk_probe, sizeof s->disk_probe, val);
             else
                 cp(s->disk_probe, sizeof s->disk_probe, "unchecked");
+        } else if (KEY("rb_mode")) {
+            cp(s->rb_mode, sizeof s->rb_mode, !strcmp(val, "full") ? "full" : "sample");   /* #2046 */
         } else if (KEY("cloner")) {
             cp(s->cloner_image, sizeof s->cloner_image, val);
         } else if (KEY("drawer_count")) {

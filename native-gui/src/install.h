@@ -28,6 +28,9 @@ typedef struct {
 #define HIT_INSTALL_NTP_SERVERS    1114
 #define HIT_INSTALL_DISK_BASE      1120
 #define HIT_INSTALL_RAID_BASE      1140   /* #1989: + RAID_* */
+#define HIT_INSTALL_BACKUP_BASE    1150   /* #1956: + backup_pick */
+#define HIT_INSTALL_BACKUP_OTHER_GB 1154
+#define HIT_INSTALL_BACKUP_TIME    1155
 
 void install_demo(App *a, int view);
 int install_start(App *a, InstallBridge *bridge, int demo);
@@ -43,6 +46,10 @@ void install_password_rules(const char *pw, int *letter, int *digit, int *specia
 int install_role_ready(const InstallState *s);
 /* #2144: "next" on the clock step -- the organisation's server needs an address */
 int install_time_ready(const InstallState *s);
+/* #1956: "next" on the backup step -- an hour and a size; the engine checks their rules.
+ * install_backup_gb is the size as it is sent ("" while "גודל אחר" is empty). */
+const char *install_backup_gb(const InstallState *s);
+int install_backup_ready(const InstallState *s);
 /* #2144: the time step's "now": HH:MM · DD/MM/YYYY in the chosen zone when its
  * TZif is on this system, else in UTC and the label says "UTC" -- never another
  * zone's time under the chosen name. Returns the minute drawn. */

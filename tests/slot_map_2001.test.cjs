@@ -15,7 +15,7 @@ const GB=1e9;
 const C1='a0:48:1c:8a:18:40', C2='78:ac:c0:9b:11:c2', HP='HP Compaq 8100 Elite SFF PC';
 const disk=(dev,port,serial,extra={})=>({dev,port,serial,model:'Samsung SSD 870 EVO',size_bytes:500*GB,smart:'ok',...extra});
 
-function setup({c2={},admin=true,fail=null,fail409=false}={}) {
+function setup({c2={},admin=true,fail=null,fail409=false,wiring=null,wiringFail=null}={}) {
   const nodes=new Map(), requests=[];
   function node(key) {
     if(!nodes.has(key)) nodes.set(key,{value:'',innerHTML:'',textContent:'',hidden:false,dataset:{},style:{removeProperty(){}},
@@ -43,6 +43,8 @@ function setup({c2={},admin=true,fail=null,fail409=false}={}) {
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async(url,options={})=>{
       const key=url.replace('/api/console','').split('?')[0]; requests.push({url,options});
+      if(/\/wiring$/.test(key) && wiringFail) return {status:500,ok:false,headers:{get:()=>null},json:async()=>({detail:wiringFail})};
+      if(/\/wiring$/.test(key) && wiring) return {status:200,ok:true,headers:{get:()=>null},json:async()=>wiring};
       if(options.method==='PUT' && fail409 && !/replace_machine_maps/.test(options.body||'')) return {status:409,ok:false,headers:{get:()=>null},json:async()=>({code:'machine_maps',message_he:'ל-2 מחשבים מהדגם יש מיפוי משלהם — הוא יוחלף',machines:['x','y']})};
       if(options.method==='PUT' && fail) return {status:400,ok:false,headers:{get:()=>null},json:async()=>({detail:fail})};
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true,machines:[C1,C2]}};
@@ -217,4 +219,79 @@ test('a 409 machine_maps from the server (stale data in the browser) also become
   assert.equal(requests.filter(r=>r.options.method==='PUT').length,1);
   assert.ok(run('globalThis.formOptions'),'the 409 became the question'); assert.match(run('formOptions').note,/ל-2 מחשבים מהדגם יש מיפוי משלהם — הוא יוחלף/);
   assert.match(run("SMAP ? '' : 'gone'"),/^$/,'the window state is kept for "back"');
+});
+
+/* ‏#2028 (מוקאפ 2028, חלק 4): המלצת החיווט. מידע בלבד — לא משנה מיפוי ולא חוסמת שמירה. */
+const tick=()=>new Promise((r)=>setImmediate(r));
+const W=(over={})=>({model:HP,machines:3,waves:11,enough:true,required_machines:2,required_waves:5,drawers:3,recommended:[1,2,4],avoid:[3],moves:[],move_notes_he:[],
+  head_he:`המלצת חיווט לדגם ${HP}:`,text_he:'חברו את 3 המגירות ל-SATA 0, 1 ו-3. מבוסס על 3 מחשבים מהדגם, 11 שיכפולים.',
+  ports:{'1':{link_gbps:6,model_link_gbps:6,crc:0,crc_waves:0,advice:'use',instead_of:null,slow_for_model:false},
+    '2':{link_gbps:3,model_link_gbps:6,crc:212,crc_waves:2,advice:'avoid',instead_of:null,slow_for_model:true},
+    '3':{link_gbps:null,model_link_gbps:6,crc:null,crc_waves:0,advice:'use',instead_of:2,slow_for_model:false}},...over});
+
+test('#2028: the window names the advice, its evidence, and three info columns', async () => {
+  const {run,node}=setup({wiring:W({move_notes_he:['המגירה השנייה מחוברת היום ל-SATA 1. מומלץ להעביר אותה ל-SATA 2.']})});
+  run(`openSlotMap('${encodeURIComponent(C2)}')`); await tick(); await tick();
+  const html=win(node), r=rows(html);
+  assert.match(html,/<th>מחובר עכשיו<\/th><th>קישור<\/th><th>CRC<\/th><th>המלצה<\/th><th>שם<\/th><th>פעיל<\/th>/);
+  assert.match(html,/class="smap-reco"[^]*<b>המלצת חיווט לדגם[^]*מבוסס על 3 מחשבים מהדגם, 11 שיכפולים/);
+  assert.match(html,/smap-note warn[^]*המגירה השנייה מחוברת היום ל-SATA 1/);
+  assert.doesNotMatch(html,/יתעדכן לבד/,'the saved map never moves by itself');
+  assert.match(html,/את המיפוי משנים כאן ושומרים/);
+  assert.match(r[0].cls,/\buse\b/); assert.match(r[0].html,/<span class="n-chip">מומלץ<\/span>/);
+  assert.match(r[1].cls,/\bavoid\b/); assert.match(r[1].html,/חשוד: לא לחבר/); assert.match(r[1].html,/איטי מהמקובל בדגם/);
+  assert.match(r[1].html,/212<\/span><span class="sub">עלה ב-2 סבבים/);
+  assert.match(r[2].html,/מומלץ: במקום SATA 1/);
+  assert.match(r[2].html,/לא נמדד<\/span><span class="sub">בדגם: <bdi dir="ltr">6 Gb\/s/,'an empty port is not given a reading of its own');
+});
+
+test('#2028: the advice changes nothing in the map; saving sends what the admin chose', async () => {
+  const {run,node,requests}=setup({wiring:W()});
+  run(`openSlotMap('${encodeURIComponent(C2)}')`);
+  const before=run('JSON.stringify(SMAP.rows.map((r)=>[r.key,r.on,r.name]))');
+  await tick(); await tick();
+  assert.equal(run('JSON.stringify(SMAP.rows.map((r)=>[r.key,r.on,r.name]))'),before);
+  assert.equal(run('smapDirty()'),0,'nothing to save');
+  run('smapScope("machine")'); await run('smapSave()'); await tick();
+  const body=JSON.parse(lastPut(requests).options.body);
+  assert.deepEqual([...body.slots],['sata:1','sata:2','sata:4','nvme:0000:02:00.0'].filter((k)=>/sata|nvme/.test(k)));
+});
+
+test('#2028: a port only the model knows gets a row that is off, is not a change, and is not saved', async () => {
+  const w=W(); w.ports['8']={link_gbps:null,model_link_gbps:6,crc:null,crc_waves:0,advice:'use',instead_of:2,slow_for_model:false};
+  const {run,node,requests}=setup({wiring:w});
+  run(`openSlotMap('${encodeURIComponent(C2)}')`); await tick(); await tick();
+  const r=rows(win(node)), row=r.find((x)=>x.key==='sata:8');
+  assert.ok(row,'the free port the advice points at is on screen');
+  assert.match(row.html,/<b>SATA 7<\/b>/); assert.match(row.html,/מומלץ: במקום SATA 1/); assert.doesNotMatch(row.html,/ checked/);
+  assert.equal(run('smapDirty()'),0,'nothing to save');
+  assert.match(r.find((x)=>/NVMe/.test(x.html)).html,/placeholder="דיסק 7"/,'the numbering of the default does not move');
+  run('smapScope("machine")'); await run('smapSave()'); await tick();
+  assert.ok(!JSON.parse(lastPut(requests).options.body).slots.includes('sata:8'));
+});
+
+test('#2028: below the threshold says so, and a suspect port still shows', async () => {
+  const {run,node}=setup({wiring:W({enough:false,head_he:null,text_he:null,recommended:[],machines:1,waves:3,
+    ports:{'2':{link_gbps:3,model_link_gbps:3,crc:9,crc_waves:1,advice:'avoid',instead_of:null,slow_for_model:false}}})});
+  run(`openSlotMap('${encodeURIComponent(C2)}')`); await tick(); await tick();
+  const html=win(node), r=rows(html);
+  assert.match(html,/אין מספיק נתונים לדגם: 1 מחשבים, 3 שיכפולים\. המלצה מ-2 מחשבים ו-5 שיכפולים/);
+  assert.doesNotMatch(html,/smap-reco/);
+  assert.match(r[1].html,/חשוד: לא לחבר/);
+  assert.doesNotMatch(r[0].html,/מומלץ/);
+});
+
+test('#2028: a read that failed is visible and says it is not "all fine"; the map still works', async () => {
+  const {run,node}=setup({wiringFail:'database is locked'});
+  run(`openSlotMap('${encodeURIComponent(C2)}')`); await tick(); await tick();
+  const html=win(node), r=rows(html);
+  assert.match(html,/נתוני החיווט לא נקראו:<\/b> database is locked\. זה לא אומר שהחיבורים תקינים/);
+  assert.match(r[0].html,/לא נקרא/); assert.doesNotMatch(html,/n-chip">מומלץ/);
+  assert.match(r[0].html,/type="checkbox"/,'the switches are still there');
+});
+
+test('#2028: a late answer for a window that was closed is dropped', async () => {
+  const {run}=setup({wiring:W()});
+  run(`openSlotMap('${encodeURIComponent(C2)}')`); run('SMAP=null'); await tick(); await tick();
+  assert.equal(run('SMAP'),null);
 });

@@ -172,6 +172,8 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
     default:
         snprintf(y->line, sizeof y->line, "%s", d && !strcmp(d->state, "replacing") ? "ממתין להחלפה" : "ממתין לשידור");
     }
+    /* #2046 (mockup 11): the check after the write -- green over the blue, "אומת" only for a full read */
+    if (d && strcmp(d->state, "writing")) lc_bay_readback(y, &d->rb, "לאימג׳", d->error);
     /* #1331 (mockup v2): the drawer's drivers, under its bar */
     if (d && d->drv_state[0]) lc_bay_drivers(y, d->drv_state, d->drv_detail, d->drv_boot, d->drv_bsvc, d->drv_berr);
     if (d && d->drv_lstate[0]) lc_bay_linux(y, d->drv_lstate, d->drv_lmod, d->drv_ldet);   /* #1331 T8 */
@@ -286,6 +288,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + 22;
     int nw = 0, nd = 0, nf = 0, ns = 0, nc = 0, ncg = 0, pend = 0, sum = 0, known = 0, eta = -1;   /* #1386: cancelled, cancelling */
     int verifying = 0, waiting = 0, asking = 0, unchecked_done = 0;   /* display counts only; entry_kind is unchanged */
+    RbSum rbs = { 0 };                    /* #2046: the check, across the rows */
     long long rate = -1, moved = 0; unsigned long long most = 0, whole = 0; int stalled = 0;   /* #2055 */
     char names[200] = "", failed_name[SLOT_NAME_MAX + 64] = "", skipped_name[SLOT_NAME_MAX + 64] = "";
     char pdisk[SLOT_NAME_MAX + 64] = "";   /* #2347: the drawer that asks (#1808/#1898), by its own row */
@@ -314,6 +317,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (k == BAY_DONE) nd++;
         if (k == BAY_DONE && (dg.line_warn || dg.done_warn || dg.flag)) unchecked_done++;
         if (k == BAY_WRITING && !strcmp(e->drawer->state, "verifying")) verifying++;
+        if (e->drawer) rb_sum_add(&rbs, &e->drawer->rb, e->drawer->state);
         if (k == BAY_WAITING) waiting++;
         if (k == BAY_SMART) asking++;
         if (k == BAY_FAILED) { nf++; snprintf(failed_name, sizeof failed_name, "%s", nm); }
@@ -325,6 +329,9 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (e->drawer && e->drawer->bytes > most) { most = e->drawer->bytes; whole = e->drawer->total; }
     }
     int ended = s->ndrawers > 0 && !nw && !pend && !ncg && nd + nf + ns + nc == n;
+    /* #2046: every disk still writing-kind is in its check -- the screen is about the check (mockup 11) */
+    const int checking = nw > 0 && verifying == nw && rbs.vbars > 0 && !pend && !ncg;   /* no count from the agent = the old screen, never an invented 0% */
+    const int full = !strcmp(s->rb_mode, "full");
 
     /* #2067: the outage bar, over the hero; the cage below gives up the room (bh, further down) */
     double nbar = net_bar(a, cr, x0, xr, y);
@@ -390,6 +397,14 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
             if (eta < 60) snprintf(left, sizeof left, "פחות מדקה נותרה");
             else snprintf(left, sizeof left, "כ-%d דק' נותרו", (eta + 30) / 60);
         } else if (nw) snprintf(left, sizeof left, "הזמן שנותר טרם נמדד");
+        if (checking) {   /* #2046 (mockup 11): the check has the screen -- its own title, its own number */
+            snprintf(title, sizeof title, "בודק את הדיסקים — %d מתוך %d %s", rbs.done, rbs.n, full ? "אומתו" : "נבדקו");
+            snprintf(s2, sizeof s2, "הכתיבה הסתיימה. כל דיסק נקרא עכשיו בחזרה ומושווה לאימג׳.");
+            if (rbs.bars) snprintf(big, sizeof big, "%d%%", (int)floor(100.0 * rbs.sum / rbs.bars + 1e-9)); else snprintf(big, sizeof big, "—");
+            if (eta >= 0 && eta < 60) snprintf(left, sizeof left, "נבדק · פחות מדקה נותרה");
+            else if (eta >= 0) snprintf(left, sizeof left, "נבדק · כ-%d דק' נותרו", (eta + 30) / 60);
+            else snprintf(left, sizeof left, "נבדק");
+        }
     }
     y += lc_hero(a, cr, x0, xr, y, label, title, s2, big, left, ended && nf && !held_end) + 16;   /* #2081: the held end title is ink, the rows carry the red */
 
@@ -401,7 +416,10 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     else snprintf(v2, sizeof v2, "%s", most ? "" : "—");
     if (!whole && most) snprintf(v2, sizeof v2, "%.1f GB", most / 1e9);
     if (ended) snprintf(v3, sizeof v3, RLM "%d מתוך %d נכתבו", nd, n);
-    else {
+    else if (checking) {   /* #2046: "1 אומת · 2 בבדיקה · 1 נכשל" */
+        disk_count(v3, sizeof v3, nd, full ? "אומת" : "נבדק", full ? "אומתו" : "נבדקו");
+        disk_count(v3, sizeof v3, verifying, "בבדיקה", "בבדיקה");
+    } else {
         disk_count(v3, sizeof v3, nw - verifying, "כותב", "כותבים");
         disk_count(v3, sizeof v3, verifying, "מאמת", "מאמתים");
         disk_count(v3, sizeof v3, waiting, "ממתין", "ממתינים");
@@ -435,9 +453,15 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     Text caption = text_make(cr, FONT_SANS, 11, 400, c3, (int)(mw - 28), DIR_RTL);
     mh = fmax(mh, 30 + counts.h + caption.h + 12);
     text_free(&counts); text_free(&caption);
+    if (checking) {   /* #2046: the check's speed (all the disks together) and the write that is behind us */
+        if (rbs.rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rbs.rate / 1e6); else snprintf(v1, sizeof v1, "עוד לא נמדד");
+        lc_met(a, cr, (Rect){ xr - mw, y, mw, mh }, "קצב בדיקה", v1, "כל הדיסקים יחד", t->muted);
+        lc_met(a, cr, (Rect){ xr - 2 * mw - 12, y, mw, mh }, "נכתב", v2, "הכתיבה הסתיימה בכל היעדים", t->muted);
+    } else {
     lc_met(a, cr, (Rect){ xr - mw, y, mw, mh }, "מהירות", v1, rate > 0 ? "הקצב שנמדד בדיסק הזה" : stalled ? "ממתין לזרם מהשרת" : "",
            stalled ? t->warn : t->muted);   /* #2055: the stream stands -- orange, the write is not stopped */
     lc_met(a, cr, (Rect){ xr - 2 * mw - 12, y, mw, mh }, "התקבלו", v2, whole ? "בזרם הדחוס" : "", t->muted);
+    }
     lc_disks_met(a, cr, (Rect){ x0, y, mw, mh }, v3, c3);
     }
     y += mh + 12;
@@ -449,7 +473,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     if (n && n * bh > room) bh = fmax(56, floor(room / n));
     if (n) {
         Rect cage = { x0, y, cw, 10 + 16 + 8 + n * bh + (n > 1 ? (n - 1) * 10 : 0) + 10 };
-        char cnt[96]; snprintf(cnt, sizeof cnt, ended ? "%d מתוך %d נכתבו" : "%d מתוך %d כותבים", ended ? nd : nw, n);   /* #1331 mockup v2 */
+        char cnt[96]; snprintf(cnt, sizeof cnt, ended ? "%d מתוך %d נכתבו" : checking ? "%d מתוך %d בבדיקה" : "%d מתוך %d כותבים", ended ? nd : nw, n);   /* #1331 mockup v2; #2046 */
         if (nc || ncg) { size_t u = strlen(cnt);    /* #1386: "1 מתוך 2 כותבים · 1 בוטל" */
             if (nc) u += snprintf(cnt + u, sizeof cnt - u, " · %d בוטל", nc);
             if (ncg && u < sizeof cnt) snprintf(cnt + u, sizeof cnt - u, " · %d מבטל", ncg); }
