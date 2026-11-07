@@ -59,6 +59,7 @@ gui_dispatch() {
     # cloner screen, and only the three valid tokens.
     case "$token" in
         shrink-*) gui_shrink_dispatch; return $? ;;   ask-*) gui_ask_dispatch; return $? ;;   # 11/10: askgui.sh
+        fw-accept) [ "${GUI_SCREEN:-}" = cloner ] || return 1; fw_accept_post; return $? ;;   # #2080 (Nadav 25/10): "זה מכוון" on the cloner
         end-poweroff) [ -s "$RUN_DIR/end.poweroff" ] && : > "$RUN_DIR/end.now"; return $? ;;
         idle-poweroff) [ -s "$RUN_DIR/idle.warn" ] && : > "$RUN_DIR/idle.now"; return $? ;;
         choice-back) [ "${GUI_SCREEN:-}" = cloner ] && [ ! -f "${LC:-$RUN_DIR/lc}/screen" ] && [ "${D_SESSION_STATE:-}" != open ] && mkdir -p "${LC:-$RUN_DIR/lc}" && echo "0|2" > "${LC:-$RUN_DIR/lc}/boot" && echo boot > "${LC:-$RUN_DIR/lc}/screen"; return $? ;;   # #2079 (mockup 02): back to the boot choice, no count (localclone.sh)   # mockup 10: "כבה עכשיו" in the idle window (idle.sh)   # #1560: "כבה עכשיו" (idle.sh), no session needed
@@ -231,7 +232,7 @@ gui_libs() {
     . "$LIB_DIR/roomflow.sh"   # #418: the room round (open/wake/start)
     . "$LIB_DIR/guistate.sh"
     . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/syspartgui.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: the question dialog; #1896: C: of an old image; #1709: the boot screen
-    . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/disklink.sh"   # disk_port + disk_link (#432), for the cloner state producer
+    . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/disklink.sh"; . "$LIB_DIR/fwimage.sh"   # #2080: fw_warn_record/fw_accept_post; disk_port + disk_link (#432), for the cloner state producer
     . "$LIB_DIR/progress.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
     . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/manifest.sh"     # #1921: the tables judge the disk, the hw note per drawer; smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591)
     . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/writemark.sh"; . "$LIB_DIR/diskused.sh"   # #2030: cused= (size, used) per disk; the server's memory per cdisk (#874); slot names (#704); #1798 the mark per cdisk/lc_disk

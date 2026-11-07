@@ -27,8 +27,14 @@ checkout. server-upgrade.sh of 9001fc91: the marker test fails -- no marker.
 from __future__ import annotations
 
 import json
+import os
+import re
 import sqlite3
+import stat
+import sys
 from pathlib import Path
+
+import pytest
 
 from test_installer_1131 import (  # noqa: F401 -- bindir is a fixture
     REPO, _fake_repo, _run_upgrade, _seed_db, _status, bindir, calls, fake_tool, posix, pytestmark,
@@ -36,6 +42,79 @@ from test_installer_1131 import (  # noqa: F401 -- bindir is a fixture
 )
 
 RECOVER = REPO / "tools" / "server-upgrade-recover.sh"
+
+
+@pytest.mark.parametrize("target", ["marker", "snapshot"])
+@pytest.mark.parametrize("failure", [None, "open", "fsync"])
+def test_upgrade_recovery_replace_fsyncs_directory(tmp_path, monkeypatch, target, failure):
+    """Execute the embedded Python, recording real descriptors and rename order."""
+    script = REPO / "tools" / "server-upgrade.sh"
+    text = script.read_text(encoding="utf-8")
+    anchor = "write_recovery_marker() {" if target == "marker" else 'if ! DB_SNAP_VER='
+    block = re.search(r"<<'PYEOF'[^\n]*\n(.*?)\nPYEOF", text.split(anchor, 1)[1], re.S)
+    assert block, f"missing {target} Python block"
+    if target == "marker":
+        destination = tmp_path / "state" / "server-upgrade.state"
+        args = [str(destination), str(REPO), "old", "new", "fetch", str(tmp_path), "", "0"]
+    else:
+        source = tmp_path / "imagesrv.db"
+        with sqlite3.connect(source) as conn:
+            conn.execute("PRAGMA user_version = 7")
+        destination = tmp_path / "imagesrv.db.pre-upgrade"
+        args = [str(source), str(destination)]
+    monkeypatch.setattr(sys, "argv", ["-", *args])
+    events = []
+    directory_fds = []
+    real_open, real_fsync, real_replace, real_close = os.open, os.fsync, os.replace, os.close
+
+    def record_replace(src, dst):
+        real_replace(src, dst)
+        events.append("replace")
+
+    def record_open(path, flags, *args, **kwargs):
+        assert Path(path) == destination.parent
+        assert flags == os.O_RDONLY
+        if failure == "open":
+            raise OSError("directory open failed")
+        fd = real_open(path, flags, *args, **kwargs)
+        assert stat.S_ISDIR(os.fstat(fd).st_mode)
+        directory_fds.append(fd)
+        return fd
+
+    def record_fsync(fd):
+        is_directory = stat.S_ISDIR(os.fstat(fd).st_mode)
+        events.append("directory fsync" if is_directory else "file fsync")
+        if is_directory and failure == "fsync":
+            raise OSError("directory fsync failed")
+        real_fsync(fd)
+
+    def record_close(fd):
+        real_close(fd)
+        if fd in directory_fds:
+            events.append("directory close")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "replace", record_replace)
+        patch.setattr(os, "open", record_open)
+        patch.setattr(os, "fsync", record_fsync)
+        patch.setattr(os, "close", record_close)
+        code = compile(block.group(1), str(script), "exec")
+        if failure:
+            with pytest.raises(OSError, match=f"directory {failure} failed"):
+                exec(code, {})
+        else:
+            exec(code, {})
+    assert destination.exists()
+    if failure != "open":
+        assert events[-3:] == ["replace", "directory fsync", "directory close"], events
+        assert len(directory_fds) == 1
+        with pytest.raises(OSError):
+            os.fstat(directory_fds[0])
+    if target == "marker":
+        assert events[0] == "file fsync"
+        assert json.loads(destination.read_text(encoding="utf-8"))["stage"] == "fetch"
+    else:
+        assert _version(destination) == 7
 
 
 def _db(data: Path) -> sqlite3.Connection:

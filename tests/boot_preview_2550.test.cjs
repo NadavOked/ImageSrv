@@ -56,12 +56,12 @@ const PREVIEW={checked_at:new Date().toISOString(),guard_limit:3,machines:{
 const row=(html,mac)=>{ const i=html.indexOf(`data-mac="${mac}"`); assert.ok(i>=0,mac); return html.slice(i,html.indexOf('</tr>',i)); };
 const cell=(tr)=>{ const m=tr.match(/<span class="boot">(.*?)<\/span><\/span>/); assert.ok(m,tr); return m[1]; };
 
-test('#2550 table: the new column sits between "דיסקים" and "מצב", with the answer and the short reason', () => {
+test('#2550 table: the new column sits between "נפח" and "מצב", with the answer and the short reason', () => {
   const {run}=setup(PREVIEW);
   run('BOOT_PREVIEW='+JSON.stringify(PREVIEW));
   const html=run('machinesTableHtml()');
   const head=html.slice(html.indexOf('<thead>'),html.indexOf('</thead>')).replace(/<[^>]+>/g,'|');
-  assert.match(head,/דיסקים\|+באתחול הבא\|+מצב/);
+  assert.match(head,/נפח\|+באתחול הבא\|+מצב/);
   assert.match(cell(row(html,BUILD)),/pill info">משימה פתוחה: קליטה<\/span><span class="why">Windows 11 בסיס · מחכה שהמחשב יעלה/);
   assert.match(cell(row(html,CLONER1)),/pill info">מצטרף לסבב<\/span><span class="why">סבב פתוח: Office 2024 — סטנדרט/);
   assert.match(cell(row(html,CLONER2)),/pill info">ImageSrv, מסך המתנה<\/span><span class="why">אין סבב פתוח: מחכה לסבב/);

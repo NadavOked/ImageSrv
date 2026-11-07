@@ -42,7 +42,7 @@ ImageSrv מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחו�
 **אם נראה רק `NadavOked/ImageSrv` (הציבורי):** אין גישה לארכיון. דיווח
 דרך GitHub Security Advisories בלבד — לשונית **Security** ← **Report a
 vulnerability**, או
-<https://github.com/NadavOked/ImageSrv-dev/security/advisories/new>.
+<https://github.com/NadavOked/ImageSrv/security/advisories/new>.
 Issue או PR בציבורי מפרסם את החולשה לפני שיש תיקון.
 
 **אין כתובת דוא"ל לאבטחה, ואין תוכנית תגמול.** הפרויקט מתוחזק על ידי
@@ -169,9 +169,7 @@ python tools/security-recheck.py --dependabot-only
 (הקרנל לבדו כ-740, ארגז הכלים, ‏QEMU). ההכרעה "נגיש אצלנו?" אינה בכלי —
 היא נכתבת ב-#1975, והנתיבים שנקבע שאינם נגישים נעולים בטסט
 (‏`tests/test_pinned_deps_unreachable_paths.py`: ‏python-multipart, ‏h2/hpack,
-‏anyio, ‏python3.13, ו-applets של busybox בסוכן). ב-22/10 נמצאו שתיים
-עם נתיב בקוד שלנו, שתיהן Low: ‏busybox ‏udhcpc ‏CVE-2026-88833 (‏DoS מוילן
-ההפצה, #1980) ו-open-iscsi ‏CVE-2026-44943 (‏discovery מול יעד מתחזה, #1983).
+‏anyio, ‏python3.13, ו-applets של busybox בסוכן). נתיבים שנמצאו נגישים אצלנו נרשמים בטריאז' הפרטי של הפרויקט ומפורסמים אחרי תיקון, לא כאן.
 
 **‏starlette (‏#326).** ‏`pip-audit` על ה-CI מדווח שבע חולשות ב-`starlette
 0.46.2` מ-PyPI. השרת אינו מריץ אותה: ה-ISO אורז את `python3-starlette
@@ -209,7 +207,7 @@ Two repositories, two disclosure surfaces:
 
 If you can only see the public repo, report through GitHub Security
 Advisories:
-<https://github.com/NadavOked/ImageSrv-dev/security/advisories/new>
+<https://github.com/NadavOked/ImageSrv/security/advisories/new>
 
 A Security Advisory is **also** required when the weakness affects someone
 other than the maintainer (a student whose disk is written, another college

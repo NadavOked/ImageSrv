@@ -203,6 +203,7 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
     case SCREEN_STANDBY:   /* #1304: what the last hello proves (screens_standby.c) */
         if(standby_conn(s)==STANDBY_OFF){*dot=a->theme->danger;return "אין קשר לשרת";}
         if(standby_conn(s)==STANDBY_UNKNOWN)*dot=a->theme->led_idle;
+        if(s->fw_warn_count>0){*dot=a->theme->warn;return "ממתין לסבב · החיבורים השתנו";}   /* #2080 (mockup 06) */
         return "ממתין לסבב";
     case SCREEN_MESSAGE:*dot=strcmp(s->screen,"boot")?a->theme->warn:a->theme->led_idle;return s->msg_title;   /* #1709: connecting is no warning */
     case SCREEN_FAILURE:return failure_status_word(a,dot);   /* #1569 */

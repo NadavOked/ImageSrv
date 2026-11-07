@@ -147,19 +147,28 @@ def test_cloner_gui_state_carries_the_record(tmp_path):
 
 
 def _texts(driver: Path, tmp_path: Path, net: str | None) -> list[str]:
-    now = int(time.time())
-    state = ("cloner=Office 2024\n"
-             f"drawer=2|sdb|writing|{int(0.86 * 19.5 * G)}|{int(19.5 * G)}||0|-1|2|SATA 1\n"
-             f"drawer_moved=sdb|{now - 60}\n"
-             + (re.sub(r"NOW-(\d+)", lambda m: str(now - int(m.group(1))), net) + "\n" if net else "")
-             + f"updated={now}\n")
-    p = tmp_path / "state.txt"; p.write_text(state, encoding="utf-8", newline="\n")
-    r = subprocess.run([str(driver), posix(p)], capture_output=True, text=True, encoding="utf-8", timeout=120,
-                       env=dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf")), stdin=subprocess.DEVNULL)
-    assert r.returncode == 0, r.stderr
-    got = [l[len("text="):] for l in r.stdout.splitlines() if l.startswith("text=")]
-    assert any("מעתיק" in t for t in got), got   # the cloner's round screen, with or without a bar
-    return got
+    """The screen reads the wall clock in whole seconds (`time(NULL)`), and `NOW-n` is n seconds before
+    the second this file was written. A run that crosses into the next second sees n+1 -- for n=4 that
+    is the other side of the five-second rule (full run of round/1107b, 07/11: `[4-True]` failed). So
+    each try starts just after a second turns, and counts only if the second did not turn again before
+    the screen answered (positive evidence that the screen saw `now`); otherwise it is repeated."""
+    for _ in range(5):
+        time.sleep(1.02 - time.time() % 1)
+        now = int(time.time())
+        state = ("cloner=Office 2024\n"
+                 f"drawer=2|sdb|writing|{int(0.86 * 19.5 * G)}|{int(19.5 * G)}||0|-1|2|SATA 1\n"
+                 f"drawer_moved=sdb|{now - 60}\n"
+                 + (re.sub(r"NOW-(\d+)", lambda m: str(now - int(m.group(1))), net) + "\n" if net else "")
+                 + f"updated={now}\n")
+        p = tmp_path / "state.txt"; p.write_text(state, encoding="utf-8", newline="\n")
+        r = subprocess.run([str(driver), posix(p)], capture_output=True, text=True, encoding="utf-8", timeout=120,
+                           env=dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf")), stdin=subprocess.DEVNULL)
+        assert r.returncode == 0, r.stderr
+        got = [l[len("text="):] for l in r.stdout.splitlines() if l.startswith("text=")]
+        assert any("מעתיק" in t for t in got), got   # the cloner's round screen, with or without a bar
+        if int(time.time()) == now:
+            return got
+    pytest.fail("the screen never answered within the second it was given (5 tries): not measured, not passed")
 
 
 def _net(got: list[str]) -> list[str]:

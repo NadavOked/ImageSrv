@@ -129,6 +129,7 @@ void lc_disks_met(App *a, cairo_t *cr, Rect r, const char *value, const char *hi
 double lc_hero(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
                const char *s2, const char *big, const char *left, int alarm);   /* alarm: the title in red */
 double lc_cage(App *a, cairo_t *cr, Rect cage, const char *title, const char *count);
+void lc_bay_number(App *a, cairo_t *cr, double right, double cy, double big, int drawer, Rgb col);   /* the drawer number column */
 /* shared pieces (screens_local.c) */
 double lc_btn(App *a, cairo_t *cr, double right, double y, double h, const char *label, const char *key,
               int kind, int id, int focus);

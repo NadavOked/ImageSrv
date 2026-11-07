@@ -127,6 +127,7 @@ cloner_gui_state() {
     # #704: the operator's slot names (slotnames.sh); a failed read keeps the last file.
     slot_names_refresh || :; drawer_slots_refresh || :   # #1495: the drawer mapping, the same way
     { slot_names_records && drawer_slots_records; } >> "$_cg_next" || return 1
+    fw_warn_record >> "$_cg_next" || :   # #2080: fw_warn=<n>|<text>, the moved-connection warning; advice, never freezes the drawers
 
     _cg_any=0
     for _cg_dir in "$RUN_DIR"/targets/*/; do

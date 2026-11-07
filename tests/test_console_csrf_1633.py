@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -41,18 +43,49 @@ def _new_user(name):
 # --- (א) X-Frame-Options -----------------------------------------------------
 
 @pytest.mark.parametrize("path", ["/console/", "/api/console/me", "/api/console/no-such"])
-def test_every_console_response_denies_framing(server, path):
-    """דף הקונסולה, תשובת API ו-404 — כולם ``DENY``, פעם אחת."""
+def test_every_console_response_allows_only_same_origin_framing(server, path):
+    """דף הקונסולה, תשובת API ו-404 — כולם ``SAMEORIGIN``, פעם אחת. לא ``DENY``
+    (#2642: חסם את ה-iframe של הקונסולה עצמה) ולא ``ALLOWALL``/``ALLOW-FROM``."""
     r = _console(server).get(path)
     values = r.headers.get_list("x-frame-options")
-    assert values == ["DENY"], (path, r.status_code, values)
+    assert values == ["SAMEORIGIN"], (path, r.status_code, values)
+
+
+def _console_iframe_srcs():
+    """כל ה-``<iframe ... src=...>`` שהקונסולה בונה ב-JS ובדפי ה-HTML שלה."""
+    static = Path(__file__).resolve().parent.parent / "server" / "static"
+    srcs = []
+    for f in [*static.glob("*.js"), *static.glob("*.html")]:
+        text = f.read_text(encoding="utf-8")
+        srcs += [(f.name, m) for m in re.findall(r"<iframe[^>]*src=\"([^\"]*)\"", text)]
+    return srcs
+
+
+def test_console_iframe_is_same_origin_and_not_denied_2642(server):
+    """#2642: "צפייה במסך" טוענת ``monitor.html`` ב-iframe. ‏``DENY`` (#1633) הציג
+    שם קובץ שבור. מוכיח את שני הצדדים: (א) ה-iframe היחיד של הקונסולה הוא נתיב
+    יחסי (אותו מקור), לא כתובת זרה; (ב) הדף שהוא טוען אינו ``DENY`` — ``SAMEORIGIN``
+    בדיוק, כך שדף זר עדיין נחסם."""
+    srcs = _console_iframe_srcs()
+    assert srcs, "no <iframe> found in the console sources — the test lost its subject"
+    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    for name, src in srcs:
+        if src == "${q}":   # console.js: the one viewer iframe, built from `const q = `monitor.html?...``
+            assert re.search(r"const q = `monitor\.html\?", js), "the viewer src is no longer a relative monitor.html"
+        else:
+            assert not re.match(r"(?:[a-z][a-z0-9+.-]*:|//)", src, re.I), (name, src)
+    r = _console(server).get("/console/monitor.html")
+    assert r.status_code == 200, r.text
+    framing = r.headers.get_list("x-frame-options")
+    assert framing != ["DENY"], "#2642: DENY blocks the console's own monitor iframe"
+    assert framing == ["SAMEORIGIN"], framing
 
 
 def test_refusal_also_denies_framing(server):
     r = _console(server).post("/api/console/users", json=_new_user("framed"),
                               headers={"Sec-Fetch-Site": "cross-site"})
     assert r.status_code == 403
-    assert r.headers.get("x-frame-options") == "DENY"
+    assert r.headers.get("x-frame-options") == "SAMEORIGIN"
 
 
 # --- (ב) Fetch Metadata -------------------------------------------------------
@@ -212,7 +245,7 @@ def test_tar_upload_type_reaches_the_handler(server):
     r = _console(server).post("/api/console/images/upload", content=b"not a tar",
                               headers={"Content-Type": "application/x-tar"})
     assert r.status_code not in (403, 415), r.text
-    assert r.headers.get("x-frame-options") == "DENY"
+    assert r.headers.get("x-frame-options") == "SAMEORIGIN"
 
 
 # --- מה שאסור לשבור ----------------------------------------------------------

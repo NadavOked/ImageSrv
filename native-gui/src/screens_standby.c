@@ -273,6 +273,35 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
     text_free(&sz); text_free(&md); text_free(&ud);
 }
 
+/* #2080 (mockup 06 section 2, Nadav 25/10): .alert.warn under the status line -- the connections moved since the
+ * last power-on -- with "זה מכוון" at its end: whoever stands at the machine says it was on purpose (fw-accept).
+ * Draws it and returns its height; 0 = no warning. */
+static double sb_fw_banner(App *a, cairo_t *cr, double x0, double y, double cw) {
+    const Theme *t = a->theme; const State *s = &a->st;
+    if (s->fw_warn_count <= 0 || !s->fw_warn[0]) return 0;
+    char body[sizeof s->fw_warn + 64];
+    snprintf(body, sizeof body, "%s. בהדלקה הבאה ה-BIOS עלול לעצור על F1.", s->fw_warn);
+    double pad = 14, ic = 24, bw = lc_btn_width(cr, "זה מכוון", NULL);
+    double tw = cw - 2 * pad - ic - 12 - bw - 16;
+    Text th = text_make(cr, FONT_SANS, 14, 600, "החיבורים השתנו מאז ההדלקה הקודמת", (int)tw, DIR_RTL);
+    Text tb = text_make(cr, FONT_SANS, 13, 400, body, (int)tw, DIR_RTL);
+    double th_h = th.h + 2 + tb.h, bh = fmax(th_h, 34) + 2 * 12;
+    {
+        Rect r = { x0, y, cw, bh };
+        draw_fill_rrect(cr, r, 6, t->warning_soft); draw_border_rrect(cr, r, 6, t->warn, 1);
+        double xr = x0 + cw - pad, cy = y + bh / 2;
+        sb_led(cr, xr - ic / 2, cy, ic, t->warn, t->warning_soft, 0, 1);
+        Text bang = text_make(cr, FONT_SANS, 14, 700, "!", 0, DIR_LTR);
+        text_draw(cr, &bang, xr - ic / 2 - bang.w / 2, cy - bang.h / 2, t->on_ink); text_free(&bang);
+        double ty = cy - th_h / 2, tr = xr - ic - 12;
+        text_draw_r(cr, &th, tr, ty, t->warning_ink);
+        text_draw_r(cr, &tb, tr, ty + th.h + 2, t->ink);
+        lc_btn(a, cr, x0 + pad + bw, cy - 17, 34, "זה מכוון", NULL, BTN_PLAIN, HIT_FW_ACCEPT, 0);
+    }
+    text_free(&th); text_free(&tb);
+    return bh;
+}
+
 void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     const Theme *t = a->theme; const State *s = &a->st;
     int conn = standby_conn(s), bays = cloner_bay_count(s), present = 0, unmapped_disks = 0, unmapped_opticals = 0;
@@ -323,6 +352,8 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     if (to3.layout) text_draw(cr, &to3, x0, oy, t->muted);
     text_free(&to1); text_free(&to2); if (to3.layout) text_free(&to3); text_free(&th); text_free(&tp);
     y = floor(y + row + 26 + .5);
+    double fwh = sb_fw_banner(a, cr, x0, y, cw);   /* #2080: before the notes and the cage, so the bays shrink to leave it room */
+    if (fwh > 0) y += fwh + 12;
 
     /* .note lines under the cage, measured first: the bays shrink to leave them room */
     Text notes[2 * MAX_DRAWERS]; Rgb note_c[2 * MAX_DRAWERS]; int note_l[2 * MAX_DRAWERS];
@@ -365,7 +396,8 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     Text ll = text_make(cr, FONT_SANS, 12, 400, cnt, 0, DIR_RTL);
     double lh = 16;   /* .lbl: 12px/1.3, on whole pixels so every hairline below is one crisp row */
     double chrome = 1 + 14 + lh + 10 + 14 + 1, bay_h = SB_BAY_H;
-    double room = H - N_STATUS_H - 24 - notes_h - y - chrome - (n - 1) * SB_BAY_GAP;
+    /* #2080: with the warning on, the bays also leave the way-back button its row (16 + 34) -- it was the 24 that left it room before */
+    double room = H - N_STATUS_H - 24 - (fwh > 0 ? 50 : 0) - notes_h - y - chrome - (n - 1) * SB_BAY_GAP;
     if (n * bay_h > room) bay_h = fmax(SB_BAY_MIN, floor(room / n));
     Rect cage = { x0, y, cw, chrome + n * bay_h + (n - 1) * SB_BAY_GAP };
     if (conn == STANDBY_OFF) cairo_push_group(cr);   /* [data-conn=off] .cage{opacity:.72} */
@@ -422,7 +454,12 @@ int standby_back_locked(const App *a) { return a->st.has_session || a->st.has_ro
 
 /* #2079: Esc or "חזרה למסך הבחירה" on the wait says choice-back (guibridge.sh). 1 = taken. */
 int standby_handle(App *a, const Event *e) {
-    if (a->screen != SCREEN_STANDBY || standby_back_locked(a)) return 0;
+    if (a->screen != SCREEN_STANDBY) return 0;
+    if (e->type == UIEV_CLICK && app_hit(a, e->x, e->y) == HIT_FW_ACCEPT) {   /* #2080: "זה מכוון" (guibridge.sh fw-accept) */
+        printf("fw-accept\n\n"); fflush(stdout);
+        return 1;
+    }
+    if (standby_back_locked(a)) return 0;
     if (!((e->type == UIEV_KEY && e->key == KEYSYM_ESC) || (e->type == UIEV_CLICK && app_hit(a, e->x, e->y) == HIT_WAIT_BACK))) return 0;
     printf("choice-back\n\n"); fflush(stdout);
     return 1;

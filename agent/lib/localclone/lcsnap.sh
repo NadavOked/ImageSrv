@@ -29,6 +29,11 @@
 # refuses the smaller target (owner 16/10, option B: never in place). "Could
 # not check" is never "fits" (principle 5).
 #
+# #2354 (owner 04/11, option A; metal 03/11: 27,706 MB to move, a 15,156 MB
+# store): a capture has no target, so a plan over the store shrinks as far as the
+# store goes (_snap_partial) and the image comes out somewhat larger, with no word
+# in the confirm dialog. The local clone (`unhib`) must reach the target's size.
+#
 # #2208 (metal 26/10, cloner 2: a 870 EVO left in Fast Startup, a 256GB
 # target): a view whose NTFS is hibernated has the hibernation dropped on the
 # VIEW first -- ntfs_unhibernate (ntfsunhib.sh, #2009's), read back clean --
@@ -41,6 +46,7 @@
 LC_SNAP_RESERVE_MB="${LC_SNAP_RESERVE_MB:-1024}"   # the copy's own buffers (fanout, partclone)
 LC_SNAP_META_MB="${LC_SNAP_META_MB:-256}"
 LC_SNAP_UNHIB_MB="${LC_SNAP_UNHIB_MB:-128}"   # #2208: hiberfil.sys deleted, $LogFile emptied -- 65 MB on metal (cloner 2, 26/10)
+LC_SNAP_FIT_MB="${LC_SNAP_FIT_MB:-1024}"   # #2354: how near the store the partial shrink stops; each halving is one walk of the MFT
 LC_SNAP_CHUNK=8   # sectors
 LC_SNAP_WHY=""; LC_SNAP_TD=""
 
@@ -112,6 +118,34 @@ _snap_back() {
     return 1
 }
 
+_snap_moves() {
+    # $1 idx, $2 the view's node, $3 bytes. _sw_mb = what moves at that size; 1 + LC_SNAP_WHY.
+    ntfsresize -n -s "$3" --no-progress-bar "$2" < /dev/null > "$_sr/snap/$1.n" 2>&1; _sw_rc=$?
+    cat "$_sr/snap/$1.n" >> "$LOG_FILE"
+    _sw_mb=$(_lc_relocs "$_sr/snap/$1.n")
+    { [ "$_sw_rc" = 0 ] && [ -n "$_sw_mb" ]; } && return 0
+    LC_SNAP_WHY="מחיצה $1: ‏ntfsresize -n לא אמר כמה צריך להזיז (rc=$_sw_rc)"; return 1
+}
+
+_snap_need() { echo $(($1 + $1 / 10 + LC_SNAP_META_MB + _sw_h * LC_SNAP_UNHIB_MB)); }
+
+_snap_partial() {
+    # $1 idx, $2 the view's node, $3 KiB of its store (from MemAvailable); _sw_new/_sw_mb = the plan,
+    # over it. Halves what the plan gives up, in whole MiB (_shrink_compact keeps the tail aligned), to
+    # within LC_SNAP_FIT_MB, or to 1 MiB while nothing fits (a small RAM shrinks a little), keeping only
+    # a size ntfsresize -n measured in the store: 0 + _sw_new/_sw_mb. None: _sw_part says so. 1 + WHY.
+    _sf_ok=0; _sf_no=$(((_sw_cur - _sw_new) / 1048576)); _sf_mb=$_sw_mb; [ $(($(_snap_need 0) * 1024)) -le "$3" ] || _sf_no=0
+    while [ $((_sf_no - _sf_ok)) -gt "$LC_SNAP_FIT_MB" ] || { [ "$_sf_ok" = 0 ] && [ "$_sf_no" -gt 1 ]; }; do
+        _sf_mid=$(((_sf_ok + _sf_no) / 2))
+        _snap_moves "$1" "$2" $((_sw_cur - _sf_mid * 1048576)) || return 1
+        if [ $(($(_snap_need "$_sw_mb") * 1024)) -le "$3" ]; then _sf_ok=$_sf_mid; _sf_mb=$_sw_mb; else _sf_no=$_sf_mid; fi
+    done
+    _sw_mb=$_sf_mb
+    [ "$_sf_ok" != 0 ] || { _sw_part=" — גם כיווץ חלקי לא נכנס בזיכרון"; return 0; }
+    _sw_new=$((_sw_cur - _sf_ok * 1048576))
+    log "partition $1: the plan is over the store -- shrunk to $_sw_new bytes only, $_sw_mb MB moved (#2354)"
+}
+
 _snap_views() {
     # $1 = source, $2 = plan, $3 = KiB per view. One view per plan line, each
     # read back, then the budget. $_sr/snap/views: idx|node|start|size|newsec|name.
@@ -136,17 +170,16 @@ _snap_views() {
         case "$_sw_hs" in clean|dirty) ;; hibernated) _sw_h=1 ;;
             *) LC_SNAP_WHY="מחיצה $_sw_idx: לא הצלחנו לבדוק אם Windows בה כובה עד הסוף (${_sw_hs#unchecked:})"; return 3 ;; esac
         if [ "$_sn_u" = capture ] && [ "$_sw_new" = "$_sw_cur" ]; then _sw_mb=0; else
-        ntfsresize -n -s "$_sw_new" --no-progress-bar "$DEVROOT/mapper/$_sw_name" < /dev/null > "$_sr/snap/$_sw_idx.n" 2>&1; _sw_rc=$?
-        cat "$_sr/snap/$_sw_idx.n" >> "$LOG_FILE"
-        _sw_mb=$(_lc_relocs "$_sr/snap/$_sw_idx.n")
-        { [ "$_sw_rc" = 0 ] && [ -n "$_sw_mb" ]; } \
-            || { LC_SNAP_WHY="מחיצה $_sw_idx: ‏ntfsresize -n לא אמר כמה צריך להזיז (rc=$_sw_rc)"; return 3; }
+        _snap_moves "$_sw_idx" "$DEVROOT/mapper/$_sw_name" "$_sw_new" || return 3
         fi
-        _sw_need=$((_sw_mb + _sw_mb / 10 + LC_SNAP_META_MB + _sw_h * LC_SNAP_UNHIB_MB))
+        _sw_need=$(_snap_need "$_sw_mb"); _sw_part=""
+        if [ "$_sn_u" != unhib ] && [ $((_sw_need * 1024)) -gt "$3" ]; then   # #2354: a capture, over the store
+            _snap_partial "$_sw_idx" "$DEVROOT/mapper/$_sw_name" "$3" || return 3; _sw_need=$(_snap_need "$_sw_mb")
+        fi
         [ $((_sw_need * 1024)) -le "$3" ] \
             || { if [ "$_sn_u" = capture ] && [ "$_sw_mb" = 0 ]; then   # #2213: the owner's wording (mockup 13, 30/10)
                 LC_SNAP_WHY="מחיצה $_sw_idx: לביטול מצב השינה בעותק נדרשים $_sw_need MB זיכרון, ויש $(($3 / 1024)) MB — לא נקלט. המקור לא נכתב"
-                else LC_SNAP_WHY="מחיצה $_sw_idx: להזזת $_sw_mb MB נדרשים $_sw_need MB זיכרון, ויש $(($3 / 1024)) MB"; fi; return 3; }
+                else LC_SNAP_WHY="מחיצה $_sw_idx: להזזת $_sw_mb MB נדרשים $_sw_need MB זיכרון, ויש $(($3 / 1024)) MB$_sw_part"; fi; return 3; }
         _sw_tot=$((_sw_tot + _sw_mb)); _sw_i=$((_sw_i + 1))
         echo "$_sw_idx|$DEVROOT/mapper/$_sw_name|$_sw_st|$_sw_sz|$((_sw_new / 512))|$_sw_name|$_sw_h" >> "$_sr/snap/views"
     done 3< "$2"

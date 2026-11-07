@@ -117,7 +117,11 @@ def array_check(array: Array) -> tuple[str, str]:
         label = ACTION_LABELS.get(array.action, array.action)
         pct = f" {array.percent:g}%" if array.percent is not None else " (ממתין)"
         bits.append(label + pct)
-        return "warn", " · ".join(bits)
+        # ‏#2624: רק בנייה מחדש (recovery) ממלאת את הכונן החסר — זה "בתהליך".
+        # סנכרון/שינוי מבנה/תיקון על מערך שחסר בו כונן רצים בלי יתירות, ו"בסנכרון"
+        # כתום הסתיר את זה (RAID10, ‏[4/3] [UUU_], ‏resync 13.4%, ‏07/11).
+        if array.action == "recovery" or not missing:
+            return "warn", " · ".join(bits)
     if missing or array.failed:
         if missing and not array.failed:
             bits.append("פגוע — חסר כונן במערך")

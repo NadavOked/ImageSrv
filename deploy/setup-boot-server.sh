@@ -8,8 +8,8 @@
 #   2. איזה כרטיס להפצה — או "לא עכשיו" (ברירת המחדל במסירה, #1088):
 #      המנהל בוחר אותו מהקונסולה (דף הרשת: כתובת → DHCP), וזה משלים
 #      את מה שהמתקין היה כותב כאן
-# המנהל כברירת מחדל הוא admin/admin עם החלפה כפויה בקונסולה (#1085).
-# `--admin-user` / `--admin-pass` נשארים לדיבאג — ואז בלי כפייה.
+# סיסמת המנהל חובה בהתקנה חדשה (#2593): `--admin-pass-fd` / `--admin-pass`
+# (ה-ISO מעביר אותה ב-fd 3). אין עוד admin/admin ברירת מחדל מהמתקין.
 #
 #   sudo ./setup-boot-server.sh
 #
@@ -294,7 +294,8 @@ ImageSrv — התקנה מלאה על שרת דביאן: שרשרת אתחול, 
 ההתקנה שואלת על כרטיס וילן השרתים (לקוח DHCP של המכללה כברירת מחדל,
 או סטטי — #1088), על כרטיס ההפצה (או "לא עכשיו" — המנהל יבחר אותו
 מהקונסולה), ומרימה הכל — כולל חומת אש nftables לפי וילן (#1074). המנהל
-הוא admin/admin עם החלפה כפויה בקונסולה (#1085); --admin-pass לדיבאג.
+נקבע בסיסמה מפורשת: --admin-pass-fd (מומלץ) או --admin-pass — חובה בהתקנה
+חדשה (#2593); בלי סיסמה ההתקנה נעצרת לפני שנגעה בדבר.
 DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מהקונסולה, לשונית הרשת,
 עם כל שכבות הבטיחות (אפיון סעיף 24). בלי כרטיס הפצה dnsmasq אינו מופעל
 ו-grub.cfg אינו נכתב — ההדלקה מהקונסולה משלימה את שניהם.
@@ -308,7 +309,7 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
   --no-firewall        מדלג על nftables, עם אזהרה ביומן (R20-F1)
   --server-url URL     עוקף את הכתובת הנגזרת מהכרטיס (http בלבד)
   --admin-user NAME    מדלג על שאלת המשתמש
-  --admin-pass PASS    מדלג על שאלות הסיסמה (נשאר ברשימת התהליכים — לדיבאג בלבד)
+  --admin-pass PASS    סיסמת המנהל (נשארת ברשימת התהליכים — עדיף --admin-pass-fd)
   --admin-pass-fd FD   קורא את הסיסמה מ-FD שכבר פתוח (האשף משתמש ב-3; אינו argv/env/log)
   --timezone ZONE      אזור הזמן של השרת (tzdata, למשל Asia/Jerusalem) — נכתב להגדרה (#1447)
   --ntp-servers "A B"  שרת הזמן של הארגון (עד 4, ברווח) — ההגדרה של הקונסולה, מקור השעה (#2144)
@@ -551,7 +552,34 @@ fi
 # ---------------------------------------------------------------------------
 
 ADMIN_USER="${ADMIN_USER:-admin}"
-# בלי --admin-pass: admin/admin, והקונסולה תדרוש החלפה. לא שואלים סיסמה.
+# ‏#2593: בלי סיסמה מפורשת אין התקנה חדשה. עד כאן נוצר admin/admin (#1085) —
+# חלון עם סיסמה ידועה בכל התקנה ידנית. ה-ISO לא הושפע (answers.sh דוחה
+# סיסמה ריקה). הרצה חוזרת על שרת שכבר יש בו מנהל (--force) ממשיכה בלי
+# סיסמה, והמנהל הקיים לא נוגעים בו. שלושה מצבים, לא שניים: יש מנהל /
+# אין מנהל / לא הצלחנו לבדוק — והאחרון נעצר, לא "כנראה בסדר" (עיקרון 5).
+admin_in_db() {   # יציאה 0 = יש מנהל · 3 = אין (אין DB / אין טבלה / אין שורה) · אחר = לא נבדק
+    [[ -f "$DATA_DIR/imagesrv.db" ]] || return 3
+    python3 - "$DATA_DIR/imagesrv.db" <<'ADMINEOF'
+import sqlite3, sys
+try:
+    conn = sqlite3.connect("file:%s?mode=ro" % sys.argv[1], uri=True)
+    found = conn.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+except sqlite3.OperationalError as exc:
+    if "no such table" not in str(exc):
+        raise
+    found = None
+sys.exit(0 if found else 3)
+ADMINEOF
+}
+if [[ -z "$ADMIN_PASS" ]]; then
+    set +e; admin_in_db; admin_rc=$?; set -e
+    case "$admin_rc" in
+        0) say "מנהל קיים ב-$DATA_DIR/imagesrv.db — לא נוגעים בו" ;;
+        3) die "התקנה חדשה דורשת סיסמה למנהל — אין ברירת מחדל admin/admin (#2593).
+    הוסיפו --admin-pass-fd FD (מומלץ: הסיסמה לא נראית ב-ps) או --admin-pass PASS." ;;
+        *) die "לא הצלחתי לבדוק אם כבר יש מנהל ב-$DATA_DIR/imagesrv.db (קוד $admin_rc) — לא מניחים; הוסיפו --admin-pass-fd או בדקו את הקובץ." ;;
+    esac
+fi
 
 say "כרטיס הפצה: ${IFACE:-לא עכשיו (מהקונסולה)} · כרטיס שרתים: $SERVERS_IF ($SERVERS_MODE) · כתובת הפצה: ${SERVER_URL:-תיקבע מהקונסולה} · מנהל: $ADMIN_USER"
 
@@ -915,8 +943,6 @@ if password:
         # שם תפוס בלבד. כל כשל אחר — דיסק, נעילה — עולה החוצה (#504).
         users.update(conn, username, by="installer",
                      password=password, role="admin", check_policy=False)
-else:
-    users.ensure_admin(conn)
 row = conn.execute(
     "SELECT role FROM users WHERE username = ? COLLATE NOCASE", (username,)
 ).fetchone()
@@ -1255,7 +1281,7 @@ fi
 if [[ -n "$ADMIN_PASS" ]]; then
     ADMIN_LOGIN_MESSAGE="משתמש $ADMIN_USER נוצר עם הסיסמה שנקבעה בהתקנה"
 else
-    ADMIN_LOGIN_MESSAGE="כניסה ראשונה: $ADMIN_USER / admin — הקונסולה תדרוש החלפת סיסמה"
+    ADMIN_LOGIN_MESSAGE="המנהל הקיים נשאר כפי שהיה (בלי סיסמה חדשה)"
 fi
 cat <<EOF
 

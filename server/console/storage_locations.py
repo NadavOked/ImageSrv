@@ -107,7 +107,9 @@ def create_storage_locations_router(
             raise HTTPException(503, result.reason or "לא הצלחנו לסרוק")
         if result.status != sl.OK:
             raise HTTPException(409, result.reason or "הסריקה נכשלה")
-        return {"ok": True, "items": (result.payload or {}).get("items") or []}
+        payload = result.payload or {}
+        return {"ok": True, "items": payload.get("items") or [],
+                "rejected": payload.get("rejected") or 0}
 
     @router.post("/test")
     async def test(request: Request, user=Depends(admin_only)):

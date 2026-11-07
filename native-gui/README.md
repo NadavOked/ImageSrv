@@ -391,6 +391,12 @@ coptical=<drawer>|<conn>|<model>    # #1495: a CD/DVD drive (/sys/block/sr*, onl
 cslot_name=<port>|<name>            # #704: the operator's name of SATA slot <port>, from the last hello's
                                     # slot_names (slotnames.sh). Drawn instead of "דיסק N" on the cloner
                                     # cards, its SMART question and the standby list; absent = "דיסק N"
+fw_warn=<count>|<text>              # #2080 (mockup 06): the server's "the SATA connections moved since the last
+                                    # power-on" (hello answer fw_warning, fwimage.sh fw_warn_record). The wait
+                                    # screen draws an orange frame under the status line with the text and
+                                    # "זה מכוון" (record fw-accept -> the agent posts firmware-accept); the status
+                                    # bar says "ממתין לסבב · החיבורים השתנו". count 0, not a number, or no text =
+                                    # no warning, no button
 drawer_count=<1..8>                 # #1565: the hello's drawer_count (#1315, clonergui.sh). Without a
                                     # cdrawer_slot= mapping the cage has this many bays instead of the
                                     # legacy 3; a disk in a later port still adds its bay. Absent or out
@@ -539,6 +545,7 @@ status bar, no background art. What each part is drawn from:
 | the hardware note (#1921) | `cdisk=` field 13: the sentence of `agent/lib/data/hw-issues.tsv` (a link reset, a drawer that dropped, USB 2.0 -- CRC and the link keep fields 9/7-8). Drawn like the CRC line: the bay's bar orange, the sentence under the name and under the cage; the SMART chip stays SMART -- never the disk's colour. `lc_disk=` field 17 is the same note on the local/USB screen, after the SATA line |
 | the CRC line (#1366) | `cdisk=` field 9: the CRC count when over the hello's `crc_warn_threshold` (empty = not over, not read, or an older server). The bay orange like a slow link, "כבל או מגירה חשודים — N שגיאות" under the name (when SMART and the link have no reason of their own), and a line under the cage |
 | the link, "· 6.0 Gb/s" after SATA N-1, and its orange line (#432) | `cdisk=` fields 7–8 (`disk_link`: the speed and the port's maximum, `null` = not read → "קישור לא ידוע", never blank and never green). Below the maximum: the bay's bar and border orange, "קישור 1.5 מתוך 6.0 Gb/s — לבדוק כבל" under the name (when SMART has no reason of its own), and a line under the cage. The SMART chip and LED stay SMART |
+| the warning frame and "זה מכוון" (#2080, mockup 06) | `fw_warn=` (above). Between the status line and the cage; the bays shrink to leave it room and the way-back button its row. The button says `fw-accept`; the server's 200 takes the warning away, anything else is a toast and the warning stays |
 | IP, MAC | `--ip` / `--mac` (the kiosk's) |
 
 Not in the data, so not drawn: the mockup's sample reason "12 סקטורים

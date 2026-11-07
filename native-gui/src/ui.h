@@ -152,6 +152,7 @@ enum {
     HIT_IDLE_KEEP,        /* mockup 10: the idle window's "השאר דלוק" (Esc) */
     HIT_IDLE_OFF,         /* mockup 10: the idle window's "כבה עכשיו" (Enter) */
     HIT_WAIT_BACK,        /* #2079 (mockup 02): "חזרה למסך הבחירה" on the cloner's wait (Esc) */
+    HIT_FW_ACCEPT,        /* #2080 (mockup 06, Nadav 25/10): "זה מכוון" on the moved-connection warning */
     /* #1322: the boot choice and the local clone */
     HIT_LC_BOOT_SERVER, HIT_LC_BOOT_LOCAL, HIT_LC_BACK, HIT_LC_NEXT, HIT_LC_GO, HIT_LC_CANCEL,
     HIT_LC_STOP, HIT_LC_STOP_GO, HIT_LC_STOP_NO, HIT_LC_OFF, HIT_LC_AGAIN,
@@ -451,6 +452,8 @@ typedef struct State {
      * question any more -- the agent asks none since #2044. */
     char cloner_image[96];
     char rb_mode[8];                 /* #2046: rb_mode= full|sample -- "אומתו" only for a check that read every chunk */
+    /* #2080 (mockup 06): fw_warn=<count>|<text> -- the server's "the SATA connections changed" for the wait screen; "" = none */
+    char fw_warn[320]; int fw_warn_count;
     int server_restarted_wave;       /* #1377: closed report after server restart */
     /* #2067 (mockup 08): net=lost|<last byte>|<ceiling s> / net=back|<s away>|<at> -- the
      * stream's outage bar (roundbeep.sh stream_net_record). -1 = the agent did not say. */

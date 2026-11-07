@@ -145,6 +145,21 @@ def test_a_new_password_is_stored_with_the_current_default(server):
     assert stored.split("$")[1] == str(users._ITERATIONS)
 
 
+def test_login_upgrades_an_old_record_through_the_api(server):
+    """‏#2591: הנתיב האמיתי (`/api/console/login`) משדרג, והכניסה הבאה עובדת."""
+    from server.console import users
+    rehash_with(server, "labtech", "deploy-pass-1", 50_000)
+    conn = server["ctx"].conn
+    sql = "SELECT pw_hash FROM users WHERE username = 'labtech'"
+    assert conn.execute(sql).fetchone()["pw_hash"].split("$")[1] == "50000"
+    for _ in range(2):
+        assert server["anon"].post(
+            "/api/console/login",
+            json={"username": "labtech", "password": "deploy-pass-1"},
+        ).status_code == 200
+        assert conn.execute(sql).fetchone()["pw_hash"].split("$")[1] == str(users._ITERATIONS)
+
+
 @pytest.mark.parametrize("stored", [
     "scrypt$200000$aabb$ccdd",        # סכימה שאיננו יודעים לאמת
     "pbkdf2$notanumber$aabb$ccdd",    # מספר סבבים שאינו מספר

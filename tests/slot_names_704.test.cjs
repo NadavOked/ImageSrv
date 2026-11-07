@@ -99,14 +99,14 @@ test('drawer disk table: drawers 1..N by the mapping, then drives outside it (na
   assert.match(sec,new RegExp(`openSlotMap\\('${encodeURIComponent(C2)}'\\)`));
 });
 
-test('drawer disk table: marketing size and vendor; SMART is a chip in its own column (mockup: תקין / נכשל)', () => {
+test('drawer disk table: marketing size and vendor; SMART is a chip only on a problem (#1375: ok = empty)', () => {
   const {run}=setup();
   run(`MACHINES[1].disks=[
     {dev:'sda',port:1,serial:'a',model:'SAMSUNG MZ7LN256',size_bytes:238*1024**3,smart:'ok'},
     {dev:'sdb',port:2,serial:'b',model:'WESTERN WD500',size_bytes:466*1024**3,smart:'warn'},
     {dev:'sdc',port:3,serial:'c',model:'KINGSTON X',size_bytes:931*1024**3,smart:'fail'}];`);
   const html=diskTab(run(`machineDrawerHtml(findMachine('${C2}'))`));
-  assert.match(html,/256GB<\/bdi><\/span> <span class="cap">Samsung<\/span><\/td><td><span class="n-chip">תקין<\/span>/);
+  assert.match(html,/256GB<\/bdi><\/span> <span class="cap">Samsung<\/span><\/td><td><\/td>/,'#1375: ok = no chip');
   assert.match(html,/500GB<\/bdi><\/span> <span class="cap">Western<\/span><\/td><td><span class="n-chip w">אזהרה<\/span>/);
   assert.match(html,/1TB<\/bdi><\/span> <span class="cap">Kingston<\/span><\/td><td><span class="n-chip d">SMART תקול<\/span>/,'#1580: SMART fail is red');
 });
@@ -139,4 +139,18 @@ test('without any names everything reads exactly as before', () => {
   run2('MACHINES.forEach(m=>delete m.slot_names)');
   run2("openClass('grp_CLONERS')");
   assert.match(slot(card(run2('machines(0)'),C2),1),/<span>דיסק 1<\/span>/);
+});
+
+test('#1375 (Nadav 07/11): the disks tab shows no "תקין" -- a chip only on a problem; no reading stays "לא נבדק" (rule 5); the list column is capacity', () => {
+  const {run}=setup();
+  run(`MACHINES[1].disks=[
+    {dev:'sda',port:1,serial:'a',model:'SAMSUNG MZ7LN256',size_bytes:238*1024**3,smart:'ok'},
+    {dev:'sdb',port:2,serial:'b',model:'WESTERN WD500',size_bytes:466*1024**3},
+    {dev:'sdc',port:3,serial:'c',model:'KINGSTON X',size_bytes:0,smart:'warn'}];`);
+  const html=diskTab(run(`machineDrawerHtml(findMachine('${C2}'))`));
+  assert.doesNotMatch(html,/>תקין</,'ok is silence, not a constant badge');
+  assert.match(html,/256GB<\/bdi><\/span> <span class="cap">Samsung<\/span><\/td><td><\/td>/);
+  assert.match(html,/500GB<\/bdi><\/span> <span class="cap">Western<\/span><\/td><td><span class="n-chip n">לא נבדק<\/span>/,'unread SMART is not "ok" and not hidden');
+  assert.match(html,/<span class="n-chip w">אזהרה<\/span>/);
+  assert.equal(run(`disksCell({disks:[{size_bytes:0},{size_bytes:512110190592}]})`),'<span class="muted">גודל לא ידוע</span> · <bdi dir="ltr">512GB</bdi>','a drive with no size is said, not dropped');
 });

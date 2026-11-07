@@ -117,3 +117,72 @@ def test_admin_only_and_unknown_machines(room_server):
     assert deploy.post(f"/api/console/machines/{CLONER1}/firmware/accept").status_code == 403
     assert admin.get("/api/console/machines/aa:bb:cc:dd:ee:ff/firmware").status_code == 404
     assert admin.post(f"/api/console/machines/{CLONER1}/firmware/accept").status_code == 409   # never reported: nothing to save
+
+
+# --- the cloner's own screen: a moved connection is a warning, and "זה מכוון" saves it (Nadav 25/10, mockup 06 section 2) ---
+
+
+def _answer(room_server, mac=CLONER1, **kw):
+    """The hello answer, as the cloner reads it."""
+    body = hello_body(mac)
+    body["firmware"] = "uefi"
+    body["disks"] = kw["disks"]
+    if "mode" in kw:
+        body["sata_mode"] = kw["mode"]
+    r = room_server["anon"].post("/api/v1/agent/hello", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _moved(room_server):
+    _answer(room_server, disks=[_disk("A", 1), _disk("T", 2, "TOSHIBA DT01ACA050")])
+    return _answer(room_server, disks=[_disk("A", 1), _disk("T", 3, "TOSHIBA DT01ACA050")])    # SATA 1 -> SATA 2
+
+
+def test_a_cloner_whose_connection_moved_is_warned_in_the_hello_answer(room_server):
+    first = _answer(room_server, disks=[_disk("A", 1), _disk("T", 2)])
+    assert "fw_warning" not in first, "the first image has nothing to compare to"
+    warn = _moved(room_server)["fw_warning"]
+    assert warn == {"changes": ["דיסק T עבר מ-SATA 1 ל-SATA 2"], "count": 1}
+    gone = _answer(room_server, disks=[_disk("A", 1)])["fw_warning"]
+    assert gone["count"] == 1 and "נעלם" in gone["changes"][0]
+
+
+def test_a_controller_mode_change_is_not_the_cloners_warning(room_server):
+    """A cloner writes disks for other machines: its own controller mode changes nothing that is written."""
+    _answer(room_server, disks=[_disk("A", 1)], mode="ahci")
+    answer = _answer(room_server, disks=[_disk("A", 1)], mode="ide")
+    assert "fw_warning" not in answer
+    assert _count(room_server) == 1, "the console still shows it"
+
+
+def test_the_agent_accepts_its_own_image_and_the_journal_says_where(room_server):
+    _moved(room_server)
+    anon = room_server["anon"]
+    r = anon.post("/api/v1/agent/firmware-accept", json={"mac": CLONER1})
+    assert r.status_code == 200 and r.json() == {"ok": True}, r.text
+    assert "fw_warning" not in _answer(room_server, disks=[_disk("A", 1), _disk("T", 3)])
+    assert _fw(room_server)["ref_kind"] == "baseline" and _count(room_server) == 0
+    detail = [r["detail"] for r in room_server["ctx"].conn.execute("SELECT detail FROM journal WHERE event = 'fw_accepted'")]
+    assert detail == [f"{CLONER1} · אושר במשכפל shich-1"]
+    _answer(room_server, disks=[_disk("A", 1)])                  # the next change is compared to the saved image
+    assert [c["kind"] for c in _fw(room_server)["changes"]] == ["gone"]
+
+
+def test_the_agent_endpoint_refuses_what_it_should(room_server):
+    anon = room_server["anon"]
+    post = lambda **b: anon.post("/api/v1/agent/firmware-accept", json=b)   # noqa: E731
+    assert post(mac="not-a-mac").status_code == 400
+    assert post(mac="aa:bb:cc:dd:ee:ff").json()["code"] == "unknown_mac"          # not registered: nothing written
+    assert post(mac=CLONER1).status_code == 409                                   # never reported
+    assert room_server["ctx"].conn.execute("SELECT COUNT(*) FROM fw_baseline").fetchone()[0] == 0
+    assert anon.post("/api/v1/agent/firmware-accept", content=b"[]", headers={"Content-Type": "application/json"}).status_code == 400
+
+
+def test_a_build_machine_cannot_use_the_cloners_endpoint(room_server):
+    build = "aa:bb:cc:00:00:31"
+    assert room_server["admin"].post("/api/console/machines", json={"mac": build, "name": "bld-1", "group_id": "grp_BUILD"}).status_code == 200
+    _hello(room_server, build, mode="ahci")
+    r = room_server["anon"].post("/api/v1/agent/firmware-accept", json={"mac": build})
+    assert r.status_code == 403 and r.json()["code"] == "not_a_cloner", r.text
+    assert room_server["ctx"].conn.execute("SELECT COUNT(*) FROM fw_baseline").fetchone()[0] == 0

@@ -54,8 +54,9 @@ lc_gui_state() {
         _gs_src=$(cat "$LC/source" 2>/dev/null)
         if [ -n "$_gs_src" ]; then
             # #1443: + copy|why -- the bytes the copy moves (lcsize.sh); -1|why = not measured, empty = not yet
-            printf 'lc_src=%s|%s|%s\n' "$_gs_src" "$(cut -d'|' -f1 "$LC/measure/$_gs_src" 2>/dev/null)" \
-                "$(cat "$LC/measure/$_gs_src.copy" 2>/dev/null || echo '|')" >> "$_gs_n"
+            # #2069: + |hibernated -- only when the measure saw Fast Startup on the source (lcinv.sh, .hib); otherwise the line is as it was
+            printf 'lc_src=%s|%s|%s%s\n' "$_gs_src" "$(cut -d'|' -f1 "$LC/measure/$_gs_src" 2>/dev/null)" \
+                "$(cat "$LC/measure/$_gs_src.copy" 2>/dev/null || echo '|')" "$([ ! -f "$LC/measure/$_gs_src.hib" ] || echo '|hibernated')" >> "$_gs_n"
             # Nadav 22/10: the source's SMART already counts sectors it could not read -- an orange line, no question
             _gs_u=$(lc_smart_unread "$_gs_src"); [ -z "$_gs_u" ] || printf 'lc_unread=%s|%s\n' "$_gs_src" "$_gs_u" >> "$_gs_n"
             for _gs_f in "$LC"/inv/*.line; do

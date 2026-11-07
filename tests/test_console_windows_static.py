@@ -42,7 +42,7 @@ def test_every_window_goes_through_one_of_the_three_entry_points():
         assert not re.search(r'getElementById\("(modalBody|drawerBody|sheet)"\)\.innerHTML', text), name
     js = JS["console.js"]
     assert len(re.findall(r"\bsheet\(\{", js)) + len(re.findall(r"confirmSheet\(", js)) >= 40
-    for fn in ("function sheet(", "function openModalContent(", "function openDrawer(", "function openWizard("):
+    for fn in ("function sheet(", "function openModalContent(", "function openDrawer("):
         assert fn in js, fn
     # הרסני = כפתור אדום מלא; הרסני במגירה = אדום ומופרד
     assert ".win .n-f-bar .btn.danger{background:var(--clr-danger-fill)" in CSS

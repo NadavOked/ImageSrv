@@ -440,38 +440,6 @@ function wireDropzones(root) {
 }
 function wireWindowParts(root) { wirePasswordFields(root); wireDropzones(root); }
 
-/* רכיב האשף: צעדים בצד, גוף משתנה, אחורה/הבא. render(step, state, body) מצייר את הצעד; valid(step, state)
-   קובע אם "הבא" פעיל. נבנה על אותה מסגרת (n-wide), ובלי לוגיקה של חלון מסוים. */
-function openWizard({ title, sub = "", steps, state = {}, finishLabel = "סיום", onFinish }) {
-  let at = 0;
-  const html = `<div class="n-wiz"><ol class="n-steps" id="wz-steps">${steps.map((s, i) => `<li data-i="${i}"><span class="num"></span><span class="lbl">${esc(s.label)}</span></li>`).join("")}</ol><div class="n-wcol"><div class="n-b" id="wz-body"></div></div></div>`;
-  openModalContent(title, html, finishLabel, () => {}, false, sub, "wide");
-  const ok = document.getElementById("modalOk"), body = () => document.getElementById("wz-body");
-  const hint = document.getElementById("modalHint");
-  const back = document.createElement("button");
-  back.type = "button"; back.className = "btn"; back.id = "wz-back"; back.textContent = "הקודם";
-  if (ok.parentNode && ok.parentNode.insertBefore) ok.parentNode.insertBefore(back, ok);
-  const draw = () => {
-    document.querySelectorAll("#wz-steps li").forEach((li, i) => {
-      li.className = i < at ? "done" : i === at ? "cur" : "";
-      li.querySelector(".num").textContent = i < at ? "✓" : String(i + 1);
-    });
-    steps[at].render(body(), state);
-    const good = !steps[at].valid || steps[at].valid(state);
-    ok.disabled = !good;
-    ok.textContent = at === steps.length - 1 ? finishLabel : "הבא";
-    back.style.visibility = at ? "visible" : "hidden";
-    if (hint) hint.textContent = good ? "" : (steps[at].hint || "");
-  };
-  back.onclick = () => { at--; draw(); };
-  ok.onclick = async () => {
-    if (at < steps.length - 1) { at++; draw(); return; }
-    try { await onFinish(state); closeModal(); } catch (e) { toast(e.message); }
-  };
-  state.redraw = draw;
-  draw();
-}
-
 /* מודאל אחיד במקום prompt/confirm — net.js/netcfg.js קוראים ל-sheet().
    אפשרויות מעבר לקודמות: size (narrow|mid|wide), hint (טקסט בפס התחתון), field.help, field.type="section".
    cancelLabel; ו-onSubmit יכול להחזיר פונקציה — היא רצה אחרי שהחלון נסגר (חלון תוצאה אחרי חלון אישור, #1268). */
@@ -4257,11 +4225,14 @@ function failureCauseText(f) {
    null = סוכן ישן שלא שלח — הטקסט הישן, לא ניחוש. */
 const DISK_PROBE_HE = { no_disks: "לא חוברו דיסקים", no_ports: "אין פורטי SATA בקושחה", unchecked: "0 דיסקים · לא נבדק" };
 function zeroDisksText(m) { return DISK_PROBE_HE[m.disk_probe] || "דיווח 0 דיסקים"; }
-/* עמודת "דיסקים" בטבלה (המוקאפ: מספר). הגודל, החריץ והכשל — במגירה ובתגית המצב. */
+/* עמודת "נפח" בטבלה (‏#1375, נדב 07/11, הכרעת 13/10: נפח במקום מספר הדיסקים). נפח שיווקי לכל כונן, זהים מקובצים
+   ("2 × 500GB"); כונן בלי גודל נקרא "גודל לא ידוע", לא מדולג. החריץ, ה-SMART והכשל — במגירה ובתגית המצב. */
 function disksCell(m) {
   if (m.disks == null) return `<span class="muted">לא דיווח</span>`;
   if (!m.disks.length) return UI.status("warn", zeroDisksText(m));
-  return String(m.disks.length);
+  const counts = new Map();
+  for (const d of m.disks) { const t = d && Number(d.size_bytes) > 0 ? marketedDiskSize(d.size_bytes) : ""; counts.set(t, (counts.get(t) || 0) + 1); }
+  return [...counts].map(([t, n]) => t ? ltr((n > 1 ? n + " × " : "") + t) : `<span class="muted">${n > 1 ? n + " × " : ""}גודל לא ידוע</span>`).join(" · ");
 }
 function waitingText(m) { return "ממתין למפעיל: " + promptHe(m.prompt); }
 /* המצב: נקודה צבעונית + מילים. ירוק רק על ראיה חיובית (השרת אמר "מחובר",
@@ -4462,7 +4433,7 @@ function machinesTableHtml() {
       : gid ? `אין מחשבים בקבוצה ${groupLabel(gid)} (${MACHINES.length} רשומים בסך הכול)` : "אין מחשבים רשומים");
   }
   const columns = [{ html: `<span class="sr">בחירה</span>` },
-    "שם", "תפקיד", "קבוצה", "כתובת", "דיסקים", "באתחול הבא", "מצב", { html: `<span class="sr">פעולות</span>` }];   // ‏#2550
+    "שם", "תפקיד", "קבוצה", "כתובת", "נפח", "באתחול הבא", "מצב", { html: `<span class="sr">פעולות</span>` }];   // ‏#2550
   // ‏בנייה, אחריה שיכפול (ואחריהן כל כיתה בתורה) — ובתוך כל קבוצה לפי השם; sort יציב.
   const groups = machineGroupsInOrder().map((g) => g.id);
   const order = (m) => { const i = groups.indexOf(machineGroupId(m)); return i < 0 ? groups.length : i; };
@@ -5820,7 +5791,7 @@ function smartPill(d, fail) {
   if (d.smart === "fail") return chip("d", d.smart_reason === "readonly" ? "קריאה בלבד" : "SMART תקול");     // #1580: red, never written; #1742
   if (d.write_mark === "incomplete") return chip("w", WRITE_MARK_HE);   // #1798: not a source; a target
   if (fail || d.smart === "failed_last") return chip("w", "נכשל בשיכפול הקודם");
-  if (d.smart === "ok") return chip("", "תקין");
+  if (d.smart === "ok") return "";   // #1375 (נדב 07/11): תג רק כשיש בעיה — "תקין" קבוע הוא רעש; ראיה חיובית (smart==="ok") = שקט
   if (d.smart === "warn") return chip("w", "אזהרה");
   return chip("n", "לא נבדק");
 }

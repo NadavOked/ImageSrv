@@ -188,7 +188,7 @@ const char *const LC_PNG_CARDS[] = { "lcboot", "lcboot-paused", "lcsource", "lcs
                                      "lcstop", "lcdone", "lcdone-ok", "lcboot-round", "lcsource-round",   /* -round: #1367 */
                                      "lcsource-usb", "lcprogress-usb",   /* #2030: the clone stick (lc_usb=1) -- the same drawer cards */
                                      "lcboot-one", "lcboot-pull", "lcpull", "lcpull-confirm", "lcpull-keys",
-                                     "lcsource-orange", "lcconfirm-usb", "lcboot-back" };   /* #2079: back from the wait */   /* #2017: an orange source -- the notice, "המשך" alone */   /* 16/10: one disk; restore from the server */
+                                     "lcsource-orange", "lcconfirm-usb", "lcboot-back", "lcdone-usb" };   /* #2131: the stick's result, mockup 03 */   /* #2079: back from the wait */   /* #2017: an orange source -- the notice, "המשך" alone */   /* 16/10: one disk; restore from the server */
 const int LC_PNG_NCARDS = (int)(sizeof LC_PNG_CARDS / sizeof LC_PNG_CARDS[0]);
 
 static void disk(LcState *l, int port, const char *dev, const char *model, unsigned long long size, const char *smart,
@@ -260,12 +260,12 @@ void lc_sample(State *s, const char *card) {
     else if (!strcmp(card, "lcsource-measuring")) { fit(l, "sdb", LCV_FITS, 500107862016LL, ""); fit(l, "sdc", LCV_MEASURING, 500107862016LL, ""); }
     else { fit(l, "sda", LCV_FITS, 480103981056LL, ""); fit(l, "sdb", LCV_FITS, 480103981056LL, ""); }
     if (strncmp(card, "lcprogress", 10) && strcmp(card, "lcstop") && strncmp(card, "lcdone", 6)) return;
-    int fail = !strcmp(card, "lcprogress-fail") || !strcmp(card, "lcdone"), done = !strncmp(card, "lcdone", 6);
+    int fail = !strcmp(card, "lcprogress-fail") || (!strncmp(card, "lcdone", 6) && strcmp(card, "lcdone-ok")), done = !strncmp(card, "lcdone", 6);
     snprintf(l->phase, sizeof l->phase, "%s", done ? "done" : "copying");
     l->has_run = 1; snprintf(l->run_src, sizeof l->run_src, "sdc"); l->total = 148600000000LL;
     l->copied = done ? l->total : fail ? 118400000000LL : 55100000000LL;
     l->elapsed = done ? (fail ? 1065 : 372) : fail ? 728 : 399; l->cur_part = 3;
-    snprintf(l->report, sizeof l->report, "%s", done ? "sent" : "");
+    snprintf(l->report, sizeof l->report, "%s", done ? (l->usb ? "usb" : "sent") : "");   /* #2131: the stick has no server to report to */
     long long in3 = l->copied - 32000000LL - 16000000LL;
     part(l, 1, "EFI", "vfat", 32000000LL, 104857600LL, "done", 0);
     part(l, 2, "MSR", "", 16000000LL, 16777216LL, "done", 0);

@@ -148,6 +148,13 @@ with open(tmp, "w", encoding="utf-8") as f:
                "payload_saved": payload_saved == "1"}, f)
     f.flush(); os.fsync(f.fileno())
 os.replace(tmp, path)
+# ‏#2623: ה-rename עצמו הוא שינוי של התיקייה — בלי fsync אליה, חיתוך חשמל מיד
+# אחריו משאיר רק את `.tmp` (נמדד ב-VM, 07/11) והשחזור לא יודע שהיה עדכון.
+dir_fd = os.open(os.path.dirname(path), os.O_RDONLY)
+try:
+    os.fsync(dir_fd)
+finally:
+    os.close(dir_fd)
 PYEOF
 }
 stage() { STAGE=$1; set_status running; write_recovery_marker; }
@@ -252,6 +259,13 @@ try:
 finally:
     os.umask(old)
 os.replace(tmp, dst)
+# ‏#2623: אותו כלל כמו הסמן — עותק שה-rename שלו לא נכתב לתיקייה נעלם בחיתוך חשמל,
+# והשחזור מדלג עליו בשקט (‏`-f $DB.pre-upgrade`) ומשאיר DB שמיגרה.
+dir_fd = os.open(os.path.dirname(os.path.abspath(dst)), os.O_RDONLY)
+try:
+    os.fsync(dir_fd)
+finally:
+    os.close(dir_fd)
 print(version)
 PYEOF
 )" || [[ ! "$DB_SNAP_VER" =~ ^[0-9]+$ ]]; then

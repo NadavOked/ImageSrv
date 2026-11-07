@@ -22,6 +22,8 @@ from server.db import _settle, _write_lock, journal, now_iso, writing
 
 SATA_MODES = ("ahci", "ide", "raid")
 KEEP = 20
+#: כמה שינויי חיבורים נשלחים למסך המשכפל (השאר רק נספרים).
+WARN_MAX = 4
 TEXT_MAX = 80
 #: שמות בעברית לשדות, לשורת היומן ולקונסולה.
 FIELD_HE = {"sata_mode": "מצב בקר הדיסקים", "boot": "מצב אתחול", "secure_boot": "Secure Boot", "bios_version": "גרסת BIOS"}
@@ -216,8 +218,17 @@ def view(conn: sqlite3.Connection, mac: str) -> dict:
             "slots": table, "gap_below_populated": view_gap, "peers": peers}
 
 
-def accept(conn: sqlite3.Connection, mac: str, user: str) -> bool:
-    """"זו ההגדרה הנכונה": התמונה הנוכחית נשמרת כתמונה התקינה, ומכאן משווים אליה."""
+def cloner_warning(conn: sqlite3.Connection, mac: str) -> dict | None:
+    """מה שמסך ההמתנה של המשכפל מציג (#2080, מוקאפ 06 סעיף 2): **רק החיבורים** -- מצב הבקר של משכפל
+    אינו משנה מה שהוא כותב, וחיבור שזז הוא מה שה-BIOS עוצר עליו. ``None`` = אין מה להציג."""
+    texts = [c["text"] for c in changes_for(conn, mac)["changes"] if c["kind"] in ("moved", "gone")]
+    return {"changes": texts[:WARN_MAX], "count": len(texts)} if texts else None
+
+
+def accept(conn: sqlite3.Connection, mac: str, user: str, *, at_cloner: str | None = None) -> bool:
+    """"זו ההגדרה הנכונה": התמונה הנוכחית נשמרת כתמונה התקינה, ומכאן משווים אליה.
+
+    ``at_cloner`` -- שם המשכפל שמי שעומד לידו לחץ "זה מכוון" (הכרעת נדב 25/10); ביומן "אושר במשכפל <שם>"."""
     rows = _rows(conn, mac, 1)
     if not rows:
         return False
@@ -226,5 +237,8 @@ def accept(conn: sqlite3.Connection, mac: str, user: str) -> bool:
         conn.execute("INSERT INTO fw_baseline (mac, at, snap_json, by) VALUES (?, ?, ?, ?)"
                      " ON CONFLICT (mac) DO UPDATE SET at = excluded.at, snap_json = excluded.snap_json, by = excluded.by",
                      (mac, now_iso(), json.dumps(rows[0][1], sort_keys=True, ensure_ascii=False), user))
-    journal(conn, "fw_accepted", mac, user, machine=mac)
+    if at_cloner:
+        journal(conn, "fw_accepted", f"{mac} · אושר במשכפל {at_cloner}", machine=mac)
+    else:
+        journal(conn, "fw_accepted", mac, user, machine=mac)
     return True

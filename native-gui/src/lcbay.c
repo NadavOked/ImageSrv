@@ -131,6 +131,17 @@ void rb_sum_add(RbSum *s, const RbBar *r, const char *state) {
     if (chk && r->rate > 0) s->rate += r->rate;
 }
 
+/* the drawer number column: the big number and "מגירה" under it, ending at <right>, centred on <cy>.
+ * Shared with the local clone's end list (screens_lcrun.c) -- one drawing of it. */
+void lc_bay_number(App *a, cairo_t *cr, double right, double cy, double big, int drawer, Rgb col) {
+    char num[16]; if (drawer > 0) snprintf(num, sizeof num, "%d", drawer); else snprintf(num, sizeof num, "%s", "—");
+    Text nb = text_make(cr, FONT_MONO, big, 600, num, 0, DIR_LTR), nl = text_make(cr, FONT_SANS, 11, 400, "מגירה", 0, DIR_RTL);
+    double ny = cy - (big + 6 + nl.h) / 2;
+    text_draw_r(cr, &nb, right, ny + (big - nb.h) / 2, col);
+    text_draw_r(cr, &nl, right, ny + big + 6, a->theme->muted);
+    text_free(&nb); text_free(&nl);
+}
+
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     const Theme *t = a->theme;
     int dwarn = g->kind == BAY_DONE && g->done_warn;   /* #2009: done, orange -- drawn as the SMART question's orange */
@@ -164,12 +175,7 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     cairo_restore(cr); draw_border_rrect(cr, b, 4, edge, emphasis ? 3 : 1);
 
     /* the drawer number */
-    char num[16]; if (g->drawer > 0) snprintf(num, sizeof num, "%d", g->drawer); else snprintf(num, sizeof num, "%s", "—");
-    double big = narrow ? 30 : 40;
-    Text nb = text_make(cr, FONT_MONO, big, 600, num, 0, DIR_LTR), nl = text_make(cr, FONT_SANS, 11, 400, "מגירה", 0, DIR_RTL);
-    double nr = b.x + b.w - (narrow ? 14 : 18), ny = cy - (big + 6 + nl.h) / 2;
-    text_draw_r(cr, &nb, nr, ny + (big - nb.h) / 2, number);
-    text_draw_r(cr, &nl, nr, ny + big + 6, t->muted); text_free(&nb); text_free(&nl);
+    lc_bay_number(a, cr, b.x + b.w - (narrow ? 14 : 18), cy, narrow ? 30 : 40, g->drawer, number);
 
     /* the disk: name, size and model, and its pill */
     double fr = b.x + b.w - numw - 1 - gap, fl = b.x + ledw + 1 + gap;

@@ -2,9 +2,12 @@
 
 שלושה דברים, כולם על אפליקציית הקונסולה בלבד (``create_console_app``):
 
-1. **‏`X-Frame-Options: DENY` על כל תשובה** — דף זר אינו יכול לעטוף את
-   הקונסולה ב-iframe ולגנוב לחיצה (clickjacking). ‏CSP עם ``frame-ancestors``
-   מחכה עד שה-``onclick=`` המוטמעים ייצאו מה-HTML (#2493).
+1. **‏`X-Frame-Options: SAMEORIGIN` על כל תשובה** — דף זר אינו יכול לעטוף את
+   הקונסולה ב-iframe ולגנוב לחיצה (clickjacking), אבל דף של הקונסולה עצמה כן:
+   "צפייה במסך" בדף המוניטור טוענת את ``monitor.html`` ב-iframe באותו מקור
+   (``console.js``, ‏``iframe.mon-frame``). ‏``DENY`` (#1633) חסם גם אותו — #2642.
+   ‏CSP עם ``frame-ancestors`` מחכה עד שה-``onclick=`` המוטמעים ייצאו מה-HTML
+   (#2493).
 2. **‏Fetch Metadata** — בקשה משנת-מצב (POST/PUT/PATCH/DELETE) שהדפדפן
    סימן ``Sec-Fetch-Site`` שאינו ``same-origin`` או ``none`` → 403. עבור
    כתובת IP, "same-site" הוא ה-IP כולו בלי פורט, ולכן ``same-site`` נדחה
@@ -121,9 +124,9 @@ def refusal(scope) -> tuple[int, str, str] | None:
     return None
 
 
-def _with_frame_deny(headers) -> list:
+def _with_frame_sameorigin(headers) -> list:
     kept = [(k, v) for k, v in headers if k.lower() != b"x-frame-options"]
-    return kept + [(b"X-Frame-Options", b"DENY")]
+    return kept + [(b"X-Frame-Options", b"SAMEORIGIN")]
 
 
 class ConsoleFetchGuard:
@@ -141,7 +144,7 @@ class ConsoleFetchGuard:
             status, code, message = refused
             body = json.dumps({"detail": message, "code": code}, ensure_ascii=False).encode("utf-8")
             await send({"type": "http.response.start", "status": status,
-                        "headers": _with_frame_deny([
+                        "headers": _with_frame_sameorigin([
                             (b"content-type", b"application/json; charset=utf-8"),
                             (b"content-length", str(len(body)).encode("ascii"))])})
             await send({"type": "http.response.body", "body": body})
@@ -149,7 +152,7 @@ class ConsoleFetchGuard:
 
         async def send_frame_deny(message):
             if message["type"] == "http.response.start":
-                message = {**message, "headers": _with_frame_deny(message.get("headers", []))}
+                message = {**message, "headers": _with_frame_sameorigin(message.get("headers", []))}
             await send(message)
 
         await self.inner(scope, receive, send_frame_deny)

@@ -154,24 +154,6 @@ test('new user: the password is permanent — no must-change option in the sheet
   assert.match(body, /post\("\/users", \{ \.\.\.v, mfa_required: !!v\.mfa_required \}\)/);   // + "דרוש אימות דו-שלבי" (18/10)
 });
 
-test('wizard: steps on the side, the next button follows step validity, finish calls onFinish with the state', async () => {
-  const {run, get} = setup();
-  run(`globalThis.st={}; globalThis.fin=null; openWizard({title:"אשף", steps:[
-    {label:"א", render(){}, valid:(s)=>!!s.ok, hint:"מלאו"},
-    {label:"ב", render(){}}], state:globalThis.st, finishLabel:"סיום", onFinish: async (s)=>{ globalThis.fin=s; }})`);
-  assert.equal(get('modalBox').className, 'modal win n-wide');
-  assert.match(get('modalBody').innerHTML, /<ol class="n-steps" id="wz-steps">/);
-  assert.equal(get('modalOk').disabled, true, 'step 1 is invalid');
-  assert.equal(get('modalHint').textContent, 'מלאו');
-  run('st.ok = true; st.redraw()');
-  assert.equal(get('modalOk').disabled, false);
-  assert.equal(get('modalOk').textContent, 'הבא');
-  await get('modalOk').onclick();
-  assert.equal(get('modalOk').textContent, 'סיום', 'the last step offers the finish label');
-  await get('modalOk').onclick();
-  assert.equal(run('fin === st'), true, 'finish hands over the collected state');
-});
-
 test('no scrollbar is drawn anywhere, and the scrolling regions of a window can take keyboard focus', () => {
   const css = fs.readFileSync(path.join(root, 'console.css'), 'utf8');
   assert.match(css, /\*\{scrollbar-width:none\}/);

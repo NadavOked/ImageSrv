@@ -168,8 +168,17 @@ write_host_configuration() {
         _wh_root_uuid=$(filesystem_uuid "$ROOT_NODE")
         _wh_esp_uuid=$(filesystem_uuid "$ESP_NODE")
     fi
+    # #2622: /boot/efi is the first member's ESP. Every member carries its own
+    # loader (raid_extra_esps), so with that disk gone the array still boots and
+    # the missing ESP must not stop it: without nofail local-fs.target fails
+    # ("Dependency failed for /boot/efi") and the server sits in emergency mode
+    # asking for the root password (QEMU, 07/11). nofail is only for RAID --
+    # a single disk has nothing to boot without its ESP, and there a mount that
+    # fails stays loud. The array row on the health page turns red meanwhile.
+    _wh_esp_opts=umask=0077
+    [ "${RAID_LEVEL:-none}" = none ] || _wh_esp_opts=$_wh_esp_opts,nofail
     write_target 0644 /etc/fstab "UUID=$_wh_root_uuid / ext4 defaults 0 1
-UUID=$_wh_esp_uuid /boot/efi vfat umask=0077 0 1
+UUID=$_wh_esp_uuid /boot/efi vfat $_wh_esp_opts 0 1
 "
     write_target 0644 /etc/hostname "$ANSWER_HOSTNAME
 "

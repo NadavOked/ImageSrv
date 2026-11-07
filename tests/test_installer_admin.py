@@ -90,7 +90,9 @@ def test_install_summary_distinguishes_default_and_installer_passwords():
     text = INSTALLER.read_text(encoding="utf-8")
     assert 'if [[ -n "$ADMIN_PASS" ]]; then' in text
     assert 'משתמש $ADMIN_USER נוצר עם הסיסמה שנקבעה בהתקנה' in text
-    assert 'כניסה ראשונה: $ADMIN_USER / admin — הקונסולה תדרוש החלפת סיסמה' in text
+    # ‏#2593: אין עוד מסלול admin/admin במתקין — הענף השני אומר שהמנהל הקיים נשאר.
+    assert 'המנהל הקיים נשאר כפי שהיה' in text
+    assert 'כניסה ראשונה: $ADMIN_USER / admin' not in text
     assert "must_change_password=False" in installer_admin_python()
 
 

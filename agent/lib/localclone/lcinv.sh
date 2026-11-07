@@ -164,7 +164,7 @@ lc_measure() {
     # $1 = source disk: will a smaller drawer take it (_lc_measure_fit), then
     # how many bytes the copy moves (lc_copy_size, lcsize.sh, #1443). The
     # return code is the fit's; the copy's size has its own file.
-    rm -f "$LC/measure/$1.copy"
+    rm -f "$LC/measure/$1.copy" "$LC/measure/$1.hib"
     _lc_measure_fit "$1"; _lm_rc=$?
     lc_copy_size "$1"
     return "$_lm_rc"
@@ -194,9 +194,11 @@ _lc_measure_fit() {
     while IFS='|' read -r _lm_i _lm_g _lm_rest; do
         case "$(_partition_role "$_lm_g")" in windows|linux) ;; *) continue ;; esac
         _lm_pn=$(partition_node "$1" "$_lm_i")
-        { [ "$(_fs_of "$_lm_pn")" = ntfs ] && [ "$(ntfs_state "$_lm_pn")" != hibernated ]; } || continue
+        [ "$(_fs_of "$_lm_pn")" = ntfs ] || continue
+        _lm_ns=$(ntfs_state "$_lm_pn")
+        [ "$_lm_ns" != hibernated ] || { echo 1 > "$LC/measure/$1.hib"; continue; }   # #2069: the screen says it (lc_src, mockup 09); the drop is on the view
         _lm_why=$(capture_ntfs_hibernation_reason "$_lm_pn" "$RUN_DIR/lc-probe") || {
-            case "$_lm_why" in   # #2084 (mockup 09, until #2069): the words of the mockup, a disk by its number
+            case "$_lm_why" in   # #2084 (mockup 09): the words of the mockup, a disk by its number; a hibernated source (14) never gets here (#2069)
                 *"Fast Startup"*) echo "failed||המקור$(_lc_src_he "$1") במצב שינה של Windows — אי אפשר לכווץ אותו לדיסק הזה, שקטן ממנו. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי" ;;
                 *) echo "failed||במקור$(_lc_src_he "$1") — מחיצה $_lm_i: $(_lc_clean "${_lm_why%.}")" ;;   # #1937: drawn on a TARGET's row
             esac > "$_lm_out"; return 1; }

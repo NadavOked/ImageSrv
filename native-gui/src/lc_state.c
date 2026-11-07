@@ -93,7 +93,8 @@ int lc_state_line(State *s, const char *key, char *val) {
         if (nf >= 17) cpy(d->hw, sizeof d->hw, f[16]);
         if (nf >= 18) cpy(d->name, sizeof d->name, f[17]);
     } else if (!strcmp(key, "lc_src")) {
-        int nf = lc_split(val, f, 4); cpy(l->src, sizeof l->src, f[0]); cpy(l->src_measure, sizeof l->src_measure, f[1]);
+        int nf = lc_split(val, f, 5); cpy(l->src, sizeof l->src, f[0]); cpy(l->src_measure, sizeof l->src_measure, f[1]);
+        l->src_hibernated = nf >= 5 && !strcmp(f[4], "hibernated");   /* #2069: anything else says nothing */
         l->src_copy = nf >= 3 && f[2][0] ? ll(f[2]) : -2;   /* #1443: empty, or an agent without it = not yet */
         if (l->src_copy < -2) l->src_copy = -1;
         cpy(l->src_copy_why, sizeof l->src_copy_why, f[3]);

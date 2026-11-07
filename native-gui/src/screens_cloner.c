@@ -159,7 +159,11 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
         if (d->error[0]) { snprintf(y->line, sizeof y->line, "הושלם — %s", d->error); y->line_warn = 1; }
         /* #1907 (Nadav 22/10): written, not read back -- the server's check list did not come down */
         else if (d->rb_nolist) { snprintf(y->line, sizeof y->line, "הושלם · לא אומת — הרשימה לא הורדה"); y->line_warn = 1; }
-        else snprintf(y->line, sizeof y->line, "הושלם · נבדק");
+        /* #2613: "נבדק" only for what the agent's verdict (readback.sh) says was read back; a verdict that is not there says nothing */
+        else if (!strcmp(d->rb.verdict, "unverified")) { snprintf(y->line, sizeof y->line, "הושלם · לא אומת"); y->line_warn = 1; }
+        else if (!strcmp(d->rb.verdict, "sampled")) snprintf(y->line, sizeof y->line, "הושלם · נבדק במדגם");
+        else if (!strcmp(d->rb.verdict, "verified")) snprintf(y->line, sizeof y->line, "הושלם · נבדק");   /* lc_bay_readback below: "אומת — זהה לאימג׳" */
+        else snprintf(y->line, sizeof y->line, "הושלם");
         break;
     case BAY_FAILED:
         y->pill = "נכשל";
@@ -289,6 +293,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     int nw = 0, nd = 0, nf = 0, ns = 0, nc = 0, ncg = 0, pend = 0, sum = 0, known = 0, eta = -1;   /* #1386: cancelled, cancelling */
     int verifying = 0, waiting = 0, asking = 0, unchecked_done = 0;   /* display counts only; entry_kind is unchanged */
     RbSum rbs = { 0 };                    /* #2046: the check, across the rows */
+    int unproven = 0, unver = 0;          /* #2613: done rows whose check the agent did not vouch for / said it did not make */
     long long rate = -1, moved = 0; unsigned long long most = 0, whole = 0; int stalled = 0;   /* #2055 */
     char names[200] = "", failed_name[SLOT_NAME_MAX + 64] = "", skipped_name[SLOT_NAME_MAX + 64] = "";
     char pdisk[SLOT_NAME_MAX + 64] = "";   /* #2347: the drawer that asks (#1808/#1898), by its own row */
@@ -318,6 +323,11 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (k == BAY_DONE && (dg.line_warn || dg.done_warn || dg.flag)) unchecked_done++;
         if (k == BAY_WRITING && !strcmp(e->drawer->state, "verifying")) verifying++;
         if (e->drawer) rb_sum_add(&rbs, &e->drawer->rb, e->drawer->state);
+        if (k == BAY_DONE) {
+            const char *v = e->drawer->rb.verdict;
+            unproven += strcmp(v, "verified") && strcmp(v, "sampled");
+            unver += !strcmp(v, "unverified") || e->drawer->rb_nolist;
+        }
         if (k == BAY_WAITING) waiting++;
         if (k == BAY_SMART) asking++;
         if (k == BAY_FAILED) { nf++; snprintf(failed_name, sizeof failed_name, "%s", nm); }
@@ -373,7 +383,8 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         snprintf(big, sizeof big, "%d/%d", nd, n); snprintf(left, sizeof left, "דיסקים תקינים");
     } else if (ended) {
         snprintf(title, sizeof title, "%s", nd ? "השיכפול הסתיים — הדיסקים נכתבו" : "השיכפול הסתיים");
-        snprintf(s2, sizeof s2, "%s", ns ? "דיסק שדולג נשאר כפי שהיה." : "כל היעדים נכתבו ונבדקו.");
+        snprintf(s2, sizeof s2, "%s", ns ? "דיסק שדולג נשאר כפי שהיה." : unver ? "כל היעדים נכתבו — אבל לא כולם נבדקו מול האימג׳."
+                                       : unproven ? "כל היעדים נכתבו." : "כל היעדים נכתבו ונבדקו.");   /* #2613: "נבדקו" only on the agent's say */
         if (dv_bad || dv_warn) {   /* #1331: the disk that may not boot first, then the one without drivers */
             char b1[300] = "", b2[300] = "";
             if (dv_bad == 1) snprintf(b1, sizeof b1, "%s: דרייבר האחסון לא הוגדר לעלייה — הדיסק עלול לא לעלות.", bad_name);
@@ -433,13 +444,13 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     if (!n) snprintf(v3, sizeof v3, "אין דיסקים");
     snprintf(c3, sizeof c3, "%s", !n ? "לא נמצאו דיסקים" : !nd ? (ended ? "אף דיסק לא נכתב" : "עוד לא הסתיים אף דיסק") : "");
     if (ended && unchecked_done) snprintf(c3, sizeof c3, "הכתיבה הסתיימה — ראו את ההערות במגירות");
-    else if (ended && nd == 1) {
+    else if (ended && nd == 1 && !unproven) {   /* #2613: no "נבדקה" over a verdict that is not there */
         for (int i = 0; i < n; i++) if (entry_kind(&entries[i]) == BAY_DONE) {
             int bay = entry_drawer(&entries[i]);
             if (bay > 0) snprintf(c3, sizeof c3, "מגירה %d נכתבה ונבדקה", bay);
             else snprintf(c3, sizeof c3, "דיסק אחד נכתב ונבדק");
         }
-    } else if (ended && nd > 1) snprintf(c3, sizeof c3, "%d דיסקים נכתבו ונבדקו", nd);
+    } else if (ended && nd > 1 && !unproven) snprintf(c3, sizeof c3, "%d דיסקים נכתבו ונבדקו", nd);
     if (ended && !nf && dv_any) {   /* #1331: only completed outcomes */
         char p1[32] = "", p2[32] = "", p3[32] = "";
         if (dv_ok) snprintf(p1, sizeof p1, "%d הונחו", dv_ok);

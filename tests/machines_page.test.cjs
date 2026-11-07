@@ -108,12 +108,12 @@ test('console-full.html P.machines: header counts from the API, three tabs with 
   assert.equal((html.match(/<table class="dg kebab-col"/g)||[]).length,1);
   assert.equal((html.match(/<tr class="group"/g)||[]).length,0,'flat, not grouped');
   const head=between(html,'<thead>','</thead>');
-  assert.deepEqual([...head.matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')),['בחירה','שם','תפקיד','קבוצה','כתובת','דיסקים','באתחול הבא','מצב','פעולות']);
+  assert.deepEqual([...head.matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')),['בחירה','שם','תפקיד','קבוצה','כתובת','נפח','באתחול הבא','מצב','פעולות']);
   assert.deepEqual([...html.matchAll(/<tr data-mac="([^"]+)"/g)].map(m=>m[1]),
     ['c8:d9:d2:0b:fe:32','c8:d9:d2:0b:fe:34','a0:48:1c:8a:18:40','78:ac:c0:9b:11:c2','b4:2e:99:07:1a:c1','b4:2e:99:07:1a:c2','b4:2e:99:07:1a:c3','b4:2e:99:07:1b:c1'],'build → cloners → each class in group order, by name inside each');
   const b1=between(html,'data-mac="c8:d9:d2:0b:fe:32"','data-mac="c8:d9:d2:0b:fe:34"');
   assert.match(b1,/class="clk" onclick="mchRowClick\(event,'c8%3Ad9%3Ad2%3A0b%3Afe%3A32'\)"/,'the row opens the machine');
-  assert.match(b1,/openMachineDetail\('c8%3Ad9%3Ad2%3A0b%3Afe%3A32'\)">בנייה 1<\/a><\/td><td>בנייה<\/td><td class="c-opt">מחשבי בנייה<\/td><td class="c-opt"><bdi dir="ltr">10.44.12.20<\/bdi><\/td><td>1<\/td>/);
+  assert.match(b1,/openMachineDetail\('c8%3Ad9%3Ad2%3A0b%3Afe%3A32'\)">בנייה 1<\/a><\/td><td>בנייה<\/td><td class="c-opt">מחשבי בנייה<\/td><td class="c-opt"><bdi dir="ltr">10.44.12.20<\/bdi><\/td><td><bdi dir="ltr">256GB<\/bdi><\/td>/,'#1375: capacity, not the count');
   assert.doesNotMatch(b1,/c8:d9:d2:0b:fe:32<\/span>|<span class="sub">/,'no MAC column and no model sub-line');
   assert.match(b1,/pill warn">ממתין למפעיל</,'prompt beats everything');
   const menu=JSON.parse(b1.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
@@ -121,7 +121,7 @@ test('console-full.html P.machines: header counts from the API, three tabs with 
   const c1=between(html,'data-mac="a0:48:1c:8a:18:40"','data-mac="78:ac:c0:9b:11:c2"');
   assert.match(c1,/<td>שיכפול<\/td>/); assert.match(c1,/pill ok">מחובר</);
   const c2=between(html,'data-mac="78:ac:c0:9b:11:c2"','data-mac="b4:2e:99:07:1a:c1"');
-  assert.match(c2,/<td>3<\/td>/,'disks = the count'); assert.match(c2,/pill warn">נכשל בשיכפול הקודם</,'#1580: a write failure is orange'); assert.doesNotMatch(c2,/sd[abc]/);
+  assert.match(c2,/<td><bdi dir="ltr">3 × 256GB<\/bdi><\/td>/,'#1375: capacity, identical drives grouped'); assert.doesNotMatch(c2,/<td>3<\/td>/); assert.match(c2,/pill warn">נכשל בשיכפול הקודם</,'#1580: a write failure is orange'); assert.doesNotMatch(c2,/sd[abc]/);
   const l1=between(html,'data-mac="b4:2e:99:07:1a:c1"','data-mac="b4:2e:99:07:1a:c2"');
   assert.match(l1,/<td>כיתה<\/td><td class="c-opt">כיתה 303 — סייבר<\/td>/); assert.match(l1,/pill info">בסבב · ממתין להתחלה</);
 });

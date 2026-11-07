@@ -47,6 +47,7 @@ AGENT_JSON_PATHS = [
     "/api/v1/agent/hello", "/api/v1/agent/login", "/api/v1/agent/pulls",
     "/api/v1/agent/progress", "/api/v1/agent/disk-event", "/api/v1/agent/local-clone",
     "/api/v1/agent/shrink-open", "/api/v1/agent/shrink-close", "/api/v1/agent/shrink-note",
+    "/api/v1/agent/firmware-accept",   # #2080
 ]
 
 

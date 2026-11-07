@@ -69,6 +69,7 @@ typedef struct {
     int inv_done; char phase[16];                /* idle|shrinking|copying|verifying|restoring|done|stopped */
     LcDisk disks[LC_MAX_DISKS]; int ndisks;
     char src[16]; char src_measure[12];          /* the source the verdicts are about */
+    int src_hibernated;                          /* #2069: lc_src's 5th field -- the agent saw Fast Startup on it; "" = say nothing */
     long long src_copy; char src_copy_why[200];  /* #1443: the bytes the copy moves; -1 = not measured (why), -2 = not yet */
     char unread_dev[16]; long long unread;       /* Nadav 22/10: lc_unread=dev|n -- SMART 197/198 of the source; 0 = say nothing */
     LcFit fits[LC_MAX_DISKS]; int nfits;

@@ -513,7 +513,13 @@ def main() -> None:
                 args.data_dir, console_addr or "127.0.0.1", hostname=machine_hostname)
     except ConsoleTLSError as exc:
         parser.error(str(exc))
-    if console_tls is not None and console_addr and console_addr not in console_tls.sans:
+    if console_tls is not None and console_tls.migration_error:
+        # ‏#1380: התעודה היא שלנו והחלפתה נכשלה — הישנה ממשיכה להיות מוגשת, בגלוי.
+        print(f"error: could not replace the generated console TLS certificate with "
+              f"one for --console-host {console_addr}: {console_tls.migration_error}; "
+              f"still serving the old one (fingerprint {console_tls.fingerprint_sha256})",
+              file=sys.stderr)
+    elif console_tls is not None and console_addr and console_addr not in console_tls.sans:
         # תעודה שהמפעיל העלה לעולם אינה מוחלפת אוטומטית.
         print(f"warning: console TLS certificate SANs {list(console_tls.sans)} "
               f"do not include --console-host {console_addr}; upload a matching certificate")
@@ -664,7 +670,8 @@ def main() -> None:
         # מוקדם יותר קרס (UnboundLocalError) בעלייה הראשונה אחרי ההחלפה
         journal(runtime.conn, "console_tls_regenerated", console_addr or "127.0.0.1",
                 f"old_sha256={console_tls.previous_fingerprint_sha256} "
-                f"new_sha256={console_tls.fingerprint_sha256}")
+                f"new_sha256={console_tls.fingerprint_sha256}"
+                + (" legacy_migration=1" if console_tls.migrated_legacy else ""))
     _start_igmp_querier(runtime, deploy, interface)   # #1972
     _start_rogue_dhcp_watch(runtime, deploy, interface)   # #2442
     _start_ups_monitor(runtime)   # #1973

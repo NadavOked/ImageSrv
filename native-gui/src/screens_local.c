@@ -140,7 +140,8 @@ static void verdict_text(App *a, const LcDisk *d, const LcDisk *src, char *out, 
         else snprintf(out, n, "נכנס");
         return;
     case LCV_SHRINK:
-        *c = t->warn; snprintf(out, n, "נכנס עם כיווץ זמני של המקור · צריך %s, יש %s", need, have); return;
+        *c = t->warn;   /* #2069 (mockup 09): a hibernated source says so on the drawer that needs the shrink -- the drop is on the copy */
+        snprintf(out, n, "%sנכנס עם כיווץ זמני של המקור · צריך %s, יש %s", a->st.lc.src_hibernated ? "המקור במצב שינה — ההשהיה תבוטל בעותק · " : "", need, have); return;
     case LCV_SHORT: {
         *c = t->danger;
         /* #1354: too little room left in the system partition -- the agent says how much. */
@@ -401,7 +402,7 @@ void lc_draw_source(App *a, cairo_t *cr, double W, double H, double head_h) {
     if (!l->usb)   /* #1914 (Nadav, metal 20/10): on the stick there is nothing to go back to */
         bx += lc_btn(a, cr, bx + lc_btn_width(cr, "חזרה", "Esc"), y, 40, "חזרה", "Esc", BTN_PLAIN, HIT_LC_BACK,
                      !a->lcu.confirm && a->lcu.focus == LCF_BACK);
-    char msg[400] = ""; Rgb mc = t->muted, dot = t->led_ok; int bad = 0, meas = 0;
+    char msg[400] = ""; Rgb mc = t->muted, dot = t->led_ok; int bad = 0, meas = 0, hib = 0;
     for (int i = 0; i < n; i++) {
         if (blocked(a, i) && !bad) {
             char lb[LC_LABEL_MAX], v[260]; Rgb c; lc_disk_label(&l->disks[i], lb, sizeof lb); verdict_text(a, &l->disks[i], src, v, sizeof v, &c);
@@ -412,11 +413,13 @@ void lc_draw_source(App *a, cairo_t *cr, double W, double H, double head_h) {
     }
     if (bad) dot = t->danger;
     else if (meas) { snprintf(msg, sizeof msg, "בודק אם הנתונים של המקור נכנסים ליעדים — לא נכתב דבר."); dot = t->led_idle; }
+    else if (l->src_hibernated && lc_any_shrink(a)) {   /* #2069 (mockup 09): orange, not a refusal -- the copy is cleaned, the source is not written */
+        snprintf(msg, sizeof msg, "המקור במצב שינה של Windows. בעותק ההשהיה מבוטלת, והמקור עצמו לא משתנה."); dot = t->warn; hib = 1; }
     else snprintf(msg, sizeof msg, "מועתקים רק בלוקים בשימוש, מהמקור אל כל היעדים במקביל.%s",
                   l->usb ? " הדיסק-און-קי שממנו עלה המחשב אינו מוצג ולא ייכתב." : "");   /* #1914 (A) */
     Text mt = text_make(cr, FONT_SANS, 13, 400, msg, (int)(xr - bx - 40), DIR_RTL);
-    sb_led(cr, xr - 5, y + 20, 10, dot, bad ? t->danger_soft : t->success_soft, 0, 1);
-    text_draw_r(cr, &mt, xr - 18, y + 20 - mt.h / 2, bad ? t->danger_fg : mc); text_free(&mt);
+    sb_led(cr, xr - 5, y + 20, 10, dot, bad ? t->danger_soft : hib ? t->warning_soft : t->success_soft, 0, 1);
+    text_draw_r(cr, &mt, xr - 18, y + 20 - mt.h / 2, bad ? t->danger_fg : hib ? t->warning_ink : mc); text_free(&mt);
     if (a->lcu.confirm) lc_draw_confirm(a, cr, W, H);
 }
 

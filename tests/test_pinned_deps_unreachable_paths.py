@@ -240,7 +240,7 @@ def test_scanner_is_quiet_on_what_we_do_use() -> None:
 # נעול כאן, כי הסוכן רץ ברשת ההפצה ו-applet שנכנס "כי הוא כבר שם" פותח אותן:
 #   udhcpc6 CVE-2026-29004 · ‏wget CVE-2025-60876 · ‏ssl_client (TLS)
 #   CVE-2026-88830 · ‏httpd CVE-2026-88829/88831/88834/88837 · ‏unzip CVE-2026-26157
-# ‏udhcpc (IPv4) **כן** בשימוש, ו-CVE-2026-88833 שבו נגיש — ראו SECURITY.md.
+# ‏udhcpc (IPv4) **כן** בשימוש — ההכרעה עליו בטריאז' הפרטי, לא כאן.
 
 AGENT = REPO / "agent"
 BUSYBOX_FORBIDDEN = re.compile(r"(?<![\w./-])(udhcpc6|wget|ssl_client|httpd|unzip)(?![\w.-])")

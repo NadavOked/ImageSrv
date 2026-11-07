@@ -51,6 +51,12 @@ KEY_NAME = "console.key"
 #: ה-CN של התעודה; מה שהדפדפן מציג ב"הונפק ל".
 COMMON_NAME = "imagesrv-console"
 GENERATED_MARKER = "generated.sha256"
+#: ‏#1380: ה-CN שהשרת נתן לתעודה שיצר לפני שנכתב ``generated.sha256`` (v0.75) —
+#: ``imagectl-console`` לפני שינוי השם, ``COMMON_NAME`` אחריו.
+LEGACY_COMMON_NAMES = ("imagectl-console", COMMON_NAME)
+#: ‏#1380: סמן של תעודה **שהמפעיל העלה** (טביעת האצבע שלה). תעודה כזו אינה
+#: מועמדת למיגרציה גם אם ה-CN שלה זהה לשלנו.
+UPLOADED_MARKER = "uploaded.sha256"
 #: ‏#2095: תת-התיקייה עם העותק ש-uvicorn טוען בפועל — נכתב בכל עליית שרת
 #: מהבייטים שטביעת האצבע חושבה מהם, ולכן ``/me`` = מה שמוגש, גם אם מישהו
 #: כותב את התעודה הקנונית אחרי העלייה.
@@ -77,6 +83,11 @@ class ConsoleTLS:
     self_signed: bool = True
     regenerated: bool = False
     previous_fingerprint_sha256: str | None = None
+    #: ‏#1380: ההחלפה הייתה מיגרציה של תעודה שנוצרה לפני הסמן (ולא חידוש רגיל).
+    migrated_legacy: bool = False
+    #: ‏#1380: הניסיון להחליף תעודה שלנו נכשל — הישנה ממשיכה להיות מוגשת
+    #: והשרת מדפיס את הסיבה (עיקרון 5: לא "הצליח" בשקט).
+    migration_error: str | None = None
     #: ‏#2095: הבייטים שטביעת האצבע חושבה מהם — מה ש-``uvicorn_kwargs`` מגיש.
     cert_pem: bytes = field(default=b"", repr=False)
     key_pem: bytes = field(default=b"", repr=False)
@@ -148,6 +159,65 @@ def cert_sans(cert_pem: bytes) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _is_legacy_generated(cert_pem: bytes, directory: Path) -> bool:
+    """‏#1380: תעודה שהשרת יצר לפני ש-``generated.sha256`` נכתב (v0.75).
+
+    שלושה תנאים, וכולם חיוביים: חתומה-עצמית, ה-CN של השרת, ו**אין** סמן
+    מכל סוג — לא ``generated.sha256`` (קיים = מנגנון הסמן מכריע, גם כשאינו
+    תואם) ולא ``uploaded.sha256`` (המפעיל העלה אותה). כל ספק = "של המפעיל"."""
+    if (directory / GENERATED_MARKER).exists() or (directory / UPLOADED_MARKER).exists():
+        return False
+    if not _self_signed(cert_pem):
+        return False
+    return _cn(_first_cert(cert_pem).subject) in LEGACY_COMMON_NAMES
+
+
+def _new_identity(console_host: str, hostname: str | None) -> tuple[bytes, bytes]:
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
+    hostname = hostname or socket.gethostname()
+    ip_sans = [console_host] if _is_ip(console_host) else []
+    dns_sans = [] if _is_ip(console_host) else [console_host]
+    if hostname and hostname not in dns_sans:
+        dns_sans.append(hostname)
+    return generate_self_signed(
+        COMMON_NAME, ip_sans=ip_sans, dns_sans=dns_sans,
+        eku=(ExtendedKeyUsageOID.SERVER_AUTH,))
+
+
+def _create_fresh(directory: Path, console_host: str, hostname: str | None) -> None:
+    cert_pem, key_pem = _new_identity(console_host, hostname)
+    directory.mkdir(parents=True, exist_ok=True)
+    write_credential_0600(directory / KEY_NAME, key_pem.decode())
+    write_atomic(directory / CERT_NAME, cert_pem)
+    write_atomic(directory / GENERATED_MARKER,
+                 fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
+
+
+def _replace_generated(directory: Path, console_host: str, hostname: str | None) -> None:
+    """מחליף תעודה **שלנו** בחדשה עם הכתובת. הכול-או-כלום: התעודה נוצרת
+    ונטענת ב-``ssl`` לפני שנוגעים בדיסק, והזוג הישן נשמר כ-``.prev``; אם
+    הכתיבה נכשלת באמצע, הישן מוחזר בייט-בייט והחריג עולה (#1380)."""
+    cert_path, key_path = directory / CERT_NAME, directory / KEY_NAME
+    old_cert, old_key = cert_path.read_bytes(), key_path.read_text(encoding="utf-8")
+    cert_pem, key_pem = _new_identity(console_host, hostname)
+    error = _ssl_loads(cert_pem, key_pem, directory)
+    if error:
+        raise ConsoleTLSError(f"הזוג החדש לא נטען ב-ssl: {error}")
+    try:
+        shutil.copy2(cert_path, cert_path.with_name(CERT_NAME + PREV_SUFFIX))
+        write_credential_0600(key_path.with_name(KEY_NAME + PREV_SUFFIX), old_key)
+        write_credential_0600(key_path, key_pem.decode())
+        write_atomic(cert_path, cert_pem)
+        write_atomic(directory / GENERATED_MARKER,
+                     fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
+    except BaseException:
+        write_credential_0600(key_path, old_key)
+        write_atomic(cert_path, old_cert)
+        (directory / GENERATED_MARKER).unlink(missing_ok=True)
+        raise
+
+
 def ensure_console_cert(data_dir, console_host: str,
                         hostname: str | None = None) -> ConsoleTLS:
     """מחזיר את זהות הקונסולה — יוצר אותה **פעם אחת** אם אין.
@@ -166,43 +236,32 @@ def ensure_console_cert(data_dir, console_host: str,
             f"זהות הקונסולה חלקית ב-{directory}: "
             f"{'תעודה בלי מפתח' if have_cert else 'מפתח בלי תעודה'} — "
             f"הסר את שני הקבצים כדי שתיווצר זהות חדשה")
-    regenerated = False
-    previous_fingerprint = None
+    regenerated = migrated_legacy = False
+    previous_fingerprint = migration_error = None
     if have_cert:
         existing_pem = cert_path.read_bytes()
-        existing_sans = cert_sans(existing_pem)
         generated = directory / GENERATED_MARKER
-        generated_fingerprint = generated.read_text(encoding="ascii").strip() \
-            if generated.is_file() else ""
+        generated_fingerprint = (generated.read_text(encoding="ascii").strip()
+                                 if generated.is_file() else "")
+        legacy = _is_legacy_generated(existing_pem, directory)
         # ‏#2095: loopback אינו כתובת חדשה — זה מה שהשרת מעביר כשה-lease עוד
         # לא הגיע. תעודה שנוצרה מחדש עליו התחלפה בכל אתחול שבו השרת עלה
         # לפני ה-DHCP (ESXi, 24/10), והדפדפן נדרש לאשר שוב.
-        if (console_host not in existing_sans and not is_loopback(console_host)
+        if (console_host not in cert_sans(existing_pem) and not is_loopback(console_host)
                 and _self_signed(existing_pem)
-                and generated_fingerprint == fingerprint_sha256(existing_pem)):
-            previous_fingerprint = fingerprint_sha256(existing_pem)
-            shutil.copy2(cert_path, cert_path.with_name(CERT_NAME + PREV_SUFFIX))
-            write_credential_0600(key_path.with_name(KEY_NAME + PREV_SUFFIX),
-                                  key_path.read_text(encoding="utf-8"))
-            have_cert = False
-            regenerated = True
-    if not have_cert:
-        from cryptography.x509.oid import ExtendedKeyUsageOID
-
-        directory.mkdir(parents=True, exist_ok=True)
-        hostname = hostname or socket.gethostname()
-        ip_sans = [console_host] if _is_ip(console_host) else []
-        dns_sans = [] if _is_ip(console_host) else [console_host]
-        if hostname and hostname not in dns_sans:
-            dns_sans.append(hostname)
-        cert_pem, key_pem = generate_self_signed(
-            COMMON_NAME, ip_sans=ip_sans, dns_sans=dns_sans,
-            eku=(ExtendedKeyUsageOID.SERVER_AUTH,))
-        write_credential_0600(key_path, key_pem.decode())
-        write_atomic(cert_path, cert_pem)
-        write_atomic(directory / GENERATED_MARKER,
-                     fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
-    elif os.name == "posix":
+                and (legacy or generated_fingerprint == fingerprint_sha256(existing_pem))):
+            try:
+                _replace_generated(directory, console_host, hostname)
+            except Exception as exc:                     # noqa: BLE001 — כל כשל, לא רק OSError
+                # ‏#1380: ``_replace_generated`` החזיר את הישנה למקומה. נשארים
+                # עליה, אבל בגלוי: השרת מדפיס את הסיבה בכל עלייה.
+                migration_error = f"{type(exc).__name__}: {exc}"
+            else:
+                regenerated, migrated_legacy = True, legacy and not generated_fingerprint
+                previous_fingerprint = fingerprint_sha256(existing_pem)
+    else:
+        _create_fresh(directory, console_host, hostname)
+    if os.name == "posix" and not regenerated:
         # המפתח הוא שלנו — מצב רחב מדי (umask, העתקה ביד) מוחזר ל-0600.
         mode = stat_module.S_IMODE(os.stat(key_path).st_mode)
         if mode != 0o600:
@@ -213,6 +272,7 @@ def ensure_console_cert(data_dir, console_host: str,
                       sans=cert_sans(cert_pem), self_signed=_self_signed(cert_pem),
                       regenerated=regenerated,
                       previous_fingerprint_sha256=previous_fingerprint,
+                      migrated_legacy=migrated_legacy, migration_error=migration_error,
                       cert_pem=cert_pem, key_pem=key_path.read_bytes())
 
 
@@ -381,6 +441,8 @@ def install_upload(data_dir, cert_pem: bytes, key_pem: bytes) -> dict:
     write_credential_0600(key_path, key_pem.decode())
     write_atomic(cert_path, cert_pem, mode=0o600)   # ‏#2425: מה שהמפעיל הדביק, לא קריא לכל
     (directory / GENERATED_MARKER).unlink(missing_ok=True)
+    write_atomic(directory / UPLOADED_MARKER,   # ‏#1380: לא מועמדת למיגרציה גם אם ה-CN שלנו
+                 fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
     return info
 
 
@@ -417,4 +479,5 @@ def reissue_self_signed(data_dir, hostname: str) -> dict:
     write_credential_0600(key_path, key_pem.decode())
     write_atomic(cert_path, cert_pem)
     write_atomic(directory / GENERATED_MARKER, fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
+    (directory / UPLOADED_MARKER).unlink(missing_ok=True)
     return cert_details(cert_pem)

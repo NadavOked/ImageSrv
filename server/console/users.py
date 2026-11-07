@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import re
 import secrets
 import sqlite3
@@ -16,8 +17,14 @@ import string
 
 from server.db import _write_lock, journal, now_iso, writing
 
-#: מספר הסבבים ל**סיסמאות חדשות**. סיסמה קיימת נבדקת במספר שנשמר איתה.
-_ITERATIONS = 200_000
+_log = logging.getLogger(__name__)
+
+#: מספר הסבבים ל**סיסמאות חדשות**. סיסמה קיימת נבדקת במספר שנשמר איתה,
+#: ובכניסה מוצלחת רשומה עם פחות סבבים משודרגת לערך הזה (#2591).
+#: ‏600,000 = המלצת OWASP ל-PBKDF2-HMAC-SHA256 (Password Storage Cheat Sheet,
+#: נקרא 07/11/2026). נמדד על ה-testrunner (i7-10700, ‏load ‏~4, ‏07/11/2026):
+#: ‏200K ‏82ms, ‏600K ‏252ms (חציון מ-7).
+_ITERATIONS = 600_000
 _SCHEME = "pbkdf2"
 
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(conn)`` — שני
@@ -221,8 +228,31 @@ def verify(conn: sqlite3.Connection, username: str, password: str) -> str | None
     if scheme != _SCHEME or iterations < 1 or not digest:
         return None
     if hmac.compare_digest(_derive(password, salt, iterations), digest):
+        if iterations < _ITERATIONS:
+            _upgrade_hash(conn, row, password)
         return row["role"]
     return None
+
+
+def _upgrade_hash(conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> None:
+    """‏#2591: כניסה מוצלחת = הסיסמה ביד, ולכן אפשר לגבב אותה מחדש בעלות
+    הנוכחית. אף פעם לא בלי סיסמה, ואף פעם לא לערך נמוך מהקיים.
+
+    ה-``WHERE pw_hash = <הישן>`` הוא השומר: סיסמה שהוחלפה (או שודרגה על ידי
+    כניסה מקבילה) בין הקריאה לכתיבה אינה נדרסת — ‏``rowcount == 0`` הוא תשובה,
+    לא כישלון. ‏``auth_epoch`` אינו זז: הסיסמה לא השתנתה, ושום session
+    לא מתבטלת. כישלון כתיבה (דיסק, נעילה) אינו מפיל כניסה שהצליחה —
+    הרשומה נשארת כפי שהייתה והשדרוג יחזור בכניסה הבאה — אבל נרשם ללוג.
+    """
+    try:
+        with _write_lock, writing(conn):
+            conn.execute(
+                "UPDATE users SET pw_hash = ? WHERE username = ? AND pw_hash = ?",
+                (_hash(password, secrets.token_hex(16)), row["username"],
+                 row["pw_hash"]),
+            )
+    except sqlite3.Error as exc:
+        _log.warning("שדרוג גיבוב נכשל למשתמש %s: %s", row["username"], exc)
 
 
 def update(

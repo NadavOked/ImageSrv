@@ -245,7 +245,7 @@ async function storageScan() {
   SV.scan = { status: "running" }; renderCurrent();
   try {
     const r = await post(SL + "/scan", body);
-    SV.scan = { status: "ok", items: r.items || [] };
+    SV.scan = { status: "ok", items: r.items || [], rejected: r.rejected || 0 };
     const key = type === "nfs" ? "export" : type === "smb" ? "share" : "iqn";
     if (SV.scan.items.length === 1) SV.form[key] = SV.scan.items[0][key];
   } catch (e) { SV.scan = { status: "failed", reason: e.message }; }
@@ -379,7 +379,7 @@ function storageIscsiAView() {
   const canLogin = !!f.iqn && !!(f.name || "").trim() && !SV.busy && !(s && s.session === "ok");
   const form = `<div class="card-b form1">
     <div class="inline">${storageInput("portal", 'פורטל <span class="muted">(כתובת:פורט)</span>', { mono: true, placeholder: "10.44.3.75:3260" })}<button class="btn" onclick="storageScan()">גלה יעדים</button></div>
-    <div class="field"><label>יעדים שנמצאו <span class="muted">(SendTargets)</span></label>${storagePicklist("iqn", targets, (it) => ({ value: it.iqn, cap: it.portal || "" }), 'עדיין לא בוצע גילוי — לחץ "גלה יעדים"')}</div>
+    <div class="field"><label>יעדים שנמצאו <span class="muted">(SendTargets)</span></label>${storagePicklist("iqn", targets, (it) => ({ value: it.iqn, cap: it.portal || "" }), 'עדיין לא בוצע גילוי — לחץ "גלה יעדים"')}${targets && SV.scan.rejected ? UI.note("warn", `היעד החזיר ${SV.scan.rejected} שמות לא תקינים — נדחו. אם זה לא צפוי, בדקו מי עונה בכתובת הזו.`) : ""}</div>
     ${storageCheckbox("chap", "‏CHAP — היעד דורש אימות")}
     ${f.chap ? `<div class="form2">${storageInput("chap_user", "משתמש CHAP", { mono: true })}${storageInput("chap_secret", 'סוד CHAP <span class="muted">(12–16 תווים)</span>', { type: "password" })}</div>` : ""}
     ${storageCheckbox("auto", 'שמור בהתחברות אוטומטית — היעד חוזר לבד אחרי אתחול השרת (<span class="mono">node.startup=automatic</span>)')}

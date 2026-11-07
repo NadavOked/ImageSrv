@@ -61,6 +61,18 @@ md0 : inactive sdb2[1](S) sda2[0](S)
 unused devices: <none>
 """
 
+# #2624: the real RAID10 of the 07/11 VM run (3 of 4 members, resyncing), and
+# the same array with all four members present (a fresh array's first sync).
+RESYNC_MISSING = """Personalities : [raid10]
+md0 : active raid10 vda2[0] vdb2[1] vdc2[2]
+      32482304 blocks super 1.2 512K chunks 2 near-copies [4/3] [UUU_]
+      [==>..................]  resync = 13.4% (4379264/32482304) finish=67.5min speed=6934K/sec
+
+unused devices: <none>
+"""
+
+RESYNC_COMPLETE = RESYNC_MISSING.replace("vdc2[2]", "vdc2[2] vdd2[3]").replace("[4/3] [UUU_]", "[4/4] [UUUU]")
+
 NO_ARRAYS = "Personalities : \nunused devices: <none>\n"
 DECLARED = "level=raid1\ndisks=/dev/sda,/dev/sdb\nspares=0\narray=/dev/md0\n"
 
@@ -154,3 +166,27 @@ def test_the_health_page_carries_the_raid_row_from_the_hooks(health_server):
     rows = {r["id"]: r for r in health.collect(ctx, {**base, "mdstat": lambda: None,
                                                       "raid_declared": lambda: None}, "http://x")}
     assert not any(k.startswith("raid") for k in rows)
+
+
+def test_a_missing_drive_during_a_resync_is_red_not_in_progress():
+    row = _one(RESYNC_MISSING)
+    assert row["state"] == "bad", row
+    assert "3/4 כוננים" in row["detail"] and "חסר כונן" in row["detail"]
+    assert "בסנכרון 13.4%" in row["detail"]     # the sync is still shown, it just does not decide
+
+
+@pytest.mark.parametrize("action", ["resync", "reshape", "repair"])
+def test_no_action_but_a_rebuild_hides_a_missing_drive(action):
+    text = RESYNC_MISSING.replace("resync =", f"{action} =")
+    assert f"{action} =" in text and _one(text)["state"] == "bad"
+
+
+def test_a_delayed_resync_with_a_missing_drive_is_red_too():
+    text = RESYNC_MISSING.replace("resync = 13.4%", "resync=DELAYED")
+    assert "resync=DELAYED" in text and _one(text)["state"] == "bad"
+
+
+def test_a_sync_with_every_drive_present_stays_orange():
+    # guard against an over-broad fix: a new array's first sync is "in progress"
+    row = _one(RESYNC_COMPLETE)
+    assert row["state"] == "warn" and "4/4 כוננים" in row["detail"] and "בסנכרון 13.4%" in row["detail"]

@@ -490,7 +490,7 @@ test('#1485 panel "דיסקים" tab = the mockup table (דיסק | חיבור |
   assert.match(t,/<div class="sec" data-cnt="3">דיסקים<\/div><table class="n-tbl disk-map"><thead><tr><th>דיסק<\/th><th>חיבור<\/th><th>גודל<\/th><th>SMART<\/th>/);
   assert.doesNotMatch(t,/<select|slotEdit/,'#2001: no editing in the table — the window edits');
   assert.match(t,/<tr class="" data-slot="1"><td><b>דיסק 1<\/b><\/td><td><span class="mono" title="SATA 0">דיסק 1<\/span><\/td>/,'#1375: the connection by drawer number (SATA k-1 in the title)');
-  assert.match(t,/<td><span class="mono"><bdi dir="ltr">256GB<\/bdi><\/span> <span class="cap">870<\/span><\/td><td><span class="n-chip">תקין<\/span><\/td>/);
+  assert.match(t,/<td><span class="mono"><bdi dir="ltr">256GB<\/bdi><\/span> <span class="cap">870<\/span><\/td><td><\/td>/,'#1375: SMART ok = an empty cell, not a constant "תקין"');
   assert.match(t,/data-slot="2">[^]*?<span class="n-chip n">לא נבדק<\/span>/,'unchecked is grey');
   assert.match(t,/data-slot="3">[^]*?<span class="n-chip w">נכשל בשיכפול הקודם<\/span>[^]*?clearDiskFailure\(7\)">נקה<\/a>/,'the red disk is cleared here now');
   assert.match(t,/<tr class="opt" data-slot=""><td><b>כונן CD\/DVD<\/b><\/td><td><span class="mono">SATA 4<\/span><\/td><td><span class="muted">HL-DT-ST DVDRAM<\/span><\/td><td><span class="muted">—<\/span><\/td>/,'the CD drive is a row of its own, not a slot, never "empty"');

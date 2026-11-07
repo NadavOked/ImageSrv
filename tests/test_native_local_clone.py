@@ -65,7 +65,11 @@ MAD_MAX = 12.0
 #: edge on white, so these two states correlate less with them (measured 24/10 on the testrunner:
 #: 0.53 and 0.41, mean difference 5.4 and 5.8). The layout is the same: only their correlation bound
 #: is lower -- the mean-difference bound is not.
-CORR_RESTYLED = {("lcprogress-fail", "light", "1280x800"): 0.45, ("lcdone-ok", "light", "1280x800"): 0.35}
+#: #2131 (mockup 03 section 1, Nadav 24/10): the result is now one list of drawers ("יעדים ומקור"), not a card
+#: per target -- the localclone.html done/done-ok PNGs are the superseded layout, so their correlation is not
+#: asked (-1.0); the mean-difference bound still is. The new layout is held by test_lc_end_list_2131.py.
+CORR_RESTYLED = {("lcprogress-fail", "light", "1280x800"): 0.45, ("lcdone-ok", "light", "1280x800"): -1.0,
+                 ("lcdone", "light", "1280x800"): -1.0}
 
 
 def fingerprint(img, cols=32, rows=20) -> list[int]:

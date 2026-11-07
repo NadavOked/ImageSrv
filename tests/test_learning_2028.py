@@ -449,6 +449,12 @@ def test_a_sender_that_ended_after_the_room_closed_reaches_the_run(room_server, 
     """החיבור ל-`app.on_sender_event`: החדר סגר קודם, והשולח סופר."""
     admin, ctx = room_server["admin"], room_server["ctx"]
     wave = _open_wave(room_server)
+    # השולח המזויף מסיים בתהליכון משלו, ו-`send_done` שלו כותב `stream` ומנסה לספור. בלי לחכות לו,
+    # הכתיבה הזו נוחתת מדי פעם אחרי ה-NULL שלמטה וממש לפני סגירת החדר -- והחדר סופר גל שהטסט
+    # התכוון שלא יספרו (`assert 1 == 0`, ריצה מלאה מקבילית). שולח שסיים הוא מצב ידוע; לא ניחוש.
+    sender = ctx.sender._thread
+    sender.join(10)
+    assert not sender.is_alive()
     ctx.conn.execute("UPDATE wave_rates SET stream = NULL WHERE session_id = ?", (wave,))
     ctx.conn.commit()
     _close_wave(room_server, wave)

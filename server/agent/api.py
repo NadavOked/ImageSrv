@@ -448,6 +448,11 @@ def create_agent_router(ctx: ServerContext,
                 if not disk_full(exc):
                     raise
                 note_disk_full(f"hello firmware_image {mac}")
+            # ‏#2080 (מוקאפ 06 סעיף 2): חיבור שזז מאז ההדלקה הקודמת -- אזהרה במסך ההמתנה של המשכפל. אחרי `record`, כדי שתשקף את ה-hello הזה
+            if answer.get("role") == "cloner":
+                fw_warning = firmware_image.cloner_warning(ctx.conn, mac)
+                if fw_warning is not None:
+                    answer["fw_warning"] = fw_warning
             # ‏#1857: מלאי הדיסקים (דגם/גודל/מקום) של משכפל ושל מחשב בנייה -- לרשימת "כל הדיסקים" ולשיוך לסטים
             if answer.get("role") in ("cloner", "build"):
                 try:
@@ -715,6 +720,30 @@ def create_agent_router(ctx: ServerContext,
             return _error(400, str(exc), "bad_report")
         journal(ctx.conn, "local_clone_note" if local_clone_report.has_note(body) else "local_clone", f"{mac}: {line}",
                 machine=mac)   # #2049
+        return JSONResponse({"ok": True})
+
+    @router.post("/agent/firmware-accept")
+    async def agent_firmware_accept(request: Request) -> JSONResponse:
+        """‏#2080 (הכרעת נדב 25/10): "זה מכוון" במסך ההמתנה של המשכפל -- התמונה הנוכחית נשמרת כהגדרה
+        הנכונה, ביומן "אושר במשכפל <שם>". רק משכפל רשום, ורק על עצמו; מי שאינו משכפל -- 403."""
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
+        if not isinstance(body, dict):
+            return _error(400, "body is not an object", "bad_json")
+        mac = lenient_mac(body.get("mac"))
+        if mac is None:
+            return _error(400, "missing or malformed mac", "bad_mac")
+        refused = identity_gate(ctx, mac, request, "firmware-accept")
+        if refused is not None:
+            return refused
+        machine = registry.lookup(ctx.conn, mac)
+        if machine is None:      # #2487: כמו `open_pull`
+            return _error(403, "this mac is not registered", "unknown_mac")
+        if machine["role"] != "cloner":
+            return _error(403, "only a cloner approves its own firmware here", "not_a_cloner")
+        if not firmware_image.accept(ctx.conn, mac, "", at_cloner=machine["suffix"]):
+            return _error(409, "this machine has not reported its firmware yet", "no_image")
         return JSONResponse({"ok": True})
 
     @router.post("/agent/log")

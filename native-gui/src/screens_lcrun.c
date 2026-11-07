@@ -215,6 +215,37 @@ void lc_draw_stop(App *a, cairo_t *cr, double W, double H) {
 
 /* ---- the result ----------------------------------------------------------------------- */
 
+/* mockup 03 section 1 (Nadav 24/10): the end of a local clone is the list of drawers, one row each, the
+ * drawer's number big at the start -- the same number column as lcbay.c (lc_bay_number), not a round icon of its own. */
+
+/* the source's own row in that list: a plain frame (red when it was not put back), "מקור", and its sentence */
+static double src_row(App *a, cairo_t *cr, double x, double y, double w, const LcDisk *d, const char *label, const char *sn, int bad, int draw) {
+    const Theme *t = a->theme; char h3[LC_LABEL_MAX + 16], mono[160], sata[24];
+    snprintf(h3, sizeof h3, "%s · מקור", label);
+    conn_text(d->conn, d->port, d->dev, sata, sizeof sata);
+    snprintf(mono, sizeof mono, "%s · %s", d->model[0] ? d->model : d->dev, sata);
+    double inner = w - 44 - 54 - 18;
+    Text th = text_make(cr, FONT_SANS, 20, 600, h3, (int)(inner - 200), DIR_RTL), tm = text_make(cr, FONT_MONO, 13, 500, mono, 0, DIR_LTR);
+    Text tl = text_make(cr, FONT_SANS, 13, bad ? 600 : 400, sn, (int)(inner - 22), DIR_RTL);
+    double h = 18 + fmax(th.h, tm.h) + 8 + tl.h + 18;
+    if (draw) {
+        Rect r = { x, y, w, h };
+        draw_fill_rrect(cr, r, 6, bad ? t->danger_soft : t->surface);
+        draw_border_rrect(cr, r, 6, bad ? t->danger : t->hair, bad ? 3 : 1);
+        lc_bay_number(a, cr, x + w - 18, y + h / 2, 40, eff_drawer(d->drawer, d->port), bad ? t->danger_fg : t->ink);
+        double tx = x + w - 22 - 54 - 18, ty = y + 18;
+        text_draw_r(cr, &th, tx, ty, t->ink); text_draw_r(cr, &tm, tx - th.w - 10, ty + (th.h - tm.h) / 2, t->muted);
+        ty += fmax(th.h, tm.h) + 8;
+        double mx = tx - 8, my = ty + 9;
+        if (bad) { cairo_set_line_width(cr, 2); draw_set(cr, t->danger); cairo_move_to(cr, mx - 4, my - 4); cairo_line_to(cr, mx + 4, my + 4);
+                   cairo_move_to(cr, mx + 4, my - 4); cairo_line_to(cr, mx - 4, my + 4); cairo_stroke(cr); }
+        else { cairo_arc(cr, mx, my, 1.6, 0, 2 * M_PI); draw_set(cr, t->led_ok); cairo_fill(cr); }
+        text_draw_r(cr, &tl, tx - 22, ty, bad ? t->danger_fg : t->muted);
+    }
+    text_free(&th); text_free(&tm); text_free(&tl);
+    return h;
+}
+
 static double res_card(App *a, cairo_t *cr, double x, double y, double w, const LcTgt *g, int draw) {
     const Theme *t = a->theme; const LcDisk *d = disk_of(a, g->dev); int bad = tfailed(g);
     char name[LC_LABEL_MAX], h3[300], mono[160], li[6][460]; int mk[6], n = 0;
@@ -273,13 +304,8 @@ static double res_card(App *a, cairo_t *cr, double x, double y, double w, const 
         Rgb hc = red ? t->danger : t->warn;   /* #2024: a target that holds the end -- tinted, a thick edge */
         draw_fill_rrect(cr, r, 6, why ? (red ? t->danger_soft : t->warning_soft) : acs);
         draw_border_rrect(cr, r, 6, why ? hc : ac, 3);   /* #2050: all four edges, no side tab */
-        double right = x + w - 22, icx = right - 27, icy = y + 18 + 27;
-        cairo_arc(cr, icx, icy, 27, 0, 2 * M_PI); draw_set(cr, acs); cairo_fill_preserve(cr);
-        cairo_set_line_width(cr, 1); draw_set(cr, ac); cairo_stroke(cr);
-        cairo_set_line_width(cr, 3); cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND); cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-        if (bad) { cairo_move_to(cr, icx - 6, icy - 6); cairo_line_to(cr, icx + 6, icy + 6); cairo_move_to(cr, icx + 6, icy - 6); cairo_line_to(cr, icx - 6, icy + 6); }
-        else { cairo_move_to(cr, icx - 8, icy + .5); cairo_line_to(cr, icx - 2.5, icy + 6); cairo_line_to(cr, icx + 8, icy - 5); }
-        cairo_stroke(cr);
+        double right = x + w - 22;
+        lc_bay_number(a, cr, x + w - 18, y + h / 2, 40, d ? eff_drawer(d->drawer, d->port) : 0, bad ? t->danger_fg : wn ? t->warning_ink : t->success_ink);   /* mockup 03: a drawer in a list */
         double tx = right - 54 - 18, ty = y + 18;
         text_draw_r(cr, &th, tx, ty, t->ink); text_draw_r(cr, &tm, tx - th.w - 10, ty + (th.h - tm.h) / 2, t->muted);
         ty += fmax(th.h, tm.h) + 8;
@@ -316,16 +342,40 @@ void lc_draw_done(App *a, cairo_t *cr, double W, double H, double head_h) {
     Text th = text_make(cr, FONT_SANS, 26, 600, h1, 0, DIR_RTL), tp = text_make(cr, FONT_SANS, 14, 400, p, 0, DIR_RTL);
     text_draw_r(cr, &th, xr, y, t->ink); y += th.h + 4; text_draw_r(cr, &tp, xr, y, t->muted); y += tp.h + 16;
     text_free(&th); text_free(&tp);
-    for (int i = 0; i < l->ntgts; i++) y += res_card(a, cr, x0, y, cw, &l->tgts[i], 1) + 10;
     /* the source: read only, or shrunk for the copy and grown back -- or not, said in red */
     char sn[560]; int bad = l->src_restore[0] && strcmp(l->src_restore, "ok");
     if (bad) snprintf(sn, sizeof sn, "%s (המקור): %s", sl, l->src_restore);
     else if (!strcmp(l->shrink_path, "snapshot")) snprintf(sn, sizeof sn, "%s (המקור) נקרא בלבד ולא שונה — הכיווץ נעשה על עותק בזיכרון.", sl);   /* #1477 */
     else if (l->shrunk) snprintf(sn, sizeof sn, "%s (המקור) כווץ זמנית לשיכפול והוחזר לגודלו המקורי.", sl);
     else snprintf(sn, sizeof sn, "%s (המקור) נקרא בלבד ולא שונה.", sl);
-    Text ts = text_make(cr, FONT_SANS, 13, bad ? 600 : 400, sn, (int)(cw - 20), DIR_RTL);
-    y += 2; sb_led(cr, xr - 5, y + 9, 10, bad ? t->danger : t->led_ok, bad ? t->danger_soft : t->success_soft, 0, 1);
-    text_draw_r(cr, &ts, xr - 18, y, bad ? t->danger_fg : t->muted); y += ts.h + 6; text_free(&ts);
+    /* mockup 03 section 1 (Nadav 24/10): "יעדים ומקור" -- one list, a row for each drawer in the machine's order, the
+     * source among them. Every line the old result cards said is still in its row (#2009, #2017, #2196, #1487). */
+    int ord[LC_MAX_DISKS + 1], nord = 0;   /* ord: a target's index, or -1 = the source's row */
+    for (int i = 0; i < l->ntgts; i++) ord[nord++] = i;
+    if (src) ord[nord++] = -1;
+    #define ROW_DRAWER(k) ((k) < 0 ? eff_drawer(src->drawer, src->port) : (disk_of(a, l->tgts[k].dev) ? eff_drawer(disk_of(a, l->tgts[k].dev)->drawer, disk_of(a, l->tgts[k].dev)->port) : 0))
+    for (int i = 1; i < nord; i++) {   /* by drawer number; one without a number keeps its place at the end */
+        int v = ord[i], dv = ROW_DRAWER(v), j = i - 1;
+        while (j >= 0 && (dv > 0 ? (ROW_DRAWER(ord[j]) <= 0 || ROW_DRAWER(ord[j]) > dv) : 0)) { ord[j + 1] = ord[j]; j--; }
+        ord[j + 1] = v;
+    }
+    #undef ROW_DRAWER
+    /* the rows are drawn first, into a group, so each is laid out once (a text is logged once) and the cage
+     * is as tall as they came out; then the cage, and the rows over it */
+    cairo_push_group(cr);
+    double ry = y + 10 + 16 + 8;
+    for (int i = 0; i < nord; i++)
+        ry += (ord[i] < 0 ? src_row(a, cr, x0 + 10, ry, cw - 20, src, sl, sn, bad, 1) : res_card(a, cr, x0 + 10, ry, cw - 20, &l->tgts[ord[i]], 1)) + 10;
+    cairo_pattern_t *rows = cairo_pop_group(cr);
+    char cnt[64]; snprintf(cnt, sizeof cnt, "%d מתוך %d יעדים הצליחו", l->ntgts - nf, l->ntgts);
+    lc_cage(a, cr, (Rect){ x0, y, cw, ry - y }, "יעדים ומקור", cnt);
+    cairo_set_source(cr, rows); cairo_paint(cr); cairo_pattern_destroy(rows);
+    y = ry + 12;
+    if (!src) {   /* no record of the source disk: its sentence stays under the list, as before */
+        Text ts = text_make(cr, FONT_SANS, 13, bad ? 600 : 400, sn, (int)(cw - 20), DIR_RTL);
+        y += 2; sb_led(cr, xr - 5, y + 9, 10, bad ? t->danger : t->led_ok, bad ? t->danger_soft : t->success_soft, 0, 1);
+        text_draw_r(cr, &ts, xr - 18, y, bad ? t->danger_fg : t->muted); y += ts.h + 6; text_free(&ts);
+    }
     const char *rp = !strcmp(l->report, "usb") ? "שיכפול מדיסק-און-קי, בלי שרת. הדוח מוצג כאן ונשמר על הדיסק-און-קי."   /* #1914 (C) */
                    : !strcmp(l->report, "sent") ? "דווח ליומן השרת (דיווח המחשב — השיכפול לא עבר דרך השרת)."
                    : "לא דווח ליומן השרת — השרת לא ענה. השיכפול עצמו אינו תלוי בשרת.";

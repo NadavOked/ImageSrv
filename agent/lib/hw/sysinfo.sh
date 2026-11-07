@@ -294,5 +294,5 @@ build_hello() {
         "$_mac" "$_all" "$IP" "$_uuid_json" \
         "$(detect_firmware)" "$(detect_secure_boot)" "$AGENT_VERSION" \
         "$(detect_memory_bytes)" "$_joining" "$_disks" "$(disk_probe)" \
-        "$_msecret" "$(command -v inventory_json >/dev/null 2>&1 && inventory_json)$(command -v probe_json >/dev/null 2>&1 && probe_json)$(command -v netprobe_json >/dev/null 2>&1 && netprobe_json)$(command -v optical_json >/dev/null 2>&1 && optical_json)$(command -v sata_lpm_json >/dev/null 2>&1 && sata_lpm_json)$(command -v timing_json >/dev/null 2>&1 && timing_json)" "$_wol$(cat "$RUN_DIR/direct.finished" 2>/dev/null)"   # #1952: direct_hello's fragment; absent = not reported
+        "$_msecret" "$(command -v inventory_json >/dev/null 2>&1 && inventory_json)$(command -v probe_json >/dev/null 2>&1 && probe_json)$(command -v netprobe_json >/dev/null 2>&1 && netprobe_json)$(command -v optical_json >/dev/null 2>&1 && optical_json)$(command -v sata_lpm_json >/dev/null 2>&1 && sata_lpm_json)$(command -v timing_json >/dev/null 2>&1 && timing_json)$(command -v firmware_json >/dev/null 2>&1 && firmware_json)" "$_wol$(cat "$RUN_DIR/direct.finished" 2>/dev/null)"   # #1952: direct_hello's fragment; absent = not reported
 }

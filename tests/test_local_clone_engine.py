@@ -560,3 +560,53 @@ def test_a_drop_that_fails_on_the_view_refuses_the_smaller_target_by_name_2208(t
     assert t["same"]["state"] == "done" and res["note"]["same"] == SAME, (t["same"], res["note"])
     _src_p3_unchanged(devs, before)
     assert res["dmleft"] == "" and res["brd"] == "none", (res["dmleft"], res["brd"])
+
+
+#: #2354: 600MiB of data high on a real NTFS, under a plan of 1GiB and a 400MB store.
+#: The capture's mode (no `unhib`), from the plan on: shrink_plan's own 2GiB floor
+#: would not leave this disk a plan over the store. The driver stops here (exit 0).
+PARTIAL_HOOK = r"""
+P3=$DEVROOT/${SRC}p3; M=$F/m2354; S=$RUN_DIR/capsnap; mkdir -p "$M" "$S" "$LC"
+mount -t ntfs-3g "$P3" "$M" || exit 3
+head -c $((2000 * 1048576)) /dev/zero > "$M/low.bin" && head -c $((600 * 1048576)) /dev/urandom > "$M/high.bin"
+rm -f "$M/low.bin"; high=$(sha256sum < "$M/high.bin"); umount "$M" || exit 3
+before=$(sha256sum < "$P3")
+LC_SNAP_RUN=$S; LC_SNAP_FIT_MB=32
+LC_SNAP_RESERVE_MB=$(($(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo) / 1024 - 400))
+lc_parts "$SRC" "$S/parts.txt" || exit 3
+awk -F'|' -v n=$((1024 * 1048576)) '$1 == 3 { printf "%s|%.0f|%.0f\n", $0, $5 * 512, n }' "$S/parts.txt" > "$S/shrink.plan"
+lc_snap_shrink "$SRC"; echo "partial rc $? [$LC_SNAP_WHY] [$LC_ERROR]"
+n=$(cat "$S/snap/3.node"); echo "partial size $(blockdev --getsize64 "$n")"
+echo "partial cur $(cut -d'|' -f6 "$S/shrink.plan")"
+grep -c 'Needed relocations' "$LOG_FILE" | sed 's/^/partial measures /'
+ntfsresize --info --no-progress-bar "$n" > "$S/info" 2>&1; echo "partial info rc $?"
+ntfs-3g -o ro "$n" "$M" || exit 3
+[ "$(sha256sum < "$M/high.bin")" = "$high" ] && echo "partial data same"
+umount "$M" || exit 3
+lc_snap_teardown; echo "partial teardown rc $?"
+[ "$(sha256sum < "$P3")" = "$before" ] && echo "partial source same"
+sed -n 's/.*shrunk to \([0-9]*\) bytes only, \([0-9]*\) MB moved.*/partial moved \1 \2/p' "$LOG_FILE"
+exit 0
+"""
+
+
+@pytest.mark.skipif(_tool("dmsetup") is None, reason="dmsetup is not installed: the RAM view (#1466) cannot be built here")
+def test_a_partial_shrink_on_a_real_ntfs_moves_what_the_store_holds_and_keeps_the_data_2354(tmp_path, disks, fanout_bin):
+    """#2354 with the real ntfsresize, dm-snapshot and brd: the plan is over a 400MB
+    store, so the view shrinks only part of the way. The real `-n` answers at each
+    size, the volume on the cut reads back, the data on it is the same and the
+    source's bytes did not move."""
+    fx, _devs = disks
+    hook = tmp_path / "partial.sh"
+    hook.write_text(PARTIAL_HOOK, newline="\n")
+    res = _engine(tmp_path, fx, fanout_bin, "", 1, env=(f"HOOK={hook}",))
+    raw = res["raw"]
+    said = dict(line[len("partial "):].split(" ", 1) for line in raw.splitlines()
+                if line.startswith("partial ") and line.count(" ") >= 2)
+    assert said.get("rc", "").startswith("0 "), raw[-3000:]
+    size, cur = int(said["size"]), int(said["cur"])
+    assert 1024 * 1048576 < size < cur and (cur - size) % 1048576 == 0, raw[-3000:]
+    assert int(said["measures"]) >= 2, raw[-3000:]
+    assert said["moved"].split()[0] == str(size), raw[-3000:]
+    assert said["info"] == "rc 0" and said["data"] == "same", raw[-3000:]
+    assert said["teardown"] == "rc 0" and said["source"] == "same", raw[-3000:]

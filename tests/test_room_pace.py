@@ -33,8 +33,12 @@ T100 = "2026-09-19T10:01:40+00:00"          # 100 שניות אחרי T0
 GB = 1_000_000_000
 
 
-def _ago(seconds: float) -> str:
-    return (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat(timespec="seconds")
+def _ago(seconds: float, now: datetime | None = None) -> str:
+    # ‏`now` — שעון אחד לכל הדיווחים של טסט. ‏`isoformat(timespec="seconds")` חותך
+    # מיקרו-שניות, ולכן שתי קריאות לשעון הקיר (`_ago(12)` ואז `_ago(0)`) שחוצות
+    # גבול שנייה נותנות פער 13 ולא 12: ‏900MB/13s = 69230769 במקום 75_000_000
+    # (ה-nightly הציבורי, 07/11, ריצה 42348661231).
+    return ((now or datetime.now(timezone.utc)) - timedelta(seconds=seconds)).isoformat(timespec="seconds")
 
 
 def _pace(**target):
@@ -149,7 +153,8 @@ def test_the_numbers_reach_the_room_screen_from_a_real_wave(room_server, monkeyp
     cloner_hello(anon, CLONER2, ["S3", "S4"])
     assert admin.post("/api/console/room/start").status_code == 200
     wave = ctx.conn.execute("SELECT wave_session_id FROM room_rounds").fetchone()[0]
-    ago = _ago(100)
+    clock = datetime.now(timezone.utc)   # שעון אחד: הפער בין שני הדיווחים הוא 12 שניות, לא "בערך 12"
+    ago = _ago(100, clock)
     ctx.conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?", (ago, wave))
     ctx.conn.commit()
 
@@ -161,8 +166,8 @@ def test_the_numbers_reach_the_room_screen_from_a_real_wave(room_server, monkeyp
                          "state": "writing"}],
         }).status_code == 200
 
-    report(_ago(12), 100_000_000)
-    report(_ago(0), 1_000_000_000)
+    report(_ago(12, clock), 100_000_000)
+    report(_ago(0, clock), 1_000_000_000)
     monkeypatch.undo()
 
     view = room(admin)

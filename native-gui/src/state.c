@@ -510,6 +510,13 @@ void state_parse(State *s, FILE *fp) {
             cp(s->rb_mode, sizeof s->rb_mode, !strcmp(val, "full") ? "full" : "sample");   /* #2046 */
         } else if (KEY("cloner")) {
             cp(s->cloner_image, sizeof s->cloner_image, val);
+        } else if (KEY("fw_warn")) {
+            /* #2080: count|text. A count that is not a whole number above 0, or no text, is no warning --
+             * the line is advice; one that cannot be read is never drawn as a half sentence (principle 5). */
+            unsigned long long n;
+            if (split(val, f, 2) == 2 && parse_uint(f[0], &n) && n > 0 && f[1][0]) {
+                cp_utf8(s->fw_warn, sizeof s->fw_warn, f[1]); s->fw_warn_count = (int)n;
+            }
         } else if (KEY("drawer_count")) {
             unsigned long long count;
             if (parse_uint(val, &count) && count >= 1 && count <= MAX_DRAWERS)

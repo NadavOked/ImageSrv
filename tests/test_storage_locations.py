@@ -29,6 +29,7 @@ class FakeHooks:
         self.nfs_items = [{"export": "/mnt/pool/images", "clients": "10.44.10.0/24 · rw"}]
         self.smb_items = [{"share": "images", "type": "Disk"}]
         self.iscsi_items = [{"portal": PORTAL, "iqn": IQN}]
+        self.iscsi_rejected = 0
         self.scan_status = OK
         self.scan_reason = "showmount: command not found"
         self.mount_status = OK
@@ -79,7 +80,8 @@ class FakeHooks:
         del chap
         if self.scan_status != OK:
             return HookResult(self.scan_status, self.scan_reason)
-        return HookResult(OK, payload={"items": list(self.iscsi_items)})
+        return HookResult(OK, payload={"items": list(self.iscsi_items),
+                                       "rejected": self.iscsi_rejected})
 
     def iscsi_login(self, iqn, portal, chap=None, auto=True):
         self.logins.append((iqn, portal, chap, auto))

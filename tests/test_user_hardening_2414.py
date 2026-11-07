@@ -116,6 +116,16 @@ def _idle_limit(server) -> int:
     return 600 + presence.TOUCH_SECONDS
 
 
+def _idle_past_issue(server, idle_clock) -> None:
+    """הקדמת השעון מעבר לגבול, **מרגע ההנפקה** של עוגייה שהונפקה בתוך הטסט.
+
+    עוגייה בלי שורה ב-`console_sessions` מתחילה את חוסר הפעילות שלה ברגע ההנפקה (`auth.issue`,
+    שעון קיר אמיתי, לא `presence._now` המוזרק). `+= limit + 1` מהרגע שבו השעון הוזרק נתן שנייה
+    אחת בלבד לכל מה שבא בין השניים -- ושלוש גזירות PBKDF2 (600K, ‏#2639) על מכונה עמוסה לוקחות
+    יותר. כאן השעון קופץ מ**עכשיו**, שבוודאות אחרי ההנפקה."""
+    idle_clock["now"] = max(idle_clock["now"], time.time()) + _idle_limit(server) + 1
+
+
 def test_an_idle_cookie_is_refused_and_stays_refused(server, idle_clock):
     admin = server["admin"]
     token = admin.cookies.get(auth.COOKIE_NAME)
@@ -140,7 +150,7 @@ def test_a_cookie_that_was_never_used_also_idles_out(server, idle_clock):
     """עוגייה שהונפקה ולא נשלחה אין לה שורה — הפעילות האחרונה היא ההנפקה."""
     c = TestClient(server["app"])
     complete_console_login(c, server["ctx"].conn, "noc", "admin-pass-123")
-    idle_clock["now"] += _idle_limit(server) + 1
+    _idle_past_issue(server, idle_clock)
     assert c.get("/api/console/me").status_code == 401
 
 
@@ -239,7 +249,7 @@ def test_a_password_change_cookie_idles_out_from_its_issue(server, idle_clock):
     c = TestClient(create_console_app(server["app"].state.runtime))
     assert c.post("/api/console/login", json={"username": "pwc", "password": temp}).json() == {
         "must_change_password": True}
-    idle_clock["now"] += _idle_limit(server) + 1
+    _idle_past_issue(server, idle_clock)
     r = c.post("/api/console/me/password", json={"current_password": temp, "new_password": "Bb12345!"})
     assert r.status_code == 401, r.text
     assert users.verify(server["ctx"].conn, "pwc", temp) == "admin"

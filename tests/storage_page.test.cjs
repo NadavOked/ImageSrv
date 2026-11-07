@@ -217,6 +217,18 @@ test('4. SMB: identity fields, scan sends the creds, params carry username/secre
   assert.doesNotMatch(html.replace(/value="p4ss"/g, ''), /p4ss/, 'the secret appears only as the field value, never in text');
 });
 
+test('#1983: names the target returned and the server refused are said out loud, and silence stays silent', async () => {
+  const scan = {ok: true, items: [{portal: PORTAL, iqn: IQN}], rejected: 2};
+  const {run} = setup({...BASE, 'POST /storage-locations/scan': () => scan});
+  await run('loadStorage()');
+  run(`storageGo('iscsi-a')`);
+  await run('storageScan()'); await settle();
+  assert.match(run('storagePage()'), /היעד החזיר 2 שמות לא תקינים/);
+  scan.rejected = 0;
+  await run('storageScan()'); await settle();
+  assert.doesNotMatch(run('storagePage()'), /שמות לא תקינים/);
+});
+
 test('5. iSCSI א\': discover → pick target → CHAP fields → התחבר runs test → create → iscsi-login and shows the session; then 6. ב\' reads the disk', async () => {
   const created = {...SAN, state: 'unchecked', state_label: 'לא נבדק', params: {portal: PORTAL, iqn: IQN, auto: true, chap_user: 'imagesrv'}};
   let disk = {device: '/dev/sdb', disk_status: 'fs', fs_type: 'ext4', fs_label: 'images', fs_uuid: '7c1e0000-0000-0000-0000-00000000a94f', fs_size: 800 * 1000 ** 3};

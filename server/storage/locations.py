@@ -64,6 +64,13 @@ FSTAB_PATH = Path("/etc/fstab")
 #: ‏#1123: קובצי credentials של SMB (פורמט mount.cifs / `smbclient -A`),
 #: ‏0600, אחד למיקום. ‏`-/etc/imagesrv` כבר ב-ReadWritePaths של היחידה.
 CREDS_DIR = Path("/etc/imagesrv/creds")
+#: ‏#1983: ‏DB הרשומות של open-iscsi מאז 2.1.10, ובהן סוד ה-CHAP (‏root, ‏0600).
+ISCSI_NODES_DIR = Path("/var/lib/iscsi/nodes")
+#: ‏`ISCSI_ERR_NO_OBJS_FOUND` — ‏"No records found"; כל קוד אחר הוא הבדיקה שנכשלה.
+ISCSI_NO_RECORDS = 21
+ISCSI_BYPATH_WAIT_S = 5.0      # ‏#2649: תקרת ההמתנה לקישור by-path אחרי login
+ISCSI_BYPATH_POLL_S = 0.1
+ISCSI_PASSWORD_KEY = "node.session.auth.password"
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 CHECK_INTERVAL = 60.0
 
@@ -365,48 +372,115 @@ def smb_scan(server: str, creds: dict | None = None) -> HookResult:
 
 
 def iscsi_discover(portal: str, chap: dict | None = None) -> HookResult:
-    """`iscsiadm -m discovery -t st -p` — SendTargets."""
+    """`iscsiadm -m discovery -t st -p` — SendTargets, ‏`-o nonpersistent` (#1983).
+
+    בלי הדגל iscsiadm כותב כ-root רשומה לכל יעד בשם שהיעד בחר, ו-`../` יוצא מה-DB
+    (‏CVE-2026-44943). כאן רק קוראים; הרשומה נכתבת ב-`iscsi_login`, אחרי בדיקת ה-IQN."""
     if not portal:
         return HookResult(FAILED, "חסר פורטל")
-    cmd = ["iscsiadm", "-m", "discovery", "-t", "st", "-p", portal]
+    cmd = ["iscsiadm", "-m", "discovery", "-t", "st", "-p", portal, "-o", "nonpersistent"]
     result = _run(cmd, timeout=20)
     if result.status != OK:
         return result
     targets = []
+    rejected = 0
     for line in result.payload["stdout"].splitlines():
-        line = line.strip()
-        if not line:
+        parts = line.split()
+        if not parts:
             continue
         # "10.44.3.75:3260,1 iqn.2005-10.org.freenas.ctl:images"
-        parts = line.split()
-        if len(parts) >= 2 and parts[-1].startswith("iqn."):
-            targets.append({"portal": parts[0].split(",")[0], "iqn": parts[-1]})
-        elif line.startswith("iqn."):
-            targets.append({"portal": portal, "iqn": line.split()[0]})
-    return HookResult(OK, payload={"items": targets})
+        if len(parts) > 2 or not _IQN_RE.fullmatch(parts[-1]):
+            rejected += 1
+            log.warning("iSCSI: היעד %s החזיר שם לא תקין: %r", portal, line[:120])
+            continue
+        found = parts[0].split(",")[0] if len(parts) == 2 else portal
+        # הפורטל שהיעד דיווח מוצג בלבד, ורק אם הוא תקין; ‏`[nas]:3260` אינו, וזה לא יעד זדוני
+        targets.append({"portal": found if valid_portal(found) else portal, "iqn": parts[-1]})
+    if rejected and not targets:
+        return HookResult(FAILED, f"היעד החזיר {rejected} שמות לא תקינים ואף יעד תקין")
+    return HookResult(OK, payload={"items": targets, "rejected": rejected})
+
+
+def _node_cmd(iqn: str, portal: str, *args: str) -> list[str]:
+    return ["iscsiadm", "-m", "node", "-T", iqn, "-p", portal, *args]
+
+
+def _node_update(iqn: str, portal: str, name: str, value: str) -> HookResult:
+    return _run(_node_cmd(iqn, portal, "-o", "update", "-n", name, "-v", value))
+
+
+def _node_ensure(iqn: str, portal: str) -> HookResult:
+    """רשומת node ל-IQN שכבר נבדק. קיימת — נשארת: ‏`-o new` מוחק אותה ואת הסוד שבה,
+    שאולי אין לו מקור אחר (#2460)."""
+    shown = _run(_node_cmd(iqn, portal))
+    if (shown.payload or {}).get("returncode") == ISCSI_NO_RECORDS:
+        return _run(_node_cmd(iqn, portal, "-o", "new"))
+    return shown
+
+
+def _node_password(iqn: str, portal: str, secret: str) -> HookResult:
+    """הסוד אל הרשומה בלי argv (#1983): ל-iscsiadm אין ערוץ אחר מ-`-v`, וב-`ps` הוא גלוי.
+
+    iscsiadm כותב לרשומות אסימון אקראי, וכאן מחליפים אותו בסוד. כך הוא זה שבוחר אילו
+    רשומות תואמות, והמיקום שלהן נשאר שלו: ‏`-o new` כותב `<iqn>/<host>,<port>` ו-discovery
+    ישן `<iqn>/<host>,<port>,<tpgt>/<iface>`. אף רשומה לא הוחלפה = כישלון, לא login בלי סוד."""
+    if _CONTROL_CHARS.search(secret):
+        return HookResult(FAILED, "סוד CHAP לא תקין — בלי תווי בקרה")
+    token = secrets.token_hex(16)
+    marked = _node_update(iqn, portal, ISCSI_PASSWORD_KEY, token)
+    if marked.status != OK:
+        return marked
+    before = f"{ISCSI_PASSWORD_KEY} = {token}\n".encode()
+    after = f"{ISCSI_PASSWORD_KEY} = {secret}\n".encode()
+    written = 0
+    try:
+        for record in (ISCSI_NODES_DIR / iqn).rglob("*"):
+            if record.is_file() and before in (data := record.read_bytes()):
+                write_atomic(record, data.replace(before, after))
+                written += 1
+    except OSError as exc:
+        return HookResult(FAILED, f"כתיבת סוד ה-CHAP לרשומה נכשלה: {exc}")
+    if not written:
+        return HookResult(FAILED, f"רשומת ה-node לא נמצאה ב-{ISCSI_NODES_DIR} — הסוד לא נכתב")
+    return HookResult(OK)
 
 
 def iscsi_login(iqn: str, portal: str, chap: dict | None = None,
                 auto: bool = True) -> HookResult:
-    """התחברות ליעד. `auto` = node.startup=automatic."""
+    """התחברות ליעד. `auto` = node.startup=automatic.
+
+    ‏#1983: הרשומה נוצרת כאן, ורק ל-IQN ולפורטל שעברו בדיקה. שלב שנכשל עוצר את ה-login."""
     if not iqn or not portal:
         return HookResult(FAILED, "חסר IQN או פורטל")
+    if not _IQN_RE.fullmatch(iqn) or not valid_portal(portal):
+        return HookResult(FAILED, "IQN או פורטל לא תקינים — לא נרשם דבר")
+    ready = _node_ensure(iqn, portal)
+    if ready.status != OK:
+        return ready
     if chap and chap.get("user"):
-        _run(["iscsiadm", "-m", "node", "-T", iqn, "-p", portal,
-              "-o", "update", "-n", "node.session.auth.authmethod", "-v", "CHAP"])
-        _run(["iscsiadm", "-m", "node", "-T", iqn, "-p", portal,
-              "-o", "update", "-n", "node.session.auth.username", "-v", chap["user"]])
+        for name, value in (("node.session.auth.authmethod", "CHAP"),
+                            ("node.session.auth.username", chap["user"])):
+            updated = _node_update(iqn, portal, name, value)
+            if updated.status != OK:
+                return updated
         if chap.get("secret"):
-            _run(["iscsiadm", "-m", "node", "-T", iqn, "-p", portal,
-                  "-o", "update", "-n", "node.session.auth.password", "-v", chap["secret"]])
+            stored = _node_password(iqn, portal, chap["secret"])
+            if stored.status != OK:
+                return stored
     startup = "automatic" if auto else "manual"
-    _run(["iscsiadm", "-m", "node", "-T", iqn, "-p", portal,
-          "-o", "update", "-n", "node.startup", "-v", startup])
-    result = _run(["iscsiadm", "-m", "node", "-T", iqn, "-p", portal, "-l"], timeout=30)
+    updated = _node_update(iqn, portal, "node.startup", startup)
+    if updated.status != OK:
+        return updated
+    result = _run(_node_cmd(iqn, portal, "-l"), timeout=30)
     if result.status != OK:
         return result
-    by_path = _iscsi_by_path(portal, iqn)
-    return HookResult(OK, payload={"device_by_path": by_path or "", "iqn": iqn,
+    by_path = _wait_iscsi_by_path(portal, iqn)
+    if not by_path:
+        # ‏#2649: ה-login עלה אבל קישור ה-LUN לא הופיע בתקרה — לא `ok` עם נתיב ריק.
+        return HookResult(FAILED, f"ההתחברות ליעד הצליחה אבל ההתקן (קישור by-path) לא הופיע "
+                                  f"תוך {ISCSI_BYPATH_WAIT_S:g} שניות — לבדוק שיש LUN ליעד",
+                          {"iqn": iqn, "portal": portal})
+    return HookResult(OK, payload={"device_by_path": by_path, "iqn": iqn,
                                    "portal": portal})
 
 
@@ -419,6 +493,20 @@ def iscsi_logout(iqn: str, portal: str, chap: dict | None = None,
     if portal:
         cmd.extend(["-p", portal])
     return _run(cmd, timeout=20)
+
+
+def _wait_iscsi_by_path(portal: str, iqn: str) -> str:
+    """‏#2649: ‏`iscsiadm -l` חוזר לפני שה-udev יצר את הקישור (נמדד 40-100ms). ממתינים
+    עד `ISCSI_BYPATH_WAIT_S` (`udevadm settle` ואז polling), ומחזירים ריק רק אחרי התקרה."""
+    deadline = time.monotonic() + ISCSI_BYPATH_WAIT_S
+    # ‏settle כושל או חסר אינו ראיה לכלום — ה-polling למטה הוא הבדיקה.
+    _run(["udevadm", "settle", f"--timeout={int(ISCSI_BYPATH_WAIT_S)}"],
+         timeout=int(ISCSI_BYPATH_WAIT_S) + 5)
+    while True:
+        found = _iscsi_by_path(portal, iqn)
+        if found or time.monotonic() >= deadline:
+            return found
+        time.sleep(ISCSI_BYPATH_POLL_S)
 
 
 def _iscsi_by_path(portal: str, iqn: str) -> str:
@@ -1493,6 +1581,9 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
         if not items:
             return {"ok": False, "reason": "הגילוי הצליח אבל לא חזר אף יעד",
                     "warnings": warnings}
+        rejected = (discovered.payload or {}).get("rejected") or 0
+        if rejected:   # ‏#1983: מי שעונה בפורטל החזיר שם שאינו IQN — המנהל צריך לדעת
+            warnings.append(f"היעד החזיר {rejected} שמות לא תקינים — נדחו")
         return {"ok": True, "free_bytes": None, "total_bytes": None,
                 "warnings": warnings, "targets": items}
 
