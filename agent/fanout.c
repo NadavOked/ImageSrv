@@ -31,7 +31,7 @@
  * which. FANOUT_SHA_ENGINE=builtin|kernel forces one (#1596).
  * --xxh64 hashes stdin and writes the 16-digit lowercase digest to stdout.
  * --sha256 hashes stdin and writes the 64-digit lowercase digest to stdout.
- *         fanout --readback [-x [-s <seed> <permille>]] <device> [<raw-bytes>]   (#1805)
+ *         fanout --readback [-p <file> <base> <total>] [-x [-s <seed> <permille>]] <device> [<raw-bytes>]   (#1805, #2046)
  * Input:  stdin.
  * Output: one line per finished target on stdout: "<path> ok" | "<path> failed <reason>"
  *         plus, for each target, a running byte count appended to "<path>.bytes".
@@ -645,6 +645,53 @@ static long long rb_pread(int fd, unsigned char *buf, uint64_t off, uint64_t len
     return (long long)(off - a0);
 }
 
+/* #2046 (Nadav 24/10): the screen draws how far the check has got -- green over
+ * the blue write bar. `-p <file> <base> <total>` overwrites <file> with one line
+ * "<done> <total>\n" at most every RB_PROG_MS, where done = <base> + the bytes
+ * of THIS partition the check has passed (a chunk nobody drew is passed, not
+ * read) and <total> = the bytes of every partition of the disk. The agent hands
+ * each partition the bytes of the ones before it as <base>, so the file is the
+ * disk's, not the partition's. DISPLAY ONLY: no verdict reads it, and a file
+ * that cannot be written is said once on stderr and the check goes on without
+ * it -- a bar is not worth a disk's verdict. */
+#define RB_PROG_MS 250
+
+struct rb_prog {
+    int fd;                 /* -1 = off */
+    uint64_t base, total;
+    long long last_ms;
+};
+
+static long long rb_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* done = bytes of this partition passed so far; force skips the rate limit. */
+static void rb_prog_note(struct rb_prog *p, uint64_t done, int force)
+{
+    char line[64];
+    int n;
+    uint64_t at;
+    if (p->fd < 0)
+        return;
+    long long now = rb_now_ms();
+    if (!force && now - p->last_ms < RB_PROG_MS)
+        return;
+    p->last_ms = now;
+    at = p->base + done;
+    if (at > p->total)
+        at = p->total;
+    n = snprintf(line, sizeof line, "%llu %llu\n", (unsigned long long)at, (unsigned long long)p->total);
+    if (n <= 0 || pwrite(p->fd, line, (size_t)n, 0) != n) {
+        fprintf(stderr, "fanout: readback: the progress file could not be written: %s\n", strerror(errno));
+        close(p->fd);
+        p->fd = -1;
+    }
+}
+
 /* Nadav, 20/10 (#1864, measured on cloner 2): sha256 of every used block cost
  * ~8 minutes a round of 4 drawers (176GB at ~390MB/s, the i5-650's two cores).
  * `-x` is the decided form: the used-data stream (the used blocks in order)
@@ -741,12 +788,27 @@ static int readback(int argc, char **argv)
     uint64_t seed = 0, permille = 0;
     struct sha_engine sha = { .kfd = -1 };
     struct rb_chunks ck;
+    struct rb_prog pg = { .fd = -1 };
+    const char *prog_path = NULL;
     void *mem = NULL;
     char line[65];
     int fd, lss = 0, rc = 2, ai = 2, sample = 0;
 
     memset(&ck, 0, sizeof ck);
     xxh_init(&ck.h);
+    if (ai + 3 < argc && strcmp(argv[ai], "-p") == 0) {      /* #2046: -p <file> <base> <total> */
+        char *e1, *e2;
+        errno = 0;
+        pg.base = strtoull(argv[ai + 2], &e1, 10);
+        pg.total = strtoull(argv[ai + 3], &e2, 10);
+        if (errno || *e1 || *e2 || e1 == argv[ai + 2] || e2 == argv[ai + 3] || pg.total == 0 ||
+            argv[ai + 2][0] < '0' || argv[ai + 2][0] > '9' || argv[ai + 3][0] < '0' || argv[ai + 3][0] > '9') {   /* strtoull takes "-5" */
+            fprintf(stderr, "fanout: readback: bad progress '%s %s'\n", argv[ai + 2], argv[ai + 3]);
+            return 2;
+        }
+        prog_path = argv[ai + 1];
+        ai += 4;
+    }
     if (ai < argc && strcmp(argv[ai], "-x") == 0) {
         ck.on = 1;
         ai++;
@@ -765,7 +827,7 @@ static int readback(int argc, char **argv)
         }
     }
     if (argc - ai != 1 && argc - ai != 2) {
-        fprintf(stderr, "usage: fanout --readback [-x [-s <seed> <permille>]] <device> [<raw-bytes>]\n");
+        fprintf(stderr, "usage: fanout --readback [-p <file> <base> <total>] [-x [-s <seed> <permille>]] <device> [<raw-bytes>]\n");
         return 2;
     }
     dev = argv[ai];
@@ -859,6 +921,12 @@ static int readback(int argc, char **argv)
     }
     if (ioctl(fd, BLKSSZGET, &lss) == 0 && lss >= 512 && lss <= 65536 && (lss & (lss - 1)) == 0)
         align = (uint64_t)lss;
+    if (prog_path) {                                       /* #2046: display only, never a reason to stop */
+        pg.fd = open(prog_path, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+        if (pg.fd < 0)
+            fprintf(stderr, "fanout: readback: cannot open the progress file %s: %s\n", prog_path, strerror(errno));
+        rb_prog_note(&pg, 0, 1);
+    }
     if (posix_memalign(&mem, 4096, (size_t)(win + 2 * align)) == 0)
         buf = mem;
     if (!buf || (!raw && !(out = malloc((size_t)win)))) {
@@ -875,6 +943,7 @@ static int readback(int argc, char **argv)
         uint64_t step = ck.on ? RB_CHUNK : win;   /* -x: a read never crosses a chunk */
         for (uint64_t off = 0; off < raw; off += step) {
             uint64_t len = raw - off < step ? raw - off : step;
+            rb_prog_note(&pg, hashed, 0);
             if (ck.on && !rb_selected(&ck, off / RB_CHUNK)) {
                 rb_feed(&ck, NULL, len);
                 hashed += len;
@@ -898,6 +967,7 @@ static int readback(int argc, char **argv)
         uint64_t cb = (ck.on && RB_CHUNK % bs == 0) ? RB_CHUNK / bs : 0;
         while (b < total) {
             uint64_t s = b, e = b, wo = 0;
+            rb_prog_note(&pg, hashed * bs, 0);
             /* A window: used blocks from s, free gaps under RB_GAP read through
              * (one read instead of a seek each), at most maxblk blocks. */
             while (e < total && e - s < maxblk) {
@@ -975,6 +1045,9 @@ static int readback(int argc, char **argv)
         }
         hashed *= bs;
     }
+    rb_prog_note(&pg, hashed, 1);       /* #2046: where the check got to -- done, or the byte it failed at */
+    if (pg.fd >= 0)
+        close(pg.fd);
     close(fd);
     if (rc == 2 && ck.on) {
         if (ck.in > 0)

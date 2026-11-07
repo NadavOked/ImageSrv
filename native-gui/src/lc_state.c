@@ -32,6 +32,19 @@ static void cpy(char *d, size_t n, const char *s) {   /* #2084: a cut never leav
 }
 static long long ll(const char *s) { return s[0] ? strtoll(s, NULL, 10) : 0; }
 
+/* #2046: numbers only, or it says nothing -- a bar drawn from a half-written line is a lie */
+static int digits(const char *s) { return s[0] && strlen(s) <= 18 && strspn(s, "0123456789") == strlen(s); }
+void rb_set(RbBar *r, const char *done, const char *total, const char *verdict, const char *rate) {
+    memset(r, 0, sizeof *r); r->rate = -1;
+    if (digits(done) && digits(total)) {
+        long long d = strtoll(done, NULL, 10), t = strtoll(total, NULL, 10);
+        if (t > 0 && d <= t) { r->has = 1; r->done = d; r->total = t; }
+    }
+    if (!strcmp(verdict, "verified") || !strcmp(verdict, "sampled") || !strcmp(verdict, "unverified"))
+        snprintf(r->verdict, sizeof r->verdict, "%s", verdict);
+    if (digits(rate)) r->rate = strtoll(rate, NULL, 10);
+}
+
 static int verdict_of(const char *v) {
     if (!strcmp(v, "fits")) return LCV_FITS;
     if (!strcmp(v, "shrink")) return LCV_SHRINK;
@@ -101,6 +114,12 @@ int lc_state_line(State *s, const char *key, char *val) {
         LcPart *p = &l->parts[l->nparts++];
         p->idx = atoi(f[0]); cpy(p->label, sizeof p->label, f[1]); cpy(p->fs, sizeof p->fs, f[2]);
         p->bytes = ll(f[3]); p->size = ll(f[4]); cpy(p->state, sizeof p->state, f[5]); p->in = ll(f[6]);
+    } else if (!strcmp(key, "lc_rbp")) {
+        /* #2046: lc_rbp=dev|done|total|verdict|rate -- after its lc_tgt (lcgui.sh) */
+        int nf = lc_split(val, f, 5);
+        if (nf >= 4)
+            for (int i = 0; i < l->ntgts; i++)
+                if (!strcmp(l->tgts[i].dev, f[0])) rb_set(&l->tgts[i].rb, f[1], f[2], f[3], nf >= 5 ? f[4] : "-1");
     } else if (!strcmp(key, "lc_tgt") && l->ntgts < LC_MAX_DISKS) {
         lc_split(val, f, 13);   /* #2009: the 10th, the note; #2017: the 11th, raw,rescued; #2045: the 12th, pulled; #2196: the 13th, grow deferred -- an agent that sends fewer = none */
         LcTgt *t = &l->tgts[l->ntgts++];

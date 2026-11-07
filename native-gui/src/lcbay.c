@@ -100,6 +100,37 @@ void lc_bay_linux(LcBay *y, const char *state, const char *module, const char *d
     if (!strcmp(state, "generic") || !strcmp(state, "skipped")) y->drv_tone = DRV_LGREY;
 }
 
+/* #2046: the check's own words and bar on a row. r->has is the only thing that draws a bar -- a disk the agent
+ * has no count for keeps the row it had (the blue, "בודק את מה שנכתב"): no invented progress. */
+void lc_bay_readback(LcBay *y, const RbBar *r, const char *same_as, const char *why) {
+    if (y->kind == BAY_DONE && !strcmp(r->verdict, "verified") && !y->done_warn && !y->line_warn) {
+        y->pill = "אומת";   /* every chunk was read back and matched -- not "הושלם", not a sample */
+        snprintf(y->line, sizeof y->line, "אומת — זהה %s", same_as);
+        return;
+    }
+    if (!r->has || (y->kind != BAY_WRITING && y->kind != BAY_FAILED)) return;
+    double share = (double)r->done / (double)r->total;
+    y->rb = 1; y->rb_share = share; y->share = 1;
+    lc_pct(y->pct, sizeof y->pct, share);
+    if (y->kind == BAY_WRITING) snprintf(y->line, sizeof y->line, "%s", "בודק");
+    else {
+        y->rb_mark = 1;
+        snprintf(y->line, sizeof y->line, "הבדיקה נכשלה ב-%s: %s", y->pct, why && why[0] ? why : "סיבה לא ידועה");
+    }
+}
+
+/* the check across a screen's disks: the title, the big number, the speed, the count */
+void rb_sum_add(RbSum *s, const RbBar *r, const char *state) {
+    int chk = !strcmp(state, "verifying"), dn = !strcmp(state, "done"), fl = !strcmp(state, "failed") && r->has && !r->verdict[0];
+    if (!chk && !dn && !fl) return;
+    s->n++; s->verifying += chk; s->done += dn; s->failed += fl;
+    if (dn && !strcmp(r->verdict, "sampled")) s->sampled++;
+    double share = dn ? 1 : r->has ? (double)r->done / (double)r->total : -1;
+    if (share >= 0) { s->sum += share; s->bars++; }
+    if (chk && r->has) s->vbars++;
+    if (chk && r->rate > 0) s->rate += r->rate;
+}
+
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     const Theme *t = a->theme;
     int dwarn = g->kind == BAY_DONE && g->done_warn;   /* #2009: done, orange -- drawn as the SMART question's orange */
@@ -184,7 +215,12 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     Rect bar = { px, ry + fmax(tl.h, tp.h) + 6, pw, 8 };
     draw_fill_rrect(cr, bar, 4, t->track);
     double share = g->share < 0 ? 0 : fmin(1, g->share);
-    if (share > 0) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - share), bar.y, bar.w * share, 8 }, 4,
+    if (g->rb) {   /* #2046: the write's blue stays whole; the green over it is what the check has read back */
+        draw_fill_rrect(cr, bar, 4, t->led_write);
+        double rs = fmin(1, fmax(0, g->rb_share));
+        if (rs > 0) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - rs), bar.y, bar.w * rs, 8 }, 4, t->led_ok);
+        if (g->rb_mark) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - rs) - 3, bar.y - 2, 6, 12 }, 2, t->danger);
+    } else if (share > 0) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - share), bar.y, bar.w * share, 8 }, 4,
                                    bad ? t->danger : ok ? t->led_ok : dwarn ? t->warn : warn ? g->tone : t->led_write);
     if (td.layout) {
         Rgb dc = g->drv_tone == DRV_BAD ? t->danger_fg : g->drv_tone == DRV_WARN || g->drv_tone == DRV_LWARN ? t->warning_ink : g->drv_tone == DRV_OK ? t->ink : t->muted;

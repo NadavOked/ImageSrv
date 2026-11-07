@@ -17,7 +17,8 @@
 #                         known_hosts — בלי שום imagesrv.db* (גם לא עותק
 #                         ה-pre-upgrade, ‏#2504), בלי נקודות העיגון
 #                         של האחסון (‏storage/, ‏storage-test/), ובלי branding/
-#                         (לוגו מוסד מלפני #1302 — שארית, לא הגדרה).
+#                         (לוגו מוסד מלפני #1302 — שארית, לא הגדרה), ובלי
+#                         backups/ (גיבויי המסד שעל כונן השרת, #1956 — עותקי DB).
 #   system/<ts>/          קובצי המערכת של ImageSrv: dnsmasq, nftables,
 #                         interfaces.d, ‏/etc/imagesrv, שורות ImageSrv
 #                         ב-fstab, יחידות ה-systemd וה-drop-ins שלהן.
@@ -56,7 +57,7 @@ ImageSrv — גיבוי השרת: DB (עותק עקבי), תיקיית הנתו�
   --images DIR         תיקיית האימג'ים (ברירת מחדל /srv/imagesrv/images)
   --app-dir DIR        שורש הקוד (ברירת מחדל: התיקייה שמעל הסקריפט)
   --system-root DIR    מאיפה לקרוא את קובצי המערכת (ברירת מחדל /; לבדיקות)
-  --no-images          רק DB/נתונים/מערכת — לגיבוי השעתי; האימג'ים בלילי
+  --no-images          רק DB/נתונים/מערכת; האימג'ים בלילי
   -h, --help           המסך הזה
 
 יציאה 0 = הכול הועתק ואומת. כל דבר אחר = לא, והשלב שנכשל נאמר בשמו.
@@ -145,7 +146,7 @@ PYEOF
 # כמות שהוא. ‏data/ היא מראה מתגלגלת בלי --delete, ולכן עותק שריצה ישנה השאירה
 # שם נמחק כאן — ואחר כך ראיה שאין אף אחד (עיקרון 5).
 say "data_dir → $DEST/data/"
-sync_dir "$DATA_DIR" "$DEST/data" 'imagesrv.db*' 'storage' 'storage-test' 'branding'
+sync_dir "$DATA_DIR" "$DEST/data" 'imagesrv.db*' 'storage' 'storage-test' 'branding' 'backups'
 for stale in "$DEST/data"/imagesrv.db*; do
     [[ -e "$stale" ]] || continue
     rm -f -- "$stale"

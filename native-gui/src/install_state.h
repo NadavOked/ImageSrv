@@ -9,12 +9,15 @@
 #define INSTALL_AUTO_REBOOT_S 90
 
 /* The form views are numbered as their step on the rail (#2144: the server
- * clock is step 5, after the name -- eight steps). */
+ * clock is step 5, after the name; #1956: the backup is step 6 -- nine steps). */
 enum {
-    INSTALL_DISK = 1, INSTALL_ROLE, INSTALL_NETWORK, INSTALL_HOSTNAME, INSTALL_TIME, INSTALL_ADMIN,
+    INSTALL_DISK = 1, INSTALL_ROLE, INSTALL_NETWORK, INSTALL_HOSTNAME, INSTALL_TIME, INSTALL_BACKUP, INSTALL_ADMIN,
     INSTALL_SUMMARY, INSTALL_DONE, INSTALL_PROGRESS, INSTALL_FAILED
 };
-#define INSTALL_STEPS 8
+#define INSTALL_STEPS 9
+
+/* #1956: the reserved space's options on the "גיבוי" step; the last is "גודל אחר" */
+#define INSTALL_BACKUP_OTHER 3
 
 /* #2144: what the engine's clock check found (installer/lib/clock.sh) */
 enum { INSTALL_CLOCK_UNCHECKED = 0, INSTALL_CLOCK_SYNCED, INSTALL_CLOCK_UNSYNCED };
@@ -46,6 +49,8 @@ typedef struct {
     char timezone[64];   /* #1447: tzdata zone, default Asia/Jerusalem */
     int ntp_org;         /* #2144: 0 = automatic (Debian's pools), 1 = the organisation's server */
     char ntp_servers[256];
+    int backup_pick;     /* #1956: 0..2 = 5/10/20 GB, INSTALL_BACKUP_OTHER = typed; zero is the mockup's default */
+    char backup_other[8], backup_time[8];
     int clock;           /* #2144: INSTALL_CLOCK_* -- unchecked until the bridge says otherwise */
     int lab;             /* #1412: INSTALL_LAB_* -- the banner above every step unless CLEAN */
     char clock_server[256], clock_offset[24];
@@ -55,7 +60,7 @@ typedef struct {
     char phase[48], title[160], log[256], job[64], error[256], console_url[192], user[64];
     double reboot_at;   /* #1250: monotonic deadline of the auto restart; 0 = not counting (cancelled or fired) */
     int reboot_left;    /* seconds shown on the done screen */
-    char field_error[18][256];   /* 14 = timezone (#1447), 15/16 = root_password/_confirm (#1632), 17 = ntp_servers (#2144) */
+    char field_error[20][256];   /* 14 = timezone (#1447), 15/16 = root_password/_confirm (#1632), 17 = ntp_servers (#2144), 18/19 = backup_reserve_gb/_time (#1956) */
     char output[INSTALL_OUTPUT_MAX];
     InstallDisk disks[INSTALL_MAX_DISKS];
     InstallNic nics[INSTALL_MAX_NICS];

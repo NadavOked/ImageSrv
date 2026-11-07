@@ -82,7 +82,7 @@ rb_digest() {
     # sample), nothing (the sha256 of a manifest from before #1864). fanout's lines
     # go to $4/rb.out. 1 = no answer: RB_KIND (failed = the disk did not give the
     # bytes back, unchecked = the check broke) and RB_WHY say why.
-    _rd_n=$1; _rd_fs=$2; _rd_b=$3; _rd_w=$4; shift 4
+    _rd_n=$1; _rd_fs=$2; _rd_b=$3; _rd_w=$4; shift 4; RB_PF=""; if command -v rb_pflags > /dev/null; then rb_pflags "$_rd_w" || :; fi; set -- $RB_PF "$@"   # #2046: the screen's bar (rbprog.sh); display only
     _rd_p=$(partclone_for_fs "$_rd_fs"); rm -f "$_rd_w/rb.out" "$_rd_w/rb.err"
     if [ "$_rd_p" = partclone.dd ]; then
         fanout --readback "$@" "$_rd_n" "$_rd_b" < /dev/null > "$_rd_w/rb.out" 2> "$_rd_w/rb.err"; _rd_rc=$?
@@ -168,9 +168,9 @@ _rb_read() {
     # $1 = disk, $2 = work dir, $3 = node function. Flushes, then every line of
     # RB_LIST in order. Prints the disk's one result line (see the top).
     rb_flush "$1" "$3" || { echo "unchecked|$RB_WHY"; return; }
-    _rk_none=""; _rk_s=0; _rk_sw=""
+    _rk_none=""; _rk_s=0; _rk_sw=""; RB_BASE=0
     while read -r _rk_l <&3; do
-        _rk_r=$(_rb_part "$1" "$2" "$_rk_l")
+        _rk_r=$(_rb_part "$1" "$2" "$_rk_l"); _rk_c=${_rk_l##*|}; RB_BASE=$((RB_BASE + ${_rk_c:-0}))   # #2046: the next partition's bar starts here
         case "$_rk_r" in
             ok-full\|*) ;;
             ok-sample\|*) _rk_s=1; _rk_sw="$_rk_sw, מחיצה ${_rk_l%%|*}: ${_rk_r#*|}" ;;
@@ -285,7 +285,7 @@ readback_drawers() {
     RB_MODE=$(rb_mode "$_rr_m"); RB_SEED=$(rb_seed)
     _rb_plan "$_rr_m" || { _fail_alive "$*" "$READBACK_NOT_RUN — המניפסט לא נקרא"; return 1; }
     log "readback: mode $RB_MODE, sample seed $RB_SEED, $RB_PERMILLE/1000"
-    _rr_jobs=""; _rr_t0=$(date +%s)
+    _rr_jobs=""; _rr_t0=$(date +%s); RB_TOTAL=$(rb_list_bytes "$RB_LIST")   # #2046: the bar's whole
     for _rr_d in $(_rb_live "$@"); do
         target_set "$_rr_d" verifying; _rb_start "$_rr_d" partition_node; _rr_jobs="$_rr_jobs $_rr_d:$RB_PID"
     done

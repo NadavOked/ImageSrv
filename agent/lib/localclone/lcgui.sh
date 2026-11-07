@@ -24,6 +24,7 @@ lc_gui_state() {
     # #1367: the round on the server as the agent's beat last heard it
     # (attended.sh). Only "open" draws anything; empty = not known.
     printf 'lc_round=%s\n' "$(cat "$RUN_DIR/attended.round" 2>/dev/null)" >> "$_gs_n" || return 1
+    if command -v gui_rb_mode > /dev/null; then gui_rb_mode >> "$_gs_n" || return 1; fi   # #2046: full|sample -- clonergui.sh
     [ "${IMAGESRV_MODE:-}" != usbclone ] || printf 'lc_usb=1\nlc_diag=%s\nlc_ide=%s\nlc_survey=%s\n' "$(cat "$RUN_DIR/usb.diag" 2>/dev/null)" "$(cut -d'|' -f1 "$RUN_DIR/usb.ctrl" 2>/dev/null)" "$(cat "$RUN_DIR/usb.survey" 2>/dev/null)" >> "$_gs_n"   # #1914 (lc_state.c)
     # #1914: the USB stick's settings that were refused, or kept for this session only -- aloud
     [ -s "$RUN_DIR/usb.notice" ] && printf 'toast=%s\n' "$(_lc_clean "$(cat "$RUN_DIR/usb.notice")")" >> "$_gs_n"
@@ -123,6 +124,8 @@ lc_gui_run() {
             "$(_lc_clean "$(cat "$_gr_t/error" 2>/dev/null)")" "$(cat "$_gr_t/total" 2>/dev/null)" "${_gr_nb:-0}" \
             "$(_lc_clean "$(cat "$_gr_t/ntfs_note" 2>/dev/null)")" \
             "$(if command -v lc_raw_flags > /dev/null; then lc_raw_flags "$_gr_d" "$_gr_r/manifest.json"; fi)" "$_gr_pl" "$_gr_gd"
+        # #2046: the read-back's bar and verdict of this target (clonergui.sh) -- lc_rbp=dev|done|total|verdict|rate
+        if command -v gui_rb_state > /dev/null && gui_rb_state "$_gr_d" "$(cat "$_gr_t/state" 2>/dev/null)"; then gui_rb_print lc_rbp "$_gr_d"; fi
     done
 }
 

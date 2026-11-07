@@ -271,7 +271,7 @@ test('#1277: the check shows the new tag as signed / unsigned / not checked — 
   const card=async(signature)=>{
     const s=setup({'/update/check':check(signature)}); s.run('current="settings"');
     await s.run('loadSettingsData()'); await s.run('healthUpdateCheck()');
-    return cell(s.run('settings()'),'<span>עדכונים',2400);
+    return cell(s.run('settings()'),'<span>עדכונים',3400);   // #1956: the card grew by the backup policy row
   };
   let c=await card({state:'signed',detail:'imagectl-release SHA256:abc'});
   // ‏#1300: הכרטיס אומר "קיימת גרסה חדשה" (לא "יש עדכון: א → ב"); החתימה חייבת להופיע גם בו.

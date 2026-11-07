@@ -25,6 +25,12 @@ enum { LCVIEW_SOURCE, LCVIEW_PROGRESS, LCVIEW_DONE };
 /* the person's role for a drawer */
 enum { LCR_SKIP, LCR_SOURCE, LCR_TARGET };
 
+/* #2046 (Nadav 24/10): a disk's read-back as the agent says it -- drawer_rbp= / lc_rbp= = dev|done|total|verdict|rate.
+ * has = a bar (total > 0, done <= total); verdict "" | verified | sampled | unverified (readback.sh); rate bytes/s,
+ * <= 0 = not measured. Display only: the disk's state, not this, says whether it passed. */
+typedef struct { int has; long long done, total, rate; char verdict[12]; } RbBar;
+void rb_set(RbBar *r, const char *done, const char *total, const char *verdict, const char *rate);
+
 /* lc_disk=port|dev|model|serial|size|smart|smart_reason|os|nparts|used|need|usable|why|drawer|conn|mark|hw|name */
 typedef struct {
     int port; char dev[16], model[64], serial[64];
@@ -48,6 +54,7 @@ typedef struct {
     char note[400];                              /* #2009: a "done" that is orange, and why (Fast Startup / dirty); "" = green */
     int pulled;                                  /* #2045: the disk left the system mid-copy -- not a broken disk */
     int grow_deferred;                           /* #2196: the table grew, the filesystem did not -- no "הוגדלה" over it */
+    RbBar rb;                                    /* #2046: lc_rbp= -- the read-back's bar and verdict */
 } LcTgt;
 
 typedef struct {

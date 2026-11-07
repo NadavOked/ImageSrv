@@ -130,6 +130,9 @@ START_BITRATE = 600_000_000
 #: udpcast ולשאר התעבורה (‏udp-sender מגיע ל-95.7% מהתקרה, ‏handoff 06/09).
 #: ‏`IMAGESRV_MAX_BITRATE`, כשהוגדר, מחליף אותו — כלפי מטה או מעלה.
 TOP_BITRATE = 900_000_000
+#: ‏#2028: קצב הפתיחה שסבב למידה הוכיח, ב-Mb/s (`server/learn/tuning.py`). חסר = ‏START_BITRATE.
+#: אינו ב-`WRITE_SETTINGS`: נכתב רק מלמידה, ומוחזר מ"החזר".
+START_SETTING = "learned_start_mbps"
 #: צעד העלייה אחרי גל נקי: ‏600→900 בשלושה גלים נקיים.
 STEP_UP = 100_000_000
 #: האצה אחרי גל נקי במיוחד: צעד גדול פי שלושה. המקור: ברזל 19/10,
@@ -271,6 +274,19 @@ def parse_bitrate(raw: object) -> int | None:
 
 def enabled(conn: sqlite3.Connection) -> bool:
     return get_setting(conn, SETTING) == "true"
+
+
+def learned_start(conn: sqlite3.Connection) -> int | None:
+    """‏#2028: קצב הפתיחה שנלמד, בביטים; ‏None — לא נלמד, או ערך פגום (עם שורת יומן),
+    ואז הפתיחה נשארת ‏START_BITRATE. למידה רק מעלה את הפתיחה."""
+    raw = get_setting(conn, START_SETTING)
+    if raw is None:
+        return None
+    bits = int(raw) * 10 ** 6 if raw.isascii() and raw.isdigit() else None
+    if bits is None or bits <= START_BITRATE:
+        log.warning("setting %s=%r is not above the start rate -- ignored", START_SETTING, raw)
+        return None
+    return bits
 
 
 def _limit_of(conn: sqlite3.Connection, serial: str,
@@ -764,6 +780,9 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
         # ‏`IMAGESRV_MAX_BITRATE` שהוגדר נשאר גג — הנמוך מבין השניים.
         ceiling = min(ceiling, bounds[0]) if ceiling_raw else bounds[0]
         start_at = bounds[1]
+    # ‏#2028: קצב שהוכח בסבב למידה — רק על קישור של 1G ומעלה: קישור איטי יותר נשאר ב-60% שלו.
+    learned = learned_start(conn) if start_at >= START_BITRATE else None
+    start_at = max(start_at, learned or 0)
     # מי קבע את התקרה — למסך. ‏None = 900m של היום (שום דבר לא נקרא).
     if configured is not None and (bounds is None or configured <= bounds[0]):
         cap_by = "configured"
@@ -777,6 +796,7 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
               "start": None, "basis": "start", "by": None, "previous": None,
               "drives": len(drives), "unknown_drives": 0, "cap_by": cap_by,
               **({"direct": True} if direct else {}),
+              **({"start_learned": True} if learned and learned == start_at else {}),
               **({"link": {**link, "applied": server is not None}} if link else {}),
               **({"cloner": cloner} if cloner else {})}
     if ceiling is None:

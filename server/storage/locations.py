@@ -219,7 +219,7 @@ DATA_DIR_RESERVED = (
     "console-tls", "interserver", "wizard", "email-accounts", "secondaries",
     "netcfg", "drivers", "storage", "storage-test", "usb", "apt-repo", "iso-boot-payload",
     "security-pool.json", "tools-selection.json", "add-disk.lock", "alive.heartbeat",
-    "last-backup.json", "dnsmasq-proxy.leases", ".firstboot-done", "firstboot.status",
+    "last-backup.json", "backups", "dnsmasq-proxy.leases", ".firstboot-done", "firstboot.status",
 )
 LOCAL_PATH_REFUSED = ("נתיב לא מורשה למיקום מקומי — רק בתוך תיקיית הנתונים של השרת, "
                       "תחת /srv, או על כונן מעוגן נפרד (לא מערכת הקבצים של השורש)")

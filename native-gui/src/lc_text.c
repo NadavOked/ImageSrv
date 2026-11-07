@@ -159,7 +159,7 @@ static const char *lc_status_base(const App *a, Rgb *dot) {
         snprintf(buf, sizeof buf, "הסתיים · %d יעדים נכשלו", nf); return buf;
     }
     if (!strcmp(l->phase, "shrinking")) return "מכין עותק מכווץ בזיכרון";   /* #1477: the source is read only */
-    if (!strcmp(l->phase, "verifying")) return "בודק את היעדים";
+    if (!strcmp(l->phase, "verifying")) return "בודק את הדיסקים";   /* #2046 (mockup 11): the status bar says what the screen says */
     if (!strcmp(l->phase, "restoring")) return "מחזיר את המקור לגודלו";
     if (!strcmp(l->phase, "stopped")) { *dot = t->warn; return "נעצר"; }
     int alive = l->ntgts - nf;

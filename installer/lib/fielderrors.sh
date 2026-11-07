@@ -13,6 +13,8 @@ field_for_code() {
         invalid-network) printf address ;; invalid-hostname) printf hostname ;;
         invalid-timezone|zones-list-missing) printf timezone ;;
         invalid-ntp-servers) printf ntp_servers ;;   # #2144
+        invalid-backup-time) printf backup_time ;;   # #1956
+        invalid-backup-reserve|backup-disk-size) printf backup_reserve_gb ;;
         invalid-admin-user) printf admin_user ;; invalid-admin-password) printf password ;;
         invalid-root-password|root-password-missing) printf root_password ;;   # #1632
         *) printf disk ;;
@@ -44,6 +46,9 @@ he_for_code() {
         invalid-hostname) printf '%s' 'שם השרת אינו תקין — שם מחשב באנגלית: אותיות לטיניות, ספרות ומקף, עד 15 תווים, בלי מקף בתחילה או בסוף' ;;
         invalid-timezone) printf '%s' 'אזור הזמן אינו מוכר — שם אזור של tzdata באנגלית, למשל Asia/Jerusalem' ;;
         invalid-ntp-servers) printf '%s' 'כתובת שרת הזמן אינה תקינה — עד ארבע כתובות IPv4 או שמות, מופרדות ברווח' ;;
+        invalid-backup-time) printf '%s' 'שעת הגיבוי אינה תקינה — HH:MM, למשל 02:00' ;;
+        invalid-backup-reserve) printf '%s' 'המקום השמור אינו תקין — מספר שלם של GB, לפחות 1, ולא יותר מ-20% מהכונן' ;;
+        backup-disk-size) printf '%s' 'לא הצלחנו לקרוא את גודל הדיסק, ולכן לא נבדק המקום השמור' ;;
         zones-list-missing) printf '%s' 'רשימת אזורי הזמן חסרה במדיית ההתקנה — לא ניתן לבדוק את אזור הזמן' ;;
         invalid-admin-user) printf '%s' 'שם המנהל אינו תקין — אותיות קטנות, ספרות ו-. _ - עד 32 תווים, בלי מקף בתחילה' ;;
         invalid-admin-password) printf '%s' 'הסיסמה לא יכולה להיות ריקה' ;;

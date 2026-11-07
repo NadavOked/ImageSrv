@@ -103,6 +103,7 @@ static void tbay(App *a, cairo_t *cr, Rect b, const LcTgt *g) {
     else if (!strcmp(g->state, "verifying")) snprintf(y.line, sizeof y.line, "בודק את טבלת המחיצות שנכתבה…");
     else if (cp) snprintf(y.line, sizeof y.line, "כותב מחיצה %d · %s · xxh64 תואם ב-%d מתוך %d", cp->idx, cp->label, g->ok, a->st.lc.nparts);
     else snprintf(y.line, sizeof y.line, "מכין את טבלת המחיצות…");
+    if (bad || ok || !strcmp(g->state, "verifying")) lc_bay_readback(&y, &g->rb, "למקור", g->error);   /* #2046 (mockup 11) */
     lc_bay_draw(a, cr, b, &y);
 }
 
@@ -128,12 +129,24 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
         snprintf(s2, sizeof s2, "%s נכשל ונעצר. השאר לא הושפעו.", fn); }
     else if (!alive) { snprintf(h1, sizeof h1, "כל היעדים נכשלו"); snprintf(s2, sizeof s2, "המקור לא שונה."); }
     else { snprintf(h1, sizeof h1, "מעתיק %s%s", names, alive > 1 ? " במקביל" : ""); snprintf(s2, sizeof s2, "המקור נקרא פעם אחת ונכתב לכל היעדים יחד."); }
+    RbSum rbs = { 0 };   /* #2046 (mockup 11): the check after the write, across the targets */
+    for (int i = 0; i < l->ntgts; i++) rb_sum_add(&rbs, &l->tgts[i].rb, l->tgts[i].state);
+    const int checking = !strcmp(l->phase, "verifying") && rbs.vbars > 0;
+    const int full = !strcmp(a->st.rb_mode, "full");
+    if (checking) {
+        snprintf(h1, sizeof h1, "בודק את הדיסקים — %d מתוך %d %s", rbs.done, rbs.n, full ? "אומתו" : "נבדקו");
+        snprintf(s2, sizeof s2, "הכתיבה הסתיימה. כל יעד נקרא עכשיו בחזרה ומושווה למקור.");
+    }
     /* #1440: one partition not measured and the whole is not known -- no percent of it, no time left */
     int um = lc_unmeasured(l), whole = !um && l->total > 0, span;
     double rate = lc_rate(&a->lcu, &span);   /* #1437: the window, not the average since the start */
     char big[24], lt[96];
     if (whole) lc_pct(big, sizeof big, (double)l->copied / l->total); else snprintf(big, sizeof big, "—");
     left_text(l, um, rate, span, lt, sizeof lt);
+    if (checking) {   /* #2046: the big number is the check's, not the copy's 100% */
+        if (rbs.bars) lc_pct(big, sizeof big, rbs.sum / rbs.bars); else snprintf(big, sizeof big, "—");
+        snprintf(lt, sizeof lt, "נבדק");
+    }
     y += lc_hero(a, cr, x0, xr, y, lb, h1, s2, big, lt, 0) + 16;   /* lcbay.c */
     /* .mets -- speed (right), copied, time passed (left) */
     double mw = (cw - 24) / 3, mh = 80;
@@ -146,8 +159,19 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     else if (!whole) snprintf(ch, sizeof ch, "הסך לא ידוע — לא נמדד");
     mmss(l->elapsed, v3, sizeof v3);
     if (nf && alive) snprintf(hint, sizeof hint, "היעד שנכשל יצא מהזרם — הוא כבר לא מאט אותו");
-    met(a, cr, (Rect){ xr - mw, y, mw, mh }, "מהירות", v1, hint, t->led_ok);
+    if (checking) {   /* #2046: the check's speed (all the targets together) */
+        if (rbs.rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rbs.rate / 1e6); else snprintf(v1, sizeof v1, "עוד לא נמדד");
+        snprintf(hint, sizeof hint, "כל היעדים יחד");
+    }
+    met(a, cr, (Rect){ xr - mw, y, mw, mh }, checking ? "קצב בדיקה" : "מהירות", v1, hint, t->led_ok);
     met(a, cr, (Rect){ xr - 2 * mw - 12, y, mw, mh }, "הועתקו", v2, ch, um || !whole ? t->warn : t->muted);
+    if (checking) {   /* #2046: "1 אומת · 2 בבדיקה · 1 נכשל" in place of the time passed */
+        char dv[200] = RLM, one[64];
+        if (rbs.done) { snprintf(one, sizeof one, "%d %s", rbs.done, full ? (rbs.done == 1 ? "אומת" : "אומתו") : (rbs.done == 1 ? "נבדק" : "נבדקו")); strcat(dv, one); }
+        if (rbs.verifying) { snprintf(one, sizeof one, "%s%d בבדיקה", dv[strlen(RLM)] ? " · " : "", rbs.verifying); strcat(dv, one); }
+        if (nf) { snprintf(one, sizeof one, "%s%d %s", dv[strlen(RLM)] ? " · " : "", nf, nf == 1 ? "נכשל" : "נכשלו"); strcat(dv, one); }
+        lc_disks_met(a, cr, (Rect){ x0, y, mw, mh }, dv, "");
+    } else
     met(a, cr, (Rect){ x0, y, mw, mh }, "זמן שעבר", v3, "", t->muted);
     y += mh + 12;
     /* .parts -- the biggest partition gets 2.4 shares, as the mockup's Windows */
@@ -164,7 +188,7 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     int n = l->ntgts; double bh = 96, room = H - N_STATUS_H - 16 - 40 - 12 - y - (10 + 16 + 8 + 10) - (n > 1 ? (n - 1) * 10 : 0);
     if (n && n * bh > room) bh = fmax(64, floor(room / n));
     Rect cage = { x0, y, cw, 10 + 16 + 8 + n * bh + (n > 1 ? (n - 1) * 10 : 0) + 10 };
-    char cnt[64]; snprintf(cnt, sizeof cnt, "%d מתוך %d כותבים", !strcmp(l->phase, "done") ? 0 : alive, n);
+    char cnt[64]; snprintf(cnt, sizeof cnt, checking ? "%d מתוך %d בבדיקה" : "%d מתוך %d כותבים", checking ? rbs.verifying : !strcmp(l->phase, "done") ? 0 : alive, n);   /* #2046 */
     double by = lc_cage(a, cr, cage, "יעדים", cnt);   /* lcbay.c */
     for (int i = 0; i < n; i++) { tbay(a, cr, (Rect){ x0 + 10, by, cw - 20, bh }, &l->tgts[i]); by += bh + 10; }
     y = cage.y + cage.h + 12;

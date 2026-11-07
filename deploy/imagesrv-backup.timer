@@ -1,17 +1,18 @@
-# ImageSrv -- every hour, the database backup (issue #1895, Nadav 22/10).
+# ImageSrv -- the database backup's clock (issues #1895, #1956).
 #
-# Persistent=true: an hour missed while the server was off runs at boot.
-# The health page marks a backup older than two hours "ישן", so one missed
-# run is not yet a warning and two are.
+# Every minute, because the hour is the operator's (console setting backup_time,
+# default 02:00) and an image upload or delete backs up right away: the job
+# itself decides whether a backup is due and exits at once when it is not, so
+# no timer rewrite and no daemon-reload follows a change of the hour. A server
+# that was off at the chosen hour backs up on the first tick after boot.
 
 [Unit]
-Description=ImageSrv: back up the database every hour
+Description=ImageSrv: check whether a database backup is due
 Documentation=https://github.com/NadavOked/ImageSrv/blob/main/docs/architecture/server.md
 
 [Timer]
-OnCalendar=hourly
-Persistent=true
-AccuracySec=1min
+OnCalendar=minutely
+AccuracySec=5s
 Unit=imagesrv-backup.service
 
 [Install]

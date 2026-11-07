@@ -1,13 +1,14 @@
-"""#1956 -- choosing where the hourly database backup goes (Nadav 22/10).
+"""#1956 -- where the database backup goes (Nadav 06/11).
 
-The decision: three kinds of destination -- (1) a local folder, with an orange
-"אותו דיסק — לא מגן מתקלת דיסק" when it sits on the database's disk; (2) an SMB
-share with a user and password; (3) NFS. On every one of them a test file is
-written **and read back** while the destination is being set, so a destination
-that does not take a file is refused now and not at the first backup an hour later
-(principle 5). The SMB password is kept the way the server already keeps it for
-storage locations (#1123): a 0600 ``credentials=`` file under /etc/imagesrv/creds,
-never in the database and never in a mount option.
+Two destinations: the server's own drive (the default, with a fixed orange "אותו
+כונן, לא מגן מתקלת כונן") and a mounted folder. On either a test file is written
+**and read back** while the destination is being set, so a destination that does
+not take a file is refused now and not at the first backup (principle 5).
+
+SMB and NFS are for the images only. A server that saved one before that decision
+keeps going safely: it backs up to its own drive at once, the saved setting, the
+fstab line and the share stay as they are and the console says so, until the
+operator chooses a destination -- and nothing is ever deleted from the share.
 
 Every system tool runs through the storage hooks injected into ``create_app``
 (``FakeHooks`` from test_storage_locations); nothing here mounts anything.
@@ -46,11 +47,10 @@ except ImportError:   # the server before #1956: the endpoint answers 404 and th
 
 REPO = Path(__file__).resolve().parent.parent
 TARGET = "backup_target"          # the setting -- JSON, no secret
-MOUNT_NAME, TEST_NAME = ".db-backup", ".db-backup-test"     # under <data_dir>/storage, which the backups skip
+MOUNT_NAME = ".db-backup"          # a share saved before SMB/NFS left: under <data_dir>/storage, which the backups skip
 NOW = datetime(2026, 10, 22, 12, 0, 0, tzinfo=timezone.utc)
-SAME_DISK = "אותו דיסק — לא מגן מתקלת דיסק"
-PASSWORD = "Nas-Secret-77"
-SMB = {"server": "10.44.10.20", "share": "dbbackup", "username": "imagesrv", "secret": PASSWORD, "domain": "COLLEGE"}
+SAME_DISK = "אותו כונן, לא מגן מתקלת כונן"
+SMB = {"server": "10.44.10.20", "share": "dbbackup", "username": "imagesrv", "domain": "COLLEGE"}
 NFS = {"server": "10.44.10.21", "export": "/pool/dbbackup", "version": "4.1"}
 
 
@@ -109,6 +109,29 @@ def _real_point(bk) -> str:
     return str(bk["data"] / "storage" / MOUNT_NAME)
 
 
+# --- the server's own drive ------------------------------------------------------------
+
+def test_with_nothing_chosen_the_backup_goes_to_the_servers_drive_and_says_it_is_one_drive(bk):
+    got = bk["admin"].get("/api/console/settings").json()["backup_target"]
+    assert (got["type"], got["same_disk"]) == ("default", True), got
+    assert backup_job.main(["--data-dir", str(bk["data"])]) == 0
+    copies = list((bk["data"] / "backups" / "db").glob("imagesrv-*.db"))
+    assert len(copies) == 1
+    row = backup_job.health_check(bk["conn"], bk["data"], "active")
+    assert row["state"] == "warn" and SAME_DISK in row["detail"] and "גובה" in row["detail"], row
+
+
+def test_choosing_the_servers_drive_back_writes_the_test_file_there(bk):
+    folder = bk["tmp"] / "second-disk"
+    folder.mkdir()
+    assert _set(bk, "local", {"path": str(folder)}).status_code == 200
+    r = _set(bk, "default")
+    assert r.status_code == 200 and SAME_DISK in r.json()["warnings"], r.text
+    assert r.json()["target"]["type"] == "default" and _settings(bk)[backup_job.SETTING] == ""
+    assert list((bk["data"] / "backups").iterdir()) == []                # created, and the test file is gone
+    assert any("backup_target=default" in d for d in _journal(bk))
+
+
 # --- (1) a local folder ---------------------------------------------------------------
 
 def test_a_local_folder_is_tested_saved_and_left_clean(bk):
@@ -118,7 +141,7 @@ def test_a_local_folder_is_tested_saved_and_left_clean(bk):
     assert r.status_code == 200, r.text
     assert r.json()["target"]["type"] == "local" and r.json()["target"]["dest"] == folder.as_posix()
     saved = _settings(bk)
-    assert saved[backup_job.SETTING] == folder.as_posix()                 # what the hourly job reads
+    assert saved[backup_job.SETTING] == folder.as_posix()                 # what the job reads
     assert json.loads(saved[TARGET])["type"] == "local"
     assert list(folder.iterdir()) == []                                  # the test file was removed after the read-back
     assert any("backup_target=local" in d for d in _journal(bk))
@@ -216,129 +239,102 @@ def test_a_local_target_whose_disk_was_not_checked_is_not_green(bk):
     assert row["state"] == "warn" and "לא נבדק" in row["detail"], row
 
 
-# --- (2) SMB, and where its password lives ---------------------------------------------
+# --- SMB and NFS are for the images ------------------------------------------------------
 
-def test_an_smb_share_is_tested_mounted_kept_in_fstab_and_the_password_only_in_a_0600_file(bk):
+@pytest.mark.parametrize("kind, params", [("smb", SMB), ("nfs", NFS)])
+def test_smb_and_nfs_are_refused_by_name_and_no_tool_runs(bk, kind, params):
     fake = bk["fake"]
-    r = _set(bk, "smb", SMB)
-    assert r.status_code == 200, r.text
-    real = _real_point(bk)
-    # the test mount first, at its own point, with its own credentials file -- both gone after
-    test_point = str(bk["data"] / "storage" / TEST_NAME)
-    assert [m[2] for m in fake.mounts] == [test_point, real]
-    assert test_point in fake.umounts and real not in fake.umounts
-    test_creds, real_creds = sl.creds_path("backup-test"), sl.creds_path("backup")
-    assert [p for p, _ in fake.creds_writes] == [test_creds, real_creds]
-    assert all(c == {"username": "imagesrv", "password": PASSWORD, "domain": "COLLEGE"} for _, c in fake.creds_writes)
-    assert fake.creds_removes == [test_creds]
-    # mount and fstab: credentials=<file>, never the password
-    fstype, source, target, opts = fake.mounts[-1]
-    assert (fstype, source, target) == ("cifs", "//10.44.10.20/dbbackup", real)
-    assert f"credentials={real_creds}" in opts and PASSWORD not in opts
-    line = next(e for e in fake.fstab[-1] if e["target"] == real)
-    assert line["fstype"] == "cifs" and f"credentials={real_creds}" in line["opts"]
-    assert "_netdev" in line["opts"] and "nofail" in line["opts"] and PASSWORD not in json.dumps(fake.fstab)
-    # the database and the API never see it
-    saved = _settings(bk)
-    assert saved[backup_job.SETTING] == real
-    assert PASSWORD not in json.dumps(saved) and "secret" not in saved[TARGET]
-    got = bk["admin"].get("/api/console/settings").json()
-    assert got["backup_target"]["type"] == "smb" and got["backup_target"]["display"] == "//10.44.10.20/dbbackup"
-    assert PASSWORD not in json.dumps(got)
-    assert not any(PASSWORD in d for d in _journal(bk))
-
-
-def test_an_smb_share_that_does_not_mount_is_refused_and_leaves_nothing(bk):
-    fake = bk["fake"]
-    fake.mount_status, fake.mount_reason = FAILED, "mount error(13): Permission denied"
-    r = _set(bk, "smb", SMB)
-    assert r.status_code == 409 and "Permission denied" in r.json()["detail"], r.text
-    assert _settings(bk).get(TARGET) is None and fake.fstab == []
-    assert fake.creds_removes == [sl.creds_path("backup-test")]          # the test credentials do not stay
-    assert len(fake.mounts) == 1                                         # the real point was never touched
-
-
-def test_a_mount_that_reports_success_but_is_not_mounted_is_refused(bk):
-    """The mount tool said 0 and nothing is mounted there: writing the test file would land on
-    the server's own disk and read back fine -- a NAS backup that is not on the NAS."""
-    bk["fake"].mounted = _NeverMounted()
-    r = _set(bk, "nfs", NFS)
-    assert r.status_code == 409 and "אינו נקודת עיגון" in r.json()["detail"], r.text
+    r = _set(bk, kind, params)
+    assert r.status_code == 400 and "לאחסון האימג'ים" in r.json()["detail"], r.text
+    assert fake.mounts == [] and fake.creds_writes == [] and fake.fstab == []
     assert _settings(bk).get(TARGET) is None
 
 
-class _NeverMounted(set):
-    def add(self, item):                     # the tool exits 0; the kernel has nothing mounted there
-        return None
-
-
-def test_when_fstab_cannot_be_written_the_mount_is_undone_and_nothing_is_saved(bk):
-    fake = bk["fake"]
-    fake.fstab_status = FAILED
-    r = _set(bk, "smb", SMB)
-    assert r.status_code == 409 and "fstab" in r.json()["detail"], r.text
-    assert _real_point(bk) in fake.umounts
-    assert sl.creds_path("backup") in fake.creds_removes
-    assert _settings(bk).get(TARGET) is None and _settings(bk).get(backup_job.SETTING) in (None, "")
-
-
-# --- (3) NFS --------------------------------------------------------------------------
-
-def test_an_nfs_export_is_tested_and_mounted_without_credentials(bk):
-    fake = bk["fake"]
-    r = _set(bk, "nfs", NFS)
-    assert r.status_code == 200, r.text
-    fstype, source, target, opts = fake.mounts[-1]
-    assert (fstype, source, target) == ("nfs", "10.44.10.21:/pool/dbbackup", _real_point(bk))
-    assert "vers=4.1" in opts and fake.creds_writes == []
-    line = next(e for e in fake.fstab[-1] if e["target"] == _real_point(bk))
-    assert line["source"] == "10.44.10.21:/pool/dbbackup" and line["fstype"] == "nfs"
-    assert r.json()["target"]["display"] == "10.44.10.21:/pool/dbbackup"
-
-
-def test_bad_network_parameters_are_refused_before_any_tool_runs(bk):
-    fake = bk["fake"]
-    assert _set(bk, "smb", {**SMB, "server": "bad host;rm"}).status_code == 400
-    assert _set(bk, "nfs", {**NFS, "export": "pool, rw"}).status_code == 400
+def test_an_unknown_kind_is_refused(bk):
     assert _set(bk, "iscsi", {"portal": "10.0.0.1"}).status_code == 400
-    assert fake.mounts == [] and fake.creds_writes == []
+    assert _set(bk, "none").status_code == 400              # there is no "no backup" any more
+    assert _settings(bk).get(TARGET) is None
 
 
-# --- changing and clearing -------------------------------------------------------------
+def _saved_share(bk, kind="smb") -> Path:
+    """What a server has after #1965: the setting, a mount point, and the backups already on the share."""
+    point = Path(_real_point(bk))
+    (point / "db").mkdir(parents=True)
+    old = point / "db" / "imagesrv-20261020-120000.db"
+    old.write_bytes(b"a backup on the share")
+    public = SMB if kind == "smb" else NFS
+    db.set_settings(bk["conn"], {backup_job.SETTING: point.as_posix(),
+                                 TARGET: json.dumps({"type": kind, **public, "mount_point": point.as_posix()})})
+    return old
 
-def test_leaving_a_share_unmounts_it_drops_its_fstab_line_and_its_credentials(bk, monkeypatch):
+
+@pytest.mark.parametrize("kind, shown", [("smb", "//10.44.10.20/dbbackup"), ("nfs", "10.44.10.21:/pool/dbbackup")])
+def test_a_saved_share_moves_to_the_servers_drive_and_nothing_is_lost(bk, kind, shown):
     fake = bk["fake"]
-    assert _set(bk, "smb", SMB).status_code == 200
-    monkeypatch.setattr(backup_target, "same_disk", lambda a, b: False)
-    folder = bk["tmp"] / "usb-disk"
-    folder.mkdir()
-    assert _set(bk, "local", {"path": str(folder)}).status_code == 200
-    assert _real_point(bk) in fake.umounts
-    assert all(e["target"] != _real_point(bk) for e in fake.fstab[-1])
-    assert sl.creds_path("backup") in fake.creds_removes
-    r = _set(bk, "none")
-    assert r.status_code == 200 and r.json()["target"]["type"] == "none"
-    assert _settings(bk)[backup_job.SETTING] == ""
-    row = backup_job.health_check(bk["conn"], bk["data"], "active", NOW)
-    assert row["state"] == "warn" and "לא נבחר יעד גיבוי" in row["detail"]
+    old = _saved_share(bk, kind)
+    before = {k: v for k, v in _settings(bk).items() if k in (TARGET, backup_job.SETTING)}
+    assert backup_job.main(["--data-dir", str(bk["data"])]) == 0
+
+    assert len(list((bk["data"] / "backups" / "db").glob("imagesrv-*.db"))) == 1      # the backups go on
+    assert len(list(old.parent.iterdir())) == 1 and old.read_bytes() == b"a backup on the share"
+    assert {k: v for k, v in _settings(bk).items() if k in (TARGET, backup_job.SETTING)} == before
+    assert fake.umounts == [] and fake.creds_removes == []                            # nothing was taken down
+    row = backup_job.health_check(bk["conn"], bk["data"], "active")
+    assert row["state"] == "warn" and shown in row["detail"] and "לא נמחקו" in row["detail"], row
+    got = bk["admin"].get("/api/console/settings").json()["backup_target"]
+    assert got["type"] == "default" and got["legacy"]["display"] == shown, got
 
 
-def test_a_storage_location_rewriting_fstab_keeps_the_backup_line(bk):
-    fake = bk["fake"]
-    assert _set(bk, "nfs", NFS).status_code == 200
+def test_a_destination_cancelled_before_this_change_is_the_servers_drive(bk):
+    """#1965 had a "none": it saved an empty destination with {"type": "none"}."""
+    db.set_settings(bk["conn"], {backup_job.SETTING: "", TARGET: json.dumps({"type": "none"})})
+    got = bk["admin"].get("/api/console/settings").json()["backup_target"]
+    assert got["type"] == "default" and "legacy" not in got, got
+    assert backup_job.main(["--data-dir", str(bk["data"])]) == 0
+    assert len(list((bk["data"] / "backups" / "db").glob("imagesrv-*.db"))) == 1
+
+
+def test_a_saved_share_keeps_its_fstab_line_when_a_storage_location_rewrites_fstab(bk):
+    _saved_share(bk, "nfs")
     r = bk["admin"].post("/api/console/storage-locations", json={
         "name": "nas-images", "type": "nfs", "tested": True,
         "params": {"server": "10.44.10.20", "export": "/mnt/pool/images", "version": "4.1"}})
     assert r.status_code == 200, r.text
-    targets = [e["target"] for e in fake.fstab[-1]]
+    targets = [e["target"] for e in bk["fake"].fstab[-1]]
     assert _real_point(bk) in targets and len(targets) == 2
 
 
+@pytest.mark.parametrize("kind", ["default", "local"])
+def test_choosing_a_destination_lets_the_saved_share_go_and_leaves_its_files(bk, kind, monkeypatch):
+    monkeypatch.setattr(backup_target, "same_disk", lambda a, b: False)
+    fake = bk["fake"]
+    old = _saved_share(bk)
+    folder = bk["tmp"] / "usb-disk"
+    folder.mkdir()
+    r = _set(bk, kind, {"path": str(folder)} if kind == "local" else {})
+    assert r.status_code == 200, r.text
+    assert _real_point(bk) in fake.umounts
+    assert all(e["target"] != _real_point(bk) for e in fake.fstab[-1])
+    assert sl.creds_path("backup") in fake.creds_removes
+    assert old.read_bytes() == b"a backup on the share"
+    assert "legacy" not in r.json()["target"]
+    assert backup_job.health_check(bk["conn"], bk["data"], "active")["detail"].find("הוסר") == -1
+
+
+def test_a_share_that_did_not_come_down_is_said_not_swallowed(bk):
+    fake = bk["fake"]
+    _saved_share(bk)
+    fake.fstab_status = FAILED
+    r = _set(bk, "default")
+    assert r.status_code == 200, r.text
+    assert any("fstab" in w for w in r.json()["warnings"]), r.json()
+
+
 def test_a_storage_location_cannot_take_the_backup_mount_point(tmp_path):
-    """The backup mounts at storage/.db-backup, next to the storage locations' own mount points: a location
-    named ".db-backup" would have mounted its NAS on top of the backup's. A dot-name gets its id instead."""
+    """A saved share is mounted at storage/.db-backup, next to the storage locations' own mount points: a
+    location named ".db-backup" would have mounted its NAS on top of it. A dot-name gets its id instead."""
     data = tmp_path / "data"
-    for name in (MOUNT_NAME, TEST_NAME, ".hidden"):
+    for name in (MOUNT_NAME, ".hidden"):
         assert sl.mount_point_for(data, name, "loc_1234abcd") == data / "storage" / "loc_1234abcd", name
     assert sl.mount_point_for(data, "nas-images", "loc_1234abcd") == data / "storage" / "nas-images"
 
@@ -351,44 +347,6 @@ def test_only_an_admin_sets_it_and_the_old_settings_key_cannot_skip_the_test(bk)
     r = bk["admin"].post("/api/console/settings", json={backup_job.SETTING: str(folder)})
     assert r.status_code == 400 and backup_job.SETTING in r.json()["detail"]
     assert _settings(bk).get(backup_job.SETTING) in (None, "")
-
-
-# --- the hourly job on a network destination ---------------------------------------------
-
-def _network_db(tmp_path: Path, kind: str = "nfs"):
-    data = tmp_path / "data"
-    data.mkdir()
-    conn = db.connect(data / "imagesrv.db")
-    dest = data / "storage" / MOUNT_NAME
-    dest.mkdir(parents=True)
-    db.set_settings(conn, {backup_job.SETTING: dest.as_posix(),
-                           TARGET: json.dumps({"type": kind, "mount_point": dest.as_posix()})})
-    return data, dest
-
-
-def test_the_job_does_not_back_up_into_an_unmounted_share(tmp_path, monkeypatch):
-    """nofail in fstab: a NAS that was down at boot leaves an empty folder. A backup written there
-    lands on the server's own disk and reads back fine -- it must fail by name instead."""
-    data, dest = _network_db(tmp_path)
-    tried = []
-    monkeypatch.setattr(backup_job.os.path, "ismount", lambda p: False)
-    monkeypatch.setattr(backup_job, "_mount_from_fstab", lambda p: tried.append(str(p)) or (32, "mount error: host is down"),
-                        raising=False)
-    assert backup_job.main(["--data-dir", str(data)]) == 1
-    assert tried == [dest.as_posix()]
-    saved = json.loads((data / "last-backup.json").read_text(encoding="utf-8"))
-    assert saved["ok"] is False and "אינו מעוגן" in saved["error"] and "host is down" in saved["error"]
-    assert not (dest / "db").exists()
-
-
-def test_the_job_mounts_the_share_from_fstab_and_then_backs_up(tmp_path, monkeypatch):
-    data, dest = _network_db(tmp_path, "smb")
-    state = {"mounted": False}
-    monkeypatch.setattr(backup_job.os.path, "ismount", lambda p: state["mounted"])
-    monkeypatch.setattr(backup_job, "_mount_from_fstab", lambda p: state.update(mounted=True) or (0, ""),
-                        raising=False)
-    assert backup_job.main(["--data-dir", str(data)]) == 0
-    assert len(list((dest / "db").glob("imagesrv-*.db"))) == 1
 
 
 # --- the console ----------------------------------------------------------------------
@@ -413,19 +371,20 @@ const settingUnreadHtml = (e) => `unread:${e}`;
 """ + "\n".join(src.values()) + """
 const rows = {};
 for (const [name, t] of Object.entries({
-  none: { type: "none", dest: "" },
-  same: { type: "local", dest: "/srv/backup", display: "/srv/backup", same_disk: true },
-  other: { type: "local", dest: "/mnt/usb", display: "/mnt/usb", same_disk: false },
-  smb: { type: "smb", dest: "/var/lib/imagesrv/storage/.db-backup", display: "//nas/db", same_disk: null } })) {
+  drive: { type: "default", label: "כונן השרת", dest: "", display: "", same_disk: true },
+  same: { type: "local", label: "תיקייה", dest: "/srv/backup", display: "/srv/backup", same_disk: true },
+  other: { type: "local", label: "תיקייה", dest: "/mnt/usb", display: "/mnt/usb", same_disk: false },
+  unchecked: { type: "local", label: "תיקייה", dest: "/mnt/usb", display: "/mnt/usb", same_disk: null },
+  legacy: { type: "default", label: "כונן השרת", dest: "", display: "", same_disk: true,
+            legacy: { type: "smb", label: "SMB", display: "//nas/db" } } })) {
   SETTINGS = { backup_target: t };
   rows[name] = backupTargetRowHtml();
 }
 SETTINGS = {};
 rows.unread = backupTargetRowHtml();
 const bodies = {
-  smb: backupTargetBody("smb", { server: " nas ", share: "db", username: "u", secret: "p", domain: "" }),
   local: backupTargetBody("local", { path: " /mnt/usb " }),
-  none: backupTargetBody("none", {}) };
+  drive: backupTargetBody("default", {}) };
 console.log(JSON.stringify({ rows, bodies }));
 """, encoding="utf-8", newline="\n")
     out = subprocess.run([NODE, str(probe)], capture_output=True, text=True, encoding="utf-8",
@@ -433,15 +392,95 @@ console.log(JSON.stringify({ rows, bodies }));
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
     rows, bodies = got["rows"], got["bodies"]
-    assert "<pill warn>לא נבחר — המסד אינו מגובה</pill>" in rows["none"], rows
+    assert "כונן השרת" in rows["drive"] and f"<pill warn>{SAME_DISK}</pill>" in rows["drive"], rows
     assert f"<pill warn>{SAME_DISK}</pill>" in rows["same"] and "/srv/backup" in rows["same"]
     assert "pill" not in rows["other"] and "/mnt/usb" in rows["other"]
-    assert "SMB" in rows["smb"] and "//nas/db" in rows["smb"] and "pill" not in rows["smb"]
-    assert "backupTargetSheet()" in rows["smb"] and rows["unread"].startswith("unread:")
-    assert bodies["smb"] == {"type": "smb", "params": {"server": "nas", "share": "db", "username": "u",
-                                                        "secret": "p", "domain": ""}}, bodies
+    assert "<pill warn>לא נבדק אם על כונן אחר</pill>" in rows["unchecked"]
+    assert "SMB" in rows["legacy"] and "//nas/db" in rows["legacy"] and "backupTargetSheet()" in rows["legacy"]
+    assert rows["unread"].startswith("unread:")
     assert bodies["local"] == {"type": "local", "params": {"path": "/mnt/usb"}}
-    assert bodies["none"] == {"type": "none", "params": {}}
+    assert bodies["drive"] == {"type": "default", "params": {}}
+
+
+@requires_native(("node", NODE))
+def test_the_console_policy_row_says_the_hour_and_the_space_and_what_it_could_not_read(tmp_path):
+    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    found = {n: re.search(rf"^function {n}\(.*?^\}}", js, re.M | re.S) for n in ("backupPolicyRowHtml", "backupPolicyHelp")}
+    src = {n: m.group(0) if m else f"function {n}() {{ return ''; }}" for n, m in found.items()}
+    probe = tmp_path / "policy.cjs"
+    probe.write_text("""
+const esc = (x) => String(x == null ? "" : x);
+const ghostBtn = (label, fn) => `<btn ${fn}>${label}</btn>`;
+const settingUnreadHtml = (e) => `unread:${e}`;
+let SETTINGS = { backup_policy: { time: "23:15", reserve_gb: 40, min_gb: 1, cap_gb: 93, cap_percent: 20 } };
+""" + "\n".join(src.values()) + """
+const row = backupPolicyRowHtml();
+const help = backupPolicyHelp(SETTINGS.backup_policy);
+const unknown = backupPolicyHelp({ ...SETTINGS.backup_policy, cap_gb: null });
+SETTINGS = {};
+console.log(JSON.stringify({ row, help, unknown, unread: backupPolicyRowHtml() }));
+""", encoding="utf-8", newline="\n")
+    out = subprocess.run([NODE, str(probe)], capture_output=True, text=True, encoding="utf-8",
+                         stdin=subprocess.DEVNULL, timeout=60)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    assert "23:15" in got["row"] and "40 GB שמורים" in got["row"] and "backupPolicySheet()" in got["row"], got
+    assert "20%" in got["help"] and "עד 93 GB" in got["help"], got
+    assert "גודל הכונן לא נקרא" in got["unknown"] and "null" not in got["unknown"], got
+    assert got["unread"].startswith("unread:"), got
+
+
+@requires_native(("node", NODE))
+def test_the_console_windows_post_what_the_server_expects(tmp_path):
+    """The real sheet functions, with ``sheet`` and ``post`` as recorders: what is on offer, and what goes out."""
+    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    names = ("backupPolicyHelp", "backupPolicySheet", "backupTargetBody", "backupTargetSave", "backupTargetSheet",
+             "backupTargetFolderSheet")
+    found = {n: re.search(rf"^(?:async )?function {n}\(.*?^\}}", js, re.M | re.S) for n in names}
+    assert all(found.values()), [n for n, m in found.items() if not m]
+    probe = tmp_path / "sheets.cjs"
+    probe.write_text("""
+const sheets = [], posts = [], toasts = [];
+const sheet = (s) => sheets.push(s);
+const post = async (path, body) => { posts.push([path, body]); return { warnings: [] }; };
+const toast = (t) => toasts.push(t);
+const loadSettingsData = async () => {};
+const isAdmin = () => true;
+const SETTINGS = { backup_target: { type: "default", dest: "" },
+                   backup_policy: { time: "02:00", reserve_gb: 5, min_gb: 1, cap_gb: 93, cap_percent: 20 } };
+""" + "\n".join(m.group(0) for m in found.values()) + """
+(async () => {
+  backupPolicySheet();
+  const policy = sheets.pop();
+  await policy.onSubmit({ time: "23:15", reserve_gb: " 40 " });
+  backupTargetSheet();
+  const target = sheets.pop();
+  await target.onSubmit({ kind: "default" });
+  const next = await target.onSubmit({ kind: "local" });
+  next();
+  const folder = sheets.pop();
+  await folder.onSubmit({ path: " /mnt/usb " });
+  console.log(JSON.stringify({ posts, fields: policy.fields.map((f) => [f.id, f.type || "", f.value]),
+                               kinds: target.fields[0].options.map((o) => o.value) }));
+})();
+""", encoding="utf-8", newline="\n")
+    out = subprocess.run([NODE, str(probe)], capture_output=True, text=True, encoding="utf-8",
+                         stdin=subprocess.DEVNULL, timeout=60)
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    assert got["fields"] == [["time", "time", "02:00"], ["reserve_gb", "", "5"]], got
+    assert got["kinds"] == ["default", "local"], got
+    assert got["posts"] == [["/backup-policy", {"time": "23:15", "reserve_gb": "40"}],
+                            ["/backup-target", {"type": "default", "params": {}}],
+                            ["/backup-target", {"type": "local", "params": {"path": "/mnt/usb"}}]], got
+
+
+def test_the_console_offers_no_network_destination():
+    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    sheet = re.search(r"^function backupTargetSheet\(.*?^\}", js, re.M | re.S).group(0)
+    assert '"default"' in sheet and '"local"' in sheet
+    assert 'value: "smb"' not in sheet and 'value: "nfs"' not in sheet
+    assert "function backupTargetDetailsSheet" not in js
 
 
 def test_the_console_files_are_bumped_together():

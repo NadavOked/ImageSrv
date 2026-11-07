@@ -12,6 +12,7 @@ CASES = [
     ("update_enabled", "no", "true", "עדכון גרסה מהקונסולה"),
     ("identity_check", "TRUE", "false", "אימות מחשבים לפי כתובת ה-DHCP"),
     ("learned_rate_enabled", "0", "true", "קצב שידור אוטומטי לפי הכוננים בחדר"),
+    ("learning_enabled", "yes", "true", "למידה אוטומטית של הרשת והמחשבים"),   # #2028
     ("session_wait_seconds", "29", "30", "המתנה מהמצטרף האחרון"),
     ("console_idle_seconds", "61", "60", "ניתוק בחוסר פעילות"),
     ("crc_warn_threshold", "1000001", "1000000", "סף CRC"),

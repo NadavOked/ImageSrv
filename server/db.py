@@ -746,6 +746,53 @@ CREATE TABLE IF NOT EXISTS model_speeds (
 CREATE INDEX IF NOT EXISTS model_speeds_model ON model_speeds (model, at);
 CREATE INDEX IF NOT EXISTS model_speeds_serial ON model_speeds (serial, at);
 
+-- ‏#2028: סבב למידה — 2 השיכפולים הבאים אחרי שהמתג נדלק (`server/learn/tuning.py`). ‏`state`:
+-- ‏`collecting` / ‏`done` (הגיעה למספר) / ‏`not_learned` (לא הגיעה — לא שונה דבר) / ‏`cancelled` (המתג כובה).
+-- ‏`summary_json` — מה שנמדד ומה לא שונה ולמה, כפי שהיה ברגע הסיום.
+CREATE TABLE IF NOT EXISTS learning_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    required     INTEGER NOT NULL,
+    state        TEXT NOT NULL DEFAULT 'collecting',
+    started_at   TEXT NOT NULL,
+    started_by   TEXT,
+    ended_at     TEXT,
+    summary_json TEXT
+);
+-- גל שהסתיים בזמן סבב למידה. ‏`ok` = יש בו ראיה; ‏`why_he` — למה לא.
+CREATE TABLE IF NOT EXISTS learning_waves (
+    run_id     INTEGER NOT NULL REFERENCES learning_runs(id),
+    session_id TEXT NOT NULL,
+    ok         INTEGER NOT NULL,
+    why_he     TEXT,
+    at         TEXT NOT NULL,
+    PRIMARY KEY (run_id, session_id)
+);
+-- ‏#2028: כל שינוי אוטומטי, עם הערך הקודם כפי שהיה בטבלת `settings` (‏NULL = לא הייתה שורה).
+-- ‏`state`: ‏`applied` / ‏`reverted` (מנהל החזיר) / ‏`overridden` (מנהל שינה ידנית) /
+-- ‏`replaced` (סבב מאוחר שינה את אותה הגדרה). ‏`why_he` — המספר והמקור שלו (עיקרון 5ב).
+CREATE TABLE IF NOT EXISTS learning_changes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id      INTEGER NOT NULL REFERENCES learning_runs(id),
+    key         TEXT NOT NULL,
+    previous    TEXT,
+    value       TEXT NOT NULL,
+    previous_he TEXT NOT NULL,
+    value_he    TEXT NOT NULL,
+    why_he      TEXT NOT NULL,
+    state       TEXT NOT NULL DEFAULT 'applied',
+    at          TEXT NOT NULL,
+    ended_at    TEXT,
+    ended_by    TEXT
+);
+-- ‏#2028: מה שמנהל ענה על הצעת הלמידה למחשב חדש: ‏`started` / ‏`dismissed`. "נלמד" אינו כאן — הוא נגזר
+-- מ-`port_history`, ולכן מחשב שכבר שוכפל אינו מקבל הצעה.
+CREATE TABLE IF NOT EXISTS learning_machines (
+    mac   TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    at    TEXT NOT NULL,
+    by    TEXT
+);
+
 -- ‏#1847: כל הערת WoL למכונה שלא נראתה (`server/learn/wol.py`), ומתי היא ענתה — הפירור
 -- הראשון של האתחול או hello. ‏`answered_at` NULL = עוד לא ענתה (או לא התעוררה, אחרי
 -- ‏`ANSWER_S`). ‏`early` — נשלחה שליחה חוזרת מוקדמת; ‏`alerted` — ההתראה על הרצף נרשמה.
@@ -915,6 +962,8 @@ DEFAULT_SETTINGS = {
     # שידורים חוזרים וכוננים איטיים, לעולם לא מעל `IMAGESRV_MAX_BITRATE`
     # (בלעדיו 900m). ‏"false" = קצב הפתיחה (600m), קבוע.
     "learned_rate_enabled": "true",
+    # ‏#2028 (נדב 23/10): למידה אוטומטית של הרשת והמחשבים. כבוי = הכול ידני, כמו היום.
+    "learning_enabled": "false",
     # נדב 18/10: "תכלס לא צריך לזה MFA" — אין חיוב MFA למנהלים, גם בשדרוג של שרת שבו
     # היה (‏console_mfa.SETTING; ‏_initialize רושם ביומן כשהשדרוג מכבה חיוב שהיה).
     "mfa_required_for_admins": "false",
@@ -1461,7 +1510,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 11  # ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 12  # ‏12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:
