@@ -215,9 +215,11 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
             s->wave_state[0]&&strcmp(s->wave_state,"running")&&strcmp(s->wave_state,"failed")?"הסתיים":"משדר");return buf;}
         {int awake=0;for(int i=0;i<s->nmachines;i++)awake+=s->machines[i].awake;snprintf(buf,n,"%d יעדים מחוברים",awake);return buf;}
     case SCREEN_CLONER:
-        {int w=0,e=0;for(int i=0;i<s->ndrawers;i++){w+=!strcmp(s->drawers[i].state,"writing");
+        {int w=0,e=0,v=0,d=0,f=0,vb=0;for(int i=0;i<s->ndrawers;i++){w+=!strcmp(s->drawers[i].state,"writing");
+            v+=!strcmp(s->drawers[i].state,"verifying");vb+=!strcmp(s->drawers[i].state,"verifying")&&s->drawers[i].rb.has;d+=!strcmp(s->drawers[i].state,"done");f+=!strcmp(s->drawers[i].state,"failed")&&s->drawers[i].rb.has;
             e+=!strcmp(s->drawers[i].state,"done")||!strcmp(s->drawers[i].state,"failed")||!strcmp(s->drawers[i].state,"skipped");}
          if(s->ndrawers&&e==s->ndrawers)return "שיכפול במקביל · הסתיים";   /* #1331 mockup v2 */
+         if(v&&!w&&vb){snprintf(buf,n,"בודק את הדיסקים · %d מתוך %d %s",d,v+d+f,strcmp(s->rb_mode,"full")?"נבדקו":"אומתו");return buf;}   /* #2046 (mockup 11): the check has the screen */
          snprintf(buf,n,"כותב %d דיסקים במקביל",w);return buf;}
     case SCREEN_RESTORE:*dot=a->theme->warn;return "בחירת אימג' לשחזור";
     case SCREEN_TOOLS:return a->tool_running?"מריץ כלי":"ארגז הכלים";

@@ -423,7 +423,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     results.append(time_sync_check(sync))
     results.append(db_space_check(hooks["db_free"](getattr(ctx, "data_dir", None)),
                                   last_disk_full()))
-    # ‏#1895 (נדב 22/10): גיבוי המסד — כתום עד שנבחר יעד, "ישן" אחרי שעתיים, אדום על כשל.
+    # ‏#1895/#1956: גיבוי המסד — "ישן" אחרי יום ושעתיים, אדום על כשל, כתום כשהוא על כונן המסד.
     results.append(backup_job.health_check(ctx.conn, getattr(ctx, "data_dir", None),
                                            hooks["unit_active"](backup_job.TIMER_UNIT)))
 

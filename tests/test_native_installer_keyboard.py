@@ -37,8 +37,8 @@ REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native-gui" / "src"
 
 #: the views as install_state.h numbers them -- #2144 put the server clock at
-#: step 5, after the name (eight steps), so the admin screen is 6 and the summary 7
-ROLE, NETWORK, ADMIN, DISK, SUMMARY = 2, 3, 6, 1, 7
+#: step 5, after the name, and #1956 the backup at 6 (nine steps), so the admin screen is 7 and the summary 8
+ROLE, NETWORK, ADMIN, DISK, SUMMARY = 2, 3, 7, 1, 8
 
 
 def _pkgconfig(*pkgs: str) -> bool:

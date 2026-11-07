@@ -92,6 +92,7 @@ write_answers() {
         emit hostname "$(field hostname)"
         emit timezone "$(field timezone)"
         emit ntp_servers "$(field ntp_servers)"   # #2144: empty = automatic
+        emit backup_time "$(field backup_time)"; emit backup_reserve_gb "$(field backup_reserve_gb)"   # #1956
         emit admin_user "$_wa_user"
         # Before the admin screen the password is legitimately empty; the engine's
         # own check ("admin_pass must not be empty") belongs to step 4+, not to

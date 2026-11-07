@@ -325,6 +325,14 @@ EVENTS_HE = {
     "disk_set_removed": "דיסק הוצא מסט",
     "machine_drawer_count": "מספר המגירות של מכונה עודכן",
     "machine_drawer_slots": "מיפוי חיבורי הדיסקים של מכונה עודכן",
+    "learning_changed": "הלמידה התאימה הגדרה",   # #2028
+    "learning_done": "הלמידה הסתיימה",
+    "learning_machine": "מנהל ענה על הצעת הלמידה למחשב",
+    "learning_not_learned": "הלמידה לא הגיעה למספר הנדרש, לא שונה דבר",
+    "learning_overridden": "שינוי ידני גבר על הגדרה שהלמידה התאימה",
+    "learning_rejected": "הלמידה דחתה מדידות כתיבה שאינן סבירות או שאינן מסבב רשום",
+    "learning_reverted": "הגדרה שהלמידה התאימה הוחזרה",
+    "learning_wave": "שיכפול נספר בסבב הלמידה",
     "machine_slot_map": "מיפוי החיבורים נשמר (מחשב או כל מחשבי הדגם)",
     "machine_slot_name": "שם של חיבור כונן במכונה עודכן",
     "monitor_stations": "מתג המוניטור בתחנות שונה",
@@ -502,6 +510,7 @@ SETTINGS_HE = {
     "console_idle_seconds": "ניתוק אוטומטי בחוסר פעילות",   # נדב 18/10: בדקות, 0 = כבוי
     "class_deploy_enabled": "הפצה לכיתות ממחשב הבנייה",
     "learned_rate_enabled": "קצב שידור אוטומטי",
+    "learning_enabled": "למידה אוטומטית של הרשת והמחשבים",   # #2028
     "mfa_required_for_admins": "חיוב אימות דו-שלבי למנהלים",   # נדב 18/10
     "crc_warn_threshold": "סף שגיאות CRC לאזהרה",   # #1366
     "min_free_gb": "מינימום מקום פנוי אחרי שחזור (GB)",   # #1354
@@ -518,6 +527,7 @@ SETTINGS_HE = {
     "auto_reboot_weekday": "יום",
     "cloner_beep": "צלילי המשכפל ומחשב הבנייה",   # #1967, as in console.js
     "backup_target": "יעד גיבוי המסד",   # #1956: הסוג, ואחריו היעד (בלי סיסמה)
+    "backup_policy": "מדיניות גיבוי המסד",   # #1956: השעה והמקום השמור
     # ‏#1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
     "identity_check": "אימות מחשבים לפי כתובת ה-DHCP",
     "readback_full": "אימות מלא אחרי הכתיבה",

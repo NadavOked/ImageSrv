@@ -284,7 +284,7 @@ install_units() {
     install -m 0644 deploy/*.service "$UNIT_DIR/" || return 1
     (( ${#timers[@]} == 0 )) || install -m 0644 "${timers[@]}" "$UNIT_DIR/" || return 1
 }
-# ‏#1957: טיימר שהגרסה מביאה (#1895: הגיבוי השעתי) מופעל גם בעדכון, לא רק
+# ‏#1957: טיימר שהגרסה מביאה (#1895: גיבוי המסד) מופעל גם בעדכון, לא רק
 # בהתקנה נקייה. ‏enable --now על טיימר שכבר פעיל אינו משנה דבר.
 enable_timers() {
     local t name

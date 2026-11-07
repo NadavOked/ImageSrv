@@ -36,6 +36,7 @@ from server.rounds import drive_rates, pulls
 from server.net import deploy_net, dhcp
 from server.learn import netloss as learn_netloss, wol as learn_wol   # #1846, #1847
 from server.learn import server_io   # #1884
+from server.learn import tuning as learn_tuning   # #2028
 from server.net import pxe_log   # #1887
 from server.agent import timing as agent_timing   # #2056
 from server.system import timezone, timesync   # #1447, #1773
@@ -610,6 +611,8 @@ def create_runtime(
             # ‏#1846: האבדן של הגל מול הבסיס של כרטיס ההפצה — קפיצה נרשמת ביומן.
             # לעולם אינו זורק.
             learn_netloss.evaluate(conn, session_id)
+            # ‏#2028: סבב למידה פתוח. החדר אולי כבר סגר את הגל. לעולם אינו זורק.
+            learn_tuning.record_wave(conn, session_id)
         if event != "send_failed":
             return
         if session_id:
