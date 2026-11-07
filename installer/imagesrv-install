@@ -48,6 +48,7 @@ SYSROOT="${SYSROOT:-}"; DEVROOT="${DEVROOT:-/dev}"
 . "$INSTALLER_DIR/lib/grublock.sh"   # #2450
 . "$INSTALLER_DIR/lib/raid.sh"
 . "$INSTALLER_DIR/lib/clock.sh"   # #2144
+. "$INSTALLER_DIR/lib/backup.sh"   # #1956
 
 DRY_RUN=0
 

@@ -65,6 +65,44 @@ cloner_gui_pace() {
     return 0
 }
 
+# #2046 (Nadav 24/10): the read-back's bar. fanout --readback -p keeps "<done> <total>" in
+# $RUN_DIR/targets/<dev>/rb_prog (rbprog.sh). Display only -- the verdict is readback.sh's.
+gui_rb_fields() {   # $1 = dev. Sets _cg_rbd/_cg_rbt; 1 = no bar (no file, or a line that is not two numbers)
+    _cg_rbd=; _cg_rbt=
+    [ -r "$RUN_DIR/targets/$1/rb_prog" ] || return 1
+    read -r _cg_rbd _cg_rbt < "$RUN_DIR/targets/$1/rb_prog" 2>/dev/null
+    case "$_cg_rbd:$_cg_rbt" in *[!0-9:]*|:*|*:) _cg_rbd=; _cg_rbt=; return 1 ;; esac
+    [ "$_cg_rbt" -gt 0 ] && [ "$_cg_rbd" -le "$_cg_rbt" ] || { _cg_rbd=; _cg_rbt=; return 1; }
+}
+
+gui_rb_state() {
+    # $1 = dev, $2 = its state. Sets _cg_rbp ("done|total", or empty), _cg_rbv (the verdict readback.sh wrote:
+    # verified|sampled|unverified, or empty) and _cg_rbr (bytes/s of the check, -1 = not measured). A disk being
+    # read back also gets that rate and its time left in _cg_rate/_cg_eta -- the write's counters are full by now.
+    # 0 = there is a record to print.
+    _cg_rbp=; _cg_rbv=; _cg_rbr=-1
+    if gui_rb_fields "$1"; then
+        _cg_rbp="$_cg_rbd|$_cg_rbt"
+        if [ "$2" = verifying ]; then
+            cloner_gui_pace "rb.$1" writing "$_cg_rbd" "$_cg_rbt"
+            [ "$_cg_rate" != 0 ] || { _cg_rate=-1; _cg_eta=-1; }   # a bar that stands is "not measured", never "waiting for the stream"
+            _cg_rbr=$_cg_rate
+        fi
+    fi
+    [ "$2" = verifying ] || rm -f "$GUI_DIR/pace.rb.$1" "$GUI_DIR/moved.rb.$1"
+    _cg_rbv=$(cat "$RUN_DIR/targets/$1/readback" 2>/dev/null)
+    case "$_cg_rbv" in verified|sampled|unverified) ;; *) _cg_rbv= ;; esac
+    [ -n "$_cg_rbp$_cg_rbv" ]
+}
+
+gui_rb_mode() {   # rb_mode=full|sample: the title says "אומתו" only for a check that read every chunk
+    case "$(json_get "$RUN_DIR/response.json" ".readback_mode" 2>/dev/null)" in full) echo 'rb_mode=full' ;; *) echo 'rb_mode=sample' ;; esac
+}
+
+gui_rb_print() {   # $1 = the record's key, $2 = dev: <key>=dev|done|total|verdict|rate (done/total empty = no bar)
+    printf '%s=%s|%s|%s|%s\n' "$1" "$2" "${_cg_rbp:-|}" "$_cg_rbv" "$_cg_rbr"
+}
+
 cloner_gui_state() {
     # Written by the kiosk process. The per-drawer files are the local source
     # of truth (progress.sh), so the screen keeps updating even when a server
@@ -79,6 +117,7 @@ cloner_gui_state() {
     printf 'cloner=%s\n' "$(printf '%s' "$_cg_name" | tr '\r\n|' '   ')" >> "$_cg_next" || return 1   # #1635: one record, as guistate.sh
     [ -s "$RUN_DIR/server-restarted-wave" ] && printf 'server_restarted_wave=1\n' >> "$_cg_next"
     gui_header_state "$RUN_DIR/response.json" >> "$_cg_next" || return 1
+    gui_rb_mode >> "$_cg_next" || return 1   # #2046
     _cg_count=$(json_get "$RUN_DIR/response.json" ".drawer_count")
     case "$_cg_count" in [1-8]) printf 'drawer_count=%s\n' "$_cg_count" >> "$_cg_next" || return 1 ;; esac
     # #1304: the standby screen's connection line. A hello.state the reader
@@ -111,6 +150,7 @@ cloner_gui_state() {
         # #410: fields 7-8 are rate (bytes/s) and ETA (s); -1 = not measured. #1386: 11-12 = who
         # asked to cancel ("" = nobody) and when it was done (epoch; "" = not yet).
         cloner_gui_pace "$_cg_dev" "$_cg_state" "$_cg_bytes" "$_cg_total"
+        gui_rb_state "$_cg_dev" "$_cg_state" && _cg_rb=1 || _cg_rb=0   # #2046: after the write's pace -- a read-back's rate replaces it
         _cg_drv=''; [ ! -e "$_cg_dir/drivers.json" ] || _cg_drv=$(drivers_gui_fields "$_cg_dir/drivers.json") || return 1   # #1331: fields 13-17 (+18-20 for Linux)
         printf 'drawer=%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s%s\n' \
             "$_cg_port" "$_cg_dev" "$_cg_state" \
@@ -121,6 +161,7 @@ cloner_gui_state() {
         [ -z "$_cg_moved" ] || printf 'drawer_moved=%s|%s\n' "$_cg_dev" "$_cg_moved" >> "$_cg_next" || return 1   # #2055: the screen's age
         # #1907: done, not verified -- the server's check list did not come down (readback.sh): orange on the row
         [ "$(cat "$_cg_dir/readback_why" 2>/dev/null)" != list_not_fetched ] || printf 'drawer_rb=%s|list_not_fetched\n' "$_cg_dev" >> "$_cg_next" || return 1
+        [ "$_cg_rb" = 0 ] || gui_rb_print drawer_rbp "$_cg_dev" >> "$_cg_next" || return 1   # #2046: the read-back's bar and verdict
     done
 
     stream_beep_tick   # #2067: one stream sample across all writing drawers, in the background

@@ -36,7 +36,7 @@ from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.system import clockstep
 from server.net import pxe_log
 from server.agent import readbackhash
-from server.learn import eta as learn_eta, models as learn_models, ports as learn_ports
+from server.learn import eta as learn_eta, models as learn_models, ports as learn_ports, tuning as learn_tuning
 from server.storage import history as storage_history
 from server.agent import held# #2031
 from server.agent import timing as agent_timing   # #2056
@@ -1632,6 +1632,7 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
         members = store.members(wave["id"])
         drive_rates.record_wave(conn, wave["id"], members)      # ‏#447
         learn_models.record_wave(conn, wave["id"], members)     # ‏#2345: גם גל שנסגר מבחוץ
+        learn_tuning.record_wave(conn, wave["id"])              # ‏#2028: גל שנסגר מבחוץ נספר כניסיון
         total, written, skipped, cancelled = _tally(conn, round_row, members)
         slots_raw, closed = _close_no_disk(conn, round_row, members)   # #2201
         no_disk += len(closed)
@@ -1785,6 +1786,8 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
     learn_ports.record_wave(conn, round_row["wave_session_id"], members)
     # ‏#1845: ה-MB/s של בדיקת הכתיבה לכל דיסק — הבסיס של "איטי מהרגיל לדגם".
     learn_models.record_wave(conn, round_row["wave_session_id"], members)
+    # ‏#2028: סבב למידה פתוח — הגל נספר, ואחרי השני מותאמות ההגדרות. לעולם אינו זורק.
+    learn_tuning.record_wave(conn, round_row["wave_session_id"])
     total, written, skipped, cancelled = _tally(conn, round_row, members)
     slots_raw, closed = _close_no_disk(conn, round_row, members)   # #2201
     no_disk = _no_disk_count(round_row) + len(closed)

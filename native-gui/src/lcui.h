@@ -102,6 +102,9 @@ typedef struct {
      * boots without them, #856) the LED. "" = the step did not run. */
     char drv[460]; int drv_tone;
     char used[96];               /* #2030: "תפוס עכשיו: 120 GB" / "נכתב: 85 GB" / "...: לא נמדד"; "" = no line */
+    /* #2046 (mockup 11): the check after the write -- the bar stays blue and whole (the write is done), the green
+     * is how much of the disk was read back, filling from the start side; a red tick where a check stopped */
+    int rb, rb_mark; double rb_share;
 } LcBay;
 /* DRV_LGREY / DRV_LWARN (#1331 T8): the Linux initramfs line -- kept apart from
  * the Windows tones so the screens'' "N placed / N without" summaries never count it */
@@ -109,6 +112,12 @@ enum { DRV_NONE, DRV_OK, DRV_MUTED, DRV_WARN, DRV_BAD, DRV_LGREY, DRV_LWARN };
 #define LC_BAY_H 86
 #define LC_BAY_DRV_H 104             /* the row with its drivers line (mockup v2: 86 + 18) */
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g);
+/* #2046: a row of a disk being checked (verifying) or whose check stopped (failed, with a bar): the green over
+ * the blue, the percent of the CHECK, and for a failure the tick; same_as = "לאימג'" / "למקור" for "אומת". */
+void lc_bay_readback(LcBay *y, const RbBar *r, const char *same_as, const char *why);
+/* the check across a screen's rows -- the title ("X מתוך Y"), the big number (mean of the bars), the speed (sum) */
+typedef struct { int n, verifying, done, failed, sampled, bars, vbars; double sum; long long rate; } RbSum;   /* vbars: verifying rows that have a bar */
+void rb_sum_add(RbSum *s, const RbBar *r, const char *state);
 /* #1331: the words and the tone of a drawer's drivers outcome (drivers.state,
  * its detail, drivers.boot state / service / error) -- the same on the
  * cloner and the build screen; a done row also takes its pill. */

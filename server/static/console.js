@@ -4447,7 +4447,7 @@ function machineRowHtml(m) {
     esc(ROLE_SHORT_HE[role] || role),
     g ? esc(g.label) : `<span class="muted">—</span>`,
     net && net.ip ? ltr(net.ip) : `<span class="muted">—</span>`,
-    disksCell(m), bootPreviewCell(m), machinePill(m) + (m.fw_changes > 0 ? ` ${UI.pill("warn", "קושחה השתנתה")}` : ""), UI.rowMenu(name, items)] };
+    disksCell(m), bootPreviewCell(m), machinePill(m) + (m.fw_changes > 0 ? ` ${UI.pill("warn", "קושחה השתנתה")}` : "") + (typeof learningRowPill === "function" ? learningRowPill(m) : ""), UI.rowMenu(name, items)] };
 }
 function machinesTableHtml() {
   if (!(MACHINES || []).length) {
@@ -5601,7 +5601,8 @@ function machineDrawerHtml(m) {
     : `<button class="btn primary" onclick="monitorMachine('${macEnc}')">פתח במוניטור</button>`;
   const actions = `<div class="acts">${admin ? `<button class="btn" onclick="renameMachine('${macEnc}')">שינוי שם</button>` : ""}${monBtn}</div>`;
   const foot = admin ? `<div style="border-top:1px solid var(--hair);padding-top:12px;display:flex;gap:6px"><button class="btn sm danger" onclick="removeMachine('${macEnc}')">הסרה מהרישום…</button></div>` : "";
-  return `<div class="page drw"><div class="obj-sub">${sub}${chips}</div>${actions}${red}${machineCaptureWarningHtml(m.mac)}${machineRestoreWarningHtml(m.mac)}${bootCardHtml(m)}`
+  const offer = typeof learningOfferHtml === "function" ? learningOfferHtml(m) : "";   // #2028
+  return `<div class="page drw"><div class="obj-sub">${sub}${chips}</div>${actions}${offer}${red}${machineCaptureWarningHtml(m.mac)}${machineRestoreWarningHtml(m.mac)}${bootCardHtml(m)}`
     + `<div><div class="sec">מצב עכשיו</div>${now}${power}${block ? `<div class="cap mon-why">מוניטור: ${esc(block)}</div>` : ""}</div>`
     + grp("זיהוי ורשת", ident)
     + (station || (fw && fw.current) ? grp(firmwareTitle(fw), firmwareSectionHtml(m, fw)) : "")   // ‏#2080: מעל "חומרה", במקום שורת "קושחה"
@@ -5894,13 +5895,58 @@ function smapBuild(m) {
   });
   return { rows, proposal: !!src.proposal };
 }
+/* ‏#2028 (מוקאפ 2028, חלק 4): המלצת החיווט — מידע בלבד. לא נוגעת ב-SMAP.rows: מיפוי משתנה רק כשמנהל שומר.
+   עד שהתשובה מגיעה ‏wiring הוא null; תשובה שנכשלה נשארת גלויה ("לא נקרא"), לא "הכול תקין" (עיקרון 5). */
+function smapLoadWiring(m) {
+  const mac = m.mac;
+  api(`/machines/${encodeId(mac)}/wiring`).then((w) => w, (e) => ({ error: e.message })).then((w) => {
+    if (SMAP && SMAP.mac === mac) { SMAP.wiring = w; smapAddWireRows(w); smapDraw(); }
+  });
+}
+/* חיבור שהדגם מכיר והמחשב הזה לא מציג (ריק, מעל הפורט הגבוה): שורה כבויה, כדי שאפשר יהיה לראות את
+   ההמלצה עליו. היא נכנסת גם לבסיס: היא אינה שינוי של מנהל, ושמירה שולחת רק שורות פעילות. */
+function smapAddWireRows(w) {
+  const base = JSON.parse(SMAP.base);
+  Object.keys(w.ports || {}).map((p) => `sata:${p}`).filter((key) => !SMAP.rows.some((r) => r.key === key)).forEach((key) => {
+    SMAP.rows.push({ key, disk: null, optical: null, on: false, name: "", manual: false, wire: true });
+    base.push([key, false, ""]);
+  });
+  SMAP.rows.sort((x, y) => smapCmp(x.key, y.key));
+  SMAP.base = JSON.stringify(base);
+}
+function smapWire(r) {
+  const s = /^sata:(\d+)$/.exec(r.key), ports = SMAP.wiring && SMAP.wiring.ports;
+  return s && ports ? ports[s[1]] || null : null;
+}
+function smapWireCells(r) {
+  const na = `<span class="na">${SMAP.wiring && SMAP.wiring.error ? "לא נקרא" : "לא נמדד"}</span>`;
+  if (!SMAP.wiring) return `<td class="wire"><span class="na">…</span></td><td class="wire"><span class="na">…</span></td><td class="wire"></td>`;
+  const w = smapWire(r);
+  if (!w) return `<td class="wire">${na}</td><td class="wire">${na}</td><td class="wire"></td>`;
+  const gbps = (v) => `<bdi dir="ltr">${esc(v)} Gb/s</bdi>`;
+  const link = w.link_gbps != null ? `<span class="mono">${gbps(w.link_gbps)}</span>${w.slow_for_model ? `<span class="sub">איטי מהמקובל בדגם</span>` : ""}`
+    : w.model_link_gbps != null ? `${na}<span class="sub">בדגם: ${gbps(w.model_link_gbps)}</span>` : na;
+  const crc = w.crc != null ? `<span class="mono">${esc(w.crc)}</span>${w.crc_waves ? `<span class="sub">עלה ב-${w.crc_waves === 1 ? "סבב אחד" : `${esc(w.crc_waves)} סבבים`}</span>` : ""}` : na;
+  const chip = w.advice === "avoid" ? `<span class="n-chip w">חשוד: לא לחבר</span>`
+    : w.advice === "use" ? `<span class="n-chip">${w.instead_of != null ? `מומלץ: במקום ${esc(smapConnName(`sata:${w.instead_of}`, []))}` : "מומלץ"}</span>` : "";
+  return `<td class="wire">${link}</td><td class="wire">${crc}</td><td class="wire">${chip}</td>`;
+}
+function smapRecoHtml() {
+  const w = SMAP.wiring;
+  if (!w) return "";
+  if (w.error) return `<div class="smap-note warn"><b>נתוני החיווט לא נקראו:</b> ${esc(w.error)}. זה לא אומר שהחיבורים תקינים.</div>`;
+  const moves = (w.move_notes_he || []).map((t) => `<div class="smap-note warn"><b>${esc(t)}</b> אחרי ההעברה העמודה "מחובר עכשיו" תתעדכן בחיבור הבא של המחשב. את המיפוי משנים כאן ושומרים.</div>`).join("");
+  if (w.text_he) return `<div class="smap-reco"><span aria-hidden="true">✓</span><span><b>${esc(w.head_he)}</b> ${esc(w.text_he)}</span></div>${moves}`;
+  return `<div class="smap-note">אין מספיק נתונים לדגם: ${esc(w.machines)} מחשבים, ${esc(w.waves)} שיכפולים. המלצה מ-${esc(w.required_machines)} מחשבים ו-${esc(w.required_waves)} שיכפולים.</div>${moves}`;
+}
 function openSlotMap(macEnc) {
   let mac = macEnc; try { mac = decodeURIComponent(macEnc); } catch (e) {}
   const m = findMachine(mac); if (!m || !isAdmin()) return;
   const built = smapBuild(m);
   SMAP = { mac: m.mac, scope: m.slot_model && m.slot_map_source !== "machine" ? "model" : "machine",
     rows: built.rows, base: JSON.stringify(built.rows.map((r) => [r.key, r.on, r.name])), proposal: built.proposal,
-    add: null, err: null, note: "" };
+    add: null, err: null, note: "", wiring: null };
+  smapLoadWiring(m);
   const when = m.disks_reported_at ? ` · דיווח אחרון ${seenAgo(m.disks_reported_at)}` : "";
   openModalContent("מיפוי חיבורים", `<div class="smap" id="smap"></div>`, "שמירה", () => smapSave(), false,
     /* כל חלק מבודד (FSI…PDI): שם דגם ו-MAC לטיניים לא הופכים את סדר השורה */
@@ -5918,7 +5964,7 @@ function smapMachine() { return SMAP ? findMachine(SMAP.mac) : null; }
    (‏sata:k = ‏ataK = "SATA k-1" = דיסק k), ו-NVMe אחרי ה-SATA הגבוה בטבלה. מיפוי שנשמר או נערך — לפי הסדר (הכרעה 1). */
 function smapNumbers() {
   if (SMAP.proposal && !smapDirty()) {
-    const top = Math.max(0, ...SMAP.rows.map((r) => Number((/^sata:(\d+)$/.exec(r.key) || [])[1] || 0)));
+    const top = Math.max(0, ...SMAP.rows.filter((r) => !r.wire).map((r) => Number((/^sata:(\d+)$/.exec(r.key) || [])[1] || 0)));
     let nv = 0;
     return SMAP.rows.map((r) => { const k = /^sata:(\d+)$/.exec(r.key); if (!k) nv += 1; return r.on ? (k ? Number(k[1]) : top + nv) : null; });
   }
@@ -5958,7 +6004,7 @@ function smapDraw() {
   const rows = SMAP.rows.map((r, i) => {
     const pci = /^nvme:/.test(r.key) ? `<span class="pci mono">${esc(r.key.slice(5).replace(/^0000:/, ""))}</span>` : "";
     const head = `<td class="conn"><b>${esc(conn(i))}</b>${pci}</td>`;
-    if (r.optical) return `<tr class="off">${head}<td class="now"><span class="model">כונן CD/DVD · <bdi>${esc(r.optical.model || "")}</bdi></span></td><td class="name"><span class="na">לא דיסק — לא יעד ולא מקור</span></td><td><span class="n-sw smap-sw na-sw" aria-hidden="true"><span class="track"></span></span></td></tr>`;   // לא מתג: אין מה להדליק
+    if (r.optical) return `<tr class="off">${head}<td class="now"><span class="model">כונן CD/DVD · <bdi>${esc(r.optical.model || "")}</bdi></span></td><td class="wire"></td><td class="wire"></td><td class="wire"></td><td class="name"><span class="na">לא דיסק — לא יעד ולא מקור</span></td><td><span class="n-sw smap-sw na-sw" aria-hidden="true"><span class="track"></span></span></td></tr>`;   // לא מתג: אין מה להדליק
     const d = r.disk;
     const now = d ? `<span class="model">${esc(d.model || "—")}</span> · <span class="sz">${ltr(marketedDiskSize(d.size_bytes))}</span>`
       : `<span class="vac">${m.disks == null ? "לא דווח" : "ריק"}</span>${r.manual ? `<span class="tag">נוסף ידנית · לא נמצא במחשב</span>` : ""}`;
@@ -5966,11 +6012,12 @@ function smapDraw() {
     const name = !r.on ? `<span class="na">לא בשימוש</span>`
       : `<input class="n-in smap-in${bad ? " bad" : ""}" type="text" maxlength="24" value="${esc(r.name)}" placeholder="דיסק ${nums[i]}" aria-label="השם של ${esc(conn(i))}"${bad ? ` aria-invalid="true" aria-describedby="smap-e${i}"` : ""} oninput="smapName(${i},this.value)">`
         + (bad ? `<div class="ferr" id="smap-e${i}">השם כבר בשימוש ב-${esc(conn(dupes.get(i)))}</div>` : "");
-    return `<tr class="${r.on ? "" : "off"}${r.manual ? " new" : ""}" data-key="${esc(r.key)}">${head}<td class="now">${now}</td><td class="name">${name}</td><td><label class="n-sw smap-sw"><input type="checkbox" role="switch"${r.on ? " checked" : ""} aria-label="${esc(conn(i))} פעיל" onchange="smapToggle(${i})"><span class="track"></span></label></td></tr>`;
+    const wire = smapWire(r), advice = wire && wire.advice ? ` ${wire.advice}` : "";   // #2028
+    return `<tr class="${r.on ? "" : "off"}${r.manual ? " new" : ""}${advice}" data-key="${esc(r.key)}">${head}<td class="now">${now}</td>${smapWireCells(r)}<td class="name">${name}</td><td><label class="n-sw smap-sw"><input type="checkbox" role="switch"${r.on ? " checked" : ""} aria-label="${esc(conn(i))} פעיל" onchange="smapToggle(${i})"><span class="track"></span></label></td></tr>`;
   }).join("");
-  const addRow = SMAP.add ? "" : `<tr class="addrow"><td colspan="4"><button type="button" class="link" onclick="smapAddOpen()">+ הוסף חיבור</button><span class="na">לחיבור שהמחשב לא מציג</span></td></tr>`;
-  el.innerHTML = scope + note
-    + `<table class="smap-t"><thead><tr><th>חיבור</th><th>מחובר עכשיו</th><th>שם</th><th>פעיל</th></tr></thead><tbody>${rows}${addRow}</tbody></table>`
+  const addRow = SMAP.add ? "" : `<tr class="addrow"><td colspan="7"><button type="button" class="link" onclick="smapAddOpen()">+ הוסף חיבור</button><span class="na">לחיבור שהמחשב לא מציג</span></td></tr>`;
+  el.innerHTML = scope + note + smapRecoHtml()
+    + `<table class="smap-t"><thead><tr><th>חיבור</th><th>מחובר עכשיו</th><th>קישור</th><th>CRC</th><th>המלצה</th><th>שם</th><th>פעיל</th></tr></thead><tbody>${rows}${addRow}</tbody></table>`
     + (SMAP.add ? smapAddHtml() : "")
     + `<p class="smap-help">פעיל = דיסק שמופיע בסבב, כמקור או כיעד. השם הוא מה שרואים בכל המסכים — "דיסק 1", "מגירה עליונה". בלי שם: "דיסק N" לפי הסדר כאן.</p>`;
   smapFoot();
@@ -7881,6 +7928,9 @@ const SETTING_ROWS = [
     sheetNote: "הערך עובר לכל משכפל בהתחברות הבאה שלו ובתחילת כל סבב. משכפל שלא אישר את הערך עובד עם 3 דקות, ומוצג כאן כ\"לא הוחל\"." },
   // ‏#1303 (נדב 12/10): הקצב הנלמד של המולטיקאסט (‏drive_rates); ‏"false" בלבד מכבה — חסר = אוטומטי.
   { key: "learned_rate_enabled", card: "deploy", label: "קצב שידור אוטומטי לפי הכוננים בחדר", more: "כבוי = תמיד התקרה הקבועה (IMAGESRV_MAX_BITRATE). השינוי חל מהגל הבא", type: "switch", defaultOn: true },
+  // ‏#2028 (נדב 23/10, מוקאפ 2028): למידה מ-2 השיכפולים הבאים, כבוי כברירת מחדל. ‏sub — המצב עכשיו (learning.js).
+  { key: "learning_enabled", card: "deploy", label: "למידה אוטומטית של הרשת והמחשבים", type: "switch",
+    get sub() { return typeof learningRowSub === "function" ? learningRowSub() : ""; } },
   // ‏#1354 (נדב 13/10): יעד שיישארו בו פחות מזה במחיצת המערכת — "לא נכנס". הסוכן מקבל ב-hello.
   { key: "min_free_gb", card: "deploy", label: "מקום פנוי מינימלי אחרי שחזור", type: "number", min: 0, max: 500, unit: "GB", more: "יעד שיישאר עם פחות מזה יוצג כ'לא נכנס'" },
   // ‏#1366 (נדב 13/10): מגירה שמונה ה-CRC שלה מעל זה — כתומה: "כבל או מגירה חשודים". 0 = כבוי, ברירת המחדל. הסוכן מקבל ב-hello.
@@ -7937,10 +7987,12 @@ const SETTING_ROWS = [
   { key: "update_enabled", card: "update", label: "עדכון גרסה מהקונסולה", more: "כבוי כברירת מחדל; החיבור היוצא לריפו הציבורי נפתח רק בזמן בדיקה/עדכון", type: "switch" },
   { key: "last_check", card: "update", label: "בדיקה אחרונה", type: "lastcheck" },
   { key: "auto_reboot", card: "update", label: "הפעלה מחדש אוטומטית", type: "reboot", more: "כבוי / כל יום / פעם בשבוע; בזמן עבודה ההפעלה נדחית" },
-  // ‏#1895/#1956 (נדב 22/10): לאן המסד מגובה כל שעה (נשמר 30 יום) — תיקייה / SMB / NFS. לא נבחר = כתום בבריאות;
-  // השרת כותב וקורא בחזרה קובץ בדיקה לפני שהוא שומר (‏POST /backup-target).
+  // ‏#1895/#1956 (נדב 06/11): המסד מגובה ביום בשעה שנבחרה ובכל שינוי אימג', אל כונן השרת או תיקייה מעוגנת.
+  // ‏SMB/NFS הם לאחסון האימג'ים. השרת כותב וקורא בחזרה קובץ בדיקה לפני שהוא שומר (‏POST /backup-target).
   { key: "backup_target", card: "update", label: "יעד גיבוי המסד", type: "backuptarget",
-    more: "תיקייה בדיסק אחר, שיתוף SMB או NFS. המסד מגובה אליו כל שעה, וגיבויים נשמרים 30 יום. גיבוי שעבר עליו יותר משעתיים מסומן 'ישן' בבריאות" },
+    more: "כונן השרת, או תיקייה מעוגנת על כונן אחר. גיבוי שעבר עליו יותר מיום מסומן 'ישן' בבריאות" },
+  { key: "backup_policy", card: "update", label: "מדיניות גיבוי המסד", type: "backuppolicy",
+    more: "פעם ביום בשעה שנבחרה, ובנוסף מיד בכל העלאה ובכל מחיקה של אימג'. אם רץ סבב, הגיבוי מחכה לסיומו. כשהמקום השמור מתמלא נמחק הגיבוי הישן ביותר, ואימג'ים לא נמחקים" },
   { key: "backup", card: "update", label: "גיבוי הגדרות", type: "backup", more: "קובץ עם הגדרות השרת, לשחזור אחרי התקנה מחדש" },
 ];
 function settingRow(key) { return SETTING_ROWS.find((r) => r.key === key); }
@@ -8031,6 +8083,7 @@ function idleMinutesSheet() {
 }
 
 function settingDd(r) {
+  if (r.key === "learning_enabled" && typeof learningRowHtml === "function") return learningRowHtml(r);   // #2028
   if (r.type === "switch") return settingSwitchHtml(r);
   if (r.type === "idleswitch")
     return `<label class="msw solo" id="srow-idle"><input type="checkbox" role="switch" aria-label="${esc(r.label)}"${idleSecondsNow() > 0 ? " checked" : ""} onchange="idleSwitch(this)"><span class="track"></span></label>`;
@@ -8058,11 +8111,13 @@ function settingDd(r) {
   if (r.type === "backup") return ghostBtn("הורדה…", "confirmSettingsBackup()");
   if (r.type === "usbclone") return usbCloneRowHtml();   // #1914
   if (r.type === "backuptarget") return backupTargetRowHtml();   // #1956
-  const v = settingCurrent(r.key);
-  return `<span class="sv">${r.type === "number" ? settingNumberText(r, v) : (v ? esc(v) : `<span class="muted">לא נקבע</span>`)}</span> ${ghostBtn("שינוי…", `settingsValueSheet('${r.key}')`)}`;
+  if (r.type === "backuppolicy") return backupPolicyRowHtml();   // #1956
+  const v = settingCurrent(r.key), learned = typeof learningChip === "function" ? learningChip(r.key) : "";   // #2028
+  return `<span class="sv">${r.type === "number" ? settingNumberText(r, v) : (v ? esc(v) : `<span class="muted">לא נקבע</span>`)}${learned}</span> ${ghostBtn("שינוי…", `settingsValueSheet('${r.key}')`)}`;
 }
 function settingRowVisible(r) {
   if (r.key === "class_deploy_enabled") return classroomsOn();
+  if (r.key === "learning_enabled") return !SERVER_CTX;   // #2028: כל שרת לומד לבד, מהקונסולה שלו
   if (r.type === "idleminutes") return idleSecondsNow() > 0;   // "אחרי N דקות" — רק כשהניתוק פעיל
   // ‏"בדיקה אחרונה" רק כשהמתג דלוק — בלעדיו השרת אינו בודק (404).
   if (r.type === "lastcheck") return !!(HEALTH_UPDATE && HEALTH_UPDATE.enabled);
@@ -8083,6 +8138,7 @@ function settingsSwitch(key, input) {
     await post("/settings", { [key]: want ? "true" : "false" });
     toast(`${r.label}: ${want ? "דלוק" : "כבוי"} — נשמר ונרשם ביומן`);
     await loadSettingsData();
+    if (key === "learning_enabled" && want && typeof openLearning === "function") openLearning();   // #2028
   };
   if (r.confirmOff && !want) {
     input.checked = true;
@@ -8138,60 +8194,67 @@ function settingsValueSheet(key) {
       await loadSettingsData();
     } });
 }
-/* ‏#1956: יעד גיבוי המסד — תיקייה / SMB / NFS. השורה: מה נבחר, ובכתום כשלא נבחר, כשהתיקייה על דיסק המסד, או כשלא
-   נבדק אם היא על דיסק אחר. "לא הגיע מהשרת" ≠ "לא נבחר" (עיקרון 5). הסיסמה לא חוזרת מהשרת לעולם. */
+/* ‏#1956: יעד גיבוי המסד — כונן השרת או תיקייה מעוגנת. השורה: מה נבחר, ובכתום כשזה כונן המסד, כשלא נבדק אם התיקייה
+   על כונן אחר, או כשנשאר יעד SMB/NFS ישן. "לא הגיע מהשרת" ≠ "כונן השרת" (עיקרון 5). */
 function backupTargetRowHtml() {
   const t = SETTINGS && SETTINGS.backup_target;
   if (!t || !t.type) return settingUnreadHtml("יעד הגיבוי לא הגיע מהשרת");
-  if (t.type === "none") return `${UI.pill("warn", "לא נבחר — המסד אינו מגובה")} ${ghostBtn("בחירה…", "backupTargetSheet()")}`;
-  const kind = { local: "תיקייה", smb: "SMB", nfs: "NFS" }[t.type] || t.type;
-  const warn = t.type !== "local" ? "" : t.same_disk === true ? ` ${UI.pill("warn", "אותו דיסק — לא מגן מתקלת דיסק")}`
-    : t.same_disk == null ? ` ${UI.pill("warn", "לא נבדק אם על דיסק אחר")}` : "";
-  return `<span class="sv">${esc(kind)} · <bdi dir="ltr">${esc(t.display || t.dest)}</bdi></span>${warn} ${ghostBtn("שינוי…", "backupTargetSheet()")}`;
+  const legacy = t.legacy ? ` ${UI.pill("warn", `יעד ${t.legacy.label} הוסר — הגיבויים הישנים נשארו ב-${t.legacy.display}`)}` : "";
+  const warn = t.same_disk === true ? ` ${UI.pill("warn", "אותו כונן, לא מגן מתקלת כונן")}`
+    : t.same_disk == null ? ` ${UI.pill("warn", "לא נבדק אם על כונן אחר")}` : "";
+  const place = t.type === "default" ? esc(t.label) : `${esc(t.label)} · <bdi dir="ltr">${esc(t.display || t.dest)}</bdi>`;
+  return `<span class="sv">${place}</span>${warn}${legacy} ${ghostBtn("שינוי…", "backupTargetSheet()")}`;
 }
-/* גוף הבקשה מערכי החלון: השדות של הסוג בלבד; הכול trim חוץ מהסיסמה. */
+/* גוף הבקשה: הנתיב רק בתיקייה. */
 function backupTargetBody(kind, v) {
-  const keys = { local: ["path"], smb: ["server", "share", "username", "secret", "domain"], nfs: ["server", "export", "version"] }[kind] || [];
-  const params = {};
-  keys.forEach((k) => { const raw = v[k] == null ? "" : String(v[k]); params[k] = k === "secret" ? raw : raw.trim(); });
-  return { type: kind, params };
+  return { type: kind, params: kind === "local" ? { path: String(v.path == null ? "" : v.path).trim() } : {} };
 }
 async function backupTargetSave(kind, v) {
   const r = await post("/backup-target", backupTargetBody(kind, v));
   const warn = r.warnings && r.warnings.length ? r.warnings.join(" · ") + " — " : "";
-  toast(warn + (kind === "none" ? "היעד בוטל — נרשם ביומן" : "קובץ הבדיקה נכתב ונקרא בחזרה — נשמר ונרשם ביומן"));
+  toast(warn + "קובץ הבדיקה נכתב ונקרא בחזרה — נשמר ונרשם ביומן");
   await loadSettingsData();
 }
 function backupTargetSheet() {
   if (!isAdmin()) return;
-  const t = (SETTINGS && SETTINGS.backup_target) || { type: "none" };
+  const t = (SETTINGS && SETTINGS.backup_target) || { type: "default" };
   const options = [
-    { value: "local", label: "תיקייה בשרת", hint: "דיסק שני או USB מעוגן. על דיסק המסד — אזהרה: לא מגן מתקלת דיסק" },
-    { value: "smb", label: "שיתוף SMB", hint: "שיתוף Windows או NAS, עם משתמש וסיסמה" },
-    { value: "nfs", label: "NFS", hint: "ייצוא NFS מ-NAS" }];
-  if (t.type !== "none") options.push({ value: "none", label: "ביטול היעד", hint: "המסד לא יגובה, והבריאות תהיה כתומה" });
-  sheet({ title: "יעד גיבוי המסד", sub: "המסד מגובה כל שעה, וגיבויים נשמרים 30 יום. בשמירה השרת כותב קובץ בדיקה ליעד וקורא אותו בחזרה",
-    fields: [{ id: "kind", label: "לאן לגבות", type: "radio", value: t.type === "none" ? "local" : t.type, options }],
+    { value: "default", label: "כונן השרת", hint: "ברירת המחדל. אותו כונן, לא מגן מתקלת כונן" },
+    { value: "local", label: "תיקייה מעוגנת", hint: "כונן נוסף או USB מעוגן. על כונן המסד — אותה אזהרה" }];
+  sheet({ title: "יעד גיבוי המסד", sub: "אחסון הרשת (SMB, iSCSI) משמש רק לאימג'ים. בשמירה השרת כותב קובץ בדיקה ליעד וקורא אותו בחזרה",
+    fields: [{ id: "kind", label: "לאן לגבות", type: "radio", value: t.type, options }],
     submitLabel: "המשך",
     onSubmit: async (v) => {
-      if (v.kind === "none") { await backupTargetSave("none", {}); return undefined; }
-      return () => backupTargetDetailsSheet(v.kind, t.type === v.kind ? t : {});
+      if (v.kind === "default") { await backupTargetSave("default", {}); return undefined; }
+      return () => backupTargetFolderSheet(t);
     } });
 }
-function backupTargetDetailsSheet(kind, t) {
-  const fields = {
-    local: [{ id: "path", label: "נתיב התיקייה", value: t.dest || "", placeholder: "/mnt/backup", dir: "ltr", help: "תיקייה קיימת על דיסק מעוגן; לא שורש מערכת הקבצים" }],
-    smb: [{ id: "server", label: "שרת (IP או שם)", value: t.server || "", dir: "ltr" },
-      { id: "share", label: "שם השיתוף", value: t.share || "", dir: "ltr" },
-      { id: "username", label: "משתמש", value: t.username || "", dir: "ltr" },
-      { id: "secret", label: "סיסמה", type: "password", policy: false, autocomplete: "new-password" },
-      { id: "domain", label: "דומיין (לא חובה)", value: t.domain || "", dir: "ltr" }],
-    nfs: [{ id: "server", label: "שרת (IP או שם)", value: t.server || "", dir: "ltr" },
-      { id: "export", label: "נתיב הייצוא", value: t.export || "", placeholder: "/pool/backup", dir: "ltr" },
-      { id: "version", label: "גרסת NFS", value: t.version || "4.1", dir: "ltr" }] }[kind];
-  const title = { local: "תיקייה בשרת", smb: "שיתוף SMB", nfs: "NFS" }[kind];
-  sheet({ title: `יעד גיבוי המסד — ${title}`, sub: "השרת יעגן את היעד, יכתוב אליו קובץ בדיקה ויקרא אותו בחזרה. יעד שלא עובר — לא נשמר",
-    fields, submitLabel: "בדיקה ושמירה", onSubmit: async (v) => { await backupTargetSave(kind, v); } });
+function backupTargetFolderSheet(t) {
+  sheet({ title: "יעד גיבוי המסד — תיקייה מעוגנת", sub: "השרת יכתוב אליה קובץ בדיקה ויקרא אותו בחזרה. תיקייה שלא עוברת — לא נשמרת",
+    fields: [{ id: "path", label: "נתיב התיקייה", value: t.dest || "", placeholder: "/mnt/backup", dir: "ltr", help: "תיקייה קיימת על כונן מעוגן; לא שורש מערכת הקבצים" }],
+    submitLabel: "בדיקה ושמירה", onSubmit: async (v) => { await backupTargetSave("local", v); } });
+}
+/* ‏#1956: השעה והמקום השמור. התקרה (20% מהכונן) נקבעת בשרת לפי כונן היעד; "לא נקראה" נאמר, לא מוסתר. */
+function backupPolicyRowHtml() {
+  const p = SETTINGS && SETTINGS.backup_policy;
+  if (!p || !p.time) return settingUnreadHtml("מדיניות הגיבוי לא הגיעה מהשרת");
+  return `<span class="sv">יומי ב-<bdi dir="ltr">${esc(p.time)}</bdi> ובכל שינוי אימג' · ${esc(p.reserve_gb)} GB שמורים</span> ${ghostBtn("שינוי…", "backupPolicySheet()")}`;
+}
+function backupPolicyHelp(p) {
+  const cap = p.cap_gb == null ? "גודל הכונן לא נקרא" : `עד ${p.cap_gb} GB`;
+  return `מינימום ${p.min_gb} GB. לא יותר מ-${p.cap_percent}% מהכונן (${cap}), כדי שיישאר מקום לאימג'ים`;
+}
+function backupPolicySheet() {
+  if (!isAdmin() || !SETTINGS || !SETTINGS.backup_policy) return;
+  const p = SETTINGS.backup_policy;
+  sheet({ title: "מדיניות גיבוי המסד", sub: "פעם ביום בשעה שנבחרה, ובנוסף מיד בכל העלאה ובכל מחיקה של אימג'",
+    fields: [{ id: "time", label: "שעת הגיבוי היומי", type: "time", value: p.time, help: "אם רץ סבב באותה שעה, הגיבוי מחכה לסיומו" },
+      { id: "reserve_gb", label: "מקום שמור (GB)", value: String(p.reserve_gb), dir: "ltr", help: backupPolicyHelp(p) }],
+    onSubmit: async (v) => {
+      await post("/backup-policy", { time: v.time, reserve_gb: String(v.reserve_gb == null ? "" : v.reserve_gb).trim() });
+      toast("נשמר — נרשם ביומן");
+      await loadSettingsData();
+    } });
 }
 /* ‏#1447: אזור הזמן — "לא נקרא" ≠ ערך (עיקרון 5); מערכת שמדווחת אזור אחר מההגדרה (שרת שהותקן ב-UTC
    ועוד לא עלה מחדש, או timedatectl שנכשל) — נאמר בשורה, לא מוסתר. */
@@ -8355,6 +8418,7 @@ async function loadSettingsData() {
   await loadHealthUpdate();   // קבוצת העדכונים
   await loadHostCfg();       // #153: תעודה
   await loadUsbClone();      // #1914: הדיסק-און-קי לשיכפול
+  if (typeof loadLearning === "function" && !SERVER_CTX) await loadLearning();   // #2028
   if (current === "settings") renderCurrent();
   if (settingsSecondariesAllowed()) loadSettingsSecondaries();   // הלשונית "שרתי משנה" — לא חוסמת את שאר העמוד
   if (typeof emailAlertsAllowed === "function" && emailAlertsAllowed()) loadEmailAlerts();   // ‏#1751 — גם היא לא חוסמת

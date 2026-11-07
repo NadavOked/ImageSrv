@@ -42,7 +42,9 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # removed before any release (Nadav 05/11: no exemption, a 15-minute lock)
                 10: "cda49192f1a686cf062355ae0c78a27066a3c623d03842873c1845f808bab24f",
                 # 11: journal.machine/round_id/class_id (#1296, 06/11)
-                11: "8b749052277b032873a241b39a3c21096f268af57f184fbb2d4f5d2c28ac644a"}
+                11: "8b749052277b032873a241b39a3c21096f268af57f184fbb2d4f5d2c28ac644a",
+                # 12: learning_runs/waves/changes/machines (#2028, 07/11)
+                12: "0eb4413b6d7acca2507afe380f3fb5a0dc6c1616280836364b247f4e7f44a409"}
 
 
 def _fingerprint(conn) -> str:
@@ -81,7 +83,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 11
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 12
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'model_slot_maps'").fetchone()
     assert "disk_serial" in [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
 
@@ -98,7 +100,7 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 11
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 12
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "held_at" in columns and "held_json" in columns
 
@@ -114,7 +116,7 @@ def test_a_database_on_7_gains_the_email_queue_and_is_stamped_8(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 11
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 12
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"email_queue", "email_queue_one_pending"} <= names
 
@@ -197,7 +199,7 @@ def test_a_database_on_8_gains_the_account_lockout_table_and_is_stamped_9(tmp_pa
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 11
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 12
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"login_account_failures", "idx_login_account_failures"} <= names
 
@@ -216,5 +218,5 @@ def test_a_database_on_9_gains_the_cap_surface_and_old_rows_are_the_console(tmp_
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 11
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 12
     assert conn.execute("SELECT surface FROM login_account_failures").fetchone()[0] == "console"

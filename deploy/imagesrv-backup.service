@@ -1,24 +1,30 @@
-# ImageSrv -- the hourly database backup (issue #1895, Nadav 22/10).
+# ImageSrv -- the database backup (issues #1895, #1956; Nadav 06/11).
 #
-# Driven by imagesrv-backup.timer. Reads the destination from the console
-# setting backup_dest (Settings -> "יעד גיבוי המסד"); none chosen = exits 0
-# and does nothing, and the health page says so in orange. Otherwise: a
-# consistent copy through sqlite3's backup API, written atomically to
-# <dest>/db/imagesrv-<ts>.db, read back (sha256 + integrity_check), copies
-# older than 30 days pruned, and /var/lib/imagesrv/last-backup.json written --
-# the health page reads it: "ישן" after two hours, red on a failure.
+# Driven by imagesrv-backup.timer, every minute. The job backs up when one is
+# due -- the daily hour (console setting backup_time), an image uploaded or
+# deleted, a destination not backed up to yet -- and otherwise exits 0 at once.
+# A round running waits: the next tick asks again, and no day is skipped.
 #
-# Not ProtectSystem=strict like imagesrv-server: the destination is another
-# disk or a mounted NAS, anywhere under /mnt, /media or /srv.
+# A backup: a consistent copy through sqlite3's backup API, written atomically
+# to <dest>/db/imagesrv-<ts>.db, read back (sha256 + integrity_check), the
+# oldest copies removed until the reserved space fits (never an image), and
+# /var/lib/imagesrv/last-backup.json written -- the health page reads it.
 #
-# An SMB/NFS destination (#1956) is the fstab line the console wrote; the job
-# runs `mount <point>` when it is not mounted and fails by name when it still
-# is not -- it never backs up into the empty folder a missing NAS leaves.
+# <dest> is /var/lib/imagesrv/backups unless a mounted folder was chosen. SMB
+# and NFS are not destinations any more; a server that had one backs up to
+# the server's drive and leaves the old share and its fstab line alone.
+#
+# Not ProtectSystem=strict like imagesrv-server: a chosen folder is another
+# disk, anywhere under /mnt, /media or /srv.
+#
+# The notice levels keep 1440 "Starting/Finished" lines a day out of the
+# journal: the job's own lines (a backup done, a failure) and a failed unit
+# are at notice or above, the manager's routine lines are at info.
 
 [Unit]
-Description=ImageSrv: back up the database to the chosen destination
+Description=ImageSrv: back up the database when a backup is due
 Documentation=https://github.com/NadavOked/ImageSrv/blob/main/docs/architecture/server.md
-After=local-fs.target remote-fs.target
+After=local-fs.target
 
 [Service]
 Type=oneshot
@@ -28,3 +34,5 @@ ProtectSystem=full
 NoNewPrivileges=yes
 Nice=10
 IOSchedulingClass=idle
+SyslogLevel=notice
+LogLevelMax=notice

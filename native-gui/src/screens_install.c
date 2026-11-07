@@ -4,8 +4,8 @@
 #include "screens_install.h"
 #include "install_raid.h"     /* #1989 */
 
-/* #2144 (Nadav 04/11): "שעון השרת" is a step of its own, after the name -- eight */
-static const char *STEP_NAMES[INSTALL_STEPS]={"דיסק","תפקיד השרת","כתובת השרת","שם השרת","שעון השרת","חשבון ניהול","החלה","סיום"};
+/* #2144 (Nadav 04/11): "שעון השרת" is a step of its own, after the name; #1956: "גיבוי" after it -- nine */
+static const char *STEP_NAMES[INSTALL_STEPS]={"דיסק","תפקיד השרת","כתובת השרת","שם השרת","שעון השרת","גיבוי","חשבון ניהול","החלה","סיום"};
 
 void install_text_r(cairo_t *cr,const Theme *t,const char *v,double px,int weight,double right,double y,double width,Rgb color){(void)t;Text x=text_make(cr,FONT_SANS,px,weight,v,(int)width,DIR_RTL);text_draw_r(cr,&x,right,y,color);text_free(&x);}
 void install_text_ltr(cairo_t *cr,const char *v,double px,int weight,double x,double y,double width,Rgb color){Text q=text_make(cr,FONT_MONO,px,weight,v,(int)width,DIR_LTR);text_draw(cr,&q,x,y,color);text_free(&q);}
@@ -55,8 +55,8 @@ InstallLayout install_frame(App *a,cairo_t *cr,double W,double H){const Theme *t
         install_text_r(cr,t,STEP_NAMES[i],14,active?600:400,l.rail.x+l.rail.w-70,y-9,l.rail.w-95,c);
         if(i<INSTALL_STEPS-1){cairo_rectangle(cr,l.rail.x+l.rail.w-46,y+17,2,31);draw_set_a(cr,done?t->success_ink:dim,.6);cairo_fill(cr);}
     }
-    const char *titles[]={"","בחירת דיסק להתקנה","תפקיד השרת במערכת","כתובת השרת","שם השרת","שעון השרת","חשבון הניהול","סיכום לפני החלה","סיום ההתקנה","מתקין את ImageSrv…","ההתקנה נכשלה"};
-    const char *subs[]={"","הדיסק שנבחר יימחק וישמש את שרת ImageSrv.","התפקיד נבחר בתפריט ההתקנה. אפשר לאשר או לשנות לפני ההחלה.","הכרטיס שדרכו מגיעים לקונסולה; רשת ההפצה מוגדרת אחר כך מהקונסולה","השם שיופיע בקונסולה, במסך השרת ובתעודת TLS.","מאיפה השרת מקבל את השעה. אפשר לשנות אחר כך בקונסולה.","המשתמש הראשון בקונסולה. משתמשים נוספים מוגדרים אחרי ההתקנה.","מה שיוחל על השרת. כל שורה ניתנת לשינוי.","הסר את מדיית ההתקנה והפעל מחדש.","אל תכבה את השרת בזמן ההתקנה.","מה נכשל כתוב למטה; הפלט המלא בפרטים הטכניים."};
+    const char *titles[]={"","בחירת דיסק להתקנה","תפקיד השרת במערכת","כתובת השרת","שם השרת","שעון השרת","גיבוי המסד","חשבון הניהול","סיכום לפני החלה","סיום ההתקנה","מתקין את ImageSrv…","ההתקנה נכשלה"};
+    const char *subs[]={"","הדיסק שנבחר יימחק וישמש את שרת ImageSrv.","התפקיד נבחר בתפריט ההתקנה. אפשר לאשר או לשנות לפני ההחלה.","הכרטיס שדרכו מגיעים לקונסולה; רשת ההפצה מוגדרת אחר כך מהקונסולה","השם שיופיע בקונסולה, במסך השרת ובתעודת TLS.","מאיפה השרת מקבל את השעה. אפשר לשנות אחר כך בקונסולה.","הגיבויים נשמרים על הכונן של השרת, במקום ששמור להם מראש. אחסון הרשת (SMB, iSCSI) משמש רק לאימג׳ים.","המשתמש הראשון בקונסולה. משתמשים נוספים מוגדרים אחרי ההתקנה.","מה שיוחל על השרת. כל שורה ניתנת לשינוי.","הסר את מדיית ההתקנה והפעל מחדש.","אל תכבה את השרת בזמן ההתקנה.","מה נכשל כתוב למטה; הפלט המלא בפרטים הטכניים."};
     install_text_r(cr,t,titles[a->install.view],26,600,l.right,28+top,l.body.w,t->ink);install_text_r(cr,t,subs[a->install.view],14,400,l.right,65+top,l.body.w,t->muted);if(a->install.error[0]&&a->install.view!=INSTALL_FAILED&&a->install.view!=INSTALL_PROGRESS)install_text_r(cr,t,a->install.error,11,600,l.right,87+top,l.body.w,t->danger_fg);
     cairo_rectangle(cr,0,l.footer.y,l.footer.w,1);draw_set(cr,t->hair);cairo_fill(cr);draw_fill_rrect(cr,l.footer,0,t->surface);return l;}
 
@@ -80,7 +80,7 @@ void install_footer(App *a,cairo_t *cr,InstallLayout l,const char *primary,int p
 static const char *install_keys(const InstallState *s){
     switch(s->view){
     case INSTALL_DISK:return install_raid_offered(s)?"↑↓  בחירת דיסק    ←→  RAID    רווח  אני מבין    Enter  הבא":"↑↓  בחירת דיסק    רווח  אני מבין    Enter  הבא";
-    case INSTALL_ROLE:case INSTALL_TIME:return "↑↓ / Tab  מעבר    Enter  הבא    Esc  חזור";   /* #2144: the role step's keys -- two options here too */
+    case INSTALL_ROLE:case INSTALL_TIME:case INSTALL_BACKUP:return "↑↓ / Tab  מעבר    Enter  הבא    Esc  חזור";   /* #2144: the role step's keys -- options here too */
     case INSTALL_NETWORK:return "↑↓ / Tab  מעבר    רווח  DHCP / סטטי    Enter  הבא    Esc  חזור";
     case INSTALL_HOSTNAME:case INSTALL_ADMIN:return "Tab / Shift-Tab  מעבר    Enter  הבא    Esc  חזור";
     case INSTALL_SUMMARY:return "Enter  החל התקנה    Esc  חזור";
@@ -95,16 +95,17 @@ static void install_keys_draw(App *a,cairo_t *cr,InstallLayout l){
     pango_layout_set_alignment(k.layout,PANGO_ALIGN_RIGHT);
     text_draw_r(cr,&k,right,l.footer.y+(l.footer.h-k.h)/2,a->theme->muted);text_free(&k);}
 
-void screen_install(App *a,cairo_t *cr,double W,double H){InstallLayout l=install_frame(a,cr,W,H);switch(a->install.view){case INSTALL_DISK:install_draw_disk(a,cr,l);break;case INSTALL_ROLE:install_draw_role(a,cr,l);break;case INSTALL_NETWORK:install_draw_network(a,cr,l);break;case INSTALL_HOSTNAME:case INSTALL_ADMIN:install_draw_forms(a,cr,l);break;case INSTALL_TIME:install_draw_time(a,cr,l);break;default:install_draw_final(a,cr,l);break;}install_keys_draw(a,cr,l);}
+void screen_install(App *a,cairo_t *cr,double W,double H){InstallLayout l=install_frame(a,cr,W,H);switch(a->install.view){case INSTALL_DISK:install_draw_disk(a,cr,l);break;case INSTALL_ROLE:install_draw_role(a,cr,l);break;case INSTALL_NETWORK:install_draw_network(a,cr,l);break;case INSTALL_HOSTNAME:case INSTALL_ADMIN:install_draw_forms(a,cr,l);break;case INSTALL_TIME:install_draw_time(a,cr,l);break;case INSTALL_BACKUP:install_draw_backup(a,cr,l);break;default:install_draw_final(a,cr,l);break;}install_keys_draw(a,cr,l);}
 
 /* #1310: the role step in its three states -- green (the demo), not yet
  * checked (next disabled), and a real failure with its reason. */
 static void role_variant(InstallState *s,const char *name){if(strstr(name,"-lab-unknown")){s->lab=INSTALL_LAB_UNCHECKED;return;}if(strstr(name,"-lab")){s->lab=INSTALL_LAB_YES;return;}   /* #1412: the strip, on the shortest and the longest steps */
     if(strstr(name,"-unchosen")){s->disk=-1;s->disk_ack=0;return;}   /* #2147: two disks, none chosen yet */
     if(strstr(name,"-time-org")){s->ntp_org=1;return;}   /* #2144: the mockup's five states */
+    if(strstr(name,"-backup-other")){s->backup_pick=INSTALL_BACKUP_OTHER;snprintf(s->backup_other,sizeof s->backup_other,"40");return;}   /* #1956 */
     if(strstr(name,"-done-unsynced")){s->clock=INSTALL_CLOCK_UNSYNCED;s->clock_offset[0]=0;return;}
     if(strstr(name,"-done-unchecked")){s->clock=INSTALL_CLOCK_UNCHECKED;s->clock_offset[0]=0;return;}
     if(strstr(name,"-unchecked")){s->primary_checked=s->primary_ok=0;}
     else if(strstr(name,"-failed")){s->primary_checked=1;s->primary_ok=0;snprintf(s->primary_error,sizeof s->primary_error,"אין תשובה מ-192.168.68.250 בפורט 8443 תוך 5 שניות (timeout): חומת אש חוסמת בשקט, או שהכתובת שגויה");}}
-int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE},{"install-0c-disk-lab",INSTALL_DISK},{"install-0d-disk-lab-unknown",INSTALL_DISK},{"install-4b-admin-lab",INSTALL_ADMIN},{"install-5d-summary-lab",INSTALL_SUMMARY}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
+int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-3d-backup",INSTALL_BACKUP},{"install-3e-backup-other",INSTALL_BACKUP},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE},{"install-0c-disk-lab",INSTALL_DISK},{"install-0d-disk-lab-unknown",INSTALL_DISK},{"install-4b-admin-lab",INSTALL_ADMIN},{"install-5d-summary-lab",INSTALL_SUMMARY}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
     for(size_t i=0;i<sizeof cards/sizeof cards[0];i++){for(int t=0;t<2;t++){install_demo(a,cards[i].view);role_variant(&a->install,cards[i].name);a->theme=themes[t];cairo_surface_t *sf=cairo_image_surface_create(CAIRO_FORMAT_RGB24,w,h);cairo_t *cr=cairo_create(sf);double s=ui_scale(h);a->scale=s;cairo_scale(cr,s,s);screen_install(a,cr,w/s,h/s);cairo_destroy(cr);   /* the scale app_draw uses */char path[512];snprintf(path,sizeof path,"%s-%s-%s.png",prefix,cards[i].name,themes[t]->id);cairo_status_t st=cairo_surface_write_to_png(sf,path);cairo_surface_destroy(sf);if(st!=CAIRO_STATUS_SUCCESS){fprintf(stderr,"native-gui: %s: %s\n",path,cairo_status_to_string(st));return 1;}}}return 0;}

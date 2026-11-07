@@ -30,9 +30,10 @@ from pathlib import Path
 #: את הסוד כמות שהוא (#2504). תבנית ולא רשימת שמות: עותק DB שיתווסף מחר ל-data_dir
 #: לא ייכנס לגיבוי בלי שאיש החליט על כך. ‏`tools/backup-server.sh` מדלג על אותה תבנית.
 #: ומה שאינו הגדרה (בדיקות אחסון זמניות; ‏`branding/` — לוגו מוסד שהועלה לפני
-#: שהיכולת הוסרה, #1302 — שארית שאיש אינו קורא).
+#: שהיכולת הוסרה, #1302 — שארית שאיש אינו קורא). ‏`backups/` (#1956) — תיקיית גיבויי המסד
+#: שעל כונן השרת: עותקי DB, ולכן לא בארכיון, מאותה סיבה כמו ``imagesrv.db*``.
 DB_PREFIX = "imagesrv.db"
-SKIP_DIRS = {"storage-test", "storage", "branding"}
+SKIP_DIRS = {"storage-test", "storage", "branding", "backups"}
 #: ‏#2424: ``server.console.auth.SECRET_KEY`` — חותם העוגיות, שאינו נכנס לשום גיבוי.
 SECRET_SETTING = "console_secret"
 BACKUP_WARNING = "מכיל סודות: סיסמאות מגובבות, סודות MFA, מפתח התעודה. לשמור כמו סיסמה."

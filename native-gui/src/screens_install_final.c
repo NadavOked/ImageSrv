@@ -43,7 +43,7 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
     /* #2129: the network row is two lines (a third when one wraps); the rows below move down by what it grew */
     char one[200],two[512];net_lines(s,one,sizeof one,two,sizeof two);
     Text m1=text_make(cr,FONT_SANS,13,500,one,(int)(w-282),DIR_RTL),m2=text_make(cr,FONT_SANS,13,500,two,(int)(w-282),DIR_RTL);double nh=fmax(48,12+m1.h+4+m2.h+10),dy=nh-48;
-    Rect card={x,y,w,338+dy};install_card(cr,t,card);
+    Rect card={x,y,w,386+dy};install_card(cr,t,card);
     InstallDisk *d=s->disk>=0&&s->disk<s->ndisks?&s->disks[s->disk]:NULL;
     if(s->raid!=RAID_NONE){char members[INSTALL_MAX_DISKS*48];install_raid_disks(s,members,sizeof members);snprintf(value,sizeof value,"%s · %d כוננים · %s",RAID_OPTS[s->raid].label,install_raid_count(s),members);}   /* #1989 */
     else{snprintf(value,sizeof value,"%s · %s",d&&d->model[0]?d->model:"—",d?d->path:"");}summary_row(a,cr,(Rect){x+1,y+1,w-2,48},"דיסק",value,0);
@@ -51,9 +51,10 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
     summary_row(a,cr,(Rect){x+1,y+97,w-2,nh},"כתובת השרת",one,2);text_draw_r(cr,&m2,x+w-181,y+97+12+m1.h+4,t->ink);text_free(&m1);text_free(&m2);
     snprintf(value,sizeof value,"%s · %s",s->hostname,s->timezone);summary_row(a,cr,(Rect){x+1,y+145+dy,w-2,48},"שם השרת",value,3);
     summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"שעון השרת",s->ntp_org?s->ntp_servers:"אוטומטי",4);   /* #2144: "שינוי" -> step 5 */
-    snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"משתמש הניהול",value,5);
-    summary_row(a,cr,(Rect){x+1,y+289+dy,w-2,48},"סיסמת root","נקבעה",5);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
-    console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+354+dy,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+354+dy,w-210,t->indigo);y+=388+dy;
+    char at[32],size[32],kept[48];bidi_isolate(s->backup_time,at,sizeof at);snprintf(size,sizeof size,"%s GB",install_backup_gb(s));bidi_isolate(size,kept,sizeof kept);snprintf(value,sizeof value,RLM "%s שמורים על כונן השרת · יומי ב-%s ובכל שינוי אימג׳",kept,at);summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"גיבוי המסד",value,5);   /* #1956: "שינוי" -> step 6 */
+    snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+289+dy,w-2,48},"משתמש הניהול",value,6);
+    summary_row(a,cr,(Rect){x+1,y+337+dy,w-2,48},"סיסמת root","נקבעה",6);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
+    console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+402+dy,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+402+dy,w-210,t->indigo);y+=436+dy;
     Rect seq={x,y,fmin(760,w),112};install_card(cr,t,seq);install_text_r(cr,t,"מה יקרה בלחיצה על \"החל התקנה\"",14,600,seq.x+seq.w-16,y+14,seq.w-32,t->ink);
     install_text_r(cr,t,"מחיקת הדיסק ← מערכת בסיס ← חבילות ImageSrv ← מנהל אתחול ← הגדרות",13,500,seq.x+seq.w-16,y+50,seq.w-32,t->ink);
     char after[192],secs[32];he_secs(INSTALL_AUTO_REBOOT_S,secs,sizeof secs);snprintf(after,sizeof after,"בסיום תתבקש להסיר את מדיית ההתקנה; השרת יופעל מחדש אוטומטית אחרי %s.",secs);install_text_r(cr,t,after,12,400,seq.x+seq.w-16,y+78,seq.w-32,t->muted);

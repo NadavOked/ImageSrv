@@ -94,7 +94,7 @@ def test_every_installer_screen_renders_with_visible_ink_at_both_target_sizes(tm
     binary = _build(tmp_path)
     names = ("install-0-disk", "install-0b-disk-unchosen", "install-1-role", "install-1b-role-unchecked", "install-1c-role-failed",
              "install-2-servers-net", "install-3-hostname", "install-3b-time", "install-3c-time-org",
-             "install-4-admin", "install-5-summary", "install-5c-progress",
+             "install-3d-backup", "install-3e-backup-other", "install-4-admin", "install-5-summary", "install-5c-progress",
              "install-5b-apply-failed", "install-6-done", "install-6b-done-unsynced",
              "install-6c-done-unchecked", "install-0c-disk-lab", "install-0d-disk-lab-unknown",
              "install-4b-admin-lab", "install-5d-summary-lab")   # #1412: the lab strip
@@ -228,7 +228,7 @@ def test_back_button_is_drawn_on_every_screen_where_escape_goes_back(tmp_path) -
     assert proc.returncode == 0, proc.stderr
     box = (850, 744, 866, 791)
     with_back = ("install-1-role", "install-2-servers-net", "install-3-hostname", "install-3b-time",
-                 "install-4-admin", "install-5-summary")
+                 "install-3d-backup", "install-3e-backup-other", "install-4-admin", "install-5-summary")
     without = ("install-0-disk", "install-5c-progress", "install-6-done")
     for name in with_back + without:
         _, _, colors = _size_and_ink(tmp_path / f"back-{name}-light.png", box)
@@ -290,7 +290,7 @@ def test_disk_admin_and_seven_step_controls_are_wired_into_the_live_form() -> No
     assert "HIT_INSTALL_SHOW_PASSWORD" in forms and "HIT_INSTALL_SHOW_CONFIRM" in forms
     assert 'shown?"הסתר":"הצג"' in forms
     # mockup 10/10: the footer carries the working keys; "שלב N מתוך 7" repeated the rail
-    assert "for(int i=0;i<INSTALL_STEPS;i++" in frame and "install_keys_draw(a,cr,l);" in frame   # #2144: eight
+    assert "for(int i=0;i<INSTALL_STEPS;i++" in frame and "install_keys_draw(a,cr,l);" in frame   # #2144, #1956: nine
     assert "שלב %d מתוך 7" not in frame
 
 

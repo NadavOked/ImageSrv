@@ -349,6 +349,7 @@ typedef struct {
     int rb_nolist;
     /* #2055: a drawer_moved= record -- when its bytes last moved (epoch; 0 = not said) */
     long long moved;
+    RbBar rb;   /* #2046: a drawer_rbp= record -- the read-back's bar and verdict */
 } Drawer;
 /* A physically connected disk shown on the cloner's IDLE screen (no round yet),
  * so the operator sees what is plugged in before a broadcast starts. */
@@ -449,6 +450,7 @@ typedef struct State {
     /* the cloner screen (clonergui.sh): the image name. #2347: no SMART
      * question any more -- the agent asks none since #2044. */
     char cloner_image[96];
+    char rb_mode[8];                 /* #2046: rb_mode= full|sample -- "אומתו" only for a check that read every chunk */
     int server_restarted_wave;       /* #1377: closed report after server restart */
     /* #2067 (mockup 08): net=lost|<last byte>|<ceiling s> / net=back|<s away>|<at> -- the
      * stream's outage bar (roundbeep.sh stream_net_record). -1 = the agent did not say. */

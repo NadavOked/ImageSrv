@@ -79,10 +79,12 @@ FANOUT_RB = (
     '#!/bin/sh\n'
     'if [ "$1" = --xxh64 ]; then sha256sum | cut -c1-16; exit 0; fi\n'
     '[ "$1" = --readback ] || exit 2\n'
-    'shift; x=; s=\n'
+    'shift; x=; s=; p=\n'
+    'if [ "$1" = -p ]; then p="$2 $3 $4"; shift 4; fi\n'   # #2046: -p <file> <base> <total>, before -x
     'if [ "$1" = -x ]; then x=1; shift; fi\n'
     'if [ "$1" = -s ]; then s="$2 $3"; shift 3; fi\n'
     'n=$(basename "$1")\n'
+    '[ -z "$p" ] || echo "$p" >> "$BOX/progs.$n"\n'
     'echo "readback $n${x:+ -x}${s:+ -s $s}${2:+ $2}" >> "$BOX/calls"\n'
     'cat > /dev/null\n'
     'if [ -f "$BOX/rb.$n.rc" ]; then echo "fanout: readback: the stand-in failed" >&2; exit "$(cat "$BOX/rb.$n.rc")"; fi\n'
@@ -145,7 +147,7 @@ def prelude(box: Path) -> str:
         + f"export TMPDIR={posix(box)!r} RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         f"WAIT_POLL_S=1 WAIT_READBACK_S=60 RB_LIST_PAUSE_S=0\n"   # #1907: the list's tries, no pause in tests
         + "".join(f". {posix(flat_lib())}/{n}.sh\n" for n in
-                  ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "verdict", "failmark", "readback", "readbacklc"))
+                  ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "verdict", "failmark", "readback", "rbprog", "readbacklc"))
         + "ata_capture() { :; }\n"
         "lc_src_node() { partition_node \"$@\"; }\n"
         'http_get() { echo "get ${1##*/api/v1/images/}" >> "$BOX/calls"; cat "$BOX/served.${1##*/}"; }\n'
@@ -453,7 +455,7 @@ def test_every_write_path_reads_back_before_it_grows():
     assert body.index("readback_local") < body.index('finish_grow "$_lf_t"')
     assert '[ "$?" -ne 127 ] || _fail_alive "$*"' in body
     agent = _text("imagesrv-agent")
-    assert re.search(r'\. "\$LIB_DIR/readback\.sh"; \. "\$LIB_DIR/readbacklc\.sh"', agent)
+    assert re.search(r'\. "\$LIB_DIR/readback\.sh"; \. "\$LIB_DIR/rbprog\.sh"; \. "\$LIB_DIR/readbacklc\.sh"', agent)   # #2046: rbprog.sh between
     assert '$(rb_capture_json "$_node" "$_fs" "$((_sizesec * _sector_size))")' in _text("lib/capture/capture.sh")
 
 

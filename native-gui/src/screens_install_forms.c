@@ -1,7 +1,9 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "screens_install.h"
+#include "screens_rounds.h"   /* bidi_isolate */
 
 static void kv(App *a,cairo_t *cr,Rect box,const char *key,const char *value,int ltr){const Theme *t=a->theme;install_text_r(cr,t,key,12,500,box.x+box.w-16,box.y+10,box.w*.38,t->muted);if(ltr)install_text_ltr(cr,value,12,400,box.x+16,box.y+10,box.w*.56,t->ink);else install_text_r(cr,t,value,12,400,box.x+box.w*.6,box.y+10,box.w*.55,t->ink);}
 
@@ -64,6 +66,36 @@ void install_draw_time(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->i
     Text zn=text_make(cr,FONT_SANS,12.5,400,zone,0,DIR_LTR);text_draw(cr,&zn,fmax(x+16,right-zn.w),y+18,t->muted);text_free(&zn);
     install_text_r(cr,t,"לפי שעון החומרה, עוד בלי סנכרון. הסנכרון נבדק בסוף ההתקנה.",12,400,x+w-16,y+54,w-32,t->muted);
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_time_ready(s));
+}
+
+/* #1956 (mockup 1956-installer-backup, Nadav 06/11): step 6. No destination: the
+ * backups stay on the server's drive, in space kept for them; the hour is the
+ * operator's. The rules (20% of the drive, HH:MM) are the engine's -- backup.sh
+ * answers through the bridge, and its line takes the hint's place. */
+static double note(App *a,cairo_t *cr,double x,double y,double w,const char *markup,Rgb fill,Rgb line,Rgb ink,int mark){const Theme *t=a->theme;double inset=mark?44:16;
+    Text m=text_make_markup(cr,FONT_SANS,12.5,400,markup,(int)(w-inset-16),DIR_RTL);double h=m.h+18;Rect box={x,y,w,h};draw_fill_rrect(cr,box,t->radius,fill);draw_border_rrect(cr,box,t->radius,line,1);
+    if(mark){cairo_arc(cr,x+w-24,y+h/2,9,0,6.283);draw_set(cr,line);cairo_fill(cr);Text e=text_make(cr,FONT_SANS,12,700,"!",0,DIR_RTL);text_draw(cr,&e,x+w-24-e.w/2,y+h/2-e.h/2,t->on_ink);text_free(&e);}
+    text_draw_r(cr,&m,x+w-inset,y+9,ink);text_free(&m);return h;}
+static void size_option(App *a,cairo_t *cr,Rect r,const char *title,const char *desc,int selected,int id){const Theme *t=a->theme;draw_fill_rrect(cr,r,t->radius,selected?t->indigo_soft:t->surface);draw_border_rrect(cr,r,t->radius,selected?t->indigo:t->hair,selected?2:1);double cx=r.x+r.w-21,cy=r.y+18;cairo_arc(cr,cx,cy,8,0,2*M_PI);draw_set(cr,selected?t->indigo:t->hair);cairo_set_line_width(cr,2);cairo_stroke(cr);if(selected){cairo_arc(cr,cx,cy,4,0,2*M_PI);draw_set(cr,t->indigo);cairo_fill(cr);}install_text_r(cr,t,title,13,600,r.x+r.w-38,r.y+9,r.w-52,t->ink);install_text_r(cr,t,desc,12,400,r.x+r.w-38,r.y+29,r.w-52,t->muted);install_focus_ring(a,cr,r,id);hit_add(a,r,id);}
+void install_draw_backup(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y,fw=w/2-10;char at[32],when[320];
+    bidi_isolate(s->backup_time[0]&&!strpbrk(s->backup_time,"<&>")?s->backup_time:"—",at,sizeof at);
+    snprintf(when,sizeof when,"<b>מתי מגבים:</b> פעם ביום ב-%s (אפשר לשנות מתחת), ובנוסף מיד בכל העלאה של אימג׳ חדש ובכל מחיקה של אימג׳ מהשרת.",at);
+    y+=note(a,cr,x,y,w,when,t->indigo_soft,t->indigo,t->ink,0)+12;
+    int other=s->backup_pick==INSTALL_BACKUP_OTHER;
+    size_option(a,cr,(Rect){x,y,w,54},"5 GB",other?"מוצע.":"מוצע. מספיק לגיבויים רבים של המסד, ומשאיר כמעט את כל הכונן לאימג׳ים.",s->backup_pick==0,HIT_INSTALL_BACKUP_BASE);y+=63;
+    size_option(a,cr,(Rect){x,y,w,54},"10 GB","יותר היסטוריה.",s->backup_pick==1,HIT_INSTALL_BACKUP_BASE+1);y+=63;
+    size_option(a,cr,(Rect){x,y,w,54},"20 GB","היסטוריה ארוכה.",s->backup_pick==2,HIT_INSTALL_BACKUP_BASE+2);y+=63;
+    size_option(a,cr,(Rect){x,y,w,54},"גודל אחר","הקלידו מספר ב-GB.",other,HIT_INSTALL_BACKUP_BASE+3);y+=66;
+    if(other){install_field_draw(a,cr,(Rect){x+w-fw,y,fw,56},"מקום שמור (GB)",s->backup_other,0,HIT_INSTALL_BACKUP_OTHER_GB,1);y+=68;}
+    install_field_draw(a,cr,(Rect){x+w-fw,y,fw,56},"שעת הגיבוי היומי",s->backup_time,0,HIT_INSTALL_BACKUP_TIME,1);y+=62;
+    if(s->field_error[19][0])install_text_r(cr,t,s->field_error[19],12,600,x+w,y,w,t->danger_fg);else install_text_r(cr,t,"מוצע 02:00: שעה בלי סבבים. אם רץ סבב באותה שעה, הגיבוי מחכה לסיומו.",12,400,x+w,y,w,t->muted);y+=26;
+    const InstallDisk *d=s->disk>=0&&s->disk<s->ndisks?&s->disks[s->disk]:NULL;double disk_gb=d?(double)d->size_bytes/1e9:0,gb=atof(install_backup_gb(s));
+    double share=disk_gb>0?fmin(1,fmax(.01,gb/disk_gb)):.01;Rect bar={x,y,w,12};draw_fill_rrect(cr,bar,6,t->track);cairo_rectangle(cr,x+w*(1-.01-share),y,w*share,12);draw_set(cr,t->warning_line);cairo_fill(cr);cairo_rectangle(cr,x+w*.99,y,w*.01,12);draw_set(cr,t->indigo);cairo_fill(cr);y+=20;
+    char mine[32],all[32],kept[48],whole[48],room[220];snprintf(mine,sizeof mine,"%s GB",install_backup_gb(s));snprintf(all,sizeof all,"%.0f GB",disk_gb);bidi_isolate(mine,kept,sizeof kept);bidi_isolate(all,whole,sizeof whole);   /* else "5 GB" reads "GB 5" in the Hebrew line */
+    snprintf(room,sizeof room,"שמורים לגיבויים %s מתוך %s פנויים בכונן",kept,whole);install_text_r(cr,t,room,12,400,x+w,y,w,t->muted);y+=24;
+    if(s->field_error[18][0]){install_text_r(cr,t,s->field_error[18],12,600,x+w,y,w,t->danger_fg);y+=24;}else if(other){install_text_r(cr,t,"מינימום 1 GB. לא יותר מ-20% מהכונן, כדי שיישאר מקום לאימג׳ים.",12,400,x+w,y,w,t->muted);y+=24;}
+    note(a,cr,x,y,w,"<b>אותו כונן, לא מגן מתקלת כונן.</b> הגיבוי עוזר נגד מחיקה או שחיתות של המסד, לא נגד מות הדיסק. עותק על כונן אחר אפשר להגדיר אחר כך בקונסולה.",t->warning_bg,t->warning_line,t->warning_ink,1);
+    install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_backup_ready(s));
 }
 
 void install_draw_forms(App *a,cairo_t *cr,InstallLayout l){if(a->install.view==INSTALL_HOSTNAME)hostname(a,cr,l);else admin_screen(a,cr,l);}

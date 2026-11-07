@@ -515,7 +515,8 @@ tftp <כתובת-השרת> -c get bootx64.efi
 
 ### RPO — כמה אפשר להפסיד
 
-- **‏DB: כל שעה** — `backup-server.sh --no-images` (שניות; ‏`umask 077`).
+- **‏DB: פעם ביום בשעה שנבחרה, ובכל העלאה ומחיקה של אימג'** — הגיבוי המובנה (‏#1956), על כונן
+  השרת במקום ששמור לו, או בתיקייה מעוגנת שנבחרה בהגדרות. לא מגן מתקלת כונן כשהוא על אותו כונן.
 - **תצורה: אחרי כל שינוי** בקונסולה (רשת, DHCP, אחסון, משתמשים) —
   אותה פקודה; או **"הורד גיבוי הגדרות"** בקונסולה (בריאות → כרטיס
   "גרסה ועדכון"): ‏tar.gz של ה-DB ושאר תיקיית הנתונים עם `MANIFEST.txt`
@@ -525,7 +526,6 @@ tftp <כתובת-השרת> -c get bootx64.efi
 
 ```bash
 # /etc/cron.d/imagesrv-backup — יעד על דיסק אחר או NAS מעוגן
-0 * * * *   root  bash /opt/imagesrv/tools/backup-server.sh --dest /backup/imagesrv --no-images >> /var/log/imagesrv-backup.log 2>&1
 30 2 * * *  root  bash /opt/imagesrv/tools/backup-server.sh --dest /backup/imagesrv >> /var/log/imagesrv-backup.log 2>&1
 0 4 * * 0   root  bash /opt/imagesrv/tools/restore-drill.sh --backup /backup/imagesrv >> /var/log/imagesrv-backup.log 2>&1
 ```
