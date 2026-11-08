@@ -737,8 +737,9 @@ def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
     """נמדד 16/09 על מחשב 2: בזמן שאלה למפעיל (אז — `smart_choice`, שהוסר ב-#2044)
     אף hello לא יצא, ‏`last_seen`
     קפא והמוניטור נחסם (403) בדיוק כשהמפעיל צריך לראות את השאלה. כאן
-    ‏`http_post_json` מזויף רושם כל גוף שנשלח; התשובה מגיעה אחרי ~2.5 פעימות
-    (‏ATTENDED_BEAT_S=1 — שניות שלמות, #1333), ולכן חייבים להיספר ≥2 hello — כל
+    ‏`http_post_json` מזויף רושם כל גוף שנשלח; התשובה מגיעה רק אחרי
+    שנספרו 2 hello (לא אחרי זמן קבוע — #2733; ‏ATTENDED_BEAT_S=1, שניות שלמות,
+    #1333), ולכן חייבים להיספר ≥2 hello — כל
     אחד עם `waiting_for: operator`, השאלה ב-`prompt`, ו-`joining: false`
     (ממתין אינו מצטרף לגל). בקרה שלילית: על main נספרים 0."""
     run = tmp_path / "run"; run.mkdir()
@@ -746,7 +747,10 @@ def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
     out = sh(env(run, dev) + PRELUDE + FAKE_HELLO
              + 'export ATTENDED_BEAT_S=1; '
              + 'http_post_json() { printf "%s\\n" "$(cat "$2")" >> "$RUN_DIR/hellos"; }; '
-             + 'ask_fake() { sleep 2.5; echo skip; }; '
+             + 'ask_fake() { _i=0; while :; do _n=0; '
+             + '[ ! -f "$RUN_DIR/hellos" ] || _n=$(wc -l < "$RUN_DIR/hellos"); '
+             + '[ "$_n" -lt 2 ] || break; [ "$_i" -lt 300 ] || return 1; '
+             + 'sleep 0.1; _i=$((_i + 1)); done; echo skip; }; '
              + "attended 'Disk 1: SMART fail (x)' ask_fake")
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "skip", out.stdout          # ההכרעה עצמה לא נפגעה

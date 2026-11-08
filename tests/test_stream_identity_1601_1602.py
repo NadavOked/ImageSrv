@@ -132,7 +132,11 @@ def station(tmp_path: Path, fanout_dir: Path, source: str, pcl: str) -> tuple[Pa
     env = (f"export BOX={posix(box)!r} PCL={pcl} SYSROOT={posix(box)!r} "
            f"RUN_DIR={posix(run)!r} DEVROOT={posix(box / 'dev')!r} TMPDIR={posix(tmp_path)!r} "
            "FANOUT_STALL_EVICT_MS=2000 WAIT_POLL_S=1 WAIT_DRAWER_S=4 WAIT_HELPER_S=4 "
-           "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=5; ")
+           "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=5 "
+           # #2734: the periodic fsync of writeback_watch is not what this file tests.
+           # At its default 10 s a run slowed by load reached it, and a `dd conv=fsync`
+           # blocked on a busy disk was still in flight when the group was killed.
+           "WRITE_FSYNC_INTERVAL_S=3600; ")
     libs = agent_sources("common", "jsonq", "sysinfo", "waits", "progress", "restore", "verdict", "failmark",
                          "writeback", "drawers")   # #1906: restore_partition's pipe is restore_pipe (drawers.sh); #2272
     out = run_sh(

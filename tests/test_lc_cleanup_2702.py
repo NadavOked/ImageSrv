@@ -159,11 +159,14 @@ def test_the_fixture_with_its_tmpfs_leaves_nothing_under_the_test_dir(tmp_path):
 
 @NATIVE
 def test_a_setup_cut_short_leaves_nothing_either(tmp_path):
-    """The timeout lands in the middle of `setup`: some loops exist, maybe the tmpfs."""
+    """The cut lands in the middle of `setup`: it is made once the first loop exists (#2738),
+    not after N seconds -- a fast machine finishes setup in any fixed window."""
     fx = tmp_path / "fx"
-    with pytest.raises(subprocess.TimeoutExpired):
-        with lcfx.fixture_dir(fx, "setup", setup_timeout=4):
-            pytest.fail("setup finished in 4s: the interruption was not tested")
+    with pytest.raises(lcfx.SetupCut) as cut:
+        with lcfx.fixture_dir(fx, "setup", cut_when=lambda seen: any(s.startswith("loop ") for s in seen)):
+            pytest.fail("setup finished before the first loop was seen: the interruption was not tested")
+    assert any(s.startswith("loop ") for s in cut.value.seen), cut.value.seen
+    assert not any("(tmpfs)" in s for s in cut.value.seen), f"cut too late, the tmpfs was already up: {cut.value.seen}"
     assert _own_eyes(tmp_path) == []
     assert orphan_guard.processes_mentioning(str(fx)) == [], "root's children of the cut setup are still running"
 

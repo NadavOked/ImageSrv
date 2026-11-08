@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextlib
 import os
 import subprocess
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -37,11 +38,50 @@ FIXTURE = REPO / "tests" / "localclone-fixture.sh"
 SBIN = "/usr/sbin:/sbin"
 
 
+class SetupCut(subprocess.TimeoutExpired):
+    """ה-setup נקטע בכוונה (#2738); `seen` = מה שחי תחת התיקייה ברגע הקטיעה."""
+
+    def __init__(self, cmd, seen: list[str]):
+        super().__init__(cmd, 0)
+        self.seen = seen
+
+
+def _root_argv(args: tuple[str, ...]) -> list[str]:
+    return ["sudo", "-n", "env", f"PATH={os.environ.get('PATH', '')}:{SBIN}", *args]
+
+
+def root_cut(fx: Path, *args: str, cut_when: Callable[[list[str]], bool], timeout: int = 600) -> subprocess.CompletedProcess:
+    """כמו `root`, אבל נקטע כש-`cut_when(מה שחי תחת fx)` נכון -- לפי מצב, לא לפי שעון (#2738).
+    נקטע: ‏`SetupCut`. הסתיים לפני: ‏CompletedProcess, והקורא מחליט שהקטיעה לא נבדקה."""
+    argv = _root_argv(args)
+    with subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace") as proc:
+        end = time.monotonic() + timeout
+        try:
+            while True:
+                try:
+                    out, err = proc.communicate(timeout=0.05)
+                    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
+                except subprocess.TimeoutExpired:
+                    pass
+                seen = mountleak.leftovers(fx)
+                if cut_when(seen):
+                    hygiene.kill_group(proc.pid)
+                    proc.communicate(timeout=hygiene.RUN_GROUP_DRAIN_S)
+                    raise SetupCut(argv, seen)
+                if time.monotonic() > end:
+                    hygiene.kill_group(proc.pid)
+                    proc.communicate(timeout=hygiene.RUN_GROUP_DRAIN_S)
+                    raise subprocess.TimeoutExpired(argv, timeout)
+        finally:
+            hygiene.kill_group(proc.pid)
+
+
 def root(*args: str, timeout: int = 600) -> subprocess.CompletedProcess:
     """‏`sudo -n env PATH=... <args>` בקבוצת תהליכים משלו: פקיעה (או Ctrl-C)
     הורגת את הקבוצה כולה, כולל ילדי root, לפי ה-PID שנשמר."""
     return hygiene.run_group(
-        ["sudo", "-n", "env", f"PATH={os.environ.get('PATH', '')}:{SBIN}", *args],
+        _root_argv(args),
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
         stdin=subprocess.DEVNULL)
 
@@ -70,13 +110,17 @@ def release(fx: Path, *, pre: Callable[[], None] | None = None) -> None:
 
 @contextlib.contextmanager
 def fixture_dir(fx: Path, kind: str, *args: str, setup_timeout: int = 300,
-                pre_teardown: Callable[[], None] | None = None) -> Iterator[Path]:
+                pre_teardown: Callable[[], None] | None = None,
+                cut_when: Callable[[list[str]], bool] | None = None) -> Iterator[Path]:
     """‏`localclone-fixture.sh <kind> <fx> [args]` ואחריו -- תמיד -- הניקוי.
 
     ה-`setup` בתוך ה-`try`: הוא שמעגן tmpfs ופותח loops, ופקיעה באמצעו היא
     בדיוק המקרה שהשאיר יתומים."""
     try:
-        up = root("sh", str(FIXTURE), kind, str(fx), *args, timeout=setup_timeout)
+        if cut_when is None:
+            up = root("sh", str(FIXTURE), kind, str(fx), *args, timeout=setup_timeout)
+        else:       # #2738: נקטע כשהתנאי מתקיים, לא אחרי N שניות
+            up = root_cut(fx, "sh", str(FIXTURE), kind, str(fx), *args, cut_when=cut_when, timeout=setup_timeout)
         assert up.returncode == 0, up.stdout + up.stderr
         yield fx
     finally:
