@@ -479,6 +479,44 @@ def test_save_lands_a_new_version_and_keeps_the_old_one(lab):
     assert events(lab["conn"])[-2:] == ["vmupdate_save", "vmupdate_saved"]
 
 
+@pytest.mark.parametrize("encrypted", [0, 1, 2])
+@pytest.mark.parametrize("keep_work", [False, True])
+def test_saved_state_warns_for_each_bitlocker_partition(lab, encrypted, keep_work):
+    capture = fake_capture()
+
+    def raw_capture(*args, **kw):
+        captured = capture(*args, **kw)
+        parts = captured["partitions"]
+        if encrypted:
+            parts[-1].update(fs="BitLocker", role="data", used_bytes=None, expandable=False)
+        if encrypted == 2:
+            parts.append({**parts[-1], "index": 4, "start_sector": 100000000,
+                          "size_bytes": 4 << 30, "file": "p4.data.pcl.zst",
+                          "unique_guid": "6C2E9F71-1A3B-4F0A-9C1D-2E7B85A0C3D6"})
+            (args[2] / "p4.data.pcl.zst").write_bytes(NEW_BYTES)
+            captured["total_compressed_bytes"] += len(NEW_BYTES)
+        return captured
+
+    lab["monkeypatch"].setattr(vmdisk, "capture_disk", raw_capture)
+    engine = run_to_stopped(lab)
+    if keep_work:
+        rmtree = vmupdate.shutil.rmtree
+
+        def keep_disk(path, *args, **kw):
+            if Path(path) != engine.workdir:
+                return rmtree(path, *args, **kw)
+
+        lab["monkeypatch"].setattr(vmupdate.shutil, "rmtree", keep_disk)
+    engine.save("noc", "BitLocker saved version")
+    status = wait_for(engine, "saved")
+    warnings = status["warnings"]
+    assert len(warnings) == encrypted + int(keep_work)
+    if keep_work:
+        assert vmupdate.WORK_AREA in warnings[0]
+    for index, warning in zip(range(3, 3 + encrypted), warnings[int(keep_work):]):
+        assert warning == f"מחיצה {index}: {vmdisk.BITLOCKER_NOTE}"
+
+
 def test_a_bound_image_stays_bound_in_its_new_version(lab):
     engine = run_to_stopped(lab, image="img_0bb001")
     engine.save("noc", "Owned v4")

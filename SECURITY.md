@@ -140,6 +140,15 @@ Advisory נדרש כשהחולשה נוגעת **למי שאינו נדב**:
 | — CVE-2026-69248 (אין התראה: GHSA מציין 45.0.0–48.0.0) | wildcard מול name constraints ב-`x509.verification` | **vulnerable, no-DSA** | לא — אין `x509.verification` |
 | #1, #2, #7 | OpenSSL **בתוך wheels** של PyPI | לא רלוונטי | לא — חבילת apt מקשרת ל-`libssl3t64` של המערכת (בדיקה: `trixie-security` ‏`openssl 3.5.7-1~deb13u3`); ה-wheel רץ רק ב-CI ובפיתוח |
 
+‏`anyio==4.8.0` מוצמד מאותה סיבה (‏`python3-anyio 4.8.0-3`, תלות של starlette;
+שדרוג ל-4.16 שבר שלושה טסטים, 01/11). שתי התראות, פגיע `< 4.14.2`
+(נבדק 08/11/2026):
+
+| התראה | על מה | trixie | ניתן לניצול אצלנו? |
+|---|---|---|---|
+| #11 CVE-2026-63374 (critical) | ‏`TLSStream.wrap(hostname=...)` מעביר שם מארח לא-ASCII ל-`wrap_bio` של ה-stdlib, שמקודד ב-IDNA 2003 — תעודה לגרסת ה-2003 של השם עוברת אימות. נכנסים אליו דרך `connect_tcp(tls=True)` ודרך `start_tls` של ה-backend של httpcore (‏`httpx.AsyncClient` ב-https) | **vulnerable** (‏security-tracker: ‏trixie `4.8.0-3`; תוקן ב-sid `4.15.1-1`, באג 1148561; אין `deb13u` ב-pool ולא ב-`debian-security`) | לא — אין ב-`server/` ייבוא של `anyio`/`httpx`/`httpcore`; ‏fastapi/starlette/uvicorn/websockets של trixie לא קוראים ל-`TLSStream`/`connect_tcp`. ה-TLS היוצא שלנו הוא stdlib/pyOpenSSL סינכרוני |
+| #10 CVE-2026-64847 (medium) | ‏`to_process.run_sync` — ה-stderr של עובד ה-pool לא מרוקן, והקריאה נתקעת | **vulnerable** (‏security-tracker: ‏trixie `4.8.0-3`; תוקן ב-sid `4.15.1-1`, באג 1148561) | לא — אין `to_process` ב-`server/`, וגם לא ב-fastapi/starlette/uvicorn (הם משתמשים ב-`to_thread` בלבד) |
+
 "אינו ניתן לניצול" אינו טענה שנשענים עליה בלי ראיה:
 ‏`tests/test_pinned_deps_unreachable_paths.py` סורק את `server/` ונופל אם נכנס
 אליו אחד הנתיבים הפגיעים. אם הוא נופל — חוזרים לטבלה הזו ומחליטים, לא

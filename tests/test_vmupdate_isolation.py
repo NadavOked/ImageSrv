@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -143,11 +144,11 @@ class NoHost:
         raise AssertionError(f"agent function {func} ran before validation")
 
 
-def capture_with(tmp_path, guest):
+def capture_with(tmp_path, guest, source=SOURCE):
     work = tmp_path / "work"
     work.mkdir()
     (work / "disk.raw").write_bytes(b"")
-    (work / "source-manifest.json").write_text(json.dumps(SOURCE), encoding="utf-8")
+    (work / "source-manifest.json").write_text(json.dumps(source), encoding="utf-8")
     with pytest.raises(vmdisk.DiskError) as caught:
         # ‏#1535: ‏capture_disk מוסר את אזור העבודה לקבוצה של משתמש ה-VM (‏chown) —
         # בלי root, רק לקבוצה שלנו. ה-uid אינו נוגע בדיסק לפני האימות.
@@ -202,10 +203,50 @@ def test_values_read_from_the_disk_are_validated_before_use(tmp_path, field, val
     assert exc.reason == "table", exc.message
 
 
-def test_bitlocker_is_refused_by_its_signature(tmp_path):
+def test_new_bitlocker_signature_is_a_filesystem_change(tmp_path):
     guest = FakeGuest()
-    guest.pread_device = lambda *_a: b"-FVE-FS-"
-    assert capture_with(tmp_path, guest).reason == "bitlocker"
+    guest.pread_device = lambda dev, *_a: b"-FVE-FS-" if dev == "/dev/sda2" else b"MSDOS5.0"
+    assert capture_with(tmp_path, guest).reason == "fs_changed"
+
+
+def test_a_bitlocker_check_that_cannot_run_is_still_refused(tmp_path):
+    guest = FakeGuest()
+
+    def unreadable(*_a):
+        raise RuntimeError("pread_device failed")
+
+    guest.pread_device = unreadable
+    assert capture_with(tmp_path, guest).reason == "unchecked"
+
+
+@pytest.mark.parametrize("fs", ["ntfs", "unknown"])
+def test_a_source_bitlocker_volume_cannot_change_filesystem(tmp_path, fs):
+    source = {**SOURCE, "partitions": [dict(p) for p in SOURCE["partitions"]]}
+    source["partitions"][1]["fs"] = "BitLocker"
+    guest = FakeGuest(fs={"/dev/sda1": "vfat", "/dev/sda2": fs})
+    assert capture_with(tmp_path, guest, source).reason == "fs_changed"
+
+
+def test_bitlocker_is_canonical_and_matches_the_source(tmp_path):
+    assert vmdisk.norm_fs("BitLocker") == "BitLocker"
+    source = {**SOURCE, "partitions": [dict(p) for p in SOURCE["partitions"]]}
+    source["partitions"][1]["fs"] = "BitLocker"
+    box = vmdisk.Appliance(tmp_path / "disk.raw", factory=FakeGuest)
+    try:
+        guid, table = box.table()
+        vmdisk.check_against_source(source, guid, table, {1: "vfat", 2: "BitLocker"})
+    finally:
+        box.close()
+
+
+def test_bitlocker_warning_matches_the_agent_and_console():
+    root = Path(__file__).resolve().parent.parent
+    shell = (root / "agent/lib/capture/hibernation.sh").read_text(encoding="utf-8")
+    console = (root / "server/static/console.js").read_text(encoding="utf-8")
+    note = re.search(r'^CAPTURE_BITLOCKER_NOTE="([^"]+)"', shell, re.M)
+    js_note = re.search(r'const BL_NOTE = "([^"]+)"', console)
+    assert note is not None and js_note is not None
+    assert vmdisk.BITLOCKER_NOTE == note[1] == js_note[1]
 
 
 @pytest.mark.parametrize("rc,reason", [(14, "hibernated"), (15, "hibernated"), (9, "unchecked")])
@@ -338,6 +379,73 @@ class LoopHost:
         rc = 1 if argv[0] in self.fail else 0
         out = "/dev/loop7\n" if argv[:2] == ["losetup", "--find"] else ""
         return subprocess.CompletedProcess(argv, rc, out, "")
+
+
+class RawCaptureHost(LoopHost):
+    """Fake devices/processes; run the real agent's metadata helpers."""
+
+    def __init__(self):
+        super().__init__()
+        self.helpers = []
+
+    def agent(self, func, *args, run_dir, **_kw):
+        assert func in ("unique_guid_gate", "_shrink_tail", "shrink_json_extra"), func
+        self.helpers.append(func)
+        return agent_shell.call(func, *args, run_dir=run_dir)
+
+    def popen(self, argv, **_kw):
+        self.calls.append(argv)
+
+        class Proc:
+            stdout = io.BytesIO(b"raw encrypted bytes")
+
+            def wait(self, timeout=None):
+                return 0
+
+        return Proc()
+
+
+@posix_only
+@pytest.mark.parametrize("reported_fs", ["unknown", "ntfs", "BitLocker"])
+def test_bitlocker_capture_is_raw_without_mount_shrink_or_growth(tmp_path, monkeypatch, reported_fs):
+    """Exercise capture_disk and capture_partition to completion, with fake I/O."""
+    work = tmp_path / "work"
+    work.mkdir()
+    start, size = 1 << 20, 4 << 20
+    with (work / "disk.raw").open("wb") as fh:
+        fh.truncate(start + size + (1 << 20))
+    source = {**SOURCE, "partitions": [
+        {**SOURCE["partitions"][1], "fs": "BitLocker"}]}
+    (work / "source-manifest.json").write_text(json.dumps(source), encoding="utf-8")
+    guest = FakeGuest(parts=[{"part_num": 2, "part_start": start, "part_size": size}],
+                      fs={"/dev/sda2": reported_fs})
+    guest.pread_device = lambda *_a: b"-FVE-FS-"
+
+    def forbidden(*_a, **_kw):
+        pytest.fail("BitLocker must never be mounted or passed to NTFS/shrink tools")
+
+    guest.mount_ro = guest.ntfs_3g_probe = guest.vfs_minimum_size = forbidden
+    guest.ntfsresize_opts = guest.part_del = guest.part_add = forbidden
+    monkeypatch.setattr(agent_shell, "grant_user", lambda *_a: None)
+    host = RawCaptureHost()
+    result = vmdisk.capture_disk(
+        host, work, work / "out", lambda _n: None, user=vmdisk.VmUser(999, 989),
+        appliance=lambda disk: vmdisk.Appliance(disk, factory=lambda: guest))
+    part, = result["partitions"]
+    assert part["fs"] == "BitLocker" and part["role"] == "data"
+    assert part["used_bytes"] is None and part["expandable"] is False
+    assert part["start_sector"] == start // 512 and part["size_bytes"] == size
+    assert "shrunk_from_bytes" not in part and "source_start_sector" not in part
+    assert json.loads(json.dumps(part))["used_bytes"] is None
+    assert (work / "out" / part["file"]).read_bytes() == b"raw encrypted bytes"
+    readers = [c for c in host.calls if "partclone.dd" in c]
+    assert len(readers) == 1 and "-c" not in readers[0] and "-I" not in readers[0]
+    assert readers[0][:2] == ["setpriv", "--reuid=999"]
+    assert not any("ntfsfix" in c or "ntfsresize" in c or "partclone.ntfs" in c
+                   or c[:2] == ["dmsetup", "create"] for c in host.calls)
+    loops = [c for c in host.calls if c[:2] == ["losetup", "--find"]]
+    assert len(loops) == 1 and "--read-only" in loops[0]
+    assert host.helpers == ["unique_guid_gate", "_shrink_tail", "shrink_json_extra"]
 
 
 PART = {"index": 2, "first": 2048, "sectors": 4096}

@@ -241,11 +241,12 @@ usbclone_main() {
     usb_find_media || usb_stop "לא זוהה הדיסק-און-קי שממנו עלה המחשב ($USB_LABEL). כדי שלא ייכתב עליו, השיכפול לא נפתח" \
         "The USB stick this machine started from was not found (label $USB_LABEL). So that nothing can write over it, no clone is offered."
     usb_data_mount || :
+    usb_sync_load || :   # #2694: server-sync/ is read only after schema, version and sha256 (usbsync.sh); a bad one is said, never used
     usb_ctrl_mode || :   # the controller's mode: IDE is said on the screen (Nadav 20/10)
     usb_diag boot || :   # every boot: what the machine has, before any screen (college 20/10)
     USB_SURVEY_NOTICE=""; usb_survey_detect || :; usb_survey || :   # the survey stick only (usbsurvey.sh); never stops the clone
     usb_settings_load; usb_answer || usb_stop "לא הצלחנו לכתוב את הגדרות ברירת המחדל" "The default settings could not be written."
-    printf '%s\n' "$USB_NOTICE${USB_NOTICE:+${USB_SURVEY_NOTICE:+ · }}$USB_SURVEY_NOTICE" > "$RUN_DIR/usb.notice"
+    _un="$USB_NOTICE${USB_NOTICE:+${USB_SURVEY_NOTICE:+ · }}$USB_SURVEY_NOTICE"; printf '%s\n' "$_un${_un:+${USB_SYNC_NOTICE:+ · }}$USB_SYNC_NOTICE" > "$RUN_DIR/usb.notice"   # #2694: + the server-sync verdict
     RESP="$RUN_DIR/response.json"; min_free_take "$RESP"
     usb_fb_wait || usb_stop "אין מסך גרפי (אין /dev/fb0) — מתאם התצוגה לא קיבל דרייבר" "$USB_NOGUI" nogui
     gui_cloner_parent

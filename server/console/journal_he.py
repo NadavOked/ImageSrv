@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import sqlite3
 
-from server.disks import disk_sets
+from server.disks import crcwarn, disk_sets, smart_history
 from server.library.images import ImageLibrary
 from server.console.journal_he_detail import he_detail
 
@@ -114,8 +114,10 @@ EVENTS_HE = {
     # ‏#65: "כבה אותו" — מחשב שיכפול אחד שחסר בגל הפתוח, כדי להחליף בו מגירות.
     "room_missing_poweroff": "התבקש כיבוי מחשב שיכפול שחסר בגל",
     "held_poweroff": "התבקש כיבוי משכפל שמחכה ללחיצה (דיסק עם בעיה)",   # #2031
-    # ‏#432: הגל יצא לדרך כשמגירה בו התחברה מתחת למהירות הפורט או שה-CRC שלה עלה.
-    "room_precheck_warned": "הגל יצא לדרך למרות אזהרת קישור/CRC על מגירה",
+    # ‏#432: הגל יצא לדרך עם אזהרת precheck על מגירה. ‏#2704: בלי סיבה בתווית הכללית (רשימת הסינון,
+    # ושורה שאי-אפשר לקרוא) -- מאז #1844/#1845/#447 האזהרה היא גם למידה וכתיבה איטית, לא רק קישור/CRC.
+    # הסוג לפי הפירוט: `precheck_he`.
+    "room_precheck_warned": "הגל יצא לדרך למרות אזהרה על מגירה",
     "power_delivered": "בקשה מהקונסולה נמסרה לסוכן",
     "power_expired": "בקשה מהקונסולה פגה — המכונה לא ענתה בזמן, והבקשה בוטלה",
     "send_start": "השידור יצא לדרך",
@@ -566,6 +568,54 @@ _SERIAL = re.compile(r"\bserial=(\S+)")
 _SET_EVENTS = ("disk_failure", "disk_failure_cleared")
 
 
+#: ‏#2704/#2707: סוג האזהרות ביומן -- אותה טבלה ואותן מילים כמו כותרת ה-precheck בעמוד החדר
+#: (‏`PRECHECK_NOUN_HE`/`precheckSigns` ב-console.js; ‏tests/test_precheck_kind_2707.py שומר שהן לא נסחפות).
+#: ‏#2707: "הדיסק עצמו" ו"איטי לדגם" אינם קישור; כמה סוגים -- בסדר הזה, מחוברים ב"או".
+PRECHECK_NOUN_HE = {"link": "קישור חשוד", "slow": "כתיבה איטית", "disk": "דיסק חשוד"}
+#: מילות `smart_learned` (#1859) לפי סוג: 183/188 שעלו -- כנראה הכבל (smart_history.ROSE_LINK); קריטי/חם -- הדיסק.
+PRECHECK_SMART_KIND = {"link": ("downshift_rose", "timeout_rose"), "disk": ("critical_rose", "hot")}
+_PRECHECK_SIGN = {"learned=port": "link", "learned=slow_write": "slow", "learned=slow_model": "slow",
+                  "learned=disk": "disk",
+                  **{f"smart={w}": k for k, words in PRECHECK_SMART_KIND.items() for w in words}}
+#: כל אסימון ש-`room.journal_precheck` כותב, בעברית -- ראשי המשפטים של המסך (room_precheck.py,
+#: ‏crcwarn.text_he, ‏learn/ports.py, ‏learn/models.py), בלי המספרים שהיומן אינו נושא.
+PRECHECK_REASON_HE = {"learned=port": "כנראה כבל/מחבר, לא הדיסק", "learned=disk": "הדיסק עצמו",
+                      "learned=slow_model": "איטי מהרגיל לדגם",
+                      "learned=slow_write": "בבדיקת הכתיבה הקודמת נמדד איטי"}
+_PRECHECK = re.compile(r"^(\S+) wave=(\S+) (.+)$", re.S)
+_PRECHECK_ITEM = re.compile(r", (?=[0-9a-f]{2}(?::[0-9a-f]{2}){5}:)")
+
+
+def precheck_he(detail: str) -> tuple[str, list[str]] | None:
+    """‏#2704: ‏(הסוג, הסיבות בעברית) של שורת `room_precheck_warned`; ‏None = הפירוט לא נקרא --
+    התווית הכללית, לעולם לא סוג מנוחש. ‏#2707: כל אסימון לסוג שלו (`_PRECHECK_SIGN`; ‏`link=`/‏`crc+`/‏`crc=`
+    -- קישור); בלי אסימון מוכר -- "עם אזהרה"."""
+    m = _PRECHECK.match(detail)
+    if not m:
+        return None
+    kinds: set[str] = set()
+    reasons: list[str] = []
+    for item in _PRECHECK_ITEM.split(m.group(3)):
+        tokens = item.split()[1:]
+        kinds.update("link" if t.startswith(("link=", "crc+", "crc=")) else _PRECHECK_SIGN.get(t, "")
+                     for t in tokens)
+        for t in tokens:
+            if t.startswith("link=") and "/" in t:
+                said = "קישור {} מתוך {} Gb/s".format(*t[5:].split("/", 1))
+            elif t.startswith("crc+"):
+                said = f"מונה CRC עלה ב-{t[4:]} מאז הסבב הקודם"
+            elif t.startswith("crc=") and t[4:].isdigit():
+                said = crcwarn.text_he(int(t[4:]))
+            elif t.startswith("smart="):
+                said = smart_history.LEARNED_HE.get(t[6:])   # #2707: #1859's word, as the room note says it
+            else:
+                said = PRECHECK_REASON_HE.get(t)
+            if said and said not in reasons:
+                reasons.append(said)
+    nouns = [PRECHECK_NOUN_HE[k] for k in ("link", "slow", "disk") if k in kinds]
+    return (f"עם {' או '.join(nouns)}" if nouns else "עם אזהרה"), reasons
+
+
 def _expand_note(detail: str) -> str:
     """#59: מה שנכתב ל-`session_open`/`room_open` כשההרחבה לא הייתה
     "auto" — כיבוי או בחירה ידנית. "auto" עצמו אינו מגיע לכאן כלל
@@ -630,6 +680,12 @@ class JournalTranslator:
                         f'{_expand_note(detail)}')
         elif event == "room_open":
             text = detail + _expand_note(detail)
+        elif event == "room_precheck_warned":
+            text = self._names(detail)
+            got = precheck_he(detail)
+            if got is not None:   # #2704: the kind in the label; the raw tokens stay -- they are the evidence
+                label = f"{label} {got[0]}"
+                text += f" — {'; '.join(got[1])}" if got[1] else ""
         elif event == "pull_open":
             m = re.search(r"(ses_\w+) (\S+) (\S+) mac=(\S+)", detail)
             if m:

@@ -41,7 +41,7 @@ LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit",
         "writeback", "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
         "shrinkmem", "smart", "smartjudge", "hwissues", "guistate", "attended", "lcinv", "lcsize", "lcplan", "lcsnap", "lctune",
         "lccopy", "lcraw", "localclone", "lcwait", "idle", "lcgui", "usbclone", "usbdiag", "usbsurvey", "usbset",
-        "disklink", "slotnames", "usbmap", "usbmapwin")   # #1962: the drawer mapping by model; #2001 its window
+        "disklink", "slotnames", "usbmap", "usbmapwin", "usbsync")   # #2694: server-sync/ verified; #1962: the drawer mapping by model; #2001 its window
 
 
 def run(tmp_path: Path, script: str, timeout: int = 60, *, steps: list[str] | None = None,

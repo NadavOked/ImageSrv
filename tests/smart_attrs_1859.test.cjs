@@ -64,3 +64,20 @@ test('an orange disk says why -- once, without "SMART SMART"', () => {
   const box=text(run(`diskBoxesHtml({mac:${JSON.stringify(MAC)},disks:[{dev:'sda',port:1,smart:'warn',smart_reason:'reallocated',size_bytes:500107862016,model:'X'}]})`));
   assert.doesNotMatch(box,/SMART SMART/); assert.match(box,/סקטורים שהועברו \(5\)/);
 });
+
+test('#2705: a table from the last round (no reading since the machine booted) says when it was read', () => {
+  const t=text(view({serial:'S1',dev:'sda',read:true,read_from:'round',read_at:'2026-11-08T05:14:43Z',compared:false,learned:null,attributes:[attr({raw:0})]}));
+  assert.match(t,/נקרא בסבב \(.+\) — המכונה לא קראה SMART מאז שעלתה/); assert.doesNotMatch(t,/לא נבדק/);
+  const live=text(view({serial:'S1',dev:'sda',read:true,read_from:'hello',read_at:null,compared:false,learned:null,attributes:[attr({raw:0})]}));
+  assert.doesNotMatch(live,/נקרא בסבב/,'the last hello\'s own reading is this boot\'s -- no caption');
+});
+
+test('#2706: a drawer the machine has not read since it booted says what the last round read, and when', () => {
+  const said=run(`smartText({smart:'unchecked',smart_round:{verdict:'ok',reason:'ok',at:'2026-11-08T05:14:43Z'}})`);
+  assert.match(said,/^SMART לא נבדק מאז שהמכונה עלתה · בסבב \(.+\): SMART תקין$/);
+  const warn=run(`smartText({smart:'unchecked',smart_round:{verdict:'warn',reason:'reallocated',at:'2026-11-08T05:14:43Z'}})`);
+  assert.match(warn,/בסבב \(.+\): SMART אזהרה — סקטורים שהועברו \(5\)/);
+  assert.equal(run(`smartText({smart:'unchecked',smart_round:{verdict:'unchecked',reason:'timeout',at:'x'}})`),'SMART לא נבדק','the round did not read it either');
+  assert.equal(run(`smartText({smart:'unchecked',smart_round:null})`),'SMART לא נבדק');
+  assert.equal(run(`smartText({smart:'ok',smart_round:{verdict:'fail',reason:'health_failed',at:'x'}})`),'SMART תקין','a reading of this boot is the word');
+});

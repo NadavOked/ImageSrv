@@ -27,12 +27,15 @@ function usbsRateText(r) {
   return [part("כתיבה", r.copy_mbps), part("בדיקה", r.verify_mbps)].filter(Boolean).join(" · ");
 }
 
+// #2694: the slowest SATA link of the clone, as the stick wrote it into the report; null = it could not read one
+const usbsLink = (r) => (r.link_gbps == null ? `<span class="muted">לא נקרא</span>` : ltr(`${r.link_gbps} Gb/s`));
+
 function usbsRow(r) {
   const [cls, label] = USBS_RESULT[r.result] || ["", r.result];
   const ctrl = r.controller ? `${USBS_CTRL_HE[r.controller] || esc(r.controller)}${r.driver ? " · " + esc(r.driver) : ""}` : `<span class="muted">לא נקרא</span>`;
   const inServer = r.in_server ? UI.status("ok", `נקלט ${fmtDate(r.imported_at)}`) : UI.status("warn", "חדש");
   return [`<span class="mono">${esc(usbsDate(r.recorded_at))}</span>`,
-    r.model ? esc(r.model) : `<span class="muted">דגם לא ידוע</span>`, ctrl,
+    r.model ? esc(r.model) : `<span class="muted">דגם לא ידוע</span>`, ctrl, usbsLink(r),
     r.bytes != null ? ltr(fmtBytes(r.bytes)) : `<span class="muted">—</span>`,
     usbsRateText(r), UI.status(cls, label), inServer];
 }
@@ -64,7 +67,7 @@ function usbsDeviceCard(s) {
 function usbsHistoryCard(s) {
   if (!s.rows.length) return "";
   const rows = s.rows.map(usbsRow);
-  const table = UI.datagrid({ cls: "nowrap", columns: ["תאריך", "דגם המחשב", "בקר", "גודל", "קצב לפי שלב", "תוצאה", "בשרת"], rows });
+  const table = UI.datagrid({ cls: "nowrap", columns: ["תאריך", "דגם המחשב", "בקר", "קישור", "גודל", "קצב לפי שלב", "תוצאה", "בשרת"], rows });
   return UI.card({ title: "היסטוריית שיכפולים על ההתקן", small: "מחשבים בלבד: בלי serial של דיסקים ובלי SMART", body: table, flush: true });
 }
 

@@ -27,7 +27,7 @@ lc_raw_why() {
     [ "$2" = msr ] && return 0
     case "$(printf '%s' "$3" | tr 'a-f' 'A-F')" in 21686148-6449-6E6F-744E-656564454649) return 0 ;; esac   # BIOS boot
     case "$1" in
-        BitLocker) echo "מוצפנת ב-BitLocker" ;;
+        BitLocker) echo "${CAPTURE_BITLOCKER_NOTE:-מוצפנת ב-BitLocker}" ;;
         crypto_LUKS) echo "מוצפנת ב-LUKS" ;;
         unknown|'') echo "מערכת הקבצים לא מזוהה" ;;
         *) echo "מערכת הקבצים $1 אינה נתמכת בהעתקה חכמה" ;;

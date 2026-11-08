@@ -91,7 +91,7 @@ def test_log_lines_go_to_the_log_not_into_a_returned_value(tmp_path):
 
 
 FS_VALUES = ["ntfs", "vfat", "fat", "fat32", "fat16", "ext4", "ext3", "ext2", "btrfs",
-             "xfs", "swap", "unknown", ""]
+             "xfs", "swap", "unknown", "", "BitLocker"]
 
 
 @pytest.mark.parametrize("fs", FS_VALUES)

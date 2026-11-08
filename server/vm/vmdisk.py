@@ -1,7 +1,7 @@
 """אימג' → דיסק וירטואלי, ודיסק → גרסה חדשה של האימג' (‏#1334).
 
 שני הכיוונים הם **שחזור וקליטה**, לא משהו שדומה להם: הטבלה, ההרחבה,
-הכיווץ, שערי ההברנציה וה-BitLocker ו-`boot_ca` רצים בפונקציות של הסוכן
+הכיווץ, שערי ההברנציה ו-`boot_ca` רצים בפונקציות של הסוכן
 עצמן (`server/vm/agent_shell.py`) מול `/dev/loopN`. כאן נשאר רק מה שבסוכן
 קשור לרשת/למסך: הזרם (קובץ ↔ ‏zstd ↔ ‏partclone, עם sha256 על הבייטים
 הדחוסים — אותו מקום מדידה כמו בסוכן, ‏#73), קריאת הטבלה בחזרה, והרכבת
@@ -40,6 +40,8 @@ SECTOR = 512
 #: כמו `CAPTURE_LEVEL`/`CAPTURE_THREADS` של `agent/lib/capture/capture.sh`.
 CAPTURE_LEVEL = 3
 CAPTURE_THREADS = 2
+# Kept in sync with CAPTURE_BITLOCKER_NOTE by the parity test (#2690, #1840).
+BITLOCKER_NOTE = "מוצפן ב-BitLocker: יועתק כמו שהוא, בלי כיווץ; במחשב אחר יידרש מפתח שחזור"
 #: תקרה לכל כלי בזרם. נגמר הזרם — הכלים יוצאים בשניות; כלי שלא יצא אחרי
 #: זה תקוע, ונהרג בשמו (לולאות רקע חייבות לפוג).
 TOOL_WAIT_S = 3600
@@ -413,8 +415,10 @@ def build_disk(host: Host, manifest: dict, image_dir: Path, workdir: Path,
 #   למניפסט המקור: מחיצה שסוג מערכת הקבצים שלה השתנה, מחיצה חדשה או חסרה,
 #   ‏GUID של דיסק אחר — סירוב בשם.
 
+# BitLocker detection runs in the appliance; matching encrypted volumes are copied
+# raw with a warning, never mounted, shrunk or grown (#2690, #1840).
 GUID_RE = re.compile(r"[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}")
-FS_KNOWN = ("ntfs", "vfat", "ext4", "ext3", "ext2", "btrfs", "xfs", "swap", "unknown")
+FS_KNOWN = ("ntfs", "vfat", "ext4", "ext3", "ext2", "btrfs", "xfs", "swap", "unknown", "BitLocker")
 BOOT_PATH_RE = re.compile(r"/[A-Za-z0-9._/-]{1,200}")
 #: קובץ אתחול גדול מזה אינו מטען אתחול — לא מורידים אותו מה-appliance.
 BOOT_FILE_MAX = 64 * MIB
@@ -427,6 +431,8 @@ def norm_fs(value: str | None) -> str:
     fs = (value or "").strip().lower()
     if fs in ("", "unknown"):
         return "unknown"
+    if fs == "bitlocker":
+        return "BitLocker"
     return "ntfs" if fs == "ntfs-3g" else fs
 
 
@@ -875,11 +881,11 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
     try:
         disk_guid, table = box.table()
         fs_of = {p["index"]: box.fs(p["index"]) for p in table}
+        for idx, fs in fs_of.items():
+            if box.bitlocker(idx, fs):
+                fs_of[idx] = "BitLocker"
         check_against_source(source, disk_guid, table, fs_of)
         for part in table:
-            if box.bitlocker(part["index"], fs_of[part["index"]]):
-                raise DiskError("bitlocker", f"מחיצה {part['index']} מוצפנת ב-BitLocker — "
-                                             "כבו את BitLocker ב-VM ושמרו שוב")
             if fs_of[part["index"]] == "ntfs":
                 rc = box.hibernation(part["index"])
                 if rc in (14, 15):
@@ -895,7 +901,7 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
         # הנפח נמדד **לפני** הכיווץ: אחרי ntfsresize הווליום מסומן לבדיקה,
         # ועגינה לקריאה שלו עלולה להיכשל. הכיווץ אינו משנה כמה תפוס.
         used = {p["index"]: box.used_bytes(p["index"]) for p in table
-                if fs_of[p["index"]] not in ("swap", "unknown")}
+                if fs_of[p["index"]] not in ("swap", "unknown", "BitLocker")}
         parts_path = run_dir / "parts.txt"
         fails = run_dir / "uguid.fail"
         fails.write_text("".join(f"{p['index']}|2|no unique GUID\n" for p in table
@@ -1000,7 +1006,8 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
             idx = row["index"]
             fs = fs_of[idx]
             real = on_disk[idx]
-            role = "swap" if fs == "swap" else partition_role(row["type_guid"])
+            role = ("data" if fs == "BitLocker" else
+                    "swap" if fs == "swap" else partition_role(row["type_guid"]))
             extra = _json_fragment(host.agent("shrink_json_extra", str(idx), str(row["first"]),
                                               str(row["sectors"]), str(SECTOR),
                                               run_dir=run_dir).out)

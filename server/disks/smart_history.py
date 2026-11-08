@@ -118,13 +118,15 @@ def serial_of(conn: sqlite3.Connection, mac: str, dev: str) -> str | None:
     return None
 
 
-def previous(conn: sqlite3.Connection, serial: str | None) -> sqlite3.Row | None:
+def previous(conn: sqlite3.Connection, serial: str | None, skip: int = 0) -> sqlite3.Row | None:
     """This serial's last snapshot, or None -- no previous round. Only rows a machine wrote for
-    a disk it reported (`record` checks it; a row without a MAC is not one) count."""
+    a disk it reported (`record` checks it; a row without a MAC is not one) count. `skip=1`: the
+    one before it (#2705: the comparison of a view that shows the last snapshot itself)."""
     if not serial:
         return None
     return conn.execute("SELECT session_id, at, attrs_json, temp_after FROM smart_history"
-                        " WHERE serial = ? AND mac IS NOT NULL ORDER BY at DESC LIMIT 1", (serial,)).fetchone()
+                        " WHERE serial = ? AND mac IS NOT NULL ORDER BY at DESC LIMIT 1 OFFSET ?",
+                        (serial, skip)).fetchone()
 
 
 def _rose(now: dict[int, dict], before: dict[int, dict]) -> dict[int, int]:
@@ -190,9 +192,20 @@ def rose_for(conn: sqlite3.Connection, disks: object) -> list[dict]:
 
 
 def describe(conn: sqlite3.Connection, disk: dict) -> dict:
-    """One disk for the console: every attribute in Hebrew, and what rose."""
-    now, nvme = _rows(disk.get("smart_attrs")), _nvme(disk.get("smart_attrs"))
+    """One disk for the console: every attribute in Hebrew, and what rose.
+
+    #2705: the hello's `smart_attrs` is null when the agent did not read the disk *in this boot*
+    (its cache is per boot, and the hello never probes). A cloner woken into a round sends that
+    hello first, reads SMART in the round (disk_event -> `record`) and powers off -- so the last
+    hello is null on a disk that was read. Then the view is this serial's last snapshot, said with
+    when it was read (`read_from: "round"`, `read_at`), compared with the snapshot before it.
+    "Not read" only when nothing was: not in the last hello and never in a round (principle 5)."""
+    attrs, read_from, read_at = disk.get("smart_attrs"), "hello", None
     prev = previous(conn, disk.get("serial"))
+    if not isinstance(attrs, dict) and prev is not None:
+        attrs, read_from, read_at = json.loads(prev["attrs_json"] or "{}"), "round", prev["at"]
+        prev = previous(conn, disk.get("serial"), skip=1)
+    now, nvme = _rows(attrs), _nvme(attrs)
     before = _rows(json.loads(prev["attrs_json"] or "{}")) if prev is not None else {}
     before_nvme = _nvme(json.loads(prev["attrs_json"] or "{}")) if prev is not None else {}
     rose = _rose(now, before)
@@ -226,10 +239,12 @@ def describe(conn: sqlite3.Connection, disk: dict) -> dict:
     return {
         "serial": disk.get("serial"), "dev": disk.get("dev"), "port": disk.get("port"),
         "read": bool(rows),
+        "read_from": read_from if rows else None,   # #2705: "hello" = the last hello; "round" = the snapshot
+        "read_at": read_at if rows else None,       # the snapshot's time; null for the hello's own reading
         "compared": prev is not None,
         "previous_at": prev["at"] if prev is not None else None,
         "previous_temp_c": prev["temp_after"] if prev is not None else None,
-        "learned": learned(disk.get("smart_attrs"), prev),
+        "learned": learned(attrs, prev),
         "attributes": rows,
         "hw": hw,   # #1921: the hardware table's notes for this drawer -- the cable, not the disk
     }

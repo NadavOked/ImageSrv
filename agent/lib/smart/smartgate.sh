@@ -53,7 +53,20 @@ smart_preflight() {
     # ‏ok/unchecked לא נשאלים — unchecked נכתב, זה קריטי (עיקרון 5).
     _pf_ses="$1"; shift
     disk_failures_refresh || :   # #874: זיכרון השרת מה-hello האחרון; כשל = הקובץ הקודם
-    command -v smart_learned_refresh >/dev/null 2>&1 && { smart_learned_refresh || :; }   # #1859: what the server learned, the same way
+    # #1859/#2711: what rose since this serial's previous round -- compared with what is read NOW. A cloner
+    # woken into a round sent its one hello before any probe (smart_attrs null: the cache is per boot), and the
+    # server compares nothing it was not sent. Probe first, then one NON-joining hello (attended_hello: the beat
+    # a running task sends -- a joining one mid-round marks the member lost, #1728 -- whose answer never touches
+    # response.json), and read smart_learned from that answer. Not delivered = said (principle 5).
+    for _pf_d in "$@"; do smart_probe "$_pf_d" > /dev/null; done
+    if command -v smart_learned_refresh > /dev/null 2>&1; then
+        if command -v attended_hello > /dev/null 2>&1 && attended_hello "" >&2 &&
+                smart_learned_refresh "$RUN_DIR/attended.resp"; then :
+        else
+            log "SMART: not compared with the previous round after the probe -- the hello did not go through; the boot answer stands" >&2
+            smart_learned_refresh || :
+        fi
+    fi
     _pf_write=""
     for _pf_d in "$@"; do
         # תיקיית היעד קיימת כבר מ-target_init; ה-mkdir הופך את השער לעצמאי --

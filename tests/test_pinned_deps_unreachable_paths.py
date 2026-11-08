@@ -25,6 +25,7 @@
 | python3-python-multipart 0.0.20 (Recommends של starlette) | CVE-2026-40347, ‏42561, ‏53537–53540 | ‏``Form``/``File``/``UploadFile`` של FastAPI ו-``request.form()`` — רק הם מפעילים את המפענח |
 | python3-h2 / python3-hpack | CVE-2025-57804, ‏CVE-2026-71554, ‏CVE-2026-59980 | ייבוא ``h2``/``hpack`` (‏uvicorn אינו מדבר HTTP/2) |
 | python3-anyio 4.8.0 | CVE-2026-63349, ‏63374, ‏64847 | ייבוא ישיר של ``anyio`` (‏run_process/to_process/connect_tcp) |
+| python3-anyio 4.8.0 (Dependabot #11, ‏#10) | CVE-2026-63374 (‏``TLSStream.wrap``), ‏64847 (‏``to_process``) | גם בלי ייבוא ישיר: ‏``TLSStream``/``start_tls``/``connect_tcp``/``to_process``, השם ``anyio`` שמיובא דרך מודול אחר, ו-``httpx``/``httpcore`` (‏ה-backend האסינכרוני שלהם הוא ``TLSStream.wrap``) |
 | python3.13 | CVE-2026-19445, ‏19553, ‏15308, ‏18503, ‏15806 | ‏``sni_callback``, ‏``wrap_bio``, ‏``HTMLParser``, ‏``Sniffer``, ‏``HTTPPasswordMgr*`` |
 
 #326: ‏starlette — שבע החולשות שה-CI (‏PyPI 0.46.2) מדווח מוטלאות ב-Debian
@@ -74,6 +75,13 @@ FORBIDDEN_NAMES = {
     "UploadFile": "python-multipart CVE-2026-40347/42561/5353x (multipart parser)",
     # #326
     "HTTPEndpoint": "starlette CVE-2026-48817 (HTTPEndpoint method dispatch)",
+    # Dependabot #11/#10: the anyio paths, also when anyio is reached without
+    # ``import anyio`` (``from starlette.concurrency import anyio``, httpcore).
+    "TLSStream": "anyio CVE-2026-63374 (TLSStream.wrap, IDNA 2003 hostname)",
+    "start_tls": "anyio CVE-2026-63374 (httpcore AnyIOStream.start_tls -> TLSStream.wrap)",
+    "connect_tcp": "anyio CVE-2026-63374 (connect_tcp(tls=True) -> TLSStream.wrap)",
+    "to_process": "anyio CVE-2026-64847 (process-pool worker stderr deadlock)",
+    "anyio": "python-anyio CVE-2026-63374/64847 (anyio reached via another module)",
 }
 #: ‏#326: חלקי ``request.url`` ש-starlette לא מוטלא בונה מ-Host/מהנתיב בלי אימות.
 POISONED_URL_PARTS = {"path", "hostname", "netloc"}
@@ -84,6 +92,8 @@ FORBIDDEN_MODULES = {
     "h2": "python-h2 CVE-2025-57804/CVE-2026-71554 (HTTP/2)",
     "hpack": "python-hpack CVE-2026-59980 (HTTP/2)",
     "anyio": "python-anyio CVE-2026-63349/63374/64847",
+    "httpx": "anyio CVE-2026-63374 (httpx.AsyncClient https -> TLSStream.wrap)",
+    "httpcore": "anyio CVE-2026-63374 (AnyIO backend start_tls -> TLSStream.wrap)",
 }
 #: ‏FastAPI מפעיל את מפענח ה-multipart רק לנקודת קצה שמצהירה עליהם.
 FASTAPI_FORM_PARAMS = {"Form", "File", "UploadFile"}
@@ -195,6 +205,15 @@ def test_scanner_catches_each_forbidden_path() -> None:
         "import h2.connection": "h2",
         "import anyio\nanyio.run(main)": "anyio",
         "from anyio import to_process": "anyio",
+        # Dependabot #11/#10
+        "from anyio.streams.tls import TLSStream": "TLSStream",
+        "s = await tls_mod.TLSStream.wrap(raw, hostname=host)": "TLSStream",
+        "from starlette.concurrency import anyio": "anyio",
+        "s = await starlette.concurrency.anyio.connect_tcp(h, 443, tls=True)": "connect_tcp",
+        "s = await stream.start_tls(ctx, server_hostname=host)": "start_tls",
+        "r = await concurrency.anyio.to_process.run_sync(f)": "to_process",
+        "import httpx\nhttpx.AsyncClient()": "httpx",
+        "from httpcore import AsyncConnectionPool": "httpcore",
         "ctx.sni_callback = pick": "sni_callback",
         "ctx.wrap_bio(i, o)": "wrap_bio",
         "from html.parser import HTMLParser": "HTMLParser",

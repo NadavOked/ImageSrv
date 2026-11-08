@@ -23,6 +23,7 @@ The engine on loop devices (root) is the Testrunner's; the rest runs anywhere ba
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -30,6 +31,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
+from test_bitlocker_raw_1840 import NOTE
 from test_cloner_gui import BASH, PORTS, PRELUDE, env, posix, sh
 from test_local_clone_agent import STREAM_STUBS, run
 
@@ -38,7 +40,7 @@ AGENT = REPO / "agent"
 
 pytestmark = requires_native(("bash", BASH))
 
-BITLOCKER_WHY = "מוצפנת ב-BitLocker"
+BITLOCKER_WHY = NOTE
 
 
 # --- which partition is raw, and why (lcraw.sh lc_raw_why) --------------------------
@@ -64,6 +66,25 @@ def test_what_partclone_cannot_copy_is_raw_and_named(tmp_path, fs, role, guid, w
     assert (js == "") == (want == ""), js
     if want:
         assert js == f',"copy":"raw","raw_why":"{want}"', js
+
+
+@pytest.mark.parametrize("setup", ["unset CAPTURE_BITLOCKER_NOTE", "CAPTURE_BITLOCKER_NOTE="])
+def test_bitlocker_warning_falls_back_to_the_old_short_reason(tmp_path, setup):
+    out = run(tmp_path, setup + '; lc_raw_why BitLocker data EBD0A0A2-B9E5-4433-87C0-68B6B72699C7')
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "מוצפנת ב-BitLocker"
+
+
+def test_bitlocker_done_note_and_manifest_keep_the_exact_warning(tmp_path):
+    m = tmp_path / "m.json"
+    out = run(tmp_path, 'lc_raw_json BitLocker data EBD0A0A2-B9E5-4433-87C0-68B6B72699C7')
+    assert out.returncode == 0, out.stderr
+    part = json.loads('{"index":2,"fs":"BitLocker"' + out.stdout + '}')
+    assert part["copy"] == "raw" and part["raw_why"] == NOTE
+    _manifest(m, [part])
+    out = run(tmp_path, f'lc_raw_note sda {posix(m)!r}')
+    assert out.returncode == 0, out.stderr
+    assert NOTE in out.stdout
 
 
 def _manifest(path: Path, parts: list[dict]) -> None:
@@ -282,6 +303,7 @@ def test_the_note_names_each_raw_partition_and_the_rescue(tmp_path):
     assert note.startswith("הועתק במצב גולמי (כמו dd): מחיצה 2 — " + BITLOCKER_WHY), note
     assert "מחיצה 3 — partclone סירב" in note and "מחיצה 5" not in note, note
     assert "מחיצה 4 במצב הצלה: 24 סקטורים לא נקראו ונכתבו כאפסים — לא זהה למקור" in note, note
+    # Full warning + refused NTFS + rescue: 379 UTF-8 bytes, still fits.
     assert len(note.encode()) < 400, len(note.encode())   # LcTgt.error[400] (localclone.h)
     assert flags == "3,24" and other == "3,-1", out.stdout
 

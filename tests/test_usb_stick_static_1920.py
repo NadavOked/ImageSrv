@@ -51,7 +51,7 @@ def test_the_icon_is_one_and_the_same_in_the_tree_the_page_header_and_the_device
 def test_the_script_loads_after_console_js_with_the_same_version_as_every_include():
     html = _read("index.html")
     assert html.index('src="console.js?v=') < html.index('src="usbstick.js?v=')
-    assert set(re.findall(r'\?v=(\d+\.\d+)"', html)) == {"12.90"}   # round/1107c: one value for every include
+    assert set(re.findall(r'\?v=(\d+\.\d+)"', html)) == {"12.93"}   # round/1107c: one value for every include
 
 
 def test_the_page_is_registered_and_the_settings_download_row_moved_out():
@@ -81,7 +81,7 @@ const ctx = {
     pill: (c, t) => `<pill ${c}>${esc(t)}</pill>`, status: (c, t) => `<st ${c}>${esc(t)}</st>`,
     kv: (rows) => rows.map(([k, v]) => `<kv>${esc(k)}=${v}</kv>`).join(""),
     note: (c, h) => `<note ${c}>${h}</note>`,
-    datagrid: (o) => `<table>${o.rows.map((r) => "<tr>" + r.join("|") + "</tr>").join("")}</table>`,
+    datagrid: (o) => `<table cols="${o.columns.join("|")}">${o.rows.map((r) => "<tr>" + r.join("|") + "</tr>").join("")}</table>`,
   },
 };
 let API_RESULT = null, POST_RESULT = null, SHEET = null;
@@ -213,3 +213,25 @@ def test_the_last_sync_card_names_a_partial_result_and_a_failed_direction(tmp_pa
     failed = {**base, "to_stick": {"error": "הכתיבה להתקן נכשלה: boom"}}
     page = run(tmp_path, stick={**CONNECTED, "last_sync": failed})["page"]
     assert "הושלם חלקית: כיוון אחד נכשל" in page and "הכתיבה להתקן נכשלה: boom" in page
+
+
+@requires_native(("node", NODE))
+def test_the_log_has_a_link_column_between_the_controller_and_the_size_2694(tmp_path):
+    # the approved mockup (1920-usb.html): ... | בקר | קישור | גודל | ...; the value is the stick's report field, read as it came
+    def cells(link):
+        stick = json.loads(json.dumps(CONNECTED))
+        stick["rows"][0]["link_gbps"] = link
+        page = run(tmp_path, stick=stick)["page"]
+        cols = re.search(r'<table cols="([^"]*)"', page).group(1).split("|")
+        row = re.search(r"<tr>(.*?)</tr>", page, re.S).group(1).split("|")
+        return cols, row
+
+    cols, row = cells(3.0)
+    assert cols[2:5] == ["בקר", "קישור", "גודל"], cols
+    assert row[3] == "<bdi>3 Gb/s</bdi>", row                       # JSON 3.0 reaches the page as the number 3
+    assert cells(6.0)[1][3] == "<bdi>6 Gb/s</bdi>" and cells(1.5)[1][3] == "<bdi>1.5 Gb/s</bdi>"
+    # null (the stick could not read a link) and a report from before the field are "not read", not a number and not 0
+    assert cells(None)[1][3] == '<span class="muted">לא נקרא</span>'
+    stick = json.loads(json.dumps(CONNECTED))
+    stick["rows"][0].pop("link_gbps", None)
+    assert re.search(r"<tr>(.*?)</tr>", run(tmp_path, stick=stick)["page"], re.S).group(1).split("|")[3]         == '<span class="muted">לא נקרא</span>'

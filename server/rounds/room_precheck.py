@@ -103,6 +103,9 @@ def _ports(conn: sqlite3.Connection, disk: dict, mac: str | None) -> dict:
 
 
 def _learned(conn: sqlite3.Connection, disk: dict) -> dict:
+    # ‏#2706 (הוכרע): רק מה-hello. ‏`smart_attrs: null` (לא נקרא מאז שהמכונה עלתה) = ‏(None, None),
+    # "לא נקרא עכשיו" -- גם כש-`smart_history` מחזיק שתי תמונות. תצוגת הקונסולה (`describe`, ‏#2705)
+    # מראה את התמונה של הסבב עם התאריך שלה; אזהרת הגל אינה מקבלת אותה כקריאה של עכשיו.
     attrs = disk.get("smart_attrs")
     if not isinstance(attrs, dict) or not disk.get("serial"):
         return {"smart_learned": None, "smart_compared": None}

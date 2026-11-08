@@ -29,7 +29,7 @@ from server.console import auth
 from server.rounds import drawer_cancel, drive_rates, room_drivers, room_precheck
 from server.library import drivers, minfree
 from server.agent import registry, reports
-from server.disks import disk_failures, disk_sets, drawer_slots, slot_names
+from server.disks import disk_events, disk_failures, disk_sets, drawer_slots, slot_names
 from server.storage import locations as storage_locations
 from server.disks import model_slots   # #2001
 from server.db import _write_lock, journal, now_iso, update_one, writing
@@ -415,6 +415,8 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
     drawers = []
     disks = _disks(conn, mac)
     set_labels = disk_sets.labels_for(conn, disks)   # ‏#1857: שאילתה אחת לכל המגירות
+    round_smart = disk_events.last_by_serial(   # ‏#2706: מה שהסבב האחרון קרא -- שאילתה אחת
+        conn, [d["serial"] for d in disks if isinstance(d, dict) and isinstance(d.get("serial"), str) and d["serial"]])
     for disk in disks:
         if not isinstance(disk, dict):
             continue
@@ -495,6 +497,9 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
             # שהמפעיל יראה "מגירה N: SMART אזהרה" **לפני** שהוא משגר סבב.
             # ‏`unchecked` = לא-נבדק, לא כשל (עיקרון 5).
             "smart": disk.get("smart") or "unchecked",
+            # ‏#2706: הפסק של הסבב האחרון שקרא את הסידורי (‏`disk_events`) -- לתצוגה. ‏`smart` שלמעלה
+            # נשאר של ה-hello: השער האדום (`open`) וה-precheck קוראים אותו, ופסק מאתחול קודם אינו ראיה על עכשיו.
+            "smart_round": round_smart.get(disk.get("serial")) if isinstance(disk.get("serial"), str) else None,
             # ‏#1366: למה `fail` (‏health_failed / pending_sectors / uncorrectable) —
             # "ה-BIOS יעצור ב-F1". ‏None = סוכן ישן או דיסק ירוק.
             "smart_reason": disk.get("smart_reason") or None,
@@ -637,6 +642,8 @@ def journal_precheck(conn: sqlite3.Connection, round_row: sqlite3.Row,
             item += f" crc+{w['crc_rise']}"
         if w.get("crc_suspect"):
             item += f" crc={w['crc']}"   # #1366: the absolute count over the threshold
+        if w.get("smart_learned"):
+            item += f" smart={w['smart_learned']}"   # #2707: #1859's word -- the journal says its kind too
         if w.get("port_suspect"):
             item += " learned=port"      # #1844: the same connection with different disks
         if w.get("disk_suspect"):

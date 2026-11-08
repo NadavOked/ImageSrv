@@ -26,7 +26,7 @@ from server.rounds import drive_rates, nic_speed, room
 from server.agent import boot_preview, identity, inventory, probe, readbackhash, registry
 from server.system import backup_target, timezone
 from server.net import dhcp, ports
-from server.disks import (crcwarn, disk_failures, disk_sets, drawer_slots, shrink_records, slot_names,
+from server.disks import (crcwarn, disk_events, disk_failures, disk_sets, drawer_slots, shrink_records, slot_names,
                           smart_history)
 from server.storage import disk_reserve, locations as storage_locations
 from server.interserver import storage_nodes, transfer_cap
@@ -703,6 +703,7 @@ def create_console_router(
         # ‏#1858 (מוקאפ 10): מי לא הגיעה אחרי WoL — קריאה אחת לכל החדר. ‏None = הקריאה נכשלה.
         woke_waits = never_woke.waiting(ctx.conn)
         f1_seen = f1_marks.all_marks(ctx.conn)   # ‏#1858 (07/11): "נצפה F1" לפי serial. ‏None = נכשל — אין ראיה שנייה
+        round_smart = disk_events.last_by_serial(ctx.conn)   # ‏#2706: מה שהסבב האחרון קרא, לתצוגה
         result = []
         for r in rows:
             row = dict(r)
@@ -730,6 +731,8 @@ def create_console_router(
                     # ‏#1857 (מוקאפ 04): "קוריאים · xx-7" ליד הדיסק; ‏None = בלי סט -- מוצג כמו היום.
                     d["set_text"] = disk_sets.text_of(set_labels, d.get("serial"))
                     serial = d.get("serial")
+                    # ‏#2706: הפסק של הסבב האחרון ליד זה של ה-hello -- `smart` עצמו אינו משתנה (השער קורא אותו)
+                    d["smart_round"] = round_smart.get(serial) if isinstance(serial, str) else None
                     mark = f1_seen.get(serial.strip()) if f1_seen and isinstance(serial, str) else None
                     if mark is not None:   # ‏#1858: "נצפה F1" לפי serial -- הקונסולה לא מציעה לסמן שוב
                         d["f1_observed"] = mark

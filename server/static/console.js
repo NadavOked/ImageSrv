@@ -2718,11 +2718,23 @@ function roomFootHtml(r) {
 /* ‏#2670: הכותרת לפי סוג האזהרות — ‏`round.precheck` נושא גם כתיבה איטית (`write_slow`, ‏#447), והמפעיל שקרא
    "קישור" חיפש כבל כשהבעיה בדיסק. אזהרה שהיא כתיבה איטית בלבד — כתיבה איטית; כל אחת שנושאת סימן קישור
    (קישור איטי, CRC) או שאינה כתיבה איטית כלל (כמו קודם) — קישור חשוד; יש מכל סוג — שניהם. */
+/* ‏#2707: כל סימן לסוג שלו — "הדיסק עצמו" (`disk_suspect`, ‏#1844) ו"איטי מהרגיל לדגם" (`model_slow`, ‏#1845)
+   אינם קישור. אותה טבלה כמו `journal_he.precheck_he` (tests/test_precheck_kind_2707.py). בלי סימן מוכר -- "עם אזהרה". */
+const PRECHECK_NOUN_HE = { link: "קישור חשוד", slow: "כתיבה איטית", disk: "דיסק חשוד" };
+const PRECHECK_LINK_ROSE = ["downshift_rose", "timeout_rose"];   // #1859 smart_learned: 183/188 -- likely the cable
+const PRECHECK_DISK_ROSE = ["critical_rose", "hot"];             // a critical attribute, hot while writing -- the disk
+function precheckSigns(x) {
+  const out = [];
+  if ((x.crc_rise || 0) > 0 || x.crc_suspect === true || x.port_suspect === true || PRECHECK_LINK_ROSE.includes(x.smart_learned)
+    || (x.link_gbps != null && x.link_max_gbps != null && x.link_gbps < x.link_max_gbps)) out.push("link");
+  if (x.write_slow === true || x.model_slow === true) out.push("slow");
+  if (x.disk_suspect === true || PRECHECK_DISK_ROSE.includes(x.smart_learned)) out.push("disk");
+  return out;
+}
 function precheckKind(w) {
-  const linkish = (x) => x.write_slow !== true || (x.crc_rise || 0) > 0 || x.crc_suspect === true
-    || (x.link_gbps != null && x.link_max_gbps != null && x.link_gbps < x.link_max_gbps);
-  const link = w.some(linkish), write = w.some((x) => x.write_slow === true);
-  return link && write ? "עם קישור חשוד או כתיבה איטית" : write ? "עם כתיבה איטית" : "עם קישור חשוד";
+  const all = new Set(w.flatMap(precheckSigns));
+  const nouns = ["link", "slow", "disk"].filter((k) => all.has(k)).map((k) => PRECHECK_NOUN_HE[k]);
+  return nouns.length ? `עם ${nouns.join(" או ")}` : "עם אזהרה";
 }
 function roomPrecheckHtml(r) {
   const w = r.wave_state === "open" && Array.isArray(r.precheck) ? r.precheck : [];
@@ -4929,6 +4941,11 @@ function smartText(d) {
   if (d.smart === "warn") return d.smart_reason ? `SMART אזהרה — ${smartReasonHe(d.smart_reason)}` : "SMART אזהרה";   // #1859: why orange
   if (d.smart === "fail") return smartF1Text(d.smart_reason);   // #1580: red, never written
   if (d.smart === "failed_last") return "נכשל בשיכפול הקודם";
+  /* #2706: the machine did not read SMART since it booted (a cloner woken into a round sends its one hello
+     first) -- what the last round read is said beside it, with when; never as the disk's word of now */
+  const r = d.smart_round;
+  if (r && ["ok", "warn", "fail"].includes(r.verdict))
+    return `SMART לא נבדק מאז שהמכונה עלתה · בסבב (${fmtWhen(r.at)}): ${smartText({ smart: r.verdict, smart_reason: r.reason })}`;
   return "SMART לא נבדק";
 }
 /* #1859 (Nadav 20/10): every SMART attribute of a disk, in Hebrew (server/disks/smart_names.py), the critical
@@ -4958,10 +4975,12 @@ function smartAttrsHtml(mac, d) {
   if (!one || !one.read) return `<div class="muted">SMART לא נקרא מהדיסק הזה — לא נבדק</div>`;
   const head = one.compared ? `<div class="cap">הושווה לסבב הקודם (${esc(fmtWhen(one.previous_at))})${one.learned ? ` · <b>${esc(smartReasonHe(one.learned))}</b>` : ""}</div>`
     : `<div class="cap">${esc(all.no_history_he || "אין עדיין השוואה")}</div>`;
+  // #2705: the machine did not read SMART since it booted -- the table is the last round's reading, said so
+  const from = one.read_from === "round" ? `<div class="cap">נקרא בסבב (${esc(fmtWhen(one.read_at))}) — המכונה לא קראה SMART מאז שעלתה</div>` : "";
   // #1921 (Nadav 20/10): the hardware table's notes (server/disks/smart_names.py, the agent's hw-issues.tsv) -- the
   // cable or the drawer, said beside the disk and never as its colour
   const hw = (one.hw || []).map((h) => UI.note("warn", `הערת חומרה (מגירה/כבל — לא הדיסק): ${esc(h.he || h.word)}`)).join("");
-  return hw + `<details class="smart-attrs"><summary>כל מאפייני ה-SMART (${one.attributes.length})</summary>${head}`
+  return hw + `<details class="smart-attrs"><summary>כל מאפייני ה-SMART (${one.attributes.length})</summary>${from}${head}`
     + `<table class="n-tbl smart-attrs-tbl"><thead><tr><th>מזהה</th><th>שם</th><th>ערך / הכי נמוך / סף</th><th>גולמי</th><th></th></tr></thead><tbody>`
     + one.attributes.map(smartAttrRow).join("") + `</tbody></table></details>`;
 }

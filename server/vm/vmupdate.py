@@ -1254,7 +1254,9 @@ class VmUpdate:
                 self._state = {"state": "saved", "image_id": source.get("id"),
                                "image_name": source.get("name"), "result": result,
                                "warnings": ([] if gone else
-                                            [f"דיסק העבודה לא נמחק — {WORK_AREA} נשאר בספרייה"]),
+                                            [f"דיסק העבודה לא נמחק — {WORK_AREA} נשאר בספרייה"]) + [
+                                   f"מחיצה {p['index']}: {vmdisk.BITLOCKER_NOTE}"
+                                   for p in manifest["partitions"] if p["fs"] == "BitLocker"],
                                "error": None}
         except vmdisk.DiskError as exc:
             shutil.rmtree(out, ignore_errors=True)

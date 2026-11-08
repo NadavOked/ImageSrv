@@ -80,6 +80,22 @@ disk_link_json() {
     printf ',"link_gbps":%s,"link_max_gbps":%s,"crc":%s' "${_dl_sm% *}" "${_dl_sm#* }" "$_dl_crc"
 }
 
+clone_link_gbps() {
+    # A partial inventory is unknown, never a reassuring minimum of the rest.
+    _clg_min=null
+    for _clg_disk in "$@"; do
+        case "$_clg_disk" in ''|*[!a-z0-9]*) printf 'null\n'; return 0 ;; esac
+        _clg_pair=$(disk_link "$_clg_disk") || { printf 'null\n'; return 0; }
+        _clg_speed=${_clg_pair%% *}
+        case "$_clg_speed" in 1.5|3.0|6.0) ;; *) printf 'null\n'; return 0 ;; esac
+        if [ "$_clg_min" = null ] ||
+            [ "${_clg_speed%.*}${_clg_speed#*.}" -lt "${_clg_min%.*}${_clg_min#*.}" ]; then
+            _clg_min=$_clg_speed
+        fi
+    done
+    printf '%s\n' "$_clg_min"
+}
+
 disk_pci_json() {
     # The controller PCI address is the component immediately before /nvme/.
     _dl_path=$(readlink -f "$SYSROOT/sys/block/$1/device" 2>/dev/null)

@@ -27,6 +27,13 @@ def test_capture_strips_exactly_one_trailing_period(suffix, remaining):
     assert why == f"הדיסק נקרא, אבל ההעלאה נכשלה{remaining}, ולכן האימג׳ לא נכנס לספרייה."
 
 
+def test_retired_bitlocker_code_uses_the_unknown_reason_fallback():
+    text = (AGENT / "lib/gui/failscreen.sh").read_text(encoding="utf-8")
+    assert "source_bitlocker" not in text
+    assert capture_texts("capture stopped", "source_bitlocker") == \
+        capture_texts("capture stopped", "future_reason")
+
+
 def test_network_failure_says_what_stopped_and_offers_a_retry():
     # #2068 (mockup 09): the sentence says what happened; the next step is a button
     _, do, btn = capture_texts("ההעלאה נכשלה.", "network_server")
@@ -43,7 +50,7 @@ def test_fast_startup_steps_treat_the_source_then_retry():
 
 
 @pytest.mark.parametrize("code,expected", [
-    ("source_bitlocker", "manage-bde -off C:"), ("source_disk", "בדוק את הדיסק"),
+    ("source_disk", "בדוק את הדיסק"),
     (None, "המשימה נעצרה"), ("future_reason", "המשימה נעצרה"),   # #2068: never "פנו ל-IT"
 ])
 def test_other_source_and_unknown_reasons_do_not_prescribe_a_cable(code, expected):
@@ -54,7 +61,7 @@ def test_other_source_and_unknown_reasons_do_not_prescribe_a_cable(code, expecte
 
 @pytest.mark.parametrize("code,expected", [
     ("source_ntfs", "chkdsk"), ("network_server", "ההעלאה לשרת נעצרה"),
-    ("source_bitlocker", "manage-bde"), (None, "בדוק את הדיסק"),
+    (None, "בדוק את הדיסק"),
 ])
 def test_capture_failure_code_reaches_screen_records(tmp_path, code, expected):
     # Real failure writer -> persisted code -> real screen record generator.

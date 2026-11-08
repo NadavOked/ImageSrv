@@ -122,6 +122,12 @@
 **שום מערכת קבצים של האורח אינה נעגנת בקרנל של השרת, ושום מפרסר שלה אינו
 רץ כ-root:**
 
+BitLocker volumes matching the source manifest are saved with `partclone.dd`,
+sector by sector, with the recovery-key warning in the saved result (#2690,
+refs #1840). They are never mounted, shrunk or grown; used space stays unknown.
+A changed filesystem is still refused (`fs_changed`), as is a BitLocker check
+that could not run (`unchecked`).
+
 1. **ב-appliance של libguestfs:** הטבלה (‏GUIDים, סוגים, היסטים — כל ערך עובר
    אימות פורמט), סוג מערכת הקבצים (חייב להיות זה שבמניפסט המקור —
    ‏`fs_changed`), ‏BitLocker (‏`-FVE-FS-`), הברנציה (‏`ntfs-3g.probe`, ‏14/15 —

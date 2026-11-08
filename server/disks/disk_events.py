@@ -174,3 +174,21 @@ def for_session(conn: sqlite3.Connection, session_id: str) -> list[dict]:
             "updated_at": r["updated_at"],
         })
     return out
+
+
+def last_by_serial(conn: sqlite3.Connection, serials: list[str] | None = None) -> dict[str, dict]:
+    """‏#2706: הפסק של הסבב האחרון שקרא כל סידורי -- ‏{serial: {"verdict", "reason", "at"}}.
+
+    משכפל שהוער לסבב שולח hello אחד עם `smart: "unchecked"` (המטמון בסוכן לכל אתחול, וה-hello
+    לעולם אינו probe), קורא SMART בשער של הסבב ונכבה; ה-hello מחליף את `disks_json` כולו. זה מה
+    שהסבב קרא, ליד המגירה, **לתצוגה בלבד**: השער האדום וה-precheck נשארים על ה-hello -- פסק
+    מאתחול קודם אינו ראיה על הדיסק עכשיו (עיקרון 5). רק שורות שהסידורי שלהן נשמר: ‏`ingest` שומר
+    סידורי רק כשהוא מה שה-MAC הזה דיווח (#2492). ‏`unchecked` של הסבב הוא גם תשובה ("לא נקרא")."""
+    # ‏`serials` -- רק אלה (מגירות של מכונה אחת, drawer_list); ‏None = כולם (‏/machines).
+    if serials is not None and not serials:
+        return {}
+    where = f" AND serial IN ({','.join('?' * len(serials))})" if serials else ""
+    rows = conn.execute(
+        "SELECT serial, verdict, reason, MAX(updated_at) AS at FROM disk_events"
+        " WHERE serial IS NOT NULL AND serial != ''" + where + " GROUP BY serial", serials or ())
+    return {r["serial"]: {"verdict": r["verdict"], "reason": r["reason"], "at": r["at"]} for r in rows}

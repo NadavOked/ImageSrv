@@ -133,7 +133,6 @@ fail_texts() {
                   case "${4:-unknown}" in
                       network_server) _ft_do="ההעלאה לשרת נעצרה. הדיסק של המחשב הזה לא שונה."; _ft_btn="retry|נסה שוב;off|כבה את המחשב" ;;
                       source_ntfs) _ft_do="‏NTFS במקור מסומן כלא תקין. ב-Windows: ⁦chkdsk C: /f⁩, הפעלה מחדש, ואז קליטה שוב." ;;
-                      source_bitlocker) _ft_do="‏BitLocker פעיל במקור. ב-Windows: ⁦manage-bde -off C:⁩, והמתינו לסוף הפענוח." ;;
                       source_dynamic) _ft_do="המירו את הדיסק ל-Basic ב-Windows (בניהול הדיסקים ההמרה מוחקת את הכרכים — גבו קודם), ואז קלטו שוב." ;;   # #1824
                       source_no_esp) _ft_do="התקינו את Windows מחדש כשרק הדיסק הזה מחובר, או צרו בו מחיצת EFI (bcdboot) — ואז קלטו שוב." ;;   # #1822
                       source_disk) _ft_do="דיסק המקור לא נקרא עד הסוף. \"בדוק את הדיסק\" מציג כאן את מצב ה-SMART שלו."; _ft_btn="smart|בדוק את הדיסק;retry|נסה שוב" ;;

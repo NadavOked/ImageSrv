@@ -144,10 +144,11 @@ usb_report_save() {
     _rs_ok=true
     # shellcheck disable=SC2046 # the device list splits into one argument per device, on purpose
     usb_serials "$RUN_DIR/usb.serials" $(cat "$1/src" "$1/targets" 2>/dev/null) || _rs_ok=false
+    # shellcheck disable=SC2046 # #2694: the clone's disks are a word list, one argument per disk, on purpose
     mkdir -p "$USB_DATA_DIR/reports" \
         && jq --argjson m "$(usb_machine_json)" --arg c "$(cat "$RUN_DIR/usb.ctrl" 2>/dev/null)" \
-            --argjson ok "$_rs_ok" --arg r "הוסר — לא ניתן לוודא שאין בו serial" --arg re "$USB_ID_RE" --arg g "$USB_ID_GONE" \
-            'del(.. | .serial?) | .machine = $m | .controller = $c
+            --argjson lk "$(clone_link_gbps $(cat "$1/src" "$1/targets" 2>/dev/null))" --argjson ok "$_rs_ok" --arg r "הוסר — לא ניתן לוודא שאין בו serial" --arg re "$USB_ID_RE" --arg g "$USB_ID_GONE" \
+            'del(.. | .serial?) | .machine = $m | .controller = $c | .link_gbps = $lk   # #2694: the slowest SATA link of the clone, null = not read
              | walk(if type == "string" and (ascii_downcase | test($re)) then $g else . end)   # one JSON line: by field, not by line
              | if $ok then . else
                  (if (.targets | type) == "array" then .targets |= map(if has("error") then .error = $r else . end) else . end)

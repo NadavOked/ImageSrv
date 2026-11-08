@@ -1121,6 +1121,12 @@
   הכבל ("CRC +N", ‏#872). מונה מצטבר שלא עלה הוא מידע בלבד. **השרת משווה; הסוכן מכריע** — הוא הופך מילה
   מוכרת לשאלה כתומה (‏`warn`), ומתעלם ממילה שאינו מכיר. דיסק בלי סבב קודם — אין רשומה (בקונסולה: "אין עדיין
   השוואה", לעולם לא "יציב"). סוכן ישן מתעלם מהשדה.
+  ‏**#2711 — מתי הסוכן קורא אותו:** השער (`smart_preflight`, ‏`agent/lib/smart/smartgate.sh`) מריץ קודם probe
+  לדיסקי הסבב, ואז שולח hello **שאינו מצטרף** (`joining: false`, ‏`attended_hello` — אותו דופק שמשימה רצה כבר
+  שולחת; hello מצטרף באמצע הגל מסמן את החבר `lost`, ‏#1728) וקורא את `smart_learned` מהתשובה שלו
+  (‏`$RUN_DIR/attended.resp`; ‏`response.json` של הלולאה הראשית לא נוגעים בו). בלי זה משכפל שהוער לסבב
+  השווה רק את ה-hello של האתחול, שבו `smart_attrs: null` (המטמון לכל אתחול) — והכתום לא הופעל לעולם.
+  ‏hello שלא עבר — נרשם ביומן הסוכן ("not compared with the previous round"), ותשובת האתחול נשארת. בלי שדה חדש.
 - **`smart_rose`** (‏#1859, נדב 07/11, מוקאפ הטבלה במסך המשכפל) — `[{"serial", "rose": {"<id>": N}}]`: לכל דיסק
   של ה-hello הזה ש-`smart_attrs` שלו נקראו **ויש לו סבב קודם**, בכמה כל מאפיין **עלה** מאז אותו סבב — ATA לפי
   המזהה (`"5": 3`), NVMe לפי המפתח (`"media_errors": 2`), רק מה שעלה (`rose: {}` = הושווה ולא עלה דבר).
@@ -1813,6 +1819,13 @@
   ‏`POST /room/start` מתקבל גם איתה ומחזיר `{"ok": true, "warned": N}`, והגל — ביד או
   לבד — רושם ביומן `room_precheck_warned` (‏`<round> wave=<n> <mac>:<port> link=1.5/6.0
   crc+12, …`): "סבב שהתחיל בכל זאת חייב לרשום שהאזהרה הייתה שם".
+  ‏#2704: ביומן של הקונסולה התווית לפי סוג האזהרות — "…על מגירה עם קישור חשוד / עם כתיבה איטית / עם דיסק חשוד",
+  כמה סוגים בסדר הזה מחוברים ב"או" — אותה טבלה ואותן מילים של כותרת ה-precheck בעמוד החדר (#2670). ‏**#2707 — הטבלה:**
+  קישור = קישור איטי, ‏`crc+`, ‏`crc=`, ‏`learned=port`, ‏`smart=downshift_rose|timeout_rose`; כתיבה איטית = ‏`learned=slow_write`,
+  ‏`learned=slow_model`; דיסק חשוד = ‏`learned=disk`, ‏`smart=critical_rose|hot`; בלי סימן מוכר — "עם אזהרה", לא סוג מנוחש.
+  ‏`smart=<מילה>` (‏`smart_learned`, ‏#1859) נוסף לפירוט ב-#2707. כל אסימון (‏`link=`, ‏`crc+`,
+  ‏`crc=`, ‏`learned=…`, ‏`smart=…`) נאמר גם בעברית אחרי הפירוט הגולמי, שנשאר. פירוט שאינו נקרא — התווית הכללית
+  "הגל יצא לדרך למרות אזהרה על מגירה", בלי סוג מנוחש (‏`journal_he.precheck_he`).
 - **CRC מוחלט, מהירות כתיבה וסיבת F1** (‏#1366) — ב-`drawer_list[]`: ‏**`crc_suspect`** —
   ‏`true` כשה-`crc` מעל `crc_warn_threshold` (סעיף 3), ‏`false` כשנקרא ואינו מעליו (או
   שהסף 0), ‏`null` כשלא נקרא — **לא "תקין"**. גם `GET /api/console/machines` נושא אותו
@@ -3430,7 +3443,6 @@ uses its name, and udp-sender receives the same name as `--interface`.
     `source_ntfs` = שער NTFS החזיר 1 (מצב שינה/Fast Startup או NTFS מלוכלך):
     ‏`chkdsk C: /f` ב-Windows, וכפתורים "הפעל את Windows" / "נסה שוב".
     כשל בבדיקה עצמה (קוד 2) נשאר `source_disk`, בלי לקבוע שהדיסק במצב שינה.
-    `source_bitlocker` = סירוב בשער BitLocker: ‏`manage-bde -off C:` במקור.
     `source_dynamic` = דיסק דינמי (מחיצת LDM, ‏#1824): להמיר ל-Basic ב-Windows ולקלוט שוב.
     `source_no_esp` = ‏Windows בדיסק שאין בו ESP (‏#1822): להתקין מחדש עם הדיסק לבדו, או ליצור בו ESP.
     `source_disk` = בעיית מקור אחרת, כולל מערכת קבצים לא קריאה: "בדוק את הדיסק" (‏SMART באותו מסך).
@@ -3622,14 +3634,25 @@ uses its name, and udp-sender receives the same name as `--interface`.
   או בלי מאפיינים — אין שורה. **רק המכונה שמחזיקה בדיסק כותבת לו היסטוריה** (סקירת אבטחה): הסידורי חייב להיות
   מה שה-MAC הזה דיווח ל-`disk` הזה ב-hello האחרון שלו — אחרת אין שורה, ומכונה אחרת אינה יכולה להסתיר "עלה"
   של דיסק שאינו שלה או לזייף "להחליף". ‏`temp_c` נרשם רק על שורת המכונה המדווחת. ‏`housekeeping` מוחק סבבים ישנים מ-`RETENTION_DAYS` **חוץ מהאחרון** של כל סידורי.
+- **`smart_round`** (‏#2706) — ב-`GET /machines` (`disks[]`) וב-`drawer_list[]` של `/room`, לכל דיסק עם סידורי:
+  ‏`{"verdict", "reason", "at"}` — הפסק של ה-`disk_event` האחרון של הסידורי (‏`disk_events.last_by_serial`; רק שורות
+  שהסידורי שלהן נשמר, כלומר ה-MAC דיווח אותו, #2492), או `null` = אף סבב לא דיווח עליו. **לתצוגה בלבד**: ‏`smart`
+  נשאר של ה-hello, והשער האדום (‏`room.open`, ‏#1732) וה-precheck (‏`smart_learned`/`smart_compared`, שנשארים
+  ‏`null` כש-`smart_attrs: null`) קוראים רק אותו — פסק מאתחול קודם אינו ראיה על הדיסק עכשיו (עיקרון 5). הקונסולה:
+  "SMART לא נבדק מאז שהמכונה עלתה · בסבב (…): SMART תקין", רק כש-`smart` אינו ok/warn/fail ו-`verdict` הוא אחד מהם.
 - **`GET /api/console/machines/{mac}/smart`** — `{"mac", "no_history_he": "אין עדיין השוואה", "disks": [...] | null}`;
-  לכל דיסק: `serial`, ‏`dev`, ‏`port`, ‏`read` (נקרא), ‏`compared` (יש סבב קודם), ‏`previous_at`,
+  לכל דיסק: `serial`, ‏`dev`, ‏`port`, ‏`read` (נקרא), ‏`read_from`, ‏`read_at`, ‏`compared` (יש סבב קודם), ‏`previous_at`,
   ‏`previous_temp_c`, ‏`learned` (מילה מ-`smart_learned` או `null`), ו-`attributes`: לכל מאפיין `id`, ‏`name_he`,
   ‏`note_he`, ‏`known` (‏`false` = לא בטבלה — `name_he` הוא שם היצרן ו-`note_he` הוא "לא מוכר"), ‏`vendor`, ‏`value`,
   ‏`worst`, ‏`thresh`, ‏`raw`, ‏`critical` (5/10/187/196/197/198/199, ובנוסף NVMe critical_warning/media_errors),
   ‏`rose_by` (בכמה עלה מאז הסבב הקודם; `null` = לא עלה או אין השוואה), ‏`failing_now` (הערך המנורמל ≤ הסף של
   היצרן — מה שה-BIOS רואה; **לתצוגה בלבד**, אינו צובע — לא הוכרע). ‏`disks: null` = המכונה מעולם לא דיווחה.
   ‏#1921: לכל מאפיין גם ‏`table` (‏`smart` / ‏`hw` / ‏`null` = לא מוכר) ו-‏`verdict` (‏`ok`/`info`/`orange`/`red`/`hw`/`unknown`, אותו שיפוט של הסוכן — `smart_names.judge_ata`), ‏`critical` לפי (מזהה, שם), ולכל דיסק ‏`hw: [{"word", "he"}]` — הערות טבלת החומרה (כבל/מגירה), מוצגות לצד הדיסק ולא כצבעו.
+  ‏**#2705 — `read_from`/`read_at`:** ‏`"hello"` = המאפיינים מה-hello האחרון (‏`read_at: null`); ‏`"round"` = ה-hello האחרון
+  נשא `smart_attrs: null` (הסוכן לא קרא SMART מאז שעלה — המטמון שלו לכל אתחול, וה-hello לעולם אינו probe: משכפל שהוער
+  לסבב שולח hello אחד, קורא SMART בשער הסבב ונכבה), ולכן מוצגת תמונת `smart_history` האחרונה של הסידורי, ‏`read_at` = מתי
+  נקראה, ו-`compared`/`previous_at`/`rose_by`/`learned` הם מול התמונה **שלפניה**. ‏`null` (שניהם) כש-`read: false`. ‏`read: false`
+  רק כשלא נקרא דבר — לא ב-hello האחרון ולא באף סבב; ‏`smart_attrs` שהוא אובייקט ריק (נקרא עכשיו, בלי מאפיינים) אינו מוחלף בסבב ישן.
 - **הטבלה במסך המשכפל** (‏#1859, נדב 07/11 — מוקאפ `docs/design/mockups-1107b/1859-smart-table.html`, "מוצע ב": מגירה
   מהצד). שתי רשומות בקובץ המצב של המשכפל הממתין (`clonergui.sh`, אחרי ה-`cdisk=` — רק כשאין סבב; `smarttable.sh`),
   לכל דיסק ש-smartctl קרא וששיפוט הסוכן (`<d>.find`) קיים. **הגואי אינו מכיר טבלה**: כל מה שהמפעיל קורא נקבע בסוכן.
@@ -7556,7 +7579,7 @@ error=named-code: message
 
 `error.reason` בסטטוס (כשל אחרי שה-202 כבר חזר): ‏`sha256`, `restore`,
 `table`, `loop`, `stream`, `firewall`, `macvtap`, `no_lease`, `qemu_exit`, `interrupted`,
-`hibernated`, `unchecked`, `bitlocker`, `layout`, `fs_changed`, `shrink`,
+`hibernated`, `unchecked`, `layout`, `fs_changed`, `shrink`,
 `capture`, `appliance`, `verify`, `internal`, `state_unreadable`.
 
 ### שליטה (הכרעה 6, עדכון 13/10)
@@ -7685,6 +7708,14 @@ broadcast/0.0.0.0/שמורה); תשובה אחרת נספרת כ"נדחתה" ו�
 מאומת, בלי partscan, וההתקן חוזר ל-`root:disk 0660` בסוף. ערך שאינו בפורמט
 (‏GUID, מספר, דגלים) → ‏`table`. מחיצה שנוספה/חסרה, ‏GUID דיסק אחר, סוג מחיצה
 אחר → ‏`layout`. מערכת קבצים אחרת מזו שבמניפסט המקור → ‏`fs_changed`.
+
+VM save copies a matching BitLocker volume sector by sector with `partclone.dd`
+(no `-c`), never mounts, shrinks or grows it (#2690, refs #1840). Its manifest
+keeps `fs: "BitLocker"`, `role: "data"`, `used_bytes: null` and `expandable: false`.
+Signature detection precedes comparison with the source manifest: a changed
+filesystem still fails with `fs_changed`, and an unreadable check with `unchecked`.
+The saved state's `warnings` appends one partition-numbered recovery-key warning
+per BitLocker volume, using the same sentence as `CAPTURE_BITLOCKER_NOTE`.
 
 ### היומן
 
@@ -9200,14 +9231,21 @@ ISO (memdisk, iPXE או HTTP) ואיך זה חי עם Secure Boot דלוק ממ�
 `reports/clone-<YYYYMMDD>-<HHMMSS>.json` (`usb_report_save`, `agent/lib/usb/usbdiag.sh`), שם הקובץ נבדק בתבנית קבועה (UTC), עד 64KB
 לקובץ ו-5000 קבצים (החדשים; השאר נספרים ונאמרים). **סכמה קשיחה:** מפתחות מותרים בלבד —
 עליון `mac, source{dev,port}, targets[{dev,port,state,error,ntfs_note}], shrunk, source_restore, stopped, bytes, elapsed_s, shrink_path,
-snapshot_teardown, info_s, resize_s, relocations_mb, copy_s, verify_s, restore_s, machine{vendor,product}, controller`.
+snapshot_teardown, info_s, resize_s, relocations_mb, copy_s, verify_s, restore_s, machine{vendor,product}, controller, link_gbps`.
 מפתח שמכיל `serial/smart/wwn/wwid/uuid/guid` ברמה כלשהי — **"שדה X אסור בסכמה"**; מפתח אחר — "אינו בסכמה"; טיפוס או טווח שגויים,
 JSON שאינו אובייקט, `NaN`, מצב יעד שאינו `done`/`failed` — הרשומה כולה נדחית עם הסיבה. טקסט חופשי מההתקן (`error`, `ntfs_note`...)
 נבדק כטקסט ו**אינו נשמר**. `machine` הוא הדגם מ-DMI באותו מפתח של `model_slots.model_key`; בלי דגם שימושי — `model = NULL`.
 בקר: `controller` של ההתקן (`<mode>|<disk>=<driver> ...`) → `ahci`/`ide` (אחד המגירות מאחורי `ata_piix`/`ata_generic`/`pata_*` מספיק)/`other`;
 ריק = `NULL` ("לא נקרא", לא AHCI). קצב: `bytes / copy_s / 1e6` ו-`bytes / verify_s / 1e6` (כמו ה-diag), `NULL` כשלא נמדד.
-`record_id` = 32 תווי hex ראשונים של sha256 מהשדות שנשמרים — **לא תלוי בהתקן**. **לא נמצא בדוח היום:** מהירות הקישור (3/6 Gb/s) — מופיעה רק
-בקובץ ה-diag של ההתקן ולכן אינה עמודה בעמוד.
+`record_id` = 32 תווי hex ראשונים של sha256 מהשדות שנשמרים — **לא תלוי בהתקן**.
+
+**`link_gbps`** (‏#2694, העמודה "קישור" בעמוד) — מהירות הקישור הנמוכה ביותר שנקראה מבין הדיסקים של אותו שיכפול (המקור והיעדים), בגיגה-ביט לשנייה:
+`1.5`, ‏`3.0` או `6.0`; `null` = **לפחות דיסק אחד לא נקרא** (אין ‏`sata_spd`, הדיסק אינו מאחורי libata — NVMe, USB, SCSI של VM — או שנשלף מאז). תשובה
+חלקית לא נראית כמלאה: מקל שקרא רק חלק מהדיסקים כותב `null`, לא את המינימום של מי שנקרא. המקל כותב אותו ב-`usb_report_save` (‏`clone_link_gbps`,
+`agent/lib/hw/disklink.sh`, מאותו `sata_spd` שה-hello ו-`disk_link` קוראים). הסכמה מקבלת בדיוק `1.5`, ‏`3` או `6` (או `null`/חסר); כל ערך אחר דוחה את הרשומה
+כולה — "הערך של link_gbps אינו 1.5, 3 או 6". דוח משרת-לפני-השדה אין בו מפתח, והעמודה מציגה "לא נקרא" (לא `0`). ‏**`record_id` נשמר:** הקישור
+נכנס לגיבוב **רק כשהוא מספר**, כך שרשומה שהשרת כבר קלט לפני #2694 לא תיקלט פעם שנייה. הקישור **אינו נשמר ב-DB** (אין לו עמודה ב-`usb_records`,
+‏`SCHEMA_VERSION` לא זז) — הוא נקרא מדוחות ההתקן ונשלח ב-`rows[].link_gbps`. ⚠️ **סדר העדכון:** שרת מלפני #2694 דוחה דוח שיש בו `link_gbps` ("אינו בסכמה") — מעדכנים את השרת לפני שמפיצים מקל שנבנה אחרי #2694, אחרת רשומות המקל החדש לא ייקלטו.
 
 ### טבלאות
 
@@ -9245,5 +9283,31 @@ JSON שאינו אובייקט, `NaN`, מצב יעד שאינו `done`/`failed` 
 `{schema, kind: imagesrv-server-sync, written_at, server_version, device_id, smart_table_version, models, files{שם:{sha256,size}}}`; ‏`smart_table_version` =
 12 תווי sha256 של שני קובצי הטבלה — גרסת תוכן, לא מונה.
 
-**לא ממומש כאן (צד ההתקן):** הקוד על המקל (`agent/lib/usb`) עדיין אינו קורא את `server-sync/` ואינו מאמת אותו לפני השימוש; הקבצים נכתבים עם
-manifest ו-sha256 בדיוק כדי שהוא יוכל. ראו #1920.
+### צד ההתקן: קריאה ואימות של `server-sync/` (‏#2694, `agent/lib/usb/usbsync.sh`)
+
+`usb_sync_load` רץ בכל עליית מקל (`usbclone_main`, מיד אחרי עיגון מחיצת הנתונים ו**לפני** `usb_diag boot`, שקורא את טבלאות ה-SMART), ואינו עוצר אף פעם את העלייה.
+המקל **אינו קורא דבר** מ-`server-sync/` לפני שעבר את כל הבדיקות, **ונכשל בשם** (הקובץ או השדה) כשמשהו אינו תקין. כל הבדיקות רצות על **עותקים ב-RAM**
+(`$RUN_DIR/usb.sync.d/`), לא על ההתקן שוב — אין פער בין בדיקה לשימוש.
+
+סדר הבדיקות (נעצר בראשונה שנכשלת): ‏(1) `server-sync` תיקייה רגילה, לא קישור סמלי; ‏`manifest.json` קיים (השרת כותב אותו **אחרון**, ולכן תיקייה בלעדיו היא כתיבה שנקטעה).
+‏(2) כל קובץ הוא קובץ רגיל, לא קישור סמלי, עד 1MiB. ‏(3) `manifest.json`: ‏`schema == 1`, ‏`kind == imagesrv-server-sync`, **בדיוק** המפתחות
+`schema, kind, written_at, server_version, device_id, smart_table_version, models, files` (חסר או נוסף = נכשל בשם המפתח), פורמט כל שדה, ו-`files` בדיוק
+`rates.json`, ‏`smart-knowledge.tsv`, ‏`hw-issues.tsv` — כל אחד `{sha256, size}`. ‏(4) לכל קובץ: גודל ו-sha256 מול המניפסט; ‏`sha256sum` שנכשל או שלא החזיר דבר =
+נכשל, לא עבר. ‏(5) ‏`rates.json`: ‏`schema == 1`, ‏`kind == imagesrv-rates`, עד 500 ערכים, ובכל ערך בדיוק `model, controller, basis, source, mbps, samples` בטיפוסים של
+החוזה למעלה. ‏(6) הטבלאות לא ריקות, ו-`smart_table_version` שבמניפסט שווה ל-12 התווים הראשונים של sha256 מ-(הטבלה, ‏NUL, טבלת החומרה) **שחושב מחדש** מהעותקים.
+
+תוצאה ב-`$RUN_DIR/usb.sync` (ובמשתנה `USB_SYNC_STATE`):
+
+| מצב | משמעות |
+|---|---|
+| `none` | מחיצת הנתונים לא מעוגנת, או שאין `server-sync/` (מעולם לא סונכרן). לא שגיאה, בלי הודעה |
+| `ok` | הכול אומת. ‏`USB_SYNC_TABLES=server` — טבלאות השרת בשימוש; ‏`builtin` — אומת, אבל הטבלאות שבמקל נשארות (ראו הכלל למטה) |
+| `failed` | משהו לא תקין או שלא ניתן היה לאמת. **שום דבר** מ-`server-sync/` אינו בשימוש (גם לא הקצבים), ‏`usb.sync.d` נמחק, ו-`USB_SYNC_NOTICE` (נוסף ל-`usb.notice` שעל המסך) ושורת יומן `usbclone: server-sync: <סיבה>` נוקבים בבעיה |
+
+**גרסה — מתי טבלאות השרת נכנסות לתוקף.** ‏`smart_table_version` הוא גיבוב תוכן, ולכן אינו מסדר: אי אפשר לדעת ממנו איזו טבלה חדשה. הכלל: טבלאות השרת נכנסות לתוקף
+(`SMART_KB` מצביע על `usb.sync.d`) רק כש-`server_version` של המניפסט **אינו קטן מ-`AGENT_VERSION` של המקל** (משווים `MAJOR.MINOR.PATCH` המובילים של התג, בלי הסיומת
+`-N-g<sha>`/`-dirty`). שרת **ישן** מהמקל — `ok`/`builtin`, הטבלאות שבמקל נשארות ושורת יומן אומרת זאת (זה ממצא, לא כשל). גרסה שאינה ניתנת לפענוח (`server_version` ריק,
+`AGENT_VERSION=unknown`, או גיבוב בלבד) — `failed`: אי אפשר לבסס שהטבלאות לא ישנות מאלה שבמקל, ועיקרון 5 אוסר להניח. אותן טבלאות כמו שבמקל — `ok`/`builtin`.
+
+`rates.json` מאומת ונשמר ב-`$RUN_DIR/usb.sync.d/rates.json`, **אך אין לו עדיין צרכן במקל** (הערכת זמן לפי דגם — Issue נפרד).
+

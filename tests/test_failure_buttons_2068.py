@@ -62,7 +62,7 @@ def test_every_hold_screen_has_a_button_and_never_sends_to_it(tmp_path, english,
     assert "sdz" not in text and "sda" not in text, text   # #2084: a disk by its drawer, never its device
 
 
-@pytest.mark.parametrize("code", ["network_server", "source_ntfs", "source_bitlocker", "source_dynamic",
+@pytest.mark.parametrize("code", ["network_server", "source_ntfs", "source_dynamic",
                                   "source_no_esp", "source_disk", "unknown"])
 def test_every_capture_reason_has_a_button_and_never_sends_to_it(tmp_path, code):
     r = run_agent(tmp_path, f'echo {code} > "$RUN_DIR/capture.reason"; ui_error_hold "capture did not complete" hold_beat',

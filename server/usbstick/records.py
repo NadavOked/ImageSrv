@@ -37,7 +37,7 @@ MAX_FILES = 5000
 TOP_KEYS = frozenset({
     "mac", "source", "targets", "shrunk", "source_restore", "stopped", "bytes", "elapsed_s",
     "shrink_path", "snapshot_teardown", "info_s", "resize_s", "relocations_mb", "copy_s",
-    "verify_s", "restore_s", "machine", "controller"})
+    "verify_s", "restore_s", "machine", "controller", "link_gbps"})
 SOURCE_KEYS = frozenset({"dev", "port"})
 TARGET_KEYS = frozenset({"dev", "port", "state", "error", "ntfs_note"})
 MACHINE_KEYS = frozenset({"vendor", "product"})
@@ -61,6 +61,7 @@ class Record:
     model: str | None           # the DMI key the server uses (server.disks.model_slots); None = no usable one
     controller: str | None      # "ahci" | "ide" | "other" | None = not read
     driver: str | None
+    link_gbps: float | None     # #2694: the slowest SATA link of the clone, 1.5 | 3.0 | 6.0; None = not read
     bytes: int | None
     elapsed_s: int | None
     copy_mbps: int | None
@@ -159,6 +160,18 @@ def parse_controller(raw: object) -> tuple[str | None, str | None]:
     return "other", found[0]
 
 
+#: the SATA generations a link can negotiate (1.5 / 3 / 6 Gb/s); the stick writes null when it could not read one.
+_LINKS = (1.5, 3.0, 6.0)
+
+
+def _link(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value not in _LINKS:
+        raise _Bad("הערך של link_gbps אינו 1.5, 3 או 6")
+    return float(value)
+
+
 def _rate(total: int | None, seconds: int | None) -> int | None:
     """MB/s the way the stick's diag computes it: bytes / seconds / 1e6. None = not measured."""
     return total // seconds // 1_000_000 if total and seconds else None
@@ -228,6 +241,7 @@ def parse_report(name: str, raw: bytes) -> Record:
     secs = {k: _int(data.get(k), k, _MAX_SECONDS) for k in SECONDS_KEYS}
     _int(data.get("relocations_mb"), "relocations_mb")
     kind, driver = parse_controller(data.get("controller", ""))
+    link = _link(data.get("link_gbps"))
     model = None if _STICK_GONE in product else model_key(
         {"product_name": product.strip(), "sys_vendor": vendor.strip()})
     failed = states.count("failed")
@@ -236,8 +250,11 @@ def parse_report(name: str, raw: bytes) -> Record:
               "verify_mbps": _rate(total, secs["verify_s"]),
               "result": "stopped" if stopped else ("failed" if failed else "ok"),
               "targets": len(states), "targets_failed": failed}
-    digest = hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()[:32]
-    return Record(record_id=digest, **fields)
+    # #2694: a report from before the link was kept has none, and the id of a record the server already
+    # took must not change -- so the link is part of the id only when there is one.
+    ident = fields if link is None else {**fields, "link_gbps": link}
+    digest = hashlib.sha256(json.dumps(ident, sort_keys=True).encode()).hexdigest()[:32]
+    return Record(record_id=digest, link_gbps=link, **fields)
 
 
 def read_reports(root: Path) -> Reading:

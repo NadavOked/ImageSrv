@@ -57,8 +57,9 @@ smart_learned_refresh() {
     # hello's `smart_learned` (the server's comparison with this serial's previous round)
     # -> $RUN_DIR/smart_learned, serial|reason a line. The first line "ok" is the proof the
     # answer was read whole; otherwise the previous file stays (principle 5, as
-    # disk_failures_refresh). 0 = refreshed.
-    json_get_join "$RUN_DIR/response.json" \
+    # disk_failures_refresh). 0 = refreshed. $1 = the answer to read (#2711: the gate's own hello),
+    # default the main loop's response.json.
+    json_get_join "${1:-$RUN_DIR/response.json}" \
         '["ok"] + ((.smart_learned // []) | map("\(.serial // "")|\(.reason // "")"))' \
         > "$RUN_DIR/smart_learned.next" 2>/dev/null
     [ "$(head -n 1 "$RUN_DIR/smart_learned.next" 2>/dev/null)" = ok ] || { rm -f "$RUN_DIR/smart_learned.next"; return 1; }

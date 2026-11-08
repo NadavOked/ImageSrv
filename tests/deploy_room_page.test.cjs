@@ -802,6 +802,20 @@ test('#2670: the precheck title follows the kind of warning — link, slow write
   assert.equal(title([{...WRITE,link_gbps:1.5}]),'מגירה אחת בגל עם קישור חשוד או כתיבה איטית','one drawer with both signs');
 });
 
+test('#2707: "the disk itself" and "slower than its model" are not a suspect link; no known sign is "a warning"', () => {
+  const BASE={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:6,link_max_gbps:6,crc_rise:null,crc_suspect:false,write_slow:false,text_he:'מחשב 2 · דיסק 2: …'};
+  const title=(precheck)=>{ const html=setup({room:roomOpenWave({precheck})}).run('deploy(0)'); balanced(html);
+    const m=html.match(/<b>לפני ההתחלה — ([^<]*)<\/b>/); assert.ok(m,'the note is there'); return m[1]; };
+  assert.equal(title([{...BASE,disk_suspect:true}]),'מגירה אחת בגל עם דיסק חשוד');
+  assert.equal(title([{...BASE,model_slow:true}]),'מגירה אחת בגל עם כתיבה איטית');
+  assert.equal(title([{...BASE,port_suspect:true}]),'מגירה אחת בגל עם קישור חשוד');
+  assert.equal(title([{...BASE,smart_learned:'critical_rose'}]),'מגירה אחת בגל עם דיסק חשוד');
+  assert.equal(title([{...BASE,smart_learned:'downshift_rose'}]),'מגירה אחת בגל עם קישור חשוד');
+  assert.equal(title([{...BASE}]),'מגירה אחת בגל עם אזהרה','no sign it knows: never a guessed kind');
+  assert.equal(title([{...BASE,disk_suspect:true},{...BASE,port:3,link_gbps:1.5},{...BASE,port:4,write_slow:true}]),
+    '3 מגירות בגל עם קישור חשוד או כתיבה איטית או דיסק חשוד');
+});
+
 test('#65: the missing machines are named with the three actions; power-off only for one that can hear, behind a confirm window', async () => {
   const miss=[{mac:C2,name:'מחשב 2',reason:'drawers',ports:[3],awake:true,joined:true,can_poweroff:true,text_he:'מחשב 2: אין דיסק חדש בדיסק 3'},
               {mac:C3,name:'מחשב 3',reason:'off',ports:[1,2],awake:false,joined:false,can_poweroff:false,text_he:'מחשב 3 כבוי או לא מחובר — לא הצטרף לגל (דיסק 1, דיסק 2)'}];
