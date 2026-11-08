@@ -91,9 +91,11 @@ class Session:
     """The GUI child: frames in, tokens out (read on a thread, so the loop
     waits on a queue with a timeout instead of select on a pipe)."""
 
-    def __init__(self, argv: list[str]):
+    def __init__(self, argv: list[str], stderr=None):
+        # stderr=None: the child shares the service's stderr, so its own
+        # complaints reach the journal.  A test passes a file (#2539).
         self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=None, bufsize=0)
+                                     stderr=stderr, bufsize=0)
         self.lines: queue.Queue[str | None] = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
 

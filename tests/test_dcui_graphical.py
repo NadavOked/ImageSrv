@@ -336,15 +336,33 @@ def test_a_session_with_a_real_child_drives_the_state_machine(tmp_path):
     script = tmp_path / "fake_gui.py"
     script.write_text(FAKE_GUI, encoding="utf-8")
     seen = tmp_path / "seen.txt"
-    session = gui.Session([sys.executable, str(script), str(seen)])
-    assert session.wait_ready(10) == ""
-    runtime = _live(tmp_path, _db(tmp_path))
-    runtime.last_refresh = time.monotonic() + 3600     # no host refresh in a test
-    why = gui.serve(runtime, session, max_loops=200)
+    # #2539: inheriting pytest's stderr makes Popen fail with WinError 6/50
+    # about half the time on Windows; the child's stderr goes to a file.
+    with (tmp_path / "child.stderr").open("wb") as child_stderr:
+        session = gui.Session([sys.executable, str(script), str(seen)], stderr=child_stderr)
+        assert session.wait_ready(10) == ""
+        runtime = _live(tmp_path, _db(tmp_path))
+        runtime.last_refresh = time.monotonic() + 3600     # no host refresh in a test
+        why = gui.serve(runtime, session, max_loops=200)
     assert runtime.screen == "auth"
     assert "graphic screen stopped" in why
     text = seen.read_text(encoding="utf-8")
     assert text.startswith("frame\tmain\nframe\tmain\n") and text.endswith("auth")
+
+
+def test_production_session_leaves_the_childs_stderr_to_the_journal(monkeypatch):
+    """#2539: only a test hands Session a stderr; the service's own call
+    inherits it (None), so the GUI's complaints still reach the journal."""
+    seen = {}
+
+    class _Popen:
+        def __init__(self, argv, **kwargs):
+            seen.update(kwargs)
+            self.stdout = iter(())
+
+    monkeypatch.setattr(gui.subprocess, "Popen", _Popen)
+    gui.Session(["x"])
+    assert "stderr" in seen and seen["stderr"] is None
 
 
 # ---- the native half (lab) --------------------------------------------------------

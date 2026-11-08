@@ -104,7 +104,7 @@ def test_build_hello_carries_the_fragment_and_only_while_it_exists(fake_machine)
     env = (f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
            f'DEVROOT={posix(fake_machine["dev"])!r} '
            f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; build_hello')
+           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; build_hello')
     assert "direct_finished" not in json.loads(sh(env))
     (fake_machine["run"] / "direct.finished").write_text(
         f',"direct_finished":["{LIVE}"]', encoding="utf-8", newline="\n")

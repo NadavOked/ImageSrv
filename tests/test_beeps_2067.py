@@ -552,8 +552,8 @@ def test_local_copy_is_not_reported_as_a_server_outage(tmp_path):
     assert frequencies(tmp_path) == []
 
 
-#: the real target_bytes and cloner_gui_pace; #2281: progress calls disk_serial (sysinfo)
-ROOM_LIBS = ("sysinfo", "progress", "failmark", "clonergui")
+#: the real target_bytes and cloner_gui_pace; #2281: progress calls disk_serial (diskinfo)
+ROOM_LIBS = ("sysinfo", "diskinfo", "progress", "failmark", "clonergui")
 ROOM = """
         for fn in gui_header_state gui_hello_state slot_names_refresh drawer_slots_refresh slot_names_records drawer_slots_records gui_ask_state; do eval "$fn() { :; }"; done
         disk_port() { echo 1; }; disk_drawer() { echo 1; }

@@ -53,7 +53,7 @@ def _one(tmp_path: Path, disk: str, body: str = "exit 0", **env: str) -> tuple[s
         f"export PATH={posix(bindir)!r}:$PATH SYSROOT={posix(root)!r} DEVROOT={posix(tmp_path / 'dev')!r} "
         f"RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(log)!r} {exports}; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/restore/discard.sh; "
-        + agent_sources("sysinfo", "progress", "failmark")   # #2434: assert_target, and the disk chosen (target_init's bind)
+        + agent_sources("sysinfo", "diskinfo", "progress", "failmark")   # #2434: assert_target, and the disk chosen (target_init's bind)
         + f'target_bind {disk}; discard_before_restore {disk}; echo "rc=$?"')
     return (out.strip().splitlines()[-1],
             calls.read_text(encoding="utf-8").splitlines() if calls.exists() else [],

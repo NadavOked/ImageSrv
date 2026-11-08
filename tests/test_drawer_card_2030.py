@@ -88,7 +88,7 @@ class Box:
         self.mounts.write_text("")
 
     def sh(self, script: str) -> subprocess.CompletedProcess:
-        libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "sysinfo", "manifest", "restore", "diskused"))
+        libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "sysinfo", "diskinfo", "manifest", "restore", "diskused"))
         pre = (f'export PATH="/usr/bin:$PATH" RUN_DIR={posix(self.run)} GUI_DIR={posix(self.gui)} SYSROOT={posix(self.root)} '
                f'DEVROOT={posix(self.dev)} LOG_FILE={posix(self.log)} MOUNTS={posix(self.mounts)} CUR={posix(self.cur)} '
                f'MNT={posix(self.gui)}/used/mnt IMAGESRV_TEST=1; {libs}{STUBS}')

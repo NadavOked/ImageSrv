@@ -99,7 +99,7 @@ def fits(tmp_path: Path, image: dict, disk: int, gb: str = "20") -> tuple[str, s
              + f'export PATH="$(cd {posix(stubs)!r} && pwd):$PATH"; '
              f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev LOG_FILE={posix(run)!r}/log; "
              + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
-                       ("common", "jsonq", "sysinfo", "progress", "failmark", "restore", "expand", "diskfit"))
+                       ("common", "jsonq", "sysinfo", "diskinfo", "progress", "failmark", "restore", "expand", "diskfit"))
              + "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
              + f'disk_fits sda {posix(path)!r}; echo "rc=$?"')
     err = run / "targets" / "sda" / "error"

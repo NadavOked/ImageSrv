@@ -219,7 +219,7 @@ FAKE_OPENSSL = fake_openssl()
 #: ‏`node_is_block` שב-restore.sh, וטעינה חלקית היתה בודקת קוד אחר.
 SOURCE_CHAIN = "".join(
     f". {posix(lib_path(name))!r}; "
-    for name in ("common.sh", "waits.sh", "sysinfo.sh", "restore.sh", "bootca.sh")
+    for name in ("common.sh", "waits.sh", "sysinfo.sh", "diskinfo.sh", "restore.sh", "bootca.sh")
 )
 
 

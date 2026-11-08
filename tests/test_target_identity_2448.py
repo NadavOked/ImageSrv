@@ -39,7 +39,7 @@ from test_agent import AGENT, BASH, REPO, posix
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "expand", "grow", "ntfsunhib",
+LIBS = ("common", "jsonq", "waits", "sysinfo", "diskinfo", "progress", "restore", "expand", "grow", "ntfsunhib",
         "expandshare", "writemark", "hostname", "hostname_linux", "writeback", "drawers", "verdict",
         "failmark", "ntfsboot", "postdeploy", "writecheck", "discard", "drawergate", "drawerselect", "cancel")
 

@@ -127,7 +127,7 @@ def test_a_wave_with_one_orange_drawer_does_not_wait(tmp_path):
 
 # --- the end: the note rides on a done target -----------------------------------------
 
-APPLY = (f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress", "failmark")}'
+APPLY = (f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "diskinfo", "progress", "failmark")}'
          f'. {posix(AGENT)}/lib/smart/smart.sh; . {posix(AGENT)}/lib/smart/smartgate.sh; ')
 
 

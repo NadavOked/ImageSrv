@@ -176,7 +176,7 @@ def test_hello_schema_2_carries_netprobe(fake_machine, tmp_path):
         f'export SYSROOT={posix(sysroot)!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR=/nonexistent/dir IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'. {posix(AGENT)}/lib/hw/netprobe.sh; build_hello'
     ))
     assert hello["schema"] == 2

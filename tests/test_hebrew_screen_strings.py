@@ -310,6 +310,51 @@ def test_every_english_journal_detail_has_a_translation_rule():
     assert not bad, "פירוט אנגלי ביומן בלי כלל ב-journal_he_detail:\n" + "\n".join(bad)
 
 
+#: ‏#2509: סיומת "[+N identical … in the last Ss not journaled]" נבנית ב-f-string נפרד ונצמדת
+#: לפירוט דרך משתנה, והאירוע שלה מגיע מ-`verdict.event`. `_journal_details` מדלג על קריאה
+#: כזאת (האירוע אינו קבוע), ולכן "identical refusals" הגיע ליומן באנגלית. כאן סורקים את
+#: הסיומת עצמה, בכל מקום בשרת, ובודקים אותה מול האירועים שהיא יכולה לצאת תחתיהם.
+REPEAT_SUFFIX = re.compile(r"\[\+\S+ identical (\w+) in the last \S+ not journaled\]")
+
+
+def _repeat_suffixes() -> list[tuple[str, str]]:
+    found = set()
+    for path in sorted((REPO / "server").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.JoinedStr):
+                text = "".join(v.value if isinstance(v, ast.Constant) else "7" for v in node.values)
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                text = node.value
+            else:
+                continue
+            for m in REPEAT_SUFFIX.finditer(text):
+                found.add((str(path.relative_to(REPO)), m.group(0)))
+    return sorted(found)
+
+
+def test_every_repeat_suffix_built_in_code_has_a_hebrew_rule():
+    from server.agent import identity
+    from server.console.journal_he_detail import he_detail
+
+    events_of = {"requests": ["unknown_mac"],
+                 "refusals": [identity.REFUSED, identity.UNVERIFIABLE, identity.NO_OPEN_JOB]}
+    suffixes = _repeat_suffixes()
+    # בקרה: הסורק רואה את שני הסוגים (סריקה עיוורת = ירוק שקרי).
+    nouns = {REPEAT_SUFFIX.search(t).group(1) for _, t in suffixes}
+    assert nouns >= {"requests", "refusals"}, suffixes
+    bad = []
+    for where, suffix in suffixes:
+        noun = REPEAT_SUFFIX.search(suffix).group(1)
+        for event in events_of.get(noun, [None]):
+            if event is None:
+                bad.append(f"{where} {suffix} -- סוג חדש ({noun}): להוסיף ל-events_of את האירועים שלו")
+            else:
+                shown = he_detail(event, f"aa:bb from 10.0.0.1 (x) {suffix}")
+                if not HEBREW.search(shown) or "identical" in shown:
+                    bad.append(f"{where} [{event}] {suffix}")
+    assert not bad, "סיומת מונה באנגלית ביומן בלי כלל ב-journal_he_detail:\n" + "\n".join(bad)
+
+
 # --------------------------------------------------------------------------- #
 # מסך השרת (DCUI)
 # --------------------------------------------------------------------------- #

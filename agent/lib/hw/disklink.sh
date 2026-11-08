@@ -67,7 +67,7 @@ disk_link() {
 
 disk_link_json() {
     # $1 = disk name. Prints ,"link_gbps":X,"link_max_gbps":Y,"crc":Z -- the
-    # fragment build_disk_entry (sysinfo.sh) appends; each a number or null.
+    # fragment build_disk_entry (diskinfo.sh) appends; each a number or null.
     _dl_sm=$(disk_link "$1")
     # attribute 199 only when smartctl really read the disk -- the same rule
     # as crc_delta_measure (crcdelta.sh); the cache holds 0 for the rest.

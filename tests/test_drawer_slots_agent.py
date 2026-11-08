@@ -21,7 +21,7 @@ def _hello(fake_machine) -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'. {posix(AGENT)}/lib/hw/disklink.sh; build_hello'))
 
 
@@ -71,7 +71,7 @@ def test_optical_parse_without_symlinks(tmp_path):
     (root / "sys/block/sr0/device/model").write_text("  HL-DT-ST DVDRAM  \n", encoding="utf-8")
     out = sh(f'export SYSROOT={posix(root)!r}; '
              'readlink() { printf "%s\\n" "/sys/devices/pci0000:00/0000:00:17.0/ata3/host2/target2/2:0:0:0"; }; '
-             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
              f'. {posix(AGENT)}/lib/hw/disklink.sh; optical_json')
     assert json.loads("{" + out.lstrip(",") + "}") == {
         "optical": [{"dev": "sr0", "model": "HL-DT-ST DVDRAM", "port": 3}]}

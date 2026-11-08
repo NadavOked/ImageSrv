@@ -45,7 +45,7 @@ READLINK = ('readlink() { case "$2" in '
             '*/nvme1n1/*) echo /sys/devices/pci0000:00/0000:00:1c.0/0000:04:00.0/nvme/nvme1 ;; '
             '*/sr0/*) echo /sys/devices/pci0000:00/0000:00:17.0/ata5/host4/target4/4:0:0:0 ;; '
             '*) echo /sys/devices/virtual/block/x ;; esac; }; ')
-LIBS = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "sysinfo", "disklink", "slotnames"))
+LIBS = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "sysinfo", "diskinfo", "disklink", "slotnames"))
 # drawer 1 = SATA 2 (ata3), drawer 2 = SATA 0 (ata1), drawer 3 = an NVMe controller
 MAPPING = "ok\n1|sata:3\n2|sata:1\n3|nvme:0000:03:00.0\n"
 

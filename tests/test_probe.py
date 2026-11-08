@@ -92,7 +92,7 @@ def _agent_hello(fake_machine, libs: str) -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'{libs} build_hello'
     ))
 

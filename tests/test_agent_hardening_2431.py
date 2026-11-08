@@ -169,7 +169,7 @@ def test_a_sata_disk_shows_its_serial_through_disk_serial(tmp_path):
     """device/serial is NVMe only; a SATA disk has its wwid (or hdparm) -- disk_serial reads both."""
     pre = (f"rm -f {posix(tmp_path / 'sysroot/sys/block/sda/device/serial')!r}; "
            f"echo 't10.ATA     Samsung SSD 870 S6PNNS0TSATA' > {posix(tmp_path / 'sysroot/sys/block/sda/device/wwid')!r}; "
-           f". {posix(flat_lib())}/common.sh; . {posix(flat_lib())}/sysinfo.sh; ")
+           f". {posix(flat_lib())}/common.sh; . {posix(flat_lib())}/sysinfo.sh; . {posix(flat_lib())}/diskinfo.sh; ")
     r = tools(tmp_path, "tools_disk_run disk-blkdiscard /dev/sda lab-pc", pre=pre)
     body = out_text(tmp_path, "disk-blkdiscard")
     assert r.returncode == 0, body
@@ -179,7 +179,7 @@ def test_a_sata_disk_shows_its_serial_through_disk_serial(tmp_path):
 # --- 3: the stick's data partition --------------------------------------------------------
 
 
-USB_LIBS = ("common", "sysinfo", "usbclone")
+USB_LIBS = ("common", "sysinfo", "diskinfo", "usbclone")
 
 
 def usb_root(tmp_path: Path, disks: dict[str, bool]) -> Path:
@@ -279,7 +279,7 @@ def cancel(tmp_path: Path, serial_now: str | None, size_now: str = "1000215216")
     run = tmp_path / "run"; (run / "gui").mkdir(parents=True, exist_ok=True)
     root = tmp_path / "sysroot"; d = root / "sys" / "block" / "sda"; (d / "device").mkdir(parents=True)
     (d / "device" / "serial").write_text("S6PNNS0T\n", newline="\n"); (d / "size").write_text("1000215216\n", newline="\n")
-    src = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in ("common", "sysinfo", "srgui"))
+    src = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in ("common", "sysinfo", "diskinfo", "srgui"))
     swap = ""
     if serial_now is not None:
         swap = (f'printf "%s\\n" {serial_now!r} > {posix(d / "device" / "serial")!r}; '

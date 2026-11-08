@@ -511,10 +511,56 @@ def test_the_refusal_says_why_the_check_could_not_run(dhcp_server):
                      "reason": "ה-DHCPDISCOVER לא נראה יוצא מ-eth0"}
 
 
-def test_an_unrunnable_check_is_still_overridable_on_purpose(dhcp_server):
+def test_link_down_refusal_2394(dhcp_server):
+    admin, fake = dhcp_server["admin"], dhcp_server["fake"]
+    fake["probe_checked"] = False
+    fake["probe_reason"] = "link_down"
+    response = admin.put("/api/console/net/interfaces/eth0",
+                         json={**GOOD, "confirm": "eth0"})
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert "כרטיס ההפצה eth0 מושבת" in detail
+    assert "יש להעלות את הכרטיס תחילה" in detail
+    assert "root" not in detail and "68" not in detail
+    assert "—" not in detail
+    assert "ignore_existing" in detail
+    assert fake["applied"] == [] and fake["proxy_applied"] == []
+    rows = admin.get("/api/console/net/interfaces").json()
+    assert next(row for row in rows if row["name"] == "eth0")["enabled"] is False
+
+
+def test_link_down_probe_is_never_clean_2394(dhcp_server):
+    admin, fake = dhcp_server["admin"], dhcp_server["fake"]
+    fake["probe_checked"] = False
+    fake["probe_reason"] = "link_down"
+    response = admin.get("/api/console/net/interfaces/eth0/probe")
+    assert response.status_code == 200
+    assert response.json() == {"interface": "eth0", "checked": False,
+                               "servers": [], "reason": "link_down"}
+
+
+@pytest.mark.parametrize("reason,fragment", [
+    ("permission", "נדרשות הרשאות root"),
+    ("port_busy", "כתובת ההאזנה תפוסה"),
+    ("os_error", "שגיאת מערכת"),
+])
+def test_socket_failure_refusal_2394(dhcp_server, reason, fragment):
+    fake = dhcp_server["fake"]
+    fake["probe_checked"] = False
+    fake["probe_reason"] = reason
+    response = dhcp_server["admin"].put("/api/console/net/interfaces/eth0",
+                                      json={**GOOD, "confirm": "eth0"})
+    assert response.status_code == 409
+    assert fragment in response.json()["detail"]
+    assert fake["applied"] == []
+
+
+@pytest.mark.parametrize("reason", ["", "link_down"])
+def test_an_unrunnable_check_is_still_overridable_on_purpose(dhcp_server, reason):
     """המעקף המפורש נשאר מעקף — מי שיודע שהכרטיס מבודד מדליק בכל זאת,
     ולא נתקע בלי דרך קדימה."""
     dhcp_server["fake"]["probe_checked"] = False
+    dhcp_server["fake"]["probe_reason"] = reason
     r = dhcp_server["admin"].put(
         "/api/console/net/interfaces/eth0",
         json={**GOOD, "confirm": "eth0", "ignore_existing": True})

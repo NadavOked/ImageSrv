@@ -214,7 +214,7 @@ def test_hello_matches_the_interface(fake_machine):
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'build_hello'
     )
     hello = json.loads(out)
@@ -254,7 +254,7 @@ def _hello_with_monitor_lib(fake_machine) -> dict:
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'. {posix(AGENT)}/lib/core/monitor.sh; '
         f'build_hello'
     ))
@@ -293,7 +293,7 @@ def test_hello_omits_the_secret_when_the_monitor_lib_is_absent(fake_machine):
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'build_hello'
     )
     body = json.loads(out)
@@ -310,7 +310,7 @@ def test_hello_omits_the_secret_when_the_monitor_lib_is_absent(fake_machine):
 def secure_boot_of(sysroot: Path) -> str:
     return sh(
         f'export SYSROOT={posix(sysroot)!r}; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'detect_secure_boot'
     ).strip()
 
@@ -350,7 +350,7 @@ def test_unknown_reaches_hello_as_a_bare_null_not_a_string(fake_machine):
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'build_hello'
     )
     assert json.loads(out)["secure_boot"] is None
@@ -363,7 +363,7 @@ def test_missing_uuid_reaches_hello_as_a_bare_null_not_an_empty_string(fake_mach
         f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'build_hello'
     )
     hello = json.loads(out)
@@ -373,7 +373,7 @@ def test_missing_uuid_reaches_hello_as_a_bare_null_not_an_empty_string(fake_mach
 def port_from(path: str, sysroot: Path | None = None) -> str:
     prefix = f"export SYSROOT={posix(sysroot)!r}; " if sysroot else ""
     return sh(
-        prefix + f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        prefix + f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f"port_from_path {path!r}"
     ).strip()
 
@@ -435,7 +435,7 @@ def test_hello_reports_the_slot_of_a_sata_drawer(fake_machine):
         f'export SYSROOT={posix(sysroot)!r} '
         f'DEVROOT={posix(fake_machine["dev"])!r} '
         f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'build_hello'
     )
     (disk,) = json.loads(out)["disks"]
@@ -447,7 +447,7 @@ def test_mac_stays_canonical(fake_machine):
     """התבנית הקנונית — lowercase עם נקודתיים — נשמרת כמו שהיא מ-sysfs."""
     out = sh(
         f'export SYSROOT={posix(fake_machine["sysroot"])!r}; '
-        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+        f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
         f'list_macs'
     )
     for mac in out.split():
@@ -475,7 +475,7 @@ def test_progress_matches_the_interface(tmp_path):
 
     out = sh(
         f'export RUN_DIR={posix(run)!r}; '
-        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress", "failmark")}'
+        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "diskinfo", "progress", "failmark")}'
         f'build_progress ses_a91f b4:2e:99:07:1a:c4'
     )
     report = json.loads(out)
@@ -1191,7 +1191,7 @@ def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share
         # אותו דבר לקריאה החוזרת של GUID המחיצות (#1212): היא נבדקת, גם
         # אחרי הרחבה, ב-test_partition_guid.py מול sgdisk שזוכר את `-u`.
         "verify_unique_guids() { true; }; "
-        + agent_sources("sysinfo", "progress", "failmark") + "target_bind sda; "   # #2434: the disk chosen
+        + agent_sources("sysinfo", "diskinfo", "progress", "failmark") + "target_bind sda; "   # #2434: the disk chosen
         + f'expand_last sda {manifest_path!r} >/dev/null 2>&1; echo "rc=$?"'
     )
     marker = run / "targets" / "sda" / "expanded"
@@ -1550,7 +1550,7 @@ def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_pat
         + f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev '
         f'LOG_FILE={posix(run / "log")!r} WAIT_POLL_S=1; '
-        + agent_sources("common", "sysinfo", "waits", "progress", "failmark", "restore", "writeback", "drawers")   # #1906: restore_pipe; #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "failmark", "restore", "writeback", "drawers")   # #1906: restore_pipe; #2272: imagesrv-agent's order
         + "stream_source() { printf 'recovery-bytes'; }; "
         # ‏/dev/sda4 אינו קיים בסביבת הבדיקה, ובדיקת ההתקן היא הבדיקה
         # הראשונה בצינור (#51). היא מוחלפת כאן ונבדקת בנפרד.
@@ -1603,7 +1603,7 @@ def swap_box(tmp_path, disks=("sda",)):
         f"chmod 0755 {posix(stub_dir)}/mkswap\n"
         f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "log() { :; }; "
         # ‏/dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
         # של כל כתיבה (#51). היא נבדקת בנפרד ב-test_restore_evidence.py.
@@ -1846,7 +1846,7 @@ def _fanout_buffer_for(tmp_path, mem_available_kb, drawers):
     )
     out = sh(
         f"export SYSROOT={posix(root)!r}; "
-        + agent_sources("common", "sysinfo", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + f"_fanout_buffer {drawers}"
     )
     return int(out.strip())

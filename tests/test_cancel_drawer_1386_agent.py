@@ -57,7 +57,7 @@ STUBS = {
     "fanout": None,
 }
 
-LIBS = ("common", "sysinfo", "waits", "jsonq", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
+LIBS = ("common", "sysinfo", "diskinfo", "waits", "jsonq", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
         "cancel", "failmark", "ntfsboot")
 
 

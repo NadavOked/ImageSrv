@@ -62,7 +62,7 @@ def grant_user(path: str | Path, uid: int, perm: int) -> None:
 #: טוענת מול הזיופים, ועוד ארבעת קובצי הקליטה. אף אחד מהם אינו מריץ דבר
 #: בטעינה מלבד השמות ערכי ברירת מחדל (נבדק ב-`tests/test_agent_shell.py`).
 LIBS = (
-    "common.sh", "waits.sh", "jsonq.sh", "sysinfo.sh", "progress.sh", "restore.sh",   # sysinfo: #2434's identity (disk_serial/disk_port)
+    "common.sh", "waits.sh", "jsonq.sh", "sysinfo.sh", "diskinfo.sh", "progress.sh", "restore.sh",   # diskinfo: #2434's identity (disk_serial/disk_port), from sysinfo.sh since #2385
     "expand.sh", "grow.sh", "ntfsunhib.sh", "failmark.sh", "diskfit.sh", "manifest.sh",
     "hibernation.sh", "shrinkplan.sh", "shrink.sh", "bootca.sh",
     "lcsnap.sh",    # ‏#1491: ‏`_lc_relocs` — כמה `ntfsresize -n` אומר שיוזז

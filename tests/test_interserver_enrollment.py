@@ -6,8 +6,9 @@ channel-binding לפי RFC 9266 ועל SPKI-pin. שכבת ה-TLS הזאת דור
 התקן ואינם מותקנים על תחנת הפיתוח (ראו דוח ה-PR). הבדיקות כאן מכסות את
 כל מה ש**אינו** תלוי ב-TLS: הפרימיטיבים, חלון ה-pairing, והצד המקומי של
 המשני (פתיחת חלון + הצגת קוד + break-glass) על השרת המלא. הבדיקות
-הבין-שרתיות (שני מאזיני TLS על loopback, sender-constraint, channel
-binding) הן שלב נפרד שממתין להכרעת התלות.
+הבין-שרתיות (שני מאזיני TLS על loopback, SPKI-pin, channel binding)
+כבר ממומשות ב-``tests/test_interserver_tls.py``, מעל הלוגיקה ב-
+``server/interserver/api.py``.
 """
 
 from __future__ import annotations

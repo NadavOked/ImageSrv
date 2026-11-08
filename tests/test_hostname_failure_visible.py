@@ -40,7 +40,7 @@ def restore_done_station(tmp_path: Path, **override: str) -> tuple[str, Path]:
     script, run = windows_box(tmp_path, **override)
     (run / "response.json").write_text("{}", encoding="utf-8")
     script += (
-        f'{agent_sources("sysinfo", "progress", "failmark")}'
+        f'{agent_sources("sysinfo", "diskinfo", "progress", "failmark")}'
         f'RESP={posix(run / "response.json")!r}; MAC=b4:2e:99:07:1a:c4; '
         'json_get() { case "$2" in *prefix) echo lab1;; *suffix) echo 05;; '
         '  .error) sed -n \'s/.*"error":"\\([^"]*\\)".*/\\1/p\' "$1";; *) echo null;; esac; }; '

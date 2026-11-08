@@ -40,7 +40,7 @@ SYSROOT="${SYSROOT:-}"; DEVROOT="${DEVROOT:-/dev}"
 
 . "$INSTALLER_DIR/lib/progress.sh"
 . "$AGENT_LIB_DIR/common.sh"
-. "$AGENT_LIB_DIR/sysinfo.sh"
+. "$AGENT_LIB_DIR/sysinfo.sh"; . "$AGENT_LIB_DIR/diskinfo.sh"   # #2385: list_disks/disk_serial moved there
 . "$INSTALLER_DIR/lib/disks.sh"
 . "$INSTALLER_DIR/lib/answers.sh"
 . "$INSTALLER_DIR/lib/bootstrap.sh"

@@ -61,7 +61,7 @@ def options(lines: list[str]) -> set[str]:
 
 @pytest.mark.parametrize("fs", ["ext4", "btrfs", "xfs"])
 def test_the_inventory_probe_of_every_drawer_never_replays(tmp_path, fs):
-    got = mounted_with(tmp_path, f"_lc_os_name /dev/sdb2 {fs}", ("common", "sysinfo", "manifest", "lcinv"))
+    got = mounted_with(tmp_path, f"_lc_os_name /dev/sdb2 {fs}", ("common", "sysinfo", "diskinfo", "manifest", "lcinv"))
     assert got, "the probe did not mount at all -- the test checks nothing"
     assert options(got) == {WANT[fs]}, got
 
@@ -82,12 +82,12 @@ def test_the_capture_used_bytes_probe_never_replays(tmp_path, fs):
 
 @pytest.mark.parametrize("fs", ["ext4", "btrfs", "xfs"])
 def test_the_drawer_card_used_bytes_probe_never_replays(tmp_path, fs):
-    got = mounted_with(tmp_path, f"_du_mount_used /dev/sdb3 {fs}", ("common", "sysinfo", "manifest", "diskused"))
+    got = mounted_with(tmp_path, f"_du_mount_used /dev/sdb3 {fs}", ("common", "sysinfo", "diskinfo", "manifest", "diskused"))
     assert got, "the probe did not mount at all -- the test checks nothing"
     assert options(got) == {WANT[fs]}, got
 
 
 def test_a_filesystem_without_a_replay_switch_keeps_plain_ro(tmp_path):
     """vfat has no journal: a bare `ro`, not an option the kernel would refuse."""
-    got = mounted_with(tmp_path, "_lc_os_name /dev/sdb1 vfat", ("common", "sysinfo", "manifest", "lcinv"))
+    got = mounted_with(tmp_path, "_lc_os_name /dev/sdb1 vfat", ("common", "sysinfo", "diskinfo", "manifest", "lcinv"))
     assert options(got) == {"ro"}, got

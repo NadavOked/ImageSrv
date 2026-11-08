@@ -104,7 +104,7 @@ def test_build_hello_carries_the_policy(fake_machine):  # noqa: F811
     env = (f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
            f'DEVROOT={posix(fake_machine["dev"])!r} '
            f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187; '
-           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+           f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
            f'. {posix(CORE)}/satalpm.sh; build_hello')
     assert "sata_lpm" not in json.loads(sh(env))
     (fake_machine["run"] / "sata_lpm").write_text("max_performance\n", encoding="utf-8", newline="\n")

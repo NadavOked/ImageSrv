@@ -11,8 +11,6 @@ dnsmasq ו-dnsmasq מופעל מחדש.
 4. ממשק שסומן trunk דורש גם `confirm_trunk: true`.
 """
 
-from __future__ import annotations
-
 import ipaddress
 import logging
 import threading
@@ -452,8 +450,19 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 # המכללה "לא יודעים" עולה רשת שלמה. פורט 68 תפוס הוא בדיוק
                 # מה שקורה על כרטיס trunk שמקבל כתובת מהמכללה.
                 if not found.checked:
+                    if found.reason == "link_down":
+                        raise HTTPException(
+                            409, f"כרטיס ההפצה {name} מושבת. יש להעלות את הכרטיס תחילה. "
+                            "לא ניתן לבדוק אם כבר יש DHCP על הכרטיס. הבדיקה לא רצה. "
+                            "אם אתה יודע שהכרטיס אינו מחובר לרשת המכללה, "
+                            "הדלק עם ignore_existing.",
+                        )
                     # ‏#2417: הסיבה מהבדיקה עצמה (האזנה, שליחה, ראיה שלא נמצאה).
-                    why = found.reason or (
+                    why = {
+                        "permission": "נדרשות הרשאות root להאזנה ברמת הקישור (AF_PACKET)",
+                        "port_busy": "כתובת ההאזנה תפוסה. יש לפנות אותה לפני הבדיקה",
+                        "os_error": "שגיאת מערכת מנעה את בדיקת ה-DHCP",
+                    }.get(found.reason, found.reason) or (
                         "נדרשות הרשאות root, ופורט 68 חייב להיות פנוי; לקוח DHCP "
                         "שרץ על הכרטיס תופס אותו")
                     raise HTTPException(

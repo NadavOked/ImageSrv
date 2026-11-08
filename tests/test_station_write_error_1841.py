@@ -88,7 +88,7 @@ def station(tmp_path: Path, fanout_dir: Path, *, eio_at_tick: int | None, pcl: s
     env = (f"export BOX={posix(box)!r} PCL={pcl} SYSROOT={posix(box)!r} RUN_DIR={posix(run)!r} "
            f"DEVROOT={posix(box / 'dev')!r} TMPDIR={posix(tmp_path)!r} WRITE_FSYNC_INTERVAL_S=1 "
            "WAIT_POLL_S=1 WAIT_DRAWER_S=6 WAIT_HELPER_S=4 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=10; ")
-    libs = agent_sources("common", "jsonq", "sysinfo", "waits", "progress", "restore", "verdict", "failmark",
+    libs = agent_sources("common", "jsonq", "sysinfo", "diskinfo", "waits", "progress", "restore", "verdict", "failmark",
                          "writeback", "drawers")   # imagesrv-agent's order (#2272)
     out = run_sh(
         make_stubs(box / "stubs", STUBS)

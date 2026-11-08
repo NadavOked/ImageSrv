@@ -78,7 +78,7 @@ def box(tmp_path: Path, plan: list[str], marked: str, *, roots=("sda3", "sda4"),
     script += (
         f'export PATH="$(cd {posix(bindir)!r} && pwd):$PATH" MARKED={marked!r} '
         f'RUN_DIR={posix(run)!r} LOG_FILE={posix(run / "agent.log")!r}; '
-        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "progress", "failmark")}'
+        f'. {posix(AGENT)}/lib/core/common.sh; {agent_sources("sysinfo", "diskinfo", "progress", "failmark")}'
         f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/grow.sh; '
         f'. {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
         f'. {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; '

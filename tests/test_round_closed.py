@@ -121,7 +121,7 @@ def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=2 "
         "WAIT_STREAM_START_S=40 WAIT_STREAM_STALL_S=40; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "target_init sda 8192; "
         "stream_source() { sleep 120; }; "
         '( sleep 2; echo ses_d6e79f65 > "$RUN_DIR/session-closed" ) & '

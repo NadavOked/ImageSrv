@@ -4,7 +4,7 @@ The gap scan of 20/10 found two defaults for the same question when
 ``/sys/block/<d>/removable`` does not read (a mount namespace, a sysfs without it):
 ``cat ... || echo 0`` in the hello ("internal"), ``|| echo 1`` in the picker and the
 drawers ("not internal"). #1807/#1832 then put every reader of the bit behind one
-test, ``disk_internal`` (sysinfo.sh) -- but no test ever took the file away, and the
+test, ``disk_internal`` (diskinfo.sh) -- but no test ever took the file away, and the
 failure screen (``fail_disk_he``, failscreen.sh) still said "פנימי" for anything that
 was not ``1``: a removable that did not read, and a USB enclosure that says 0.
 

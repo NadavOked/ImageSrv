@@ -201,7 +201,7 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
     if shutil.which("blkid") is None:   # #1905: a missing blkid is "unreadable"; the real one says rc 2 on these files
         stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
     libs =" ".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh;" if n == "captureview" else f". {posix(flat_lib())}/{n}.sh;" for n in (
-        "common", "sysinfo", "waits", "jsonq", "gptboot", "progress", "failmark", "restore", "manifest",
+        "common", "sysinfo", "diskinfo", "waits", "jsonq", "gptboot", "progress", "failmark", "restore", "manifest",
         "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui"))   # ‏#87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
     out = run_sh(
         make_stubs(box / "stubs", stubs) + exports + libs

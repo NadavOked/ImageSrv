@@ -75,7 +75,7 @@ def _room(tmp_path: Path, fanout: str, sdb_read: str, drawer_s: int) -> tuple[st
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} SDB_READ={sdb_read!r} "
         f"WAIT_POLL_S=1 WAIT_DRAWER_S={drawer_s} WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers",
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers",
                         "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + f"stream_source() {{ cat {posix(payload)!r}; }}; "
         "target_bind sda; target_bind sdb; "   # #2434: the drawers chosen, as target_init binds them

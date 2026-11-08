@@ -156,7 +156,7 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
     out = run_sh(
         make_stubs(tmp_path / "stubs", extra)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
@@ -384,7 +384,7 @@ def _plan_drawers(tmp_path, *, plan_cmd, restore_cmd="return 0",
     out = run_sh(
         make_stubs(tmp_path / "stubs", {"ntfsfix": OK, "ntfsresize": OK, "sgdisk": OK})   # #1798: the mark's table read
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file

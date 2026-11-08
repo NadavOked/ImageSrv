@@ -83,7 +83,7 @@ def test_an_empty_date_is_null_and_a_quote_is_escaped(fake_machine):
 def test_it_rides_the_real_hello(fake_machine):
     _pci_device(fake_machine["sysroot"], "0000:00:1f.2", "0x8086", "0x1c02", "0x010185")
     _bios(fake_machine)
-    base = _env(fake_machine) + f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+    base = _env(fake_machine) + f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; '
     hello = json.loads(sh(base + f'. {posix(AGENT)}/lib/hw/fwimage.sh; build_hello'))
     assert hello["sata_mode"] == "ide" and hello["bios"]["version"] == "786H1 v01.13"
     old = json.loads(sh(base + "build_hello"))

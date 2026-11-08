@@ -196,7 +196,7 @@ def offer_run(tmp_path, *, answer_records: list[dict] | None, keys: str = "",
     if JQ is None:
         stub["jq"] = JQ_STUB
     libs = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in (
-        "common", "sysinfo", "waits", "jsonq", "restore", "ui", "attended",
+        "common", "sysinfo", "diskinfo", "waits", "jsonq", "restore", "ui", "attended",
         "shrinkplan", "shrink", "shrinkmem", "shrinkoffer", "askgui"))   # ‏#929: ההצעה באתחול ב-shrinkoffer.sh
     # קלט מקובץ ולא מצינור: פונקציה בצינור רצה בתת-מעטפת, ו-`_shrink_offered`
     # (פעם אחת לאתחול) לא היה שורד — בסוכן הקריאה ישירה, כמו כאן.

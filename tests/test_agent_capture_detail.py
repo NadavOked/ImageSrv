@@ -34,7 +34,7 @@ def run(tmp_path: Path, body: str, who: str = "task", parts: str = PARTS, setup:
     ids = '"" b4:2e:99:07:1a:c4 tsk_4e10' if who == "task" else "ses_1 b4:2e:99:07:1a:c4"
     return sh(
         f'export RUN_DIR={posix(run_dir)!r} CAPTURE_LEVEL=3\n'
-        f'. {posix(LIB)}/common.sh; . {posix(LIB)}/manifest.sh; {agent_sources("sysinfo", "progress", "failmark")}'
+        f'. {posix(LIB)}/common.sh; . {posix(LIB)}/manifest.sh; {agent_sources("sysinfo", "diskinfo", "progress", "failmark")}'
         f'. {posix(LIB)}/capturedetail.sh\n{STUBS}target_init sda 0; {setup}\n{body}\n'
         f'build_progress {ids}')
 

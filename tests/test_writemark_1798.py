@@ -361,7 +361,7 @@ def _hello_disk(tmp_path, image: bytes, sgdisk: str | None) -> dict:
     (stubs / "sgdisk").write_text(body, encoding="utf-8", newline="\n")
     out = sh(f'chmod 0755 {posix(stubs)}/sgdisk; export PATH="$(cd {posix(stubs)!r} && pwd):$PATH" DEVROOT={posix(box)}/dev '
              f'SYSROOT={posix(box)}; '
-             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
+             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '
              f'LOG_FILE={posix(box)}/log; build_disk_entry sda')   # after common.sh: it sets its own default
     entry = json.loads(out.strip().splitlines()[-1])
     entry["_sgdisk_calls"] = len(calls.read_text().splitlines()) if calls.exists() else 0

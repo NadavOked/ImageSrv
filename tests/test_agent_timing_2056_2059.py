@@ -33,7 +33,7 @@ pytestmark = requires_native(("bash", BASH))
 
 TIMING = AGENT / "lib" / "core" / "timing.sh"
 MAIN = AGENT / "imagesrv-agent"
-LIBS = ("common", "timing", "waits", "jsonq", "sysinfo", "restore", "idle")
+LIBS = ("common", "timing", "waits", "jsonq", "sysinfo", "diskinfo", "restore", "idle")
 GOOD = {"lost_wait_seconds": 240, "idle_poweroff_seconds": 600, "end_poweroff_seconds": 45}
 DEFAULTS = {"lost_wait_seconds": 180, "idle_poweroff_seconds": 300, "end_poweroff_seconds": 20}
 #: the agent's own constants (waits.sh, idle.sh) -- what an unapplied value leaves in force

@@ -108,7 +108,7 @@ tools_net_run() {
 
 
 #: כל מזהה שהמודולים המזויפים והמובנים מכירים — ברירת המחדל של קובץ הבחירה.
-ALL_FAKE_IDS = ["sysinfo", "smart-health", "wipe", "fsck", "lsblk", "odd", "ping", "broken"]
+ALL_FAKE_IDS = ["sysinfo", "diskinfo", "smart-health", "wipe", "fsck", "lsblk", "odd", "ping", "broken"]
 
 
 def write_selection(tmp_path: Path, build: list[str]) -> Path:

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import errno
 import socket
 import struct
 import types
@@ -156,7 +157,47 @@ def test_a_link_layer_listener_that_cannot_open_is_not_clean(monkeypatch):
     """בלי root אין AF_PACKET. השליחה לבדה אינה בדיקה."""
     result = _probe(monkeypatch, FakeNet(offers=(), tap_error=PermissionError(1, "denied")))
     assert result.checked is False, result
-    assert "AF_PACKET" in result.reason
+    assert result.reason == "permission", result
+
+
+@pytest.mark.parametrize("operation,error,reason", [
+    ("sendto", errno.ENETUNREACH, "link_down"),
+    ("sendto", errno.ENETDOWN, "link_down"),
+    ("bind", errno.EADDRINUSE, "port_busy"),
+    ("bind", errno.EACCES, "permission"),
+    ("sendto", errno.EPERM, "permission"),
+    ("sendto", errno.EACCES, "permission"),
+    ("bind", errno.ENODEV, "os_error"),
+    ("sendto", errno.EIO, "os_error"),
+])
+def test_probe_socket_failure_reason_2394(monkeypatch, operation, error, reason):
+    def fail(*args):
+        raise OSError(error, "injected socket failure")
+
+    monkeypatch.setattr(FakeSocket, operation, fail)
+    net = FakeNet(offers=())
+    result = _probe(monkeypatch, net)
+    assert result.checked is False
+    assert result.servers == ()
+    assert result.reason == reason, result
+    assert net.wire == []
+    assert net.made and all(s.closed for s in net.made)
+
+
+def test_probe_sender_bind_busy_reason_2394(monkeypatch):
+    original_bind = FakeSocket.bind
+
+    def bind(sock, address):
+        if len(sock.net.made) == 2:
+            raise OSError(errno.EADDRINUSE, "injected sender bind failure")
+        original_bind(sock, address)
+
+    monkeypatch.setattr(FakeSocket, "bind", bind)
+    net = FakeNet(offers=())
+    result = _probe(monkeypatch, net)
+    assert result.checked is False
+    assert result.reason == "port_busy", result
+    assert all(s.closed for s in net.made)
 
 
 def test_silence_while_the_kernel_dropped_frames_is_not_clean(monkeypatch):

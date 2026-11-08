@@ -335,6 +335,7 @@ FAILING_GUI = textwrap.dedent('''
 def test_a_gui_that_cannot_show_its_frame_hands_its_reason_to_the_text_screen(tmp_path):
     script = tmp_path / "failing_gui.py"
     script.write_text(FAILING_GUI, encoding="utf-8")
-    session = gui.Session([sys.executable, str(script)])
-    why = session.wait_ready(10)
+    with (tmp_path / "child.stderr").open("wb") as child_stderr:      # #2539
+        session = gui.Session([sys.executable, str(script)], stderr=child_stderr)
+        why = session.wait_ready(10)
     assert why == "drm: CRTC 40 shows fb 0, not ours (52)"

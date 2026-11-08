@@ -54,7 +54,7 @@ _tools_disk_dev_ok() {
 _tools_disk_ident() {   # $1 = /dev/<disk>: model, serial and size -- what is about to be erased
     _tdb="${SYSROOT:-}/sys/block/${1#/dev/}"
     _tds=$(cat "$_tdb/size" 2>/dev/null); case "$_tds" in ''|*[!0-9]*) _tds=0 ;; esac
-    # device/serial is NVMe only: disk_serial (sysinfo.sh) reads SATA too; alone (tests), the file
+    # device/serial is NVMe only: disk_serial (diskinfo.sh) reads SATA too; alone (tests), the file
     if command -v disk_serial >/dev/null 2>&1; then _tdr=$(disk_serial "${1#/dev/}"); else _tdr=$(tr -d '\r\n' < "$_tdb/device/serial" 2>/dev/null); fi
     printf 'הדיסק: %s · סידורי %s · %s בתים\n' "$(tr -d '\r\n' < "$_tdb/device/model" 2>/dev/null)" "$_tdr" "$((_tds * 512))"
 }

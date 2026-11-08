@@ -28,7 +28,7 @@ AGENT = REPO / "agent"
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "waits", "jsonq", "sysinfo", "progress", "failmark", "restore", "expand", "grow", "ntfsunhib",
+LIBS = ("common", "waits", "jsonq", "sysinfo", "diskinfo", "progress", "failmark", "restore", "expand", "grow", "ntfsunhib",
         "expandshare", "diskfit", "askgui", "smartgate", "drawergate")
 
 #: עונה לשאלה הראשונה שעל המסך, ושומר את הבקשה ואת מצב המגירה בזמן ההמתנה.

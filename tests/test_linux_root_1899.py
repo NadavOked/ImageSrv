@@ -104,7 +104,7 @@ def _agent(tmp_path: Path, m: dict, disk: int) -> str:
     (tmp_path / "min_free_gb").write_text("20\n")
     out = sh(f"export RUN_DIR={posix(tmp_path)!r} LOG_FILE={posix(tmp_path)!r}/log; "
              + "".join(f". {posix(flat_lib())}/{lib}.sh; " for lib in
-                       ("common", "jsonq", "sysinfo", "progress", "failmark", "restore", "expand", "grow", "ntfsunhib", "expandshare", "diskfit"))
+                       ("common", "jsonq", "sysinfo", "diskinfo", "progress", "failmark", "restore", "expand", "grow", "ntfsunhib", "expandshare", "diskfit"))
              + f'min_free_check {posix(path)!r} {disk} {required_bytes(m)}')
     return out.strip().splitlines()[-1]
 

@@ -158,7 +158,7 @@ class Box:
             f'SYSROOT={posix(self.run)!r}/sys LIB_DIR={posix(AGENT)!r}/lib '
             f'SERVER=http://10.44.12.10:8080 MAC=b4:2e:99:07:1a:c4 {env}; '
             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
-            + agent_sources("sysinfo", "progress", "failmark")   # #2434: assert_target (the disk chosen, bound in stage)
+            + agent_sources("sysinfo", "diskinfo", "progress", "failmark")   # #2434: assert_target (the disk chosen, bound in stage)
             + f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
             f'. {posix(AGENT)}/lib/postdeploy/hostname_linux.sh; . {posix(AGENT)}/lib/postdeploy/linuxdrivers.sh; '
             f'. {posix(AGENT)}/lib/postdeploy/bootstorage.sh; . {posix(AGENT)}/lib/postdeploy/postdeploy.sh; '
@@ -350,7 +350,7 @@ def test_the_progress_report_carries_drivers_only_once_it_exists(tmp_path):
         (run / "targets/sda" / name).write_text(value + "\n")
     (run / "state").write_text("done\n")
     script = (f'export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; '
-              f'{agent_sources("sysinfo", "progress", "failmark")}build_progress ses_1 b4:2e:99:07:1a:c4')
+              f'{agent_sources("sysinfo", "diskinfo", "progress", "failmark")}build_progress ses_1 b4:2e:99:07:1a:c4')
     before = json.loads(subprocess.run([BASH, "-c", script], capture_output=True, text=True,
                                        stdin=subprocess.DEVNULL, cwd=str(AGENT.parent)).stdout)
     assert "drivers" not in before

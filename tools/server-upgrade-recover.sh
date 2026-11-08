@@ -136,4 +136,6 @@ fi
 why="העדכון ל-$TAG נקטע (כיבוי או הפסקת חשמל) בשלב $STAGE, והוחזר באתחול ל-$PREV$note"
 report "$why" rollback
 rm -f "$STATE"
+# ‏#2626: מחיקת הסמן שנכתבה לתיקייה; כשל ב-sync נאמר, לא נבלע (והשחזור אידמפוטנטי).
+sync -f "$(dirname "$STATE")" || say "sync of the marker's directory failed -- a power cut now may bring $STATE back"
 say "$why"

@@ -214,7 +214,7 @@ def pulled(tmp_path: Path, then: str) -> tuple[Path, str]:
     env = (f"export BOX={posix(box)!r} SYSROOT={posix(box)!r} RUN_DIR={posix(run)!r} "
            f"DEVROOT={posix(box / 'dev')!r}; ")
     libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (
-        "common", "jsonq", "sysinfo", "progress", "failmark"))
+        "common", "jsonq", "sysinfo", "diskinfo", "progress", "failmark"))
     out = run_sh(
         make_stubs(box / "stubs", {"dmesg": '#!/bin/sh\ncat "$BOX/kmsg"\n',
                                    "sgdisk": "#!/bin/sh\nexit 0\n",

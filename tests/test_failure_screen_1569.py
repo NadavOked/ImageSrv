@@ -101,7 +101,7 @@ def run_agent(tmp_path: Path, script: str, *, targets: dict[str, tuple[str, str]
         stub.chmod(0o755)
         gui_env = f"FAIL_GUI_BIN={shlex.quote(posix(stub))} "
     libs = "".join(f". {posix(flat_lib())}/{n}; "
-                   for n in ("common.sh", "sysinfo.sh", "jsonq.sh", "progress.sh", "guistate.sh", "hold.sh", "ui.sh", "failscreen.sh")
+                   for n in ("common.sh", "sysinfo.sh", "diskinfo.sh", "jsonq.sh", "progress.sh", "guistate.sh", "hold.sh", "ui.sh", "failscreen.sh")
                    if (lib_path(n)).exists())
     full = (
         f"export RUN_DIR={shlex.quote(posix(run))} MAC={MAC} IP=10.44.0.82 IMAGESRV_TEST=1 "

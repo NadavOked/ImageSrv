@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import ctypes
+import errno
 import logging
 import re
 import secrets
@@ -114,7 +115,21 @@ class ProbeResult:
 
     checked: bool
     servers: tuple[str, ...] = ()
+    # Socket failures use link_down / port_busy / permission / os_error.
+    # Other incomplete probes retain their explanatory diagnostics.
     reason: str = ""
+
+
+def _probe_os_error(exc: OSError) -> ProbeResult:
+    if exc.errno in (errno.ENETUNREACH, errno.ENETDOWN):
+        reason = "link_down"
+    elif exc.errno == errno.EADDRINUSE:
+        reason = "port_busy"
+    elif exc.errno in (errno.EACCES, errno.EPERM):
+        reason = "permission"
+    else:
+        reason = "os_error"
+    return ProbeResult(False, reason=reason)
 
 
 # ‏#2417: ההאזנה היא ברמת הקישור (AF_PACKET), לא על סוקט UDP. סוקט UDP
@@ -241,8 +256,7 @@ def probe_existing_dhcp(iface: str, timeout: float = 2.0) -> ProbeResult:
         try:
             tap = _open_tap(iface)
         except OSError as exc:
-            return ProbeResult(False, reason=(
-                f"לא ניתן להאזין ל-{iface} ברמת הקישור (AF_PACKET, נדרש root): {exc}"))
+            return _probe_os_error(exc)
         try:
             # סוקט נפרד: ההאזנה אינה רואה מה שהיא עצמה שלחה. ‏protocol=0 — אינו מקבל.
             sender = socket.socket(AF_PACKET, socket.SOCK_RAW, 0)
@@ -255,7 +269,7 @@ def probe_existing_dhcp(iface: str, timeout: float = 2.0) -> ProbeResult:
             frame = _discover_frame(mac, xid)
             written = sender.sendto(frame, (iface, 0x0800))
         except OSError as exc:
-            return ProbeResult(False, reason=f"לא ניתן לשלוח DHCPDISCOVER על {iface}: {exc}")
+            return _probe_os_error(exc)
         if written != len(frame):
             return ProbeResult(False, reason=(
                 f"הקרנל קיבל {written} מתוך {len(frame)} בייט של ה-DHCPDISCOVER על {iface}"))

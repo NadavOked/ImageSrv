@@ -165,7 +165,7 @@ AGENT_VERSION_FILE={posix(version_file)!r}
 RUN_DIR={posix(tmp_path)!r}
 SYSROOT=$RUN_DIR; IFACE=eth0
 . {posix(AGENT / 'lib/core/common.sh')!r}
-. {posix(AGENT / 'lib/hw/sysinfo.sh')!r}
+. {posix(AGENT / 'lib/hw/sysinfo.sh')!r}; . {posix(AGENT / 'lib/hw/diskinfo.sh')!r}
 list_macs() {{ echo aa:bb:cc:00:00:10; }}
 detect_uuid() {{ :; }}
 detect_firmware() {{ echo bios; }}

@@ -76,7 +76,7 @@ json_escape_pre_fix() {
 json_escape_pre_fix "$1"
 """
 
-LIBS = ("common.sh", "jsonq.sh", "sysinfo.sh", "restore.sh", "progress.sh", "ui.sh",
+LIBS = ("common.sh", "jsonq.sh", "sysinfo.sh", "diskinfo.sh", "restore.sh", "progress.sh", "ui.sh",
         "pull.sh")
 
 

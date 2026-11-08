@@ -51,7 +51,7 @@ smart_attrs_json() {
     else printf null; fi
 }
 
-smart_attrs_hello() { printf ',"smart_attrs":%s' "$(smart_attrs_json "$1")"; }   # $1 = disk: sysinfo.sh's fragment
+smart_attrs_hello() { printf ',"smart_attrs":%s' "$(smart_attrs_json "$1")"; }   # $1 = disk: diskinfo.sh's fragment
 
 smart_learned_refresh() {
     # hello's `smart_learned` (the server's comparison with this serial's previous round)

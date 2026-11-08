@@ -37,7 +37,7 @@ pytestmark = requires_native(("bash", BASH))
 needs_jq = requires_native(("jq", shutil.which("jq")))
 needs_usb_build = requires_native("cpio", "gzip", "zstd", "python3", "git", posix=True)
 
-LIBS = ("common", "jsonq", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
+LIBS = ("common", "jsonq", "waits", "sysinfo", "diskinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux",
         "writeback", "drawers", "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink",
         "shrinkmem", "smart", "smartjudge", "hwissues", "guistate", "attended", "lcinv", "lcsize", "lcplan", "lcsnap", "lctune",
         "lccopy", "lcraw", "localclone", "lcwait", "idle", "lcgui", "usbclone", "usbdiag", "usbsurvey", "usbset",

@@ -1,15 +1,15 @@
 {
- "agent_version": "v0.91.1",
+ "agent_version": "v0.91.2",
  "flags": [
   "--skip-apt --output initrd.img",
   "--skip-apt --with-gui --output initrd.img.gui"
  ],
- "input_hash": "2f3ad046c021cef366c43b2bcc7491bf0e6a607000e1e2bdc2048656d7d50297",
+ "input_hash": "638e6a2f94d37cf4938db028bf36cc19f94a5f5d5a400e20b8495bfefef4adef",
  "kernel_version": "6.12.115+deb13.1-amd64",
  "sha256": {
-  "initrd.img": "7ff8a3acffae9afb9dc663db6d401c37e5e9c552adb2d5aa2c57d6787329de66",
-  "initrd.img.gui": "f45af3949c8375e216e42b42945a1850afea3d5b1233756b228447e166f1a962",
+  "initrd.img": "27c3f5f5d76ffc911b83f52b68efb4f5ac590c34ce2b67507ed0fcbd075aa9ac",
+  "initrd.img.gui": "93648a007f15c35a5c7ceb2ae48f0e5992d471bdd1ae928f325e8d189605c02e",
   "vmlinuz": "96758c40859c94163e5cf81399a107d679e984e251cb4e13aba4e7d92f5d14f2"
  },
- "source_commit": "0b48b5b376cf150425f7e17e7c1ed3e3667ba941"
+ "source_commit": "67301c59e7ae63774e73135a1db3e7cfb8a9d971"
 }

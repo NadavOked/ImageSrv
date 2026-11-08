@@ -12,7 +12,7 @@ So a room is built by `agentlib.agent_sources` (or `agent_libs` for a
 without what it calls. This file holds every test file to that.
 
 #2281: the same family on the failure path -- failmark.sh and progress.sh call
-disk_serial (sysinfo.sh), and rooms that loaded them without it marked a failed
+disk_serial (diskinfo.sh), and rooms that loaded them without it marked a failed
 drawer with "disk_serial: not found": not the evidence the agent would write.
 
 #2289: progress.sh's target_init calls target_ident_keep (failmark.sh). Rooms

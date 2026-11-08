@@ -140,7 +140,7 @@ def test_hostname_json_is_valid_json_after_a_successful_name(tmp_path):
     (אין jq בבדיקה); השם עצמו מורכב ע"י compose_hostname האמיתית."""
     script, run = windows_box(tmp_path)
     (run / "response.json").write_text("{}", encoding="utf-8")
-    out = sh(script + agent_sources("sysinfo", "progress", "failmark") + "target_bind sda; "   # #2434: the disk chosen
+    out = sh(script + agent_sources("sysinfo", "diskinfo", "progress", "failmark") + "target_bind sda; "   # #2434: the disk chosen
              + f'RESP={posix(run / "response.json")!r}; '
              'json_get() { case "$2" in *prefix) echo lab1;; *suffix) echo 05;; esac; }; '
              'name_this_machine sda sess1')

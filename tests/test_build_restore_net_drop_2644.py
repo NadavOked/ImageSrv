@@ -125,7 +125,7 @@ def _restore(box: Path, stubs: Path, server: _Server, *, ceiling: int, http: int
         + "export D_ROLE=build WAIT_POLL_S=1 WAIT_STREAM_START_S=30 WAIT_HELPER_S=10 WAIT_DRAWER_S=30 "
         + f"WAIT_STREAM_STALL_S={ceiling} UDPCAST_STALL_TIMEOUT={ceiling} HTTP_STALL_TIMEOUT={http} "
         + "HTTP_TIMEOUT=4 NETLOST_AFTER_S=2\n"
-        + agent_sources("common", "sysinfo", "waits", "jsonq", "progress", "restore", "writeback", "drawers",
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "jsonq", "progress", "restore", "writeback", "drawers",
                         "drawerfeed", "verdict", "failmark", "ntfsboot", "roundbeep", "srgui", "clonergui") + "\n"
         + "node_is_block() { true; }\n"   # a regular file stands for the partition (test_timeouts.py)
         + f'target_init sda {len(PAYLOAD)}; target_set sda writing; echo writing > "$RUN_DIR/state"\n'
@@ -183,7 +183,7 @@ def _argv(tmp_path: Path, body: str) -> list[str]:
     curl = tmp_path / "bin" / "curl"; curl.parent.mkdir()
     curl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$RUN_DIR/curl.argv"\n', newline="\n"); curl.chmod(0o755)
     run_ash(f'export PATH={posix(curl.parent)!r}:"$PATH" RUN_DIR={posix(run)!r}\n'
-            + agent_sources("common", "timing", "waits", "jsonq", "sysinfo", "progress", "failmark", "restore")
+            + agent_sources("common", "timing", "waits", "jsonq", "sysinfo", "diskinfo", "progress", "failmark", "restore")
             + "\n" + body)
     return (run / "curl.argv").read_text(encoding="utf-8").split("\n")
 
@@ -246,7 +246,7 @@ def test_the_restore_card_carries_the_record(tmp_path):
     (run / "beep.net").write_text("lost\n", newline="\n")
     (run / "beep.netsince").write_text("1955\n", newline="\n")
     script = (f"export RUN_DIR={posix(run)!r}; . {posix(AGENT)}/lib/core/common.sh; "
-              + agent_sources("sysinfo", "progress", "failmark", "roundbeep", "clonergui", "srgui")
+              + agent_sources("sysinfo", "diskinfo", "progress", "failmark", "roundbeep", "clonergui", "srgui")
               + 'stream_beep_tick() { :; }; target_init sda 100; target_set sda writing; '
               'printf "sda\\nשחזור\\nדיסק 1\\n1\\nx\\n" > "$RUN_DIR/gui/restore.head"; sr_gui_state')
     out = subprocess.run([BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script], capture_output=True,

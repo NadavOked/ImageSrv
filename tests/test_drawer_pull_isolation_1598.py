@@ -110,7 +110,7 @@ def room(tmp_path: Path, fanout_dir: Path, death: str, source: str,
            f"RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} TMPDIR={posix(tmp_path)!r} "
            f"FANOUT_BUFFER=2097152 WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=5 "
            f"WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S={stall_s}; ")
-    libs = agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed",
+    libs = agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed",
                          "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
     started = time.monotonic()
     out = run_sh(

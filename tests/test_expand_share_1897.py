@@ -181,7 +181,7 @@ def test_after_the_stream_d_and_e_grow_too_and_a_failure_names_it(tmp_path):
 
 # --- לפני הבייט הראשון: disk_fits, ‏min-free, והשרת -----------------------------
 
-LIBS = ("common", "jsonq", "sysinfo", "progress", "failmark", "restore", "expand", "diskfit")
+LIBS = ("common", "jsonq", "sysinfo", "diskinfo", "progress", "failmark", "restore", "expand", "diskfit")
 
 
 def _disk_fits(tmp_path, m: dict, disk_bytes: int, min_free_gb: int) -> tuple[str, str]:

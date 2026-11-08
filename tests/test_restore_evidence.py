@@ -212,8 +212,8 @@ def build_box(tmp_path, *, plan=PLAN, count=None, plan_cut=None, nodes=None,
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(box)}/dev '
         f'SYSROOT={posix(box)} TABLE_SETTLE_S={settle} WAIT_POLL_S=1 REREAD_TRIES=1; '   # #1594: a refusal here is the test, not a busy disk to wait out
         f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; '
-        f'. {posix(AGENT)}/lib/core/jsonq.sh; {agent_sources("sysinfo", "progress", "failmark", "gptboot")}'
-        f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; {agent_sources("sysinfo", "failmark")}'
+        f'. {posix(AGENT)}/lib/core/jsonq.sh; {agent_sources("sysinfo", "diskinfo", "progress", "failmark", "gptboot")}'
+        f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/restore/expand.sh; . {posix(AGENT)}/lib/restore/grow.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; . {posix(AGENT)}/lib/restore/expandshare.sh; . {posix(AGENT)}/lib/restore/writemark.sh; {agent_sources("sysinfo", "diskinfo", "failmark")}'
         f'. {posix(AGENT)}/lib/restore/diskfit.sh; '   # #1217: disk_fits, split from restore.sh
         # ‏#672: ‏boot_ca_preflight. ‏SYSROOT היא הקופסה ואין בה efivars -- unchecked, ממשיך.
         f'. {posix(AGENT)}/lib/postdeploy/bootcadb.sh; '

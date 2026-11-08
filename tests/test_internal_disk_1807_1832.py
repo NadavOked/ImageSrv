@@ -11,7 +11,7 @@ sdhci reader. Four places took ``removable=0`` for "internal":
   send, ``.[0]``), ``gui_capture``, guistate.sh, the native GUI and the server
   all read as "internal".
 
-Now one test, ``disk_internal`` (sysinfo.sh): removable 0 AND a device path that
+Now one test, ``disk_internal`` (diskinfo.sh): removable 0 AND a device path that
 reads AND is on no USB/MMC bus. The hello says ``removable:true`` for anything
 else, so every reader of the field gets it at once; ``pick_internal_disk`` and
 ``direct-open`` refuse when more than one disk is left -- never a silent pick.
@@ -79,7 +79,7 @@ def _sh(box: Path, call: str, libs: str = "") -> str:
     return sh(f'chmod 0755 {posix(box)}/stubs/readlink; export PATH="$(cd {posix(box)!r}/stubs && pwd):$PATH" '
               f'LINKS={posix(box / "links")!r} SYSROOT={posix(box)!r} DEVROOT={posix(box / "dev")!r} '
               f'RUN_DIR={posix(box)!r} LOG_FILE={posix(box)}/log; log() {{ :; }}; '
-              f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; {libs}{call}')
+              f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; {libs}{call}')
 
 
 PICK = f'. {posix(AGENT)}/lib/restore/single_restore.sh; '
@@ -200,5 +200,5 @@ def test_the_real_readlink_on_real_symlinks(tmp_path):
         target.mkdir(parents=True)
         os.symlink(target, blk / "device", target_is_directory=True)
     out = sh(f'export SYSROOT={posix(box)!r}; log() {{ :; }}; . {posix(AGENT)}/lib/core/common.sh; '
-             f'. {posix(AGENT)}/lib/hw/sysinfo.sh; {PICK}pick_internal_disk; echo "rc=$?"')
+             f'. {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; {PICK}pick_internal_disk; echo "rc=$?"')
     assert out.strip().splitlines() == ["nvme0n1", "rc=0"]

@@ -52,6 +52,14 @@ FLAGS_FILE="${IMAGESRV_INITRD_FLAGS:-/etc/imagesrv/initrd.flags}"
 ISO_MANIFEST="${IMAGESRV_ISO_MANIFEST:-/etc/imagesrv/iso-release.json}"
 HTTP_ROOT="${IMAGESRV_HTTP_ROOT:-/srv/imagesrv/boot}"
 UPGRADE_STATE="${IMAGESRV_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
+# ‏#2626: מחיקת הסמן היא שינוי של התיקייה — בלי sync אליה, חיתוך חשמל מיד אחריה
+# מחזיר את הסמן והשחזור באתחול ירוץ על עדכון שהצליח. כשל ב-sync נכתב ללוג
+# ולא נבלע; הוא אינו מפיל את הריצה (היא בדרך החוצה, וה-ERR trap היה מחזיר
+# אחורה עדכון שאומת) — ולכן הקריאות הן `drop_marker || :`.
+drop_marker() {
+    rm -f "$UPGRADE_STATE"
+    sync -f "$(dirname "$UPGRADE_STATE")"         || { echo "server-upgrade: sync של תיקיית הסמן נכשל — חיתוך חשמל עכשיו עלול להחזיר את $UPGRADE_STATE" >&2; return 1; }
+}
 PREV=""         # התג הקודם — נקרא בשלב 1; ריק עד אז (set_status קורא אותו)
 INITRD_NOTE=""   # נקבע בחזרה — האם המטען הקודם הוחזר
 # ‏#1287: עותק המטען הקודם (initrd/vmlinuz) — מוחזר יחד עם הקוד בחזרה.
@@ -219,7 +227,7 @@ stage fetch
 if ! git_error="$(git -C "$REPO_DIR" fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG" 2>&1)"; then
     why="git fetch $TAG נכשל: $git_error"
     set_status failed "$why" fetch "$why"
-    rm -f "$UPGRADE_STATE"
+    drop_marker || :
     die "$why"
 fi
 # ‏#1277: התג חתום במפתח שהעץ **המותקן** סומך עליו — לפני ה-checkout, כלומר
@@ -235,7 +243,7 @@ if sig="$(python3 -I "$REPO_DIR/tools/verify-release-tag.py" "$REPO_DIR" "$TAG" 
 else
     why="התג $TAG לא אומת כחתום — העדכון נדחה, העץ לא הוחלף: ${sig:-המאמת לא החזיר דבר}"
     set_status failed "$why" signature "$why"
-    rm -f "$UPGRADE_STATE"
+    drop_marker || :
     die "$why"
 fi
 # ‏#1894: עותק עקבי של ה-DB (‏sqlite backup — נכון גם תחת WAL ושרת רץ) לפני
@@ -271,7 +279,7 @@ PYEOF
 )" || [[ ! "$DB_SNAP_VER" =~ ^[0-9]+$ ]]; then
     why="העתקת ה-DB לפני העדכון ($DB_SNAPSHOT) נכשלה — לא משדרגים בלי דרך חזרה: $DB_SNAP_VER"
     set_status failed "$why" install "$why"
-    rm -f "$UPGRADE_STATE"
+    drop_marker || :
     die "$why"
 fi
 echo "ה-DB הועתק ל-$DB_SNAPSHOT (גרסת סכמה $DB_SNAP_VER)"
@@ -280,7 +288,7 @@ stage install
 if ! git_error="$(git -C "$REPO_DIR" checkout --detach "$TAG" 2>&1)"; then
     why="git checkout --detach $TAG נכשל: $git_error"
     set_status failed "$why" install "$why"
-    rm -f "$UPGRADE_STATE"
+    drop_marker || :
     die "$why"
 fi
 # ‏#1957: יחידות הגרסה — ‏*.service וגם *.timer. גרסה בלי טיימרים היא אפס
@@ -424,7 +432,7 @@ rollback() {   # rollback <סיבה> [<סוג>]
         fi
         if install_units_and_restart; then
             set_status failed "$why · הוחזר ל-$PREV$INITRD_NOTE$DB_NOTE$TIMER_NOTE" rollback "$why"
-            rm -f "$UPGRADE_STATE"
+            drop_marker || :
             die "$why — הוחזר ל-$PREV"
         fi
     fi
@@ -681,7 +689,7 @@ echo "--- $(date -Is) upgrade to $TAG done and verified ---"
 STAGE="done"
 # ‏#1893: הסמן יורד **לפני** "done" — חשמל שנופל ביניהם משאיר `running` (נעשה stale
 # אחרי STALE_UPDATE_MINUTES), ולא מחזיר באתחול עדכון שכבר אומת.
-rm -f "$UPGRADE_STATE"
+drop_marker || :
 set_status "done"
 # אחרי האימות בלבד. כשל כאן אינו כשל שדרוג (השרת החדש רץ ואומת) — נרשם
 # בלוג, והריצה הבאה מוחקת את העותק לפני שהיא שומרת חדש (PAYLOAD_SAVED).

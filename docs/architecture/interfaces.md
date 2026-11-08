@@ -2384,6 +2384,21 @@
 
 ---
 
+### DHCP probe failure reasons (#2394)
+
+`ProbeResult.reason` and `GET /api/console/net/interfaces/{name}/probe` use
+`link_down` for `ENETUNREACH`/`ENETDOWN`, `port_busy` for `EADDRINUSE`,
+`permission` for `EACCES`/`EPERM`, and `os_error` for other socket setup/send
+errors. These results always have `checked=false` and empty `servers`.
+Other incomplete probes retain their existing explanatory reason text.
+An empty server list is clean only when `checked=true`.
+
+Enabling DHCP with an unchecked probe returns HTTP 409 with a Hebrew `detail`
+message explaining the reason. For `link_down`, it says the deploy card is
+disabled and must be brought up first. The server does not bring it up.
+The explicit `ignore_existing` override is unchanged. The raw-socket probe
+does not bind UDP port 68, so address-in-use errors do not imply that port is busy.
+
 ## 7. פורמט הזרם
 
 מה עובר בפועל ב-udpcast וביוניקאסט. סעיף 1 מגדיר איך אימג' שמור בשרת; הסעיף הזה מגדיר איך הוא מגיע ליעד. זה הצינור שמחבר בין הקליטה, מנוע השיכפול והסוכן.
@@ -6468,9 +6483,9 @@ last_ok, last_good, waiting?, waiting_since?}`, ‏0600.
 `POST /api/console/users/{u}/reset-password` (admin, לא על עצמו):
 סיסמה אקראית שעומדת בנוהל, מוחזרת פעם אחת, `must_change_password=1`.
 
-**סיסמה חדשה מבטלת את כל ה-sessions ואת הדפדפנים הזכורים** (#1120):
+**סיסמה חדשה מבטלת את כל ה-sessions ואתגרי ה-MFA** (#1120):
 גם `POST /me/password` וגם האיפוס קוראים ל-`bump_auth_epoch` (‏`auth_epoch`
-‏+1, מחיקת `trusted_browsers` ו-`mfa_challenges` של המשתמש). המחליף
+‏+1, מחיקת `mfa_challenges` של המשתמש; ‏`trusted_browsers` אינה נקראת ואינה נכתבת, ראו #2592). המחליף
 עצמו מקבל עוגייה חדשה בתשובה ל-`/me/password` ואינו מנותק; כל דפדפן
 אחר — כולל session של תוקף אחרי איפוס — מקבל `401` בבקשה הבאה, ונדרש
 ל-MFA מחדש בכניסה.
@@ -6535,12 +6550,12 @@ console|agent (last ip=…)`.
    ה-MFA ב-`/me/mfa/enable`, #2414) או קוד גיבוי חד-פעמי → session. **ה-challenge
    חד-פעמי גם בכישלון** (#1120): קוד שגוי → `401` "קוד שגוי — היכנס
    מחדש", ה-challenge נמחק, והקונסולה חוזרת למסך הכניסה (שם המשתמש
-   נשמר); ניחוש נוסף דורש סיסמה מחדש. `remember_browser: true`
-   → עוגייה נפרדת `imagesrv_trusted` (token אקראי, hash בטבלה, **7 שעות**)
-   שמדלגת על שלב 2 מאותו דפדפן. זה **פטור מקוד בלבד** — הוא אינו משפיע
-   על הניתוק בחוסר פעילות. בקונסולה התיבה נמצאת רק במסך הקוד ("אל תבקש
-   קוד בדפדפן הזה ל-7 שעות"); ל-`/login` אין שדה כזה, ולכן במסך הכניסה
-   הראשון אין תיבה (#1243).
+   נשמר); ניחוש נוסף דורש סיסמה מחדש. **אין "דפדפן זכור"** (מוסר ב-
+   63135798, ‏#1243): כל כניסה עם MFA דורשת קוד, ‏`remember_browser` בגוף
+   הבקשה מתעלמים ממנו ולא נקבעת עוגיית `imagesrv_trusted`, ועוגייה כזאת
+   שנשארה בדפדפן אינה מדלגת על שלב 2. הטבלה `trusted_browsers` נשארת בסכמה
+   לתאימות ("חזור לגרסה" תלוי בה) ואין לה קורא או כותב בקוד
+   (‏`tests/test_trusted_browsers_retired_2592.py`).
 3. **הרשמת MFA** — **רק כשההגדרה `mfa_required_for_admins` דלוקה** (נדב 18/10: "תכלס
    לא צריך לזה MFA. אם בנוי, אפשר להפעיל או לא"; ברירת המחדל `"false"`, הגדרות ← אבטחה):
    admin שאינו builtin ובלי MFA: `200 {"mfa_enrollment_required": true}`
@@ -6619,7 +6634,7 @@ TOTP: RFC 6238, HMAC-SHA1, 30 שניות, 6 ספרות, stdlib בלבד.
 באותו מפתח (יומן `login_failed` "‏`<user> (mfa)`"), ו-`/login/mfa` בודק
 השהיה/נעילה לפני שהוא בודק קוד (אותם `429`/`403` + `Retry-After`).
 סיסמה נכונה **אינה** מאפסת את המונה למשתמש עם MFA — רק כניסה שהושלמה
-(‏TOTP/גיבוי נכון, או דפדפן זכור) מאפסת; אחרת "קוד שגוי → כניסה
+(‏TOTP/גיבוי נכון) מאפסת; אחרת "קוד שגוי → כניסה
 מחדש" היה מאפס בכל סיבוב ונעילה לא הייתה מצטברת לעולם. למשתמש בלי
 MFA, בקיוסק, ובהחלפה כפויה — הסיסמה הנכונה מאפסת כמו קודם.
 **תקרה לגודל הטבלה** (‏#2459): כל שם אקראי מוסיף שורה, והניקוי הרגיל הוא 90 יום.
@@ -6628,7 +6643,7 @@ MFA, בקיוסק, ובהחלפה כפויה — הסיסמה הנכונה מא�
 `login_attempts_trimmed`. מתחת לתקרה ההתנהגות לא השתנתה, וגם התקרה לפי חשבון
 (‏`login_account_failures`) אינה מושפעת.
 `POST /api/console/sessions/revoke {"username"}` (admin) מבטל את כל
-ה-sessions (‏`auth_epoch`) ואת הדפדפנים הזכורים של המשתמש. יומן `sessions_revoked`
+ה-sessions (‏`auth_epoch`) ואת אתגרי ה-MFA של המשתמש. יומן `sessions_revoked`
 (`user` = מי ביטל, ‏`detail` = של מי). המסך: "סשנים" ב"משתמשים והרשאות" (‏#2552).
 
 ### קיוסק ומחשב בנייה
@@ -7122,7 +7137,7 @@ HTTP ולכן אימות ואיפוס `admin` עובדים גם כש-`imagesrv-s
 admin מתאפס (‏`mfa_enabled=0`, הסוד, `mfa_enrolled_at`, `mfa_last_step`,
 קודי הגיבוי), מוני `login_attempts` של `admin|*` והתקרה לפי חשבון
 (‏`login_account_failures`, #2443) נמחקים, ו-`bump_auth_epoch`
-מבטל כל session, דפדפן זכור ואתגר MFA. ההצלחה נקבעת בקריאה חוזרת
+מבטל כל session ואתגר MFA. ההצלחה נקבעת בקריאה חוזרת
 (‏`users.verify` עם הסיסמה החדשה + הדגלים). שלושה כשלים (סיסמה
 שאינה עומדת במדיניות, אימות שאינו תואם) נועלים את F9 ל-30 שניות. ‏F12
 (הפעלה מחדש/כיבוי, אחרי סיסמת admin) מבצע ב-Enter על הכפתור המסומן, בלי הקלדת שם השרת (#1270); המיקוד מתחיל על ביטול ו-Tab מעביר לביצוע (#1203). רשת הניהול כותבת `netcfg:<interface>`, קובץ
@@ -9310,4 +9325,3 @@ JSON שאינו אובייקט, `NaN`, מצב יעד שאינו `done`/`failed` 
 `AGENT_VERSION=unknown`, או גיבוב בלבד) — `failed`: אי אפשר לבסס שהטבלאות לא ישנות מאלה שבמקל, ועיקרון 5 אוסר להניח. אותן טבלאות כמו שבמקל — `ok`/`builtin`.
 
 `rates.json` מאומת ונשמר ב-`$RUN_DIR/usb.sync.d/rates.json`, **אך אין לו עדיין צרכן במקל** (הערכת זמן לפי דגם — Issue נפרד).
-

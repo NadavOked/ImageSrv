@@ -171,7 +171,7 @@ def _raid_json(tmp_path: Path, image: bytes, role: str, stubs: dict | None = Non
         make_stubs(box / "stubs", stubs)
         + f"export RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         f"SYSROOT={posix(box)!r} D_ROLE={role}; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; "
+        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; . {posix(AGENT)}/lib/hw/diskinfo.sh; "
         f". {posix(AGENT)}/lib/restore/diskfit.sh; "
         'printf "[%s]" "$(raid_member_json sda)"').strip()
 

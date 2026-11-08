@@ -232,7 +232,7 @@ gui_libs() {
     . "$LIB_DIR/roomflow.sh"   # #418: the room round (open/wake/start)
     . "$LIB_DIR/guistate.sh"
     . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/syspartgui.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: the question dialog; #1896: C: of an old image; #1709: the boot screen
-    . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/disklink.sh"; . "$LIB_DIR/fwimage.sh"   # #2080: fw_warn_record/fw_accept_post; disk_port + disk_link (#432), for the cloner state producer
+    . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/diskinfo.sh"; . "$LIB_DIR/disklink.sh"; . "$LIB_DIR/fwimage.sh"   # #2080: fw_warn_record/fw_accept_post; disk_port + disk_link (#432), for the cloner state producer
     . "$LIB_DIR/progress.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
     . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/manifest.sh"     # #1921: the tables judge the disk, the hw note per drawer; smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591); #1859: smarttable.sh -- every attribute, csmart= on the idle screen
     . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/writemark.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: cdisk_label= (the set and sticker of a disk); #2030: cused= (size, used) per disk; the server's memory per cdisk (#874); slot names (#704); #1798 the mark per cdisk/lc_disk

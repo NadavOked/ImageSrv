@@ -69,7 +69,7 @@ AGENT_MAIN = REPO_ROOT / "agent" / "imagesrv-agent"
 #: Without it the job is "not found" and exits at once; its SIGCHLD lands while
 #: busybox ash is blocked opening the drawer's fifo, ash does not retry that open
 #: on EINTR (dash and bash do), and the drawer never starts (#2248, #2272).
-#: failmark.sh and progress.sh call disk_serial (sysinfo.sh) -- on the failure path
+#: failmark.sh and progress.sh call disk_serial (diskinfo.sh, loaded alongside sysinfo.sh) -- on the failure path
 #: (target_ident_keep, wipe_written_gpt, target_write_started), so a room without it
 #: shows "disk_serial: not found" exactly where the evidence is written (#2281).
 #: progress.sh's target_init calls target_ident_keep (failmark.sh): without it the
@@ -94,6 +94,9 @@ def agent_libs(*names: str) -> list[str]:
     """``names`` in imagesrv-agent's order. A name the agent does not source, or a
     library without what it calls at run time (``NEEDS``), is an error -- a test
     room that is not the agent's is how #2248 hid for weeks."""
+    # sysinfo and its disk collector are loaded together by every caller (#2385).
+    if "sysinfo" in names and "diskinfo" not in names:
+        names = (*names, "diskinfo")
     order = agent_order()
     unknown = sorted(set(names) - set(order))
     if unknown:

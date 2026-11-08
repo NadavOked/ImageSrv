@@ -162,7 +162,7 @@ def room(tmp_path: Path, fanout_dir: Path, shell: str = BASH, payload: bytes = P
     # SIGCHLD then lands while busybox ash is blocked opening the drawer's
     # fifo -- ash does not retry the open on EINTR (dash and bash do), the
     # drawer never starts, and the rendezvous above waits on it for good.
-    libs = agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers",
+    libs = agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers",
                          "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
     out = run_in(shell,
         make_stubs(box / "stubs", STUBS)

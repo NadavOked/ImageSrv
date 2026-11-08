@@ -369,7 +369,7 @@ def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp
         f"DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=3 WAIT_HELPER_S=3 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + f'stream_source() {{ cat {posix(payload)!r}; }}; '
         "target_bind sda; target_bind sdb; "   # #2434: the drawers chosen, as target_init binds them
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
@@ -482,7 +482,7 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         f"UDP_ARGV={posix(argv)!r} UDP_PAYLOAD={posix(payload)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         # ‏wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
         + "eval \"orig_$(declare -f wait_progress)\"; "
         f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
@@ -595,7 +595,7 @@ _nap() {
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=2 "
         "WAIT_STREAM_START_S=20 WAIT_STREAM_START_LATER_S=20; "
-        + agent_sources("common", "sysinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + clock +
         f'stream_source() {{ if [ "$4" = p3.zst ]; then read -r send < "$RUN_DIR/test-send"; fi; cat {posix(payload)!r}; }}; '
         "target_init sda 4096; STREAMED_PARTITIONS=0; "
@@ -741,9 +741,12 @@ def test_fanout_bounds_the_fifo_open_itself():
     assert "fsync" in source
 
 
-def test_run_sh_leaves_no_temp_dir_behind():
-    """#1238: run_sh מנקה את התיקייה הזמנית שלו — גם אחרי ריצה תקינה."""
-    before = set(Path(tempfile.gettempdir()).glob("imagesrv-wait-*"))
+def test_run_sh_leaves_no_temp_dir_behind(tmp_path, monkeypatch):
+    """#1238: run_sh מנקה את התיקייה הזמנית שלו — גם אחרי ריצה תקינה.
+
+    ‏#2731: תיקייה זמנית משלו. בריצה מקבילית (`-n auto`) worker אחר יוצר
+    ‏`imagesrv-wait-*` בתיקייה המשותפת באותו רגע, והטסט נפל על תיקייה לא שלו."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     assert run_sh("echo hi").strip() == "hi"
-    after = set(Path(tempfile.gettempdir()).glob("imagesrv-wait-*"))
-    assert after - before == set(), f"left behind: {sorted(after - before)}"
+    left = sorted(tmp_path.glob("imagesrv-wait-*"))
+    assert left == [], f"left behind: {left}"

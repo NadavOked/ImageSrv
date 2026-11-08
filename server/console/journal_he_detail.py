@@ -32,10 +32,17 @@ _FROM = [(r" progress from ", " התקדמות מ-"), (r" from ", " מ-")]
 _FOR = [(r" for ", " עבור ")]
 _AT_OPEN = [(r" at station round open$", " בפתיחת סבב מהתחנה")]
 _NET_NAME = r"^(\S+) "
+# ‏#2509: "<פירוט> [+N identical refusals in the last Ss not journaled]" (api._identity_refusal)
+_REFUSALS = [(r" \[\+(\d+) identical refusals in the last (\d+)s not journaled\]$",
+              r" [ועוד \1 סירובים זהים ב-\2 השניות האחרונות שלא נרשמו]")]
 
 #: event -> [(regex, replacement)], applied in order with re.sub.
 RULES: dict[str, list[tuple[str, str]]] = {
     "task_token_refused": _FROM,
+    # ‏#2509: האירוע מגיע מ-`verdict.event` (identity.py), לא מקבוע, ולכן הסורק של הטסט אינו רואה אותו.
+    "identity_refused": _REFUSALS,
+    "identity_unverifiable": _REFUSALS,
+    "image_fetch_refused": _REFUSALS,
     "off_vlan_contact": _FROM,
     # ‏#2487/#2498: "<mac> from <ip>[ [+N identical requests in the last Ss not journaled]]"
     "unknown_mac": _FROM + [(r" \[\+(\d+) identical requests in the last (\d+)s not journaled\]$",

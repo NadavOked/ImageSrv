@@ -65,7 +65,7 @@ pytestmark = requires_native(
     why="loop devices and partclone as root: the Testrunner",
 )
 
-LIBS = ("common", "jsonq", "gptboot", "waits", "sysinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writemark", "writeback", "drawers",
+LIBS = ("common", "jsonq", "gptboot", "waits", "sysinfo", "diskinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writemark", "writeback", "drawers",
         "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink", "shrinkmem", "smart",
         "lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "askgui", "readback", "readbacklc")
 

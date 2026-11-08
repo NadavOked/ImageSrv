@@ -1,4 +1,4 @@
-"""#1912: שומרי רגרסיה ל-`disk_serial` (agent/lib/hw/sysinfo.sh) — #16 ו-#30.
+"""#1912: שומרי רגרסיה ל-`disk_serial` (agent/lib/hw/diskinfo.sh) — #16 ו-#30.
 
 ‏#16: מגירה בלי serial נעלמה מסבב החדר — ספירת החדר היא לפי serial, ודיסק
 וירטואלי (serial: null) הפך משכפל שלם לשקוף. התיקון: נפילה ל-`wwid`.
@@ -11,7 +11,7 @@
 ‏`disk_serial` עם `SYSROOT=""` ומפנה את `/sys/...` לעץ מזויף דרך פונקציית
 ‏`cat` — ו-hdparm מזויף על PATH רושם כל הפעלה שלו.
 
-בקרה שלילית (מוטציות על sysinfo.sh, ראו גוף ה-PR):
+בקרה שלילית (מוטציות על diskinfo.sh, ראו גוף ה-PR):
   A. בלוק ה-wwid הוסר (הקוד שלפני #16) — נופלים הטסט של #16 והטסט של #30.
   B. ‏wwid אחרי hdparm (הקוד שבין #16 ל-#30) — נופל הטסט של #30 בלבד.
   ‏serial-קודם ו-hdparm-כמוצא-אחרון עוברים בשני המצבים: שומרים מפני
@@ -41,7 +41,7 @@ def _find_bash() -> str | None:
 
 
 BASH = _find_bash()
-pytestmark = requires_native(("bash", BASH), why="sysinfo.sh הוא POSIX sh")
+pytestmark = requires_native(("bash", BASH), why="diskinfo.sh הוא POSIX sh")
 
 WWID = "naa.60022480a1b2c3d4e5f60718293a4b5c"
 HDPARM_SERIAL = "HD-FROM-HDPARM"
@@ -89,7 +89,7 @@ def _disk_serial(tmp_path: Path, root: Path, *, real_machine: bool) -> tuple[str
     script = ('export PATH="$PATH:/usr/bin:/bin"; '
               f'export DEVROOT={_posix(dev)!r} FAKE_ROOT={_posix(root)!r} '
               f'HDPARM_LOG={_posix(log)!r}; '
-              f'. {_posix(LIB / "core" / "common.sh")}; . {_posix(LIB / "hw" / "sysinfo.sh")}; '
+              f'. {_posix(LIB / "core" / "common.sh")}; . {_posix(LIB / "hw" / "sysinfo.sh")}; . {_posix(LIB / "hw" / "diskinfo.sh")}; '
               + setup + 'printf "[%s]" "$(disk_serial sda)"')
     proc = subprocess.run([BASH, "-c", script], capture_output=True, text=True, encoding="utf-8",
                           env=env, stdin=subprocess.DEVNULL, timeout=60)
