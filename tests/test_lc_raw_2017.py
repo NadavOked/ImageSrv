@@ -497,6 +497,7 @@ def test_a_broken_bad_sector_question_is_not_drawn(tmp_path):
 
 from test_local_clone_engine import ENGINE_LOCK, FIXTURE, SBIN, _engine, _root, _sudo_ok, _table, _tool  # noqa: E402,F401
 from test_local_clone_engine import fanout_bin  # noqa: E402,F401  (the fixture)
+import lcfx  # noqa: E402
 
 ENGINE = requires_native(
     ("sudo -n", _sudo_ok()),
@@ -508,16 +509,14 @@ ENGINE = requires_native(
 @pytest.fixture
 def raw_disks(tmp_path):
     fx = tmp_path / "fx"
-    up = _root("sh", str(FIXTURE), "setup-raw", str(fx), timeout=300)
-    try:
-        assert up.returncode == 0, up.stdout + up.stderr
-        yield fx, dict(line.split() for line in (fx / "devs").read_text().splitlines())
-    finally:
+
+    def drop_the_error_target() -> None:      # it holds the source's partition: before the loops go
         name = fx / "dmname"
         if name.exists():
             _root("dmsetup", "remove", name.read_text().strip())
-        down = _root("sh", str(FIXTURE), "teardown", str(fx), timeout=120)
-        assert down.returncode == 0, down.stdout + down.stderr
+
+    with lcfx.fixture_dir(fx, "setup-raw", pre_teardown=drop_the_error_target):   # #2702
+        yield fx, dict(line.split() for line in (fx / "devs").read_text().splitlines())
 
 
 def _sha(node: str, skip_bytes: int = 0, zero: tuple[int, int] | None = None) -> str:

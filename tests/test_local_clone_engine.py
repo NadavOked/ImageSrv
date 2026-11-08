@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pytest
 
+import lcfx
 from native import requires_native
 from agentlib import agent_libs, flat_lib
 
@@ -188,9 +189,7 @@ class _Server:
         self.http.shutdown()
 
 
-def _root(*args: str, timeout: int = 600) -> subprocess.CompletedProcess:
-    return subprocess.run(["sudo", "-n", "env", f"PATH={os.environ.get('PATH', '')}:{SBIN}", *args],
-                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, stdin=subprocess.DEVNULL)
+_root = lcfx.root     # #2702: its own process group, killed whole (root's children too) on a timeout
 
 
 @pytest.fixture(scope="module")
@@ -204,16 +203,12 @@ def fanout_bin(tmp_path_factory) -> Path:
 
 @pytest.fixture
 def disks(tmp_path):
+    # #1934: a teardown that left the tmpfs mounted fails here, not unseen on the host;
+    # #2702: so does a loop or a mount left under the test's dir, whatever teardown said
     fx = tmp_path / "fx"
-    up = _root("sh", str(FIXTURE), "setup", str(fx), timeout=300)
-    try:
-        assert up.returncode == 0, up.stdout + up.stderr
+    with lcfx.fixture_dir(fx, "setup"):
         devs = dict(line.split() for line in (fx / "devs").read_text().splitlines())
         yield fx, devs
-    finally:
-        # #1934: a teardown that left the tmpfs mounted fails here, not unseen on the host
-        down = _root("sh", str(FIXTURE), "teardown", str(fx), timeout=120)
-        assert down.returncode == 0, down.stdout + down.stderr
 
 
 def _engine(tmp_path, fx: Path, fanout: Path, targets: str, shrink: int, server: str = "", stop_at: str = "",

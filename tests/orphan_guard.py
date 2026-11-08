@@ -24,11 +24,12 @@ from __future__ import annotations
 
 import os
 import re
-import signal
 import time
 from pathlib import Path
 
 import pytest
+
+import hygiene
 
 OFF_ENV = "IMAGESRV_ORPHAN_GUARD"
 GRACE_S = 3.0
@@ -82,10 +83,7 @@ def settle_and_kill(marker: str, proc_root: Path = Path("/proc"), grace: float =
         leaked = processes_mentioning(marker, proc_root)
     if leaked and kill:
         for pid, _ in leaked:
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except OSError:                    # כבר מת
-                pass
+            hygiene.kill_pid(pid)              # #2702: גם של root, לפי ה-PID
         end = time.monotonic() + 3.0
         while processes_mentioning(marker, proc_root) and time.monotonic() < end:
             time.sleep(0.05)

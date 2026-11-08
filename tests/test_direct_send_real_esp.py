@@ -31,9 +31,10 @@ from pathlib import Path
 
 import pytest
 
+import lcfx
 from native import requires_native
 from test_directsend import TASK, _answer
-from test_local_clone_engine import FIXTURE, LIB, REPO, _root, _sudo_ok, _tool
+from test_local_clone_engine import LIB, REPO, _root, _sudo_ok, _tool
 
 pytestmark = requires_native(
     ("sudo -n", _sudo_ok()),
@@ -94,12 +95,8 @@ def stubs(tmp_path_factory) -> Path:
 @pytest.fixture
 def esp(tmp_path):
     fx = tmp_path / "fx"
-    up = _root("sh", str(FIXTURE), "setup-esp", str(fx), timeout=300)
-    try:
-        assert up.returncode == 0, up.stdout + up.stderr
+    with lcfx.fixture_dir(fx, "setup-esp"):                            # #2702
         yield fx
-    finally:
-        _root("sh", str(FIXTURE), "teardown", str(fx), timeout=120)
 
 
 def _drive(fx: Path, stubs: Path, mode: str, env: tuple[str, ...] = ()) -> dict:

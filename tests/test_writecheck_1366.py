@@ -37,6 +37,13 @@ LIB = flat_lib()
 SBIN = "/usr/sbin:/sbin"
 MIB = 1048576
 HEAD = "הדיסק לא מקבל כתיבה — "
+# #2718: the 30 s ceiling of waits.sh is the production limit for a disk that takes no write;
+# it is the subject of test_a_check_that_does_not_finish_in_time_fails alone. A test about the
+# selection or the order must not be decided by how busy the runner is (full run, -n auto,
+# load > 13 on 14 cores: a good drawer did not finish in 30 s and RR was 1).
+# Below the 300 s of _agent(), so a real hang still ends as a named failure, not as a
+# TimeoutExpired.
+NO_CEILING = "WAIT_WRITECHECK_S=240"
 
 
 def _sudo_ok() -> bool:
@@ -230,7 +237,7 @@ def _sha(img: Path) -> str:
 
 def test_a_good_disk_is_written_in_three_places_and_read_back(fx):
     # 16MiB a place: 48MiB with its fsync takes long enough for the 10ms clock (writecheck.sh)
-    res = _agent(fx, "check", "good", env=("WRITECHECK_MIB=16",))
+    res = _agent(fx, "check", "good", env=("WRITECHECK_MIB=16", NO_CEILING))   # #2718
     assert res["rc"]["good"] == 0, res["raw"][-3000:]
     g = res["t"]["good"]
     assert g["wstate"] == "ok" and g["state"] == "waiting" and g["error"] == "", g
@@ -295,7 +302,8 @@ def test_the_room_writes_only_the_selected_drawers(fx):
     # is). Its 50 MB/s, measured on a sparse file on a CI runner's disk, read 26 MB/s
     # once (run 38961297623, 3.12): good went red "slow" and RR was 1 -- the selection
     # was right. The verdict still runs here; only its floor is the test's own.
-    res = _agent(fx, "room", *ports, env=("WRITECHECK_MIN_MBPS=1",))
+    # #2718: the same for the time ceiling (NO_CEILING).
+    res = _agent(fx, "room", *ports, env=("WRITECHECK_MIN_MBPS=1", NO_CEILING))
     t = res["t"]
     # the selection is exactly the two drawers the fixture made, by their kernel names
     kernel = dict(line.split() for line in (fx / "names").read_text().splitlines())
@@ -310,7 +318,7 @@ def test_the_room_writes_only_the_selected_drawers(fx):
 
 
 def test_the_station_fails_before_the_table(fx):
-    floor = ("WRITECHECK_MIN_MBPS=1",)   # #1534: the runner's disk speed is not the subject
+    floor = ("WRITECHECK_MIN_MBPS=1", NO_CEILING)   # #1534: the runner's disk speed is not the subject; #2718: nor is its time
     bad = _agent(fx, "station", "err", env=floor)
     assert bad["RS"] == 1 and (fx / "calls").read_text() == "", bad["raw"][-3000:]
     assert bad["t"]["err"]["error"].startswith(HEAD + "אמצע")

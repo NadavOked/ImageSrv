@@ -28,10 +28,14 @@ from __future__ import annotations
 
 import os
 import random
+import shutil
 import signal
 import subprocess
+import threading
 import time
 from pathlib import Path
+
+import mountleak
 
 #: הכלים שמזרימים בייטים ברשת. אלה שיכולים לשרוד את הריצה ולהפריע
 #: לשידור אמיתי; שאר תת-התהליכים בטסטים (gcc, ‏sh) מסיימים מעצמם.
@@ -184,6 +188,46 @@ def kill_and_confirm(marker: str, timeout: float = 5.0) -> list[tuple[int, str]]
     return live_stream_processes(marker)
 
 
+#: ‏#2702: כמה זמן לאפשר לפירוק אחרי SIGTERM לפני שהתהליך נהרג בכל זאת.
+SIGTERM_GRACE_S = 60
+
+
+def install_sigterm_as_interrupt() -> bool:
+    """‏SIGTERM (`timeout 5400 pytest`, ‏`kill`) הורג את pytest בלי להריץ אף
+    finalizer -- וה-fixtures של טסטי השיכפול המקומי הם אלה שמנתקים loops
+    ו-tmpfs, כך שריצה שנקטעה השאירה אותם מעוגנים (#2702). כאן ה-SIGTERM הופך
+    ל-`KeyboardInterrupt`, ש-pytest מפרק לפיו כרגיל. ‏SIGTERM שני הורג מיד,
+    ובכל מקרה התהליך נהרג אחרי `SIGTERM_GRACE_S`: פירוק שנתקע לא יהפוך את
+    `timeout` לתלוי. מחזיר אם הותקן."""
+    if os.name == "nt" or threading.current_thread() is not threading.main_thread():
+        return False
+    if signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL:     # מישהו כבר טיפל
+        return False
+
+    def _on_term(_signum, _frame) -> None:
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        killer = threading.Timer(SIGTERM_GRACE_S, os.kill, (os.getpid(), signal.SIGKILL))
+        killer.daemon = True
+        killer.start()
+        raise KeyboardInterrupt("SIGTERM")
+
+    signal.signal(signal.SIGTERM, _on_term)
+    return True
+
+
+def leftover_mount_lines(basetemp: str) -> list[str]:
+    """‏#2702: מעגן או loop שנשארו תחת ה-basetemp של הריצה אחרי שכל ה-fixtures
+    פורקו. ‏`rm -rf` על התיקייה דולג על עגינה, והמקום לא מתפנה. ננתק (רק מה
+    שתחת הנתיב הזה) והריצה אדומה: הניקוי שלא נעשה הוא הכשל."""
+    if not mountleak.supported():
+        return []
+    left = mountleak.wait_clean(basetemp, timeout=5.0)
+    if not left:
+        return []
+    mountleak.sweep(basetemp)
+    return [f"#2702: {len(left)} מעגנים/loops שרדו את הריצה תחת {basetemp} (נותקו עכשיו):"]         + [f"    {item}" for item in left]
+
+
 def session_verdict(basetemp: str | None, native_required: bool) -> list[str]:
     """שורות לדוח בסוף הריצה — ריק כשהריצה באמת לא השאירה כלום."""
     if basetemp is None:
@@ -193,10 +237,11 @@ def session_verdict(basetemp: str | None, native_required: bool) -> list[str]:
         # זו לא תקלה; במקום שבו דורשים כלים מקומיים — היא כן.
         return ["אי אפשר לסרוק תהליכים יתומים בלי /proc — הריצה לא נבדקה"] \
             if native_required else []
+    lines = leftover_mount_lines(basetemp)
     found = live_stream_processes(basetemp)
     if not found:
-        return []
-    lines = [f"{len(found)} תהליכי שידור שרדו את הריצה (#79) — תחת {basetemp}:"]
+        return lines
+    lines += [f"{len(found)} תהליכי שידור שרדו את הריצה (#79) — תחת {basetemp}:"]
     lines += [f"    pid {pid}: {line}" for pid, line in found]
     survivors = kill_and_confirm(basetemp)
     lines.append("נהרגו, ואימות חוזר ב-/proc מראה שמתו." if not survivors
@@ -212,14 +257,49 @@ def session_verdict(basetemp: str | None, native_required: bool) -> list[str]:
 # התהליך הישיר הוא ראש session משלו, ובסוף -- גם כשהטסט עבר, גם בפקיעה --
 # כל הקבוצה נהרגת.
 
+def _sudo_kill(target: str) -> None:
+    """‏#2702: תהליך של root אינו ניתן לסיגנל ממשתמש הטסטים. ‏`os.kill` נכשל שם
+    ב-`PermissionError`, וקוד שקרא לזה "כבר מת" השאיר ילדי `sudo` של ריצה
+    שנקטעה חיים כ-root, מחזיקים את נעילת המנוע. ההורג הוא אותו `sudo -n` שהפעיל
+    אותם, וה-PID (או הקבוצה) הם מה שנשמר בעת ההפעלה -- לעולם לא שם."""
+    if shutil.which("sudo"):
+        subprocess.run(["sudo", "-n", "kill", "-KILL", "--", target], capture_output=True,
+                       stdin=subprocess.DEVNULL, timeout=30)
+
+
+def kill_pid(pid: int) -> None:
+    """SIGKILL לפי PID; של root -- דרך `sudo -n`. כבר מת = לא שגיאה."""
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        _sudo_kill(str(pid))
+
+
 def kill_group(pgid: int) -> None:
-    """SIGKILL לכל הקבוצה. אין קבוצה (כולם כבר מתו) = לא שגיאה."""
+    """SIGKILL לכל הקבוצה. אין קבוצה (כולם כבר מתו) = לא שגיאה.
+
+    ‏#2702: ‏`killpg` הורג את ה-`sudo` (שלנו) ומשאיר את ילדיו של root באותה
+    קבוצה. אות 0 אחריו אומר אם נשאר חבר כלשהו (`ProcessLookupError` = הקבוצה ריקה);
+    נשאר -- הקבוצה כולה נהרגת דרך `sudo -n kill -- -PGID`."""
     if not hasattr(os, "killpg"):              # ווינדוס: אין קבוצות
         return
     try:
         os.killpg(pgid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
+    except ProcessLookupError:
+        return
+    except PermissionError:
         pass
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        pass
+    # חבר שנשאר: root's child (PermissionError), או ה-sudo עצמו כזומבי שטרם נאסף (הצלחה) --
+    # בשני המקרים root's children עלולים להיות עוד חיים, ו-`kill -- -PGID` הורג את כולם
+    _sudo_kill(f"-{pgid}")
 
 
 #: #1940: אחרי SIGKILL לקבוצה, נכד שברח (setsid) עדיין מחזיק את הצינור.

@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+import lcfx
 from native import requires_native
 from test_local_clone_engine import (  # noqa: F401 -- fanout_bin is a fixture
     ENGINE_LOCK,
@@ -82,13 +83,9 @@ echo "path $(cat "$LC/run/shrink_path" 2>/dev/null)"
 @pytest.fixture(params=[100, 170], ids=["nearly_full", "packed"])
 def tail_disks(request, tmp_path):
     fx = tmp_path / "fx"
-    up = _root("sh", str(FIXTURE), "setup-tail", str(fx), str(request.param), timeout=300)
-    try:
-        assert up.returncode == 0, up.stdout + up.stderr
+    with lcfx.fixture_dir(fx, "setup-tail", str(request.param)):     # #2702
         devs = dict(line.split() for line in (fx / "devs").read_text().splitlines())
         yield request.param, fx, devs
-    finally:
-        _root("sh", str(FIXTURE), "teardown", str(fx), timeout=120)
 
 
 def _files(dev: str, fx: Path) -> list[str]:

@@ -340,7 +340,7 @@ function vmuSavedCard(st) {
 function vmuFailCard(st) {
   const e = st.error || {}, booted = !!st.booted_at;
   const tech = `<details class="vmu-tech"><summary>פרטים טכניים</summary><pre>${esc(e.reason || "")}: ${esc(e.message || "")}</pre></details>`;
-  const saveFail = ["hibernated", "unchecked", "bitlocker", "layout", "fs_changed", "shrink", "capture", "appliance", "verify", "disk_space", "table", "loop", "internal"].includes(e.reason) && booted;
+  const saveFail = ["hibernated", "unchecked", "layout", "fs_changed", "shrink", "capture", "appliance", "verify", "disk_space", "table", "loop", "internal"].includes(e.reason) && booted;
   if (!st.disk_ready) {
     return vmuCard({ key: "faildisk:" + e.reason, badge: VMU_ICON.x, badgeCls: "bad",
       title: saveFail ? "השמירה נכשלה — הדיסק הזמני אינו שלם" : "הדיסק לא נבנה",

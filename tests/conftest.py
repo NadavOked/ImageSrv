@@ -88,6 +88,8 @@ def pytest_configure(config) -> None:
     msys_guard.install()
     # ‏#2181: reboot/poweroff/halt/shutdown אמיתי — מלכודת ב-PATH, וטסט שהגיע אליה נכשל.
     powertrap.install()
+    # ‏#2702: ריצה שנקטעה ב-SIGTERM מפרקת את ה-fixtures (loops, tmpfs) כמו ריצה רגילה.
+    hygiene.install_sigterm_as_interrupt()
 
 
 #: קובץ עקבות אופציונלי — ‏`IMAGESRV_TEST_TRACE=<נתיב>`.
