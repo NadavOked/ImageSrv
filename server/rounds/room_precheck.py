@@ -123,6 +123,21 @@ def _slot(m: dict, port: int | None, d: dict | None = None) -> str:
     return (d or {}).get("serial") or (d or {}).get("dev") or "דיסק"
 
 
+def _held_where(m: dict) -> str:
+    """‏#2741: הדיסקים שב-`held.problems` — בשם המגירה/הפורט שלהם (לפי ה-`dev` ב-`drawer_list`),
+    ואם לא נמצאו: שם ה-dev עצמו. עם הסיבה כשיש. אין בעיות — ריק."""
+    by_dev = {d.get("dev"): d for d in m.get("drawer_list") or [] if d.get("dev")}
+    out = []
+    for p in (m.get("held") or {}).get("problems") or []:
+        dev = p.get("disk")
+        if not dev:
+            continue
+        d = by_dev.get(dev)
+        label = _slot(m, d.get("port"), d) if d and d.get("port") is not None else dev
+        out.append(f"{label}: {p['reason']}" if p.get("reason") else label)
+    return ", ".join(dict.fromkeys(out))
+
+
 def _gbps(x: float) -> str:
     return f"{x:.1f}"
 
@@ -219,6 +234,8 @@ def missing(machines: list[dict], remaining: int, slots: list[dict] | None,
             continue
         name = m.get("name") or mac
         where = ", ".join(_slot(m, p) for p in (short if reason == "drawers" else ports))
+        if reason == "held":
+            where = _held_where(m)      # #2741: רק הדיסקים שנכשלו, לא כל מגירות הסבב
         text = {"held": f"{name} דלוק ומחכה ללחיצה על 'כבה' — יש בו דיסק עם בעיה מהסבב הקודם",
                 "off": f"{name} כבוי או לא מחובר — לא הצטרף לגל",
                 "not_joined": f"{name} דולק אך לא הצטרף לגל",

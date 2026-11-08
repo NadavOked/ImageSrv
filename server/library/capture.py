@@ -63,6 +63,10 @@ log = logging.getLogger("imagesrv.capture")
 
 SAFE_FILE = re.compile(r"^p\d+\.[a-z]+\.pcl\.zst$")
 CHUNK = 1024 * 1024
+#: ‏#2742: ‏fdatasync תוך כדי הזרם, כל כך הרבה בייטים — כדי שה-fsync שלפני
+#: התשובה (#1951) יחכה למרווח אחד ולא לכל ה-dirty pages של מחיצה שלמה.
+#: הסוכן נותן לתשובה תקרה, וקליטה של 17GB נחתכה כשה-fsync הסופי חרג ממנה.
+SYNC_EVERY = 256 * 1024 * 1024
 #: ‏#1830 (הכרעת נדב 01/11): קובץ זרם של מחיצה שנמדד בה `used_bytes` חיובי
 #: חייב להיות לפחות החלק הזה ממנו — אחרת הזרם נקטע, והגיבוב "תואם" רק כי
 #: הסוכן גיבב את מה שנשלח. **נגזר ממדידה:** כל המניפסטים בספריית TA
@@ -107,6 +111,12 @@ def _write_and_hash(handle, digest, data: bytes) -> None:
     """‏#1488: אצווה אחת של ההעלאה — רצה בתהליכון (`asyncio.to_thread`)."""
     digest.update(data)
     handle.write(data)
+
+
+def _sync_data(handle) -> None:
+    """‏#2742: מה שנכתב עד כה — לדיסק, תוך כדי הזרם. כשל זורק, כמו בסוף."""
+    handle.flush()
+    getattr(os, "fdatasync", os.fsync)(handle.fileno())   # בווינדוס אין fdatasync
 
 
 def _flush_to_disk(handle) -> None:
@@ -229,13 +239,18 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
                 # שהקונסולה חולקת.
                 loop = asyncio.get_running_loop()
                 batch = bytearray()
+                unsynced = 0
                 async for chunk in request.stream():
                     batch += chunk
                     if len(batch) >= CHUNK:
                         await loop.run_in_executor(priority.CAPTURE_IO, _write_and_hash,
                                                    handle, digest, bytes(batch))
                         guard.wrote(len(batch))
+                        unsynced += len(batch)
                         batch.clear()
+                        if unsynced >= SYNC_EVERY:   # ‏#2742: ה-fsync הסופי חסום במרווח
+                            await loop.run_in_executor(priority.CAPTURE_IO, _sync_data, handle)
+                            unsynced = 0
                 if batch:
                     await loop.run_in_executor(priority.CAPTURE_IO, _write_and_hash,
                                                handle, digest, bytes(batch))

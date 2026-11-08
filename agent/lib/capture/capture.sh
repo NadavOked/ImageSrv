@@ -241,10 +241,10 @@ capture_disk() {
         fi
         # ה-stderr של partclone ממשיך ליומן — אחרי המחיצה במקום תוך כדי.
         [ ! -f "$RUN_DIR/targets/$_disk/partclone.err" ] || cat "$RUN_DIR/targets/$_disk/partclone.err" >> "$LOG_FILE"
-        # ממתינים להעלאה בלבד, בשם: wait ריק תופס גם את דמון ההתקדמות
-        # שרץ ברקע — וכשהפונקציה רצה ב-shell הראשי זה נעצר לנצח (מעבדה #12).
-        # ובתקרה: ‏curl שנתקע בפתיחת ה-fifo לא ייתלה כאן לנצח.
-        wait_pid "$_uppid" "$WAIT_HELPER_S" "העלאת מחיצה $_idx" \
+        # ממתינים להעלאה בלבד, בשם: wait ריק תופס גם את דמון ההתקדמות (מעבדה #12).
+        # התקרה היא שקט ה-curl עצמו (‏--speed-time; השרת עושה fsync לפני התשובה)
+        # ועוד WAIT_HELPER_S: ‏30ש' לבדן חתכו קליטה תקינה (#2742). הראיה היא rc של curl.
+        wait_pid "$_uppid" "$((HTTP_STALL_TIMEOUT + WAIT_HELPER_S))" "העלאת מחיצה $_idx" \
             || echo "$WAIT_TIMED_OUT" > "$RUN_DIR/up.$_idx.rc"
         rm -f "$_out" "$_out.bytes"
 
