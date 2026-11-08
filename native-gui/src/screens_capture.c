@@ -254,6 +254,9 @@ void screen_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     card_frame(a,cr,W,H,head_h,&hd,body_h,0,&body,&foot);
     body_clip_begin(a,cr,body);
     double x=body.x+N_PAD, y=body.y, xr = x + inner;
+    /* #2644: the build machine's restore -- the cloner's outage bar (net=, #2067), the same one, over the card */
+    double nbar = net_bar(a, cr, x, xr, y);
+    if (nbar > 0) y += nbar + 14;
     /* align-items:flex-end: both blocks sit on the row's bottom */
     double sy = y + top_h - start_h, ey = y + top_h - end_h;
     text_draw_r(cr,&lb,xr,sy,t->muted);                  sy += lb.h + N_LABEL_GAP;

@@ -37,8 +37,8 @@ ATTRS_RE = re.compile(r"[0-9A-F]{16}")
 PARTITION_ROLES = {"esp", "msr", "windows", "recovery", "linux", "swap", "data"}
 # "" / "unknown" = מחיצה בלי מערכת קבצים (MSR, ‏BIOS boot) — הסוכן מזרים אותה ב-partclone.dd
 # (#1419). ‏"unknown" הוא מה ש-_fs_of (manifest.sh) כותב כש-blkid יוצא ≠0 — וזה בדיוק מה
-# ש-blkid עושה על מחיצה בלי חתימה.
-FILESYSTEMS = {"ntfs", "vfat", "ext4", "btrfs", "swap", "", "unknown"}
+# ש-blkid עושה על מחיצה בלי חתימה. ‏"BitLocker" (#1840) — כרך מוצפן שנקלט גולמי, באותו partclone.dd.
+FILESYSTEMS = {"ntfs", "vfat", "ext4", "btrfs", "swap", "", "unknown", "BitLocker"}
 
 MIB = 1 << 20
 #: מה שהכונן חייב להחזיק **אחרי** סוף הפריסה: עותק הגיבוי של ה-GPT.
@@ -788,6 +788,9 @@ class ImageLibrary:
                     # ‏#2053: התג "מצב שינה" נגזר מהשדה הקיים (#2213) — כמו שהוא;
                     # ‏None = השדה חסר, ואז אין תג (לא טענה שהמקור לא היה מושהה).
                     "src_unhib": manifest.get("src_unhib"),
+                    # ‏#1840: מחיצות BitLocker שנקלטו גולמי — התג והשורה הכתומה בהפצה.
+                    "bitlocker": [part.get("index") for part in (manifest.get("partitions") or [])
+                                  if isinstance(part, dict) and part.get("fs") == "BitLocker"],
                 }
             )
         return sorted(result, key=lambda m: (m["folder"], m["sort"], m["name"]))

@@ -26,6 +26,8 @@ __all__ = [
     "AGENT",
     "LOCAL_BOOT_PATHS",
     "SUPPORTED_SCHEMA",
+    "ANSWER_FAILURE_FLAG",
+    "ANSWER_FAILURE_CODES",
     "MENU_NO_TIMEOUT",
     "ROLES_WITH_NORMAL_ENTRY",
     "ROLES_WITH_GUI",
@@ -43,6 +45,13 @@ __all__ = [
 #: הגרסה היחידה של ממשק 3 שהמחולל יודע לפרש. schema גבוה יותר = שינוי שובר,
 #: ולכן מצב לא ברור, ולכן דיסק מקומי.
 SUPPORTED_SCHEMA = 1
+
+#: ‏#2666: הדגל שהשרת שם על תשובה שהמחולל אינו מבין, כשהבקשה הגיעה לכרטיס מפיץ
+#: ובתוך התקציב של #75 — **רק במסלול התפריט** (‏`server/agent/answer_failure.py`).
+ANSWER_FAILURE_FLAG = "answer_failure_screen"
+
+#: ‏#2666: קודי ההחלטה של "התשובה אינה מובנת" — מה שהשרת שואל לפני שהוא סופר.
+ANSWER_FAILURE_CODES = frozenset({"bad-answer", "bad-schema"})
 
 #: ‏GRUB: ערך שלילי ב-timeout = התפריט ממתין לאדם ללא הגבלת זמן. זה מה
 #: שנדב הכריע ב-#140 עבור כל מכונה רשומה שאין לה משימה — ראו decide().
@@ -221,6 +230,17 @@ def decide(answer: object) -> Decision:
 
     schema = answer.get("schema", SUPPORTED_SCHEMA)
     if not isinstance(schema, int) or schema > SUPPORTED_SCHEMA:
+        # ‏#2666 (הכרעת נדב 07/11): כשל אימות בכרטיס שהשרת מפיץ בו מסתיים במסך
+        # הכישלון של הסוכן, לא בדיסק בשקט. רק כשהשרת אמר אותו במפורש — הוא שם
+        # את הדגל על ראיה חיובית שהכרטיס מפיץ, ובתוך התקציב של #75
+        # (‏`server/agent/answer_failure.py`). ‏`is True` בכוונה: כל ערך אחר —
+        # כמו היום. ערך רגיל בלי `imagesrv.mode` — שורת הקרנל נקייה (עיקרון 2).
+        # תשובה שאינה אובייקט (למעלה) אינה יכולה לשאת דגל, ונשארת בדיסק.
+        if answer.get(ANSWER_FAILURE_FLAG) is True:
+            return Decision(AGENT, "answer-failure-screen",
+                            f"unsupported contract schema {schema!r}, distributing card: "
+                            "the agent's failure screen (#2666)",
+                            offer_local=True, gui_screen=True)
         return Decision(LOCAL, "bad-schema", f"unsupported contract schema {schema!r}")
 
     # known: false → כלום. המחשב עולה מהדיסק כאילו לא קרה דבר.

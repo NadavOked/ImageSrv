@@ -447,7 +447,7 @@ void state_parse(State *s, FILE *fp) {
              * first (#688). The 5th field (#709) and the 6th (#874: the
              * server's cause for failed_last) are optional so an older agent
              * still parses. */
-            int nf = split(val, f, 13);   /* #1495: drawer and connection are fields 10/11; #1798: the mark 12; #1921: hw 13 */
+            int nf = split(val, f, 16);   /* #1495: drawer and connection are fields 10/11; #1798: the mark 12; #1921: hw 13; #1858: F1 mark 14-16 */
             if (nf < 4) continue;
             unsigned long long port, size;
             if (!parse_uint(f[0], &port) || port > INT_MAX) continue;
@@ -472,7 +472,8 @@ void state_parse(State *s, FILE *fp) {
             if (!strcmp(sm, "warn")) { if (strspn(cause, "abcdefghijklmnopqrstuvwxyz_") != strlen(cause)) cause = ""; }   /* #1859: a reason word (smart.sh), said by smart_reason_text */
             else if (!strcmp(sm, "failed_last") ? strcmp(cause, "cable") && strcmp(cause, "disk") && strcmp(cause, "readonly")   /* #1742 */
                     : strcmp(cause, "health_failed") && strcmp(cause, "pending_sectors") && strcmp(cause, "uncorrectable")
-                      && strcmp(cause, "readonly") && strcmp(cause, "media_readonly") && strcmp(cause, "health_unread"))   /* #1742: read-only; #1921: NVMe read-only; #2078 */
+                      && strcmp(cause, "readonly") && strcmp(cause, "media_readonly") && strcmp(cause, "health_unread")
+                      && strcmp(cause, "f1_observed"))   /* #1742: read-only; #1921: NVMe read-only; #2078; #1858: a mark by serial */
                 cause = "";
             cp(id->cause, sizeof id->cause, cause);
             /* #432: fields 7/8 (link, port max), "6.0"-shaped or not read --
@@ -491,6 +492,14 @@ void state_parse(State *s, FILE *fp) {
             if (nf >= 12 && (!strcmp(f[11], "incomplete") || !strcmp(f[11], "unchecked")))
                 cp(id->mark, sizeof id->mark, f[11]);
             if (nf >= 13) cp(id->hw, sizeof id->hw, f[12]);   /* #1921: said as it is; "" = no note */
+            /* #1858: "נצפה F1" by serial (f1mark.sh): the date must be YYYY-MM-DD and the source a known word, or the mark is not drawn */
+            if (nf >= 15 && strlen(f[13]) == 10 && f[13][4] == '-' && f[13][7] == '-' && strspn(f[13], "0123456789-") == 10
+                && (!strcmp(f[14], "manual") || !strcmp(f[14], "auto"))) {
+                cp(id->f1_date, sizeof id->f1_date, f[13]);
+                cp(id->f1_src, sizeof id->f1_src, f[14]);
+                if (nf >= 16 && (!strcmp(f[15], "passed") || !strcmp(f[15], "warn") || !strcmp(f[15], "fail") || !strcmp(f[15], "unchecked")))
+                    cp(id->f1_smart, sizeof id->f1_smart, f[15]);
+            }
         } else if (KEY("cused") && s->ncuseds < MAX_DRAWERS + 4) {
             /* #2030: cused=dev|size|used -- used -1 (or anything unreadable) = not measured */
             if (split(val, f, 3) < 3) continue;
@@ -500,6 +509,33 @@ void state_parse(State *s, FILE *fp) {
             cp(cu->dev, sizeof cu->dev, f[0]);
             cu->size = size;
             cu->used = parse_uint(f[2], &used) && used <= (unsigned long long)LLONG_MAX ? (long long)used : -1;
+        } else if (KEY("cdisk_label") && s->ncdlabels < MAX_DRAWERS + 4) {
+            /* #1857: cdisk_label=dev|text -- an empty dev or text is no label, never a blank chip */
+            if (split(val, f, 2) < 2 || !f[0][0] || !f[1][0]) continue;
+            CDiskLabel *dl = &s->cdlabels[s->ncdlabels++];
+            cp(dl->dev, sizeof dl->dev, f[0]);
+            cp_utf8(dl->text, sizeof dl->text, f[1]);
+        } else if (KEY("csmart") && s->nsmheads < MAX_DRAWERS) {
+            /* #1859: csmart=dev|total|cmp -- the head of a disk's SMART table (smarttable.sh). A total that is
+             * not a whole number is no table; a cmp that is not one of its three words is "not read" */
+            unsigned long long total;
+            if (split(val, f, 3) < 3 || !f[0][0] || !parse_uint(f[1], &total) || total > 100000) continue;
+            SmHead *h = &s->smheads[s->nsmheads++];
+            cp(h->dev, sizeof h->dev, f[0]);
+            h->total = (int)total;
+            h->cmp = !strcmp(f[2], "1") || !strcmp(f[2], "0") ? f[2][0] : '-';
+        } else if (KEY("csmartrow") && s->nsmrows < MAX_SMROWS) {
+            /* #1859: csmartrow=dev|id|flags|raw|rose|name -- raw / rose that are not whole numbers are -1 (not there) */
+            if (split(val, f, 6) < 5 || !f[0][0] || !f[1][0]) continue;
+            SmRow *r = &s->smrows[s->nsmrows++];
+            unsigned long long v;
+            cp(r->dev, sizeof r->dev, f[0]); cp(r->id, sizeof r->id, f[1]);
+            r->flags[0] = 0;
+            for (size_t i = 0, k = 0; f[2][i] && k + 1 < sizeof r->flags; i++)
+                if (strchr("coRhfuk", f[2][i])) r->flags[k++] = f[2][i], r->flags[k] = 0;
+            r->raw = parse_uint(f[3], &v) && v <= (unsigned long long)LLONG_MAX ? (long long)v : -1;
+            r->rose = parse_uint(f[4], &v) && v <= (unsigned long long)LLONG_MAX ? (long long)v : -1;
+            cp_utf8(r->name, sizeof r->name, f[5]);
         } else if (KEY("disk_probe")) {
             if (!strcmp(val, "drives") || !strcmp(val, "no_disks") ||
                 !strcmp(val, "no_ports") || !strcmp(val, "unchecked"))
@@ -534,6 +570,15 @@ void state_parse(State *s, FILE *fp) {
             s->net_kind = f[0][0] == 'l' ? NET_LOST : NET_BACK;
             s->net_since = s->net_kind == NET_LOST ? v[0] : -1; s->net_ceiling = s->net_kind == NET_LOST ? v[1] : -1;
             s->net_away = s->net_kind == NET_BACK ? v[0] : -1; s->net_at = s->net_kind == NET_BACK ? v[1] : -1;
+        } else if (KEY("forecast")) {
+            /* #1843: forecast=<clock 0|1>|<end epoch or empty>|<empty or no_history>; a record that is not exactly that
+             * is not said (principle 5) -- no hour on a half-read line */
+            unsigned long long u = 0;
+            s->fc_clock = s->fc_nohist = 0; s->fc_at = 0;
+            if (split(val, f, 3) != 3 || (strcmp(f[0], "0") && strcmp(f[0], "1"))) continue;
+            if (f[1][0] && (!parse_uint(f[1], &u) || u > (unsigned long long)LLONG_MAX)) continue;
+            if (f[2][0] && strcmp(f[2], "no_history")) continue;
+            s->fc_clock = f[0][0] == '1'; s->fc_at = (long long)u; s->fc_nohist = f[2][0] != 0;
         } else if (KEY("shrink_prompt")) {
             /* nonce|count. The nonce is echoed back on the answer, so it is
              * kept only in the shape the bridge accepts: digits and '-'. */

@@ -164,6 +164,7 @@ fail_texts() {
 fail_fatal_he() {
     # die_local's English, in Hebrew where the line is a known one.
     case "$1" in
+        *"not confirmed open for this machine"*|*"did not confirm round"*|*"is not open -- nothing was written"*|*"did not open the pull"*) printf 'השרת לא אישר שהעבודה פתוחה למחשב הזה, ולכן לא נכתב דבר לדיסק (#2657).' ;;
         *"not authorized"*)        printf 'השחזור לא אושר מול השרת — כניסת הקונסולה של המסך הזה כבר אינה בתוקף. לא נכתב דבר.' ;;
         *"no longer allowed"*)     printf 'האימג׳ שנבחר כבר אינו מותר למחשב הזה. לא נכתב דבר.' ;;
         *"malformed image id"*)    printf 'מזהה האימג׳ שהגיע מהמסך פגום. לא נכתב דבר.' ;;
@@ -174,10 +175,10 @@ fail_fatal_he() {
         *"more than one internal disk"*|*"no single internal disk"*) printf 'במחשב אין דיסק פנימי אחד בדיוק (אף אחד, או יותר מאחד) — לא משחזרים בניחוש. לא נכתב דבר.' ;;   # #1807
         *"split of the room was not approved"*) printf 'חלוקת המקום בין המחיצות לא אושרה. לא נכתב דבר.' ;;   *"split of the room did not compute"*) printf 'לא הצלחנו לחשב את חלוקת המקום בין המחיצות. לא נכתב דבר.' ;;   # #1898
         *"server unreachable"*)    printf 'השרת לא ענה במשך יותר מדקה.' ;;
-        *"no work for this"*)      printf 'אין למחשב הזה משימה — הוא עולה מהדיסק המקומי.' ;;
+        *"no work for this"*)      printf 'אין למחשב הזה משימה — הוא עולה מהדיסק המקומי.' ;;   *"answer not understood"*) printf 'המחשב לא הבין את תשובת השרת (גרסת ממשק שאינה נתמכת), ולכן לא התחיל דבר.' ;;   # #2666
         *"MAC not registered"*)    printf 'המחשב אינו רשום במערכת — הוא עולה מהדיסק המקומי.' ;;   *"another vlan"*) printf 'הסבב פתוח ברשת אחרת — המחשב אינו ברשת ההפצה.' ;;
         *"no image id"*|*"without image or id"*) printf 'לא נבחר אימג׳ למשימה. לא נכתב דבר.' ;;
-        *"failed SMART"*)          printf 'הדיסק נכשל בבדיקת SMART ואינו יעד לכתיבה. לא נכתב דבר.' ;;   *"is read-only"*) printf 'הדיסק במצב קריאה בלבד ואינו יעד לכתיבה. לא נכתב דבר.' ;;
+        *"failed SMART"*)          printf 'הדיסק נכשל בבדיקת SMART ואינו יעד לכתיבה. לא נכתב דבר.' ;;   *"is read-only"*) printf 'הדיסק במצב קריאה בלבד ואינו יעד לכתיבה. לא נכתב דבר.' ;;   *"seen stopping the"*) printf 'נצפה F1 בהדלקה בדיסק הזה, והוא אינו יעד לכתיבה. לא נכתב דבר.' ;;   # #1858
         *"target selection"*|*"room target disks"*|*"selected drawer"*|*"selected no writable"*) printf 'בחירת המגירות לסבב חסרה או אינה תואמת לדיסקים במחשב. לא נכתב דבר.' ;;
         *"imagesrv.server"*|*"network configuration"*) printf 'הגדרות הרשת או כתובת השרת חסרות באתחול.' ;;   *"GUI unavailable"*) printf 'המסך הגרפי לא עלה.' ;;
         *)                         printf 'המחשב נעצר בשלב שאין לו הסבר כאן. הלוג המלא במגירת המכונה בקונסולה.' ;;   # #1861: never the English itself; #2068: no details box

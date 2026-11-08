@@ -150,3 +150,16 @@ test('#2550 the status poll refreshes the preview only on the machines page and 
   assert.match(poll,/current === "machines" && Date\.now\(\) - BOOT_PREVIEW_AT > BOOT_PREVIEW_EVERY_MS\) loadBootPreview\(\)/);
   assert.match(src,/const BOOT_PREVIEW_EVERY_MS = 10000;/);
 });
+
+// #2682: the server's answer is not understood (bad schema) on a distributing card -> the agent's failure screen (#2666).
+// The preview must say so -- not "דיסק מקומי" (what decide() said before the flag) and not "לא ידוע".
+test('#2682 the failure screen is named: a warning, with the button, and not "local disk" or "unknown"', () => {
+  const {run}=setup(PREVIEW);
+  const item={decided:true,kind:'failure',code:'answer-failure-screen',action:'agent',role:'build',guard:null,task:null,session:null};
+  run('BOOT_PREVIEW='+JSON.stringify({checked_at:new Date().toISOString(),guard_limit:3,machines:{[BUILD]:item}}));
+  const v=run(`bootView(findMachine('${BUILD}'))`);
+  assert.equal(v.title,'מסך כישלון'); assert.equal(v.cls,'warn');
+  assert.doesNotMatch(v.title+v.line+v.lead,/דיסק מקומי|לא ידוע/);
+  const card=run(`bootCardHtml(findMachine('${BUILD}'))`);
+  assert.match(card,/class="bootcard warn"/); assert.match(card,/אתחל עכשיו/); assert.match(card,/ההגנה מלולאה \(#75\)/);
+});

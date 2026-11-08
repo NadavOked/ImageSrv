@@ -356,7 +356,7 @@ def test_real_round_end_uses_all_drawers(tmp_path, state, kind):
     script = prelude(tmp_path) + _function(AGENT / "imagesrv-agent", "do_restore_drawers", "do_restore() {")
     script += f"""
         . "$LIB_DIR/idle.sh"
-        for fn in identify_watch_stop smart_selftest_cancel session_stream job_reset crc_delta_measure smart_note_apply stage_drawer_drivers writemark_release_done report_final agent_log_send; do eval "$fn() {{ :; }}"; done
+        for fn in identify_watch_stop smart_selftest_cancel session_stream session_open_gate job_reset crc_delta_measure smart_note_apply stage_drawer_drivers writemark_release_done report_final agent_log_send; do eval "$fn() {{ :; }}"; done
         resolve_target_drawers() {{ _disks='sda sdb'; }}
         target_init() {{ mkdir -p "$RUN_DIR/targets/$1"; echo writing > "$RUN_DIR/targets/$1/state"; }}
         http_get() {{ echo '{{}}'; }}
@@ -380,7 +380,7 @@ def test_real_round_end_uses_all_drawers(tmp_path, state, kind):
 def test_a_round_whose_drawers_were_all_skipped_ends_in_failure(tmp_path):
     script = prelude(tmp_path) + _function(AGENT / "imagesrv-agent", "do_restore_drawers", "do_restore() {")
     script += """
-        for fn in identify_watch_stop smart_selftest_cancel session_stream job_reset target_init progress_loop end_failed_round; do eval "$fn() { :; }"; done
+        for fn in identify_watch_stop smart_selftest_cancel session_stream session_open_gate job_reset target_init progress_loop end_failed_round; do eval "$fn() { :; }"; done
         resolve_target_drawers() { _disks='sda sdb'; }
         http_get() { echo '{}'; }
         smart_gate() { return 1; }
@@ -399,7 +399,7 @@ def test_build_machine_restore_end(tmp_path, restored, kind):
     script = prelude(tmp_path, role="build") + _function(AGENT / "imagesrv-agent", "do_restore", "# --- main loop")
     script += f"""
         . "$LIB_DIR/waits.sh"   # wait_pid: the bounded wait before the reboot
-        for fn in job_reset target_init smart_note_apply name_this_machine stage_drivers ui_clear ui_header session_stream report_final writemark_release_done sync; do eval "$fn() {{ :; }}"; done
+        for fn in job_reset target_init smart_note_apply name_this_machine stage_drivers ui_clear ui_header session_stream session_open_gate report_final writemark_release_done sync; do eval "$fn() {{ :; }}"; done
         crc_delta_after() {{ _r=$?; return "$_r"; }}
         pick_internal_disk() {{ echo sda; }}
         http_get() {{ echo '{{}}'; }}

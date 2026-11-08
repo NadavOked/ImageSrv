@@ -244,7 +244,7 @@ def test_the_per_drawer_outcome_is_kept_shown_and_journaled_once(room_server):
          "drivers": {"state": "failed", "packages": [],
                      "error": "the server has no driver package for the chosen model"}},
     ]}
-    assert anon.post("/api/v1/agent/progress", json=body).json() == {"ok": True}
+    assert anon.post("/api/v1/agent/progress", json=body).json()["ok"] is True
     machine = next(m for m in room(room_server["deploy"])["machines"] if m["mac"] == CLONER1)
     by_dev = {d["dev"]: d["drivers"] for d in machine["drawer_list"]}
     assert by_dev["sda"] is None, "חסר = השלב לא רץ למגירה הזו, לא no_match"
@@ -261,7 +261,7 @@ def test_a_malformed_per_drawer_outcome_is_dropped(room_server):
     body = {"session_id": wave, "mac": CLONER1, "state": "writing", "targets": [
         {"dev": "sdb", "bytes_written": 1, "bytes_total": 9, "state": "writing",
          "drivers": {"state": "installed", "packages": []}}]}
-    assert anon.post("/api/v1/agent/progress", json=body).json() == {"ok": True}
+    assert anon.post("/api/v1/agent/progress", json=body).json()["ok"] is True
     row = room_server["ctx"].conn.execute(
         "SELECT targets_json FROM session_members WHERE mac = ?", (CLONER1,)).fetchone()
     assert "drivers" not in json.loads(row["targets_json"])[0]

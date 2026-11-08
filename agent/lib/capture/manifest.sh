@@ -184,7 +184,7 @@ _mark_expandable() {
         n = split($0, parts, "},");
         best = 0; pick = 0;
         for (i = 1; i <= n; i++) {
-            if (parts[i] !~ /"role":"(windows|linux)"/) continue;
+            if (parts[i] !~ /"role":"(windows|linux)"/ || parts[i] ~ /"fs":"BitLocker"/) continue;   # #1840: raw, never grown
             s = -1;
             if (match(parts[i], /"start_sector":[0-9]+/))
                 s = substr(parts[i], RSTART + 15, RLENGTH - 15) + 0;

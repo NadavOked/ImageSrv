@@ -536,6 +536,16 @@ class SessionStore:
             (session_id,),
         ).fetchall()]
 
+    def has_open_membership(self, mac: str, image_id: str) -> bool:
+        """‏#2657: האם המכונה חברה בסבב פתוח (‏`open`/`running`) של האימג' הזה.
+        משיכה (‏`pulls.open_pull`) היא סבב עם חבר אחד, ולכן נספרת כאן גם היא.
+        זה מה ש-`api.source_gate` דורש לפני שהוא מגיש מניפסט, קבצים או רשימת אימות."""
+        return self.conn.execute(
+            "SELECT 1 FROM session_members m JOIN sessions s ON s.id = m.session_id"
+            " WHERE m.mac = ? AND s.image_id = ? AND s.state IN ('open', 'running') LIMIT 1",
+            (mac, image_id),
+        ).fetchone() is not None
+
     def is_member(self, session_id: str, mac: str) -> bool:
         return (
             self.conn.execute(

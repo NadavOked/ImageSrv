@@ -119,7 +119,7 @@ stream_source() {
         udp-receiver --nokbd ${IFACE:+--interface "$IFACE"} --portbase "$UDPCAST_PORTBASE" \
             --start-timeout "${5:-${WAIT_STREAM_START_S:-600}}" --receive-timeout "$UDPCAST_STALL_TIMEOUT" 2>> "$LOG_FILE"
     else
-        http_get_stream "$2/api/v1/images/$3/files/$4"
+        http_get_stream "$2/api/v1/images/$3/files/$4" "$UDPCAST_STALL_TIMEOUT"   # #2644: the cloner's ceiling (timing.sh moves it), not HTTP's 120
     fi
 }
 
@@ -167,23 +167,23 @@ restore_partition() {
     fi
 
     next_stream_ceiling   # #957: אחרי ה-swap — נספרים רק זרמים
-    rm -f "$_tdir/feed" "$_tdir/sha.out" "$_tdir/pipe.rc" "$_tdir/zstd.rc" "$_tdir/fanout.rc" "$_tdir/fanout.out"
-    mkfifo "$_tdir/feed"
+    rm -f "$_tdir/feed" "$_tdir/sha.out" "$_tdir/pipe.rc" "$_tdir/zstd.rc" "$_tdir/fanout.rc" "$_tdir/fanout.out" "$RUN_DIR/source.rc"
+    mkfifo "$_tdir/feed"; target_counter "$4" "$RUN_DIR/bytes.raw"   # #2644: the target's counter, where the cloner's stream keeps its own
     # הצינור רץ ברקע כדי שתהיה עין שמסתכלת עליו: המונה (‏-P, פורמט pv -n)
-    # הוא ההוכחה היחידה שמשהו זז, ו-wait_progress מודד בדיוק אותו. ‏#1444:
-    # מונה וגיבוב בתוך fanout ולא pv|tee|sha256sum של busybox (‏#1438).
+    # הוא ההוכחה היחידה שמשהו זז, ו-wait_progress מודד בדיוק אותו. ‏#1444: מונה וגיבוב בתוך fanout (‏#1438).
+    # ‏#2644: המונה וה-rc של המקור באותם שמות של drawers.sh -- roundbeep.sh קורא אותם לפסים ולצלילים של ניתוק.
     (
         restore_pipe "$_tdir" "$_pcl" "$_node" pipe.rc &   # #1906: zstd's rc too (drawers.sh), as the drawers'
         _wpid=$!
-        stream_source "$1" "$2" "$3" "$7" "$STREAM_START_CEILING" \
-            | fanout -S "$_tdir/sha.out" -P "$_tdir/bytes.raw" 16777216 "$_tdir/feed" \
+        { stream_source "$1" "$2" "$3" "$7" "$STREAM_START_CEILING"; echo "$?" > "$RUN_DIR/source.rc"; } \
+            | fanout -S "$_tdir/sha.out" -P "$RUN_DIR/bytes.raw" 16777216 "$_tdir/feed" \
                 > "$_tdir/fanout.out" 2>> "$LOG_FILE"   # #1601: restore_blame reads it
         echo "$?" > "$_tdir/fanout.rc"
         grep -qx 0 "$_tdir/fanout.rc" || unblock_fifo "$_tdir/feed"   # מת לפני open (#49)
         wait_pid "$_wpid" "$WAIT_DRAWER_S" "כתיבת מחיצה $5 על $4"
     ) &
     _pipepid=$!
-    if wait_progress "$_pipepid" "$_tdir/bytes.raw" \
+    if wait_progress "$_pipepid" "$RUN_DIR/bytes.raw" \
             "$STREAM_START_CEILING" "$WAIT_STREAM_STALL_S" \
             "מחיצה $5 ($7) על $4" "$_tdir/feed"; then
         _rc=$(cat "$_tdir/pipe.rc" 2>/dev/null || echo 1)

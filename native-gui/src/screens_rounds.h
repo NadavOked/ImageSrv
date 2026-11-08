@@ -43,6 +43,7 @@ void unmapped_label(const char *name, const char *conn, int port, const char *de
  * "(לא ממופה)". Never a device name: "sda" is a log word, not the operator's. */
 void card_name(const char *name, int bay, const char *conn, int port, char *out, size_t n);
 const CUsed *cused_for_dev(const State *s, const char *dev);   /* #2030: NULL = no size read for it */
+const char *disk_label_for_dev(const State *s, const char *dev);   /* #1857: "קוריאים · xx-7", or "" = no set */
 int cloner_bay_count(const State *s);
 const IdleDisk *idle_for_bay(const State *s, int bay);
 const COptical *optical_for_bay(const State *s, int bay);
@@ -100,4 +101,7 @@ void room_drv_tag_draw(App *a, cairo_t *cr, Rect slot, const Machine *m, int mi,
 Text room_drv_summary_make(App *a, cairo_t *cr, double w);
 double room_drv_summary_height(const Text *t);
 void room_drv_summary_draw(App *a, cairo_t *cr, double x, double y, double w, Text *t);
+/* #2067: the stream's outage bar (net=lost|back) at y, between x0 and xr; its height, 0 = none.
+ * screens_cloner.c; the cloner's round screen and the build machine's restore card (#2644). */
+double net_bar(App *a, cairo_t *cr, double x0, double xr, double y);
 #endif

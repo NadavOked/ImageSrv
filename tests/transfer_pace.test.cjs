@@ -1,4 +1,4 @@
-// #1462 — קצב, ETA וזמן שעבר בהעברה בין אתרים (branches.js), רק ממה שנמדד:
+// #1462 — קצב, ETA וזמן שעבר בהעברה בין אתרים (branches.js; מוצג ברשימת המשימות), רק ממה שנמדד:
 // קצב = הפרש בין שתי דגימות (bytes_sent, updated_at) של השרת; פחות משתיים =
 // "מודד קצב…" ולא 0. בשלב האימות — פס נע וזמן שעבר מ-seconds_since_update
 // (שעון השרת), ובלי השדה — בלי זמן. console.js + branches.js רצים ב-vm.
@@ -29,7 +29,9 @@ function setup() {
   }
   vm.runInContext('ME={username:"admin",role:"admin",server_name:"ראשי"};', ctx);
   const call = (fn, t) => vm.runInContext(`${fn}(${JSON.stringify(t)})`, ctx);
-  return {call};
+  // ‏#1781: אין עוד טבלת העברות בדף שרתי המשנה — השורה היא שורת המשימות בסקירה (homeNowRows).
+  const taskRow = (t) => vm.runInContext(`HOME.transfers=[${JSON.stringify(t)}]; HOME.err={}; CAPTURE_TASKS=[]; homeNowRows(true)[0]`, ctx);
+  return {call, taskRow};
 }
 
 const GB = 1024 ** 3;
@@ -66,18 +68,20 @@ test('no progress update for 30s or more is said in words, with no ETA', () => {
 });
 
 test('verifying: a moving bar and the elapsed time from the server; without the field, no time', () => {
-  const {call} = setup();
+  const {call, taskRow} = setup();
   const v = row({state: 'verifying', bytes_sent: 10 * GB, seconds_since_update: 125});
   assert.equal(call('transferPace', v), "עברו 2 דק'");
-  const html = call('branchTransferRow', v).cells[2];
-  assert.match(html, /class="bar indeterminate"/);
-  assert.match(html, /עברו 2 דק(&#39;|')/);
+  const cells = taskRow(v);
+  assert.match(cells[2], /class="bar indeterminate"/);
+  assert.match(cells[3], /עברו 2 דק(&#39;|')/);
   assert.equal(call('transferPace', row({state: 'verifying', seconds_since_update: null})), '');
-  assert.doesNotMatch(call('branchTransferRow', row({state: 'sending'})).cells[2], /indeterminate/);
+  assert.doesNotMatch(taskRow(row({state: 'sending'}))[2], /indeterminate/);
 });
 
 test('pull is verified by the primary, push by the secondary', () => {
-  const {call} = setup();
+  const {call, taskRow} = setup();
+  assert.match(taskRow(row({state: 'verifying', direction: 'pull'}))[3], /הראשי מאמת sha256/, 'the tasks list says who verifies');
+  assert.match(taskRow(row({state: 'verifying', direction: 'push'}))[3], /שרת המשנה מאמת sha256/);
   assert.equal(call('transferStateLabel', row({state: 'verifying', direction: 'pull'}))[0], 'הראשי מאמת sha256');
   assert.equal(call('transferStateLabel', row({state: 'verifying', direction: 'push'}))[0], 'שרת המשנה מאמת sha256');
 });

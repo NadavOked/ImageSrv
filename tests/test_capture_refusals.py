@@ -590,29 +590,31 @@ def test_capture_manifest_uses_source_logical_sector_size(tmp_path):
     assert written["min_target_bytes"] == expected_need
 
 
-# --- #671: כרך BitLocker אינו נקלט כ-ciphertext ------------------------------
+# --- #671, #1840: כרך BitLocker נקלט גולמי — בשמו, לא בשקט --------------------
 
 #: util-linux probe_bitlocker.c / FOG isBitlockedPartition: ‎-FVE-FS-‎
 #: ב-offset 3 של הסקטור הראשון. בלי המגן, `_fs_of` מחזיר unknown/BitLocker
-#: ו-`partclone_for_fs` נופל ל-`partclone.dd` — קליטת ההצפנה בשקט.
+#: ו-`partclone_for_fs` נופל ל-`partclone.dd` — קליטת ההצפנה בשקט. מאז #1840
+#: היא נקלטת גולמי **בשמה** (`fs: "BitLocker"` ואזהרה), לא בשקט.
 FVE_SECTOR = b"\xeb\x52\x90-FVE-FS-" + bytes(501)
 
 
-def test_a_bitlocker_signature_is_refused_not_captured_as_ciphertext(tmp_path):
-    """חתימת BitLocker על צומת המחיצה — סירוב עם סיבה, לא partclone.dd.
-
-    הבקרה השלילית: החזרת `capture.sh` לייצור בלי `_bitlocker_reason`
-    מחזירה rc=0 ומניפסט, כי CURL_SINK + partclone.dd בולעים את הכרך.
+def test_a_bitlocker_signature_is_captured_raw_by_name_not_silently(tmp_path):
+    """חתימת BitLocker על צומת המחיצה — עד #1840 סירוב; מאז (הכרעת נדב 07/11)
+    ‏partclone.dd, **בשמו**: ‏`fs: "BitLocker"` במניפסט ולא `unknown`, והאזהרה
+    בשדה `error` של היעד. "קליטת ההצפנה בשקט" שהמגן הזה נכתב נגדה עדיין אסורה —
+    מה שהשתנה הוא שהיא נקלטת בגלוי. הפירוט: `tests/test_bitlocker_raw_1840.py`.
     """
     fve = tmp_path / "fve.bin"
     fve.write_bytes(FVE_SECTOR)
     part = tmp_path / "box" / "dev" / "sda1"
     box, run, out = capture_run(
         tmp_path,
-        stubs={"sgdisk": ONE_PARTITION, "curl": CURL_SINK},
+        stubs={"sgdisk": ONE_PARTITION, "curl": CURL_SINK, "partclone.dd": PIPE_INPUT},
         shell_pre=f"cp {posix(fve)!r} {posix(part)!r}; ",
     )
-    reason = refusal_reason(box, run, out)
-    assert "BitLocker" in reason, reason
-    assert "1" in reason, reason
-    assert not (run / "new-manifest.json").exists()
+    assert out.strip().endswith("rc=0"), out + (box / "capture.out").read_text(encoding="utf-8", errors="replace")
+    written = json.loads((run / "new-manifest.json").read_text(encoding="utf-8"))
+    assert written["partitions"][0]["fs"] == "BitLocker", written["partitions"]
+    report = json.loads((box / "progress.json").read_text(encoding="utf-8"))
+    assert "מחיצה 1: מוצפן ב-BitLocker" in report["targets"][0]["error"], report

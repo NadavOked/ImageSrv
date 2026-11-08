@@ -195,7 +195,7 @@ def test_a_clock_step_does_not_fail_a_running_pull(server, monkeypatch, step):
 
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
-    assert pull_report(server, pull_id, lab2["mac1"], "writing").json() == {"ok": True}
+    assert pull_report(server, pull_id, lab2["mac1"], "writing").json()["ok"] is True
     clock = _Clock()
 
     class _FakeDatetime(datetime):

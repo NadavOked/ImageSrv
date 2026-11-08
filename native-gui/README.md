@@ -374,13 +374,29 @@ net=lost|<epoch>|<seconds>          # #2067 (mockup 08): the stream stands -- no
 net=back|<seconds>|<epoch>          # #2067: the bytes moved again -- it was gone <seconds> (empty = not saved),
                                     # back at <epoch>. A green bar for 5 s, then gone: the agent stops writing the
                                     # record after 5 s and the screen does not draw it past 5 s either. Absent = no bar
-cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>|<mark>|<hw>
+                                    # #2644: the build machine's restore card (--screen progress, srgui.sh) carries
+                                    # the same two records and draws the same bar over the card; <seconds> there is
+                                    # also the ceiling of its HTTP stream (restore.sh stream_source)
+cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>|<mark>|<hw>|<f1date>|<f1src>|<f1smart>
                                     # the idle inventory (no round targets) -- see the #1304 table below;
                                     # #1495: fields 10-11 as drawer= fields 9-10
                                     # #1859: <cause> also carries why a `warn` disk is orange (a smart.sh
                                     # SMART_WARN_REASONS word, said by smart_reason_text)
+csmart=<dev>|<total>|<cmp>          # #1859 (mockup 1859-smart-table): the head of a disk's SMART table (smarttable.sh, idle only).
+                                    # <total> = attributes the disk reported; <cmp>: 1 compared with the previous round,
+                                    # 0 the server has none ("אין עדיין השוואה"), - the answer was not read. Without it
+                                    # the drawer has no "כל מאפייני ה-SMART" line and S does nothing
+csmartrow=<dev>|<id>|<flags>|<raw>|<rose>|<name>
+                                    # one attribute: id (ATA number, or the NVMe key), flags (c critical, k the cable's 199,
+                                    # o orange, R red, h hardware note, f at the vendor threshold -- red, u unknown), raw / rose
+                                    # (empty = not there, never 0), the Hebrew name (the vendor's own for u). The drawer
+                                    # (smarttbl.c) draws the "עלה" column only when <cmp> is 1
 cused=<dev>|<size>|<used>           # #2030: size and bytes in use of a disk (diskused.sh), round or idle;
                                     # used -1 = not measured -> "לא נמדד", never 0. See docs/architecture/interfaces.md
+cdisk_label=<dev>|<text>            # #1857 (mockup 04): the set and sticker of a disk, "קוריאים · xx-7"
+                                    # (disklabels.sh, from hello's disk_labels). A chip beside the drawer's name
+                                    # on the idle screen, the first words of the size line in a round. A disk
+                                    # with no set has no record: the card is exactly as it was. Display only
 cdrawer_slot=<drawer>|<conn>|<name> # #1495: one per drawer of the hello's drawer_slots, empty ones too. With
                                     # them the cloner screens lay out drawers 1..N of the mapping (the cage
                                     # size is no longer a guess); without them -- an older server, no answer
@@ -538,10 +554,12 @@ status bar, no background art. What each part is drawn from:
 | "מאז 12:41" (server down) | only when the last code was a 200 that went stale -- `hello.state` keeps the last *attempt*, so after a failed one the last success is not known and the line is left out |
 | bay mapping and name source (#1495; since #2030 the card's name is the connection, see below) | the bay is drawer N of the mapping (`cdrawer_slot=`, #1495); its name is the slot name there (or `cslot_name=` without a mapping, #704), else "דיסק N"; the connection is that record's `conn`. A disk whose `cdisk=` drawer is 0 is an extra row after the bays: "—" / "לא ממופה" in the number box, "SATA n (לא ממופה)" as its name. A `coptical=` drive is "כונן CD/DVD" in its bay (or an extra row), never "ריק" |
 | size, model | `cdisk=` fields 3–4; the size in market units (500107862016 → "500 GB") |
+| the SMART table (#1859, mockup 1859-smart-table "מוצע ב") | `csmart=` / `csmartrow=` per disk: under the drawer's name "כל מאפייני ה-SMART (N) ›" and an S key; a click on the drawer, or S, opens a drawer from the side (600 px, 16 rows at 1024×768; Tab the next disk, ↑ ↓ and the wheel scroll, Esc closes). Read only; the disk's colour does not change from it. "קריטי" is a neutral tag, orange only where the agent judged orange, "בסף היצרן" red, an unknown name is the vendor's with "לא מוכר". "עלה" exists only with `cmp` 1; otherwise the banner says "אין עדיין השוואה" |
 | the card's name (#2030) | the connection -- "SATA 0", "NVMe 03:00.0" -- not "דיסק N" next to the big drawer number; the operator's slot name still wins (#704); a disk outside the mapping is "<conn> (לא ממופה)". Never a device name ("sda"). Size: `cused=` (round and idle) else `cdisk=` field 4 |
 | the card's third line (#2030) | before the write "תפוס עכשיו: X" (`cused=` used: what it will erase), writing "נכתב עד כה: X", done "נכתב: X" (`drawer=` field 4); no measurement, a cancelled write, or no `cused=` record at all is "לא נמדד" -- never 0. Dropped in a crowded cage (rows under 72px) |
 | SMART chip, its colour, the bar on the bay, the orange/red line under the cage | `cdisk=` field 5 by the #872 rule: `failed_last` red, `fail` (and an old agent's `warn`) orange, the rest green; `unchecked` says "SMART לא נבדק" |
 | the reason under the name | `fail` → "ה-BIOS יעצור ב-F1 — SMART: …" by field 6, the SMART reason (#1366: `health_failed` / `pending_sectors` 197 / `uncorrectable` 198); `fail` with `readonly` (#1742) → "הדיסק במצב קריאה בלבד"; `failed_last` → field 6, the server's cause (כבל/חריץ, הדיסק) |
+| "נצפה F1" (#1858) | `cdisk=` fields 14–16 (`f1mark.sh`): the date (`YYYY-MM-DD`), the source (`manual|auto`) and the disk's own SMART beneath the red (`passed|warn|fail|unchecked`, empty = not known). The disk arrives red (`fail`, cause `f1_observed`); the chip says "נצפה F1", the line "נצפה F1 בהדלקה (24/10) · סומן בקונסולה", under it what its SMART says. A malformed date or source draws no mark. The same disk makes the F1 notice of the power-off windows (`f1_notice`: the idle one, and the end-of-task count #1560). |
 | the hardware note (#1921) | `cdisk=` field 13: the sentence of `agent/lib/data/hw-issues.tsv` (a link reset, a drawer that dropped, USB 2.0 -- CRC and the link keep fields 9/7-8). Drawn like the CRC line: the bay's bar orange, the sentence under the name and under the cage; the SMART chip stays SMART -- never the disk's colour. `lc_disk=` field 17 is the same note on the local/USB screen, after the SATA line |
 | the CRC line (#1366) | `cdisk=` field 9: the CRC count when over the hello's `crc_warn_threshold` (empty = not over, not read, or an older server). The bay orange like a slow link, "כבל או מגירה חשודים — N שגיאות" under the name (when SMART and the link have no reason of their own), and a line under the cage |
 | the link, "· 6.0 Gb/s" after SATA N-1, and its orange line (#432) | `cdisk=` fields 7–8 (`disk_link`: the speed and the port's maximum, `null` = not read → "קישור לא ידוע", never blank and never green). Below the maximum: the bay's bar and border orange, "קישור 1.5 מתוך 6.0 Gb/s — לבדוק כבל" under the name (when SMART has no reason of its own), and a line under the cage. The SMART chip and LED stay SMART |

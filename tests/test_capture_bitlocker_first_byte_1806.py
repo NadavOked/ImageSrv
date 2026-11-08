@@ -1,25 +1,25 @@
-"""#1806: שער ה-BitLocker מסרב **לפני שבייט אחד עוזב את המחשב**.
+"""#1806: שער ה-BitLocker רץ **לפני שבייט אחד עוזב את המחשב**.
 
-עד התיקון הבדיקה (`_bitlocker_reason`) רצה בתוך לולאת הזרם, מחיצה אחר
-מחיצה. דיסק Windows 11 24H2 טיפוסי — ESP, ‏MSR, ‏C: מוצפן — העלה את
-מחיצות 1 ו-2 לשרת, ורק במחיצה 3 הגיע הסירוב. כאן נמדד מה **יצא**: כל
-קריאת curl נרשמת, ובקליטה שסורבה אין אף העלאה (`/files/`), אף partclone
-שרץ, והשלב `stream` לא נפתח.
+עד #1806 הבדיקה רצה בתוך לולאת הזרם, מחיצה אחר מחיצה. דיסק Windows 11
+24H2 טיפוסי — ESP, ‏MSR, ‏C: מוצפן — העלה את מחיצות 1 ו-2 לשרת, ורק
+במחיצה 3 הגיעה ההכרעה. כאן נמדד מה **יצא**: כל קריאת curl נרשמת.
 
-ובנוסף: הנוסח. "הצפנת מכשיר" ב-Home, הצפנה שממתינה להפעלה, הצפנה
-מושהית ופענוח שלא הסתיים — כולם נושאים את אותה חתימת `-FVE-FS-` על
-הדיסק, והמפעיל שבטוח ש"BitLocker כבוי" צריך לקרוא את המצב שלו בהודעה.
+#1840 (הכרעת נדב 07/11) הפך את ההכרעה עצמה: כרך מוצפן נקלט גולמי
+(‏`tests/test_bitlocker_raw_1840.py`), והנוסח של סירוב ה-BitLocker הוסר. מה
+שנשאר מ-#1806 הוא המקום: השער (`capture_bitlocker_gate`) יושב ליד שער המהובר,
+לפני בדיקת המקום, הכיווץ והזרם — ובדיקה **שלא רצה** עדיין מסרבת שם, לפני
+שבייט יצא.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from native import requires_native
-from test_agent import AGENT, BASH, posix, sh
+from test_agent import AGENT, BASH, posix
 import test_capture_refusals
-from test_capture_refusals import FVE_SECTOR, capture_run, refusal_reason
-from test_timeouts import make_stubs
+from test_capture_refusals import capture_run, refusal_reason
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -70,34 +70,27 @@ PARTCLONE_RECORDER = (
 )
 
 
-def _encrypted_third(tmp_path: Path, monkeypatch):
-    # הקוד הישן מזרים שתי מחיצות לפני הסירוב, ובווינדוס זה יותר מתקרת
-    # הקליטה של 90 שניות. התקרה מורחבת כאן כדי שהבקרה השלילית תיכשל על
-    # **מה שיצא** ולא על פקיעת זמן; הקוד המתוקן מסרב לפני הזרם.
+def _unchecked_third(tmp_path: Path, monkeypatch):
+    # ‏dd שנכשל על כותרת מחיצה 3 בלבד — "לא הצלחנו לבדוק", לא "מוצפן" ולא "נקי".
     monkeypatch.setattr(test_capture_refusals, "CAPTURE_TIMEOUT", 400)
-    fve = tmp_path / "fve.bin"
-    fve.write_bytes(FVE_SECTOR)
-    part = tmp_path / "box" / "dev" / "sda3"
+    real_dd = shutil.which("dd") or "/usr/bin/dd"
+    dd = ('#!/bin/sh\ncase "$*" in *sda3*bs=512*) exit 5 ;; esac\n'
+          f'exec {posix(Path(real_dd))!r} "$@"\n')
     return capture_run(
         tmp_path,
-        stubs={"sgdisk": THREE_PARTITIONS, "curl": CURL_RECORDER,
+        stubs={"sgdisk": THREE_PARTITIONS, "curl": CURL_RECORDER, "dd": dd,
+               "blkid": "#!/bin/sh\nexit 2\n",
                "partclone.dd": PARTCLONE_RECORDER,
                "partclone.vfat": PARTCLONE_RECORDER},
-        shell_pre=f"cp {posix(fve)!r} {posix(part)!r}; ",
     )
 
 
-def test_an_encrypted_third_partition_is_refused_before_a_byte_leaves(tmp_path, monkeypatch):
-    """הגדרת ה"גמור" של #1806, סעיף 2: מחיצה 3 נושאת `-FVE-FS-` ← סירוב,
-    ואף קובץ (`p1`, ‏`p2`) לא נפתח בשרת.
-
-    בקרה שלילית: על `capture.sh` + `hibernation.sh` של לפני התיקון
-    ‏`curl.log` מכיל את `files/p1.esp...` ואת `files/p2.msr...` —
-    הסירוב מגיע רק במחיצה 3.
-    """
-    box, run, out = _encrypted_third(tmp_path, monkeypatch)
+def test_a_third_partition_that_could_not_be_checked_is_refused_before_a_byte_leaves(tmp_path, monkeypatch):
+    """מחיצה 3 שכותרתה לא נקראה ← סירוב בשמה, ואף קובץ (`p1`, ‏`p2`) לא נפתח
+    בשרת, partclone לא רץ, והשלב `stream` לא נפתח (עיקרון 5)."""
+    box, run, out = _unchecked_third(tmp_path, monkeypatch)
     reason = refusal_reason(box, run, out)
-    assert "BitLocker" in reason and "מחיצה 3" in reason, reason
+    assert "לא הצלחנו לבדוק BitLocker במחיצה 3" in reason and "dd rc=5" in reason, reason
 
     sent = (run / "curl.log").read_text(encoding="utf-8") \
         if (run / "curl.log").exists() else ""
@@ -114,46 +107,19 @@ def test_the_refusal_comes_before_the_space_check_and_the_shrink(tmp_path, monke
     """אותו "לפני בייט": גם בדיקת המקום מול השרת (`/preflight`) והכיווץ
     הם עבודה על דיסק שבכל מקרה יסורב. השער יושב ליד שער המהובר — בלולאה
     הקודמת לכל אלה."""
-    _box, run, _out = _encrypted_third(tmp_path, monkeypatch)
+    _box, run, _out = _unchecked_third(tmp_path, monkeypatch)
     sent = (run / "curl.log").read_text(encoding="utf-8") \
         if (run / "curl.log").exists() else ""
     assert sent == "", f"השרת שמע מהקליטה לפני הסירוב: {sent}"
 
 
-def _bitlocker_reason(tmp_path: Path, fs: str = "ntfs") -> str:
-    run = tmp_path / "run"
-    run.mkdir(parents=True)
-    script = (
-        make_stubs(tmp_path / "stubs",
-                   {"dd": "#!/bin/sh\nprintf -- '\\353R\\220-FVE-FS-'\n"})
-        + f'RUN_DIR={posix(run)!r}; LOG_FILE={posix(run / "agent.log")!r}; '
-        + f'. {posix(AGENT)}/lib/capture/hibernation.sh; '
-        + f'_bitlocker_reason 3 {fs} /dev/fake'
-    )
-    return sh(script).strip()
-
-
-def test_the_refusal_names_the_states_that_look_off_but_are_encrypted(tmp_path):
-    """הדרישה של #1806: הודעה ברורה גם למי ש"כיבה" — הצפנת מכשיר ב-Home
-    (אין שם תפריט BitLocker), הצפנה שממתינה להפעלה, הצפנה מושהית ופענוח
-    שעוד לא הגיע ל-100%. על הדיסק כולם אותה חתימה, ולכן אותו סירוב —
-    והנוסח הקיים (#671) נשאר בראשו, מילה במילה."""
-    for reason in (_bitlocker_reason(tmp_path / "sig"),
-                   _bitlocker_reason(tmp_path / "blkid", fs="BitLocker")):
-        assert reason.startswith(
-            "מחיצה 3 מוצפנת ב-BitLocker — כבו את BitLocker לפני הקליטה"), reason
-        for state in ("הצפנת מכשיר", "ממתינה להפעלה", "מושהית", "100%"):
-            assert state in reason, f"{state!r} חסר: {reason}"
-        assert "manage-bde -off" in reason, reason
-
-
 def test_the_hibernation_header_promise_is_kept_in_capture():
     """‏`hibernation.sh:2-3` מבטיח "Both run before a byte moves". הטסט
-    הזה קורא את capture.sh: הקריאה ל-`_bitlocker_reason` יושבת לפני
+    הזה קורא את capture.sh: הקריאה ל-`capture_bitlocker_gate` יושבת לפני
     ‏`capture_stage stream` ואינה בתוך לולאת הזרם."""
     src = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
-    gate = src.index("_bitlocker_reason")
+    gate = src.index("capture_bitlocker_gate")
     assert gate < src.index("capture_stage shrink"), "השער אחרי הכיווץ"
-    assert src.count("_bitlocker_reason") == 1, "השער נשאר גם בלולאת הזרם"
+    assert src.count("capture_bitlocker_gate") == 1, "השער נשאר גם בלולאת הזרם"
     header = (AGENT / "lib" / "capture" / "hibernation.sh").read_text(encoding="utf-8")
     assert "Both run before a byte moves" in header

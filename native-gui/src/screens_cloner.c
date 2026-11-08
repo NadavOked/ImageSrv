@@ -98,6 +98,17 @@ static int entry_pct(const ClonerEntry *e) {
     return pct > 100 ? 100 : pct;
 }
 
+/* #1857: snprintf cut a long line at a byte; drop the partial UTF-8 letter it may leave at the end
+ * (a cut letter draws a replacement box). */
+static void cut_to_whole_char(char *s) {
+    size_t n = strlen(s), i = n;
+    while (i && ((unsigned char)s[i - 1] & 0xC0) == 0x80) i--;   /* i - 1 = the last letter's first byte */
+    if (!i) return;
+    unsigned char c = (unsigned char)s[i - 1];
+    size_t want = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1;
+    if (n - (i - 1) < want) s[i - 1] = 0;
+}
+
 static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
     const Theme *t = a->theme; const Drawer *d = e->drawer; const IdleDisk *idle = e->idle;
     memset(y, 0, sizeof *y);
@@ -113,6 +124,14 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
         if (idle && idle->model[0]) { bidi_isolate(idle->model, mi, sizeof mi); snprintf(y->sub, sizeof y->sub, "%s · %s", sz, mi); }
         else snprintf(y->sub, sizeof y->sub, "%s", sz);
     } else snprintf(y->sub, sizeof y->sub, "%s", d || idle ? "גודל הדיסק לא נקרא" : "לא זוהה דיסק בפורט הזה");
+    /* #1857 (mockup 04): the disk's set and sticker lead the line, "קוריאים · xx-7 · 500 GB · ..."; no set = as it was */
+    const char *set_label = disk_label_for_dev(&a->st, d ? d->dev : idle ? idle->dev : "");
+    if (set_label[0]) { char lb[DISK_LABEL_MAX + 8], rest[sizeof y->sub];
+        bidi_isolate(set_label, lb, sizeof lb); snprintf(rest, sizeof rest, "%s", y->sub);
+        /* "500 GB" after a Hebrew run would read "GB 500": a known size keeps its own left-to-right isolate */
+        int n = size ? snprintf(y->sub, sizeof y->sub, "%s · \xE2\x81\xA6%s\xE2\x81\xA9", lb, rest)
+                     : snprintf(y->sub, sizeof y->sub, "%s · %s", lb, rest);
+        if (n >= (int)sizeof y->sub) cut_to_whole_char(y->sub); }   /* a long set name: cut, never mid-letter */
     if (d || idle) {   /* #2030: before the write -- what it will erase; after -- what it wrote */
         int k = y->kind;
         if (k == BAY_DONE) card_used_text(USED_WRITTEN, d ? (long long)d->bytes : -1, y->used, sizeof y->used);
@@ -256,8 +275,9 @@ static int net_texts(const App *a, char *title, size_t tn, char *body, size_t bn
 }
 
 /* .alert.bad / .alert.info of the mockup: 12/16 padding, a 24px disc at the start, a 15px
- * title over a 14px line. Returns the height it took (0 = none), without the gap below. */
-static double net_bar(App *a, cairo_t *cr, double x0, double xr, double y) {
+ * title over a 14px line. Returns the height it took (0 = none), without the gap below.
+ * #2644: the build machine's restore card draws the same bar (screen_progress). */
+double net_bar(App *a, cairo_t *cr, double x0, double xr, double y) {
     char title[96], body[320];
     if (!net_texts(a, title, sizeof title, body, sizeof body)) return 0;
     const Theme *t = a->theme; int bad = a->st.net_kind == NET_LOST;
@@ -358,6 +378,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     snprintf(label, sizeof label, RLM "שיכפול במקביל · %s%s%s%s", image, dv_any ? " · חבילת דרייברים לפי דגם המגירה" : "",
              age[0] ? " · " : "", age);
     snprintf(big, sizeof big, "%s", "—"); left[0] = 0;
+    LcEta fe = { "", left, "" };   /* #1843: what stands under the number; just `left` unless the writing branch adds an end */
     /* #2081 (mockup 03 section 2, Nadav 24/10: "המשכפל צריך להיראות כמו 1"): a held end of a round
      * is the drawers' list -- a title, one line of what was written, no summary cards, no big number */
     const int held_end = ended && n && s->end_kind != END_NONE && s->end_held;
@@ -416,8 +437,23 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
             else if (eta >= 0) snprintf(left, sizeof left, "נבדק · כ-%d דק' נותרו", (eta + 30) / 60);
             else snprintf(left, sizeof left, "נבדק");
         }
+        /* #1843 (mockup 07/11): the expected end under the number -- only on the write's own screen, and never while the
+         * stream stands ("waiting for the stream" has no end to promise). An HH:MM is drawn only when the server said its
+         * clock is proven synced (#2144): a wrong hour is worse than none. The measured rate decides, as in the console;
+         * history speaks until it is measured; with neither, the screen says why there is no estimate. */
+        if (nw && !checking && !stalled) {
+            long long now = (long long)time(NULL);
+            if (eta >= 0 && s->fc_clock) {
+                clock_ago(a, -eta, fe.at, sizeof fe.at); fe.l1 = "לפי הקצב בפועל"; fe.l2 = left;
+            } else if (eta < 0 && rate < 0 && s->fc_clock && s->fc_at > now) {
+                time_t w = (time_t)s->fc_at; struct tm tm;
+                if (localtime_r(&w, &tm)) { strftime(fe.at, sizeof fe.at, "%H:%M", &tm); fe.l1 = "לפי היסטוריה · הקצב עוד לא נמדד"; fe.l2 = ""; }
+            } else if (eta < 0 && rate < 0 && s->fc_nohist) {
+                fe.l2 = "אין עדיין הערכת סיום (אין היסטוריה)";
+            }
+        }
     }
-    y += lc_hero(a, cr, x0, xr, y, label, title, s2, big, left, ended && nf && !held_end) + 16;   /* #2081: the held end title is ink, the rows carry the red */
+    y += lc_hero_eta(a, cr, x0, xr, y, label, title, s2, big, &fe, ended && nf && !held_end) + 16;   /* #2081: the held end title is ink, the rows carry the red */
 
     /* .mets: speed, what was received, the disks -- not on a held end (#2081: no summary cards) */
     double mw = (cw - 24) / 3, mh = held_end ? -12 : 80;

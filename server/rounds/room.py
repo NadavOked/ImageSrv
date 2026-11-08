@@ -29,7 +29,7 @@ from server.console import auth
 from server.rounds import drawer_cancel, drive_rates, room_drivers, room_precheck
 from server.library import drivers, minfree
 from server.agent import registry, reports
-from server.disks import disk_failures, drawer_slots, slot_names
+from server.disks import disk_failures, disk_sets, drawer_slots, slot_names
 from server.storage import locations as storage_locations
 from server.disks import model_slots   # #2001
 from server.db import _write_lock, journal, now_iso, update_one, writing
@@ -413,7 +413,9 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
         if "session_id" in member.keys():               # #1386 (a bare member: no wave to ask)
             cancels = drawer_cancel.by_dev(conn, member["session_id"], mac)
     drawers = []
-    for disk in _disks(conn, mac):
+    disks = _disks(conn, mac)
+    set_labels = disk_sets.labels_for(conn, disks)   # ‏#1857: שאילתה אחת לכל המגירות
+    for disk in disks:
         if not isinstance(disk, dict):
             continue
         port = disk.get("port")
@@ -431,6 +433,8 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
             # שנשאר. שורת כשל בלי אחד מהם שולחת אדם לחפש.
             "serial": disk.get("serial") or None,
             "model": disk.get("model") or None,
+            # ‏#1857 (מוקאפ 04): שם הסט והמדבקה ("קוריאים · xx-7") לפי הסידורי. ‏None = בלי סט.
+            "set_text": disk_sets.text_of(set_labels, disk.get("serial")),
             # ‏#105: שלושה מצבים, לא שניים. ‏`None` = הכונן לא דיווח serial,
             # ולכן הסבב (שסופר לפי serial) אינו יכול לדעת אם הוא נכתב —
             # "לא ניתן לזהות את הכונן", לא `False` ("נכתבה") ולא `True`.
@@ -2096,17 +2100,23 @@ def _with_pxe(conn: sqlite3.Connection, missing: list[dict]) -> list[dict]:
 
 def _wave_forecast(ctx, round_row: sqlite3.Row, wave: sqlite3.Row | None,
                    started_at: str | None) -> dict | None:
+    return learn_eta.with_clock(
+        wave_forecast(ctx.conn, getattr(ctx, "library", None), round_row, wave, started_at),
+        getattr(ctx, "clock_trust", None))   # #2684
+
+
+def wave_forecast(conn: sqlite3.Connection, library, round_row: sqlite3.Row,
+                  wave: sqlite3.Row | None, started_at: str | None) -> dict | None:
     """‏#1843: ‏`learn_eta.wave` לגל הנוכחי — לגל שרץ לפי הכוננים שיצא אליהם
     (‏`wave_rates.roster`), לגל פתוח לפי מי שהצטרף עד עכשיו. ‏None = אין גל."""
     session_id = round_row["wave_session_id"]
     if not session_id or wave is None or wave["state"] not in ("open", "running"):
         return None
-    stored = drive_rates.decision(ctx.conn, session_id)
-    drives = ((stored or {}).get("roster") if wave["state"] == "running" else None)         or wave_drives(ctx.conn, session_id)
-    library = getattr(ctx, "library", None)
+    stored = drive_rates.decision(conn, session_id)
+    drives = ((stored or {}).get("roster") if wave["state"] == "running" else None)         or wave_drives(conn, session_id)
     manifest = library.get(round_row["image_id"]) if library is not None else None
     size = manifest.get("total_compressed_bytes") if isinstance(manifest, dict) else None
-    return learn_eta.wave(ctx.conn, drives, size, started_at, session_id)
+    return learn_eta.wave(conn, drives, size, started_at, session_id)
 
 
 def _wave_rate(ctx, round_row: sqlite3.Row, wave: sqlite3.Row | None) -> dict | None:

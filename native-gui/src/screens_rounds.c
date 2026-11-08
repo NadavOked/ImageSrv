@@ -46,6 +46,7 @@ const char *smart_he(const char *smart) {
  * reason: a read-only disk did not fail SMART (smart.sh SMART_RO_HE / SMART_RED_HE) */
 const char *red_refusal_he(const char *reason) {
     return reason && !strcmp(reason, "readonly") ? "הדיסק במצב קריאה בלבד"
+         : reason && !strcmp(reason, "f1_observed") ? "נצפה F1 בהדלקה — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת"   /* #1858 (smart.sh SMART_F1_HE) */
          : "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת";
 }
 
@@ -62,6 +63,8 @@ const char *smart_reason_text(const char *reason) {
     if (!reason || !reason[0] || !strcmp(reason, "ok")) return "";
     /* #1742: /sys/block/<d>/ro = 1, or the server's cause of a refused write (EPERM/EROFS) */
     if (!strcmp(reason, "readonly")) return "הדיסק במצב קריאה בלבד";
+    /* #1858: a mark by serial (f1mark.sh), seen on the BIOS's F1 stop -- not a SMART word */
+    if (!strcmp(reason, "f1_observed")) return "נצפה F1 בהדלקה";
     /* #1921 (Nadav 20/10): red is the disk's own FAILED -- what stops an HP BIOS on "press F1";
      * 197/198 are orange -- an early sign, the disk still works */
     if (!strcmp(reason, "health_failed")) return "ה-BIOS יעצור ב-F1 — SMART: בדיקת הבריאות נכשלה";
@@ -149,6 +152,12 @@ const CUsed *cused_for_dev(const State *s, const char *dev) {
     for (int i = 0; dev && dev[0] && i < s->ncuseds; i++)
         if (!strcmp(s->cuseds[i].dev, dev)) return &s->cuseds[i];
     return NULL;
+}
+
+const char *disk_label_for_dev(const State *s, const char *dev) {
+    for (int i = 0; dev && dev[0] && i < s->ncdlabels; i++)
+        if (!strcmp(s->cdlabels[i].dev, dev)) return s->cdlabels[i].text;
+    return "";
 }
 
 int cloner_bay_count(const State *s) {

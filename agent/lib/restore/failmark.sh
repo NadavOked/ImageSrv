@@ -245,6 +245,7 @@ disk_failures_refresh() {
     # serial|port|cause. השורה הראשונה "ok" היא הראיה שה-JSON נקרא בשלמותו:
     # קובץ תשובה באמצע כתיבה (‏send_hello) או jq שנפל אינם "אין כשלים" —
     # הקובץ הקודם נשאר (עיקרון 5). 0 = רוענן.
+    command -v disk_f1_refresh >/dev/null 2>&1 && { disk_f1_refresh || :; }   # #1858: "נצפה F1" לפי serial, מאותה תשובה
     _dr_n="$RUN_DIR/disk_failures.next"
     json_get_join "$RUN_DIR/response.json" \
         '["ok"] + ((.disk_failures // []) | map("\(.serial // "")|\(.port // "")|\(.cause // "")"))' \

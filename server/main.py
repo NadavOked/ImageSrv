@@ -152,7 +152,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="קובץ החכירות של dnsmasq — שומר הזהות (#855) "
                              "משווה אליו את כתובת המקור של hello/progress")
     parser.add_argument("--interface", default=None,
-                        help="ממשק השידור; ברירת מחדל: הכרטיס של --server-url")
+                        help="עוקף במפורש את כרטיס השידור שנבחר לפי שירותים פר-כרטיס; "
+                             "ברירת מחדל: הכרטיס של --server-url (שרת שלא נערך) או בחירת המפעיל")
     parser.add_argument("--extra-cmdline",
                         default=os.environ.get("IMAGESRV_EXTRA_CMDLINE", ""),
                         help="תוספות לשורת הקרנל של הסוכן (למשל קונסולה "
@@ -629,6 +630,7 @@ def main() -> None:
     # ‏pytest.
     runtime = create_runtime(args.data_dir, args.images, server_url,
                              boot_dir=args.boot_dir, interface=interface,
+                             multicast_interface_override=args.interface,
                              sender_portbase=args.sender_portbase,
                              sender_simulate=args.sender_simulate,
                              storage_role=args.storage_role,

@@ -91,6 +91,7 @@ sr_gui_state() {
     _ss_ts=$(cat "$_ss_t/state" 2>/dev/null)
     _ss_n=$(cat "$_ss_t/partition" 2>/dev/null); case "$_ss_n" in *[!0-9]*) _ss_n= ;; esac
     cloner_gui_pace "$_ss_d" "$_ss_ts" "$_ss_b" "$_ss_z"
+    stream_beep_tick > /dev/null; stream_net_record   # #2644: the cloner's outage tunes and red/green bars (roundbeep.sh, #2067) -- log() is not the state
     _ss_c=0   # #1561: "ביטול השחזור" -- while the write can still be stopped, and not asked yet
     if [ -f "$_ss_g/restore.cancel" ]; then _ss_w="מבטל: עוצר את הכתיבה ומוחק את טבלת המחיצות…"
     elif [ "$_ss_ts" = "done" ]; then _ss_w="נכתב — מסיים: דרייברים ודיווח לשרת"
@@ -192,10 +193,11 @@ sr_refused() {
         session) _rf="הכניסה לקונסולה פגה או לא אומתה — היכנסו שוב ונסו שוב" ;;
         not-allowed) _rf="האימג׳ כבר אינו מותר למחשב הזה" ;;
         no-image) _rf="לא נבחר אימג׳" ;;
-        manifest) _rf="לא ניתן לקרוא מהשרת את פרטי האימג׳" ;;
+        manifest) _rf="לא ניתן לקרוא מהשרת את פרטי האימג׳" ;; pull) _rf="השרת לא אישר את השחזור למחשב הזה" ;;   # #2657
         no-disk) _rf="לא נמצא דיסק פנימי במחשב" ;;
         many-disks) _rf="במחשב יותר מדיסק פנימי אחד — לא משחזרים בניחוש" ;;   # #1807
         share) _rf="חלוקת המקום בין המחיצות לא אושרה" ;; share-plan) _rf="לא הצלחנו לחשב את חלוקת המקום בין המחיצות" ;;   # #1898 (single_restore.sh)
+        f1-observed) _rf="$SMART_F1_HE" ;;   # #1858 (f1mark.sh)
         smart-red|readonly) _rf="$SMART_RED_HE"; [ "$1" = smart-red ] || _rf="$SMART_RO_HE" ;;   # #1732, #1742 (smart.sh)
         *) _rf="הסיבה ביומן הסוכן ובקונסולה" ;;
     esac

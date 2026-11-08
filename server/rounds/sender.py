@@ -560,6 +560,8 @@ class SenderEngine:
         #: ‏#705: ‏`gate(interface)` → סיבת סירוב או None — השידור כבוי בכרטיס
         #: (רשת ← חיבורים פיזיים ← שירותים). ‏`create_runtime` מתקין.
         self.gate: Callable[[str | None], str | None] | None = None
+        # Resolve before bitrate selection and spawning, once per round.
+        self.select_interface: Callable[[dict], str | None] | None = None
         self._lock = threading.Lock()
         self._state: SendState | None = None
         self._process: subprocess.Popen | None = None
@@ -1137,6 +1139,12 @@ class SenderEngine:
                 log.exception("sender: reporting the crash of %s failed too", session["id"])
 
     def _send(self, session: dict) -> None:
+        if self.select_interface is not None:
+            try:
+                self.interface = self.select_interface(session)
+            except ValueError as exc:
+                self._fail(str(exc))
+                return
         if self.gate is not None:
             refused = self.gate(self.interface)
             if refused:

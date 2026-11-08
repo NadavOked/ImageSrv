@@ -328,4 +328,4 @@ def test_a_round_report_needs_no_token(server):
         "targets": [{"dev": "sda", "bytes_written": 1, "bytes_total": 2,
                      "state": "writing"}]})
     assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True}
+    assert r.json() == {"ok": True, "session_id": ids["session"]}   # #2657: the round it was recorded for

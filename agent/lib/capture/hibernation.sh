@@ -1,6 +1,6 @@
 #!/bin/sh
 # Read-only capture guards: NTFS fast-startup/hibernation (#651) and
-# BitLocker (#671). Both run before a byte moves; capture.sh calls them.
+# BitLocker (#671; read raw since #1840). Both run before a byte moves; capture.sh calls them.
 
 capture_hibernated_message() {
     # $1 = partition node. #1502 (metal 16/10, probe rc=14): with Fast Startup
@@ -66,17 +66,53 @@ probe_ntfs() {
     printf ']'
 }
 
-_bitlocker_refusal() {
-    # $1=idx. #671's line first, word for word. #1806: Home's "device
-    # encryption", waiting for activation, suspended and a decryption short
-    # of 100% all keep -FVE-FS- on the disk -- the operator who believes it is
-    # "off" reads his own state here, and the one fix that ends all of them.
-    echo "מחיצה $1 מוצפנת ב-BitLocker — כבו את BitLocker לפני הקליטה. זה כולל 'הצפנת מכשיר' ב-Windows Home, הצפנה שממתינה להפעלה, הצפנה מושהית ופענוח שעוד לא הגיע ל-100%: בכולם הדיסק עדיין מוצפן. בחלונות, כמנהל: manage-bde -off C: והמתינו עד ש-manage-bde -status מראה Fully Decrypted."
+# #1840 (Nadav 07/11, after FOG, Clonezilla, Ghost and MDT): a BitLocker volume
+# is copied sector by sector -- partclone.dd, the path every partition without a
+# filesystem we know already takes -- never shrunk, never grown, never mounted.
+# Until #1840 it was refused (#671, #1806). Its key stays in the source's TPM, so
+# on another computer the copy asks for the recovery key: the operator is told
+# before the first byte, and again when the copy is written (postdeploy.sh).
+CAPTURE_BITLOCKER_NOTE="מוצפן ב-BitLocker: יועתק כמו שהוא, בלי כיווץ; במחשב אחר יידרש מפתח שחזור"
+
+capture_bitlocker_gate() {
+    # $1=idx $2=fs $3=node. Before a byte (#1806). Encrypted = recorded in
+    # capture.bitlocker (read raw); stdout = the refusal when not checked.
+    _bg=$(bitlocker_state "$1" "$2" "$3")
+    case "$_bg" in
+        clear) return 0 ;;
+        encrypted) echo "$1" >> "$RUN_DIR/capture.bitlocker" \
+                       || echo "מחיצה $1 מוצפנת ב-BitLocker, וההעתקה הגולמית לא נרשמה — לא נקלט"
+                   log "partition $1: BitLocker -- read raw, as it is (#1840)" >&2 ;;
+        *) echo "$_bg" ;;
+    esac
 }
 
-_bitlocker_reason() {
-    # $1=idx $2=fs $3=node. FOG -FVE-FS-; empty=ok, text=refuse (#671).
-    case "$2" in *[Bb]it[Ll]ocker*) _bitlocker_refusal "$1"; return ;; esac
+capture_fs_of() {
+    # $1=idx $2=node. _fs_of, and "BitLocker" for a partition the gate found
+    # encrypted -- busybox blkid says "unknown" of it, the manifest says what it is.
+    if grep -qx "$1" "$RUN_DIR/capture.bitlocker" 2>/dev/null; then echo BitLocker; else _fs_of "$2"; fi
+}
+
+capture_used_bytes() {
+    # $1=node $2=fs. An encrypted volume is never mounted, not even to measure.
+    if [ "$2" = BitLocker ]; then echo null; else _used_bytes "$1" "$2"; fi
+}
+
+capture_bitlocker_note() {
+    # $1=disk. The note, orange, in the target's error field -- the console and
+    # the GUI show it while the capture runs and on its "done". Idempotent.
+    [ -s "$RUN_DIR/capture.bitlocker" ] || return 0
+    _bn="מחיצה $(awk 'NR > 1 { printf ", " } { printf "%s", $0 }' "$RUN_DIR/capture.bitlocker"): $CAPTURE_BITLOCKER_NOTE"
+    _bn_old=""; [ ! -f "$RUN_DIR/targets/$1/error" ] || _bn_old=$(cat "$RUN_DIR/targets/$1/error") || return 1
+    case "$_bn_old" in *"$CAPTURE_BITLOCKER_NOTE"*) return 0 ;; esac
+    printf '%s\n' "${_bn_old:+$_bn_old · }$_bn" > "$RUN_DIR/targets/$1/error" || return 1
+    log "WARNING: $1: $_bn"
+}
+
+bitlocker_state() {
+    # $1=idx $2=fs $3=node. FOG -FVE-FS- (#671). stdout: clear | encrypted |
+    # why it could not be checked -- three states, never two (principle 5).
+    case "$2" in *[Bb]it[Ll]ocker*) echo encrypted; return ;; esac
     for _bltool in dd grep tr; do
         command -v "$_bltool" >/dev/null 2>&1 || {
             echo "לא הצלחנו לבדוק BitLocker במחיצה $1: הכלי $_bltool חסר"
@@ -102,8 +138,8 @@ _bitlocker_reason() {
     LC_ALL=C grep -qF -- '-FVE-FS-' "$_bltext"; _blrc=$?
     rm -f "$_blraw" "$_bltext"
     case "$_blrc" in
-        0) _bitlocker_refusal "$1" ;;
-        1) return ;;
+        0) echo encrypted ;;
+        1) echo clear ;;
         *) echo "לא הצלחנו לבדוק BitLocker במחיצה $1: חיפוש החתימה נכשל (grep rc=$_blrc)" ;;
     esac
 }

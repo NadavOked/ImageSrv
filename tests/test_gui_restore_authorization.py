@@ -310,6 +310,7 @@ def test_the_restore_uses_the_session_once_and_deletes_it(tmp_path):
                      'sr_share_gate() { return 0; }; '   # #1898: the split question -- its own tests
                      'pull_open() { [ -s "$PULL_JAR" ] && echo "PULL-WITH-SESSION"; PULL_SESSION=ses_1; }; '
                      'progress_loop() { :; }; run_restore() { return 0; }; stage_drivers() { :; }; writemark_release_done() { :; }; '
+                     'session_open_gate() { :; }; '   # #2657: the open-job gate -- its own tests (test_unicast_pull.py)
                      'pull_close() { :; }; '
                      'single_restore_run img_1; echo "rc=$?"')
     assert "PULL-WITH-SESSION" in out and "rc=0" in out, out

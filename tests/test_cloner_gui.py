@@ -277,7 +277,7 @@ def test_the_kiosk_load_chain_carries_the_cached_smart_verdict(tmp_path):
     # ‏#432: 7/8 = הקישור — ‏null כשהדיסק אינו מאחורי libata (כאן: תיקייה, לא קישור).
     # #1495: 10/11 = the drawer and the connection -- a disk with no ATA port and no
     # NVMe address is not in any mapping: 0, connection unknown (never a guessed number)
-    assert any(l.startswith("cdisk=") and l.endswith("|passed||null|null||0||unchecked|") for l in lines), lines   # #1366: field 9, no CRC colour; #1798: 12 -- no disk to read the mark from = unchecked; #1921: 13 -- no hw note
+    assert any(l.startswith("cdisk=") and l.endswith("|passed||null|null||0||unchecked||||") for l in lines), lines   # #1366: field 9, no CRC colour; #1798: 12 -- no disk to read the mark from = unchecked; #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
 
 
 # --- ‏#867/#874: המלאי הממתין — ממוין לפי מספר הדיסק, ונושא את זיכרון השרת ----
@@ -361,8 +361,8 @@ def test_a_disk_the_server_remembers_reports_failed_last_with_its_cause(tmp_path
     לצדו נשאר `passed` בלי סיבה. ‏sgdisk אינו נקרא. בקרה שלילית: על main
     שניהם `passed` (הזיוף לא מדפיס טבלה), ו-`sgdisk -p` נקרא."""
     lines = idle_state(tmp_path, {"sda": "1", "sdb": "2"}, failed={"sda": "cable"})
-    assert lines[0] == "cdisk=1|sda|Model sda|512000|failed_last|cable|null|null||1|SATA 0|clean|", lines   # #1921: 13 -- no hw note
-    assert lines[1] == "cdisk=2|sdb|Model sdb|512000|passed||null|null||2|SATA 1|clean|", lines
+    assert lines[0] == "cdisk=1|sda|Model sda|512000|failed_last|cable|null|null||1|SATA 0|clean||||", lines   # #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
+    assert lines[1] == "cdisk=2|sdb|Model sdb|512000|passed||null|null||2|SATA 1|clean||||", lines   # #1858: fields 14-16 empty -- no F1 mark
 
 
 @requires_native("jq", why="the shared GUI state reads the cached hello reply")

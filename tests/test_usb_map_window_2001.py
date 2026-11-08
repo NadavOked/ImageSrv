@@ -6,8 +6,8 @@ comfortable. The mockup he approved -- docs/design/console-redesign/mockups/slot
 empty one too, a CD/DVD drive as a row that is never a drawer, each NVMe controller): the
 connection, what is on it now, a name, a switch "פעיל". His decisions (the issue, 22/10):
 1. the name replaces "דיסק N" on every screen; an active row with no name is "דיסק N" by order;
-3. the default: a connection with a disk is active, an empty one is not -- and with no saved
-   mapping that is what is in force, numbered in order;
+3. the default: a connection with a disk is active, and (#1874, Nadav 07/11) so is an empty SATA below
+   the last SATA with a disk -- drawer k = sata:k, what is in force with no saved mapping;
 4. "הוסף חיבור" is a type and a number only, no PCI address (an NVMe gets its address when a
    disk is seen there);
 5. F2 saves, Enter ends a name, F5 is the default, Tab / Space, Alt+Shift for Hebrew.
@@ -36,7 +36,7 @@ MODEL = "HP Compaq 8000 Elite SFF PC"
 TO_MAP = ["KEY DOWN"] * 4 + ["KEY ENTER"]
 TO_RESET = ["KEY DOWN"] * 7 + ["KEY ENTER", "KEY TAB", "KEY ENTER"]
 NV3, NV4 = "nvme:0000:03:00.0", "nvme:0000:04:00.0"
-DEFAULT = ["sata:1", "sata:3", NV3, NV4]
+DEFAULT = ["sata:1", "sata:2", "sata:3", NV3, NV4]   # #1874: by the real SATA number, an empty SATA 1 is drawer 2
 
 STUBS = ('list_disks() { echo sda sdb nvme0n1 nvme1n1 sdz; }; '
          'disk_port() { case "$1" in sda) echo 1 ;; sdb) echo 3 ;; esac; }; '
@@ -118,17 +118,17 @@ def test_the_window_shows_every_connection_the_empty_ones_and_the_dvd_too(tmp_pa
     assert "dlg\tmap\t0\tמיפוי חיבורים\t⁨HP Compaq 8000 Elite SFF PC⁩ · נשמר על הדיסק-און-קי לדגם הזה" in frame
     assert conns(frame) == [
         ["SATA 0", "", "ST500DM002", "500GB", "", "", "דיסק 1", "2", "1", "disk"],
-        ["SATA 1", "", "ריק", "", "", "", "", "0", "0", "empty"],
-        ["SATA 2", "", "WDC WD2500", "250GB", "", "", "דיסק 2", "0", "1", "disk"],
+        ["SATA 1", "", "ריק", "", "", "", "דיסק 2", "0", "1", "empty"],   # #1874: between two disks, a drawer by its number
+        ["SATA 2", "", "WDC WD2500", "250GB", "", "", "דיסק 3", "0", "1", "disk"],
         ["SATA 3", "", "ריק", "", "", "", "", "0", "0", "empty"],
         ["SATA 4", "", "ריק", "", "", "", "", "0", "0", "empty"],
         ["SATA 5", "", "כונן CD/DVD · ⁨DVD-RAM GH60L⁩", "", "", "", "", "0", "0", "optical"],
-        ["NVMe 1", "03:00.0", "Samsung 970", "256GB", "", "", "דיסק 3", "0", "1", "disk"],
-        ["NVMe 2", "04:00.0", "WD SN550", "1TB", "", "", "דיסק 4", "0", "1", "disk"]], frame
+        ["NVMe 1", "03:00.0", "Samsung 970", "256GB", "", "", "דיסק 4", "0", "1", "disk"],
+        ["NVMe 2", "04:00.0", "WD SN550", "1TB", "", "", "דיסק 5", "0", "1", "disk"]], frame
     assert "SanDisk" not in frame                                   # the stick is no connection
     assert recs(frame, "d.alert")[0][0].startswith("<b>אין מיפוי שמור</b> — זו ברירת המחדל")   # the mockup's "empty"
     assert recs(frame, "d.addlink") == [["+ הוסף חיבור", "לחיבור שהמחשב לא מציג"]]
-    assert recs(frame, "d.foot") == [["4 פעילים · ברירת המחדל", ""]]
+    assert recs(frame, "d.foot") == [["5 פעילים · ברירת המחדל", ""]]
     assert recs(frame, "d.btn") == [["ביטול", "Esc", "plain", "0"], ["שמירה", "F2", "pri", "0"]]   # no F5: nothing saved
     keys = [k[0] for k in recs(frame, "key")]
     assert keys == ["↑ ↓", "Tab", "רווח", "+", "Alt+Shift", "F2"], keys
@@ -148,7 +148,7 @@ def test_a_saved_list_and_names_are_what_the_window_opens_with(tmp_path):
 
 
 def test_names_with_a_space_and_in_hebrew_saved_by_model_and_in_force(tmp_path):
-    keys = TO_MAP + chars("Top 1") + ["KEY ENTER", "KEY DOWN", "CHAR 20"] + chars("מגירה תחתונה") + ["KEY F2"]
+    keys = TO_MAP + chars("Top 1") + ["KEY ENTER", "KEY DOWN"] + chars("מגירה תחתונה") + ["KEY F2"]
     out, usb = stick(tmp_path, keys, then='jq -c ".drawer_slots" "$RUN_DIR/response.json"; echo "@@"; '
                                           'cat "$RUN_DIR/drawer_names"; echo "@@"; '
                                           'printf "%s;" "$(usb_drawer_name sda 1)" "$(usb_drawer_name sdb 3)" '
@@ -164,13 +164,13 @@ def test_names_with_a_space_and_in_hebrew_saved_by_model_and_in_force(tmp_path):
 
 
 def test_space_on_a_row_flips_its_switch_and_the_drawers_close_up(tmp_path):
-    out, usb = stick(tmp_path, TO_MAP + ["CHAR 20", "KEY F2"], then='disk_drawer sdb 3')
-    assert saved(usb)["drawer_slots"][MODEL] == ["sata:3", NV3, NV4], out.stdout + out.stderr
-    assert out.stdout.split("@@")[1].strip() == "1|SATA 2", out.stdout   # WD250 on SATA 2 is drawer 1 now
+    out, usb = stick(tmp_path, TO_MAP + ["KEY DOWN", "CHAR 20", "KEY F2"], then='disk_drawer sdb 3')
+    assert saved(usb)["drawer_slots"][MODEL] == ["sata:1", "sata:3", NV3, NV4], out.stdout + out.stderr
+    assert out.stdout.split("@@")[1].strip() == "2|SATA 2", out.stdout   # the empty SATA 1 off: WD250 on SATA 2 is drawer 2 now
     assert "slot_names" not in saved(usb)                           # no name given, none kept
     other = tmp_path / "another"; other.mkdir()                     # a stick with nothing saved
     out, _usb = stick(other, TO_MAP + ["KEY DOWN", "KEY LEFT", "KEY DOWN", "KEY RIGHT"])
-    assert [a for _, _, a in table(frame_of(out))][:3] == ["1", "1", "0"]   # Left/Right too
+    assert [a for _, _, a in table(frame_of(out))][:3] == ["1", "0", "0"]   # Left/Right too
 
 
 def test_tab_is_name_or_switch_and_enter_ends_the_name(tmp_path):
@@ -178,8 +178,8 @@ def test_tab_is_name_or_switch_and_enter_ends_the_name(tmp_path):
     assert focus(frame_of(out)) == [("SATA 0", "1")]                # the name
     out, _usb = stick(tmp_path, TO_MAP + ["KEY TAB", "KEY TAB"])
     assert focus(frame_of(out)) == [("SATA 0", "2")]                # the switch
-    out, _usb = stick(tmp_path, TO_MAP + ["KEY DOWN", "KEY TAB"])
-    assert focus(frame_of(out)) == [("SATA 1", "2")]                # off: no name to go to
+    out, _usb = stick(tmp_path, TO_MAP + ["KEY DOWN"] * 3 + ["KEY TAB"])
+    assert focus(frame_of(out)) == [("SATA 3", "2")]                # off: no name to go to
     out, _usb = stick(tmp_path, TO_MAP + chars("A"))
     assert focus(frame_of(out)) == [("SATA 0", "1")] and conns(frame_of(out))[0][5] == "A"   # a letter starts the name
     out, _usb = stick(tmp_path, TO_MAP + chars("A") + ["KEY ENTER", "CHAR 20"])
@@ -200,7 +200,7 @@ def test_a_dvd_drive_is_never_a_drawer(tmp_path):
 
 
 def test_a_letter_on_a_connection_that_is_off_says_so(tmp_path):
-    out, _usb = stick(tmp_path, TO_MAP + ["KEY DOWN"] + chars("a"))
+    out, _usb = stick(tmp_path, TO_MAP + ["KEY DOWN"] * 3 + chars("a"))
     frame = frame_of(out)
     assert recs(frame, "d.alert")[0][0] == "החיבור לא פעיל — הפעל אותו (רווח) כדי לתת לו שם", frame
     assert "sb\twarn\tערך לא תקין" in frame
@@ -234,10 +234,10 @@ def test_spaces_at_the_ends_of_a_name_are_not_saved(tmp_path):
 
 def test_the_footer_counts_the_changes_not_saved(tmp_path):
     out, _usb = stick(tmp_path, TO_MAP + ["CHAR 20"])
-    assert recs(frame_of(out), "d.foot") == [["3 פעילים", "· שינוי אחד לא נשמר"]]
+    assert recs(frame_of(out), "d.foot") == [["4 פעילים", "· שינוי אחד לא נשמר"]]
     assert recs(frame_of(out), "d.alert")[0][1] == "info"             # until saved: the rows stay put under the mouse
     out, _usb = stick(tmp_path, TO_MAP + ["CHAR 20", "KEY DOWN", "KEY DOWN"] + chars("x"))
-    assert recs(frame_of(out), "d.foot") == [["3 פעילים", "· 2 שינויים לא נשמרו"]]
+    assert recs(frame_of(out), "d.foot") == [["4 פעילים", "· 2 שינויים לא נשמרו"]]
 
 
 # --- "הוסף חיבור": a type and a number, no PCI address (decision 4) --------------------------------
@@ -250,9 +250,9 @@ def test_add_a_sata_port_the_machine_does_not_show(tmp_path):
     assert [k[0] for k in recs(frame, "key")] == ["Tab", "Enter", "Esc"]
     out, usb = stick(tmp_path, TO_MAP + ["CHAR 2b", "KEY TAB"] + chars("כרטיס") + ["KEY ENTER"])
     row = conns(frame_of(out))[6]
-    assert row == ["SATA 6", "", "ריק", "", "נוסף ידנית · לא נמצא במחשב", "כרטיס", "דיסק 3", "2", "1", "manual"], row
+    assert row == ["SATA 6", "", "ריק", "", "נוסף ידנית · לא נמצא במחשב", "כרטיס", "דיסק 4", "2", "1", "manual"], row
     out, usb = stick(tmp_path, TO_MAP + ["CHAR 2b", "KEY TAB"] + chars("כרטיס") + ["KEY ENTER", "KEY F2"])
-    assert saved(usb) == {"drawer_slots": {MODEL: ["sata:1", "sata:3", "sata:7", NV3, NV4]},
+    assert saved(usb) == {"drawer_slots": {MODEL: ["sata:1", "sata:2", "sata:3", "sata:7", NV3, NV4]},
                           "slot_names": {MODEL: {"sata:7": "כרטיס"}}}, out.stdout + out.stderr
     out, _usb = stick(tmp_path, TO_MAP)                                    # the next time: a saved row not found
     assert conns(frame_of(out))[6][:6] == ["SATA 6", "", "ריק", "", "לא נמצא במחשב", "כרטיס"]
@@ -263,14 +263,14 @@ def test_add_an_nvme_by_number_and_it_takes_its_address_when_a_disk_is_seen(tmp_
     out, _usb = stick(tmp_path, TO_MAP + to_nvme)
     assert recs(frame_of(out), "d.add")[0][:4] == ["NVMe", "3", "", "0"]
     out, usb = stick(tmp_path, TO_MAP + to_nvme + ["KEY ENTER", "KEY F2"])
-    assert saved(usb)["drawer_slots"][MODEL] == ["sata:1", "sata:3", NV3, NV4, "nvme#3"], out.stdout + out.stderr
+    assert saved(usb)["drawer_slots"][MODEL] == ["sata:1", "sata:2", "sata:3", NV3, NV4, "nvme#3"], out.stdout + out.stderr
     out, _usb = stick(tmp_path, TO_MAP, then='usb_settings_load; usb_answer; jq -c .drawer_slots "$RUN_DIR/response.json"')
     assert conns(frame_of(out))[8][:2] == ["NVMe 3", ""]                   # no address: none shown
-    assert json.loads(out.stdout.split("@@")[1]) == ["sata:1", "sata:3", NV3, NV4, "nvme#3"]
+    assert json.loads(out.stdout.split("@@")[1]) == ["sata:1", "sata:2", "sata:3", NV3, NV4, "nvme#3"]
     out, _usb = stick(tmp_path, TO_MAP, stubs=THIRD_NVME,
                       then='usb_settings_load; usb_answer; jq -c .drawer_slots "$RUN_DIR/response.json"')
     assert conns(frame_of(out))[8][:4] == ["NVMe 3", "05:00.0", "KINGSTON NV2", "2TB"], frame_of(out)
-    assert json.loads(out.stdout.split("@@")[1]) == ["sata:1", "sata:3", NV3, NV4, "nvme:0000:05:00.0"]
+    assert json.loads(out.stdout.split("@@")[1]) == ["sata:1", "sata:2", "sata:3", NV3, NV4, "nvme:0000:05:00.0"]
 
 
 def test_add_refuses_a_connection_already_there(tmp_path):
@@ -284,13 +284,13 @@ def test_add_refuses_a_connection_already_there(tmp_path):
 
 
 def test_nothing_active_or_more_than_eight_is_not_saved_and_said(tmp_path):
-    off = ["CHAR 20", "KEY DOWN", "KEY DOWN", "CHAR 20", "KEY DOWN", "KEY DOWN", "KEY DOWN", "CHAR 20", "KEY DOWN", "CHAR 20"]
+    off = ["CHAR 20", "KEY DOWN", "CHAR 20", "KEY DOWN", "CHAR 20", "KEY DOWN", "KEY DOWN", "KEY DOWN", "CHAR 20", "KEY DOWN", "CHAR 20"]
     out, usb = stick(tmp_path, TO_MAP + off + ["KEY F2"])
     assert all(a == "0" for _, _, a in table(frame_of(out))), frame_of(out)
     assert recs(frame_of(out), "d.alert")[0][0] == "<b>לא נשמר:</b> אין אף חיבור פעיל — צריך לפחות אחד."
     assert "sb\tbad\tלא נשמר" in frame_of(out)                      # the mockup's red dot
     assert not (usb / "settings.json").exists()
-    on = ["KEY DOWN", "CHAR 20", "KEY DOWN", "KEY DOWN", "CHAR 20", "KEY DOWN", "CHAR 20"]
+    on = ["KEY DOWN"] * 3 + ["CHAR 20", "KEY DOWN", "CHAR 20"]
     add = ["CHAR 2b", "KEY ENTER", "CHAR 2b", "KEY ENTER"]
     out, usb = stick(tmp_path, TO_MAP + on + add + ["KEY F2"])
     assert sum(a == "1" for _, _, a in table(frame_of(out))) == 9, frame_of(out)
@@ -302,7 +302,7 @@ def test_f5_is_the_default_and_saving_it_removes_this_models_mapping(tmp_path):
     other = {"drawer_slots": {"HP 8100": ["sata:2"]}}
     mine = {"drawer_slots": {MODEL: ["sata:3"], **other["drawer_slots"]}, "slot_names": {MODEL: {"sata:3": "x"}}}
     out, _usb = stick(tmp_path, TO_MAP + ["KEY F5"], settings=mine)
-    assert table(frame_of(out)) == [("SATA 0", "", "1"), ("SATA 1", "", "0"), ("SATA 2", "", "1"), ("SATA 3", "", "0"),
+    assert table(frame_of(out)) == [("SATA 0", "", "1"), ("SATA 1", "", "1"), ("SATA 2", "", "1"), ("SATA 3", "", "0"),
                                     ("SATA 4", "", "0"), ("SATA 5", "", "0"), ("NVMe 1", "", "1"), ("NVMe 2", "", "1")]
     out, usb = stick(tmp_path, TO_MAP + ["KEY F5", "KEY F2"], settings=mine,
                      then='jq -c .drawer_slots "$RUN_DIR/response.json"')
@@ -316,7 +316,7 @@ def test_with_no_saved_list_the_default_is_in_force_and_follows_the_disks(tmp_pa
               'disk_drawer sdb 3')
     out, _usb = stick(tmp_path, [], then=script)
     first, second, drawer = out.stdout.split("@@")[1].strip().split("\n")
-    assert (json.loads(first), json.loads(second), drawer) == (DEFAULT, ["sata:3"], "1|SATA 2"), out.stdout + out.stderr
+    assert (json.loads(first), json.loads(second), drawer) == (DEFAULT, ["sata:1", "sata:2", "sata:3"], "3|SATA 2"), out.stdout + out.stderr
 
 
 def test_reset_removes_this_models_names_too_and_keeps_another_models(tmp_path):
@@ -344,7 +344,7 @@ def test_the_local_clone_screen_gets_the_name_of_each_drawer(tmp_path):
                       then=f'mkdir -p "$LC/inv"; echo local > "$LC/screen"; {lines} lc_gui_state; grep ^lc_disk= "$GUI_DIR/state"')
     disks = out.stdout.split("@@")[1].strip().split("\n")
     assert [(d.split("|")[1], d.split("|")[13], d.split("|")[17]) for d in disks] == [
-        ("sda", "1", "עליונה"), ("sdb", "2", "")], out.stdout + out.stderr
+        ("sda", "1", "עליונה"), ("sdb", "3", "")], out.stdout + out.stderr
 
 
 # --- the mouse, the keyboard language and the name on the clone screen (native-gui) ---------------
@@ -404,7 +404,7 @@ def test_a_click_on_a_name_or_a_switch_is_the_keys_to_it(drv, tmp_path):
     names = hits_named(drv(), gui_dir)
     for c in ("SATA 0", "SATA 4", "NVMe 1", "NVMe 2"):
         assert f"active:{c}" in names, names
-    assert "active:SATA 5" not in names and "name:SATA 1" not in names   # the DVD drive; a row that is off has no name
+    assert "active:SATA 5" not in names and "name:SATA 3" not in names   # the DVD drive; a row that is off has no name
     assert press(drv(), gui_dir, "name:SATA 2") == ["KEY DOWN", "KEY DOWN", "KEY TAB"]
     assert press(drv(), gui_dir, "active:NVMe 1") == ["KEY DOWN"] * 5 + ["KEY LEFT"]   # past the DVD drive
     assert press(drv(), gui_dir, "addlink") == ["CHAR 2b"]

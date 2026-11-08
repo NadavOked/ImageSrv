@@ -65,6 +65,7 @@ capture_snap() {
 capture_unhib_note() {
     # Existing local-clone wording; the task's error field carries warnings
     # even on success. Reapply after direct send initializes its second pass.
+    capture_bitlocker_note "$1" || return 1   # #1840 (hibernation.sh), the same field
     case "$(cat "$RUN_DIR/src_unhib" 2>/dev/null)" in
         unhibernated) _cv_note=$LC_NTFS_UNHIB ;;
         unhibernated_logfile) _cv_note=$LC_NTFS_UNHIB_LOGFILE ;;

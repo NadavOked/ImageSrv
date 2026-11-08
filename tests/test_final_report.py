@@ -259,6 +259,9 @@ STUBS = (
     # isolation; their own tests are test_raid_drawer_1808 / test_head_share_1898.
     'drawer_gates() { echo "$@"; }; '
     'drawers_bound() { echo "$@"; }; '   # #2434: the drawers' identity -- its own tests (test_target_identity_2434.py)
+    # #2657: the open-round gate before the disk -- the same isolation; its
+    # own tests (test_open_gate_2657.py) source the real opengate.sh after these.
+    'session_open_gate() { :; }; '
     'pick_internal_disk() { echo sda; }; '
     'list_drawers() { echo "sdb sdc"; }; '
     # ‏#1410: resolve_target_drawers ממפה כל פורט שנבחר לדיסק אחד בדיוק

@@ -43,7 +43,7 @@ function setup(answers = {}) {
     },
   });
   vm.runInContext(cut('const SERVER_HEALTH = {};', 'function updateAlertBadge()')
-    + cut('function markSecondaryStatus(', '/* ‏#1179: דף "העברות"')
+    + cut('function markSecondaryStatus(', '/* F13: רענון תקופתי')
     + ';this.t={serverDotState,paintServerDot,noteServerHealth,refreshServerDots,markSecondaryStatus,SERVER_HEALTH,setNodes:(n)=>{SIDEBAR_NODES=n;}};', ctx);
   return {t: ctx.t, dots, rows, calls, rail, ctx};
 }

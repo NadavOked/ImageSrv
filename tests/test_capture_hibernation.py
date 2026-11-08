@@ -39,7 +39,7 @@ def _bitlocker(tmp_path, dd_body: str) -> str:
         make_stubs(tmp_path / "stubs", {"dd": f"#!/bin/sh\n{dd_body}\n"})
         + f'RUN_DIR={posix(run)!r}; LOG_FILE={posix(run / "agent.log")!r}; '
         + f'. {posix(AGENT)}/lib/capture/hibernation.sh; '
-        + '_bitlocker_reason 1 ntfs /dev/fake'
+        + 'bitlocker_state 1 ntfs /dev/fake'
     )
     return sh(script).strip()
 
@@ -91,8 +91,8 @@ def test_bitlocker_header_has_detected_clean_and_unable_states(tmp_path):
     clean = _bitlocker(tmp_path / "clean", "printf plain-header")
     encrypted = _bitlocker(tmp_path / "encrypted", "printf -- '-FVE-FS-'")
     assert "לא הצלחנו לבדוק" in unable and "dd rc=7" in unable
-    assert clean == ""
-    assert "BitLocker" in encrypted and "מוצפנת" in encrypted
+    assert clean == "clear"          # #1840: three answers, not "" for clean
+    assert encrypted == "encrypted"  # #1840: read raw, not refused
 
 
 def test_detection_commands_are_read_only():

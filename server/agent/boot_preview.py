@@ -14,6 +14,10 @@
 2. `bootguard.peek` — מה `guard` היה עושה בבקשה **הבאה**, בלי לספור אותה;
 3. `boot.grub_menu.decide` — ההחלטה עצמה, הפונקציה שמייצרת את קובץ ה-GRUB.
 
+תשובה שהמחולל אינו מבין (`schema`, ‏#2666) עוברת בשלב 2 דרך `answer_failure.peek`
+במקום `bootguard.peek`: אותו סדר כמו `hello.make_resolver` (לפני `known`), אותו
+תקציב ואותו חלון, בלי לספור (#2682).
+
 **אי-ודאות היא תשובה** (עיקרון 5). ‏`decided: false` — ולא ניחוש — כשבניית
 התשובה נכשלה, כשמונה האתחולים לא נקרא, או ש-`decide` החזירה קוד שהתצוגה אינה
 מכירה. "לא הצלחנו לבדוק" אינו "יעלה מהדיסק".
@@ -32,7 +36,7 @@ import sqlite3
 
 from boot.grub_menu import AGENT, LOCAL, decide
 
-from server.agent import bootguard
+from server.agent import answer_failure, bootguard
 from server.agent.hello import build_answer
 from server.db import now_iso
 from server.library.images import ImageLibrary
@@ -47,6 +51,7 @@ _AGENT_KINDS = {
     "session-joinable": "session",  # סבב פתוח או רץ — מצטרף
     "cloner-wait": "wait",          # משכפל בלי סבב — מסך המתנה
     "no-task": "auto",              # בנייה/כיתה בלי משימה — עולה אוטומטית למסך שלה
+    "answer-failure-screen": "failure",   # #2666: תשובה לא מובנת בכרטיס מפיץ — מסך הכישלון
 }
 
 #: למה `decided` הוא false. קודים, לא טקסט: הקונסולה אומרת "לא ידוע" ועוד מילה.
@@ -93,9 +98,17 @@ def preview(conn: sqlite3.Connection, library: ImageLibrary, store: SessionStore
     """ההחלטה של האתחול הבא של מכונה **רשומה** אחת. לעולם אינה זורקת ואינה כותבת."""
     try:
         answer = build_answer(conn, library, store, mac, read_only=True)
-        if answer.get("known") is not True:
+        if answer_failure.failed(answer):
+            # ‏#2682: אותו סדר ואותה החלטה כמו `hello.make_resolver` -- תשובה שהמחולל אינו
+            # מבין נבדקת לפני `known` ולפני `bootguard`, ובתקציב של `answer_failure`
+            # (‏#2666) מקבלת את הדגל. התצוגה מניחה בקשה שהגיעה לכרטיס מפיץ, כמו כל
+            # שאר התצוגה (ראו "מה שהתצוגה אינה יודעת").
+            offered = answer_failure.peek(conn, mac, answer)
+            checked = None if offered is None else (offered, None)
+        elif answer.get("known") is not True:
             return _undecided(WHY_NOT_REGISTERED)   # נמחקה בין הרשימה לבדיקה
-        checked = bootguard.peek(conn, mac, answer)
+        else:
+            checked = bootguard.peek(conn, mac, answer)
         task, session = _offered(answer)
     except Exception:  # noqa: BLE001 — מכונה אחת שנכשלה אינה מפילה את החדר
         log.exception("boot preview of %s failed", mac)

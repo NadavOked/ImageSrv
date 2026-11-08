@@ -79,9 +79,9 @@ const base = {
   [`/storage-nodes/${NODE}/console/images`]: [{id: 'img_h1', name: 'Windows Haifa'}],
 };
 
-test('the branches page has three tabs: שרתים, העברות, קבוצות', () => {
+test('the branches page has two tabs: שרתים, קבוצות — the transfers tab is gone (#1781, נדב 07/11)', () => {
   const {run} = setup(base);
-  assert.equal(JSON.stringify(run('pages.branches.tabs')), JSON.stringify(['שרתים', 'העברות', 'קבוצות']));
+  assert.equal(JSON.stringify(run('pages.branches.tabs')), JSON.stringify(['שרתים', 'קבוצות']));
   assert.equal(run('pageAllowed("branches")'), true);
   // 16/10: a primary/standalone without an active secondary still gets the page (to register the first)
   run('ME.capabilities.interbranch_transfer=false');
@@ -97,7 +97,7 @@ test('16/10: with no secondary yet the page is an empty state with a prominent r
     {capabilities: {interbranch_transfer: false, enroll_secondary: true}});
   await run('loadBranchesData()');
   assert.equal(run('pageAllowed("branches")'), true);
-  for (const tab of [0, 1, 2]) {
+  for (const tab of [0, 1]) {
     const html = run(`branchesPage(${tab})`);
     assert.match(html, /data-testid="branches-empty"/);
     assert.match(html, /אין עדיין שרת משנה/);
@@ -111,13 +111,15 @@ test('16/10: with no secondary yet the page is an empty state with a prominent r
   assert.ok(calls.find((c) => c.url.endsWith('/storage-nodes')));
 });
 
-test('16/10: once a secondary exists the page has its three tabs and the transfers come back', async () => {
+test('#1781: once a secondary exists the page has its two tabs; transfers live in the image menu, and the inter-site rate cap stays on the servers tab', async () => {
   const {run} = setup(base, {capabilities: {interbranch_transfer: true, enroll_secondary: true}});
   await run('loadBranchesData()');
-  const html = run('branchesPage(1)');
-  assert.doesNotMatch(html, /data-testid="branches-empty"/);
-  assert.match(html, /העברות/);
-  assert.match(html, /הגבלת קצב בין אתרים/);
+  for (const tab of [0, 1]) {
+    const html = run(`branchesPage(${tab})`);
+    assert.doesNotMatch(html, /data-testid="branches-empty"/);
+    assert.doesNotMatch(html, /<th[^>]*>התחיל<\/th>|נסה שוב|העבר אימג'/, 'no transfers table, no per-server transfer button');
+  }
+  assert.match(run('branchesPage(0)'), /הגבלת קצב בין אתרים/);
 });
 
 test('the servers tab lists each secondary with a measured connection, not a frozen "checking…"', async () => {
@@ -172,7 +174,7 @@ test('an unreachable secondary shows the reason and the server-recorded time (#1
   const html = run('branchesPage(0)');
   assert.match(html, /class="status err" id="branch-row-conn-n0de"><i><\/i>לא ענה — (19\/09\/2026 )?08:12<span class="sub">החיבור נסגר לפני סוף הכותרות<\/span><span class="sub">ענתה לאחרונה 18\/09\/2026 07:30<\/span>/,
     'the failure time and the last answer are the server\u2019s last_error_at / last_seen_at');
-  assert.equal(run('pages.branches.tabs.length'), 3);
+  assert.equal(run('pages.branches.tabs.length'), 2);
 });
 
 test('#1017: without server timestamps there is no time at all — never the browser clock', async () => {
@@ -251,32 +253,20 @@ test('the header shows a count and "לא מגיב" tag when a secondary did not 
   assert.match(html, /1 לא מגיב</);
 });
 
-test('the transfers tab shows progress, state in Hebrew, and a retry button only for a failed transfer', async () => {
+test('#1781: the old transfers tab, its retry, its sheet and the per-secondary page are gone from the source', () => {
   const {run} = setup(base);
-  await run('loadBranchesData()');
-  const html = run('branchesPage(1)');
-  assert.match(html, /Office 365/);
-  assert.match(html, /שולח/);
-  assert.match(html, /נכשל/);
-  assert.match(html, /אינו תואם ל-sha256/);
-  assert.match(html, /admin/);
-  assert.match(html, /נסה שוב/);
-  assert.equal((html.match(/נסה שוב/g) || []).length, 1, 'only the failed transfer offers retry');
-});
-
-test('retrying a failed transfer re-posts the same node/image and reloads the list', async () => {
-  const {run, calls} = setup(base);
-  await run('loadBranchesData()');
-  await run(`retryBranchTransfer('${NODE}', 'img_2c8e04')`);
-  const post = calls.find((c) => c.method === 'POST' && c.url.endsWith('/storage-nodes/n0de/transfer'));
-  assert.ok(post && post.body.image_id === 'img_2c8e04');
+  for (const fn of ['branchesTransfersTab', 'branchTransferRow', 'retryBranchTransfer', 'openTransferSheet', 'openTransferSheetForNode',
+    'renderBranchTransfers', 'startPullFromSecondary', 'loadBranchView', 'maybeStartBranchesListPolling']) {
+    assert.equal(run(`typeof ${fn}`), 'undefined', fn);
+  }
+  assert.equal(run('typeof cancelBranchTransfer'), 'function', 'cancel of a running pull is still reachable (from the tasks list)');
 });
 
 test('the groups tab reuses storage_nodes.js: create, rename, delete a group', async () => {
   const fixtures = {...base, '/storage-node-groups': [{id: 'g1', label: 'צפון', nodes: 1, sort: 0}]};
   const {run, node} = setup(fixtures);
   await run('loadBranchesData()');
-  run('currentTab=2; wireBranchesGroupsTab();');
+  run('currentTab=1; wireBranchesGroupsTab();');
   const html = node('branch-groups').innerHTML;
   assert.match(html, /צפון/);
   assert.match(html, /1 שרתי משנה/);
@@ -513,19 +503,19 @@ test('after login the console holds the /me capabilities, so the branches tab is
 });
 
 // #1473 (נדב 16/10): הגבלת קצב בין אתרים — אופציונלית, ברירת מחדל ללא הגבלה, ליד ההעברות.
-test('#1473: the transfers tab shows the inter-site rate cap in force; unlimited by default; unread is said', async () => {
+test('#1473: the servers tab shows the inter-site rate cap in force; unlimited by default; unread is said', async () => {
   let {run} = setup({...base, '/settings': {intersite_rate_cap_mbps: '0'}});
   await run('loadBranchesData()');
-  let html = run('branchesPage(1)');
+  let html = run('branchesPage(0)');
   assert.match(html, /הגבלת קצב בין אתרים: <b>ללא הגבלה<\/b>/);
   assert.match(html, /onclick="transferCapSheet\(\)"/, 'admin can change it from here');
   ({run} = setup({...base, '/settings': {intersite_rate_cap_mbps: '200'}}));
   await run('loadBranchesData()');
-  html = run('branchesPage(1)');
+  html = run('branchesPage(0)');
   assert.match(html, /עד <bdi dir="ltr">200 Mb\/s<\/bdi> \(<bdi dir="ltr">25 MB\/s<\/bdi>\) לכל העברה/);
   ({run} = setup({...base, '/settings': new Error('500')}));
   await run('loadBranchesData()');
-  html = run('branchesPage(1)');
+  html = run('branchesPage(0)');
   assert.match(html, /הגבלת קצב בין אתרים: <b>לא נקרא: /, 'an unread setting is never shown as "unlimited"');
   assert.doesNotMatch(html, /ללא הגבלה/);
   assert.doesNotMatch(html, /transferCapSheet/, 'no change button on a value that was not read');
@@ -549,7 +539,7 @@ test('#1473: the change sheet posts the whole number to /settings and refuses an
 test('#1473: a deploy user sees the cap but has no change button', async () => {
   const {run} = setup({...base, '/settings': {intersite_rate_cap_mbps: '100'}}, {role: 'deploy'});
   await run('loadBranchesData()');
-  const html = run('branchesTransfersTab()');
+  const html = run('branchesPage(0)');
   assert.match(html, /עד <bdi dir="ltr">100 Mb\/s<\/bdi>/);
   assert.doesNotMatch(html, /transferCapSheet/);
 });

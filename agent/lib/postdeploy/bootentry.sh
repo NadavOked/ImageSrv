@@ -75,7 +75,7 @@ _bootentry_find() {
 ensure_boot_entry() {
     # $1 = disk name (sda), $2 = manifest file. Always returns 0.
     rm -f "$RUN_DIR/bootentry.json"
-    if ! manifest_plan "$2" 2>/dev/null | awk -F'|' '$3 == "windows"' | grep -q .; then
+    if ! manifest_plan "$2" 2>/dev/null | awk -F'|' '$3 == "windows" || $4 == "BitLocker"' | grep -q .; then   # #1840: BitLocker is Windows; the entry is on the ESP
         _bootentry_result "skipped" "" "not_windows"; return 0
     fi
     _efivars="${SYSROOT:-}/sys/firmware/efi/efivars"

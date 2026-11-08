@@ -51,6 +51,9 @@ class _Conn:
         class _R:
             def fetchone(self):
                 return {"disks_json": json.dumps(disks)}
+
+            def __iter__(self):   # #1857: drawer_list also asks disk_sets.labels_for -- no set here
+                return iter(())
         return _R()
 
 

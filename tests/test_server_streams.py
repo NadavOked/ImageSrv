@@ -204,7 +204,7 @@ def test_a_pull_that_reported_is_not_handed_out_again(server):
     """
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
-    assert report(server, pull_id, lab2["mac1"], "writing").json() == {"ok": True}
+    assert report(server, pull_id, lab2["mac1"], "writing").json()["ok"] is True
 
     again = pull(server, lab2["mac1"])
 
@@ -235,7 +235,7 @@ def test_a_pull_reports_progress_like_any_member(server):
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
 
-    assert report(server, pull_id, lab2["mac1"], "writing").json() == {"ok": True}
+    assert report(server, pull_id, lab2["mac1"], "writing").json()["ok"] is True
 
     member = overview(server)["pulls"][0]["members"][0]
     assert member["state"] == "writing"
@@ -245,7 +245,7 @@ def test_a_pull_reports_progress_like_any_member(server):
 def test_a_finished_pull_leaves_the_overview(server):
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
-    assert report(server, pull_id, lab2["mac1"], "done").json() == {"ok": True}
+    assert report(server, pull_id, lab2["mac1"], "done").json()["ok"] is True
 
     assert overview(server)["pulls"] == []
 
@@ -255,7 +255,7 @@ def test_a_finished_pull_does_not_block_the_next_one(server):
     משיכה **שהצליחה** החזירה 409 לשחזור הבא של אותה תחנה (‏#1573)."""
     lab2 = second_class(server)
     first = pull(server, lab2["mac1"]).json()["id"]
-    assert report(server, first, lab2["mac1"], "done").json() == {"ok": True}
+    assert report(server, first, lab2["mac1"], "done").json()["ok"] is True
 
     again = pull(server, lab2["mac1"])
 
@@ -267,7 +267,7 @@ def test_an_operator_can_still_close_a_running_pull(server):
     """הסגירה הידנית מהקונסולה נשארת — באותו endpoint של כל סבב."""
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
-    assert report(server, pull_id, lab2["mac1"], "writing").json() == {"ok": True}
+    assert report(server, pull_id, lab2["mac1"], "writing").json()["ok"] is True
 
     assert server["deploy"].post(
         f"/api/console/sessions/{pull_id}/close",
@@ -316,7 +316,7 @@ def test_a_failed_pull_does_not_block_the_next_pull_of_that_station(server):
     """הבאג של 17/10: משיכה נכשלה, נשארה `running`, וכל משיכה חדשה — 409."""
     lab2 = second_class(server)
     first = pull(server, lab2["mac1"]).json()["id"]
-    assert report_failed(server, first, lab2["mac1"]).json() == {"ok": True}
+    assert report_failed(server, first, lab2["mac1"]).json()["ok"] is True
 
     again = pull(server, lab2["mac1"])
 
@@ -329,7 +329,7 @@ def test_a_failed_pull_closes_as_failed_with_its_reason(server):
     """‏"נכשל" אינו "הסתיים" ואינו "רץ": המצב `failed`, והסיבה נשארת (עיקרון 4/5)."""
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
-    assert report_failed(server, pull_id, lab2["mac1"]).json() == {"ok": True}
+    assert report_failed(server, pull_id, lab2["mac1"]).json()["ok"] is True
 
     assert overview(server)["pulls"] == []
     row = session_row(server, pull_id)
@@ -345,7 +345,7 @@ def test_a_pull_that_has_not_reported_for_too_long_closes_as_failed(server):
     from datetime import datetime                          # noqa: PLC0415
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
-    assert report(server, pull_id, lab2["mac1"], "writing").json() == {"ok": True}
+    assert report(server, pull_id, lab2["mac1"], "writing").json()["ok"] is True
     stamp = silence(server, pull_id, 2 * 3600)
 
     assert overview(server)["pulls"] == []
@@ -387,7 +387,7 @@ def test_a_pull_that_reports_within_the_ceiling_still_blocks(server):
     חיה (‏curl איטי, שרת שאותחל) — לא שתיקה."""
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
-    assert report(server, pull_id, lab2["mac1"], "writing").json() == {"ok": True}
+    assert report(server, pull_id, lab2["mac1"], "writing").json()["ok"] is True
     silence(server, pull_id, 120)
 
     again = pull(server, lab2["mac1"])

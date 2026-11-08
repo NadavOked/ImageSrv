@@ -80,7 +80,7 @@ def test_a_database_on_11_gains_the_learning_tables_and_keeps_its_rows(tmp_path)
     conn.commit()
     conn.close()
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 12
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION   # stamped to the current one (14 since round/1107c: #1920 = 13, #1858 = 14)
     assert writefloor.mbps(conn) == 70
     assert db.get_setting(conn, tuning.SETTING) == "false"
     assert tuning.status(conn)["run"] is None

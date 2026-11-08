@@ -71,6 +71,7 @@ def test_explicit_interface_is_the_way_out(monkeypatch, fake_startup):
     server.main.main()
     args, kwargs = fake_startup["runtime"]
     assert kwargs.get("interface") == "eth0"
+    assert kwargs["multicast_interface_override"] == "eth0"
 
 
 def test_detected_interface_reaches_the_runtime(monkeypatch, fake_startup):
@@ -79,3 +80,4 @@ def test_detected_interface_reaches_the_runtime(monkeypatch, fake_startup):
     server.main.main()
     args, kwargs = fake_startup["runtime"]
     assert kwargs.get("interface") == "eth1"
+    assert kwargs["multicast_interface_override"] is None

@@ -65,7 +65,7 @@ def test_a_database_on_10_gains_the_target_and_keeps_its_rows(tmp_path):
     raw.close()
 
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 12
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 14   # 13: usb_records/usb_syncs (#1920), 14: disk_f1_marks (#1858)
     [old] = conn.execute("SELECT user, detail, machine, round_id, class_id FROM journal").fetchall()
     assert tuple(old) == ("noc", f"{MAC} name=05", None, None, None)
     journal(conn, "agent_loop", MAC, machine=MAC)

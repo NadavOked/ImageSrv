@@ -438,6 +438,17 @@ CREATE TABLE IF NOT EXISTS disk_inventory (
     last_seen  TEXT NOT NULL
 );
 
+-- ‏#1858 (מוקאפ 07/11, נדב): "נצפה F1 בהדלקה" לפי מספר סידורי -- המגירה אינה חלק מהזהות, ודיסק חדש בחריץ נקי.
+-- ‏`source` = manual (אדם סימן) / auto (מכונה שהוצגה "לא הגיע · ייתכן F1" חזרה לרשת). ניקוי = מחיקת השורה
+-- (ההיסטוריה ביומן: disk_f1_marked / disk_f1_cleared). ‏`mac` = המכונה שבה הדיסק היה כשסומן (לא מפתח).
+CREATE TABLE IF NOT EXISTS disk_f1_marks (
+    serial      TEXT PRIMARY KEY,
+    observed_at TEXT NOT NULL,
+    source      TEXT NOT NULL CHECK (source IN ('manual', 'auto')),
+    marked_by   TEXT NOT NULL DEFAULT '',
+    mac         TEXT
+);
+
 -- ‏#2080 (מוקאפ 06, נדב 24/10): תמונת הקושחה של כל מכונה -- שורה חדשה רק כשהתמונה השתנתה
 -- (מצב אתחול, מצב בקר הדיסקים, גרסת BIOS, דיסק בכל חיבור SATA). ‏`fw_baseline` = "זו ההגדרה הנכונה".
 CREATE TABLE IF NOT EXISTS fw_snapshots (
@@ -936,6 +947,39 @@ CREATE TABLE IF NOT EXISTS email_queue (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS email_queue_one_pending
     ON email_queue (rule_id, kind, lang) WHERE state = 'pending';
+
+-- ‏#1920: מה שהגיע מדיסק-און-קי שחובר לשרת (`server/usbstick/`). נתונים על **מחשבים** בלבד (נדב 20/10):
+-- דגם, מצב בקר, קצב — לעולם לא serial או SMART של דיסק. טבלה נפרדת, בכוונה: מה שהשרת מדד בעצמו
+-- (`model_speeds`, `drive_rates`) אינו נדרס, ורשומה מה-USB היא מידע נוסף שאפשר להפריד או למחוק לפי
+-- `device_id`. ‏`record_id` = גיבוב של מה שנשמר — אותה רשומה לא נקלטת פעמיים. ‏NULL = לא נמדד/לא נקרא.
+CREATE TABLE IF NOT EXISTS usb_records (
+    record_id    TEXT PRIMARY KEY,
+    source       TEXT NOT NULL DEFAULT 'usb' CHECK (source = 'usb'),
+    device_id    TEXT NOT NULL,
+    recorded_at  TEXT NOT NULL,
+    imported_at  TEXT NOT NULL,
+    imported_by  TEXT NOT NULL,
+    model        TEXT,
+    controller   TEXT,
+    driver       TEXT,
+    bytes        INTEGER,
+    elapsed_s    INTEGER,
+    copy_mbps    INTEGER,
+    verify_mbps  INTEGER,
+    result       TEXT NOT NULL CHECK (result IN ('ok', 'failed', 'stopped')),
+    targets      INTEGER NOT NULL,
+    targets_failed INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS usb_records_recorded ON usb_records (recorded_at);
+-- ‏#1920: סיכום כל סנכרון שאושר (`summary_json`) — מה שעמוד "דיסק-און-קי" מציג כ"סיכום הסנכרון האחרון".
+CREATE TABLE IF NOT EXISTS usb_syncs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    at           TEXT NOT NULL,
+    by           TEXT NOT NULL,
+    device_id    TEXT NOT NULL,
+    state        TEXT NOT NULL CHECK (state IN ('ok', 'partial', 'failed')),
+    summary_json TEXT NOT NULL
+);
 """
 
 #: הקבוצות הקבועות: חדר שיכפולים ומחשב הבנייה הם יחידים במערכת —
@@ -1510,7 +1554,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 12  # ‏12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 14  # ‏14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · ‏13: usb_records/usb_syncs (#1920) · ‏12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:

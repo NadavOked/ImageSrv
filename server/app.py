@@ -31,7 +31,7 @@ from boot.http import create_boot_asgi, gui_initrd_path
 
 from server.console import auth
 from . import auto_reboot
-from server.agent import boottrace, registry
+from server.agent import boottrace, hello_eta, registry   # hello_eta: #2684
 from server.rounds import drive_rates, pulls
 from server.net import deploy_net, dhcp
 from server.learn import netloss as learn_netloss, wol as learn_wol   # #1846, #1847
@@ -67,9 +67,11 @@ from server.rounds import direct
 from server.rounds import prompt_hold
 from server.rounds.sender import QUIET_SECONDS, SenderEngine
 from server.console.library import create_library_router
+from server.console.isos import create_iso_router
 from server.console.drivers import create_agent_drivers_router, create_drivers_router   # #720
 from server.console.tools import create_tools_router   # #649 שלב 1
 from server.console.usb import create_usb_router   # #1914: the clone stick download
+from server.console.usb_stick import create_usb_stick_router   # #1920: the stick plugged into the server
 from server.library.drivers import DriverLibrary
 from server.library.capture import (create_agent_capture_router, create_console_capture_router,
                                     start_verification)
@@ -231,6 +233,9 @@ class ServerRuntime:
     #: ‏#153: hooks של לשונית התעודה/שם המארח (``console_hostcfg``) —
     #: ‏``None`` = ברירות המחדל האמיתיות; בדיקות מזריקות, כמו ``dhcp_hooks``.
     host_hooks: dict | None = None
+    #: ‏#1920: הדיסק-און-קי שמחובר לשרת — ``{"scan", "open"}`` של ``server.usbstick.device``. ``None`` = ההתקן האמיתי;
+    #: בדיקות מזריקות תיקייה במקום התקן (לעולם לא נוגעים בדיסק של המכונה שהן רצות עליה).
+    usb_hooks: dict | None = None
     #: ‏#1334: עדכון אימג' ב-VM — מנוע אחד לתהליך (VM אחד בכל פעם).
     vmupdate: "VmUpdate | None" = None
     #: ‏#1372: המארח של עדכון ה-VM — אזהרה בסטטוס העדכון ובבריאות, וההכנה
@@ -429,6 +434,7 @@ def create_runtime(
     sender_start_timeout: float | None = None,
     wol_send=None,
     interface: str | None = None,
+    multicast_interface_override: str | None = None,
     dhcp_hooks: dict | None = None,
     health_hooks: dict | None = None,
     storage_hooks: dict | None = None,
@@ -468,6 +474,8 @@ def create_runtime(
     deploy: "deploy_net.DeployContext | None" = None,
     # ‏#153: ראו ``ServerRuntime.host_hooks``.
     host_hooks: dict | None = None,
+    # ‏#1920: ראו ``ServerRuntime.usb_hooks``.
+    usb_hooks: dict | None = None,
     # ‏#1013: בעלייה, לכתוב את קובץ ה-dnsmasq הראשי מה-DB אם הוא שונה ממה
     # שעל הדיסק (‏`console_dhcp.sync_main_conf`). ‏False כברירת מחדל מאותו
     # טעם כמו ``known_macs_hooks``: רק ``main`` מדליק; בדיקות לא נוגעות
@@ -714,6 +722,9 @@ def create_runtime(
                         drivers=DriverLibrary(data_dir / "drivers"),
                         leases=(identity_hooks or {}).get("leases"),
                         data_dir=data_dir)
+    # ‏#2684: ראיה אחת לשעון השרת (chrony) -- למשכפל ב-hello ולקונסולה ב-forecasts.
+    ctx.clock_trust = hello_eta.ClockTrust(
+        {**health_default_hooks(), **(health_hooks or {})}["timesync_status"])
     drain_crumbs(ctx, netcfg_dir)
     # ‏#705: השירותים לכל כרטיס — **לפני** ה-render של dnsmasq בעלייה, כי הוא
     # קורא אותם; ‏`startup` מחזיר שינוי שפג בזמן שהשרת לא רץ.
@@ -722,6 +733,9 @@ def create_runtime(
                                      apply_timesync=apply_timesync)
     ctx.nic_services.startup()
     sender.gate = ctx.nic_services.multicast_refused
+    sender.select_interface = lambda session: ctx.nic_services.multicast_interface(
+        lambda: _multicast_addresses(ctx, session["id"]), multicast_interface_override,
+        default=interface)
 
     # בהתקנה טרייה: admin/admin עם החלפה כפויה (#1085). אם כבר יש מנהל — לא נוגעים.
     password = ensure_admin(conn)
@@ -776,7 +790,7 @@ def create_runtime(
         room_clock_interval=room_clock_interval,
         heartbeat_interval=heartbeat_interval,
         housekeeping_first=housekeeping_first, housekeeping_every=housekeeping_every,
-        console_tls=console_tls, deploy=deploy, host_hooks=host_hooks,
+        console_tls=console_tls, deploy=deploy, host_hooks=host_hooks, usb_hooks=usb_hooks,
         vmupdate=engine, vm_host=host,
         auto_reboot_hook=auto_reboot_hook or auto_reboot.default_reboot,
         auto_reboot_interval=auto_reboot_interval,
@@ -807,6 +821,25 @@ def _grub_lock(conn, password_file, deploy) -> str:
         if problem:
             journal(conn, "grub_cfg_lock_failed", f"ה-bootstrap על ה-TFTP לא ננעל: {problem}")
     return password_hash
+
+
+def _multicast_addresses(ctx, session_id: str) -> list[str | None]:
+    """Current DHCP leases, or observed hello addresses without a lease source.
+
+    A configured lease source that cannot verify a member stays unknown; an
+    old hello address must not hide missing/unreadable DHCP evidence.
+    """
+    rows = ctx.conn.execute(
+        "SELECT m.mac, d.ip FROM session_members m"
+        " LEFT JOIN net_devices d ON d.mac = m.mac WHERE m.session_id = ?"
+        " AND m.state NOT IN ('done', 'failed', 'partial', 'lost')", (session_id,)).fetchall()
+    if ctx.leases is None:
+        return [row["ip"] or None for row in rows]
+    addresses = []
+    for row in rows:
+        lease = ctx.leases.lookup(row["mac"])
+        addresses.append(lease.ip if lease.read else None)
+    return addresses
 
 
 def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
@@ -977,7 +1010,9 @@ def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = Tr
     דורשת שם וסיסמה. ולכן הם חיים כאן ולא על הקונסולה (#703: הגבול הוא
     ה-socket). ‏#1247: מסך התחנה בדפדפן והמאזין ‎:8082 הוסרו; הגואי הנייטיב
     הוא הצרכן היחיד."""
-    app.include_router(create_agent_router(rt.ctx, rt.server_base, rt.data_dir))
+    app.include_router(create_agent_router(
+        rt.ctx, rt.server_base, rt.data_dir,
+        clock_status={**health_default_hooks(), **(rt.health_hooks or {})}["timesync_status"]))   # #1843
     app.include_router(create_agent_drivers_router(rt.ctx))   # #720
     app.include_router(create_cloner_round_router(rt.ctx))   # 16/10: a cloner opens a round on its own drawers
     app.include_router(create_agent_capture_router(rt.ctx))
@@ -1082,10 +1117,13 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
             rt.boot_dir, rt.deploy.tftp_root if rt.deploy else None) if t)))   # ‏#2462
     include(create_backup_target_router(ctx, rt.storage_hooks, rt.data_dir))   # #1956
     include(create_library_router(ctx))
+    include(create_iso_router(ctx))   # #404: לשונית ISO -- העלאה, רשימה, מחיקה
     include(create_console_data_router(ctx))   # #1882-#1889: מה שנאסף על מכונה
     include(create_drivers_router(ctx))   # #720
     include(create_tools_router(ctx, rt.data_dir))   # #649: ארגז הכלים — קטלוג + בחירה
     include(create_usb_router(ctx, rt.data_dir))   # #1914: הדיסק-און-קי לשיכפול — הורדה למנהל
+    include(create_usb_stick_router(
+        ctx, rt.usb_hooks, version=lambda: display_version(update_hooks, repo_dir).version or ""))   # #1920: הדיסק-און-קי בשרת
     include(create_net_router(ctx))
     # ‏#1013: מתג ה-TFTP בדף הפורטים מחיל את אותם קובצי dnsmasq, דרך אותם
     # hooks, כמו לשונית ה-DHCP — מקום אחד שכותב את הקובץ.

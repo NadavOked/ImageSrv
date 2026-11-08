@@ -15,6 +15,7 @@
 #include "lcui.h"   /* #2030: card_used_text */
 #include "screens_rounds.h"
 #include "he_time.h"
+#include "smarttbl.h"   /* #1859: the table of every SMART attribute, a drawer */
 
 #define SB_CAGE_W   980.0   /* .A .st / .cage / .note width */
 #define SB_BAY_H    132.0   /* .A .bay height */
@@ -40,7 +41,7 @@ void disk_size(unsigned long long b, char *out, size_t n) {
 static void ago(int s, char *out, size_t n) { he_ago(s, out, n); }   /* #1503: "לפני שנייה", not "1 שניות" */
 
 /* The wall-clock time <age> seconds ago; --png counts back from the header's 12:45. */
-static void clock_ago(const App *a, int age, char *out, size_t n) {
+void clock_ago(const App *a, int age, char *out, size_t n) {
     if (a->fixed_clock) {
         int t = ((12 * 3600 + 45 * 60 - age) % 86400 + 86400) % 86400;
         snprintf(out, n, "%02d:%02d", t / 3600, t / 60 % 60);
@@ -85,13 +86,23 @@ static const char *chip_he(const char *smart) {
     return RLM "SMART לא נבדק";
 }
 
+/* #1858: a disk marked "נצפה F1" (by serial) is red and says what it is -- not "SMART תקול". Marked = the date was
+ * sent, or the agent painted it with its own reason. */
+static int f1_marked(const IdleDisk *d) {
+    return d->f1_date[0] || !strcmp(d->cause, "f1_observed");
+}
+static const char *chip_of(const IdleDisk *d) {
+    return f1_marked(d) ? "נצפה F1" : chip_he(d->smart);
+}
+const char *standby_chip_he(const char *smart) { return chip_he(smart); }   /* #1859: the table drawer's head says it the same way */
+
 /* The line under the drawer's name: why the chip is not green. fail is only
  * ever health_failed (smart.sh smart_classify); failed_last carries the
  * server's cause (#874, the console's FAILURE_CAUSE_HE words). */
 static const char *reason_he(const IdleDisk *d) {
     /* #1366: fail is what stops an HP BIOS on "press F1"; #1580 (17/10): red */
     if (!strcmp(d->smart, "fail"))
-        return !strcmp(d->cause, "readonly") ? smart_reason_text(d->cause)   /* #1742 */
+        return !strcmp(d->cause, "readonly") || !strcmp(d->cause, "f1_observed") ? smart_reason_text(d->cause)   /* #1742; #1858 */
              : !strcmp(d->cause, "media_readonly") ? smart_reason_text(d->cause)   /* #1921: NVMe */
              : !strcmp(d->cause, "health_unread") ? smart_reason_text(d->cause)   /* #2078: SMART not read -- not "health failed" */
              /* an older agent's red 197/198 (before #1921 they are orange): said in words, not as the F1 */
@@ -124,6 +135,16 @@ double sb_bay_pill(cairo_t *cr, double right, double cy, const char *label, Rgb 
 
 double sb_pill(cairo_t *cr, double right, double cy, const char *label, Rgb fg, Rgb bg) {
     return sb_bay_pill(cr, right, cy, label, fg, bg, 0);
+}
+
+/* #1857 (mockup 04) .setname: the disk's set and sticker beside the drawer's name -- 12/600, a 4px
+ * round box in the action tint, 6px inside. Right edge in, width out. Display only. */
+static double sb_set_chip(cairo_t *cr, const Theme *t, double right, double cy, const char *label) {
+    Text v = text_make(cr, FONT_SANS, 12, 600, label, 0, DIR_RTL);
+    double w = v.w + 12, h = v.h + 2;
+    draw_fill_rrect(cr, (Rect){ right - w, cy - h / 2, w, h }, 4, t->indigo_soft);
+    text_draw_r(cr, &v, right - 6, cy - v.h / 2.0, t->action_fg);
+    text_free(&v); return w;
 }
 
 /* The empty slot: repeating-linear-gradient(135deg, slot 0 10px, sunken 10px 20px). */
@@ -224,6 +245,17 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
     }
     const char *why = d ? reason_he(d) : NULL;
     Rgb why_c = col;
+    /* #1858 (mockup 07/11): "נצפה F1 בהדלקה (24/10) · סומן בקונסולה", and under it what the disk's own SMART says */
+    char f1_why[160] = "", f1_sub[96] = "";
+    if (d && f1_marked(d)) {
+        if (d->f1_date[0]) snprintf(f1_why, sizeof f1_why, "נצפה F1 בהדלקה (⁦%.2s/%.2s⁩) · %s", d->f1_date + 8, d->f1_date + 5,
+                                    !strcmp(d->f1_src, "auto") ? "סומן אוטומטית" : "סומן בקונסולה");
+        else snprintf(f1_why, sizeof f1_why, "נצפה F1 בהדלקה");
+        const char *sm = d->f1_smart;
+        snprintf(f1_sub, sizeof f1_sub, "%s", !strcmp(sm, "passed") ? "SMART של הדיסק תקין" : !strcmp(sm, "warn") ? "SMART של הדיסק: אזהרה"
+                 : !strcmp(sm, "fail") ? "גם ה-SMART של הדיסק אדום" : !strcmp(sm, "unchecked") ? "SMART של הדיסק לא נבדק" : "");
+        why = f1_why;
+    }
     if (!why && inc) { why = "כתיבה לא הושלמה — לא שמיש"; why_c = t->warn; }   /* #1798 */
     if (!why && slow) {
         if (link_slow(d)) snprintf(slow_why, sizeof slow_why, "קישור %s מתוך %s Gb/s — לבדוק כבל", d->link, d->link_max);
@@ -235,12 +267,25 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
     Text tn = text_make(cr, FONT_SANS, 18, 600, name, 0, DIR_RTL);
     Text ts = sub[0] ? text_make(cr, FONT_SANS, 12, 400, sub, 0, DIR_RTL) : (Text){ NULL, 0, 0 };
     Text tw = why ? text_make(cr, FONT_SANS, 12, 400, why, 0, DIR_RTL) : (Text){ NULL, 0, 0 };
-    double bh = tn.h + (ts.layout ? 3 + ts.h : 0) + (why ? 3 + tw.h : 0), by = cy - bh / 2;
+    Text tw2 = f1_sub[0] ? text_make(cr, FONT_SANS, 12, 400, f1_sub, 0, DIR_RTL) : (Text){ NULL, 0, 0 };   /* #1858 */
+    /* #1859 (mockup 1859-smart-table): "כל מאפייני ה-SMART (N) ›" and S -- a click on the drawer opens the table. Only where
+     * the agent wrote one, and only where the line fits: four drawers at 4:3 keep their size and the click */
+    const SmHead *sh = d ? smt_head(s, d->dev) : NULL;
+    Text ta = sh ? smt_aff_make(cr, sh) : (Text){ NULL, 0, 0 };
+    double bh0 = tn.h + (ts.layout ? 3 + ts.h : 0) + (why ? 3 + tw.h : 0) + (tw2.layout ? 3 + tw2.h : 0);
+    if (ta.layout && b.h < bh0 + 3 + ta.h + 28) { text_free(&ta); ta = (Text){ NULL, 0, 0 }; }
+    double bh = bh0 + (ta.layout ? 3 + ta.h : 0), by = cy - bh / 2;
+    double name_cy = by + tn.h / 2, chip_w = 0;
     text_draw_r(cr, &tn, fr, by, t->ink); by += tn.h + 3;
+    const char *set_label = d ? disk_label_for_dev(s, d->dev) : "";   /* #1857: "קוריאים · xx-7"; "" = no set, the card as it was */
+    if (set_label[0]) chip_w = 8 + sb_set_chip(cr, t, fr - tn.w - 8, name_cy, set_label);
     if (ts.layout) { text_draw_r(cr, &ts, fr, by, t->muted); by += ts.h + 3; }
-    if (why) text_draw_r(cr, &tw, fr, by, why_c);
-    double names_w = fmax(tn.w, fmax(ts.w, tw.w));
-    text_free(&tn); text_free(&ts); if (why) text_free(&tw);
+    if (why) { text_draw_r(cr, &tw, fr, by, why_c); by += tw.h + 3; }
+    if (tw2.layout) { text_draw_r(cr, &tw2, fr, by, t->muted); by += tw2.h + 3; }
+    if (ta.layout) smt_aff_draw(a, cr, &ta, fr, by);
+    if (sh && d >= s->idisks && d < s->idisks + s->nidisks) hit_add(a, b, HIT_SMT_BASE + (int)(d - s->idisks));   /* the whole drawer opens it */
+    double names_w = fmax(fmax(tn.w + chip_w, fmax(ts.w, fmax(tw.w, tw2.w))), ta.layout ? smt_aff_width(&ta) : 0);
+    text_free(&tn); text_free(&ts); if (why) text_free(&tw); if (tw2.layout) text_free(&tw2); if (ta.layout) text_free(&ta);
 
     if (o) {
         Text md = o->model[0] ? text_make(cr, FONT_MONO, 13, 400, o->model, 0, DIR_LTR)
@@ -256,7 +301,7 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
         text_draw(cr, &e, fl, cy - e.h / 2.0, t->muted); text_free(&e);
         return;
     }
-    sb_bay_pill(cr, fr - names_w - 22, cy, lvl ? chip_he(d->smart) : inc ? "לא שמיש" : slow ? "אזהרה" : chip_he(d->smart),
+    sb_bay_pill(cr, fr - names_w - 22, cy, lvl ? chip_of(d) : inc ? "לא שמיש" : slow ? "אזהרה" : chip_of(d),
                 acc ? t->on_ink : col, acc ? acol : soft_of(t, lvl), acc);
     char size[32]; disk_size(d->size, size, sizeof size);
     Text sz = text_make(cr, FONT_MONO, 22, 600, size, 0, DIR_LTR);
@@ -375,7 +420,7 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
             const char *slot_name = d->port >= 1 && d->port <= MAX_DRAWERS ? s->cslot_names[d->port - 1] : "";
             unmapped_label(slot_name, d->conn, d->port, d->dev, label, sizeof label);
         }
-        if (kind == 0) snprintf(msg, sizeof msg, RLM "%s: %s — לפני כתיבה אליו תופיע שאלה.", label, chip_he(d->smart));
+        if (kind == 0) snprintf(msg, sizeof msg, RLM "%s: %s — לפני כתיבה אליו תופיע שאלה.", label, chip_of(d));
         else if (link_slow(d)) snprintf(lmsg, sizeof lmsg, RLM "%s: קישור SATA %s מתוך %s Gb/s — לבדוק כבל או מגירה. לפני התחלת סבב תופיע אזהרה.",
                       label, d->link, d->link_max);
         else if (d->crc_suspect) snprintf(lmsg, sizeof lmsg, RLM "%s: כבל או מגירה חשודים — %ld שגיאות. לפני התחלת סבב תופיע אזהרה.",
@@ -455,6 +500,7 @@ int standby_back_locked(const App *a) { return a->st.has_session || a->st.has_ro
 /* #2079: Esc or "חזרה למסך הבחירה" on the wait says choice-back (guibridge.sh). 1 = taken. */
 int standby_handle(App *a, const Event *e) {
     if (a->screen != SCREEN_STANDBY) return 0;
+    if (smt_handle(a, e)) return 1;   /* #1859: the SMART table -- open, it takes every key; closed, S and a click on a drawer */
     if (e->type == UIEV_CLICK && app_hit(a, e->x, e->y) == HIT_FW_ACCEPT) {   /* #2080: "זה מכוון" (guibridge.sh fw-accept) */
         printf("fw-accept\n\n"); fflush(stdout);
         return 1;
@@ -469,6 +515,11 @@ int standby_handle(App *a, const Event *e) {
  * place of the key list (the screen takes no keys). Drawn from <left>. */
 void standby_status_info(App *a, cairo_t *cr, double left, double cy) {
     const Theme *t = a->theme; const State *s = &a->st;
+    if (smt_keys(a)[0]) {   /* #1859: the SMART table is open -- its keys, in place of the line */
+        Text k = text_make(cr, FONT_SANS, 12, 400, smt_keys(a), 0, DIR_RTL);
+        text_draw(cr, &k, left, cy - k.h / 2.0, t->muted); text_free(&k);
+        return;
+    }
     char hello[160], when[48];
     if (s->hello_age < 0) snprintf(hello, sizeof hello, "טרם הסתיים hello ראשון");   /* RLM below: Latin-first lines stay RTL */
     else {
@@ -487,6 +538,10 @@ void standby_status_info(App *a, cairo_t *cr, double left, double cy) {
         text_draw(cr, &tv, left, cy - tv.h / 2.0, t->ink); left += tv.w + 5;
         text_draw(cr, &tk, left, cy - tk.h / 2.0, t->muted); left += tk.w + 18;
         text_free(&tv); text_free(&tk);
+    }
+    if (s->nsmheads) {   /* #1859: S opens the table of every SMART attribute */
+        Text k = text_make(cr, FONT_SANS, 12, 400, "S  מאפייני SMART", 0, DIR_RTL);
+        text_draw(cr, &k, left, cy - k.h / 2.0, t->muted); text_free(&k);
     }
     text_free(&h);
 }

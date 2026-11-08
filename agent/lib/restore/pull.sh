@@ -10,9 +10,10 @@
 #
 # The interface: interfaces.md, "משיכת יוניקאסט לתחנה בודדת".
 #
-# A single-station restore pulls the image over HTTP. The bytes move whether
-# or not the server was told -- /api/v1/images/... serves them to any machine
-# in the registry -- so opening a pull is not asking permission. It is how the
+# A single-station restore pulls the image over HTTP. Since #2657 opening the
+# pull is also the permission: /api/v1/images/... serves an image's files only
+# to a member of an open round or pull of that image, so single_restore.sh does
+# not touch the disk without one. It is also how the
 # work becomes *visible*: a session id to address the reports above to, a line
 # in the journal, and a row on the console. Until the agent called it, a
 # station pulled for twenty minutes while the operator watched an idle

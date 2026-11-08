@@ -115,6 +115,7 @@ ui_clear() { :; }; ui_header() { :; }; hold_beat() { :; }
 crc_delta_after() { :; }; crc_delta_measure() { :; }
 pick_internal_disk() { echo sda; }
 sr_share_gate() { return 0; }   # #1898: the split question -- its own tests (test_single_restore_share_1898.py)
+session_open_gate() { :; }   # #2657: the open-job gate -- its own tests (test_open_gate_2657.py, test_unicast_pull.py)
 resolve_target_drawers() { _disks="sdb sdc"; }
 run_restore() { echo "RESTORE hold=${WRITEMARK_HOLD:-0}" >> "$RUN_DIR/trace"; target_set "$2" done; echo done > "$RUN_DIR/state"; return 0; }
 run_restore_drawers() { echo "DRAWERS hold=${WRITEMARK_HOLD:-0}" >> "$RUN_DIR/trace"; shift 4; for _t in "$@"; do target_set "$_t" done; done; echo done > "$RUN_DIR/state"; return 0; }

@@ -14,7 +14,7 @@ single_restore_run() {
     # fetch (principle 5). 0 = written, 1 = failed (held), 3 = cancelled on
     # the GUI and the disk left empty (#1561).
     [ -n "$1" ] || sr_refused no-image "restore: no image id" || die_local "restore: no image id"
-    http_get "$SERVER/api/v1/images/$1/manifest" > "$RUN_DIR/sr-manifest.json" \
+    http_get "$SERVER/api/v1/images/$1/manifest" "${PULL_JAR:-}" > "$RUN_DIR/sr-manifest.json" \
         || sr_refused manifest "restore: manifest fetch failed" || die_local "restore: manifest fetch failed"
     _sr_disk=$(pick_internal_disk); _sr_pk=$?   # #1807: 2 = more than one internal disk
     [ "$_sr_pk" -ne 2 ] || sr_refused many-disks "more than one internal disk" || die_local "more than one internal disk"
@@ -24,6 +24,7 @@ single_restore_run() {
     if smart_red "$_sr_disk"; then   # the probe first: the reason is read from its cache
         _sr_why="failed SMART"; _sr_key=smart-red
         [ "$(smart_field "$_sr_disk" 2)" != "readonly" ] || { _sr_why="is read-only"; _sr_key="readonly"; }
+        [ "$(smart_field "$_sr_disk" 2)" != "f1_observed" ] || { _sr_why="was seen stopping the BIOS on F1"; _sr_key="f1-observed"; }   # #1858
         sr_refused "$_sr_key" "restore: $_sr_disk $_sr_why -- never written (#1732)" || die_local "restore: $_sr_disk $_sr_why"
     fi
     _sr_total=$(json_get "$RUN_DIR/sr-manifest.json" ".total_compressed_bytes")
@@ -38,20 +39,24 @@ single_restore_run() {
     [ "$_sr_sq" -eq 0 ] || sr_refused share "restore: the split of the room was not approved (#1898)" || die_local "restore: the split of the room was not approved"
 
     # The server is told before the first byte moves (a pull nobody can watch is
-    # useless, #63); a failed open is non-fatal -- the disk is erased either way
-    # (rule 1), and pull_open has already said so in the journal.
+    # useless, #63). #2657: the pull is also the permission -- the server serves
+    # an image's files only inside an open round or pull of that image -- so a
+    # pull that did not open stops here, before the disk is touched (rule 5),
+    # and not after the table was wiped, at the stream.
     #
     # No password: the operator signed in on the GUI, whose password never
     # leaves the kiosk's sign-in process. Instead the pull carries that
     # console session ($PULL_JAR, the cookie jar the bridge handed over), and
     # the server accepts it as the authorization (11/10) -- the restore is
-    # linked to the console user and followed there. The jar is single-use.
-    _sr_ppid=""
-    if pull_open "$SERVER" "$MAC" "$1" "" ""; then
-        progress_loop "$PULL_SESSION" "$MAC" "$SERVER" &
-        _sr_ppid=$!
-    fi
+    # linked to the console user and followed there. The jar serves the
+    # manifest above and this pull, and is removed right after.
+    pull_open "$SERVER" "$MAC" "$1" "" ""; _sr_po=$?
     [ -z "${PULL_JAR:-}" ] || rm -f "$PULL_JAR"
+    [ "$_sr_po" -eq 0 ] || sr_refused pull "restore: the server did not open the pull -- nothing was written (#2657)" || die_local "restore: the server did not open the pull"
+    # #2657: an id in the answer is not yet evidence the pull is open for us -- the same gate as a round (opengate.sh)
+    session_open_gate "$PULL_SESSION" "$MAC" "$SERVER" || sr_refused pull "restore: $OPEN_GATE_WHY (#2657)" || die_local "restore: $OPEN_GATE_WHY"
+    progress_loop "$PULL_SESSION" "$MAC" "$SERVER" &
+    _sr_ppid=$!
     # #1561 (Nadav 17/10): "ביטול השחזור" on the GUI stops the stream (srgui.sh);
     # a cancel, whatever the write's own end, leaves an empty disk -- 3.
     sr_cancel_watch "$1" "$_sr_disk" & _sr_cw=$!

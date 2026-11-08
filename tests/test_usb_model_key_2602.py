@@ -27,7 +27,7 @@ from native import requires_native
 from server.disks import model_slots
 from test_cloner_gui import posix
 from test_usb_clone import needs_jq
-from test_usb_map_1962 import MODEL, SATA1_ON, TO_MAP, machine, saved, stick
+from test_usb_map_1962 import MODEL, SATA1_OFF, TO_MAP, machine, saved, stick
 
 pytestmark = [needs_jq, requires_native(("busybox", shutil.which("busybox")), posix=True,
                                         why="the agent runs under busybox ash; bash would hide a bashism")]
@@ -129,8 +129,8 @@ def _no_product_name(tmp_path: Path, vendor: str | None, board: str | None, prod
 
 def test_a_stick_on_a_machine_with_no_product_name_keeps_its_map_by_the_board(tmp_path):
     _no_product_name(tmp_path, "Hewlett-Packard", "18E7")
-    out, usb = stick(tmp_path, TO_MAP + SATA1_ON + ["KEY F2"], model=None, then='cat "$RUN_DIR/response.json"')
-    want = ["sata:1", "sata:2", "sata:3", "nvme:0000:03:00.0"]
+    out, usb = stick(tmp_path, TO_MAP + SATA1_OFF + ["KEY F2"], model=None, then='cat "$RUN_DIR/response.json"')
+    want = ["sata:1", "sata:3", "nvme:0000:03:00.0"]   # SATA 1 off (#1874: on by default): a compact list is a saved one
     assert saved(usb) == {"drawer_slots": {BOARD_KEY: want}}, out.stdout + out.stderr
     assert json.loads(out.stdout.split("@@")[1])["drawer_slots"] == want
     # the same board finds it again; another board of the same maker gets the default
@@ -145,7 +145,7 @@ def test_a_stick_on_a_machine_with_no_product_name_keeps_its_map_by_the_board(tm
 def test_a_generic_product_name_saves_nothing_on_the_stick(tmp_path):
     """Before: the key was "To Be Filled By O.E.M." -- one map for every such machine."""
     _no_product_name(tmp_path, "ASUS", None, OEM)
-    out, usb = stick(tmp_path, TO_MAP + SATA1_ON + ["KEY F2"], model=OEM)
+    out, usb = stick(tmp_path, TO_MAP + SATA1_OFF + ["KEY F2"], model=OEM)
     assert "לא זוהה דגם המחשב" in out.stdout, out.stdout + out.stderr
     assert not (usb / "settings.json").exists()
 
@@ -154,4 +154,4 @@ def test_a_map_saved_under_a_generic_name_no_longer_applies(tmp_path):
     out, _ = stick(tmp_path, [], model=OEM, settings={"drawer_slots": {OEM: ["sata:2"]}},
                    then='usb_map_json; echo "rc=$?"; usb_settings_load; usb_answer; jq -c ".drawer_slots" "$RUN_DIR/response.json"')
     rc, slots = out.stdout.split("@@")[1].split("\n")[1:3]
-    assert rc == "rc=1" and slots == '["sata:1","sata:3","nvme:0000:03:00.0"]', out.stdout + out.stderr
+    assert rc == "rc=1" and slots == '["sata:1","sata:2","sata:3","nvme:0000:03:00.0"]', out.stdout + out.stderr

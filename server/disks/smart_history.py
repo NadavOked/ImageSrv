@@ -169,6 +169,26 @@ def learned_for(conn: sqlite3.Connection, disks: object) -> list[dict]:
     return out
 
 
+def rose_for(conn: sqlite3.Connection, disks: object) -> list[dict]:
+    """The hello's `smart_rose` (#1859, Nadav 07/11): [{"serial", "rose": {id: n}}] for each disk of
+    this hello that has a previous round -- by how much each attribute rose since (ATA by id, NVMe by
+    key; only those that rose). **No entry = no previous round**: the cloner's table says "אין עדיין
+    השוואה", never "stable". A disk with an entry and `rose: {}` was compared and nothing rose."""
+    out = []
+    for d in disks if isinstance(disks, list) else []:
+        if not isinstance(d, dict) or not isinstance(d.get("serial"), str) or not d["serial"]                 or not isinstance(d.get("smart_attrs"), dict):
+            continue
+        prev = previous(conn, d["serial"])
+        if prev is None:
+            continue
+        before = json.loads(prev["attrs_json"] or "{}")
+        rose = {str(i): n for i, n in _rose(_rows(d["smart_attrs"]), _rows(before)).items()}
+        was = _nvme(before)
+        rose.update({k: v - was[k] for k, v in _nvme(d["smart_attrs"]).items() if k in was and v > was[k]})
+        out.append({"serial": d["serial"], "rose": rose})
+    return out
+
+
 def describe(conn: sqlite3.Connection, disk: dict) -> dict:
     """One disk for the console: every attribute in Hebrew, and what rose."""
     now, nvme = _rows(disk.get("smart_attrs")), _nvme(disk.get("smart_attrs"))

@@ -115,7 +115,8 @@ def test_the_three_screens_draw_the_same_row():
     cloner = (SRC / "screens_cloner.c").read_text(encoding="utf-8")
     for name, text in (("screens_lcrun.c", lcrun), ("screens_room.c", room), ("screens_cloner.c", cloner)):
         assert "lc_bay_draw(a, cr," in text, name
-        assert "lc_hero(a, cr," in text, name
+        # #1843: the cloner's hero carries the expected end -- lc_hero_eta, which lc_hero itself calls (lcbay.c)
+        assert re.search(r"\blc_hero(?:_eta)?\(a, cr,", text), name
     # no second copy of the row: the drawer number / "מגירה" are drawn in lcbay.c only
     for name, text in (("screens_lcrun.c", lcrun), ("screens_room.c", room), ("screens_cloner.c", cloner)):
         assert not re.search(r'"מגירה", 0, DIR_RTL', text), name

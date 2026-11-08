@@ -35,6 +35,7 @@ from server.agent import timing as agent_timing   # #2056
 from server.disks import disk_sets   # #1857
 from server.disks import writefloor   # #2338
 from server.agent import firmware_image# #2080
+from server.agent import hello_eta   # #1843
 from server.agent import unknown_screen   # #1802
 from server.agent import body as agent_body   # #2410/#2416
 from server.agent.readbackhash import mode as readback_mode
@@ -82,6 +83,10 @@ class ServerContext:
     journal_budget: dict = field(default_factory=dict)
     #: ‏#1973: מנטר ה-UPS (`ups.UpsMonitor`) — ‏`server.main` בלבד; None = אין מנטר.
     ups: object | None = None
+    #: ‏#2684: האם שעון השרת מסונכרן (`hello_eta.ClockTrust`) -- אותה ראיה שה-hello נושא
+    #: למשכפל (`clock`), וממנה גם ה-`clock` של ה-forecasts שהקונסולה מקבלת. ‏None (בדיקות
+    #: שבונות ctx ביד, שרת בלי הוק) = "לא הוכח": הקונסולה לא תצייר שעה.
+    clock_trust: object | None = None
 
 
 def _error(status: int, message: str, code: str) -> JSONResponse:
@@ -235,17 +240,37 @@ def boot_journal_unknown(ctx: ServerContext, mac: str, client_ip: str | None,
                         if repeats[0] else "")
 
 
-def source_gate(ctx: ServerContext, request: Request, where: str) -> JSONResponse | None:
-    """‏#997: זהות בלי MAC מוצהר — `GET /images/…/manifest|files`. הסוכן
+def gui_session(ctx: ServerContext, request: Request):
+    """11/10: the console session the operator signed in with on the build
+    machine's GUI, carried as the cookie (`PULL_JAR`). A live, plain session
+    of an existing account -- not one mid password change or MFA enrollment;
+    a cookie that does not read back as a session is none (None)."""
+    session = read_session(ctx.conn, request.cookies.get(COOKIE_NAME))
+    if session is not None and session.purpose not in ("", PURPOSE_KIOSK):
+        return None
+    return session
+
+
+def source_gate(ctx: ServerContext, request: Request, where: str,
+                image_id: str) -> JSONResponse | None:
+    """‏#997: זהות בלי MAC מוצהר — `GET /images/…/manifest|files|readback`. הסוכן
     מושך אותם ב-`http_get` בלי MAC ובלי כותרת (‏`agent/lib/core/common.sh`), ולכן
     הכיוון הפוך: כתובת המקור → החכירה שיושבת עליה → MAC רשום ב-`machines`.
-    אותו מתג, אותם קודים. הסוכן אינו משתנה ואין initrd חדש."""
+    אותו מתג, אותם קודים.
+
+    ‏#2657: "רשומה" אינה מספיקה. המכונה צריכה להיות חברה בסבב או במשיכה
+    פתוחים של **האימג' הזה** (`SessionStore.has_open_membership`), אחרת
+    ‏403 `image_fetch_refused`. חריג אחד, למניפסט בלבד: השחזור מהגואי מושך
+    אותו לפני שהמשיכה נפתחת (‏`single_restore.sh`), ונושא את כניסת המפעיל
+    לקונסולה (‏`gui_session`) — אותה הרשאה ש-`/agent/pulls` מקבל."""
     if ctx.leases is None:
         return None
     client_ip = request.client.host if request.client else None
+    signed_in = where == "manifest" and gui_session(ctx, request) is not None
     verdict = identity.verify_source(
         ctx.conn, ctx.leases, client_ip,
-        lambda mac: registry.lookup(ctx.conn, mac) is not None)
+        lambda mac: registry.lookup(ctx.conn, mac) is not None,
+        None if signed_in else (lambda mac: ctx.store.has_open_membership(mac, image_id)))
     return _identity_refusal(ctx, verdict, where)
 
 
@@ -281,12 +306,18 @@ def agent_credentials(ctx: ServerContext, request: Request, username: str,
 
 def create_agent_router(ctx: ServerContext,
                         server_base: str | None = None,
-                        data_dir: Path | None = None) -> APIRouter:
+                        data_dir: Path | None = None,
+                        clock_status=None) -> APIRouter:
     """‏server_base — כתובת וילן ההפצה (מ---server-url). ‏hello שהתקבל על
     כתובת מקומית אחרת דורש כניסה תמיד (#42); בלעדיה אין עם מה להשוות,
     וההתנהגות היא הישנה.
+
+    ‏`clock_status` (#1843): ‏`() -> {"synchronized", ...}` — מצב שעון השרת (health
+    `timesync_status`). בלעדיו אין שעה למשכפל: ראיה שלא הוזרקה אינה "מסונכרן".
     """
     router = APIRouter(prefix="/api/v1")
+    clock_trust = (ctx.clock_trust if ctx.clock_trust is not None
+                   else hello_eta.ClockTrust(clock_status))   # #2684: אותה ראיה לקונסולה ולמשכפל
 
     @router.post("/agent/hello")
     async def agent_hello(request: Request) -> JSONResponse:
@@ -510,6 +541,7 @@ def create_agent_router(ctx: ServerContext,
         # clock, read last so it is as fresh as the reply; hello.sh sets
         # the machine's clock from it. Only in the real hello, not the menu.
         answer["now"] = int(time.time())
+        hello_eta.add(ctx.conn, ctx.library, answer, clock_trust)   # #1843: מתי הגל צפוי להסתיים
         return JSONResponse(answer)
 
     @router.post("/agent/login")
@@ -548,9 +580,9 @@ def create_agent_router(ctx: ServerContext,
     async def open_pull(request: Request) -> JSONResponse:
         """פתיחת משיכת יוניקאסט — התחנה מודיעה לשרת שהיא מתחילה למשוך.
 
-        לא "בקשת רשות למשוך": קבצי האימג' מוגשים ממילא (‏`/api/v1/images`),
-        וההרשמה כאן היא כדי שהעבודה תיראה — במבט-העל, ביומן ובדיווחי
-        ההתקדמות. מה שכן נאכף כאן הוא בדיוק מה ש-hello מכריז עליו:
+        ההרשמה כאן היא כדי שהעבודה תיראה — במבט-העל, ביומן ובדיווחי
+        ההתקדמות — ומ-#2657 היא גם הרשות: ‏`/api/v1/images` מגיש קבצים רק
+        לחבר בסבב או במשיכה פתוחים של האימג' (`source_gate`). מה שכן נאכף כאן הוא בדיוק מה ש-hello מכריז עליו:
         כניסה, לפי ההגדרה ולפי הווילן (#42) — הצהרה שהסוכן מציית לה
         אינה אכיפה.
 
@@ -597,11 +629,9 @@ def create_agent_router(ctx: ServerContext,
         # -- and the pull is opened in that user's name, so the console can
         # follow it -- without a second password. A cookie that does not read
         # back as a session is no session: the password road below decides.
-        gui_session = read_session(ctx.conn, request.cookies.get(COOKIE_NAME))
-        if gui_session is not None and gui_session.purpose not in ("", PURPOSE_KIOSK):
-            gui_session = None     # mid password change / MFA enrollment: not a session for work
-        if gui_session is not None:
-            username = gui_session.username
+        signed_in = gui_session(ctx, request)
+        if signed_in is not None:
+            username = signed_in.username
         elif login_required(ctx.conn, has_open,
                             off_deploy_vlan(request.scope, server_base)):
             _role, refused = agent_credentials(ctx, request, username,
@@ -868,7 +898,7 @@ def create_agent_router(ctx: ServerContext,
 
     @router.get("/images/{image_id}/manifest")
     def image_manifest(image_id: str, request: Request):
-        refused = source_gate(ctx, request, "manifest")      # #997
+        refused = source_gate(ctx, request, "manifest", image_id)      # #997
         if refused is not None:
             return refused
         manifest = ctx.library.get(image_id)
@@ -899,7 +929,7 @@ def create_agent_router(ctx: ServerContext,
 
     @router.get("/images/{image_id}/files/{filename}")
     def image_file(image_id: str, filename: str, request: Request):
-        refused = source_gate(ctx, request, "files")         # #997
+        refused = source_gate(ctx, request, "files", image_id)         # #997
         if refused is not None:
             return refused
         # רשימה לבנה: מוגש רק קובץ שהמניפסט מכריז עליו בשמו המדויק.
@@ -913,7 +943,7 @@ def create_agent_router(ctx: ServerContext,
         """‏#1805/#1864: רשימת ה-XXH64 של מחיצה — שורה לחתיכה של 4MiB של זרם הנתונים
         (‏`server/agent/readbackhash.py`). הסוכן בודק אותה בעצמו מול `readback_xxh64`
         שבמניפסט; אין רשימה (טרם גובב, הפצה ישירה) — 404, והסוכן אומר "לא אומת"."""
-        refused = source_gate(ctx, request, "readback")
+        refused = source_gate(ctx, request, "readback", image_id)
         if refused is not None:
             return refused
         manifest = ctx.library.get(image_id)

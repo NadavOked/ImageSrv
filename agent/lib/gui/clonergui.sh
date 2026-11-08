@@ -103,6 +103,18 @@ gui_rb_print() {   # $1 = the record's key, $2 = dev: <key>=dev|done|total|verdi
     printf '%s=%s|%s|%s|%s\n' "$1" "$2" "${_cg_rbp:-|}" "$_cg_rbv" "$_cg_rbr"
 }
 
+# #1843 (mockup 07/11): the server's expected end of this wave, from the hello the write started on
+# (session.forecast) -- forecast=<clock 0|1>|<end epoch>|<no_history>, e.g. "1|1762512720|" or "1||no_history".
+# clock 1 = the server proved its clock synced (#2144): only then does the screen draw an HH:MM at all.
+# Nothing printed = nothing said: an older server, a wave that is not a room wave, a record that is not an object.
+gui_forecast_record() {
+    _cg_fc=$(json_get "$RUN_DIR/response.json" '.session.forecast | if type != "object" then empty else
+        [(if .clock == true then 1 else 0 end), (if (.ends_at | type) == "number" then (.ends_at | floor) else "" end),
+         (if .why == "no_history" then "no_history" else "" end)] | map(tostring) | join("|") end')
+    case "$_cg_fc" in [01]\|*) printf 'forecast=%s\n' "$_cg_fc" ;; esac
+    return 0
+}
+
 cloner_gui_state() {
     # Written by the kiosk process. The per-drawer files are the local source
     # of truth (progress.sh), so the screen keeps updating even when a server
@@ -118,6 +130,7 @@ cloner_gui_state() {
     [ -s "$RUN_DIR/server-restarted-wave" ] && printf 'server_restarted_wave=1\n' >> "$_cg_next"
     gui_header_state "$RUN_DIR/response.json" >> "$_cg_next" || return 1
     gui_rb_mode >> "$_cg_next" || return 1   # #2046
+    gui_forecast_record >> "$_cg_next" || return 1   # #1843
     _cg_count=$(json_get "$RUN_DIR/response.json" ".drawer_count")
     case "$_cg_count" in [1-8]) printf 'drawer_count=%s\n' "$_cg_count" >> "$_cg_next" || return 1 ;; esac
     # #1304: the standby screen's connection line. A hello.state the reader
@@ -126,6 +139,7 @@ cloner_gui_state() {
     gui_hello_state >> "$_cg_next" || :
     # #704: the operator's slot names (slotnames.sh); a failed read keeps the last file.
     slot_names_refresh || :; drawer_slots_refresh || :   # #1495: the drawer mapping, the same way
+    if command -v disk_labels_refresh > /dev/null 2>&1; then disk_labels_refresh || :; fi   # #1857: the sets of the disks (disklabels.sh); a failed read keeps the last file
     { slot_names_records && drawer_slots_records; } >> "$_cg_next" || return 1
     fw_warn_record >> "$_cg_next" || :   # #2080: fw_warn=<n>|<text>, the moved-connection warning; advice, never freezes the drawers
 
@@ -170,16 +184,19 @@ cloner_gui_state() {
     # Idle -- no round targets yet: what is plugged in, not a bare "waiting".
     if [ "$_cg_any" = 0 ]; then
         cloner_cdisks "$(list_disks)" >> "$_cg_next" || return 1
+        # #1859 (mockup 1859-smart-table): csmart= / csmartrow= -- every attribute, for the table behind a click. A table that cannot be built leaves the disk without its "all attributes" line
+        if command -v smart_tables_state > /dev/null 2>&1; then smart_tables_state "$(list_disks)" >> "$_cg_next" || :; fi
     fi
     if command -v disk_used_records > /dev/null 2>&1; then disk_used_records "$(list_disks)" >> "$_cg_next" || return 1; fi   # #2030: cused= -- size and bytes in use per disk; none = "not measured" (guibridge.sh loads it, a test pins that)
 
+    if command -v disk_label_records > /dev/null 2>&1; then disk_label_records "$(list_disks)" >> "$_cg_next" || :; fi   # #1857: cdisk_label=dev|text -- "קוריאים · xx-7" beside the drawer; no set = no record, the screen as it was (guibridge.sh loads the library, a test pins that)
     gui_ask_state >> "$_cg_next" || return 1   # #1808/#1898: a drawer's question (drawergate.sh, askgui.sh)
     # #410: when this snapshot was taken -- the screen shows its age.
     printf 'updated=%s\n' "$(date +%s)" >> "$_cg_next" || return 1
     mv "$_cg_next" "$GUI_DIR/state"
 }
 
-# cdisk=port|dev|model|size|smart|cause|link|link_max|crc|drawer|conn|mark|hw (#432/#1366; #1798; #1921; not the build's disk=, #688) of
+# cdisk=port|dev|model|size|smart|cause|link|link_max|crc|drawer|conn|mark|hw|f1date|f1src|f1smart (#432/#1366; #1798; #1921; #1858; not the build's disk=, #688) of
 # the disks in $1: all on the idle screen, the drawers on the restore screen (lcpull.sh).
 # #867: by disk number (sda can be disk 3), a disk with no slot last; the prefix after the sort.
 cloner_cdisks() {
@@ -210,9 +227,13 @@ cloner_cdisks() {
         _cg_crc=$(disk_link_json "$_cg_d" | sed -n 's/.*"crc":\([0-9][0-9]*\).*/\1/p')
         case "$_cg_crcmax" in ''|0|*[!0-9]*) _cg_crc= ;; *) [ -n "$_cg_crc" ] && [ "$_cg_crc" -gt "$_cg_crcmax" ] || _cg_crc= ;; esac
         _cg_link=$(disk_link "$_cg_d")   # #432: "<speed> <max>", null = not read -- fields 7/8
-        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
+        # #1858: "נצפה F1" by serial -- the date and source (14/15), and the disk's own SMART beneath the red (16; empty = not known)
+        _cg_f1=$(command -v disk_f1_observed >/dev/null 2>&1 && disk_f1_observed "$_cg_d") || _cg_f1="|"
+        _cg_f1u=$(command -v disk_f1_under >/dev/null 2>&1 && [ "$_cg_f1" != "|" ] && disk_f1_under "$_cg_d")
+        case "$_cg_f1u" in ok) _cg_f1u=passed ;; esac
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
             "$_cg_dmodel" "$_cg_dsize" "$_cg_dsmart" "$_cg_dcause" "${_cg_link% *}" "${_cg_link#* }" "$_cg_crc" "$_cg_dn" \
-            "$(writemark_state "$_cg_d")" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_cg_d" "crc link_slow")" \
+            "$(writemark_state "$_cg_d")" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_cg_d" "crc link_slow")" "$_cg_f1" "$_cg_f1u" \
             >> "$_cg_idle" || return 1   # #1798: field 12 -- incomplete|clean|unchecked; #1921: 13 -- the drawer's hw note (crc/link have 7-9)
     done
     sort -t'|' -k1,1n -k2,2n -k3,3n "$_cg_idle" > "$_cg_idle.sorted" || return 1

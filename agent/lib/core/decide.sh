@@ -11,6 +11,8 @@
 #
 # Output (stdout, one word):
 #   local            reboot to the local disk -- the default for anything unclear
+#   bad_answer       the server's answer is not understood (#2666): the failure
+#                    screen with the reason, then a reboot (die_local)
 #   unknown          show "MAC not registered" briefly, then local
 #   recovery         show the single-station recovery menu
 #   task             a direct task was assigned (restore/capture)
@@ -22,8 +24,12 @@
 # explicit, well-understood work order ends in "local".
 
 decide() {
-    # An interface version we do not speak: do not guess, boot locally.
-    [ "$D_SCHEMA" = "1" ] || { echo "local"; return; }
+    # An interface version we do not speak -- or an answer that did not parse
+    # (an empty or null schema): do not guess, and say so (#2666). The caller
+    # dies with that reason on the failure screen; where the next boot goes is
+    # the server's menu (#75), which serves this screen only on a card that
+    # distributes images and only within the boot budget.
+    [ "$D_SCHEMA" = "1" ] || { echo "bad_answer"; return; }
 
     # The server does not know this MAC. It offers nothing; neither do we.
     [ "$D_KNOWN" = "true" ] || { echo "unknown"; return; }

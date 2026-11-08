@@ -173,6 +173,7 @@ def restore(tmp_path: Path, run_restore: str, *, gui: str | None = "live", manif
         f"http_get() {{ {get}; }}; "
         "pull_post() { printf '{\"id\":\"ses_1\"}' > \"$3\"; echo 200; }; "
         "http_post_json() { :; }; progress_loop() { :; }; "
+        "session_open_gate() { :; }; "   # #2657: the open-job gate -- its own tests (test_unicast_pull.py)
         'arm_wol() { return 0; }; watchdog_beat() { echo beat >> "$RUN_DIR/beats"; }; '
         'sgdisk() { echo "SGDISK $*" >> "$RUN_DIR/trace"; return "${SGDISK_RC:-0}"; }; '
         'blockdev() { echo "BLOCKDEV $*" >> "$RUN_DIR/trace"; }; '

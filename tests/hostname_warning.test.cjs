@@ -55,6 +55,7 @@ PATH=/usr/bin:/bin:$PATH
 LOG_FILE="$RUN_DIR/log"
 . agent/lib/postdeploy/hostname.sh
 . agent/lib/postdeploy/hostname_linux.sh
+. agent/lib/postdeploy/postdeploy.sh   # plan_bitlocker (#1840), as imagesrv-agent sources it
 log() { printf '%s\\n' "$*" >> "$LOG_FILE"; }
 manifest_plan() { echo '1|guid|data|ext4|2048|4096|p1|sha|false'; }
 _linux_marked() { return 0; }

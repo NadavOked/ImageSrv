@@ -344,8 +344,14 @@ def ingest(conn: sqlite3.Connection, payload: dict,
             named = slot_names.label(conn, mac, dev=t["dev"]) or t["dev"]
             drawer_cancel.confirmed(conn, session_id, mac, t["dev"], f"{mac} {named}")
     # ‏#1386: בקשות "בטל דיסק זה" מהקונסולה/מחשב הבנייה נמסרות בתשובה הזו.
+    # ‏#2657: ‏`session_id` חוזר **רק כאן** — הדיווח נרשם לחבר פעיל בסבב פתוח.
+    # זו הראיה ששער הכתיבה של הסוכן (`opengate.sh`) דורש לפני שהוא נוגע
+    # בדיסק; ‏`ok` בלי המזהה (חבר שכבר סיים, למעלה) אינו פותח אותו.
+    reply: dict = {"ok": True, "session_id": session_id}
     cancel = drawer_cancel.pending(conn, session_id, mac)
-    return {"ok": True, "cancel": cancel} if cancel else {"ok": True}
+    if cancel:
+        reply["cancel"] = cancel
+    return reply
 
 
 def _bound_serial(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) -> dict:

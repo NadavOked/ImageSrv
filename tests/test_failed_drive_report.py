@@ -53,6 +53,9 @@ def _drawers(disks: list[dict], targets: list[dict], written=frozenset()):
             class _R:
                 def fetchone(self_inner):
                     return {"disks_json": json.dumps(disks)}
+
+                def __iter__(self_inner):   # #1857: drawer_list also asks disk_sets.labels_for -- no set here
+                    return iter(())
             return _R()
 
     member = _Member(targets_json=json.dumps(targets))

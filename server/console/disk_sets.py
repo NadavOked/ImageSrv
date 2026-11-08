@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from server.disks import disk_sets
+from server.disks import disk_sets, f1_marks
+from server.agent import registry
 from server.agent.api import ServerContext
 
 
-def _guard(fn, *args):
+def _guard(fn, *args, **kwargs):
     try:
-        return fn(*args)
-    except disk_sets.SetError as exc:
+        return fn(*args, **kwargs)
+    except (disk_sets.SetError, f1_marks.MarkError) as exc:
         raise HTTPException(exc.status, str(exc)) from None
 
 
@@ -25,7 +26,7 @@ async def _body(request: Request) -> dict:
 def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
     @router.get("/disk-sets")
     def list_sets(user=Depends(admin_only)):
-        return disk_sets.list_sets(ctx.conn)
+        return _guard(disk_sets.list_sets, ctx.conn)   # ‏#1858: 503 כשסימוני ה-F1 לא נקראו
 
     @router.post("/disk-sets")
     async def create_set(request: Request, user=Depends(admin_only)):
@@ -62,6 +63,22 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
     @router.get("/disks")
     def all_disks(user=Depends(admin_only)):
         """‏כל הדיסקים שהשרת מכיר + האפשרויות לסינון; הסינון עצמו בקונסולה (רשימה של מאות לכל היותר)."""
-        rows = disk_sets.disks(ctx.conn)
+        rows = _guard(disk_sets.disks, ctx.conn)
         rows.sort(key=disk_sets.sort_key)
         return {"disks": rows}
+
+    # ‏#1858 (מוקאפ 07/11): "נצפה F1" לדיסק לפי serial. ‏`mac` (אופציונלי) = המכונה שבה הדיסק היה כשסומן.
+    @router.post("/disks/{serial}/f1")
+    async def mark_f1(serial: str, request: Request, user=Depends(admin_only)):
+        b = await _body(request) if await request.body() else {}
+        mac = b.get("mac")
+        if mac is not None:
+            mac = registry.normalize_mac(mac) if isinstance(mac, str) else None
+            if mac is None:
+                raise HTTPException(400, "mac לא תקין")
+        return {"ok": True, "f1": _guard(f1_marks.mark, ctx.conn, serial, f1_marks.MANUAL, user[0], mac)}
+
+    @router.delete("/disks/{serial}/f1")
+    def clear_f1(serial: str, user=Depends(admin_only)):
+        _guard(f1_marks.clear, ctx.conn, serial, user[0])
+        return {"ok": True}

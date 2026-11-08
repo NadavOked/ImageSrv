@@ -119,7 +119,7 @@ firmware → shim (Microsoft-signed) → GRUB (Debian-signed) → distro kernel 
                                                                             ^ הסוכן, בלי חתימה
 ```
 
-ה-initramfs נטען כנתון אחרי הקרנל ולכן אינו דורש חתימה. עדכון הסוכן הוא החלפת קובץ אחד.
+Secure Boot מאמת את השרשרת עד הקרנל בלבד. ה-initramfs וקובץ התצורה של GRUB **אינם נבדקים בחתימה**, ובמחשבי Legacy BIOS אין אימות כלל: האמון בהם נשען על בידוד רשת ההפצה. עדכון הסוכן הוא החלפת קובץ אחד. מה מאומת ומה לא: [מודל האמון](docs/architecture/security-model.md).
 GRUB מושך קובץ תצורה שמיוצר בזמן אמת לפי ה-MAC. פרטי משימה אינם עוברים בשורת הפקודה של הקרנל — הכול מגיע מהשרת בערוץ מתועד ([docs/architecture/interfaces.md](docs/architecture/interfaces.md)).
 
 ## התקן שיכפול USB
@@ -218,6 +218,8 @@ Issue בריפו הפרטי מותר; פרסום לציבור לפני תיקו�
 
 בפריסה: הקונסולה (8081, HTTPS) על וילן השרתים בלבד; ערוץ התחנות והמולטיקאסט על וילן ההפצה בלבד.
 
+**מודל האמון:** ערוץ התחנות (8080), ה-initramfs וזרם המולטיקאסט אינם מאומתים קריפטוגרפית היום. מי שמחובר לוילן ההפצה נמצא בתוך גבול האמון, ולכן וילן הפצה סגור הוא דרישת פריסה, לא המלצה. בידוד הרשת אינו תחליף לאימות. מה מוגן, מה לא, מה קורה כשאימות נכשל ואיך כל פער נסגר: [docs/architecture/security-model.md](docs/architecture/security-model.md).
+
 ## מבנה הריפו
 
 | נתיב | תפקיד |
@@ -227,6 +229,7 @@ Issue בריפו הפרטי מותר; פרסום לציבור לפני תיקו�
 | [docs/architecture/server.md](docs/architecture/server.md) | שרת וקונסולה, כולל פריסה כשירות |
 | [docs/architecture/agent.md](docs/architecture/agent.md) | סוכן: החלטות, שחזור, קליטה, חדר שיכפולים |
 | [docs/architecture/grub-generator.md](docs/architecture/grub-generator.md) | מחולל תפריט GRUB |
+| [docs/architecture/security-model.md](docs/architecture/security-model.md) | מודל האמון: מה מאומת באתחול ובמשימה, ומה לא |
 | [docs/guides/server-install.md](docs/guides/server-install.md) | התקנת שרת |
 | [docs/guides/driver-packages.md](docs/guides/driver-packages.md) | חבילות דרייברים |
 | [docs/guides/local-clone.md](docs/guides/local-clone.md) | שיכפול מקומי והתקן USB |

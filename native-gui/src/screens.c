@@ -11,6 +11,7 @@
 #include "lcui.h"   /* #1322 */
 #include "smartdlg.h"   /* 16/10 */
 #include "canceldlg.h"  /* #1386 */
+#include "smarttbl.h"   /* #1859 */
 #include "dcui.h"       /* #1914: the USB stick's settings are the DCUI's settings screen */
 
 /* #1252: a value the state file did not carry is said as unknown -- the
@@ -630,6 +631,50 @@ static int app_f1_disk(const App *a,const IdleDisk **d){
     return 0;
 }
 
+/* #1858 (mockup 07/11, Nadav): the second proof -- a disk that "נצפה F1 בהדלקה", marked by serial (an operator in the
+ * console, or the server after the machine "did not arrive" and came back). It wins over a SMART red: it was seen. */
+static int app_f1_seen(const App *a,const IdleDisk **d){
+    for(int i=0;i<a->st.nidisks;i++){const IdleDisk *x=&a->st.idisks[i];
+        if(x->f1_date[0]||!strcmp(x->cause,"f1_observed")){if(d)*d=x;return 1;}}
+    return 0;
+}
+
+/* "נצפה F1 ב-24/10" from the mark's YYYY-MM-DD (state.c checked its shape); "נצפה F1" when the date is unknown */
+void f1_seen_when(const IdleDisk *d,char *out,size_t n){
+    if(d->f1_date[0])snprintf(out,n,"נצפה F1 ב-⁦%.2s/%.2s⁩",d->f1_date+8,d->f1_date+5);
+    else snprintf(out,n,"נצפה F1");
+}
+
+/* The F1 notice of the power-off counts (the idle window and the end-of-task count, #1560): the same box.
+ * Drawn at (x,y) of width w when `draw`; returns its height, 0 = no disk is known to stop the BIOS (nothing drawn). */
+double f1_notice(App *a,cairo_t *cr,double x,double y,double w,int draw){
+    const IdleDisk *fd=NULL;int seen=app_f1_seen(a,&fd);
+    if(!seen&&!app_f1_disk(a,&fd))return 0;
+    const Theme *t=a->theme;
+    char drw[32],when[64],why[96],f1[480];
+    if(fd->drawer>0)snprintf(drw,sizeof drw,"במגירה %d",fd->drawer);else snprintf(drw,sizeof drw,"במחשב");
+    when[0]=0;
+    if(seen)f1_seen_when(fd,when,sizeof when);
+    /* the SMART red only when it is one (a mark on a disk that reads healthy says only that it was seen) */
+    int red=!strcmp(fd->smart,"fail")&&(!fd->cause[0]||!strcmp(fd->cause,"health_failed")||!strcmp(fd->cause,"health_unread"));
+    snprintf(why,sizeof why,"%s%s%s",red?"‏SMART אדום":"",red&&seen?", ":"",when);
+    snprintf(f1,sizeof f1,"%s יש דיסק שה-BIOS עוצר עליו: ⁦%s⁩, %s. הוציאו אותו לפני ההדלקה הבאה, או לחצו F1 ליד המחשב כשהוא נדלק.",
+             drw,fd->model[0]?fd->model:"דיסק",why);
+    Text fh=text_make(cr,FONT_SANS,13,700,"בהדלקה הבאה ה-BIOS יעצור על F1",(int)(w-24-36),DIR_RTL);
+    Text fb=text_make(cr,FONT_SANS,12.5,400,f1,(int)(w-24-36),DIR_RTL);
+    double h=12+fh.h+4+fb.h+12;
+    if(draw){
+        Rect fr={x,y,w,h};
+        draw_fill_rrect(cr,fr,RADIUS_SM,t->warning_soft);draw_border_rrect(cr,fr,RADIUS_SM,t->warn,1);
+        double cx=fr.x+fr.w-12-10,cy=fr.y+12+10;
+        cairo_arc(cr,cx,cy,10,0,2*M_PI);draw_set(cr,t->warn);cairo_fill(cr);
+        Text ex=text_make(cr,FONT_SANS,13,700,"!",0,DIR_LTR);text_draw(cr,&ex,cx-ex.w/2,cy-ex.h/2,t->on_ink);text_free(&ex);
+        text_draw_r(cr,&fh,fr.x+fr.w-12-24,fr.y+12,t->warn);text_draw_r(cr,&fb,fr.x+fr.w-12-24,fr.y+12+fh.h+4,t->ink);
+    }
+    text_free(&fh);text_free(&fb);
+    return h;
+}
+
 /* #434 / mockup 10: the power-off window, over every screen: the agent found nobody here for
  * IDLE_POWEROFF_S. Any key keeps the machine on (the GUI emits "touch"); Enter or "כבה עכשיו"
  * powers off now (idle-poweroff). A drawer with a disk that stops the BIOS on F1 says so. */
@@ -638,37 +683,21 @@ static void draw_idle_countdown(App *a,cairo_t *cr,double W,double H){
     const Theme *t=a->theme;
     long long left=a->fixed_clock?30:a->st.idle_poweroff_at-(long long)time(NULL); if(left<0)left=0;
     cairo_rectangle(cr,0,N_HEADER_H,W,H-N_HEADER_H-N_STATUS_H);draw_set_a(cr,(Rgb){0,0,0},.35);cairo_fill(cr);
-    char ttl[96],sub[160],f1[400],secs[32];
+    char ttl[96],sub[160],secs[32];
     he_secs(left,secs,sizeof secs);snprintf(ttl,sizeof ttl,"המחשב ייכבה בעוד %s",secs);
     int m=a->st.idle_poweroff_s/60;
     if(m==1)snprintf(sub,sizeof sub,"דקה בלי פעילות. כל מקש משאיר אותו דלוק.");
     else if(m>0)snprintf(sub,sizeof sub,"%d דקות בלי פעילות. כל מקש משאיר אותו דלוק.",m);
     else snprintf(sub,sizeof sub,"אין פעילות במחשב. כל מקש משאיר אותו דלוק.");
-    const IdleDisk *fd=NULL;int f1on=app_f1_disk(a,&fd);
     double bw=fmin(560,W-48),in=bw-2*24;
     Text tt=text_make(cr,FONT_SANS,18,600,ttl,(int)in,DIR_RTL),ts=text_make(cr,FONT_SANS,13,400,sub,(int)in,DIR_RTL);
-    Text fh={0},fb={0};
-    if(f1on){
-        char drw[32];if(fd->drawer>0)snprintf(drw,sizeof drw,"במגירה %d",fd->drawer);else snprintf(drw,sizeof drw,"במחשב");
-        snprintf(f1,sizeof f1,"%s יש דיסק שה-BIOS עוצר עליו: \u2066%s\u2069, \u200fSMART אדום. הוציאו אותו לפני ההדלקה הבאה, או לחצו F1 ליד המחשב כשהוא נדלק.",drw,fd->model[0]?fd->model:"דיסק");
-        fh=text_make(cr,FONT_SANS,13,700,"בהדלקה הבאה ה-BIOS יעצור על F1",(int)(in-24-36),DIR_RTL);
-        fb=text_make(cr,FONT_SANS,12.5,400,f1,(int)(in-24-36),DIR_RTL);
-    }
-    double fbh=f1on?12+fh.h+4+fb.h+12:0;
-    double h=24+tt.h+6+ts.h+(f1on?14+fbh:0)+18+38+22;
+    double fbh=f1_notice(a,cr,0,0,in,0);   /* #1858: measured; 0 = no F1 disk */
+    double h=24+tt.h+6+ts.h+(fbh>0?14+fbh:0)+18+38+22;
     Rect b={(W-bw)/2,N_HEADER_H+(H-N_HEADER_H-N_STATUS_H-h)/2,bw,h};
     draw_fill_rrect(cr,b,t->radius,t->surface);draw_border_rrect(cr,b,t->radius,t->hair,1);
     double y=b.y+24,xr=b.x+b.w-24;
     text_draw_r(cr,&tt,xr,y,t->ink);y+=tt.h+6;text_draw_r(cr,&ts,xr,y,t->muted);y+=ts.h;
-    if(f1on){
-        y+=14;Rect fr={b.x+24,y,in,fbh};
-        draw_fill_rrect(cr,fr,RADIUS_SM,t->warning_soft);draw_border_rrect(cr,fr,RADIUS_SM,t->warn,1);
-        double cx=fr.x+fr.w-12-10,cy=fr.y+12+10;
-        cairo_arc(cr,cx,cy,10,0,2*M_PI);draw_set(cr,t->warn);cairo_fill(cr);
-        Text ex=text_make(cr,FONT_SANS,13,700,"!",0,DIR_LTR);text_draw(cr,&ex,cx-ex.w/2,cy-ex.h/2,t->on_ink);text_free(&ex);
-        text_draw_r(cr,&fh,fr.x+fr.w-12-24,fr.y+12,t->warn);text_draw_r(cr,&fb,fr.x+fr.w-12-24,fr.y+12+fh.h+4,t->ink);
-        y+=fbh;text_free(&fh);text_free(&fb);
-    }
+    if(fbh>0){y+=14;f1_notice(a,cr,b.x+24,y,in,1);y+=fbh;}
     y+=18;   /* the buttons at the end (left): "השאר דלוק" the primary, "כבה עכשיו" beside it */
     double kw=lc_btn_width(cr,"השאר דלוק","Esc"),ow=lc_btn_width(cr,"כבה עכשיו","Enter");
     double r=b.x+24+ow+10+kw;
@@ -805,6 +834,7 @@ static void app_draw_logical(App *a,cairo_t *cr,double W,double H){
     case SCREEN_FAILURE:  screen_failure(a, cr, W, H, head_h); break;   /* #1569 */
     case SCREEN_INSTALL:  break;
     }
+    smt_draw(a,cr,W,H,head_h);   /* #1859: the SMART table's drawer -- over the cloner's wait, under every dialog */
     draw_state_warning(a,cr,W,H);draw_idle_countdown(a,cr,W,H);
     draw_shrink_dialog(a,cr,W,H);   /* #928: modal, over every screen but the status bar */
     draw_ask_dialog(a,cr,W,H);      /* 11/10: the agent's question, the same way */

@@ -50,6 +50,8 @@ DEFAULT_LEASES = "/var/lib/misc/dnsmasq.leases"
 
 REFUSED = "identity_refused"
 UNVERIFIABLE = "identity_unverifiable"
+#: ‏#2657: מכונה רשומה שאין לה סבב או משיכה פתוחים עם האימג' המבוקש.
+NO_OPEN_JOB = "image_fetch_refused"
 
 
 @dataclass(frozen=True)
@@ -252,13 +254,19 @@ def verify_extra(conn: sqlite3.Connection, leases: LeaseFile, mac: str, extra: s
 
 
 def verify_source(conn: sqlite3.Connection, leases: LeaseFile, client_ip: str | None,
-                  is_registered: Callable[[str], bool]) -> Verdict:
+                  is_registered: Callable[[str], bool],
+                  has_open_job: Callable[[str], bool] | None = None) -> Verdict:
     """‏#997: זהות **בלי MAC מוצהר** — ל-`GET /images/…/manifest|files`, שבהם
     הסוכן שולח רק את הכתובת (‏`http_get` ב-`common.sh`, בלי `?mac=` ובלי
     כותרת). הכיוון הפוך: כתובת המקור → החכירה שיושבת עליה → ה-MAC של
     החכירה רשום ב-`machines`. "יש חכירה" לבדו אינו ראיה — ‏`dhcp-range`
     מחלק לכל מי שמבקש בוילן, גם למחשב נייד של תלמיד; "המכונה שחכורה
-    לכתובת הזאת היא אחת משלנו" כן. אותם שלושה מצבים ואותו מתג."""
+    לכתובת הזאת היא אחת משלנו" כן. אותם שלושה מצבים ואותו מתג.
+
+    ‏#2657: ‏``has_open_job`` — כשנמסר, "רשומה" אינה מספיקה: לפחות אחת
+    מהמכונות הרשומות שחכורות לכתובת צריכה עבודה פתוחה עם האימג' הזה
+    (`NO_OPEN_JOB` אחרת). כשהמתג כבוי אין MAC שאפשר לסמוך עליו, ולכן
+    גם הבדיקה הזו אינה רצה — כמו הבדיקה שלפניה."""
     if not enabled(conn):
         return Verdict(ok=True)
     if not client_ip:
@@ -274,10 +282,15 @@ def verify_source(conn: sqlite3.Connection, leases: LeaseFile, client_ip: str | 
         return Verdict(ok=False, event=UNVERIFIABLE,
                        detail=f"{client_ip}: no DHCP lease on this address",
                        message="machine identity could not be verified: no DHCP lease on this address")
-    if not any(is_registered(mac) for mac in holders.macs):
+    registered = [mac for mac in holders.macs if is_registered(mac)]
+    if not registered:
         return Verdict(ok=False, event=REFUSED,
                        detail=f"{client_ip}: lease holder {', '.join(holders.macs)} is not a registered machine",
                        message="the machine leased on this address is not registered")
+    if has_open_job is not None and not any(has_open_job(mac) for mac in registered):
+        return Verdict(ok=False, event=NO_OPEN_JOB,
+                       detail=f"{client_ip}: {', '.join(registered)} has no open round or pull with this image",
+                       message="no open round or pull for this machine with this image")
     return Verdict(ok=True)
 
 

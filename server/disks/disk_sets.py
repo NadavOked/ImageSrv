@@ -21,6 +21,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from server.db import NET_SEEN_MIN_INTERVAL_SECONDS, _settle, _write_lock, journal, now_iso, writing
+from server.disks import f1_marks
 
 log = logging.getLogger("imagesrv.disk_sets")
 
@@ -210,7 +211,11 @@ def health(conn: sqlite3.Connection, serials: list[str]) -> dict[str, dict]:
 
 # ---------------------------------------------------------------- views
 
-def _disk_view(conn, serial, inv, member, set_by_id, hl, places, names) -> dict:
+def _disk_view(conn, serial, inv, member, set_by_id, hl, places, names, f1=None) -> dict:
+    # ‏#1858 (07/11): "נצפה F1" צובע אדום (כלל 24/10: דיסק שגורם ל-F1 מדולג בשיכפול) -- בלי לטעון ש-SMART פגום:
+    # הסיבה `f1_observed` נקבעת רק כשאין סיבה אדומה משלו.
+    if f1 is not None and hl["state"] != "red":
+        hl = {**hl, "state": "red", "reason": "f1_observed"}
     mac, port = places.get(serial, (None, None))
     here = mac is not None
     if not here and inv is not None:
@@ -229,6 +234,7 @@ def _disk_view(conn, serial, inv, member, set_by_id, hl, places, names) -> dict:
         "in_machine": here,
         "mac": mac, "machine": names.get(mac) if mac else None, "port": port,
         "last_seen": inv["last_seen"] if inv else None,
+        "f1": f1,
     }
 
 
@@ -243,7 +249,10 @@ def disks(conn: sqlite3.Connection) -> list[dict]:
     sets = {r["id"]: r for r in conn.execute("SELECT * FROM disk_sets")}
     hl = health(conn, order)
     places, names = _current_places(conn), _machine_names(conn)
-    return [_disk_view(conn, s, inv.get(s), members.get(s), sets, hl[s], places, names) for s in order]
+    marks = f1_marks.all_marks(conn)
+    if marks is None:   # "לא נקרא" אינו "אין סימונים" (עיקרון 5): דיסק מסומן היה מוצג כתקין
+        raise SetError("לא הצלחתי לקרוא את סימוני ה-F1 של הדיסקים", 503)
+    return [_disk_view(conn, s, inv.get(s), members.get(s), sets, hl[s], places, names, marks.get(s)) for s in order]
 
 
 def sort_key(d: dict):
@@ -405,6 +414,24 @@ def labels_for(conn: sqlite3.Connection, disks_: object) -> dict[str, dict]:
     for r in conn.execute(
             f"SELECT m.serial, m.suffix, s.name, s.prefix FROM disk_set_members m JOIN disk_sets s ON s.id = m.set_id"
             f" WHERE m.serial IN ({marks})", serials):
-        lab = label(r["prefix"], r["suffix"])
-        out[r["serial"]] = {"set": r["name"], "label": lab, "text": f"{r['name']} · {lab}"}
+        out[r["serial"]] = _label_entry(r)
     return out
+
+
+def _label_entry(r: sqlite3.Row) -> dict:
+    lab = label(r["prefix"], r["suffix"])
+    return {"set": r["name"], "label": lab, "text": f"{r['name']} · {lab}"}
+
+
+def all_labels(conn: sqlite3.Connection) -> dict[str, dict]:
+    """‏#1857: כל הדיסקים ששויכו לסט, ``{serial: {"set", "label", "text"}}`` -- בשאילתה אחת, למסכים
+    שמציגים הרבה דיסקים בבת אחת (רשימת המכונות, כשלי דיסק, היומן). דיסק בלי סט חסר."""
+    return {r["serial"]: _label_entry(r) for r in conn.execute(
+        "SELECT m.serial, m.suffix, s.name, s.prefix FROM disk_set_members m JOIN disk_sets s ON s.id = m.set_id")}
+
+
+def text_of(labels: dict[str, dict], serial: object) -> str | None:
+    """‏``all_labels`` -> הטקסט ("קוריאים · xx-7") של דיסק לפי הסידורי, או ``None``. סידורי שאינו מחרוזת
+    (JSON פגום ב-hello) אינו נחפש."""
+    entry = labels.get(serial) if isinstance(serial, str) else None
+    return entry["text"] if entry else None

@@ -42,7 +42,7 @@ capture_pcl_flags() {
 capture_disk() {
     # $1 = task id, $2 = disk name, $3 = the serial it was ordered for (#1901; a direct send too, #1955). Emits the manifest path on success.
     _task="$1"; _disk="$2"
-    rm -f "$RUN_DIR/capture.reason" "$RUN_DIR/capture.unhib" "$RUN_DIR/src_unhib"
+    rm -f "$RUN_DIR/capture.reason" "$RUN_DIR/capture.unhib" "$RUN_DIR/src_unhib" "$RUN_DIR/capture.bitlocker"
     _node_base="$DEVROOT/$_disk"
     capture_stage ntfs_check   # #980 §4: the source checks (GPT, partitions, NTFS hibernation)
 
@@ -102,7 +102,7 @@ capture_disk() {
 
     while IFS='|' read -r _idx _guid _uguid _first _sizesec; do
         _node=$(partition_node "$_disk" "$_idx"); _fs=$(_fs_of "$_node")
-        _why=$(_bitlocker_reason "$_idx" "$_fs" "$_node"); [ -z "$_why" ] || { _capture_failed "$_disk" "$_why" source_bitlocker; return 1; }   # #1806: every partition, before a byte
+        _why=$(capture_bitlocker_gate "$_idx" "$_fs" "$_node"); [ -z "$_why" ] || { _capture_failed "$_disk" "$_why"; return 1; }   # #1806: every partition, before a byte; #1840: encrypted = read raw
         case "$_fs" in ntfs|ntfs-3g)
             _why=$(capture_ntfs_hibernation_reason "$_node" "$RUN_DIR/ntfs-check.$_idx"); _hn_status=$?
             capture_ntfs_gate "$_disk" "$_idx" "$_node" "$_hn_status" "$_why" || { _capture_failed "$_disk" "$CAPTURE_NTFS_ERROR" "$CAPTURE_NTFS_CODE"; return 1; } ;;
@@ -163,6 +163,7 @@ capture_disk() {
     fi
 
     capture_stage stream; cd_init "$_disk" "$_parts" "$_sector_size" 2>/dev/null || :   # sizes after the shrink
+    capture_bitlocker_note "$_disk" || { _capture_failed "$_disk" "לא הצלחנו לרשום את אזהרת ה-BitLocker — לא נקלט"; return 1; }   # #1840: before the first byte
     _json_parts=""
     _total=0
     # ‏#85: ה-ESP נקרא שוב אחרי הלולאה, לגזירת החותם של מטעני האתחול.
@@ -170,7 +171,7 @@ capture_disk() {
     while IFS='|' read -r _idx _guid _uguid _first _sizesec; do
         _node=$(lc_src_node "$_disk" "$_idx")   # #1466: a shrunk partition is read from its RAM view
         _attrs=$(awk -F'|' -v i="$_idx" '$1 == i { print $2 }' "$RUN_DIR/partition.attrs")
-        _fs=$(_fs_of "$_node")
+        _fs=$(capture_fs_of "$_idx" "$_node")   # #1840
         _role=$(_partition_role "$_guid")
         [ "$_role" = windows ] && { _role=$(_system_role "$_idx" "$_node" "$_fs") || { _capture_failed "$_disk" "$_role"; return 1; }; }   # #1369
         [ "$_role" = linux ] && { _why=$(_linux_system "$_idx" "$_node" "$_fs") || { _capture_failed "$_disk" "$_why"; return 1; }; }   # #1899: the root, not /boot
@@ -189,7 +190,7 @@ capture_disk() {
             continue
         fi
         _file="p$_idx.$_role.pcl.zst"
-        _used=$(_used_bytes "$_node" "$_fs"); cd_used "$_idx" "$_used" 2>/dev/null || :
+        _used=$(capture_used_bytes "$_node" "$_fs"); cd_used "$_idx" "$_used" 2>/dev/null || :
         log "partition $_idx ($_role, $_fs): reading"; cd_part "$_idx" "$_role" "$_fs" reading 2>/dev/null || :
 
         _out="$RUN_DIR/upload.$_idx"

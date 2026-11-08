@@ -78,7 +78,7 @@ def test_a_member_reporting_in_dashes_is_recognized_and_the_round_closes(server)
     response = progress(server, "B4-2E-99-07-1A-C4", ids["session"],
                         state="done", written=57982058496)
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert response.json()["ok"] is True
 
     # ראיה חיובית שהשורה הנכונה עודכנה, ולא ששום דבר לא התפוצץ.
     member = members(server)[0]
@@ -97,7 +97,7 @@ def test_every_form_of_section_six_reaches_the_same_row(server, form):
     ids = open_session(server, expected=1)
     hello(server, CANONICAL)
 
-    assert progress(server, form, ids["session"]).json() == {"ok": True}
+    assert progress(server, form, ids["session"]).json()["ok"] is True
     assert len(members(server)) == 1               # לא נוצרה שורה שנייה
     assert members(server)[0]["bytes_written"] == 4194304
 

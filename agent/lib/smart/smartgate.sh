@@ -88,7 +88,7 @@ smart_preflight() {
                 _pf_write="$_pf_write $_pf_d"
                 ;;
             fail)
-                target_set "$_pf_d" "skipped" "$(smart_red_he "$_pf_d")$([ "$_pf_r" = readonly ] || printf ' (%s)' "$(smart_reason_he "$_pf_r")")"   # #1742; #1861: no raw word
+                target_set "$_pf_d" "skipped" "$(smart_red_he "$_pf_d")$([ "$_pf_r" = readonly ] || [ "$_pf_r" = f1_observed ] || printf ' (%s)' "$(smart_reason_he "$_pf_r")")"   # #1742; #1861: no raw word
                 smart_send_event "$_pf_ses" "$_pf_d" "$_pf_v" "$_pf_r" skipped skip
                 log "$(smart_disk_label "$_pf_d"): SMART failed ($_pf_r) -- never written (#1732), skipped" >&2
                 ;;

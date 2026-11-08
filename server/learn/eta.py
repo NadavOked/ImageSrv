@@ -64,6 +64,21 @@ MIN_SECONDS = 60
 MIN_BYTES = 10 ** 9
 
 
+def with_clock(forecast: dict | None, trust: object | None) -> dict | None:
+    """‏#2684: ‏`forecast` + ‏`clock` -- האם מותר לצייר ממנו **שעה** (`ends_at`).
+    ‏`clock` הוא `True` רק על ראיה חיובית (`trust.ok()`, ‏`hello_eta.ClockTrust`: chrony
+    מסונכרן, טרי); ‏`trust` שלא הוזרק, או שזרק -- ‏`False`. אותו שדה ואותה משמעות כמו
+    `session.forecast.clock` ב-hello. ‏`None` נשאר `None` (אין הערכה לצייר)."""
+    if forecast is None:
+        return None
+    try:
+        trusted = trust is not None and trust.ok() is True
+    except Exception:             # noqa: BLE001 -- מדידה שנכשלה היא "לא הוכח"
+        log.exception("clock trust failed")
+        trusted = False
+    return {**forecast, "clock": trusted}
+
+
 def _when(stamp: object) -> datetime | None:
     if not isinstance(stamp, str):
         return None

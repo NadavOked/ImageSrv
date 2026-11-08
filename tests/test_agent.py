@@ -126,8 +126,9 @@ def decide(schema="1", known="true", role="classroom",
 @pytest.mark.parametrize(
     ("kwargs", "expected"),
     [
-        # גרסת ממשק לא מוכרת — לא מנחשים, עולים מהדיסק. גם כשיש סבב רץ.
-        (dict(schema="2", session="running"), "local"),
+        # גרסת ממשק לא מוכרת — לא מנחשים, גם כשיש סבב רץ. ‏#2666: אומרים את
+        # זה על מסך הכישלון (die_local), ולא "אין משימה"; לאן האתחול — השרת.
+        (dict(schema="2", session="running"), "bad_answer"),
         # MAC לא רשום — לא מציעים דבר, גם לא במצב recovery.
         (dict(known="false", mode="recovery"), "unknown"),
         (dict(known="false"), "unknown"),

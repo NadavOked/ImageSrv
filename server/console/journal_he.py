@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import sqlite3
 
+from server.disks import disk_sets
 from server.library.images import ImageLibrary
 from server.console.journal_he_detail import he_detail
 
@@ -157,6 +158,7 @@ EVENTS_HE = {
     # ‏#855: שומר הזהות — MAC מוצהר מול חכירת ה-DHCP.
     "identity_refused": "פנייה בשם מחשב מכתובת שאינה שלו — סורבה",
     "identity_unverifiable": "זהות מחשב לא ניתנת לבדיקה — סורבה",
+    "image_fetch_refused": "בקשת אימג׳ ממחשב בלי סבב או משיכה פתוחים לאימג׳ — סורבה",   # #2657
     "setting_change": "הגדרה שונתה",
     "auto_reboot": "הפעלה מחדש אוטומטית",
     "storage_group_create": "קבוצת שרתי משנה נוצרה",
@@ -250,6 +252,10 @@ EVENTS_HE = {
     "retention_failed": "ניקוי יומי: חלק לא בוצע (#1737)",
     "image_download": "אימג' הורד למחשב",
     "image_upload": "אימג' הועלה מהמחשב",
+    "iso_upload": "ISO הועלה לשרת",   # #404
+    "iso_delete": "ISO נמחק מהשרת",
+    "iso_folder_create": "תיקיית ISO נוצרה",
+    "iso_folder_delete": "תיקיית ISO נמחקה",
     # ‏#1861: הקריאה פרוסה על שתי שורות ב-app.py, והסריקה שורה-שורה לא ראתה אותה.
     "image_manifest_rejected": "אימג' הוצא מהספרייה — המניפסט שלו פגום",
     "driver_upload": "חבילת דרייברים יובאה",
@@ -323,11 +329,14 @@ EVENTS_HE = {
     "disk_set_assigned": "דיסקים שויכו לסט",
     "disk_set_replaced": "דיסק בסט הוחלף",
     "disk_set_removed": "דיסק הוצא מסט",
+    "disk_f1_marked": "נצפה F1 בהדלקה — דיסק סומן",   # #1858
+    "disk_f1_cleared": "סימון \"נצפה F1\" של דיסק נוקה",
     "machine_drawer_count": "מספר המגירות של מכונה עודכן",
     "machine_drawer_slots": "מיפוי חיבורי הדיסקים של מכונה עודכן",
     "learning_changed": "הלמידה התאימה הגדרה",   # #2028
     "learning_done": "הלמידה הסתיימה",
     "learning_machine": "מנהל ענה על הצעת הלמידה למחשב",
+    "usb_stick_sync": "סנכרון עם דיסק-און-קי שמחובר לשרת (#1920)",   # הפירוט: מצב, מזהה ההתקן, כמה נקלטו/נדחו/נכתבו
     "learning_not_learned": "הלמידה לא הגיעה למספר הנדרש, לא שונה דבר",
     "learning_overridden": "שינוי ידני גבר על הגדרה שהלמידה התאימה",
     "learning_rejected": "הלמידה דחתה מדידות כתיבה שאינן סבירות או שאינן מסבב רשום",
@@ -455,6 +464,7 @@ _SEVERITY_WARN = {
     "login_account_failures_trimmed", "journal_flood",   # #2478, #2498
     "unknown_mac", "drive_rates_failed", "boot_loop_local", "boot_loop_unverified", "agent_loop",
     "agent_loop_unverified", "report_from_nonmember", "identity_unverifiable", "room_rejoin",
+    "image_fetch_refused",   # #2657
     "capture_cancel", "direct_cancel", "task_boot_cancel", "send_stopped", "dhcp_proxy_risk",
     "net_config_unverified", "net_rollback_armed", "net_rollback",
     "net_rollback_unreadable", "net_rollback_marker_stuck", "work_area_kept", "nic_services_armed", "nic_services_reverted",
@@ -550,6 +560,10 @@ _IMG = re.compile(r"\b(img_[0-9a-f]+)\b")
 _SES = re.compile(r"\b(ses_[0-9a-f]+)\b")
 _GRP = re.compile(r"\b(grp_\w+)\b")
 _EXPAND = re.compile(r"expand=(\S+)")
+_SERIAL = re.compile(r"\bserial=(\S+)")
+#: ‏#1857: שורות יומן על דיסק לפי הסידורי -- מקבלות בקריאה את הסט והמדבקה הנוכחיים ("קוריאים · xx-7"),
+#: כדי שמי שקורא "דיסק נכשל" יידע איזה דיסק לשלוף. בקריאה ולא בכתיבה: דיסק ששויך אחרי הכשל מקבל שם גם בשורה הישנה.
+_SET_EVENTS = ("disk_failure", "disk_failure_cleared")
 
 
 def _expand_note(detail: str) -> str:
@@ -588,6 +602,7 @@ class JournalTranslator:
             row["id"]: f'{row["prefix"]} · {self._groups.get(row["group_id"], row["group_id"])}'
             for row in conn.execute("SELECT id, prefix, group_id FROM sessions")
         }
+        self._sets = disk_sets.all_labels(conn)   # ‏#1857
 
     def _names(self, text: str) -> str:
         text = _MAC.sub(lambda m: self._machines.get(m.group(1), m.group(1)), text)
@@ -651,8 +666,8 @@ class JournalTranslator:
             if m:
                 group = self._groups.get(m.group(1), m.group(1))
                 text = f"{group} ({ROLES_HE.get(m.group(2), m.group(2))})"
-        elif event in ("image_download", "image_upload"):
-            m = re.search(r'img_\w+ "(.+)"', detail)
+        elif event in ("image_download", "image_upload", "iso_upload", "iso_delete"):
+            m = re.search(r'(?:img|iso)_\w+ "(.+)"', detail)
             if m:
                 text = f'"{m.group(1)}"'
         elif event == "image_edit":
@@ -751,4 +766,10 @@ class JournalTranslator:
         else:
             text = self._names(detail)
 
-        return label, he_detail(event, text)
+        text = he_detail(event, text)
+        if event in _SET_EVENTS:
+            m = _SERIAL.search(detail)
+            tag = disk_sets.text_of(self._sets, m.group(1)) if m else None
+            if tag:
+                text += f" · {tag}"
+        return label, text

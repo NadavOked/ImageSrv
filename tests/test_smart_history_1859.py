@@ -236,3 +236,56 @@ def test_old_rounds_are_purged_but_the_last_one_of_each_serial_stays(conn):
         conn.execute("UPDATE smart_history SET at = ? WHERE session_id = ?", (at, ses)); conn.commit()
     housekeeping.purge_tables(conn)
     assert [r[0] for r in conn.execute("SELECT session_id FROM smart_history")] == ["b"]
+
+
+# --- the table on the cloner's screen: how much each attribute rose (#1859, Nadav 07/11) -------
+
+
+def test_the_hello_carries_how_much_each_attribute_rose(conn):
+    """The cloner's table has a "עלה" column: ATA by id, only what rose; the agent got just one word before."""
+    disk_events.ingest(conn, event("ses1", attrs(r5=9, r9=100)))
+    now = attrs(r5=12, r9=131, r199=7)
+    assert smart_history.rose_for(conn, [{"serial": "S1", "smart_attrs": now}]) ==         [{"serial": "S1", "rose": {"5": 3, "9": 31, "199": 7}}]
+
+
+def test_a_disk_that_was_compared_and_rose_nowhere_has_an_entry_with_nothing(conn):
+    """"Compared, nothing rose" is not "no comparison": the first is an entry with {}, the second no entry."""
+    disk_events.ingest(conn, event("ses1", attrs(r5=4)))
+    assert smart_history.rose_for(conn, [{"serial": "S1", "smart_attrs": attrs(r5=4)}]) == [{"serial": "S1", "rose": {}}]
+
+
+def test_without_a_previous_round_there_is_no_entry_never_a_stable_one(conn):
+    assert smart_history.rose_for(conn, [{"serial": "S1", "smart_attrs": attrs(r5=9)}]) == []
+
+
+def test_a_disk_nothing_was_read_from_or_with_no_serial_has_no_entry(conn):
+    disk_events.ingest(conn, event("ses1", attrs()))
+    assert smart_history.rose_for(conn, [{"serial": "S1", "smart_attrs": None}, {"serial": None, "smart_attrs": attrs()},
+                                         {"smart_attrs": attrs(r5=3)}, "junk"]) == []
+    assert smart_history.rose_for(conn, None) == []
+
+
+def test_nvme_rises_are_by_key(conn):
+    nv = lambda media: {"ata": [], "nvme": {"media_errors": media, "power_on_hours": 100}}   # noqa: E731
+    disk_events.ingest(conn, event("ses1", nv(0)))
+    assert smart_history.rose_for(conn, [{"serial": "S1", "smart_attrs": nv(2)}]) == [{"serial": "S1", "rose": {"media_errors": 2}}]
+
+
+def test_the_rose_is_the_same_number_the_console_shows(conn):
+    """Two views of one comparison: describe()'s rose_by and the hello's rose never disagree."""
+    disk_events.ingest(conn, event("ses1", attrs(r5=9)))
+    now = {"serial": "S1", "dev": "sda", "smart_attrs": attrs(r5=12, r9=12880)}
+    shown = {str(a["id"]): a["rose_by"] for a in smart_history.describe(conn, now)["attributes"] if a["rose_by"]}
+    assert smart_history.rose_for(conn, [now])[0]["rose"] == shown
+
+
+def test_the_hello_answer_carries_smart_rose(server):
+    """The agent reads it from response.json (smarttable.sh): none first, then the rise, from the real endpoint."""
+    from server.agent import registry
+    ids = setup_classroom(server)
+    first = hello_body(ids["mac1"]); first["disks"][0]["smart_attrs"] = attrs()
+    assert server["anon"].post("/api/v1/agent/hello", json=first).json()["smart_rose"] == []
+    disk_events.ingest(server["ctx"].conn, {**event("ses1", attrs()), "mac": registry.normalize_mac(ids["mac1"])})
+    body = hello_body(ids["mac1"]); body["disks"][0]["smart_attrs"] = attrs(r5=3, r9=12900)
+    answer = server["anon"].post("/api/v1/agent/hello", json=body).json()
+    assert answer["smart_rose"] == [{"serial": "S1", "rose": {"5": 3, "9": 29}}]

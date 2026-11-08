@@ -26,7 +26,7 @@ from server.rounds import drive_rates, nic_speed, room
 from server.agent import boot_preview, identity, inventory, probe, readbackhash, registry
 from server.system import backup_target, timezone
 from server.net import dhcp, ports
-from server.disks import (crcwarn, disk_failures, drawer_slots, shrink_records, slot_names,
+from server.disks import (crcwarn, disk_failures, disk_sets, drawer_slots, shrink_records, slot_names,
                           smart_history)
 from server.storage import disk_reserve, locations as storage_locations
 from server.interserver import storage_nodes, transfer_cap
@@ -43,9 +43,11 @@ from server import auto_reboot
 from server.net import igmp_querier
 from server.console import disk_sets as console_disk_sets   # #1857
 from server.console import learning as console_learning   # #2028
-from server.learn import tuning as learn_tuning   # #2028
+from server.learn import never_woke, tuning as learn_tuning   # #2028, #1858
+from server.learn import eta as learn_eta   # #2684
 from server.agent import firmware_image# #2080
 from server.disks import model_slots   # #2001
+from server.disks import f1_marks   # #1858
 from server.disks import writefloor   # #2338
 from server.agent import unknown_screen   # #1802
 from server.agent import held# #2031
@@ -488,7 +490,9 @@ def create_console_router(
             # משיכות היוניקאסט שרצות עכשיו. הן אינן "הסבב" — אבל הן
             # עבודה אמיתית על השרת, ושרת שעובד לא ייראה פנוי (#60).
             # ‏#1843: לכל משיכה גם `forecast` — הזמן הצפוי לפי המשיכות הקודמות של המכונה.
-            "pulls": [{**with_extras(row), "forecast": sv.pull_forecast(ctx.store, row, ctx.library)}
+            "pulls": [{**with_extras(row),
+                       "forecast": learn_eta.with_clock(      # #2684: + clock
+                           sv.pull_forecast(ctx.store, row, ctx.library), ctx.clock_trust)}
                       for row in ctx.store.active_pulls()],
             "room": room_module.status_view(ctx)["round"],
             "sender": ctx.sender.status() if ctx.sender else None,
@@ -692,9 +696,13 @@ def create_console_router(
         # ‏#2001: מיפוי לפי דגם — מכונה ← דגם ← ברירת מחדל.
         model_maps, models = model_slots.all_maps(ctx.conn), model_slots.models_by_mac(ctx.conn)
         crc_limit = crcwarn.threshold(ctx.conn)   # #1366
+        set_labels = disk_sets.all_labels(ctx.conn)   # ‏#1857: שם הסט והמדבקה לפי סידורי
         fw_counts = firmware_image.change_counts(ctx.conn)   # ‏#2080
         # ‏#2028: הצעת הלמידה למחשב חדש — מנהל בלבד. ‏null = לא נקרא או אינו מנהל, ואז אין הצעה.
         learning = learn_tuning.machine_states(ctx.conn) if user[1] == "admin" else None
+        # ‏#1858 (מוקאפ 10): מי לא הגיעה אחרי WoL — קריאה אחת לכל החדר. ‏None = הקריאה נכשלה.
+        woke_waits = never_woke.waiting(ctx.conn)
+        f1_seen = f1_marks.all_marks(ctx.conn)   # ‏#1858 (07/11): "נצפה F1" לפי serial. ‏None = נכשל — אין ראיה שנייה
         result = []
         for r in rows:
             row = dict(r)
@@ -719,6 +727,12 @@ def create_console_router(
                     crc = d.get("crc")
                     read = isinstance(crc, int) and not isinstance(crc, bool) and crc >= 0
                     d["crc_suspect"] = crcwarn.suspect(crc if read else None, crc_limit)
+                    # ‏#1857 (מוקאפ 04): "קוריאים · xx-7" ליד הדיסק; ‏None = בלי סט -- מוצג כמו היום.
+                    d["set_text"] = disk_sets.text_of(set_labels, d.get("serial"))
+                    serial = d.get("serial")
+                    mark = f1_seen.get(serial.strip()) if f1_seen and isinstance(serial, str) else None
+                    if mark is not None:   # ‏#1858: "נצפה F1" לפי serial -- הקונסולה לא מציעה לסמן שוב
+                        d["f1_observed"] = mark
             seen = inventories.get(row["mac"])
             row["inventory"] = seen["inventory"] if seen else None
             row["inventory_seen_at"] = seen["seen_at"] if seen else None
@@ -737,6 +751,8 @@ def create_console_router(
             row["local_copy"] = room.local_copy_now(row.pop("local_clone"), row["disks_reported_at"])
             # ‏#2031: "דלוק — מחכה ללחיצה" (#2024): ‏{at, problems} מדיווח held טרי, או None
             row["held"] = held.view(row.pop("held_at"), row.pop("held_json"))
+            # ‏#1858: "לא הגיעה אחרי WoL" — ו-F1 רק עם דיסק שידוע שעוצר (`server/learn/never_woke.py`)
+            row["never_woke"] = never_woke.for_machine(woke_waits, row["mac"], row["disks"], row["drawer_slots"], f1_seen)
             row["learning"] = (None if learning is None else learning.get(row["mac"], {
                 "state": "offer", "waves": 0, "ports": 0, "required": learn_tuning.REQUIRED_WAVES}))
             result.append(row)
@@ -996,7 +1012,9 @@ def create_console_router(
 
     @router.get("/disk-failures")
     def read_disk_failures(user=Depends(current_user)):
-        return disk_failures.list_open(ctx.conn)
+        set_labels = disk_sets.all_labels(ctx.conn)   # ‏#1857: איזה דיסק להחליף -- השם מהמדבקה, לא רק ה-serial
+        return [{**f, "set_text": disk_sets.text_of(set_labels, f["serial"])}
+                for f in disk_failures.list_open(ctx.conn)]
 
     @router.post("/disk-failures/{failure_id}/clear")
     def clear_disk_failure(failure_id: int, user=Depends(admin_only)):

@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -222,26 +223,58 @@ def test_the_wave_outcome_sums_bytes_and_resends_over_the_partitions(engine_env)
     assert _counts(engine.wave_outcome("ses_other")) == {"sent_bytes": None, "loss_blocks": None}
 
 
-def test_the_stream_rate_is_the_bytes_moved_over_the_time_they_moved(engine_env, monkeypatch):
+@pytest.fixture()
+def sample_clock(monkeypatch):
+    """The sampler's time is a function of what it just read -- not of the wall (#2689).
+
+    ``stream_s`` is a difference of two ``time.monotonic()`` stamps the sampler
+    takes right after it reads the counter. The old test slept 0.3/0.5/0.2 s on
+    the real clock and asserted ``0.3 <= stream_s <= 1.5``: at load 35 on 14 cores
+    the sampler woke late and it measured 2.6. Here ``monotonic`` is a table
+    ``{bytes the sampler saw: second}``, so the difference is whatever the table
+    says, however late a thread runs. ``seen`` lets the test wait until the sampler
+    has really consumed a counter before it writes the next one (a sampler that
+    skipped the 1MB line would see only one sample and report None)."""
+    stamps: dict[int, float] = {}
+    seen: list[int] = []
+    now = [0.0]
+    real_progress, real_time = sender_module.sender_progress, sender_module.time
+
+    def progress(path):
+        got = real_progress(path)
+        if got is not None and got[0] in stamps:
+            now[0] = stamps[got[0]]       # the same thread stamps right after this
+            seen.append(got[0])
+        return got
+
+    monkeypatch.setattr(sender_module, "sender_progress", progress)
+    monkeypatch.setattr(sender_module, "time", SimpleNamespace(
+        monotonic=lambda: now[0], sleep=real_time.sleep, time=real_time.time))
+    return stamps, seen
+
+
+def test_the_stream_rate_is_the_bytes_moved_over_the_time_they_moved(
+        engine_env, sample_clock, monkeypatch):
     """התנאי השני לעלייה (המתאם, 11/10): הקצב בקו, מהמונה של udp-sender עצמו.
     השולח דוגם אותו בזמן שהוא ממתין לתהליך — ההמתנה למקבלים (מונה 0)
-    אינה זרם, ולכן הספירה מתחילה בדגימה הראשונה שמעל אפס."""
+    אינה זרם, ולכן הספירה מתחילה בדגימה הראשונה שמעל אפס.
+
+    השעון מוזרק (#2689): המונה 0 נדגם ב-4.0, ‏1MB ב-10.0 ו-6MB ב-10.5. הזרם
+    הוא 0.5 שנייה ו-5MB, בדיוק; ספירה מהדגימה שלפני הבייט הראשון הייתה
+    נותנת 6.5."""
+    stamps, seen = sample_clock
+    stamps.update({0: 4.0, 1_000_000: 10.0, 6_000_000: 10.5})
     monkeypatch.setattr(sender_module, "PACE_POLL", 0.05)
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
     assert wait_for(lambda: len(recorder.processes) == 1)
-    write_log(current_log(recorder), "Starting transfer: f\n" + line(0, 0))
-    time.sleep(0.3)                                  # ממתין למקבלים — לא נספר
-    write_log(current_log(recorder), "Starting transfer: f\n" + line(1_000_000, 0))
-    time.sleep(0.5)
-    write_log(current_log(recorder), "Starting transfer: f\n" + line(6_000_000, 0))
-    time.sleep(0.2)
+    for counter in (0, 1_000_000, 6_000_000):     # ממתין למקבלים, ואז הזרם
+        write_log(current_log(recorder), "Starting transfer: f\n" + line(counter, 0))
+        assert wait_for(lambda: counter in seen, timeout=30), seen
     recorder.processes[0].release()
     assert wait_for(lambda: len(recorder.processes) == 2)
     got = engine.wave_outcome("ses_1")
-    assert got["stream_s"] is not None and 0.3 <= got["stream_s"] <= 1.5, got
-    # ‏5MB זזו (מ-1MB ל-6MB); ‏`stream_s` מעוגל לעשירית, ולכן בקירוב
-    assert abs(got["stream_bps"] * got["stream_s"] - 5_000_000) < 1_000_000, got
+    assert got["stream_s"] == 0.5 and got["stream_bps"] == 10_000_000, got
 
 
 def test_a_partition_that_never_moved_between_samples_has_no_stream_rate(engine_env):

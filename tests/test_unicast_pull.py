@@ -334,7 +334,7 @@ def station(tmp_path, *, pull_code: str = "200",
             pull_answer: str = '{"id":"ses_pull01","kind":"unicast"}',
             restore: str = "ok", real_loop: bool = False,
             keys: tuple[str, ...] = ("1", "ERASE", ""),
-            gui: bool = False, reason: str = "no") -> dict:
+            gui: bool = False, reason: str = "no", gate_reply: str = "") -> dict:
     """מריץ את `single_restore_run` האמיתי מקצה לקצה עם תפרים מזויפים.
     ‏`keys` הם מקשים שמחכים ב-stdin — הכתיבה אינה קוראת אותם (GUI בלבד).
 
@@ -378,11 +378,12 @@ def station(tmp_path, *, pull_code: str = "200",
         f"IMAGESRV_TEST=1 HTTP_RETRIES=0 HTTP_TIMEOUT=1 PROGRESS_INTERVAL_S=0.2 "
         f"RECOVERY_USER=labtech RECOVERY_PASS=pass RESTORE_RESULT={restore!r} "
         f"AWAIT_FILE={shlex.quote(await_file)} "
-        f"AWAIT_TEXT={shlex.quote(await_text)}; "
+        f"AWAIT_TEXT={shlex.quote(await_text)} GATE_REPLY={shlex.quote(gate_reply)}; "
         f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
         f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/pull.sh; "
         f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/gui/guibridge.sh; "   # #1545: gui_backend_args
         f". {posix(AGENT)}/lib/restore/single_restore.sh; "   # #706: the GUI restore's write
+        f"[ ! -f {posix(AGENT)}/lib/core/opengate.sh ] || . {posix(AGENT)}/lib/core/opengate.sh; "   # #2657: the real gate
         f". {posix(AGENT)}/lib/gui/srgui.sh; . {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; "   # #1561: its progress on the GUI
         f". {posix(AGENT)}/lib/hw/slotnames.sh; disk_port() {{ echo 1; }}; "
         'pick_internal_disk() { echo sda; }; '
@@ -392,7 +393,10 @@ def station(tmp_path, *, pull_code: str = "200",
         'cp "$RUN_DIR/pull_answer.json" "$3"; '
         f'echo "PULL" >> "$RUN_DIR/trace"; echo {pull_code!r}; }}; '
         'http_post_json() { printf \'%s\\n\' "$(cat "$2")" '
-        '>> "$RUN_DIR/posts.jsonl"; }; '
+        '>> "$RUN_DIR/posts.jsonl"; '
+        # #2657: the server's answer -- the report's own round back, unless the test says otherwise
+        'if [ -n "$GATE_REPLY" ]; then printf %s "$GATE_REPLY"; '
+        'else jq -c "{ok: true, session_id: .session_id}" "$2"; fi; }; '
         + AWAIT
         + RESTORE_STUB
         + ("" if real_loop else LOOP_STUB)
@@ -449,24 +453,46 @@ def test_the_gui_restore_opens_the_pull_without_credentials(tmp_path):
     assert result["sent"]["password"] == ""
 
 
-def test_an_old_server_does_not_cancel_the_restore(tmp_path):
-    """עיקרון 1: הבייטים מוגשים ממילא, והדיסק כבר נמחק. מה שאסור הוא
-    לוותר בשקט — ולכן יש שורה ביומן, וגם אין דיווחים לשום מקום."""
+#: ‏#2657: מה ש-`sr_refused pull` משאיר — ‏`die_local` (‏TEST-REBOOT) לפני הכתיבה.
+PULL_REFUSED = "TEST-REBOOT: restore: the server did not open the pull -- nothing was written (#2657)"
+
+
+def test_an_old_server_stops_the_restore_before_the_disk(tmp_path):
+    """‏#2657: הקבצים מוגשים רק בתוך משיכה פתוחה, ולכן משיכה שלא נפתחה
+    עוצרת **לפני** הדיסק — לא מוחקת את הטבלה ונכשלת בזרם. עד #2657 השחזור
+    המשיך ("הבייטים מוגשים ממילא"). מה שאסור הוא לוותר בשקט — ולכן יש
+    שורה ביומן, וגם אין דיווחים לשום מקום."""
     result = station(tmp_path, pull_code="404",
                      pull_answer='{"detail":"Not Found"}')
 
-    assert result["trace"] == ["PULL", "RESTORE unicast"]
-    assert "RC=0" in result["out"]
+    assert result["trace"] == ["PULL"]
+    assert PULL_REFUSED in result["out"]
     assert "no /api/v1/agent/pulls" in result["log"]
     assert result["posts"] == []
 
 
-def test_a_server_that_fell_over_does_not_cancel_the_restore_either(tmp_path):
+@pytest.mark.parametrize("reply", [
+    '{"ok":false,"code":"not_open","error":"this session is no longer open"}',
+    '{"ok":true}',
+    '{"ok":true,"session_id":"ses_other"}',
+])
+def test_a_pull_the_server_does_not_confirm_open_touches_no_disk(tmp_path, reply):
+    """#2657: a 200 with an id is not yet evidence the pull is open for this
+    machine. The first report asks, as a round does (opengate.sh): nothing but
+    ok with the same id lets the write start."""
+    result = station(tmp_path, gate_reply=reply)
+
+    assert "RESTORE unicast" not in result["trace"], result["trace"]
+    assert "TEST-REBOOT: restore: " in result["out"] and "nothing was written" in result["out"], result["out"]
+    assert [p["session_id"] for p in result["posts"]] == ["ses_pull01"], result["posts"]
+
+
+def test_a_server_that_fell_over_stops_the_restore_before_the_disk_too(tmp_path):
     """אותה החלטה, שורת יומן אחרת. ההבחנה היא כל העניין."""
     result = station(tmp_path, pull_code="503", pull_answer="down")
 
-    assert result["trace"] == ["PULL", "RESTORE unicast"]
-    assert "RC=0" in result["out"]
+    assert result["trace"] == ["PULL"]
+    assert PULL_REFUSED in result["out"]
     assert "http 503" in result["log"] and "older" not in result["log"]
 
 

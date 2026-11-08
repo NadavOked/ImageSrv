@@ -69,6 +69,7 @@ static void gui_heartbeat(void) {
 #include "smartdlg.h"        /* 16/10: the SMART warning window */
 #include "splash.h"         /* 17/10: the last-resort screen */
 #include "canceldlg.h"       /* #1386: "בטל דיסק זה" */
+#include "smarttbl.h"        /* #1859: the table of every SMART attribute (--png card "standby-smart") */
 
 static volatile sig_atomic_t stop_now = 0;
 static void on_signal(int sig) { (void)sig; stop_now = 1; }
@@ -1496,7 +1497,8 @@ static const char *PNG_CARDS[] = { "login", "menu", "pick", "progress", "done", 
                                    "failure",   /* #1569; #2068: no technical lines, buttons */
                                    "cloner-cancel", "cloner-canceled", "room-cancel", "room-canceled",   /* #1386 */
                                    "cloner-raid", "cloner-share", "cloner-badsect",   /* #1808/#1898; #2017 */
-                                   "restore-syspart" };   /* #1896: the C: picker over the restore screen */
+                                   "restore-syspart",   /* #1896: the C: picker over the restore screen */
+                                   "standby-smart" };   /* #1859: the cloner's wait, the SMART table open */
 
 static int png_builtin;   /* #1386: --png on the built-in sample, not a --state file */
 
@@ -1592,6 +1594,7 @@ static void png_setup(App *a, const State *base, const char *card) {
     a->chosen_disk = -1; a->confirm = CONFIRM_NONE; a->dd_open = 0;
     memset(&a->sdlg, 0, sizeof a->sdlg);                                       /* 16/10: on its three cards only */
     memset(&a->cdlg, 0, sizeof a->cdlg);                                       /* #1386: on its cards only */
+    memset(&a->smt, 0, sizeof a->smt);                                         /* #1859: on its card only */
     a->pick_in_folder = 0; a->pick_folder[0] = 0;
     room_drv_reset(a); room_drv_after_reload(a);                               /* #1269: off, but for one card */
     a->focus = HIT_USER; a->lang_he = 0;   /* #1245: every card starts in English (HIT_USER: what main() sets) */
@@ -1674,6 +1677,7 @@ static void png_setup(App *a, const State *base, const char *card) {
                                           if (!base->ndrawers && !base->cloner_image[0])
                                               snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט"); }
     else if (!strcmp(card, "standby"))  { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; }
+    else if (!strcmp(card, "standby-smart")) { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; smt_png(a); }   /* #1859 */
     else if (!strcmp(card, "message"))  { snprintf(a->st.msg_title, sizeof a->st.msg_title, "%s", base->msg_title);
                                           snprintf(a->st.msg_sub, sizeof a->st.msg_sub, "%s", base->msg_sub); }
     else if (!strcmp(card, "failure")) {   /* #1569: the state file's block, or the sample */
@@ -1801,7 +1805,8 @@ static int render_png(App *a, const State *base, const char *prefix, int w, int 
                                        SCREEN_CLONER, SCREEN_CLONER, /* #1386: the window; a drawer cancelled */
                                        SCREEN_ROOM, SCREEN_ROOM,   /* #1386: X and its choice; cancelled */
                                        SCREEN_CLONER, SCREEN_CLONER, SCREEN_CLONER,   /* #1808/#1898: the drawer's question; #2017: badsect */
-                                       SCREEN_RESTORE };   /* #1896: "restore-syspart" */
+                                       SCREEN_RESTORE,   /* #1896: "restore-syspart" */
+                                       SCREEN_STANDBY };   /* #1859: "standby-smart" */
         /* One entry per card, or want[c] reads past the table -- that is exactly
          * what the lab saw when "direct" was added to PNG_CARDS alone. */
         _Static_assert(sizeof want / sizeof want[0] == sizeof PNG_CARDS / sizeof PNG_CARDS[0],

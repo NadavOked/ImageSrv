@@ -26,16 +26,18 @@ _um_q() { _uq_j=$1; shift; printf '%s' "$_uq_j" | jq "$@"; }   # $1 = JSON, then
 _um_build() {
     # $1 = saved | default. The rows, [{k, n, a, kind, m}]: every connection the machine shows,
     # then the saved ones it does not; SATA by port, NVMe by address, then the ones added by
-    # hand. Active = in this model's saved list -- else (the default) a connection with a disk.
+    # hand. Active = in this model's saved list -- else (the default, #1874) a connection with a disk, and the empty SATA
+    # below the last SATA with a disk: drawer k = sata:k, the list the drawers are numbered by.
     _ub_c=$(usb_conns_json); _ub_l=null; _ub_n='{}'
     if [ "$1" = saved ]; then _ub_l=$(usb_map_json) || _ub_l=null; _ub_n=$(usb_names_json) || _ub_n='{}'; fi
     jq -cn --argjson c "$_ub_c" --argjson l "$_ub_l" --argjson n "$_ub_n" --argjson max "$USBMAP_ROWS" "$USBMAP_RESOLVE$USBMAP_SORT"'
-        [$c[].k | select(startswith("nvme:"))] as $d | (($l // []) + ($n | keys)) as $t
+        ([$c[] | select(.kind == "disk" and (.k | startswith("sata:"))) | .k | ltrimstr("sata:") | tonumber] | max // 0) as $mx
+        | [$c[].k | select(startswith("nvme:"))] as $d | (($l // []) + ($n | keys)) as $t
         | (($l // []) | map(rkey($d; $t))) as $L | ($n | with_entries(.key |= rkey($d; $t))) as $N
         | ([$c[].k] + $L + ($N | keys)) | reduce .[] as $k ([]; if index([$k]) then . else . + [$k] end)
         | map(. as $k | ($c | map(select(.k == $k)) | .[0]) as $x
             | {k: $k, n: ($N[$k] // ""), kind: ($x.kind // "missing"), m: false}
-            | .a = (.kind != "optical" and (if $l == null then .kind == "disk" else ($L | index([$k])) != null end)))
+            | .a = (.kind != "optical" and (if $l == null then (.kind == "disk" or (.kind == "empty" and (.k | startswith("sata:")) and (.k | ltrimstr("sata:") | tonumber) <= $mx)) else ($L | index([$k])) != null end)))
         | rsort | .[:$max]'
 }
 
@@ -188,7 +190,7 @@ usbset_map_frame() {
             [ "$_mf_a" = 1 ] || continue
             _us_rec prow "${_mf_n:-$_mf_h}" "" "$_mf_l" mono "$_mf_o${_mf_s:+ · $_mf_s}" "" "" ""
         done
-        if ! usb_map_json > /dev/null; then _us_rec pnote "<b>ברירת המחדל</b> — אין מיפוי שמור לדגם הזה: כל חיבור שיש בו דיסק פעיל, \"דיסק 1, 2, 3…\" לפי הסדר."
+        if ! usb_map_json > /dev/null; then _us_rec pnote "<b>ברירת המחדל</b> — אין מיפוי שמור לדגם הזה: SATA 0 = דיסק 1, SATA 1 = דיסק 2, וכן הלאה."
         else _us_rec pnote "<b>$_mf_where</b> — חל בכל מחשב מאותו דגם."; fi
         _us_rec key "↑ ↓" "בחירה" 0; _us_rec key Enter "שינוי" 0; _us_rec key Esc "חזרה לשיכפול" 0
         _us_rec sb ok "דיסק-און-קי" "· הגדרות"
@@ -201,7 +203,7 @@ usbset_map_frame() {
     _mf_d=$(_um_q "$_mf_j" --argjson o "$(cat "$USBSET/rows0.json" 2>/dev/null || echo '[]')" \
         '[.[] as $r | ($o | map(select(.k == $r.k)) | .[0]) as $p | select($p == null or $p.a != $r.a or $p.n != $r.n)] | length')
     if [ -n "$3" ]; then _us_rec d.alert "$3" ""
-    elif [ "$_mf_saved" = 0 ]; then _us_rec d.alert "<b>אין מיפוי שמור</b> — זו ברירת המחדל: כל חיבור שיש בו דיסק פעיל, והשמות \"דיסק 1, 2, 3…\" לפי סדר החיבורים. שינוי ושמירה יוצרים מיפוי." info; fi
+    elif [ "$_mf_saved" = 0 ]; then _us_rec d.alert "<b>אין מיפוי שמור</b> — זו ברירת המחדל: SATA 0 = דיסק 1, SATA 1 = דיסק 2, וכן הלאה; NVMe אחרי ה-SATA האחרון. שינוי ושמירה יוצרים מיפוי." info; fi
     _um_view "$_mf_j" "$_mf_c" "$_mf_r" "$_mf_x" | while IFS='|' read -r _mf_l _mf_p _mf_o _mf_s _mf_t _mf_n _mf_h _mf_f _mf_a _mf_k; do
         _us_rec d.conn "$_mf_l" "$_mf_p" "$_mf_o" "$_mf_s" "$_mf_t" "$_mf_n" "$_mf_h" "$_mf_f" "$_mf_a" "$_mf_k"
     done

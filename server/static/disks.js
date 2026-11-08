@@ -48,10 +48,39 @@ function dkWhere(d) {
   if (d.in_machine && d.machine) return `${esc(d.machine)}${d.port != null ? ` · מגירה ${esc(d.port)}` : ""}`;
   return `<span class="muted"${d.machine ? ` title="${esc(`נראה לאחרונה ב${d.machine}${d.port != null ? `, מגירה ${d.port}` : ""} · ${fmtWhenShort(d.last_seen)}`)}"` : ""}>לא במשכפל</span>`;
 }
+/* ‏#1858 (מוקאפ 07/11): "נצפה F1 · 24/10 · סומן ידנית" -- תגית מתחת למצב. הדיסק אדום (כלל 24/10), והסיבה "נצפה F1" נאמרת בתגית
+   ולא שוב כשורת משנה; ‏SMART אדום משלו (אם יש) נשאר כשורת המשנה. */
+function dkF1Tag(d) {
+  if (!d.f1) return "";
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(d.f1.date || "");
+  const when = m ? ` · ${m[2]}/${m[1]}` : "";
+  return `<br>${UI.pill("err f1-tag", `נצפה F1${when} · ${d.f1.source === "auto" ? "סומן אוטומטית" : "סומן ידנית"}`)}`;
+}
 function dkStateCell(d) {
   const [cls, text] = DK_STATE[d.state] || DK_STATE.unchecked;
-  let sub = d.reason ? smartReasonHe(d.reason) : (d.state === "unchecked" && !d.last_good_write ? "לא נכתב מאז ששויך" : "");
-  return `${UI.pill(cls, text)}${sub ? `<span class="sub">${esc(sub)}</span>` : ""}`;
+  let sub = d.reason && d.reason !== "f1_observed" ? smartReasonHe(d.reason) : (d.state === "unchecked" && !d.last_good_write ? "לא נכתב מאז ששויך" : "");
+  return `${UI.pill(cls, text)}${dkF1Tag(d)}${sub ? `<span class="sub">${esc(sub)}</span>` : ""}`;
+}
+/* ‏#1858: ⋯ בסוף השורה -- סימון וניקוי של "נצפה F1" (מנהל בלבד). דיסק מסומן: "נקה סימון"; "סמן" כבוי עם הסיבה. */
+function dkRowMenu(d) {
+  if (!isAdmin()) return "";
+  const items = d.f1 ? [["נקה סימון F1", `dkF1Clear(${jsStr(d.serial)})`], ["סמן: נצפה F1 בהדלקה… — כבר מסומן", "", "disabled"]]
+    : [["סמן: נצפה F1 בהדלקה…", `dkF1Mark(${jsStr(d.serial)})`]];
+  return UI.rowMenu(d.serial, items);
+}
+function dkF1Mark(serial) {
+  confirmSheet("לסמן שהדיסק עצר את ההדלקה ב-F1?", `הדיסק ${serial}`, "סמן: נצפה F1", async () => {
+    await post(`/disks/${encodeURIComponent(serial)}/f1`, {});
+    toast("הדיסק סומן: נצפה F1 — נרשם ביומן");
+    await loadDisks();
+  }, [["w", "הדיסק ייצבע אדום, ובשיכפול הוא מדולג כמו כל דיסק שגורם ל-F1."], ["ok", "אפשר לנקות את הסימון באותו תפריט."]], false);
+}
+function dkF1Clear(serial) {
+  confirmSheet("לנקות את הסימון \"נצפה F1\"?", `הדיסק ${serial}`, "נקה סימון", async () => {
+    await del(`/disks/${encodeURIComponent(serial)}/f1`);
+    toast("הסימון נוקה — נרשם ביומן");
+    await loadDisks();
+  }, [["ok", "הדיסק חוזר להיות מוערך לפי ה-SMART שלו בלבד."]], false);
 }
 function dkLastGood(d) {
   if (!d.last_good_write) return `<span class="muted">—</span>`;
@@ -128,13 +157,13 @@ function dkListTab(stateOnly) {
   const chosen = rows.filter((d) => DK.picked.has(d.serial));
   const allOn = rows.length && chosen.length === rows.length;
   const cols = [{ html: `<input type="checkbox" aria-label="סימון הכול"${allOn ? " checked" : ""} onchange="dkPickAll(this.checked,JSON.parse(${jsStr(JSON.stringify(serials))}))">` },   // #2352: the serials come from hello -- never raw JSON in an attribute
-    "מספר סידורי", "דגם", "סט", "מצב", "איפה עכשיו", "כתיבה תקינה אחרונה"];
+    "מספר סידורי", "דגם", "סט", "מצב", "איפה עכשיו", "כתיבה תקינה אחרונה", ""];
   const body = rows.map((d) => ({ attrs: DK.picked.has(d.serial) ? 'class="sel"' : "", cells: [
     `<input type="checkbox" aria-label="סימון ${esc(d.serial)}"${DK.picked.has(d.serial) ? " checked" : ""} onchange="dkPick(${jsStr(d.serial)},this.checked)">`,
     `<span class="mono" dir="ltr">${esc(d.serial)}</span>`, `${esc(d.model || "—")}${d.size_bytes ? ` · ${dkSize(d.size_bytes)}` : ""}`,
-    dkLabel(d), dkStateCell(d), dkWhere(d), dkLastGood(d)] }));
+    dkLabel(d), dkStateCell(d), dkWhere(d), dkLastGood(d), dkRowMenu(d)] }));
   const assign = chosen.length ? `<div class="dk-pick"><button class="btn primary" onclick="diskAssignPickedSheet()">שייך ${chosen.length} נבחרים לסט…</button></div>` : "";
-  return `<div class="c12 card">${dkFilterBar()}${assign}${UI.datagrid({ columns: cols, rows: body, empty: DK.disks.length ? "אין דיסקים שמתאימים לסינון" : "השרת עוד לא ראה אף דיסק — הם נרשמים כשמשכפל או מחשב בנייה מתחבר" })}</div>`;
+  return `<div class="c12 card">${dkFilterBar()}${assign}${UI.datagrid({ columns: cols, rows: body, empty: DK.disks.length ? "אין דיסקים שמתאימים לסינון" : "השרת עוד לא ראה אף דיסק — הם נרשמים כשמשכפל או מחשב בנייה מתחבר", cls: "kebab-col" })}</div>`;
 }
 
 /* ---------------------------------------------------------------- סטים */

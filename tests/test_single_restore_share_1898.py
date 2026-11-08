@@ -95,6 +95,7 @@ def restore(tmp_path: Path, manifest: dict, answer: str, *, gui: bool = True, wa
         'http_get() { cat "$RUN_DIR/manifest.src.json"; }; '
         "pull_post() { printf '{\"id\":\"ses_1\"}' > \"$3\"; echo 200; }; "
         "http_post_json() { :; }; progress_loop() { :; }; "
+        "session_open_gate() { :; }; "   # #2657: the open-job gate -- its own tests (test_unicast_pull.py)
         + AWAIT + WRITE
         + 'single_restore_run img_1898; echo "RC=$?"; wait'
     )

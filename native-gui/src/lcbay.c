@@ -285,15 +285,50 @@ void lc_disks_met(App *a, cairo_t *cr, Rect r, const char *value, const char *hi
  * Returns its height. */
 double lc_hero(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
                const char *s2, const char *big, const char *left, int alarm) {
+    const LcEta e = { "", left, "" };
+    return lc_hero_eta(a, cr, x0, xr, y, label, h1, s2, big, &e, alarm);
+}
+
+/* #1843 (mockup 07/11): the hero whose end side carries an expected end -- under the number,
+ * "צפוי להסתיים ב-HH:MM" (the time in mono, the action colour) and up to two small lines, the
+ * whole stack centred on its widest line (the mockup's .hero-eta). No time and no second line =
+ * the one right-aligned line the hero always had. */
+double lc_hero_eta(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
+                   const char *s2, const char *big, const LcEta *e, int alarm) {
     const Theme *t = a->theme; double cw = xr - x0;
+    const char *l1 = e->l1 ? e->l1 : "", *l2 = e->l2 ? e->l2 : "";
+    const int stack = e->at[0] || l2[0];
     Text tlb = text_make(cr, FONT_SANS, 12, 500, label, (int)(cw - 260), DIR_RTL), th1 = text_make(cr, FONT_SANS, 26, 600, h1, (int)(cw - 260), DIR_RTL);
     Text ts2 = text_make(cr, FONT_SANS, 13, 400, s2, (int)(cw - 260), DIR_RTL);
-    Text tb = text_make(cr, FONT_MONO, 64, 400, big, 0, DIR_LTR), tlt = text_make(cr, FONT_SANS, 13, 400, left, 0, DIR_RTL);
-    double hh = fmax(tlb.h + 2 + th1.h + 3 + ts2.h, tb.h + tlt.h);
+    Text tb = text_make(cr, FONT_MONO, 64, 400, big, 0, DIR_LTR), tlt = text_make(cr, FONT_SANS, stack ? 12 : 13, 400, l1, 0, DIR_RTL);
+    Text tl2 = { 0 }, tpre = { 0 }, ttime = { 0 };
+    double at_w = 0, at_h = 0, right_h = tb.h + tlt.h;
+    if (stack) {
+        if (l2[0]) tl2 = text_make(cr, FONT_SANS, 12, 400, l2, 0, DIR_RTL);
+        if (e->at[0]) {
+            tpre = text_make(cr, FONT_SANS, 17, 600, "צפוי להסתיים ב-", 0, DIR_RTL);
+            ttime = text_make(cr, FONT_MONO, 24, 600, e->at, 0, DIR_LTR);
+            at_w = tpre.w + 2 + ttime.w; at_h = fmax(tpre.h, ttime.h);
+        }
+        right_h = tb.h + (e->at[0] ? 6 + at_h : l1[0] ? 4 : 0) + (l1[0] ? tlt.h : 0) + (l2[0] ? tl2.h : 0);
+    }
+    double hh = fmax(tlb.h + 2 + th1.h + 3 + ts2.h, right_h);
     double ty = y + hh - (tlb.h + 2 + th1.h + 3 + ts2.h);
     text_draw_r(cr, &tlb, xr, ty, t->muted); ty += tlb.h + 2; text_draw_r(cr, &th1, xr, ty, alarm ? t->danger_fg : t->ink); ty += th1.h + 3; text_draw_r(cr, &ts2, xr, ty, t->muted);
-    text_draw(cr, &tb, x0, y + hh - tlt.h - tb.h, t->ink); text_draw(cr, &tlt, x0 + tb.w - tlt.w, y + hh - tlt.h, t->muted);
-    text_free(&tlb); text_free(&th1); text_free(&ts2); text_free(&tb); text_free(&tlt);
+    if (!stack) {
+        text_draw(cr, &tb, x0, y + hh - tlt.h - tb.h, t->ink); text_draw(cr, &tlt, x0 + tb.w - tlt.w, y + hh - tlt.h, t->muted);
+    } else {
+        double cx = x0 + fmax(fmax(tb.w, at_w), fmax(tlt.w, tl2.w)) / 2, ry = y + hh - right_h;
+        text_draw(cr, &tb, cx - tb.w / 2, ry, t->ink); ry += tb.h;
+        if (e->at[0]) {
+            double rx = cx - at_w / 2; ry += 6;
+            text_draw(cr, &ttime, rx, ry + (at_h - ttime.h) / 2, t->action_fg);
+            text_draw(cr, &tpre, rx + ttime.w + 2, ry + (at_h - tpre.h) / 2, t->ink); ry += at_h;
+        } else if (l1[0]) ry += 4;
+        if (l1[0]) { text_draw(cr, &tlt, cx - tlt.w / 2, ry, t->muted); ry += tlt.h; }
+        if (l2[0]) text_draw(cr, &tl2, cx - tl2.w / 2, ry, t->muted);
+    }
+    text_free(&tlb); text_free(&th1); text_free(&ts2); text_free(&tb); text_free(&tlt); text_free(&tl2); text_free(&tpre); text_free(&ttime);
     return hh;
 }
 

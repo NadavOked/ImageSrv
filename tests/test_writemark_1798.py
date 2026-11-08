@@ -418,6 +418,9 @@ def test_the_room_drawer_list_carries_the_mark_and_an_old_agent_is_not_clean():
             class _R:
                 def fetchone(self):
                     return {"disks_json": json.dumps(disks)}
+
+                def __iter__(self):   # #1857: drawer_list also asks disk_sets.labels_for -- no set here
+                    return iter(())
             return _R()
 
     def mark_of(**extra):

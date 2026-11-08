@@ -153,10 +153,17 @@ def die_local_lines() -> list[str]:
     """Every line die_local can be handed: the literals, the dynamic ones with their
     variables filled, and sr_refused's English (srgui.sh hands it on)."""
     lines: set[str] = set()
+    # #2657: session_open_gate's whys (opengate.sh), filled in wherever die_local is handed them
+    gate_whys = {re.sub(r"\$\{?\w+\}?", "3", w) for w in re.findall(
+        r'OPEN_GATE_WHY="([^"]+)"', _read(REPO / "agent" / "lib" / "core" / "opengate.sh"))}
+    assert len(gate_whys) == 3, gate_whys
     for path in [REPO / "agent" / "imagesrv-agent", *lib_files(LIB)]:
         text = _read(path)
         for m in re.finditer(r'\b(?:die_local|sr_refused "?[\w$-]+"?) "([^"]*)"', text):
             raw = m.group(1)
+            if "$OPEN_GATE_WHY" in raw:
+                lines |= {raw.replace("$OPEN_GATE_WHY", w) for w in gate_whys}
+                continue
             if re.fullmatch(r"\$\w+", raw):
                 continue   # srgui.sh: die_local "$2" -- sr_refused's line, collected above
             if "$_sr_why" in raw:   # single_restore.sh: the red disk's two whys

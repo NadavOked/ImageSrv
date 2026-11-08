@@ -242,7 +242,6 @@ def test_failed_drop_readback_or_budget_refuses_by_name(tmp_path, direct, env, r
 
 @pytest.mark.parametrize("direct", [False, True])
 @pytest.mark.parametrize("env,text,code", [
-    ({"SOURCE_FS": "BitLocker"}, "מוצפנת ב-BitLocker", "source_bitlocker"),
     ({"SOURCE_RC": "15"}, "Fast Startup", "source_ntfs"),
     ({"SOURCE_RC": "18"}, "ntfs-3g.probe rc=18", "source_disk"),
     ({"BLKID_FAIL": "1"}, "לא הצלחנו לקרוא את מערכת הקבצים שלה (blkid)", "source_disk"),
@@ -253,6 +252,31 @@ def test_old_refusals_remain_distinct_from_the_hibernated_success(tmp_path, dire
     assert text in refusal_reason(box, run, out)
     assert (run / "capture.reason").read_text().strip() == code
     assert not any(s.startswith(("modprobe ", "partclone ", "ntfsfix ")) for s in order(run))
+    no_source_writes(box, run)
+
+
+@pytest.mark.parametrize("direct", [False, True])
+def test_bitlocker_is_read_raw_with_its_note_in_capture_and_direct_send(tmp_path, direct):
+    """#1840 (Nadav 07/11), replacing the old source_bitlocker refusal row above:
+    the encrypted partition 2 is read by partclone.dd from the source itself --
+    no RAM view, no unhibernate, no shrink, never expandable even where
+    _system_role says windows -- and the target carries the note at the end,
+    in a direct send too (pass 2's target_init clears pass 1's error)."""
+    box, run, out = fast_run(tmp_path, direct=direct, env={"SOURCE_FS": "BitLocker"},
+                             extra={"partclone.dd": PARTCLONE})
+    details = box / ("direct.out" if direct else "capture.out")
+    assert out.strip().endswith("rc=0"), out + details.read_text(encoding="utf-8")
+    manifest = json.loads((run / "new-manifest.json").read_text(encoding="utf-8"))
+    p2 = manifest["partitions"][1]
+    assert p2["fs"] == "BitLocker" and p2["expandable"] is False, p2
+    assert "src_unhib" not in manifest, manifest
+    steps = order(run)
+    reads = [s for s in steps if s.startswith("partclone ") and f'-s {posix(box / "dev")}/sda2 ' in s]
+    assert len(reads) == (2 if direct else 1), steps
+    assert not any(s.startswith(("dmsetup create", "ntfs-3g -o remove_hiberfile", "ntfsresize -s")) for s in steps), steps
+    report = json.loads((box / "progress.json").read_text(encoding="utf-8"))
+    assert report["targets"][0]["error"] == \
+        "מחיצה 2: מוצפן ב-BitLocker: יועתק כמו שהוא, בלי כיווץ; במחשב אחר יידרש מפתח שחזור", report
     no_source_writes(box, run)
 
 

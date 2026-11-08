@@ -1,19 +1,24 @@
 """Storage Nodes — פרימיטיבים ל-enrollment מוקשח (#740, tracer 2.1).
 
-**מה שכן כאן, ומה שאינו — במכוון.** הדגם הנעול של #740 נשען על ערוץ
-mTLS 1.3 עם channel-binding לפי RFC 9266 (``tls-exporter``) ועל SPKI-pin.
-שלושתם דורשים ``export_keying_material`` ו-parsing של SubjectPublicKeyInfo,
-ואלה **אינם** בספריית התקן של פייתון (‏3.12: אין ``export_keying_material``,
-ו-channel binding היחיד הוא ``tls-unique`` שאינו מוגדר ל-TLS 1.3). הם
-דורשים ``pyOpenSSL``/``cryptography``, שאינם מותקנים על תחנת הפיתוח.
+**מה כאן.** הדגם הנעול של #740 נשען על ערוץ mTLS 1.3 עם channel-binding
+לפי RFC 9266 (``tls-exporter``) ועל SPKI-pin, והוא **ממומש**. שלושת
+המרכיבים דורשים ``export_keying_material`` ו-parsing של
+SubjectPublicKeyInfo, ואלה אינם בספריית התקן של פייתון (3.12: אין
+``export_keying_material``, ו-channel binding היחיד הוא ``tls-unique``
+שאינו מוגדר ל-TLS 1.3), ולכן הם נשענים על ``pyOpenSSL``/``cryptography``
+(ראו ``can_export_keying_material``; בלי pyOpenSSL הבדיקות מדולגות).
 
-לכן המודול הזה מכיל **רק** את הפרימיטיבים שאין להם תלות ב-TLS ושניתן
-לאמת אותם כאן במלואם: יצירת קוד ה-pairing וגיבובו האיטי המלוח, אימות
-בזמן-קבוע, ניהול חלון ה-pairing (פתיחה/מצב/צריכה עם תקרת ניסיונות
+הקובץ הזה מכיל את הפרימיטיבים: יצירת קוד ה-pairing וגיבובו האיטי המלוח,
+אימות בזמן-קבוע, ניהול חלון ה-pairing (פתיחה/מצב/צריכה עם תקרת ניסיונות
 ותפוגה), יצירת/גיבוב/אימות של טוקן האב, ניתוח קפדני של כתובת הבין-שרתי,
-כתיבת קובץ אישורים ``0600`` אטומית וטעינתו עם דחיית קובץ לא-בטוח,
-ועזרי הסתרת סודות ליומן. ה-context של ה-TLS, חילוץ ה-SPKI, ה-exporter
-והלקוח המוצמד — שלב נפרד שממתין להכרעת התלות (ראו דוח ה-PR של #740).
+כתיבת קובץ אישורים ``0600`` אטומית וטעינתו עם דחיית קובץ לא-בטוח, עזרי
+הסתרת סודות ליומן, וה-TLS עצמו: חילוץ ה-SPKI והטביעות, ה-exporter,
+ו-``SSL.Context`` נעולי TLS 1.3 לשרת (``build_server_tls_context``) ולקוח
+מוצמד (``build_pinned_client_context``). ההצמדה ל-SPKI, כריכת הטוקן
+לתעודת-הלקוח ובדיקת ה-exporter נאכפות בשכבת ה-service
+(``server/interserver/api.py``), והחיבור האמיתי נבדק ב-
+``tests/test_interserver_tls.py``. מודל האמון המלא:
+``docs/architecture/security-model.md``.
 """
 
 from __future__ import annotations

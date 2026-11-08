@@ -174,6 +174,7 @@ enum {
     HIT_LC_USBSET,        /* #1914 (Nadav 20/10): "הגדרות" -- top left of the USB stick's source screen */
     HIT_PWR_KEEP, HIT_PWR_STOP,   /* #1918: the power button's question -- "המשך" and the red "עצור וכבה" */
     HIT_SYSP_CANCEL,      /* #1896: "ביטול" in the C: picker */
+    HIT_SMT_SCRIM, HIT_SMT_PANEL,   /* #1859: the dim behind the SMART table drawer (a click closes), and the drawer (it does not) */
     HIT_INSTALL_SUMMARY_BASE = 1000,
     HIT_INSTALL_NIC_BASE = 1020,
     /* ranges: base + index */
@@ -205,6 +206,7 @@ enum {
     HIT_BAY_CANCEL_BASE = 3400, HIT_CDLG_PICK_BASE = 3500,
     HIT_SYSP_BASE = 3600,  /* #1896: a partition of the C: picker (+index into the image's cand) */
     HIT_IDENTIFY_BASE = 3700,  /* #1966: identify a drawer (+drawer index); not 3600 -- that is #1896's C: picker */
+    HIT_SMT_BASE = 3800,       /* #1859: a drawer of the cloner's wait with a SMART table (+bay index) -- opens it */
 };
 
 typedef struct { Rect r; int id; } Hit;
@@ -360,12 +362,29 @@ typedef struct { int port; char dev[32], model[48]; unsigned long long size; cha
                  long crc_suspect; /* #1366: field 9 -- the CRC count over crc_warn_threshold; 0 = not over / not read */
                  int drawer; char conn[32];
                  char mark[12]; /* #1798: field 12 -- incomplete|unchecked; "" = clean or not reported */
-                 char hw[240]; /* #1921: field 13 -- the drawer's hardware note (hw-issues.tsv), never the disk's colour */ } IdleDisk;
+                 char hw[240]; /* #1921: field 13 -- the drawer's hardware note (hw-issues.tsv), never the disk's colour */
+                 char f1_date[12], f1_src[8]; /* #1858: fields 14/15 -- "נצפה F1" by serial: YYYY-MM-DD and manual|auto; "" = not marked */
+                 char f1_smart[16]; /* #1858: field 16 -- the disk's own SMART beneath the F1 red (passed|warn|fail|unchecked); "" = not known */ } IdleDisk;
 typedef struct { char conn[32], name[SLOT_NAME_MAX]; int set; } ClonerBay;
 /* #2030: cused=dev|size|used -- the size of a disk of this cloner and the bytes
  * in use on it (diskused.sh). used -1 = not measured: said so, never 0. */
 typedef struct { char dev[32]; unsigned long long size; long long used; } CUsed;
+/* #1857 (mockup 04): cdisk_label=dev|text -- the set and sticker of a disk of this cloner,
+ * "קוריאים · xx-7" (disklabels.sh). A disk with no set has no record. Display only. */
+#define DISK_LABEL_MAX 160   /* a 40-letter set name (server NAME_MAX) at 4 UTF-8 bytes, + " · xx-1234" */
+typedef struct { char dev[32], text[DISK_LABEL_MAX]; } CDiskLabel;
 typedef struct { int drawer; char conn[32], model[48]; } COptical;
+/* #1859 (Nadav 07/11, mockup 1859-smart-table): every SMART attribute of an idle disk, behind a
+ * click on its drawer. csmart=dev|total|cmp is the head (cmp: '1' compared with the previous round,
+ * '0' it has none, '-' the server's answer was not read); csmartrow=dev|id|flags|raw|rose|name one
+ * row (smarttable.sh). flags: c critical, k the cable's (199: a rise there is not "replace the disk"),
+ * o orange, R red, h the cable/drawer, f at the vendor's threshold, u unknown. raw/rose -1 = not there -- never 0. total counts what the disk reported:
+ * a table cut at MAX_SMROWS says so. */
+#define MAX_SMROWS 400
+typedef struct { char dev[32]; int total; char cmp; } SmHead;
+typedef struct { char dev[32], id[24], flags[12], name[100]; long long raw, rose; } SmRow;
+/* the open drawer (smarttbl.c): the disk's device, and the first row on show */
+typedef struct { int open; char dev[32]; int top, vis; } SmTbl;   /* vis: the rows that fit, set by the last draw */
 
 /* Everything the --state file can say. See README "The --state file". */
 typedef struct State {
@@ -378,7 +397,10 @@ typedef struct State {
     IdleDisk idisks[MAX_DRAWERS];       int nidisks;   /* cloner idle inventory */
     ClonerBay cbays[MAX_DRAWERS];        int ncbays;
     CUsed cuseds[MAX_DRAWERS + 4];       int ncuseds;   /* #2030: any disk the cloner has, drawers or not */
+    CDiskLabel cdlabels[MAX_DRAWERS + 4]; int ncdlabels; /* #1857: the set and sticker, by device */
     COptical copticals[MAX_DRAWERS];     int ncopticals;
+    SmHead smheads[MAX_DRAWERS];         int nsmheads;   /* #1859: csmart= */
+    SmRow smrows[MAX_SMROWS];            int nsmrows;    /* #1859: csmartrow= */
     int drawer_count;                    /* configured cloner bays; 0 = legacy default */
     char disk_probe[16];                /* drives / no_disks / no_ports / unchecked */
 
@@ -459,6 +481,10 @@ typedef struct State {
      * stream's outage bar (roundbeep.sh stream_net_record). -1 = the agent did not say. */
     enum { NET_NONE, NET_LOST, NET_BACK } net_kind;
     long long net_since, net_ceiling, net_away, net_at;
+    /* #1843 (mockup 07/11): forecast=<clock 0|1>|<end epoch>|<no_history> -- the server's expected end of this wave
+     * (clonergui.sh, from the hello's session.forecast). fc_clock: the server proved its clock synced, so an HH:MM may be
+     * drawn at all; fc_at: the end from history, 0 = none; fc_nohist: the server said there is no history. All 0 = not said. */
+    int fc_clock, fc_nohist; long long fc_at;
     /* #704: cslot_name=<port>|<name> -- [port-1], "" = "דיסק N" */
     char cslot_names[MAX_DRAWERS][SLOT_NAME_MAX];
 
@@ -670,6 +696,7 @@ typedef struct App {
 
     LcUi lcu;                   /* #1322: what the person chose on the local clone screens */
     SmartDlg sdlg;              /* 16/10: the SMART warning window (smartdlg.c); kind 0 = closed */
+    SmTbl smt;                  /* #1859: the table of every SMART attribute, a drawer on the cloner's wait (smarttbl.c) */
     CancelDlg cdlg;             /* #1386: "בטל דיסק זה" (canceldlg.c); open 0 = closed */
 
     /* #1188: local UI state; validation and apply remain in wizard/core.py. */
@@ -761,6 +788,9 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H);
 int ask_share_words(const State *s, char *lead, size_t n, const char **skip, const char **hint);
 /* #1560 (screens_ask.c): the end-of-task count to power-off, one button */
 void draw_end_dialog(App *a, cairo_t *cr, double W, double H);
+/* #1858: the F1 notice of the power-off counts (screens.c) -- height drawn at (x,y), 0 = no disk is known to stop the BIOS */
+double f1_notice(App *a, cairo_t *cr, double x, double y, double w, int draw);
+void f1_seen_when(const IdleDisk *d, char *out, size_t n);
 /* #2024: the reason <dev> holds the end (end_problem=), NULL = it does not;
  * *red = 1 red, 0 orange. Only while the end record is on the screen. */
 const char *end_problem_of(const State *s, const char *dev, int *red);

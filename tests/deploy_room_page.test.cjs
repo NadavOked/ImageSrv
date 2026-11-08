@@ -788,6 +788,20 @@ test('#432: an open wave with a precheck warning shows it in orange; "start" ask
   assert.equal(clean.run('typeof formOptions'),'undefined');
 });
 
+test('#2670: the precheck title follows the kind of warning — link, slow write, or both — not always "suspect link"', () => {
+  const LINK={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:1.5,link_max_gbps:6,crc_rise:null,write_slow:false,text_he:WARN_TEXT};
+  const CRC={...LINK,port:3,serial:'S5Y32',link_gbps:6,crc_rise:12,text_he:'מחשב 2 · דיסק 3: מונה CRC עלה ב-12'};
+  const WRITE={mac:C2,machine:'מחשב 2',port:4,serial:'S5Y33',link_gbps:6,link_max_gbps:6,crc_rise:null,crc_suspect:false,write_slow:true,text_he:'מחשב 2 · דיסק 4: כתיבה איטית'};
+  const title=(precheck)=>{ const html=setup({room:roomOpenWave({precheck})}).run('deploy(0)'); balanced(html);
+    const m=html.match(/<b>לפני ההתחלה — ([^<]*)<\/b>/); assert.ok(m,'the note is there'); return m[1]; };
+  assert.equal(title([LINK]),'מגירה אחת בגל עם קישור חשוד');
+  assert.equal(title([CRC]),'מגירה אחת בגל עם קישור חשוד','a CRC rise is a link sign');
+  assert.equal(title([WRITE]),'מגירה אחת בגל עם כתיבה איטית','a slow write alone says nothing about a cable');
+  assert.equal(title([WRITE,{...WRITE,port:5}]),'2 מגירות בגל עם כתיבה איטית');
+  assert.equal(title([LINK,WRITE]),'2 מגירות בגל עם קישור חשוד או כתיבה איטית');
+  assert.equal(title([{...WRITE,link_gbps:1.5}]),'מגירה אחת בגל עם קישור חשוד או כתיבה איטית','one drawer with both signs');
+});
+
 test('#65: the missing machines are named with the three actions; power-off only for one that can hear, behind a confirm window', async () => {
   const miss=[{mac:C2,name:'מחשב 2',reason:'drawers',ports:[3],awake:true,joined:true,can_poweroff:true,text_he:'מחשב 2: אין דיסק חדש בדיסק 3'},
               {mac:C3,name:'מחשב 3',reason:'off',ports:[1,2],awake:false,joined:false,can_poweroff:false,text_he:'מחשב 3 כבוי או לא מחובר — לא הצטרף לגל (דיסק 1, דיסק 2)'}];

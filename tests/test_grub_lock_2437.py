@@ -50,6 +50,7 @@ PASSWORD_LINE = f"password_pbkdf2 imagesrv {HASH}"
 ANSWERS = {
     "bad-answer": "not a dict",
     "bad-schema": {"schema": 99, "known": True},
+    "answer-failure-screen": {"schema": 99, "known": True, "answer_failure_screen": True},   # #2666
     "unregistered": {"known": False},
     "unregistered-screen": {"known": False, "unregistered_screen": True},
     "unregistered-autoboot": {"known": False, "unregistered_autoboot": True},

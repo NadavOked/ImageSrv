@@ -196,6 +196,10 @@ def test_manifest_and_files_need_a_lease_of_a_registered_machine(identity_server
     assert any(UNREGISTERED_MAC in d and LEASED_STRANGER_IP in d and "(manifest)" in d
                for d in rows), rows
 
+    # #2657: registered is not enough -- an open round or pull of this image is.
+    refused_by_name(identity_server["station"].get(manifest), "image_fetch_refused")
+    assert identity_server["station"].post("/api/v1/agent/pulls", json={
+        "mac": MAC1, "image_id": IMAGE, **CREDS}).status_code == 200
     ok = identity_server["station"].get(manifest)
     assert ok.status_code == 200 and ok.json()["id"] == IMAGE
     assert identity_server["station"].get(part).status_code == 200
@@ -326,6 +330,10 @@ def test_the_live_manifest_needs_the_token_and_the_identity(identity_server):
     opened = _open_direct(identity_server["admin"], [{"mac": CLONER1, "ports": [1, 2]}])
     assert opened.status_code == 200, opened.text
     task_id = opened.json()["task_id"]
+    live = f"/api/v1/images/{opened.json()['image_id']}/manifest"
+    # #2657: the live manifest goes to a member of the wave -- the cloner joins it here.
+    refused_by_name(identity_server["station"].get(live), "image_fetch_refused")
+    cloner_hello(identity_server["station"], CLONER1, ["S1", "S2"])
     token = identity_server["ctx"].conn.execute(
         "SELECT token FROM tasks WHERE id = ?", (task_id,)).fetchone()["token"]
     payload = json.dumps(_live_manifest()).encode()
@@ -336,7 +344,6 @@ def test_the_live_manifest_needs_the_token_and_the_identity(identity_server):
     state = identity_server["ctx"].conn.execute(
         "SELECT state FROM tasks WHERE id = ?", (task_id,)).fetchone()["state"]
     assert state in ("pending", "running"), state
-    live = f"/api/v1/images/{opened.json()['image_id']}/manifest"
     assert identity_server["station"].get(live).status_code == 404     # טרם הגיע
 
     genuine = identity_server["station"].put(

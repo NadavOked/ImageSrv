@@ -128,6 +128,12 @@ void lc_met(App *a, cairo_t *cr, Rect r, const char *l, const char *v, const cha
 void lc_disks_met(App *a, cairo_t *cr, Rect r, const char *value, const char *hint);
 double lc_hero(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
                const char *s2, const char *big, const char *left, int alarm);   /* alarm: the title in red */
+/* #1843: under the number "צפוי להסתיים ב-<at>" (at "" = no time line), then the small lines l1 / l2 */
+typedef struct { char at[8]; const char *l1, *l2; } LcEta;
+double lc_hero_eta(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
+                   const char *s2, const char *big, const LcEta *e, int alarm);
+/* the wall-clock "HH:MM" of <age> seconds ago (a negative age = from now); --png counts from the header's 12:45 */
+void clock_ago(const App *a, int age, char *out, size_t n);
 double lc_cage(App *a, cairo_t *cr, Rect cage, const char *title, const char *count);
 void lc_bay_number(App *a, cairo_t *cr, double right, double cy, double big, int drawer, Rgb col);   /* the drawer number column */
 /* shared pieces (screens_local.c) */

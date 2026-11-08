@@ -101,8 +101,10 @@ smart_ro_check() {
             disk_failure_readonly "$1"; }; then
         _smart_store "$1" fail readonly; return 0
     fi
+    # ‏#1858: "נצפה F1" לפי serial -- אותו אדום, סיבה אחרת (f1mark.sh). ‏SMART_F1_OFF: ה-probe האמיתי שהוא עצמו מריץ
+    if [ -z "${SMART_F1_OFF:-}" ] && command -v disk_f1_red >/dev/null 2>&1 && disk_f1_red "$1"; then return 0; fi
     case "$(smart_field "$1" 2)" in   # כבר לא לקריאה בלבד / ‏ro נקרא שוב: probe מחדש
-        readonly) rm -f "$RUN_DIR/smart/$1.v" ;;
+        readonly|f1_observed) rm -f "$RUN_DIR/smart/$1.v" ;;   # #1858: and the mark was cleared
         ro_unread) [ "$_sr_v" = 0 ] && rm -f "$RUN_DIR/smart/$1.v" ;;
     esac
     [ "$_sr_v" = 0 ] && return 1
@@ -116,7 +118,7 @@ smart_ro_stale() {
     # אמת כשמצב הקריאה-בלבד השתנה מאז שנכתבה (#1742) -- קריאת sysfs אחת, בלי smartctl.
     smart_ro_check "$1"; _rs_rc=$?
     case "$(cat "$2" 2>/dev/null)" in
-        *"|fail|readonly|"*) [ "$_rs_rc" != 0 ] ;;
+        *"|fail|readonly|"*|*"|fail|f1_observed|"*) [ "$_rs_rc" != 0 ] ;;
         *"|ok|"*) [ "$_rs_rc" != 1 ] ;;   # ‏ro שלא נקרא אינו "תקין" (עיקרון 5)
         *) [ "$_rs_rc" = 0 ] ;;
     esac
@@ -217,7 +219,7 @@ SMART_RO_HE="הדיסק במצב קריאה בלבד"
 
 smart_red_he() {
     # $1 = disk. המשפט של הסירוב על דיסק אדום, לפי הסיבה שבמטמון (smart_probe).
-    if [ "$(smart_field "$1" 2)" = readonly ]; then printf '%s' "$SMART_RO_HE"; else printf '%s' "$SMART_RED_HE"; fi
+    case "$(smart_field "$1" 2)" in readonly) printf '%s' "$SMART_RO_HE" ;; f1_observed) printf '%s' "$SMART_F1_HE" ;; *) printf '%s' "$SMART_RED_HE" ;; esac   # #1858
 }
 
 smart_reason_he() {
@@ -244,6 +246,7 @@ smart_reason_he() {
         unc_logged) printf 'ביומן הדיסק יש קריאה שלא תוקנה (UNC)' ;;   media_errors) printf 'הדיסק דיווח על שגיאות נתונים שלא תוקנו (NVMe)' ;;
         program_fail) printf 'הזיכרון של ה-SSD נכשל בכתיבה או במחיקה' ;;   data_path) printf 'שגיאות בנתיב הנתונים בתוך הדיסק' ;;
         selftest_failed) printf 'הבדיקה העצמית האחרונה של הדיסק נכשלה' ;;   nvme_reliability) printf 'הבקר מדווח שהאמינות של הדיסק נפגעה (NVMe)' ;;
+        f1_observed) printf 'נצפה F1 בהדלקה' ;;   # #1858: a mark by serial (f1mark.sh), not a SMART word
         media_readonly) printf 'הבקר נעל את הדיסק לקריאה בלבד (NVMe)' ;;   no_table) printf 'טבלת הידע של SMART חסרה — לא נבדק' ;;
         standby) printf 'הדיסק במצב המתנה ולא הוער לבדיקת SMART' ;;   # #1775: smartctl -n standby
         cable) printf 'כבל/חריץ' ;;   disk) printf 'הדיסק' ;;   removed) printf 'המגירה נשלפה' ;;   write_error) printf 'שגיאת כתיבה לדיסק' ;;   unclassified) printf 'לא סווג' ;;

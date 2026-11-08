@@ -84,7 +84,7 @@ gui_early_settle() {
     # that never calls gui_parent, is closed before that path draws its own.
     [ "${_gui_early:-0}" = 1 ] && [ ! -s "$RUN_DIR/gui.screen" ] || return 0
     case "$1" in
-        local|unknown) ;;
+        local|unknown|bad_answer) ;;   # #2666: bad_answer dies like local -- the same screen path
         restore) case "$D_ROLE" in classroom|cloner) return 0 ;; esac ;;
         task) [ "$(json_get "$RESP" ".task.type")" != capture ] || return 0 ;;
         *) return 0 ;;

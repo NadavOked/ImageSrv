@@ -205,15 +205,15 @@ http_post_json() {
 }
 
 http_get() {
-    # $1 = URL. Response on stdout.
-    curl -sfS --max-time "$HTTP_TIMEOUT" --retry "$HTTP_RETRIES" "$1"
+    # $1 = URL, $2 = a cookie jar (optional; #2657: the GUI restore's console session). Response on stdout.
+    curl -sfS --max-time "$HTTP_TIMEOUT" --retry "$HTTP_RETRIES" ${2:+-b "$2"} "$1"
 }
 
 http_get_stream() {
-    # $1 = URL. Long transfer: no total timeout, fail fast on connect --
-    # and abort a transfer that stopped moving instead of waiting for ever.
+    # $1 = URL, $2 = the stall ceiling in s (optional; #2644: a restore's is the cloner's, restore.sh). Long
+    # transfer: no total timeout, fail fast on connect -- and abort a transfer that stopped moving, never wait for ever.
     curl -sfS --connect-timeout "$HTTP_TIMEOUT" \
-        --speed-limit 1 --speed-time "$HTTP_STALL_TIMEOUT" "$1"
+        --speed-limit 1 --speed-time "${2:-$HTTP_STALL_TIMEOUT}" "$1"
 }
 
 # --- boot trace (#400) -------------------------------------------------------

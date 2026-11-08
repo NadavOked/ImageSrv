@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -333,6 +334,72 @@ class NicServices:
             return (f"שידור כבוי בכרטיס {interface} — הפעל אותו ברשת ← חיבורים "
                     "פיזיים ← שירותים, או השתמש בכרטיס אחר")
         return None
+
+    def multicast_interface(self, target_addresses: Callable[[], list[str | None]],
+                            override: str | None = None,
+                            default: str | None = None) -> str | None:
+        """Resolve one round's egress from services and the receivers' networks.
+
+        A single enabled NIC needs no address lookup. Multiple NICs require
+        every receiver to map unambiguously to the same enabled NIC. The
+        explicit CLI `override` wins over the selection (the sender's
+        `multicast_refused` gate still honours the operator's off switch). A
+        server the operator never edited keeps `default`, as before #2668.
+        """
+        if override:
+            logging.getLogger(__name__).warning(
+                "multicast: explicit --interface %s overrides per-NIC selection", override)
+            return override
+        if not self.edited():
+            return default
+        interfaces = self.interfaces()
+        saved, bad = self.saved()
+        if bad:
+            raise ValueError("Multicast refused: unreadable NIC services: " + ", ".join(bad))
+        names = list(dict.fromkeys([n["name"] for n in interfaces] + list(saved)))
+        eff = effective(names, saved, self.base)
+        enabled = plan(eff, {})["nics"]["multicast"]
+        if not enabled:
+            raise ValueError("Multicast refused: no NIC has multicast enabled")
+        present = {n["name"]: n for n in interfaces}
+        missing = [n for n in enabled if n not in present]
+        if missing:
+            raise ValueError("Multicast refused: enabled NICs are unavailable: " + ", ".join(missing))
+        if len(enabled) == 1:
+            return enabled[0]
+        reason = ("Multicast refused: cannot determine one target network among enabled NICs: "
+                  + ", ".join(enabled))
+        networks = {}
+        for name in enabled:
+            networks[name] = []
+            for cidr in present[name].get("addresses") or []:
+                try:
+                    # A bare address supplies no subnet evidence.
+                    if "/" not in str(cidr):
+                        continue
+                    network = ipaddress.ip_interface(cidr).network
+                    if network.version == 4:
+                        networks[name].append(network)
+                except ValueError:
+                    continue
+            if not networks[name]:
+                raise ValueError(reason + f" (no readable IPv4 subnet for {name})")
+        addresses = target_addresses()
+        if not addresses:
+            raise ValueError(reason + " (no receiver addresses)")
+        selected = set()
+        for address in addresses:
+            try:
+                ip = ipaddress.IPv4Address(address)
+            except (ValueError, TypeError):
+                raise ValueError(reason + " (missing or invalid receiver address)") from None
+            matches = [n for n in enabled if any(ip in net for net in networks[n])]
+            if len(matches) != 1:
+                raise ValueError(reason + f" (receiver {address} has no unique NIC)")
+            selected.update(matches)
+        if len(selected) != 1:
+            raise ValueError(reason + " (receivers span multiple NICs)")
+        return selected.pop()
 
     # -- שמירה --
 

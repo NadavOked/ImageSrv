@@ -123,6 +123,22 @@ _device_path_add() {
     return 0
 }
 
+plan_bitlocker() {
+    # $1 = plan (manifest_plan). #1840: the BitLocker partitions ("3" / "3, 5");
+    # rc 1 = none. They were restored raw: hostname.sh and the drivers never touch them.
+    awk -F'|' '$4 == "BitLocker" { printf "%s%s", s, $1; s = ", " } END { exit s == "" }' "$1"
+}
+
+restore_bitlocker_note() {
+    # $1 = target, $2 = the partitions. Orange on the "done": the copy asks for
+    # the recovery key on another computer. Appended once, beside the other notes.
+    _rb_f="$RUN_DIR/targets/$1/error"; _rb="מחיצה $2 — מוצפן ב-BitLocker: הועתק כמו שהוא, בלי כיווץ; במחשב אחר יידרש מפתח שחזור"
+    _rb_old=""; [ ! -s "$_rb_f" ] || _rb_old=$(cat "$_rb_f")
+    case "$_rb_old" in *"מפתח שחזור"*) return 0 ;; esac
+    printf '%s\n' "${_rb_old:+$_rb_old · }$_rb" > "$_rb_f" || { log "WARNING: $1: the BitLocker note was not written"; return 0; }
+    log "WARNING: $1: $_rb"
+}
+
 stage_drivers() {
     # $1 = disk name, $2 = manifest file. Always returns 0, and always leaves
     # the top-level state non-terminal; the caller writes done only after every
@@ -145,6 +161,8 @@ _stage_drivers() {
     fi
     grep -qE '^[^|]*\|[^|]*\|windows\|' "$_dr_plan"; _dr_plan_rc=$?
     if [ "$_dr_plan_rc" -eq 1 ]; then
+        _dr_skip=not_windows   # #1840: an encrypted volume is never touched -- and the operator is told
+        if _dr_bl=$(plan_bitlocker "$_dr_plan"); then _dr_skip=bitlocker; restore_bitlocker_note "$1" "$_dr_bl"; fi
         # #1331: a Linux target is checked, never changed (linuxdrivers.sh).
         grep -qE '^[^|]*\|[^|]*\|linux\|' "$_dr_plan"
         case $? in
@@ -152,7 +170,7 @@ _stage_drivers() {
             1) ;;
             *) _dr_linux='{"state":"failed","error":"לא הצלחנו לבדוק את תוכנית המחיצות"}' ;;
         esac
-        _drivers_result "skipped" "" "not_windows"
+        _drivers_result "skipped" "" "$_dr_skip"
         return 0
     fi
     if [ "$_dr_plan_rc" -ne 0 ]; then

@@ -120,14 +120,18 @@ usb_conns_json() {   # usb_map_conns as [{k, kind, m, s}]
 
 usb_map_live() {
     # The list in force, compact: this model's saved one, its nvme#<n> resolved against
-    # the machine now -- else the default, every connection with a disk in order (at most 8).
+    # the machine now -- else the default: drawer k = sata:k up to the last SATA with a disk, then the NVMe (at most 8).
     # 1 = none (no saved list and no disk).
     _ul_c=$(usb_conns_json)
     if _ul_l=$(usb_map_json); then
         printf '%s' "$_ul_l" | jq -c --argjson c "$_ul_c" "$USBMAP_RESOLVE"' . as $l
             | [$c[] | .k | select(startswith("nvme:"))] as $d | map(rkey($d; $l))'
     else
-        printf '%s' "$_ul_c" | jq -ce '[.[] | select(.kind == "disk") | .k] | .[:8] | select(length > 0)' || return 1
+        # #1874 (Nadav 07/11): by the real SATA number, as the cloner -- SATA 0 = drawer 1, SATA 2 = drawer 3, an empty
+        # SATA 1 between them is drawer 2 -- up to the last SATA with a disk; the NVMe with a disk follow (#2001's rule).
+        printf '%s' "$_ul_c" | jq -ce '([.[] | select(.kind == "disk" and (.k | startswith("sata:"))) | .k | ltrimstr("sata:") | tonumber]
+            | max // 0 | [., 8] | min) as $mx | [range(1; $mx + 1) | "sata:\(.)"] + [.[] | select(.kind == "disk" and (.k | startswith("nvme:"))) | .k]
+            | .[:8] | select(length > 0)' || return 1
     fi
 }
 

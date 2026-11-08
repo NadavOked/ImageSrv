@@ -41,8 +41,9 @@ def test_rufus_dd_is_the_way_and_etcher_is_not_recommended():
     js = _src("server/static/console.js")
     sheet = js[js.index("function usbCloneSheet()"):js.index("async function healthUpdateCheck()")]
     assert "צורבים ב-Rufus במצב DD" in sheet and "balenaEtcher נכשל בשטח" in sheet, sheet
-    row = js[js.index('key: "usbclone"'):js.index('key: "class_deploy_enabled"')]
-    assert "ב-Rufus במצב DD (balenaEtcher נכשל בשטח" in row, row
+    # #1920: the download left the settings row for the דיסק-און-קי page; its only door is that sheet
+    assert 'key: "usbclone"' not in js
+    assert 'onclick="usbCloneSheet()"' in _src("server/static/usbstick.js")
     assert "(Rufus במצב DD, balenaEtcher או dd)" not in js   # Etcher was offered as an equal
     build = _src("tools/build_usb_clone.sh")
     assert "'To write a new version: Rufus, \"DD Image\" mode (balenaEtcher failed in the field" in build

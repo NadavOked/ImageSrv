@@ -29,7 +29,7 @@ pytestmark = needs_jq
 MODEL = "HP Compaq 8000 Elite SFF PC"
 TO_MAP = ["KEY DOWN"] * 4 + ["KEY ENTER"]
 TO_RESET = ["KEY DOWN"] * 7 + ["KEY ENTER", "KEY TAB", "KEY ENTER"]
-SATA1_ON = ["KEY DOWN", "CHAR 20"]   # #2001: the window -- SATA 1 (empty, off by default) to "פעיל", F2 saves
+SATA1_OFF = ["KEY DOWN", "CHAR 20"]   # #2001: the window -- SATA 1 (empty, on by default since #1874: drawer 2) to "לא פעיל", F2 saves: a compact list
 
 STUBS = ('list_disks() { echo sda sdb nvme0n1 sdz; }; '
          'disk_port() { case "$1" in sda) echo 1 ;; sdb) echo 3 ;; esac; }; '
@@ -71,42 +71,42 @@ def saved(usb: Path) -> dict:
 
 
 def test_saved_by_model_in_force_and_every_screen_numbers_by_it(tmp_path):
-    out, usb = stick(tmp_path, TO_MAP + SATA1_ON + ["KEY F2"],
+    out, usb = stick(tmp_path, TO_MAP + SATA1_OFF + ["KEY F2"],
                      then='cat "$RUN_DIR/response.json"; echo "@@"; cat "$RUN_DIR/drawer_slots"; echo "@@"; '
                           'disk_drawer sdb 3; echo; disk_drawer sda 1; echo; disk_drawer nvme0n1 0')
     frame, answer, slots, drawers = out.stdout.split("@@")
-    want = ["sata:1", "sata:2", "sata:3", "nvme:0000:03:00.0"]
+    want = ["sata:1", "sata:3", "nvme:0000:03:00.0"]
     assert saved(usb) == {"drawer_slots": {MODEL: want}}, out.stdout + out.stderr
     assert dialog_title(frame) is None                              # saved: the window closed
     assert json.loads(answer)["drawer_slots"] == want
-    assert slots.split() == ["ok", "1|sata:1", "2|sata:2", "3|sata:3", "4|nvme:0000:03:00.0"]
-    assert drawers.strip().split("\n") == ["3|SATA 2", "1|SATA 0", "4|NVMe 03:00.0"], drawers
+    assert slots.split() == ["ok", "1|sata:1", "2|sata:3", "3|nvme:0000:03:00.0"]
+    assert drawers.strip().split("\n") == ["2|SATA 2", "1|SATA 0", "3|NVMe 03:00.0"], drawers
     assert "ST500" not in json.dumps(saved(usb)) and "serial" not in json.dumps(saved(usb))   # nothing about a disk
 
 
 def test_another_model_gets_the_default_not_this_models_mapping(tmp_path):
-    stick(tmp_path, TO_MAP + SATA1_ON + ["KEY F2"])
+    stick(tmp_path, TO_MAP + SATA1_OFF + ["KEY F2"])
     out, usb = stick(tmp_path, [], model="HP Compaq 8100 Elite SFF PC",
                      then='usb_settings_load; usb_answer; jq -c ".drawer_slots" "$RUN_DIR/response.json"; disk_drawer sdb 3')
     tail = out.stdout.split("@@")[1].split()
-    # #2001: the default -- every connection with a disk, in order
-    assert tail[0] == '["sata:1","sata:3","nvme:0000:03:00.0"]' and tail[1] == "2|SATA", out.stdout + out.stderr
+    # #1874: the default -- by the real SATA number, an empty SATA 1 is drawer 2
+    assert tail[0] == '["sata:1","sata:2","sata:3","nvme:0000:03:00.0"]' and tail[1] == "3|SATA", out.stdout + out.stderr
     assert MODEL in saved(usb)["drawer_slots"]                      # still on the stick, for its own model
 
 
 def test_reset_removes_this_models_mapping_and_keeps_another_models(tmp_path):
     other = {"HP Compaq 8100 Elite SFF PC": ["sata:2", "sata:1"]}
-    out, usb = stick(tmp_path, TO_MAP + SATA1_ON + ["KEY F2"], settings={"drawer_slots": dict(other)})
-    assert saved(usb)["drawer_slots"][MODEL][1] == "sata:2", out.stdout
+    out, usb = stick(tmp_path, TO_MAP + SATA1_OFF + ["KEY F2"], settings={"drawer_slots": dict(other)})
+    assert saved(usb)["drawer_slots"][MODEL][1] == "sata:3", out.stdout
     out, usb = stick(tmp_path, TO_RESET, then='jq -c ".drawer_slots" "$RUN_DIR/response.json"')
     assert saved(usb) == {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60, "cloner_beep": True, "poweroff_s": 20,
                           "drawer_slots": other}, out.stdout + out.stderr
-    assert out.stdout.split("@@")[1].split() == ['["sata:1","sata:3","nvme:0000:03:00.0"]']   # the default again
+    assert out.stdout.split("@@")[1].split() == ['["sata:1","sata:2","sata:3","nvme:0000:03:00.0"]']   # the default again
 
 
 def test_reset_says_what_happens_to_the_mapping(tmp_path):
     out, _usb = stick(tmp_path, ["KEY DOWN"] * 7 + ["KEY ENTER"])
-    assert "d.kv\tמיפוי חיבורים\tברירת המחדל — כל חיבור שיש בו דיסק, לפי הסדר\t0" in out.stdout, out.stdout
+    assert "d.kv\tמיפוי חיבורים\tברירת המחדל — לפי מספר ה-SATA: SATA 0 = דיסק 1\t0" in out.stdout, out.stdout
 
 
 def test_a_mapping_not_valid_on_the_stick_is_refused_aloud_and_not_used(tmp_path):
@@ -114,11 +114,11 @@ def test_a_mapping_not_valid_on_the_stick_is_refused_aloud_and_not_used(tmp_path
                       then='usb_settings_load 2>/dev/null; echo "$USB_NOTICE"; usb_answer; jq -c ".drawer_slots" "$RUN_DIR/response.json"')
     notice, ds = out.stdout.split("@@")[1].strip().split("\n")
     assert f"drawer_slots[{MODEL}]" in notice and "נדחו" in notice, out.stdout
-    assert ds == '["sata:1","sata:3","nvme:0000:03:00.0"]'          # the default, not the refused list
+    assert ds == '["sata:1","sata:2","sata:3","nvme:0000:03:00.0"]'  # the default, not the refused list
 
 
 def test_without_a_model_nothing_is_saved_and_it_is_said(tmp_path):
-    out, usb = stick(tmp_path, TO_MAP + SATA1_ON + ["KEY F2"], model=None)
+    out, usb = stick(tmp_path, TO_MAP + SATA1_OFF + ["KEY F2"], model=None)
     assert "d.alert\t<b>לא נשמר:</b> לא זוהה דגם המחשב (DMI) — אין לפי מה לשמור את המיפוי.\t" in out.stdout, out.stdout + out.stderr
     assert not (usb / "settings.json").exists()
 
@@ -128,7 +128,7 @@ def test_a_save_that_does_not_read_back_is_said(tmp_path):
     usb = tmp_path / "usbdata"; usb.mkdir(exist_ok=True)
     root = machine(tmp_path)
     script = (KIOSK + STUBS + f'echo mounted > "$RUN_DIR/usb.data"; USB_DATA_DIR={posix(usb)!r}; usbset_open; '
-              + "".join(f'usbset_key {k!r}; ' for k in TO_MAP + SATA1_ON) + pre_mv + 'usbset_key "KEY F2"; cat "$GUI_DIR/usbset.frame"')
+              + "".join(f'usbset_key {k!r}; ' for k in TO_MAP + SATA1_OFF) + pre_mv + 'usbset_key "KEY F2"; cat "$GUI_DIR/usbset.frame"')
     out = run(tmp_path, script, IMAGESRV_MODE="usbclone", SYSROOT=posix(root))
     assert "הקריאה החוזרת לא החזירה את אותו מיפוי" in out.stdout, out.stdout + out.stderr
     assert dialog_title(out.stdout) == "מיפוי חיבורים"

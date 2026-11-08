@@ -1999,3 +1999,30 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 .page .dg tr.group .cnt{font-weight:400;color:var(--clr-muted);margin-inline-start:8px}
 .page .dg .sess-hash{color:var(--clr-muted);font-size:var(--t-xs)}
 .page .dg tr.sess-me td{background:var(--indigo-soft)}
+/* ‏#1858 (מוקאפ 10): "המכונה לא הגיעה" — כתום, כמו .alert של המוקאפ; טוקנים קיימים בלבד. */
+.nw-alert{display:flex;gap:12px;align-items:flex-start;margin:0 0 14px;padding:12px 16px;border:1px solid var(--clr-warning);background:var(--warn-soft);border-radius:var(--r-sm);font-size:var(--t-sm);color:var(--ink)}
+.nw-alert b{display:block;font-size:var(--t-md);color:var(--warn-ink)}
+.nw-alert .ic{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--clr-warning);color:var(--on-ink);font-weight:700}
+.nw-alert .act{margin-inline-start:auto;align-self:center}
+
+/* ‏#1920 — עמוד "דיסק-און-קי" (usbstick.js) וחלון הסיכום של "סנכרן"; הצבעים מהטוקנים, בלי ערכים קבועים חדשים. */
+.usbs-head{display:flex;gap:14px;align-items:center;padding:4px 0 12px}
+.usbs-icon{flex:none;width:54px;height:54px;border-radius:10px;background:var(--clr-action-soft);color:var(--clr-action-fg);display:grid;place-items:center}
+.usbs-icon .ui-icon{width:28px;height:28px}
+.usbs-head b{font-size:var(--t-md)}
+.usbs-none{display:flex;gap:16px;align-items:center;justify-content:space-between}
+.usbs-help{display:grid;gap:3px}
+.usbs-help small{color:var(--clr-muted);font-size:var(--t-sm);line-height:1.5}
+.usbs-none + .usbs-help{margin-top:12px;padding-top:12px;border-top:1px solid var(--hair)}
+.usbs-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.usbs-cols h5{margin:0 0 6px;font-size:var(--t-base)}
+.usbs-sum{border:1px solid var(--hair);border-radius:var(--r-sm);padding:12px 14px}
+.usbs-ul{margin:0;padding-inline-start:18px;display:grid;gap:5px;font-size:var(--t-base)}
+.usbs-ul .m{color:var(--clr-muted)}
+.usbs-ul .okc{color:var(--clr-success-fg)}
+.usbs-ul .bad{color:var(--clr-danger-fg)}
+.usbs-info{margin-top:12px;padding:10px 12px;border-radius:var(--r-sm);background:var(--clr-action-soft);font-size:var(--t-sm);line-height:1.5}
+@media (max-width:640px){.usbs-cols{grid-template-columns:1fr}}
+.nw-alert .act{display:flex;gap:8px}
+/* #1858: "נצפה F1" -- תגית מתחת למצב הדיסק בדף הדיסקים */
+.pill.f1-tag{margin-top:4px;white-space:nowrap}

@@ -19,6 +19,7 @@ from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from server.agent import timing as agent_timing, bootguard, inventory, probe, registry, unknown_screen
+from server.agent import answer_failure   # #2666
 from server.core import capabilities
 from server.rounds import direct, room, room_drivers
 from server.library import minfree
@@ -29,7 +30,8 @@ from server.core.agent_version import server_version
 from server.agent.boot_cancel import cancel_gui_tasks_on_boot
 from server.db import disk_full, get_setting, journal, net_seen, note_disk_full
 from server.agent import readbackhash
-from server.disks import model_slots   # #2001
+from server.disks import f1_marks, model_slots   # #2001; #1858
+from server.learn import never_woke   # #1858
 from server.library.images import ImageLibrary
 from server.net.ports import server_name
 from server.rounds.sessions import SessionStore
@@ -93,6 +95,18 @@ def on_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
         return ipaddress.ip_address(host) == ipaddress.ip_address(configured)
     except Exception:  # noqa: BLE001 — ספק = כמו היום
         return False
+
+
+def serves_images(scope: dict | None, server_base: str | None) -> bool:
+    """‏#2666 (הבהרת נדב 07/11): הבקשה התקבלה על כרטיס **שהשרת מפיץ בו אימג'ים**.
+
+    זה התנאי של שני המסכים במסלול התפריט — "המחשב הזה לא רשום" (‏#1802) ומסך
+    הכישלון על תשובה לא מובנת (‏#2666) — ולא שם קבוע של וילן. היום הכרטיס היחיד
+    כזה הוא כרטיס ההפצה (`on_deploy_vlan`, ראיה חיובית בלבד); כרטיס כיתות שמפיץ
+    (v2) נכנס **כאן**, ושני המסכים מקבלים אותו יחד. רשת שהשרת אינו מפיץ בה
+    (למשל שרתים) — בלי מסך ובלי GRUB של סוכן: המחשב עולה מהדיסק.
+    """
+    return on_deploy_vlan(scope, server_base)
 
 
 #: ‏#976: הכותרת שבה הבדיקה העצמית של השרת (‏`health.default_hooks`) מסמנת
@@ -256,6 +270,9 @@ def _unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
 def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
                  disk_probe, firmware, secure_boot, agent_version, local_clone,
                  optical, optical_reported, hw_inventory, hw_probe, history=True) -> None:
+    # ‏#1858 (07/11): לפני `net_seen` -- הוא מרענן את `last_seen`, ומכונה שהקונסולה הציגה "לא הגיע · ייתכן F1"
+    # חדלה להיות כזו. לעולם אינו זורק.
+    never_woke.arrived(conn, mac)
     net_seen(conn, mac, ip,
              disks_json=json.dumps(disks) if disks is not None else None,
              monitor_secret=monitor_secret, monitor_auth=monitor_auth,
@@ -386,6 +403,9 @@ def build_answer(
         # ‏#1859: מה שהשרת למד מאז הסבב הקודם של כל סידורי (183/188 שעלו, מאפיין קריטי
         # שעלה, חום בכתיבה) — [{"serial", "reason"}]. הסוכן הופך את המילה לשאלה כתומה.
         "smart_learned": smart_history.learned_for(conn, disks),
+        # ‏#1859 (נדב 07/11): בכמה כל מאפיין עלה מאז הסבב הקודם — [{"serial", "rose": {"5": 3}}], רק לדיסק
+        # שיש לו סבב קודם. הגואי של המשכפל מצייר מזה את עמודת "עלה"; בלי רשומה = "אין עדיין השוואה".
+        "smart_rose": smart_history.rose_for(conn, disks),
         # ‏#926: דיסק שכווץ בקליטה ולא הוחזר לגודלו — לפי הסידורי שהמכונה
         # שלחה. מחשב הבנייה מציע להחזיר (‏shrinkmem.sh); סוכן ישן מתעלם.
         "shrink_open": shrink_records.open_for(conn, disks, mac),   # #2492: רק מה שפתחה
@@ -403,6 +423,10 @@ def build_answer(
         "readback_mode": readbackhash.mode(conn),
         # ‏#1857 (מוקאפ 04): שם הסט והמדבקה של דיסקים ששלח המשכפל ({serial: {set, label, text}}); דיסק בלי סט חסר.
         "disk_labels": disk_sets.labels_for(conn, disks),
+        # ‏#1858 (07/11): "נצפה F1 בהדלקה" -- הדיסקים שהמכונה שלחה ושנרשם להם F1, לפי serial: [{serial, date, source}].
+        # הסוכן צובע אותם אדום ומדלג עליהם (smart.sh), ומציג "נצפה F1 (תאריך)". חסר = הקריאה נכשלה או שרת ישן --
+        # הסוכן משאיר את מה שקיבל קודם; [] = אין. (None נשמט: "לא נקרא" אינו "אין".)
+        **({"f1_observed": f1_seen} if (f1_seen := f1_marks.for_hello(conn, disks)) is not None else {}),
         # ‏#2056/#2059: זמני ההמתנה והכיבוי האוטומטי (הגדרות בקונסולה). בכל תשובה לרשומה,
         # ולכל תפקיד. הסוכן מחזיר את מה שהחיל ב-`applied_timing` (ראו interfaces.md).
         **agent_timing.hello_fields(conn),
@@ -626,11 +650,19 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
             log.warning("boot menu for %s from %s: identity not verified — "
                         "served without the agent, not counted (#2411)", mac, client_ip)
             return {**answer, "boot_guard": bootguard.EXHAUSTED}
+        if answer_failure.failed(answer):
+            # ‏#2666: המחולל אינו מבין את התשובה (`schema`). בכרטיס מפיץ — מסך הכישלון
+            # של הסוכן, בתקציב של #75; אחריו, ומחוץ לרשת המפיצה — הדיסק, כמו היום.
+            # לפני `known`, באותו סדר של `grub_menu.decide`. ‏`bootguard` אינו סופר
+            # כאן: ‏`decide` בלי הדגל אומרת דיסק, ולכן אין לו הקשר.
+            if serves_images(scope, server_base):
+                return answer_failure.offer(conn, mac, answer)
+            return answer
         if answer.get("known") is not True:
             # ‏#1802: מכונה לא רשומה בווילן ההפצה — המסך (`unknown_screen`); כשההגדרה
             # דלוקה, בחלון — ‏UEFI לדיסק, ‏BIOS שוב המסך. ‏`bootguard` אינו רלוונטי: אין לה
             # סבב ואין לה משימה, ולכן אין לה הקשר לספור בו.
-            if on_deploy_vlan(scope, server_base):
+            if serves_images(scope, server_base):
                 return unknown_screen.offer(conn, mac, answer)
             return answer
         # רק כאן, ולא ב-hello: בקשת התפריט היא האתחול, והיא גם הרגע

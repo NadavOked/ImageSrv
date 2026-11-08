@@ -1,22 +1,24 @@
-/* ImageSrv — #954 גל 7: דף "שרתי משנה" (רשימת שרתי המשנה) ודף "שרת משנה" (הצומת
-   בעץ, #936). לפי docs/design/console-redesign/branches.md.
+/* ImageSrv — #954 גל 7: דף "שרתי משנה" (רשימת שרתי המשנה). לפי
+   docs/design/console-redesign/branches.md.
 
    "שרתי משנה" הוא דף "own" (UI.objHeader/datagrid כמו drivers.js): כותרת עם
-   מונים ותג "N לא מגיב/ים" · לשוניות שרתים/העברות/קבוצות. חיבור כל שרת
+   מונים ותג "N לא מגיב/ים" · לשוניות שרתים/קבוצות. חיבור כל שרת
    **נמדד** בפועל מול ה-machines endpoint של שרת המשנה, ולא נשאר "בודק
    חיבור…" קפוא (עיקרון 5) — אחרי שהטבלה על המסך, כל שרת נבדק במקביל
    ותא ה"חיבור" שלו מתעדכן במקום.
 
-   "שרת משנה" (branch, BRANCH_NODE) נשאר בדפוס הישן (לא "own" — הלשוניות
-   שלו טוענות נתונים שונים כל אחת) עם כותרת אובייקט/KPI/note שנוספו כאן;
-   ‏loadBranchMachines/renderBranchTransfers/openTransferSheet משותפים
-   לשני הדפים. קבוצות שרתי המשנה (יצירה/שם/סדר/מחיקה) נשארות ב-storage_nodes.js
+   ‏#1781 (נדב 07/11): אין עוד לשונית ואין עוד דף "העברות". העברת אימג' לשרת משנה ומשיכתו
+   ממנו מתחילות מתפריט ⋯ של האימג' בדף האימג'ים (חלון אחד, ‏branch_transfer.js); ההעברות
+   שרצות מופיעות במשימות. קבוצות שרתי המשנה (יצירה/שם/סדר/מחיקה) נשארות ב-storage_nodes.js
    ומוצגות כלשונית "קבוצות" כאן. משתמש ב-UI/api/post/put/del/sheet/toast/
    esc/encodeId/fmtDate/fmtClock/formatGB/confirmSheet מ-console.js. */
 "use strict";
 
-let BRANCH_TIMER = null;          // פולינג העברות בדף שרת משנה יחיד (branch)
-let BRANCHES_LIST_TIMER = null;   // פולינג לשונית "העברות" בדף שרתי המשנה
+const TRANSFER_STATE = {
+  queued: ["ממתין", ""], sending: ["שולח", ""], verifying: ["שרת המשנה מאמת sha256", ""],
+  done: ["הושלם", "ok"], failed: ["נכשל", "err"],
+};
+
 let BRANCH_LIVE_TIMER = null;     // מצב חדר/קליטה חי בכרטיסי שרתי המשנה
 let BRANCH_TRANSFERS = [];
 let BRANCH_GROUPS = [];
@@ -26,11 +28,6 @@ let BRANCH_CONN = {};   // id → {state:"checking"|"ok"|"err"|"disabled", error
 // ‏#1017: הזמנים הם של **השרת** (last_seen_at / last_error_at על storage_nodes,
 // נכתבים בכל קריאה בין-שרתית) — לא שעון הדפדפן ברגע שהדף קרא. בלי שדה מהשרת
 // אין זמן, לא ניחוש.
-
-const TRANSFER_STATE = {
-  queued: ["ממתין", ""], sending: ["שולח", ""], verifying: ["שרת המשנה מאמת sha256", ""],
-  done: ["הושלם", "ok"], failed: ["נכשל", "err"],
-};
 
 /* ‏#1462: קצב, ETA וזמן שעבר — רק ממה שנמדד. הקצב הוא הפרש בין שתי דגימות
    (bytes_sent, updated_at) שהדף ראה, **שתיהן בשעון השרת**, בחלון של עד דקה;
@@ -58,6 +55,12 @@ function transferRate(t) {
   return (z.b - a.b) * 1000 / (z.t - a.t);
 }
 
+/* ‏#1781: המשימות מציירות את התווית; שלב האימות נאמר לפי מי שמאמת — במשיכה הראשי, בהעברה השרת המשנה. */
+function transferStateLabel(t) {
+  if (t.state === "verifying" && t.direction === "pull") return ["הראשי מאמת sha256", ""];
+  return TRANSFER_STATE[t.state] || [t.state, ""];
+}
+
 function transferPace(t) {
   const since = t.seconds_since_update;
   if (t.state === "verifying") {
@@ -74,19 +77,11 @@ function transferPace(t) {
   return eta ? `${speed} · נותרו כ-${eta}` : speed;
 }
 
-function transferStateLabel(t) {
-  if (t.state === "verifying" && t.direction === "pull") return ["הראשי מאמת sha256", ""];
-  return TRANSFER_STATE[t.state] || [t.state, ""];
-}
-
-function stopBranchPolling() { clearInterval(BRANCH_TIMER); BRANCH_TIMER = null; }
-function stopBranchesListPolling() { clearInterval(BRANCHES_LIST_TIMER); BRANCHES_LIST_TIMER = null; }
 function stopBranchLivePolling() { clearInterval(BRANCH_LIVE_TIMER); BRANCH_LIVE_TIMER = null; }
 
 /* ---------- דף "שרתי משנה" (רשימת שרתי המשנה, own) ---------- */
 
 async function loadBranchesData() {
-  stopBranchesListPolling();
   stopBranchLivePolling();
   const [groups, nodes, transfers] = await Promise.all([
     api("/storage-node-groups"), api("/storage-nodes"), api("/storage-transfers"),
@@ -104,7 +99,6 @@ async function loadBranchesData() {
   if (current === "branches" || current === "settings") renderCurrent();
   await Promise.all(nodes.filter((n) => !n.disabled_at).map((n) =>
     checkBranchConnection(n).catch(() => {})));
-  maybeStartBranchesListPolling();
   maybeStartBranchLivePolling();
 }
 
@@ -208,7 +202,6 @@ function branchNodeRow(n) {
   const acts = UI.acts([
     ["פתח", `openSecondaryPage('${idEnc}','home',null)`],
     ["בדוק חיבור", `checkBranchNow('${idEnc}')`],
-    ["העבר אימג'", `openTransferSheetForNode('${idEnc}')`],
     ["עריכה", `editBranchNode('${idEnc}')`],
     [disabled ? "הפעל" : "השבת", `toggleBranchNode('${idEnc}')`],
     ["הסר", `removeBranchNode('${idEnc}')`],
@@ -232,7 +225,8 @@ function branchesServersTab() {
     rows: BRANCH_NODES.map(branchNodeRow),
     empty: "אין שרתי משנה רשומים.",
   });
-  return `<div class="c12 card"><div class="card-b${BRANCH_NODES.length ? " flush" : ""}">${table}</div></div>
+  // ‏#1781: הגבלת הקצב בין אתרים ישבה בלשונית "העברות" שנעלמה; היא נשארת כאן, ליד השרתים.
+  return `<div class="c12 card">${transferCapStrip("card-h")}<div class="card-b${BRANCH_NODES.length ? " flush" : ""}">${table}</div></div>
     ${BRANCH_NODES.map(branchControlCard).join("")}`;
 }
 
@@ -313,99 +307,13 @@ function stopBranchRound(nidEnc) {
     onSubmit: async () => { await post(`/storage-nodes/${encodeId(nid)}/console/room/close`, { confirm_name: name }); toast(`הסבב נעצר ב-${n.label}`); await refreshBranchLive(n); renderCurrent(); } });
 }
 
-function transferDirectionHtml(t) {
-  const primary = (typeof ME !== "undefined" && ME.server_name) ? ME.server_name : "ראשי";
-  const node = t.node_label || t.node_id || "";
-  if (t.direction === "pull") return `${esc(node)} → ${esc(primary)}`;
-  return esc(node);
-}
-
-function branchTransferRow(t) {
-  const [label, cls] = transferStateLabel(t);
-  const active = ["sending", "verifying", "queued"].includes(t.state);
-  const pct = t.bytes_total ? Math.min(100, Math.round(100 * t.bytes_sent / t.bytes_total)) : 0;
-  const pace = transferPace(t);
-  const progress = (active
-    ? UI.barRow(pct, t.state === "verifying" ? "indeterminate" : "", `${esc(formatGB(t.bytes_sent))} / ${esc(formatGB(t.bytes_total))}`)
-    : (t.state === "done" ? UI.barRow(100) : UI.barRow(null)))
-    + (pace ? `<div class="sub transfer-pace">${esc(pace)}</div>` : "");
-  const state = UI.status(cls, label) + (t.error ? `<div class="sub">${esc(t.error)}</div>` : "");
-  const retry = t.state === "failed"
-    ? `<button class="btn sm" onclick="retryBranchTransfer('${encodeId(t.node_id)}','${encodeId(t.image_id)}')">נסה שוב</button>` : "";
-  const cancel = t.direction === "pull" && active
-    ? `<button class="btn sm" onclick="cancelBranchTransfer('${encodeId(t.id)}')">ביטול</button>` : "";
-  return { cells: [
-    UI.name(t.image_name, t.image_id),
-    transferDirectionHtml(t),
-    progress,
-    state,
-    `<span class="mono" dir="ltr">${esc(fmtDate(t.created_at))} ${esc(fmtClock(t.created_at))}</span>`,
-    esc(t.started_by || "—"),
-    retry + cancel,
-  ] };
-}
-
-function branchesTransfersTab() {
-  const table = UI.datagrid({
-    columns: ["אימג'", "אל", "התקדמות", "מצב", "התחיל", "מי", ""],
-    rows: BRANCH_TRANSFERS.map(branchTransferRow),
-    empty: "אין העברות.",
-  });
-  return `<div class="c12 card">${transferCapStrip("card-h")}<div class="card-b${BRANCH_TRANSFERS.length ? " flush" : ""}">${table}</div></div>`;
-}
-
-function maybeStartBranchesListPolling() {
-  if (!BRANCH_TRANSFERS.some((t) => ["queued", "sending", "verifying"].includes(t.state))) return;
-  stopBranchesListPolling();
-  BRANCHES_LIST_TIMER = setInterval(() => {
-    if (current !== "branches" || currentTab !== 1 || document.hidden) { stopBranchesListPolling(); return; }
-    api("/storage-transfers").then((rows) => {
-      BRANCH_TRANSFERS = rows;
-      renderCurrent();
-      if (!rows.some((t) => ["queued", "sending", "verifying"].includes(t.state))) stopBranchesListPolling();
-    }).catch(() => {});
-  }, 2000);
-}
-
-async function retryBranchTransfer(nidEnc, imageIdEnc) {
-  let nid = nidEnc, image_id = imageIdEnc;
-  try { nid = decodeURIComponent(nid); image_id = decodeURIComponent(image_id); } catch (e) {}
-  try {
-    const row = BRANCH_TRANSFERS.find((t) => t.node_id === nid && t.image_id === image_id);
-    const kind = row && row.direction === "pull" ? "pull" : "transfer";
-    const body = { image_id };
-    if (kind === "transfer") body.location_id = (row && row.location_id) || "loc_local";
-    await post(`/storage-nodes/${encodeId(nid)}/${kind}`, body);
-    toast("ההעברה הופעלה מחדש");
-    BRANCH_TRANSFERS = await api("/storage-transfers");
-    renderCurrent();
-    maybeStartBranchesListPolling();
-  } catch (e) { toast(e.message); }
-}
-
 async function cancelBranchTransfer(tidEnc) {
   let tid = tidEnc;
   try { tid = decodeURIComponent(tid); } catch (e) {}
   try {
     await post(`/storage-transfers/${encodeId(tid)}/cancel`, {});
     toast("ההעברה בוטלה");
-    BRANCH_TRANSFERS = await api("/storage-transfers");
-    renderCurrent();
-  } catch (e) { toast(e.message); }
-}
-
-async function startPullFromSecondary(nidEnc, imageIdEnc) {
-  let nid = nidEnc, image_id = imageIdEnc;
-  try { nid = decodeURIComponent(nid); image_id = decodeURIComponent(image_id); } catch (e) {}
-  try {
-    await post(`/storage-nodes/${encodeId(nid)}/pull`, { image_id });
-    toast("ההעברה לראשי התחילה");
-    if (current === "branch") openBranchView(encodeId(nid), "transfers", null);
-    else {
-      BRANCH_TRANSFERS = await api("/storage-transfers");
-      renderCurrent();
-      maybeStartBranchesListPolling();
-    }
+    await refreshTransfers();
   } catch (e) { toast(e.message); }
 }
 
@@ -416,7 +324,7 @@ function branchesGroupsTab() {
 /* מתעדכנת לאחר כל רינדור של לשונית "קבוצות" — renderBranchGroups
    (storage_nodes.js) כותבת ל-#branch-groups ומחברת את הכפתורים/הגרירה. */
 function wireBranchesGroupsTab() {
-  if (current !== "branches" || currentTab !== 2 || !(BRANCH_NODES || []).length) return;
+  if (current !== "branches" || currentTab !== 1 || !(BRANCH_NODES || []).length) return;
   renderBranchGroups(BRANCH_GROUPS, loadBranchesData);
 }
 
@@ -452,9 +360,9 @@ function branchesPage(tab = 0) {
   const header = UI.objHeader({
     crumbs: [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "שרתי משנה" }],
     icon: "server", name: "שרתי משנה", sub, pill, actions,
-    tabs: ["שרתים", "העברות", "קבוצות"], tab,
+    tabs: ["שרתים", "קבוצות"], tab,
   });
-  const body = tab === 1 ? branchesTransfersTab() : tab === 2 ? branchesGroupsTab() : branchesServersTab();
+  const body = tab === 1 ? branchesGroupsTab() : branchesServersTab();
   return `<div class="page">${header}<div class="body">${body}</div></div>`;
 }
 
@@ -545,13 +453,6 @@ function removeBranchNode(idEnc) {
     danger: true, submitLabel: "הסרת השרת",
     onSubmit: async () => { await del(`/storage-nodes/${encodeId(id)}`); await loadBranchesData(); },
   });
-}
-
-function openTransferSheetForNode(idEnc) {
-  let id = idEnc; try { id = decodeURIComponent(id); } catch (e) {}
-  const node = BRANCH_NODES.find((n) => n.id === id);
-  if (!node) return;
-  api("/images").then((images) => openTransferSheet(node, images, loadBranchesData)).catch((e) => toast(e.message));
 }
 
 /* ---------- רישום שרת משנה (enroll): כתובת → preview SPKI → קוד ----------
@@ -737,152 +638,12 @@ function openBranchGroupSheet() {
   });
 }
 
-/* ---------- משותף לשני הדפים: מכונות שרת המשנה, העברת אימג' ---------- */
+/* ---------- מכונות שרת המשנה ---------- */
 
 function branchMonitor(nid, mac, name) {
   if (!isAdmin()) return;
   window.open(`monitor.html?node=${encodeId(nid)}&mac=${encodeId(mac)}&name=${encodeId(name)}`,
               `imagesrv-monitor-${nid}-${mac}`);
-}
-
-function renderBranchTransfers(nid, target = null, limit = 8) {
-  const box = target || $(`#branch-transfers-${CSS.escape(nid)}`);
-  if (!box) return;
-  const rows = BRANCH_TRANSFERS.filter((t) => t.node_id === nid).slice(0, limit);
-  if (!rows.length) { box.innerHTML = `<div class="sub">אין העברות.</div>`; return; }
-  box.innerHTML = rows.map((t) => {
-    const [label, cls] = transferStateLabel(t);
-    const pct = t.bytes_total ? Math.min(100, Math.round(100 * t.bytes_sent / t.bytes_total)) : 0;
-    const pace = transferPace(t);
-    const meter = t.state === "verifying"
-      ? `<div class="bar indeterminate" style="margin-top:6px"><i></i></div>`
-      : `<div class="progress" style="margin-top:6px"><i style="width:${pct}%"></i></div>`;
-    const bar = ["sending", "verifying", "queued"].includes(t.state)
-      ? `${meter}<span class="sub">${esc(formatGB(t.bytes_sent))} מתוך ${esc(formatGB(t.bytes_total))} (${pct}%)${pace ? ` · <span class="transfer-pace">${esc(pace)}</span>` : ""}</span>`
-      : "";
-    const err = t.error ? `<div class="notice warn" role="status">${esc(t.error)}</div>` : "";
-    const dir = t.direction === "pull" ? transferDirectionHtml(t) : "";
-    const cancel = t.direction === "pull" && ["sending", "verifying", "queued"].includes(t.state)
-      ? `<button class="btn sm" onclick="cancelBranchTransfer('${encodeId(t.id)}')">ביטול</button>` : "";
-    return `<div class="member"><b>${esc(t.image_name)}</b> <span class="status ${cls}"><i></i>${esc(label)}</span>
-      ${dir ? `<div class="sub">${dir}</div>` : ""}
-      <div class="sub mono" dir="ltr">${esc(t.created_at ? fmtWhen(t.created_at) : "")}</div>${bar}${err}${cancel}</div>`;
-  }).join("");
-}
-
-async function openTransferSheet(n, images, afterSubmit) {
-  if (!images.length) { toast("אין אימג'ים בספרייה להעברה"); return; }
-  let locations;
-  try {
-    locations = (await api(`/storage-nodes/${encodeId(n.id)}/console/storage-locations`)).locations;
-  } catch (e) {
-    toast(`לא ניתן לקרוא את מיקומי האחסון של ${n.label}: ${e.message}`);
-    return;
-  }
-  const writable = (locations || []).filter((loc) => loc.state === "connected");
-  if (!writable.length) { toast("אין בשרת המשנה מיקום אחסון זמין לקליטה"); return; }
-  const options = images.map((m) => ({
-    value: m.id, label: `${m.folder ? m.folder + " / " : ""}${m.name} (${formatGB(m.total_compressed_bytes)})`,
-  }));
-  sheet({
-    title: `העברת אימג' אל ${n.label}`,
-    sub: "האימג' ייכנס לספריית שרת המשנה רק אחרי ששרת המשנה אימת sha256 של כל מחיצה. ניתוק באמצע = כשל גלוי, ומתחילים מחדש.",
-    fields: [
-      { id: "image_id", label: "אימג'", type: "select", value: options[0].value, options },
-      { id: "location_id", label: "מיקום אחסון בשרת המשנה", type: "select",
-        value: writable.some((loc) => loc.id === "loc_local") ? "loc_local" : writable[0].id,
-        options: writable.map((loc) => ({value: loc.id, label: `${loc.name} (${loc.id})`})) },
-    ],
-    submitLabel: "התחל העברה",
-    onSubmit: async (v) => {
-      await post(`/storage-nodes/${encodeId(n.id)}/transfer`,
-                 { image_id: v.image_id, location_id: v.location_id });
-      toast("ההעברה התחילה");
-      await afterSubmit();
-    },
-  });
-}
-
-/* ---------- #936: דף "העברות" של שרת משנה אחד ----------
-   ‏#1179: שאר העלים בעץ של שרת המשנה הם העמודים של הראשי עצמם בהקשר שרת המשנה (SERVER_CTX
-   ב-console.js). כאן נשאר מה שאין לו מקבילה בראשי: ספריית שרת המשנה עם "העבר לראשי",
-   ו"העבר אימג'" + יומן ההעברות. שרת משנה שלא ענה — "‹שם› לא ענה: ‹סיבה›", לא דף ריק. */
-
-let BRANCH_VIEW_GEN = 0;
-
-function branchDownNote(label, error) {
-  return `<div class="notice err" role="status" data-branch-down>${esc(label)} לא ענה: ${esc(error || "בלי סיבה בתשובה")}</div>`;
-}
-
-function branchConnHtml(n, conn) {
-  if (conn.disabled) return { status: `<span class="status"><i></i>מושבת</span>`, note: `<div class="notice err" role="status">השרת מושבת — לא נשאל.</div>` };
-  if (conn.unchecked) return { status: `<span class="status"><i></i>לא נבדק</span>`, note: `<div class="notice warn" role="status">לא נבדק אם ${esc(n.label)} עונה — הבקשה לראשי נכשלה: ${esc(conn.error)}</div>` };
-  if (!conn.connected) return { status: `<span class="status err"><i></i>לא מחובר</span>`, note: branchDownNote(n.label, conn.error) };
-  return { status: `<span class="status ok"><i></i>מחובר</span>`, note: "" };
-}
-
-async function loadBranchView() {
-  const host = $("#branch-view");
-  if (!host) return;
-  stopBranchPolling();
-  // מעבר מהיר בין שרתי משנה בעץ — טעינה שהתיישנה בזמן ה-await לא כותבת ל-DOM שכבר הוחלף.
-  const gen = ++BRANCH_VIEW_GEN;
-  const stale = () => gen !== BRANCH_VIEW_GEN || $("#branch-view") !== host;
-  const nid = BRANCH_NODE;
-  const nodes = await api("/storage-nodes");
-  if (stale()) return;
-  const n = nodes.find((x) => x.id === nid);
-  if (!n) {
-    host.innerHTML = `<div class="card"><div class="card-b"><div class="empty">שרת המשנה אינו רשום עוד. בחר שרת אחר בעץ.</div></div></div>`;
-    return;
-  }
-  BRANCH_NODES = nodes;
-  const disabled = !!n.disabled_at;
-  const remoteP = disabled
-    ? Promise.resolve({ connected: false, error: "שרת המשנה מושבת", images: [] })
-    : api(`/storage-nodes/${encodeId(n.id)}/images`).catch((e) => (
-      { connected: false, unchecked: true, error: e.message, images: [] }));
-  const [transfers, images, remote] = await Promise.all([
-    api("/storage-transfers"), api("/images"), remoteP, loadTransferCap(),
-  ]);
-  if (stale()) return;
-  BRANCH_TRANSFERS = transfers;
-  if (!disabled && !remote.unchecked) markSecondaryStatus(n, !!remote.connected, remote.error);
-  const c = branchConnHtml(n, disabled ? { disabled: true } : remote);
-  const localIds = new Set(images.map((m) => m.id));
-  const libRows = (remote.images || []).map((img) => {
-    const present = localIds.has(img.id);
-    const pullBtn = `<button class="btn sm primary" ${present || disabled ? "disabled" : ""} onclick="startPullFromSecondary('${encodeId(n.id)}','${encodeId(img.id)}')">העבר לראשי</button>`;
-    return `<tr>
-      <td><b>${esc(img.name)}</b> <span class="mono muted" dir="ltr">${esc(img.id)}</span></td>
-      <td>${esc(formatGB(img.size_bytes || 0))}</td>
-      <td class="mono" dir="ltr">${esc(fmtWhen(img.created_at))}</td>
-      <td>${present ? "✓" : "—"}</td>
-      <td>${pullBtn}</td>
-    </tr>`;
-  }).join("");
-  const libBody = !remote.connected ? c.note
-    : (libRows
-      ? `<table><thead><tr><th>שם</th><th>גודל</th><th>תאריך</th><th>קיים בראשי</th><th></th></tr></thead><tbody>${libRows}</tbody></table>`
-      : `<div class="empty">אין אימג'ים בספריית שרת המשנה.</div>`);
-  host.innerHTML = `<div class="card"><div class="card-h"><span>${esc(n.label)} · העברות <small class="muted">${esc(n.group_label || "ללא קבוצה")}</small></span>${c.status}</div><div class="card-b">
-      <div class="action-strip"><button class="btn primary" id="branch-view-transfer" ${disabled ? "disabled" : ""}>העבר אימג'</button></div>
-      <h4>ספריית האימג'ים של שרת המשנה</h4>
-      ${libBody}
-      <h4>העברות</h4>
-      ${transferCapStrip("sub")}
-      <div id="branch-transfers-${esc(n.id)}"></div>
-    </div></div>`;
-  $("#branch-view-transfer").onclick = () => openTransferSheet(n, images, async () => loadBranchView());
-  renderBranchTransfers(n.id, null, 20);
-  BRANCH_TIMER = setInterval(() => {
-    if (current !== "branch" || BRANCH_NODE !== n.id || document.hidden) { stopBranchPolling(); return; }
-    if (!BRANCH_TRANSFERS.some((t) => ["queued", "sending", "verifying"].includes(t.state))) return;
-    api("/storage-transfers").then((rows) => {
-      BRANCH_TRANSFERS = rows;
-      renderBranchTransfers(n.id, null, 20);
-    }).catch(() => {});
-  }, 2000);
 }
 
 /* ---------- #1473: הגבלת קצב להעברות בין אתרים (הכרעת נדב 16/10) ----------
@@ -911,7 +672,7 @@ function transferCapText() {
   return `עד ${ltr(`${m} Mb/s`)} (${ltr(`${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB/s`)}) לכל העברה`;
 }
 
-/* cls: "card-h" — שורת כותרת בכרטיס (לשונית "העברות"); "sub" — שורה מתחת ל-h4 (דף שרת המשנה). */
+/* cls: "card-h" — שורת כותרת בכרטיס (לשונית "שרתים"). */
 function transferCapStrip(cls) {
   const btn = isAdmin() && TRANSFER_CAP.mbps != null
     ? ` <button class="btn sm flat" type="button" onclick="transferCapSheet()">שינוי</button>` : "";
@@ -932,6 +693,6 @@ function transferCapSheet() {
       await post("/settings", { [TRANSFER_CAP_KEY]: n });
       toast(n ? `הקצב בין אתרים מוגבל ל-${n} Mb/s — נרשם ביומן` : "ללא הגבלת קצב בין אתרים — נרשם ביומן");
       await loadTransferCap();
-      if (current === "branch") loadBranchView(); else renderCurrent();
+      renderCurrent();
     } });
 }

@@ -9,7 +9,8 @@
 
 #: ‏#1900: התאום של `server/images.py:FILESYSTEMS` (בלי ""; ‏_fs_of לא מדפיס
 #: ריק). ‏`tests/test_capture_gates.py` משווה את שתי הרשימות — מקור אחד, לא שניים.
-CAPTURE_FILESYSTEMS="ntfs vfat ext4 btrfs swap unknown"
+#: ‏#1840: ‏BitLocker נקלט גולמי (partclone.dd), כמו unknown — hibernation.sh.
+CAPTURE_FILESYSTEMS="ntfs vfat ext4 btrfs swap unknown BitLocker"
 
 capture_identity_reason() {
     # $1 = disk, $2 = the serial the server recorded when the capture was
@@ -46,7 +47,6 @@ capture_fs_reason() {
     # before the space check and the first byte -- not by the server at the end.
     [ "$2" != vfat ] || { capture_fat_reason "$1" "$3"; return; }   # #1823
     case " $CAPTURE_FILESYSTEMS " in *" $2 "*) return 0 ;; esac
-    case "$2" in *[Bb]it[Ll]ocker*) _bitlocker_reason "$1" "$2" ""; return ;; esac
     echo "מחיצה $1: מערכת הקבצים $2 אינה נתמכת לקליטה (נתמכות: ntfs, vfat, ext4, btrfs) — לא נקלט"
 }
 

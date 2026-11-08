@@ -429,9 +429,9 @@ def test_staging_is_a_state_the_server_accepts_and_a_report_without_drivers_keep
     body = {"session_id": ids["session"], "mac": ids["mac1"], "state": "staging",
             "targets": [{"dev": "sda", "bytes_written": 2, "bytes_total": 2, "state": "done"}],
             "drivers": {"state": "no_match", "packages": []}}
-    assert server["anon"].post("/api/v1/agent/progress", json=body).json() == {"ok": True}
+    assert server["anon"].post("/api/v1/agent/progress", json=body).json()["ok"] is True
     assert server["anon"].post("/api/v1/agent/progress",
-                               json={**body, "state": "done", "drivers": None}).json() == {"ok": True}
+                               json={**body, "state": "done", "drivers": None}).json()["ok"] is True
     member = next(m for m in server["admin"].get("/api/console/overview").json()["session"]["members"]
                   if m["mac"] == ids["mac1"])
     assert member["done"] is True and member["drivers"] == {"state": "no_match", "packages": []}

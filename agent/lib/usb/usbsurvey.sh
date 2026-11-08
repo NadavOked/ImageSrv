@@ -76,7 +76,7 @@ usb_survey_assess() {
     [ "$_sa_v" != fail ] && command -v disk_failure_cause > /dev/null 2>&1 && _sa_c=$(disk_failure_cause "$1" 2>/dev/null) \
         && { _sa_v=failed_last; _sa_r=$_sa_c; }
     case "$_sa_v:$_sa_r" in
-        fail:readonly) printf 'אדום · קריאה בלבד' ;;   fail:*) printf 'אדום · SMART תקול' ;;
+        fail:readonly) printf 'אדום · קריאה בלבד' ;;   fail:f1_observed) printf 'אדום · נצפה F1' ;;   fail:*) printf 'אדום · SMART תקול' ;;
         warn:*) printf 'כתום · אזהרת SMART' ;;   failed_last:*) printf 'כתום · נכשל בשיכפול הקודם' ;;
         ok:*) printf 'ירוק · SMART תקין' ;;   *) printf 'אפור · SMART לא נבדק' ;;
     esac

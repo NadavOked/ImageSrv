@@ -287,7 +287,8 @@ void draw_end_dialog(App *a, cairo_t *cr, double W, double H) {
         (int)inner, DIR_RTL);
     pango_layout_set_alignment(hint.layout, PANGO_ALIGN_CENTER);
     double buttons_h = ASK_BTN_H + (can_hold ? ASK_GAP + ASK_BTN_H : 0);
-    double dh = ASK_PAD + title.h + 10 + lead.h + 22 + buttons_h + ASK_HINT_GAP + hint.h + ASK_PAD;
+    double f1h = f1_notice(a, cr, 0, 0, inner, 0);   /* #1858: a disk known to stop the BIOS on F1 -- the idle window's box; 0 = none */
+    double dh = ASK_PAD + title.h + 10 + lead.h + 22 + (f1h > 0 ? f1h + 14 : 0) + buttons_h + ASK_HINT_GAP + hint.h + ASK_PAD;
     Rect box = { (W - dw) / 2, (usable - dh) / 2, dw, dh };
     draw_box_shadow(cr, box, t->radius, 10, 30, -8, t->shadow_strong, t->shadow_strong_a);
     draw_fill_rrect(cr, box, t->radius, t->surface);
@@ -295,6 +296,7 @@ void draw_end_dialog(App *a, cairo_t *cr, double W, double H) {
     double right = box.x + box.w - ASK_PAD, y = box.y + ASK_PAD;
     text_draw_r(cr, &title, right, y, t->ink); y += title.h + 10;
     text_draw_r(cr, &lead, right, y, t->warn); y += lead.h + 22;
+    if (f1h > 0) { f1_notice(a, cr, box.x + ASK_PAD, y - 8, inner, 1); y += f1h + 14; }   /* 14 under the lead, 22 above the buttons: the lead's own 22 gap moved down */
     Text l = btn_label(cr, "כבה עכשיו");
     draw_btn(a, cr, (Rect){ box.x + ASK_PAD, y, inner, ASK_BTN_H }, &l, BTN_PRIMARY, HIT_END_NOW);
     text_free(&l);

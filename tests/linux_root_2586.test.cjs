@@ -17,6 +17,7 @@ function shell(script) {
         'LOG_FILE="$RUN_DIR/log"\nexport LOG_FILE\n' +
         '. agent/lib/capture/manifest.sh\n. agent/lib/postdeploy/hostname.sh\n' +
         '. agent/lib/postdeploy/hostname_linux.sh\n. agent/lib/restore/grow.sh\n' +
+        '. agent/lib/postdeploy/postdeploy.sh\n' +   // plan_bitlocker (#1840), as imagesrv-agent sources it
         'log() { printf "%s\\n" "$*" >> "$LOG_FILE"; }\n' + script,
     });
     assert.ifError(result.error);

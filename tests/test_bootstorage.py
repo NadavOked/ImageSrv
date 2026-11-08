@@ -224,7 +224,7 @@ def test_a_drawers_failed_boot_storage_is_journaled_once_with_its_dev(room_serve
         {"dev": "sdb", "bytes_written": 9, "bytes_total": 9, "state": "done",
          "drivers": {"state": "staged", "packages": ["m70q-nic"], "boot": boot}},
     ]}
-    assert anon.post("/api/v1/agent/progress", json=body).json() == {"ok": True}
+    assert anon.post("/api/v1/agent/progress", json=body).json()["ok"] is True
     assert anon.post("/api/v1/agent/progress", json=body).json() == {"ok": True}
     machine = next(m for m in room(room_server["deploy"])["machines"] if m["mac"] == CLONER1)
     by_dev = {d["dev"]: d["drivers"] for d in machine["drawer_list"]}

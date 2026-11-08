@@ -94,6 +94,9 @@ _write_hostname_linux() {
     # up with the image's name: #107's failure between two Linuxes. A root
     # that failed is named by its partition, and the others are written all
     # the same (עיקרון 5). One root, or none marked: the single path below.
+    if [ -n "${4:-}" ] && ! grep -qE '^[^|]*\|[^|]*\|linux\|' "$4" && _bl=$(plan_bitlocker "$4"); then   # #1840: no root, an encrypted Windows
+        printf '{"ok":false,"error":"%s","code":"bitlocker"}\n' "$(json_escape "מחיצה $_bl מוצפנת ב-BitLocker — דולג בגלל ההצפנה, לא נגענו בכרך")"; return 1
+    fi
     _wl_roots=$(_linux_marked "$2")
     case "$_wl_roots" in
         *[!0-9]*) ;;   # more than one index (a newline between them)

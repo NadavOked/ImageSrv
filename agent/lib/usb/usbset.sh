@@ -244,7 +244,7 @@ usbset_reset_frame() {
         _us_rec prow "$(_us_text "$_rf_id" short)" "" "$(_us_show "$_rf_id" "$_rf_v")" mono "$_rf_sub" "" "" ""
     done
     _rf_map="ברירת המחדל"; if usb_map_json > /dev/null || usb_names_json > /dev/null; then _rf_map="מיפוי שמור לדגם הזה"; fi   # #1962, #2001
-    _us_rec prow "מיפוי חיבורים" "" "$_rf_map" "" "ברירת המחדל: כל חיבור שיש בו דיסק, לפי הסדר" "" "" ""
+    _us_rec prow "מיפוי חיבורים" "" "$_rf_map" "" "ברירת המחדל: לפי מספר ה-SATA" "" "" ""
     if [ "$1" = 1 ]; then
         if [ "$2" = נשמר ]; then _rf_l="ההגדרות השמורות על הדיסק-און-קי יוחלפו בערכים האלה:"
         else _rf_l="ההגדרות של הסשן הזה יוחלפו בערכים האלה:"; fi
@@ -252,7 +252,7 @@ usbset_reset_frame() {
         for _rf_id in min_free_gb readback_mode crc_warn_threshold temp_warn_c cloner_beep poweroff_s; do
             _us_rec d.kv "$(_us_text "$_rf_id" short)" "$(_us_iso "$(_us_show "$_rf_id" "$(_us_default "$_rf_id")")")" 0
         done
-        _us_rec d.kv "מיפוי חיבורים" "ברירת המחדל — כל חיבור שיש בו דיסק, לפי הסדר" 0   # #1962, #2001
+        _us_rec d.kv "מיפוי חיבורים" "ברירת המחדל — לפי מספר ה-SATA: SATA 0 = דיסק 1" 0   # #1962, #2001
         [ -z "$3" ] || _us_rec d.error "$3"
         _rf_go=0; [ "$(_us_get foc)" = go ] && _rf_go=1
         _us_rec d.btn "ביטול" Esc plain $((1 - _rf_go))

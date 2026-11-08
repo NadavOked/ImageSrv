@@ -19,7 +19,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/inventory.sh"; . "$LIB_DIR/fwimage.sh"; . "$LIB_DIR/probe.sh"; . "$LIB_DIR/probe_bg.sh"; . "$LIB_DIR/netprobe.sh"; . "$LIB_DIR/cablelive.sh"; . "$LIB_DIR/disklink.sh"   # #720+#1049+#1048(+#1968); #432 link speed per disk
 . "$LIB_DIR/decide.sh"
 . "$LIB_DIR/progress.sh"; . "$LIB_DIR/datareport.sh"   # #1882-#1889: what the server keeps beyond the report
-. "$LIB_DIR/pull.sh"   # אחרי progress.sh: pull_close קורא ל-report_final (#562)
+. "$LIB_DIR/pull.sh"; . "$LIB_DIR/opengate.sh"   # אחרי progress.sh: pull_close קורא ל-report_final (#562); #2657: the open-round gate sends a report
 . "$LIB_DIR/expand.sh"; . "$LIB_DIR/grow.sh"; . "$LIB_DIR/ntfsunhib.sh"; . "$LIB_DIR/expandshare.sh"; . "$LIB_DIR/writemark.sh"   # ההרחבה: לפני הזרם ואחריו (#478); diskfit calls _expand_candidate (#1354); #1798 the mark
 . "$LIB_DIR/bootcadb.sh"; . "$LIB_DIR/discard.sh"; . "$LIB_DIR/restore.sh"; . "$LIB_DIR/streamid.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/writecheck.sh"; . "$LIB_DIR/writeback.sh"   # #672/#1217/#1366/#1969: restore preflights; #1826 session_stream; #1841 early EIO
 . "$LIB_DIR/drawers.sh"; . "$LIB_DIR/drawerfeed.sh"; . "$LIB_DIR/verdict.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/ntfsboot.sh"; . "$LIB_DIR/readback.sh"; . "$LIB_DIR/rbprog.sh"; . "$LIB_DIR/readbacklc.sh"   # #1805 read-back after the write; (#704 slot names; #1487 NTFS backup boot) הזרם, הפסק עליו (#520), והראיה על כשל (#874)
@@ -30,7 +30,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/sitehooks.sh"   # #1266: a site/lab overlay's start hooks; the product ships none
 . "$LIB_DIR/watchdog.sh"; . "$LIB_DIR/monitor.sh"; . "$LIB_DIR/installer_boot.sh"   # #690: RFB, role+flag gated; #1190: init-only (inert here, load gate #84)
 . "$LIB_DIR/ui.sh"; . "$LIB_DIR/failscreen.sh"   # #1569: the one failure screen behind ui_error_hold and die_local
-. "$LIB_DIR/attended.sh"; . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/smartattrs.sh"; . "$LIB_DIR/smartgate.sh"; . "$LIB_DIR/smartselftest.sh"; . "$LIB_DIR/crcdelta.sh"   # #652/#872/#1970 SMART paths
+. "$LIB_DIR/attended.sh"; . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smartattrs.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/smartgate.sh"; . "$LIB_DIR/smartselftest.sh"; . "$LIB_DIR/crcdelta.sh"   # #652/#872/#1970 SMART paths; #1859: smarttable.sh runs in the kiosk, here for the load gate
 . "$LIB_DIR/single_restore.sh"; . "$LIB_DIR/srgui.sh"   # #706: the write behind the GUI restore screen; its progress on the GUI
 . "$LIB_DIR/buildmenuitems.sh"; . "$LIB_DIR/buildmenu.sh"   # #1073: the GUI menu gates; the console session
 . "$LIB_DIR/buildcapture.sh"
@@ -38,7 +38,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/hold.sh"; . "$LIB_DIR/task.sh"   # #1217: do_task, split from this file
 . "$LIB_DIR/poll.sh"; . "$LIB_DIR/idle.sh"; . "$LIB_DIR/roundbeep.sh"   # #434/#1967: idle power-off and audible result
 . "$LIB_DIR/guiparent.sh"; . "$LIB_DIR/localboot.sh"; . "$LIB_DIR/splash.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: no GUI -> BootNext to the local disk + told to the server; 17/10: the static screen; #1709: the GUI init started
-. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drawerselect.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"   # #2201: resolve_target_drawers; #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
+. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drawerselect.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: the set and sticker per disk (kiosk; here for the load gate); #2201: resolve_target_drawers; #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
 . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcsize.sh"; . "$LIB_DIR/lcplan.sh"; . "$LIB_DIR/lcsnap.sh"; . "$LIB_DIR/lctune.sh"; . "$LIB_DIR/lccopy.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/localclone.sh"; . "$LIB_DIR/lcwait.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/syspartgui.sh"   # #1896: C: from the screen; #1322: local clone (lcgui.sh runs in the kiosk); 16/10: restore from the server
 . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/drawergate.sh"   # #928: the shrink question; 11/10: grow-back / end-of-capture dialogs
 . "$LIB_DIR/guibridge.sh"   # run in imagesrv-kiosk; sourced here for the load gate
@@ -115,6 +115,7 @@ do_restore_drawers() {
         target_init "$_d" "$_total"
     done
 
+    session_open_gate "$2" "$MAC" "$SERVER" || die_local "$OPEN_GATE_WHY"   # #2657: the server says this round is open for us -- before any disk I/O
     progress_loop "$2" "$MAC" "$SERVER" &
     _ppid=$!
 
@@ -180,6 +181,7 @@ do_restore() {
 
     job_reset   # #1916
     target_init "$_disk" "$_total"
+    session_open_gate "$_ses" "$MAC" "$SERVER" || die_local "$OPEN_GATE_WHY"   # #2657: before the write check, TRIM and the table
     progress_loop "$_ses" "$MAC" "$SERVER" &
     _ppid=$!
 
@@ -231,6 +233,7 @@ while :; do
         local)
             die_local "no work for this machine"
             ;;
+        bad_answer) die_local "server answer not understood (unsupported schema)" ;;   # #2666
         unknown)
             ui_unknown "$MAC"   # #1802: the screen until F2, then a reboot to the local disk
             die_local "MAC not registered"   # only if that reboot did not happen

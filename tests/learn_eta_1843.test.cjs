@@ -40,20 +40,42 @@ test('#1843: no history is said in words, never a number',()=>{
 
 test('#1843: an open wave shows the learned length, a running one the end time',()=>{
   assert.match(fc({seconds:1259,ends_at:null,why:null},null),/לפי היסטוריה: כ-20 דק/);
-  assert.match(fc({seconds:600,ends_at:'2026-10-21T10:10:00+00:00',why:null},null),/צפוי להסתיים ב-.*\d\d:\d\d.*\(לפי היסטוריה\)/);
+  assert.match(fc({seconds:600,ends_at:'2026-10-21T10:10:00+00:00',why:null,clock:true},null),/צפוי להסתיים ב-.*\d\d:\d\d.*\(לפי היסטוריה\)/);
 });
 
+// #2684: an hour on the screen leans on the server's wall clock. Only `clock === true` (chrony says
+// synchronized -- the same field as session.forecast.clock in the hello) allows it. Missing, false, or a
+// truthy non-boolean is "not proven": a duration only, never a clock time.
+for(const [label,clock] of [['false',false],['missing',undefined],['null',null],['the string "true"','true'],['1',1]]){
+  test(`#2684: clock ${label} -> no hour, only the duration`,()=>{
+    const f={seconds:600,ends_at:'2026-10-21T10:10:00+00:00',why:null}; if(clock!==undefined) f.clock=clock;
+    const h=fc(f,null);
+    assert.match(h,/לפי היסטוריה: כ-10 דק/); assert.doesNotMatch(h,/צפוי להסתיים/); assert.doesNotMatch(h,/\d\d:\d\d/);
+  });
+}
+
 test('#1843: the measured rate wins over history',()=>{
-  const h=fc({seconds:600,ends_at:'2026-10-21T10:10:00+00:00',why:null},120);
+  const h=fc({seconds:600,ends_at:'2026-10-21T10:10:00+00:00',why:null,clock:true},120);
   assert.match(h,/צפוי להסתיים ב-/); assert.doesNotMatch(h,/לפי היסטוריה/);
+});
+
+test('#2684: the measured rate gives an hour only when the clock is proven, else "about N min"',()=>{
+  const f={seconds:600,ends_at:'2026-10-21T10:10:00+00:00',why:null};
+  for(const withClock of [{...f,clock:false},f,null]){       // false / missing / no forecast at all
+    const h=fc(withClock,120);
+    assert.match(h,/כ-2 דק'/); assert.doesNotMatch(h,/צפוי להסתיים/); assert.doesNotMatch(h,/\d\d:\d\d/);
+  }
 });
 
 test('#1843: the capture panel falls back to the history estimate only while the rate is unmeasured',()=>{
   const t={id:'tsk_1',type:'capture',name:'x',machine:'m',mac:MAC,disk:'sda',state:'running',bytes_written:1,bytes_total:null,
     created_at:'2026-10-16T09:50:00Z',updated_at:'2026-10-16T10:25:00Z',created_by:'admin',
     capture_detail:{partitions:[],compression:null,read_bytes:1,total_used_bytes:10*GB,rate_bps:null,eta_s:null,elapsed_s:5},
-    forecast:{seconds:900,ends_at:'2026-10-16T10:05:00+00:00',why:null}};
+    forecast:{seconds:900,ends_at:'2026-10-16T10:05:00+00:00',why:null,clock:true}};
   assert.match(s.run(`capEta(${JSON.stringify(t)}, ${JSON.stringify(t.capture_detail)})`),/לפי היסטוריה/);
+  // #2684: the same task with an unproven server clock shows the duration, not the hour
+  const unproven=s.run(`capEta(${JSON.stringify({...t,forecast:{...t.forecast,clock:false}})}, ${JSON.stringify(t.capture_detail)})`);
+  assert.match(unproven,/לפי היסטוריה: כ-15 דק/); assert.doesNotMatch(unproven,/צפוי להסתיים/);
   t.forecast={seconds:null,ends_at:null,why:'no_history'};
   assert.match(s.run(`capEta(${JSON.stringify(t)}, ${JSON.stringify(t.capture_detail)})`),/עוד לא נמדד/);
 });

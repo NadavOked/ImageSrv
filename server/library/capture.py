@@ -874,8 +874,9 @@ def create_console_capture_router(ctx: ServerContext) -> APIRouter:
         if r["type"] != "capture" or r["state"] != "running":
             return None
         detail = capture_detail.view(r) or {}
-        return learn_eta.capture(ctx.conn, ctx.library, r["mac"], detail.get("total_used_bytes"),
-                                 r["started_at"], r["id"])
+        return learn_eta.with_clock(      # #2684: + clock
+            learn_eta.capture(ctx.conn, ctx.library, r["mac"], detail.get("total_used_bytes"),
+                              r["started_at"], r["id"]), ctx.clock_trust)
 
     @router.get("/tasks")
     def tasks(user=Depends(current_user)):
