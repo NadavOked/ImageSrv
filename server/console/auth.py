@@ -16,6 +16,7 @@ from typing import NamedTuple
 import hashlib
 import hmac
 import sqlite3
+import threading
 import time
 
 from server.db import _settle, _write_lock, get_setting, writing
@@ -65,6 +66,8 @@ class Session(NamedTuple):
     username: str
     role: str
     purpose: str  # "" = מלא; pwchange / mfaenroll = מוגבל
+    expiry: int = 0   # ‏#2757: תפוגת העוגייה, ל-``session_renewal``
+    epoch: int = 0    # ‏#2757: ה-auth_epoch שבעוגייה — חידוש נושא אותו, לא קורא חדש
 
 
 def _enforce_purpose(request, session: Session) -> None:
@@ -102,12 +105,15 @@ def dependencies(conn: sqlite3.Connection):
         peer = request.scope.get(PEER_SCOPE_KEY)
         if peer is not None:
             return peer
-        found = read_session(conn, request.cookies.get(COOKIE_NAME),
+        token = request.cookies.get(COOKIE_NAME)
+        found = read_session(conn, token,
                              ip=request.client.host if request.client else "",
                              idle_exempt=_is_logout(request))
         if found is None:
             raise HTTPException(401, "לא מחובר")
         _enforce_purpose(request, found)
+        from server.console import session_renewal   # noqa: PLC0415 — הוא טוען את auth, לא להפך
+        session_renewal.propose(request, conn, found, token)   # ‏#2757
         return found.username, found.role
 
     def admin_only(user: tuple[str, str] = Depends(current_user)) -> tuple[str, str]:
@@ -214,12 +220,19 @@ def _auth_epoch(conn: sqlite3.Connection, username: str) -> int:
 
 
 def issue(conn: sqlite3.Connection, username: str, role: str,
-          purpose: str = "") -> str:
+          purpose: str = "", epoch: int | None = None) -> str:
     expiry = int(time.time()) + TTL_SECONDS
-    epoch = _auth_epoch(conn, username)
+    if epoch is None:
+        epoch = _auth_epoch(conn, username)
     payload = f"{username}|{role}|{expiry}|{purpose}:{epoch}"
     signature = hmac.new(_secret(conn), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}|{signature}"
+
+
+def cookie_flags(tls) -> dict:
+    """דגלי עוגיית ה-session — מקור יחיד, גם לכניסה וגם לחידוש (#2757)."""
+    return {"httponly": True, "samesite": "lax", "max_age": TTL_SECONDS,
+            "secure": tls is not None}
 
 
 def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
@@ -227,8 +240,7 @@ def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
     response.set_cookie(
         # codeql[py/cookie-injection] false positive: הערך חתום HMAC, ושם המשתמש מוגבל ל-[a-z0-9._-] (users._USERNAME_RE, #291)
         COOKIE_NAME, issue(conn, username, role, purpose=purpose),
-        httponly=True, samesite="lax", max_age=TTL_SECONDS,
-        secure=tls is not None,
+        **cookie_flags(tls),
     )
 
 
@@ -263,7 +275,8 @@ def read_session(conn: sqlite3.Connection, token: str | None, *,
         if purpose not in ("", PURPOSE_PWCHANGE, PURPOSE_MFAENROLL, PURPOSE_KIOSK):
             return None
     try:
-        if int(expiry) < time.time():
+        expiry_at = int(expiry)
+        if expiry_at < time.time():
             return None
     except ValueError:
         return None
@@ -276,11 +289,11 @@ def read_session(conn: sqlite3.Connection, token: str | None, *,
     ).fetchone()
     if row is None or not row["role"]:
         return None
-    if row["disabled_at"] or row["revoked"]:
+    if row["disabled_at"] or (row["revoked"] and not in_grace(token)):
         return None
     if epoch < int(row["auth_epoch"] or 0):
         return None
-    session = Session(row["username"], row["role"], purpose)
+    session = Session(row["username"], row["role"], purpose, expiry_at, epoch)
     return session if _active(conn, token, session, ip, idle_exempt) else None
 
 
@@ -300,6 +313,9 @@ def _active(conn: sqlite3.Connection, token: str, session: Session, ip: str,
     הפורטים. ‏``idle_exempt`` — ל-logout בלבד: הוא עצמו מבטל, ודפדפן שחזר משינה
     מתנתק בלי "הניתוק לא אושר"."""
     if session.purpose == PURPOSE_KIOSK:
+        return True
+    if in_grace(token):
+        # ‏#2757: העוגייה הוחלפה זה עתה בחדשה — הפעילות והשורה כבר אצל החדשה.
         return True
     from server.console import presence   # noqa: PLC0415 — presence אינו תלוי ב-auth; כאן בשביל הסדר
     if not idle_exempt and presence.idle_expired(
@@ -329,9 +345,39 @@ def revoke(conn: sqlite3.Connection, token: str | None) -> None:
     revoke_hash(conn, _token_hash(token), expires)
 
 
+#: ‏#2757: חידוש מחליף עוגייה בחדשה, והישנה מבוטלת (``revoked_tokens``) — אבל בקשות
+#: שכבר יצאו מהדפדפן עם הישנה עוד בדרך. לחסד קצר, בזיכרון בלבד, הן עוברות. ביטול
+#: אמיתי (``revoke`` / ``revoke_hash``) מוחק את החסד. אתחול שרת מאבד אותו, וזה בכיוון הבטוח.
+GRACE_SECONDS = 60
+_grace: dict[str, float] = {}
+_grace_lock = threading.Lock()
+
+
+def in_grace(token: str) -> bool:
+    key = _token_hash(token)
+    with _grace_lock:
+        until = _grace.get(key)
+        if until is not None and until < time.time():
+            del _grace[key]
+            return False
+        return until is not None
+
+
+def supersede(conn: sqlite3.Connection, token: str) -> None:
+    """‏#2757: מבטל את ``token`` בשרת (כמו logout) ופותח לו חסד קצר."""
+    revoke(conn, token)
+    now = time.time()
+    with _grace_lock:
+        for stale in [k for k, t in _grace.items() if t < now]:
+            del _grace[stale]
+        _grace[_token_hash(token)] = now + GRACE_SECONDS
+
+
 def revoke_hash(conn: sqlite3.Connection, token_hash: str, expires: float) -> None:
     """‏#2552: אותו ביטול לפי הגיבוב — מסך הסשנים של המנהל מכיר רק את ה-sha256
     של העוגייה (``console_sessions``), לא אותה. ‏``expires`` = תפוגת העוגייה."""
+    with _grace_lock:
+        _grace.pop(token_hash, None)
     _settle(conn)
     with _write_lock, writing(conn):
         conn.execute("DELETE FROM revoked_tokens WHERE expires_at < ?", (time.time(),))

@@ -1099,6 +1099,13 @@ def create_console_router(
                     user[0])
             raise HTTPException(400, refusal)
 
+        # ‏#1500 (המשך #1494): כלל המקום הפנוי (#1354) שאינו ניתן לבדיקה על
+        # האימג' הזה — הסוכן מסרב לו בכל מחשב, אז סבב שנפתח עליו מעיר את
+        # הכיתה ונכשל בכולה. אותה מחרוזת של הסוכן; כלל כבוי (0) אינו חוסם.
+        blocked = minfree.unchecked(manifest, minfree.min_free_gb(ctx.conn))
+        if blocked is not None:
+            raise HTTPException(409, blocked)
+
         # ‏#59: בחירת ההרחבה — ברירת המחדל האוטומטית, כיבוי, או מחיצה
         # שנבחרה ביד. מאומתת מול המניפסט הזה לפני שהסבב נפתח.
         try:

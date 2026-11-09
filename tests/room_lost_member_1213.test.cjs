@@ -62,3 +62,24 @@ test('#2603: a lost session member row is red and shows no percent', () => {
   assert.match(html,/<span class="pct">אבד הקשר<\/span>/,'the percent label must not show the last percent of a lost member');
   assert.match(html,/<div class="err">אבד הקשר/);
 });
+
+test('#2390: the progress bar of a lost member is stopped and carries no live value for a screen reader', () => {
+  const run=setup('lost');
+  const lost=run(`Progress.bar({state:"lost",bytes_written:63,bytes_total:100})`);
+  assert.match(lost,/class="bar determinate stopped"/,lost);
+  assert.doesNotMatch(lost,/aria-valuenow/,'a screen reader would read the last percent as live progress: '+lost);
+  assert.doesNotMatch(lost,/aria-label="63%"/,lost);
+  const row=run(`memberRow({mac:"${C1}",state:"lost",bytes_written:63,bytes_total:100,done:false},{kind:"multicast"})`);
+  assert.match(row,/class="bar determinate stopped"/,row);
+  assert.doesNotMatch(row,/aria-valuenow/,row);
+});
+
+test('#2390 guard: a running member keeps its live value, a failed one stays stopped with its value', () => {
+  const run=setup('running');
+  const live=run(`Progress.bar({state:"running",bytes_written:63,bytes_total:100})`);
+  assert.match(live,/class="bar determinate"/);
+  assert.match(live,/aria-valuenow="63"/);
+  const failed=run(`Progress.bar({state:"failed",bytes_written:63,bytes_total:100})`);
+  assert.match(failed,/determinate stopped/);
+  assert.match(failed,/aria-valuenow="63"/);
+});

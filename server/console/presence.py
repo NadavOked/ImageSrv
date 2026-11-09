@@ -107,6 +107,26 @@ def idle_expired(conn: sqlite3.Connection, token: str, idle_seconds: int,
     return _now() - last > idle_seconds + TOUCH_SECONDS
 
 
+def rekey(conn: sqlite3.Connection, old: str, new: str) -> None:
+    """‏#2757: חידוש עוגייה — השורה של הישנה עוברת לחדשה, עם ``since`` ו-``last_seen``
+    שלה, כדי ש"מי מחובר" ימשיך להראות סשן אחד ולא שניים. אין שורה לישנה — אין מה להעביר;
+    הבקשה הבאה של החדשה תיצור אחת."""
+    old_key, new_key = _hash(old), _hash(new)
+    expires = int(new.rpartition("|")[0].split("|")[2])
+    with _lock:
+        stamp = _written.pop(old_key, None)
+        if stamp is not None:
+            _written[new_key] = stamp
+    _settle(conn)
+    with _write_lock, writing(conn):
+        try:
+            conn.execute("UPDATE console_sessions SET token_hash = ?, expires_at = ?"
+                         " WHERE token_hash = ?", (new_key, expires, old_key))
+        except sqlite3.IntegrityError:
+            # שתי עוגיות שחודשו באותה שנייה לאותו משתמש הן אותה מחרוזת בדיוק.
+            conn.execute("DELETE FROM console_sessions WHERE token_hash = ?", (old_key,))
+
+
 def forget(conn: sqlite3.Connection, token: str | None) -> None:
     """יציאה: העוגייה נמחקת מהדפדפן, והשורה — מכאן."""
     if not token:

@@ -23,18 +23,20 @@ const Progress = (() => {
     const known = count(read) && count(total) && total > 0;
     const percent = known ? Math.min(100, Math.round(100 * read / total)) : null;
     const moving = count(task.bytes_written) && task.bytes_written > 0;
-    const terminal = ["done", "failed", "partial", "cancelled"].includes(task.state);
+    // ‏#2390: "lost" = השרת ויתר על החבר; האחוז האחרון אינו התקדמות חיה ואסור שיוקרא כך.
+    const lost = task.state === "lost";
+    const terminal = lost || ["done", "failed", "partial", "cancelled"].includes(task.state);
     const state = known ? "determinate" : moving ? "indeterminate" : "unknown-idle";
     const label = known ? percent + "%" + suffix
       : moving ? "נקראו בייטים · הסך לא ידוע" : "טרם נקראו בייטים · הסך לא ידוע";
     const cls = state + (terminal ? " stopped" : "");
     const width = known ? percent : moving ? 40 : 100;
-    return {percent, label, cls, width};
+    return {percent, label, cls, width, lost};
   }
   function bar(task) {
     const p = view(task);
-    return `<div class="bar ${p.cls}" role="progressbar" aria-label="${p.label}"` +
-      (p.percent === null ? "" : ` aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p.percent}"`) +
+    return `<div class="bar ${p.cls}" role="progressbar" aria-label="${p.lost ? "אבד הקשר" : p.label}"` +
+      (p.percent === null || p.lost ? "" : ` aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p.percent}"`) +
       `><i style="width:${p.width}%"></i></div>`;
   }
   function apply(fill, label, task) {
@@ -43,8 +45,8 @@ const Progress = (() => {
     fill.className = p.cls;
     label.textContent = p.label;
     fill.setAttribute("role", "progressbar");
-    fill.setAttribute("aria-label", p.label);
-    if (p.percent === null) fill.removeAttribute("aria-valuenow");
+    fill.setAttribute("aria-label", p.lost ? "אבד הקשר" : p.label);
+    if (p.percent === null || p.lost) fill.removeAttribute("aria-valuenow");
     else fill.setAttribute("aria-valuenow", p.percent);
   }
   return {view, bar, apply};

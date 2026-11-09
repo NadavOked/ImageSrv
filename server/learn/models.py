@@ -29,7 +29,7 @@ import logging
 import sqlite3
 import statistics
 
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, journal, now_iso, writing
 from server.disks import writefloor
 
 log = logging.getLogger("imagesrv.learn_models")
@@ -60,9 +60,13 @@ def _mbps(pre: object) -> int | None:
 
 
 def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
-    """נקרא כשגל החדר הסתיים. מחזיר כמה נרשמו; לעולם אינו זורק."""
+    """נקרא כשגל החדר הסתיים. מחזיר כמה נרשמו; לעולם אינו זורק.
+
+    מדידה שהושלמה לדיסק בלי `model` או בלי `serial` ב-hello אינה נשמרת (#2532), ונרשמת
+    ביומן `model_speed_dropped` — לא נרשמת עם דגם ריק: שורה כזו הייתה "דגם" אחד לכל הדיסקים
+    האלמוניים ומזהמת את הבסיס של `judge` ושל הלמידה (`tuning._model_base`)."""
     try:
-        rows = []
+        rows, dropped = [], []
         for member in members:
             got = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?",
                                (member["mac"],)).fetchone()
@@ -74,20 +78,33 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
                 mbps = _mbps(t.get("write_preflight"))
                 disk = by_dev.get(t.get("dev")) or {}
                 serial, model = disk.get("serial"), disk.get("model")
-                if mbps is None or not serial or not model:
+                if mbps is None:
+                    continue
+                if not serial or not model:
+                    # ‏#2532: מדידה שהושלמה ואין לאן לשמור אותה (`model` ו-`serial` NOT NULL) —
+                    # נזרקת **בגלוי**, כדי שהבדיקה המקדימה ("לא נמדד") לא תסתיר מדידה שהייתה.
+                    dropped.append((member["mac"], t.get("dev"), serial, mbps))
                     continue
                 if t.get("serial") and t["serial"] != serial:
                     continue          # הדיסק הוחלף מאז — אין ייחוס
                 rows.append((session_id, serial, model, member["mac"], mbps, now_iso()))
-        if not rows:
-            return 0
-        with _write_lock, writing(conn):
-            return sum(conn.execute(
-                "INSERT OR REPLACE INTO model_speeds (session_id, serial, model, mac, mbps, at)"
-                " VALUES (?,?,?,?,?,?)", row).rowcount for row in rows)
+        written = 0
+        if rows:
+            with _write_lock, writing(conn):
+                written = sum(conn.execute(
+                    "INSERT OR REPLACE INTO model_speeds (session_id, serial, model, mac, mbps, at)"
+                    " VALUES (?,?,?,?,?,?)", row).rowcount for row in rows)
     except Exception:             # noqa: BLE001 — הלמידה אינה עוצרת סיום גל
         log.exception("recording model speeds of %s failed", session_id)
         return 0
+    for mac, dev, serial, mbps in dropped:
+        try:
+            journal(conn, "model_speed_dropped",
+                    f"{dev} serial={serial or '-'} {mbps} MB/s: {'no serial' if not serial else 'no model'}",
+                    machine=mac, round_id=session_id)
+        except Exception:         # noqa: BLE001 — שורת יומן שנכשלה אינה מבטלת את מה שנשמר
+            log.exception("journaling a dropped model speed of %s failed", session_id)
+    return written
 
 
 def last_mbps(conn: sqlite3.Connection, serial: str | None) -> int | None:

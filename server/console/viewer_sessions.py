@@ -26,12 +26,24 @@ def register(token: str, username: str, task: asyncio.Task) -> None:
 
 
 def forget(token: str, task: asyncio.Task) -> None:
+    # ‏#2757: הגשר נרשם תחת העוגייה שפתחה אותו, ו-``rekey`` יכול להעביר אותו לחדשה —
+    # לכן מחפשים את המשימה בכל המפתחות, לא רק ב-``token``.
     with _lock:
-        rest = [item for item in _tasks.get(token, []) if item[2] is not task]
-        if rest:
-            _tasks[token] = rest
-        else:
-            _tasks.pop(token, None)
+        for key in list(_tasks):
+            rest = [item for item in _tasks[key] if item[2] is not task]
+            if rest:
+                _tasks[key] = rest
+            else:
+                del _tasks[key]
+
+
+def rekey(old: str, new: str) -> None:
+    """‏#2757: חידוש עוגייה — הגשרים הפתוחים עוברים לחדשה, כדי ש-logout/ניתוק
+    של החדשה (שהיא היחידה שהדפדפן מחזיק) עדיין יסגור אותם."""
+    with _lock:
+        items = _tasks.pop(old, [])
+        if items:
+            _tasks.setdefault(new, []).extend(items)
 
 
 def was_revoked(task: asyncio.Task) -> bool:

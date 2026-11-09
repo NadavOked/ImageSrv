@@ -20,6 +20,8 @@ from server.system.health_rows import check
 
 MDSTAT_PATH = Path("/proc/mdstat")
 RAID_FACT_PATH = Path("/etc/imagesrv/raid")
+MOUNTS_PATH = Path("/proc/mounts")
+ESP_MOUNT = "/boot/efi"
 log = logging.getLogger("imagesrv.raid")
 
 _HEAD = re.compile(r"^(md[\w/]+)\s*:\s*(active|inactive)\s*(?:\(\w[\w-]*\)\s*)?(\S+)?\s*(.*)$")
@@ -136,9 +138,28 @@ def array_check(array: Array) -> tuple[str, str]:
     return "ok", " · ".join(bits)
 
 
-def health_checks(read_mdstat, read_declared) -> list[dict]:
-    """שורה לכל מערך. ‏`read_*` מחזירים טקסט, ‏None (אין קובץ) או זורקים.
-    hook שלא הוזרק (None) = אין שורה — כמו `vm_host` ב-health.py."""
+def esp_check(read_mounts) -> dict:
+    """#2627: ה-ESP של שרת RAID ב-fstab הוא `nofail` (#2622) — שרת שה-ESP שלו לא עוגן עולה בכל זאת,
+    ובלי שורה זו שום דבר בבריאות לא אומר את זה. הראיה היא `/proc/mounts`; קובץ שלא נקרא אינו "מעוגן"
+    וגם אינו "לא מעוגן" (עיקרון 5)."""
+    label = f"מחיצת ESP ({ESP_MOUNT})"
+    try:
+        mounts = read_mounts()
+    except OSError as exc:
+        log.warning("raid: %s unreadable: %s", MOUNTS_PATH, exc)
+        return check("raid_esp", label, "unknown", f"לא ניתן לקרוא {MOUNTS_PATH} — הפרטים ביומן השרת")
+    if mounts is None:
+        return check("raid_esp", label, "unknown", f"{MOUNTS_PATH} לא קיים — לא נבדק")
+    if any(line.split()[1:2] == [ESP_MOUNT] for line in mounts.splitlines()):
+        return check("raid_esp", label, "ok", "מעוגנת")
+    return check("raid_esp", label, "warn",
+                 "לא מעוגנת — השרת עלה בלעדיה (nofail), אבל עדכוני מטען האתחול לא יגיעו אליה. "
+                 "לבדוק את הכונן הראשון: systemctl status boot-efi.mount")
+
+
+def health_checks(read_mdstat, read_declared, read_mounts=None) -> list[dict]:
+    """שורה לכל מערך, ושורת ESP לשרת שהמתקין יצר בו RAID. ‏`read_*` מחזירים טקסט, ‏None (אין קובץ)
+    או זורקים. hook שלא הוזרק (None) = אין שורה — כמו `vm_host` ב-health.py."""
     if read_mdstat is None or read_declared is None:
         return []
     try:
@@ -168,4 +189,7 @@ def health_checks(read_mdstat, read_declared) -> list[dict]:
         rows.insert(0, check("raid", "מערך RAID", "bad",
                              f"המתקין יצר {LEVEL_LABELS.get(want_level, want_level)} ({want_array}), "
                              "אבל המערך אינו מופיע ב-/proc/mdstat"))
+    # דיסק בודד: ה-ESP שלו חובה (בלי `nofail`), ועגינה שנכשלה עוצרת את האתחול בקול — אין מה להוסיף.
+    if expected and read_mounts is not None:
+        rows.append(esp_check(read_mounts))
     return rows

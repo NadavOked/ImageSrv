@@ -264,6 +264,13 @@ def create_station_router(ctx: ServerContext,
                     f'{body.get("image_id", "")} — {refusal}')
             return _error(400, refusal, "image_bound_to_another_machine")
 
+        # ‏#1500 (המשך #1494): כלל המקום הפנוי (#1354) שאינו ניתן לבדיקה על
+        # האימג' הזה — הסוכן מסרב לו בכל מחשב, אז סבב שנפתח עליו מעיר את
+        # הכיתה ונכשל בכולה. אותה מחרוזת של הסוכן; כלל כבוי (0) אינו חוסם.
+        blocked = minfree.unchecked(manifest, minfree.min_free_gb(ctx.conn))
+        if blocked is not None:
+            return _error(409, blocked, "min_free_unchecked")
+
         try:
             session_id = ctx.store.open(
                 group_id, body["image_id"],

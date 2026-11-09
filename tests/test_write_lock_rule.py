@@ -56,13 +56,13 @@ STILL_BARE = frozenset({
     # וה-INSERT שם עטוף ב-writing().
     # ‏finish_capture יצא מהחוב ב-#1470: ה-UPDATE ל-verifying בתוך writing().
     # ‏upload_partition יצא מהחוב ב-#2750: ה-commit עבר ל-_upload_settle, בתוך writing().
+    # ‏reports.ingest יצא מהחוב ב-#2753: ה-UPDATE וה-commit של session_members בתוך writing().
     "dhcp.py:forget",
     "net.py:add_device",
     "net.py:describe_device",
     "net.py:forget_device",
     "pulls.py:open_pull",
     "reports.py:_ingest_task",
-    "reports.py:ingest",
     "room.py:_attach_wave",
     "room.py:_finish_wave",
     "room.py:_resume",

@@ -126,6 +126,8 @@ def default_hooks() -> dict:
         # הוא מה שהמתקין יצר. ‏None מה-hook = אין קובץ; ‏OSError = לא נקרא.
         "mdstat": lambda: raid_status.read_optional(raid_status.MDSTAT_PATH),
         "raid_declared": lambda: raid_status.read_optional(raid_status.RAID_FACT_PATH),
+        # ‏#2627: ‏/proc/mounts — האם ה-ESP (‏nofail בשרת RAID) באמת מעוגן.
+        "mounts": lambda: raid_status.read_optional(raid_status.MOUNTS_PATH),
     }
 
 
@@ -639,7 +641,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     from server.storage import locations as _storage_locations
     results.extend(_storage_locations.health_checks(ctx))
     # ‏#1989: שורה לכל מערך RAID — תקין / פגוע / בבנייה מחדש (עם אחוז).
-    results.extend(raid_status.health_checks(hooks.get("mdstat"), hooks.get("raid_declared")))
+    results.extend(raid_status.health_checks(hooks.get("mdstat"), hooks.get("raid_declared"), hooks.get("mounts")))
 
     # ‏#855: שומר הזהות — מתג כבוי הוא מצב מוצהר שנאמר כאן, וקובץ חכירות
     # שאינו נקרא הוא "כל hello מסורב", לא שקט.

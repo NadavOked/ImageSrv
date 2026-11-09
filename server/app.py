@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from boot.grub_menu import GrubConfig
 from boot.http import create_boot_asgi, gui_initrd_path
 
-from server.console import auth
+from server.console import auth, session_renewal
 from . import auto_reboot
 from server.agent import boottrace, hello_eta, registry   # hello_eta: #2684
 from server.rounds import drive_rates, pulls
@@ -1166,6 +1166,9 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_room_console_router(ctx))
     app.mount("/console", StaticFiles(directory=STATIC_DIR, html=True), name="console")
     app.add_middleware(ConsoleNoStaleCache)
+    # ‏#2757: חידוש עוגיית הקונסולה בשימוש פעיל -- רק כאן, כי רק כאן ה-middleware שמוסר
+    # את העוגייה החדשה. פורט הסוכן אינו מחדש.
+    app.add_middleware(session_renewal.SessionRenewal, conn=ctx.conn, tls=rt.console_tls)
 
     @app.get("/")
     def root() -> RedirectResponse:

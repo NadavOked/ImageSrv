@@ -18,7 +18,7 @@ from server.library import capture_detail
 from server.agent import cloner_cpu, restore_stages
 from server.rounds import drawer_cancel
 from server.disks import disk_failures, slot_names, smart_history
-from server.db import journal, now_iso, update_one
+from server.db import _settle, _write_lock, journal, now_iso, update_one, writing
 from server.core.tasks import CAPTURE_STAGES, OPEN_STATES, claim_task
 
 log = logging.getLogger("imagesrv.reports")
@@ -269,24 +269,29 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     cpu = cloner_cpu.well_formed(payload.get("cpu"))   # #1885: רק בדיווח הסופי
 
     previous = row["state"]
-    conn.execute(
-        "UPDATE session_members SET state = ?, bytes_written = ?, bytes_total = ?,"
-        " error = ?, done = ?, targets_json = ?, updated_at = ?,"
-        " drivers_json = COALESCE(?, drivers_json),"
-        " udp_drops_json = COALESCE(?, udp_drops_json),"
-        " cpu_json = COALESCE(?, cpu_json)"
-        " WHERE session_id = ? AND mac = ?",
-        (
-            state, bytes_written, bytes_total, errors or None,
-            1 if state == "done" else row["done"],
-            json.dumps(targets), now_iso(),
-            json.dumps(drivers, ensure_ascii=False) if drivers else None,
-            json.dumps(drops) if drops else None,
-            json.dumps(cpu) if cpu else None,
-            session_id, mac,
-        ),
-    )
-    conn.commit()
+    # ‏#2753/#54: ה-UPDATE וה-commit בתוך אותה נעילה (‏`agent_progress` רץ בתהליכון
+    # מהמאגר מאז #2749, ולכן מתחרה בכותבים אחרים). ‏`_settle` לפני הנעילה — סדר
+    # הנעילות של #457; ה-`journal` שאחרי הבלוק לוקח את `_write_lock` בעצמו
+    # (אינו RLock), ולכן נשאר מחוץ לו.
+    _settle(conn)
+    with _write_lock, writing(conn):
+        conn.execute(
+            "UPDATE session_members SET state = ?, bytes_written = ?, bytes_total = ?,"
+            " error = ?, done = ?, targets_json = ?, updated_at = ?,"
+            " drivers_json = COALESCE(?, drivers_json),"
+            " udp_drops_json = COALESCE(?, udp_drops_json),"
+            " cpu_json = COALESCE(?, cpu_json)"
+            " WHERE session_id = ? AND mac = ?",
+            (
+                state, bytes_written, bytes_total, errors or None,
+                1 if state == "done" else row["done"],
+                json.dumps(targets), now_iso(),
+                json.dumps(drivers, ensure_ascii=False) if drivers else None,
+                json.dumps(drops) if drops else None,
+                json.dumps(cpu) if cpu else None,
+                session_id, mac,
+            ),
+        )
 
     if state != previous and state in TERMINAL:
         target = {"machine": mac, "round_id": session_id}   # ‏#1296

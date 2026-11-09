@@ -21,6 +21,9 @@
    זמני באותה תיקייה (שם אקראי, ‏`O_EXCL|O_NOFOLLOW` — מי שכותב ליעד אינו מפנה את
    ה-root דרך symlink, #2423), ‏`fsync`, ‏`os.replace`, ‏`fsync` לתיקייה — ואז קריאה חוזרת:
    ‏sha256 של מה שעל היעד = של מה שנכתב, ו-`integrity_check` על הקובץ שביעד (עיקרון 5).
+   תיקייה שנבחרה כשהיא על **כונן אחר** (`same_disk: false`, #2574) נבדקת שוב **בכל גיבוי**: אם כבר
+   אינה על כונן אחר מהמסד — לא עוגנה אחרי אתחול או שנמחקה — או שלא הצלחנו לבדוק, הגיבוי נכשל בשמו
+   ולא נכתב דבר, במקום לכתוב בשקט לכונן המערכת. תיקייה רגילה על כונן המסד היא יעד לגיטימי: לא נבדקת.
 4. גיזום לפי גודל (`prune`): המקום השמור (ברירת מחדל 5GB, תקרה 20% מהכונן) — הישן ביותר יוצא
    **אחרי** שהחדש אומת, ורק `imagesrv-<ts>.db` ב-`<dest>/db`. לעולם לא אימג'ים. **מוגנים תמיד**
    (`_protected`): החדש, הגיבוי התקין האחרון, והראשון של כל אחד מ-`KEEP_DAILY` הימים האחרונים —
@@ -218,11 +221,40 @@ def drive_cap_bytes(path: Path) -> int:
     return shutil.disk_usage(existing).total * CAP_PERCENT // 100
 
 
+def expects_other_disk(stored: str | None, raw_target: str | None) -> bool:
+    """האם המפעיל בחר תיקייה שנבדקה בהגדרה והייתה על כונן אחר מהמסד (`same_disk: false`). רק כאן העיגון
+    נדרש (#2574): `same_disk: true` / ‏`null` (תיקייה רגילה, או יעד שלא נבדק) ויעד ברירת המחדל — לא."""
+    try:
+        target = json.loads(raw_target or "null")
+    except ValueError:
+        return False
+    return bool((stored or "").strip()) and isinstance(target, dict) and target.get("type") == "local"         and target.get("same_disk") is False
+
+
+def _require_other_disk(dest: Path, data_dir: Path) -> None:
+    """‏#2574: יעד שנבחר כשהוא על כונן אחר חייב להיות עליו גם עכשיו. כונן שנפל או לא עוגן משאיר את
+    `dest` תיקייה ריקה על כונן המערכת, והגיבוי היה "מצליח" אליו. לא נוצרת כאן תיקייה: היעד קיים או שנכשלים.
+    ‏"לא הצלחנו לבדוק" אינו "כונן אחר" (עיקרון 5)."""
+    from server.system.backup_target import same_disk   # noqa: PLC0415 — ‏backup_target מייבא את המודול הזה
+
+    if not dest.is_dir():
+        raise RuntimeError(f"התיקייה {dest} אינה קיימת (הכונן לא מעוגן?) — הגיבוי לא נכתב")
+    verdict = same_disk(dest, data_dir)
+    if verdict is True:
+        raise RuntimeError(f"{dest} נבחרה כשהיא על כונן אחר, ועכשיו היא על אותו כונן כמו המסד (הכונן לא "
+                           "מעוגן?) — הגיבוי לא נכתב")
+    if verdict is None:
+        raise RuntimeError(f"לא הצלחנו לבדוק אם {dest} על כונן אחר מהמסד — הגיבוי לא נכתב")
+
+
 def backup_once(db_path: Path, dest: Path, now: datetime, reserve_gb: int = DEFAULT_RESERVE_GB,
-                last_good: str | None = None) -> dict:
-    """גיבוי אחד ל-`dest/db`, מאומת. מחזיר {file, bytes, reserve_bytes, pruned}; כל כשל — חריגה."""
+                last_good: str | None = None, other_disk: bool = False) -> dict:
+    """גיבוי אחד ל-`dest/db`, מאומת. מחזיר {file, bytes, reserve_bytes, pruned}; כל כשל — חריגה.
+    ‏`other_disk`: היעד נבחר כשהוא על כונן אחר, ולכן נבדק כאן שהוא עדיין שם (#2574)."""
     from server.system.backup import consistent_db_copy   # noqa: PLC0415 — כמו ב-backup-server.sh
 
+    if other_disk:
+        _require_other_disk(dest, db_path.parent)
     src = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
     try:
         data = consistent_db_copy(src)        # integrity_check == ok על העותק, אחרת חריגה
@@ -272,7 +304,8 @@ def _write_status(data_dir: Path, status: dict) -> None:
                   (json.dumps(status, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
 
 
-def run(data_dir: Path, dest: str, now: datetime | None = None, reserve_gb: int = DEFAULT_RESERVE_GB) -> dict:
+def run(data_dir: Path, dest: str, now: datetime | None = None, reserve_gb: int = DEFAULT_RESERVE_GB,
+        other_disk: bool = False) -> dict:
     """גיבוי אחד + קובץ הסטטוס. מחזיר את הסטטוס שנכתב (`ok` אומר אם הצליח; `too_small` — אם
     הכישלון הוא מקום שמור קטן מעותק אחד, הכתום)."""
     now = now or datetime.now(timezone.utc)
@@ -287,7 +320,7 @@ def run(data_dir: Path, dest: str, now: datetime | None = None, reserve_gb: int 
               "file": None, "bytes": None, "error": None, "pruned": [], "last_good": last_good,
               "last_ok": previous.get("last_ok") if same_dest else None}
     try:
-        status.update(backup_once(data_dir / "imagesrv.db", Path(dest), now, reserve_gb, last_good))
+        status.update(backup_once(data_dir / "imagesrv.db", Path(dest), now, reserve_gb, last_good, other_disk))
         status["ok"] = True
         status["last_ok"] = status["at"]
         status["last_good"] = status["file"]
@@ -338,6 +371,7 @@ def _config(data_dir: Path) -> dict:
     finally:
         conn.close()
     return {"dest": effective_dest(rows.get(SETTING), rows.get(TARGET_SETTING), data_dir),
+            "other_disk": expects_other_disk(rows.get(SETTING), rows.get(TARGET_SETTING)),
             "time": parse_time(rows.get(TIME_SETTING)) or DEFAULT_TIME,
             "reserve_gb": parse_reserve(rows.get(RESERVE_SETTING)) or DEFAULT_RESERVE_GB,
             "changed": changed, "busy": busy}
@@ -411,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
             _wait(data_dir, previous, config["busy"], now)
             return 0
     dest = config["dest"]
-    status = run(data_dir, dest, now, config["reserve_gb"])
+    status = run(data_dir, dest, now, config["reserve_gb"], config["other_disk"])
     if not status["ok"]:
         print(f"backup_job: FAILED to {dest}: {status['error']}", file=sys.stderr)
         return 1

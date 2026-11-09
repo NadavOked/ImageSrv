@@ -75,6 +75,7 @@ EVENTS_HE = {
     "net_loss_jump": "האבדן ברשת ההפצה קפץ מול הבסיס שלה — סוויץ'/כבל/IGMP",
     "wol_resent": "WoL נשלח שוב — המחשב לא ענה בזמן הטיפוסי שלו",
     "wol_no_wake": "המחשב לא מתעורר מ-WoL — BIOS/כבל",
+    "model_speed_dropped": "מדידת בדיקת הכתיבה של דיסק לא נשמרה — אין דגם או מספר סידורי ב-hello של המחשב (#2532)",
     "boot_step_slow": "שלב באתחול התארך פי 2 מהבסיס של המחשב",
     # ‏#1882: הזנב של לוג הסוכן נשמר בשרת (מסונן), עם הכשלים המוכרים שזוהו בו.
     "agent_log": "הלוג של המכונה מסוף הסבב נשמר בשרת",
@@ -473,7 +474,7 @@ _SEVERITY_WARN = {
     "storage_node_disable",
     "room_drawer_changed", "room_drawer_unidentified", "room_drawer_wake_mismatch", "room_rewake", "clock_jump",
     "room_drawer_serial_conflict", "shrink_refused",   # #2421, #2413
-    "power_expired", "gui_failed", "wol_arm_failed", "net_loss_jump", "wol_no_wake", "wol_resent", "boot_step_slow", "server_disk_slow", "capture_space_refused", "capture_space_unchecked", "cloner_throttled", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
+    "power_expired", "gui_failed", "wol_arm_failed", "net_loss_jump", "model_speed_dropped", "wol_no_wake", "wol_resent", "boot_step_slow", "server_disk_slow", "capture_space_refused", "capture_space_unchecked", "cloner_throttled", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
     "vmupdate_mac_created", "vmupdate_leftover_failed", "linux_initramfs_warning",
     "send_counts_lost", "send_quiet_wait",   # #1430
     "readback_list_not_fetched",   # #1907
