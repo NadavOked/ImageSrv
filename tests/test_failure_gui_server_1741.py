@@ -266,6 +266,17 @@ def test_s9_no_media_with_a_framebuffer_is_drawn_on_the_gui(tmp_path):
     assert "install media is not mounted" in r["got"].stdout
 
 
+def test_s9_no_media_names_the_common_cause_in_hebrew_and_english_2761(tmp_path):
+    """#2761: the screen says what a person most often did wrong -- an unfinished write with Rufus --
+    as a common cause (not a promise), in both languages, and keeps the plain reconnect advice."""
+    r = _hold(tmp_path)
+    steps = " ".join(_values(r["state"], "fail_step"))
+    assert "סיבה נפוצה" in steps and "Rufus" in steps and "sha256" in steps, steps
+    assert "DD Image" in steps and "העתקת קבצים" in steps, steps
+    assert "Common cause" in steps and "file-copy mode" in steps, steps
+    assert "חברו מחדש את הדיסק-און-קי" in steps, steps
+
+
 @pytest.mark.parametrize("line,title", [
     ("no keyboard found", "לא נמצאה מקלדת"),
     ("GUI bridge /usr/lib/imagesrv/installer/gui-bridge.sh is missing from this image", "רכיב של ההתקנה חסר"),

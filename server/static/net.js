@@ -68,7 +68,8 @@ const LEASE_UNITS = [["h", "שעות"], ["m", "דקות"], ["d", "ימים"]];
 
 function deployFormProblems(v) {
   const found = [];
-  const server = firstHost(v.network, v.netmask);
+  // ‏#2668: על כרטיס הניהול כתובת השרת היא הכתובת הקיימת שלו, לא נגזרת.
+  const server = v.server || firstHost(v.network, v.netmask);
   if (!validIp(v.network)) found.push("כתובת הרשת אינה תקינה");
   else if (!validMask(v.netmask)) found.push("מסכה אינה תקינה");
   else if (!server) {
@@ -100,28 +101,46 @@ function deployServerNote(network, netmask) {
     : "כתובת השרת נגזרת מהרשת: הכתובת הראשונה בה.";
 }
 
+/* ‏#2668: שרת עם כרטיס יחיד — כרטיס הניהול הוא גם רשת ההפצה. הכתובת הידנית שלו
+   נשארת כתובת השרת (הקונסולה ממשיכה בה), הרשת היא הרשת שלה ואינה שדה, והשמירה
+   היא כפתור אדום עם ההסבר (בלי הקלדת מילה, #1270). השרת בודק שאין DHCP אחר,
+   ו"לא הצלחנו לבדוק" הוא סירוב. ‏null = אין לכרטיס כתובת ידנית — אין חלון. */
+function mgmtDeployBase(name) {
+  const row = ((NETCFG && NETCFG.interfaces) || []).find((r) => r.name === name);
+  if (!row || row.mode !== "static" || !validIp(row.address) || !validMask(row.netmask)) return null;
+  return { server: row.address, netmask: row.netmask, network: networkOf(row.address, row.netmask) };
+}
+
 function editDeployNet(name) {
   const nic = (NICS || []).find((n) => n.name === name);
   if (!nic) { toast("כרטיס לא נמצא"); return; }
-  if (isMgmtNic(name)) { toast(`${name} הוא כרטיס הניהול — הוא לא יכול להיות רשת ההפצה`); return; }
-  const netmask = nic.netmask || "255.255.255.0";
-  const network = networkOf(nic.server_ip, netmask);
+  const mgmt = isMgmtNic(name) ? mgmtDeployBase(name) : null;
+  if (isMgmtNic(name) && !mgmt) {
+    toast(`${name} הוא כרטיס הניהול: כדי שתהיה עליו גם רשת ההפצה, קבעו לו קודם כתובת ידנית (הגדרת כרטיס ← כתובת ידנית)`);
+    return;
+  }
+  const netmask = mgmt ? mgmt.netmask : nic.netmask || "255.255.255.0";
+  const network = mgmt ? mgmt.network : networkOf(nic.server_ip, netmask);
   const lease = String(nic.lease || "12h").trim().toLowerCase().match(/^(\d+)([mhd])$/) || [null, "12", "h"];
   const firstTime = typeof NET_DEPLOY !== "undefined" && NET_DEPLOY && NET_DEPLOY.configured === false && !nic.enabled;
-  const cards = deployCardsFields(name, nic);
+  const cards = mgmt ? null : deployCardsFields(name, nic);
   const initial = { network, netmask, range_start: nic.range_start || "", range_end: nic.range_end || "", lease_n: lease[1], lease_u: lease[2] };
+  const fixed = mgmt ? { network, netmask, server: mgmt.server } : {};
+  const mgmtNote = mgmt ? `<div class="sheet-note danger"><b>זה כרטיס הניהול — הקונסולה נכנסת דרכו.</b> בשרת עם כרטיס יחיד הוא יכול להיות גם רשת ההפצה, אבל אז ה-DHCP של ההפצה יענה לכל מחשב ברשת שלו (<b dir="ltr">${esc(network)}</b>): אם זו רשת המכללה, הוא ישבית אותה. לפני ההדלקה השרת בודק שאין ברשת שרת DHCP אחר — אם נמצא שרת, או שהבדיקה לא הצליחה לרוץ, ההדלקה נעצרת.</div>`
+    + `<div class="sheet-note" id="deploy-server-ip">הכתובת של השרת נשארת <b dir="ltr">${esc(mgmt.server)}</b> — הקונסולה ממשיכה בה. ההגדרה הראשונה מאתחלת את השרת, והקונסולה תחזור תוך כמה שניות.</div>` : "";
   sheet({
     title: `רשת הפצה — ${name}`,
-    sub: "ה-DHCP למחשבי השיכפול והבנייה רץ על הכרטיס הזה",
-    note: (nic.trunk ? `<div class="sheet-note danger">הכרטיס מסומן כמחובר לרשת המכללה. DHCP כאן ישבית את הרשת.</div>`
+    sub: mgmt ? "כרטיס הניהול · שרת עם כרטיס יחיד" : "ה-DHCP למחשבי השיכפול והבנייה רץ על הכרטיס הזה",
+    danger: !!mgmt,
+    note: mgmt ? mgmtNote : (nic.trunk ? `<div class="sheet-note danger">הכרטיס מסומן כמחובר לרשת המכללה. DHCP כאן ישבית את הרשת.</div>`
       : !nic.enabled ? `<div class="sheet-note">ההגדרה המסוכנת ביותר במערכת: DHCP על רשת שכבר יש בה שרת משבית אותה. השרת יבדוק לפני ההדלקה אם מישהו כבר עונה.</div>` : "")
       + (firstTime ? `<div class="sheet-note">רשת ההפצה מוגדרת כאן <b>בפעם הראשונה</b>: השמירה משלימה את ההתקנה (grub.cfg, dnsmasq, חומת אש) ומאתחלת את השרת על כתובת ההפצה — הקונסולה תחזור תוך כמה שניות.</div>` : "")
       + `<div class="sheet-note" id="deploy-server-ip">${deployServerNote(network, netmask)}</div>`,
     size: "mid",
     fields: [
-      { type: "section", label: "רשת ההפצה" },
-      { id: "network", label: "כתובת רשת", value: network, dir: "ltr" },
-      { id: "netmask", label: "מסכה", value: netmask, dir: "ltr" },
+      ...(mgmt ? [] : [{ type: "section", label: "רשת ההפצה" },
+        { id: "network", label: "כתובת רשת", value: network, dir: "ltr" },
+        { id: "netmask", label: "מסכה", value: netmask, dir: "ltr" }]),
       { type: "section", label: "DHCP למחשבים" },
       { id: "range_start", label: "תחילת טווח", value: nic.range_start, dir: "ltr" },
       { id: "range_end", label: "סוף טווח", value: nic.range_end, dir: "ltr" },
@@ -132,8 +151,9 @@ function editDeployNet(name) {
         label: "אני מבין שזו רשת המכללה ורוצה להדליק בכל זאת" }] : []),
       ...(cards ? cards.fields : []),
     ],
-    submitLabel: "שמירה והחלה",
-    onSubmit: async (v) => {
+    submitLabel: mgmt ? "הדלקת רשת הפצה על כרטיס הניהול" : "שמירה והחלה",
+    onSubmit: async (raw) => {
+      const v = { ...raw, ...fixed };
       const problems = deployFormProblems(v);
       if (problems.length) throw new Error(problems.join(" · "));
       // ‏#1264: רק הכרטיס השני השתנה — רק ‏/second; הרשת לא נשמרת שוב (ואין
@@ -146,6 +166,7 @@ function editDeployNet(name) {
           range_start: v.range_start.trim(), range_end: v.range_end.trim(),
           lease: `${Number(v.lease_n)}${v.lease_u}`,
           confirm: name, confirm_trunk: v.confirm_trunk === true,
+          ...(mgmt ? { confirm_management: true } : {}),
         });
       }
       if (cards && second !== cards.current) await saveDeploySecond(name, second);
@@ -158,8 +179,8 @@ function editDeployNet(name) {
   const value = (id) => { const el = document.getElementById("sf-" + id); return el ? el.value : ""; };
   const sync = () => {
     const v = { network: value("network"), netmask: value("netmask"), range_start: value("range_start"),
-                range_end: value("range_end"), lease_n: value("lease_n") };
-    const note = document.getElementById("deploy-server-ip");
+                range_end: value("range_end"), lease_n: value("lease_n"), ...fixed };
+    const note = !mgmt && document.getElementById("deploy-server-ip");
     if (note) note.innerHTML = deployServerNote(v.network, v.netmask);
     const problems = deployFormProblems(v);
     const submit = form.querySelector('button[type="submit"]');

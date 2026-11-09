@@ -395,10 +395,15 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         )
 
     def _gates(name: str, cfg: dhcp.InterfaceConfig,
-               before: dhcp.InterfaceConfig, body: dict) -> str | None:
+               before: dhcp.InterfaceConfig, body: dict,
+               management_ok: bool = False) -> str | None:
         """כל השומרים שלפני הכתיבה — זורק HTTPException, או מחזיר את
         גרסת ה-dnsmasq כשה-proxy הודלק על גרסה שלא נבדקה. ‏#1263: נקרא גם
-        מ-`PUT /net/config/{שם}/deploy` **לפני** שהכתובת של הכרטיס זזה."""
+        מ-`PUT /net/config/{שם}/deploy` **לפני** שהכתובת של הכרטיס זזה.
+
+        ‏`management_ok` (‏#2668, שרת עם כרטיס יחיד): רק חלון רשת ההפצה מעביר
+        אותו, אחרי אישור מפורש של המפעיל. הוא ארגומנט ולא שדה בגוף הבקשה —
+        כדי שאף בקשה ל-`PUT /net/interfaces/{שם}` לא תוכל לפתוח אותו."""
         if cfg.enabled and cfg.proxy:
             raise HTTPException(400, "DHCP מלא ו-proxy על אותו ממשק סותרים זה את זה")
         # הכרעת נדב 11/10: ‏proxy קיים בשביל תחנות כיתה שמקבלות כתובת מה-DHCP
@@ -409,7 +414,17 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 409, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v1.2)")
         # ‏#1263: כרטיס הניהול (נבחר בהתקנה) הוא לקוח DHCP או כתובת ידנית — לא
         # מחלק כתובות ולא עונה ל-PXE. כיבוי (enabled=false) תמיד מותר.
-        if (cfg.enabled or cfg.proxy) and _is_management(name):
+        # ‏#2668: החריג — DHCP מלא (לא proxy) מחלון רשת ההפצה, וגם אז בלי
+        # דילוג על "מי כבר עונה": על כרטיס הניהול הבדיקה היא הראיה היחידה
+        # שהרשת שלו אינה רשת המכללה (#53, עיקרון 5).
+        management = (cfg.enabled or cfg.proxy) and _is_management(name)
+        if management and management_ok and not cfg.proxy:
+            if body.get("ignore_existing"):
+                raise HTTPException(
+                    409, f"{name} הוא כרטיס הניהול — עליו אי אפשר לדלג על הבדיקה "
+                         "אם כבר יש ברשת שרת DHCP: היא הראיה היחידה שהרשת שלו "
+                         "אינה רשת המכללה")
+        elif management:
             raise HTTPException(
                 409, f"{name} הוא כרטיס הניהול (נבחר בהתקנה) — אין עליו DHCP "
                      "ואין proxy; הוא לקוח DHCP או כתובת ידנית בלבד")
@@ -450,12 +465,15 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 # המכללה "לא יודעים" עולה רשת שלמה. פורט 68 תפוס הוא בדיוק
                 # מה שקורה על כרטיס trunk שמקבל כתובת מהמכללה.
                 if not found.checked:
+                    # ‏#2668: על כרטיס הניהול אין עקיפה — לא מציעים אותה.
+                    bypass = (" על כרטיס הניהול אין דילוג על הבדיקה." if management else
+                              " אם אתה יודע שהכרטיס אינו מחובר לרשת המכללה, "
+                              "הדלק עם ignore_existing.")
                     if found.reason == "link_down":
                         raise HTTPException(
                             409, f"כרטיס ההפצה {name} מושבת. יש להעלות את הכרטיס תחילה. "
-                            "לא ניתן לבדוק אם כבר יש DHCP על הכרטיס. הבדיקה לא רצה. "
-                            "אם אתה יודע שהכרטיס אינו מחובר לרשת המכללה, "
-                            "הדלק עם ignore_existing.",
+                            "לא ניתן לבדוק אם כבר יש DHCP על הכרטיס. הבדיקה לא רצה."
+                            + bypass,
                         )
                     # ‏#2417: הסיבה מהבדיקה עצמה (האזנה, שליחה, ראיה שלא נמצאה).
                     why = {
@@ -468,8 +486,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                     raise HTTPException(
                         409, f"לא ניתן לבדוק אם כבר יש DHCP על {name} — הבדיקה "
                         f"עצמה לא רצה ({why}). לא נמצא "
-                        "שרת אחר — פשוט לא נבדק. אם אתה יודע שהכרטיס אינו "
-                        "מחובר לרשת המכללה, הדלק עם ignore_existing.",
+                        "שרת אחר — פשוט לא נבדק." + bypass,
                     )
                 if found.servers:
                     raise HTTPException(
@@ -483,7 +500,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
 
     def _commit(name: str, cfg: dhcp.InterfaceConfig,
                 before: dhcp.InterfaceConfig, user, live: dict,
-                risky_proxy: str | None) -> dict:
+                risky_proxy: str | None, management_ok: bool = False) -> dict:
         turning_on = (cfg.enabled or cfg.proxy) and not (before.enabled or before.proxy)
         # ‏#1088: הדלקת DHCP על כרטיס כשרשת ההפצה טרם הוגדרה **משלימה את
         # ההתקנה** — grub.cfg, ‏dnsmasq באתחול, חומת אש, ואתחול השרת עם
@@ -508,7 +525,8 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 # ואז commit. כשל בה = שום דבר לא נרשם (לא deploy ולא DHCP),
                 # אחרת ההדלקה הבאה לא הייתה "הדלקה ראשונה" ולא הייתה מנסה שוב.
                 result = deploy_net.complete(deploy, ctx.conn, interface=name,
-                                             server_ip=cfg.server_ip)
+                                             server_ip=cfg.server_ip,
+                                             management_confirmed=management_ok)
                 if not result["ok"]:
                     detail = " · ".join(result["errors"])
                     journal(ctx.conn, "deploy_net_failed", f"{name} {detail}", user[0])
@@ -551,6 +569,8 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         # אותה השלמת התקנה (‏deploy) ואותו dnsmasq אחרי שה-DHCP עבר ל-bond.
         "probe": lambda name: hooks["probe"](name),
         "deploy": lambda: deploy,
+        # ‏#2668: אותה הגדרה של "כרטיס הניהול" (הרישום + כרטיס הקונסולה) לשני הראוטרים.
+        "is_management": lambda name: _is_management(name),
         "apply": apply_all,
     }
 

@@ -86,11 +86,16 @@ failgui_firstboot() {
 
 failgui_installer() {
     # $1 = the hold's English line: the S9 screen.
+    _gi_d2=; _gi_d3=
     case "$1" in
         "install media is not mounted"*)
             _gi_t="מדיית ההתקנה לא נמצאה"; _gi_s="install media not found"
             _gi_w="מדיית ההתקנה (הדיסק-און-קי או ה-ISO) לא עוגנה, ולכן אין ממה להתקין. לא נכתב דבר לדיסק."
-            _gi_d="חברו מחדש את הדיסק-און-קי או את ה-ISO, והפעילו את המחשב מחדש." ;;
+            _gi_d="חברו מחדש את הדיסק-און-קי או את ה-ISO, והפעילו את המחשב מחדש."
+            # #2761: the common cause, named as a common cause and not promised: a stick whose write did not
+            # finish or was not verified. Both Rufus modes work; the second line is the English of the first.
+            _gi_d2="סיבה נפוצה: הצריבה לא הושלמה. צרבו שוב ב-Rufus, ב-DD Image או בברירת המחדל (העתקת קבצים), אחרי בדיקת sha256 של ה-ISO."
+            _gi_d3="Common cause: the stick was not written completely. Write it again with Rufus (DD Image or the default file-copy mode) after checking the ISO sha256." ;;
         "no keyboard found"*)
             _gi_t="לא נמצאה מקלדת"; _gi_s="no keyboard"
             _gi_w="ההתקנה נענית במקלדת שבמסך הזה, ולא נמצאה מקלדת מחוברת. לא נכתב דבר לדיסק."
@@ -108,7 +113,7 @@ failgui_installer() {
             _gi_w="ההתקנה נעצרה לפני שהתחילה."
             _gi_d="הפעילו את המחשב מחדש מהמדיה." ;;
     esac
-    failgui_records bad 1 installer "$_gi_t" "$_gi_s" "$_gi_w" "$1" "$_gi_d"
+    failgui_records bad 1 installer "$_gi_t" "$_gi_s" "$_gi_w" "$1" "$_gi_d" ${_gi_d2:+"$_gi_d2"} ${_gi_d3:+"$_gi_d3"}
 }
 
 failgui_shutdown() {

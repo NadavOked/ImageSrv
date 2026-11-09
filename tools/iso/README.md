@@ -19,7 +19,7 @@
 | `build-iso.sh` | ‏netinst רשמי (מאומת sha256) + pool + קוד (`git archive` של ה-ref) + preseed + תפריט → ISO hybrid ב-`xorriso -boot_image any replay`; מדפיס `-report_el_torito` |
 | `test-iso.sh` | ‏QEMU/OVMF עם Secure Boot, שני שלבים (התקנה → אתחול ראשון) — **טרם הורץ** (אין KVM במעבדה) |
 | `check-pool.py` | ‏#2520: האינדקס הממוזג עקבי — כל תלות-גרסה מתקיימת בגרסה הגבוהה של היעד (מה ש-debootstrap ו-apt בוחרים). ‏`build-iso.sh` נעצר בלעדיו |
-| `install-test.py` | ‏#2520: התקנה **מלאה** מה-ISO ב-QEMU (הקרנל וה-initramfs שלו, מעטפת על הסריאלי, המנוע עם תשובות) עד `state=done`. שלב חובה בשרשרת הגרסה (‏CONTRIBUTING, "גרסאות") |
+| `install-test.py` | ‏#2520: התקנה **מלאה** מה-ISO ב-QEMU (הקרנל וה-initramfs שלו, מעטפת על הסריאלי, המנוע עם תשובות) עד `state=done`. שלב חובה בשרשרת הגרסה (‏CONTRIBUTING, "גרסאות"). ‏`--medium fat32-usb` (#2761): אותה התקנה מדיסק-און-קי FAT32 כמו ש-Rufus במצב העתקת קבצים כותב (תווית `IMAGESRV_IN`), עם אתחול מלא דרך OVMF, shim ו-GRUB (בלי Secure Boot) |
 
 ## בנייה (על דביאן 13 עם אינטרנט — Testrunner)
 

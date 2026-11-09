@@ -28,7 +28,13 @@ How (the way the 06/11 VM test ran it by hand, vm-2490):
     state's error= line and the engine log in DIR. Missing tools or an
     unreadable ISO = not run (exit 2) -- never a pass.
 
-Not covered: Secure Boot (direct kernel boot skips shim), the GUI screens,
+--medium fat32-usb (#2761) is the other way a person writes the stick: Rufus in its default
+"copy files" mode. The ISO's files are copied onto the one FAT32 partition of a GPT stick (label cut
+to 11 characters, symlinks as small text files, as Rufus writes them), only the serial console is
+added to the grub.cfg copy, and QEMU boots the stick through OVMF -> shim -> grub -> the kernel, so
+the boot itself is proved and not only the mount. Needs mtools, sfdisk, xorriso.
+
+Not covered: Secure Boot (direct kernel boot skips shim; OVMF here has it off), BIOS/CSM, the GUI screens,
 and the first boot of the installed disk (tools/iso/test-iso.sh stage 2).
 Without KVM (TCG) an install is about an hour; give --timeout accordingly.
 """
@@ -130,6 +136,75 @@ def extract(iso, out):
     return kernel, initrd
 
 
+FAT_LABEL = "IMAGESRV_IN"   # Rufus: upper case, cut to the 11 characters a FAT label holds
+PART_OFFSET = 1024 * 1024
+
+
+def tool(name):
+    """A tool by name; sfdisk lives in /usr/sbin, which a plain user's PATH may not have."""
+    path = shutil.which(name, path=os.environ.get("PATH", "") + ":/usr/sbin:/sbin")
+    if not path:
+        raise NotRun(f"missing {name}")
+    return path
+
+
+def sh(cmd, what, stdin_text=None):
+    proc = subprocess.run(cmd, input=stdin_text, stdin=None if stdin_text else subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if proc.returncode != 0:
+        raise NotRun(f"{what} failed ({proc.returncode}): {proc.stdout.strip()[-300:]}")
+    return proc.stdout
+
+
+def build_fat32_stick(iso, out):
+    """The ISO's files on a GPT stick with one FAT32 partition, the way Rufus's copy mode leaves it.
+
+    Symlinks: Rufus does not recreate them on FAT32; it writes the link's target as a small text file
+    (iso.c, read 09/11). Done the same here. No root: everything is a file and mtools works on offsets.
+    Returns (image path, the symlinks turned into text files)."""
+    tree, img = os.path.join(out, "fat-tree"), os.path.join(out, "usb.img")
+    if os.path.isdir(tree):
+        sh(["chmod", "-R", "u+w", tree], "chmod")
+        shutil.rmtree(tree)
+    sh([need("xorriso"), "-osirrox", "on:auto_chmod_on", "-indev", iso, "-extract", "/", tree], "xorriso -extract")
+    links = []
+    for root, dirs, files in os.walk(tree):
+        for name in dirs + files:
+            full = os.path.join(root, name)
+            if os.path.islink(full):
+                links.append(os.path.relpath(full, tree))
+                target = os.readlink(full)
+                os.unlink(full)
+                with open(full, "w", encoding="utf-8") as f:
+                    f.write(target)
+    # the only change to the content: a serial console and the shell, as the direct-kernel mode has them
+    cfg = os.path.join(tree, "boot", "grub", "grub.cfg")
+    with open(cfg, encoding="utf-8") as f:
+        text = f.read()
+    if " --- quiet" not in text:
+        raise NotRun("boot/grub/grub.cfg has no ' --- quiet' to put the serial console before")
+    os.chmod(cfg, 0o644)
+    with open(cfg, "w", encoding="utf-8") as f:
+        f.write(text.replace(" --- quiet", " console=ttyS0,115200 INSTALLER_BIN=/bin/sh --- quiet", 1))
+    total = sum(os.path.getsize(os.path.join(r, n)) for r, _d, fs in os.walk(tree) for n in fs)
+    mib = (total * 11 // 10) // (1024 * 1024) + 512
+    if os.path.exists(img):
+        os.remove(img)
+    with open(img, "wb") as f:
+        f.truncate(mib * 1024 * 1024)
+    sectors = (mib * 1024 * 1024 - 2 * PART_OFFSET) // 512
+    sh([tool("sfdisk"), "-q", img], "sfdisk", f"label: gpt\nstart=2048, size={sectors}, type=U\n")
+    part = f"{img}@@{PART_OFFSET}"
+    sh([tool("mformat"), "-i", part, "-F", "-T", str(sectors), "-v", FAT_LABEL, "::"], "mformat")
+    sh([tool("mlabel"), "-i", part, f"::{FAT_LABEL}"], "mlabel")
+    sh([tool("mcopy"), "-i", part, "-s", "-n", *[os.path.join(tree, n) for n in sorted(os.listdir(tree))], "::/"], "mcopy")
+    shown = sh([tool("mdir"), "-i", part, "::/imagesrv-iso.json"], "mdir imagesrv-iso.json")
+    if "imagesrv" not in shown.lower():
+        raise NotRun("imagesrv-iso.json did not reach the FAT32 partition")
+    shutil.rmtree(tree)
+    return img, links
+
+
 def answers_text(nic):
     pw = lambda: secrets.token_urlsafe(15)  # noqa: E731 -- throwaway VM passwords
     return "".join(f"{k}={v}\n" for k, v in (
@@ -154,7 +229,9 @@ def run(args):
     if not os.path.isfile(args.iso):
         raise NotRun(f"no ISO: {args.iso}")
     os.makedirs(args.out, exist_ok=True)
-    kernel, initrd = extract(args.iso, args.out)
+    fat = args.medium == "fat32-usb"
+    if not fat:
+        kernel, initrd = extract(args.iso, args.out)
     disk, vars_fd, sock = (os.path.join(args.out, n) for n in ("disk.qcow2", "vars.fd", "serial.sock"))
     for f in (disk, sock):
         if os.path.exists(f):
@@ -166,15 +243,21 @@ def run(args):
     cmd = ["qemu-system-x86_64", "-name", "imagesrv-install-test", "-m", str(args.mem_mb), "-smp", str(args.smp),
            "-accel", accel,
            "-drive", f"if=pflash,format=raw,readonly=on,file={OVMF_CODE}",
-           "-drive", f"if=pflash,format=raw,file={vars_fd}",
-           "-kernel", kernel, "-initrd", initrd,
-           "-append", "imagesrv.mode=installer console=ttyS0,115200 INSTALLER_BIN=/bin/sh",
-           "-drive", f"file={disk},if=virtio,format=qcow2",
-           "-device", "virtio-scsi-pci,id=scsi0",
-           "-drive", f"if=none,id=cd0,media=cdrom,readonly=on,file={args.iso}",
-           "-device", "scsi-cd,bus=scsi0.0,drive=cd0",
-           "-netdev", "user,id=n0,restrict=on", "-device", f"e1000,netdev=n0,mac={MAC}",
-           "-display", "none", "-serial", f"unix:{sock},server,nowait", "-monitor", "none"]
+           "-drive", f"if=pflash,format=raw,file={vars_fd}"]
+    if fat:
+        stick, links = build_fat32_stick(args.iso, args.out)
+        say(f"FAT32 stick {stick} (label {FAT_LABEL}); {len(links)} symlinks as text files: {' '.join(links[:6])}")
+        cmd += ["-device", "qemu-xhci,id=xhci", "-drive", f"if=none,id=usb0,format=raw,file={stick}",
+                "-device", "usb-storage,bus=xhci.0,drive=usb0,bootindex=0"]
+    else:
+        cmd += ["-kernel", kernel, "-initrd", initrd,
+                "-append", "imagesrv.mode=installer console=ttyS0,115200 INSTALLER_BIN=/bin/sh",
+                "-device", "virtio-scsi-pci,id=scsi0",
+                "-drive", f"if=none,id=cd0,media=cdrom,readonly=on,file={args.iso}",
+                "-device", "scsi-cd,bus=scsi0.0,drive=cd0"]
+    cmd += ["-drive", f"file={disk},if=virtio,format=qcow2",
+            "-netdev", "user,id=n0,restrict=on", "-device", f"e1000,netdev=n0,mac={MAC}",
+            "-display", "none", "-serial", f"unix:{sock},server,nowait", "-monitor", "none"]
     say(f"QEMU ({accel}): {args.iso}")
     with open(os.path.join(args.out, "qemu.log"), "wb") as qlog:
         qemu = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=qlog, stderr=subprocess.STDOUT)
@@ -197,7 +280,11 @@ def drive(args, qemu, sock):
             return fail(args, f"no shell on the serial console within {args.boot_timeout}s (serial.log)")
         rc, out = ser.run("cat /run/imagesrv/install-media && test -f /cdrom/imagesrv-iso.json")
         if rc != 0:
-            return fail(args, f"the live image did not mount the ISO at /cdrom: {out.strip()[-200:]}")
+            _rc, seen = ser.run("blkid; ls /dev/sd* /dev/sr* 2>&1; grep -E 'vfat|iso9660' /proc/filesystems", 30)
+            with open(os.path.join(args.out, "media-evidence.txt"), "w", encoding="utf-8") as f:
+                f.write(seen or "")
+            return fail(args, f"the live image did not mount the install medium at /cdrom: {out.strip()[-200:]} "
+                              "(what the guest sees: media-evidence.txt)")
         rc, out = ser.run(f"for d in /sys/class/net/*; do [ \"$(cat $d/address)\" = {MAC} ] && echo NIC=${{d##*/}}; done")
         nic = re.search(r"^NIC=([A-Za-z0-9_.-]+)\r?$", out or "", re.M)
         if rc is None or not nic:
@@ -266,6 +353,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 2)[1])
     ap.add_argument("--iso", required=True)
     ap.add_argument("--out", required=True, help="work and evidence directory (disk, serial.log, engine.log)")
+    ap.add_argument("--medium", choices=("cdrom", "fat32-usb"), default="cdrom",
+                    help="cdrom: the ISO as a CD, direct kernel boot (default); fat32-usb: Rufus copy mode, via OVMF (#2761)")
     ap.add_argument("--timeout", type=int, default=3 * 3600, help="install ceiling in seconds (default 3h, TCG)")
     ap.add_argument("--boot-timeout", type=int, default=1800, help="ceiling for the live shell (default 30 min)")
     ap.add_argument("--mem-mb", type=int, default=4096)

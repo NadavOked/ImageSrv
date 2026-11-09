@@ -552,6 +552,10 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         חוזרת), ורק אם היא **אומתה** ואינה ממתינה לאישור — ה-DHCP. כתובת
         שלא אומתה עוצרת: DHCP שמכריז על כתובת שהכרטיס אינו נושא אינו
         "חצי הצלחה".
+
+        ‏#2668 — שרת עם כרטיס יחיד: כרטיס הניהול יכול להיות גם רשת ההפצה, רק
+        כאן, ורק כמעבר מפורש (`_management_deploy_or_409`). הכתובת שלו **אינה
+        זזה** — היא כתובת השרת ברשת ההפצה, והקונסולה ממשיכה בה.
         """
         if dhcp_steps is None:
             raise HTTPException(501, "שלבי ה-DHCP לא חוברו לראוטר הזה")
@@ -560,25 +564,26 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         live = {i["name"]: i for i in hooks["interfaces"]()}
         if name not in live:
             raise HTTPException(404, "כרטיס רשת כזה לא קיים במכונה")
-        if name == management():
-            raise HTTPException(
-                409, f"{name} הוא כרטיס הניהול (נבחר בהתקנה) — הוא יכול להיות "
-                     "לקוח DHCP או כתובת ידנית, לא רשת ההפצה")
+        on_management = dhcp_steps["is_management"](name)
         member = bond_of(name)
         if member is not None:
             raise HTTPException(
                 409, f"{name} חבר ב-{member.name} — רשת ההפצה נערכת על {member.name}")
-        netmask = str(body.get("netmask") or "255.255.255.0").strip()
-        network = str(body.get("network", "")).strip()
-        address, found = netcfg.deploy_address(network, netmask)
-        if found:
-            raise HTTPException(400, " · ".join(found))
         before = load(name)
-        # השער וה-DNS של **הכרטיס** ריקים בכוונה: הם של המחשבים (ב-DHCP),
-        # ושער ברירת מחדל שני על השרת היה מתחרה בזה של כרטיס הניהול.
-        cfg = netcfg.NetConfig(name=name, mode=netcfg.MODE_STATIC, address=address,
-                               netmask=netmask, routes=before.routes,
-                               slaves=before.slaves)            # ‏#1264
+        if on_management:
+            address, network, netmask = _management_deploy_or_409(name, before, body)
+            cfg = before                    # הכתובת של הקונסולה נשארת כמו שהיא
+        else:
+            netmask = str(body.get("netmask") or "255.255.255.0").strip()
+            network = str(body.get("network", "")).strip()
+            address, found = netcfg.deploy_address(network, netmask)
+            if found:
+                raise HTTPException(400, " · ".join(found))
+            # השער וה-DNS של **הכרטיס** ריקים בכוונה: הם של המחשבים (ב-DHCP),
+            # ושער ברירת מחדל שני על השרת היה מתחרה בזה של כרטיס הניהול.
+            cfg = netcfg.NetConfig(name=name, mode=netcfg.MODE_STATIC, address=address,
+                                   netmask=netmask, routes=before.routes,
+                                   slaves=before.slaves)            # ‏#1264
         dhcp_before = dhcp_steps["load"](name)
         # שער ו-DNS **למחשבים**: הקונסולה אינה מציעה אותם ברשת ההפצה (רשת
         # סגורה — dnsmasq ב-port=0, השרת אינו מנתב; נדב 10/10). מי שלא שולח
@@ -599,7 +604,8 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         found = check(cfg, dhcp_cfg, state)
         if found:
             raise HTTPException(400, " · ".join(found))
-        risky = dhcp_steps["gates"](name, dhcp_cfg, dhcp_before, dhcp_body)
+        risky = dhcp_steps["gates"](name, dhcp_cfg, dhcp_before, dhcp_body,
+                                    management_ok=on_management)
         address_result = None
         if netcfg.changed(before, cfg):
             address_result = await _configure(name, before, cfg, body, request, user, live,
@@ -612,15 +618,54 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                         "dhcp": None, "apply_error": f"הכתובת {address} על {name} {why} "
                         "— ה-DHCP לא שונה"}
         dhcp_result = dhcp_steps["commit"](name, dhcp_cfg, dhcp_before, user,
-                                           dhcp_steps["live"](), risky)
+                                           dhcp_steps["live"](), risky,
+                                           management_ok=on_management)
         journal(ctx.conn, "net_deploy_saved",
                 f"{name} {network}/{netcfg._prefix_len(netmask)} server={address} "
                 f"range={dhcp_cfg.range_start}-{dhcp_cfg.range_end}", user[0])
+        if on_management and not dhcp_before.enabled:
+            journal(ctx.conn, "net_deploy_on_management",
+                    f"{name} server={address}", user[0])
         out = {"ok": dhcp_result["ok"], "server_ip": address, "address": address_result,
                "dhcp": dhcp_result, "apply_error": dhcp_result["apply_error"]}
         if "deploy" in dhcp_result:
             out["deploy"] = dhcp_result["deploy"]
         return out
+
+    def _management_deploy_or_409(name: str, before: netcfg.NetConfig,
+                                  body: dict) -> tuple[str, str, str]:
+        """‏#2668: רשת ההפצה על כרטיס הניהול — ‏(כתובת השרת, רשת, מסכה), או סירוב.
+
+        מה שנבדק כאן הוא מה שאינו ב-`_gates` של ראוטר ה-DHCP: אישור מפורש,
+        כתובת ידנית, ואותה רשת. ‏"מי כבר עונה" (#53) רץ שם, בלי עקיפה.
+
+        **למה הכתובת הקיימת ולא הראשונה ברשת:** הקונסולה נכנסת דרך הכתובת הזו —
+        העברתה הייתה מנתקת את המפעיל באמצע השמירה ומשאירה את ההחלטה לזרוע
+        ההחזרה של 60 השניות (#56); והכתובת הראשונה ברשת קיימת (10.0.0.0/24 →
+        ‏10.0.0.1) היא לרוב הנתב. כתובת שנייה על אותו כרטיס אינה מבודדת דבר:
+        ה-DHCP עונה לכל מי שמשדר באותה רשת פיזית, באיזו רשת IP שלא תהיה."""
+        if body.get("confirm_management") is not True:
+            raise HTTPException(
+                409, f"{name} הוא כרטיס הניהול — הקונסולה נכנסת דרכו. בשרת עם כרטיס "
+                     "יחיד הוא יכול להיות גם רשת ההפצה, אבל אז ה-DHCP של ההפצה עונה "
+                     "לכל מחשב ברשת שלו: אם זו רשת המכללה, הוא ישבית אותה. נדרש "
+                     "אישור מפורש (confirm_management), והשרת בודק קודם שאין ברשת "
+                     "שרת DHCP אחר")
+        network = before.network() if before.mode == netcfg.MODE_STATIC else None
+        if network is None:
+            raise HTTPException(
+                409, f"כרטיס הניהול {name} אינו בכתובת ידנית — כתובת ההפצה חייבת להיות "
+                     "קבועה, וכרטיס שמקבל כתובת מ-DHCP מחובר לרשת שכבר יש בה שרת "
+                     "DHCP. הגדירו לו קודם כתובת ידנית (הגדרת כרטיס ← כתובת ידנית); "
+                     "רשת ההפצה תשב על הכתובת הזו")
+        wanted = (str(body.get("network") or network.network_address).strip(),
+                  str(body.get("netmask") or before.netmask).strip())
+        if wanted != (str(network.network_address), before.netmask):
+            raise HTTPException(
+                400, f"על כרטיס הניהול רשת ההפצה היא הרשת של הכתובת שלו ({network}): "
+                     f"הכתובת {before.address} נשארת, כדי שהקונסולה לא תתנתק. לרשת "
+                     "אחרת — שנו קודם את כתובת הכרטיס")
+        return before.address, str(network.network_address), before.netmask
 
     # --- ‏#1264: כרטיס שני ברשת ההפצה (bond, ‏balance-alb) -------------------
 
@@ -651,6 +696,12 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         second = str(body.get("second") or "").strip()
         current, deploy = load(name), dhcp_steps["deploy"]()
         _deploy_network_or_409(name, current, deploy)
+        if second and dhcp_steps["is_management"](name):
+            # ‏#2668: bond מעביר את הכתובת ל-bond0, והקונסולה (`--console-host`)
+            # נקשרת לשם הכרטיס — היא הייתה מאבדת את הכתובת שלה.
+            raise HTTPException(409, f"רשת ההפצה יושבת על כרטיס הניהול ({name}) — "
+                                     "אין לה כרטיס שני: איחוד הכרטיסים היה מעביר את "
+                                     "הכתובת שהקונסולה נקשרת אליה")
         live = {i["name"]: i for i in hooks["interfaces"]()}
         touched: list[str] | None = None            # None = המכונה כבר במצב הזה
         if current.slaves and second == current.slaves[1]:

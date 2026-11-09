@@ -405,7 +405,8 @@ class DeployContext:
     grub_password_hash: str = ""
 
 
-def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dict:
+def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
+             management_confirmed: bool = False) -> dict:
     """משלים את ההתקנה לכרטיס שהודלק עליו DHCP — **apply לפני commit** (‏#1121).
 
     הסדר: grub.cfg → dnsmasq באתחול → חומת אש → תזמון אתחול → ורק אז
@@ -420,7 +421,10 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str) -> dic
               "errors": [], "restarting": False, "recorded": False}
     # ‏#2428: כרטיס הניהול אינו רשת ההפצה — בכל מסלול שמגיע לכאן, לפני כל
     # צעד. אחרת dnsmasq, ‏67/69/8080 ומולטיקאסט נפתחים ברשת המכללה.
-    if ctx.servers_interface and interface == ctx.servers_interface:
+    # ‏#2668: החריג היחיד — שרת עם כרטיס יחיד, מחלון רשת ההפצה בלבד, אחרי
+    # שהשומר של DHCP קיים החזיר "נבדק, נקי" והמפעיל אישר (`management_confirmed`).
+    if (ctx.servers_interface and interface == ctx.servers_interface
+            and not management_confirmed):
         result["errors"].append(
             f"{interface} הוא כרטיס הניהול (הקונסולה נקשרת אליו) — הוא אינו "
             "יכול להיות רשת ההפצה")

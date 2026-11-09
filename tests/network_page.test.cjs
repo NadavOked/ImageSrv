@@ -356,10 +356,10 @@ test('NICs: live state not read → "לא נקרא" (never an address shown as m
 
 // ‏#1263 (הכרעת נדב 10/10): לכל כרטיס אופן הגדרה אחד — רשת הפצה / DHCP מהרשת / כתובת ידנית — בחלון
 // אחד "הגדרת כרטיס…"; הגדרות רשת ההפצה בחלון של לשונית "רשת הפצה". בלי הקלדת שם הכרטיס בשניהם;
-// כיבוי DHCP — כן. כרטיס הניהול: DHCP או ידנית בלבד.
+// כיבוי DHCP — כן. כרטיס הניהול: DHCP או ידנית, ו"רשת הפצה" רק כמעבר מפורש לשרת עם כרטיס יחיד (#2668).
 // מערכים מתוך ה-vm הם מ-realm אחר — deepEqual קפדני משווה גם prototype; JSON מנרמל.
 const sheetAt=(run,i)=>JSON.parse(run(`JSON.stringify(sheets[${i}])`));
-test('#1263 the card window: three modes, no typed name; the management NIC has no deploy mode and says the 60-second rollback',async()=>{
+test('#1263 the card window: three modes, no typed name; the management NIC (#2668: deploy only as the single-NIC case) says the 60-second rollback',async()=>{
   const {run,requests}=await loaded();
   run("netEditNic('ens19')");
   let sh=sheetAt(run,0);
@@ -370,7 +370,8 @@ test('#1263 the card window: three modes, no typed name; the management NIC has 
   assert.deepEqual(sh.fields.map(f=>f.id),['mode','address','netmask','gateway','dns1','dns2'],'static: IP/mask/gateway + two DNS');
   assert.match(sh.note,/כבו קודם את ה-DHCP/,'leaving the deploy mode means DHCP off first');
   run("netEditNic('ens18')"); sh=sheetAt(run,1);
-  assert.equal(sh.sub,'כרטיס הניהול · רשת השרתים'); assert.deepEqual(mode(sh).options.map(o=>o.value),['dhcp','static']);
+  assert.equal(sh.sub,'כרטיס הניהול · רשת השרתים'); assert.deepEqual(mode(sh).options.map(o=>o.value),['deploy','dhcp','static']);
+  assert.equal(mode(sh).options[0].hint,'שרת עם כרטיס יחיד'); assert.match(sh.note,/רשת הפצה על כרטיס הניהול — לשרת עם כרטיס יחיד[^<]*ישבית אותה[^<]*הכתובת של הכרטיס לא משתנה/);
   assert.match(sh.note,/כרטיס הניהול — נבחר בהתקנה/); assert.match(sh.note,/תוך 60 שניות, ההגדרה הקודמת תחזור/);
   assert.equal(mode(sh).value,'static'); assert.equal(sh.fields.find(f=>f.id==='dns1').value,'10.44.10.2');
   run("netEditNic('ens20')"); sh=sheetAt(run,2);
@@ -398,11 +399,12 @@ test('#1263 the card window saves static (two DNS) and DHCP through the existing
   t.requests.length=0;
   const bad=await t.run("sheets[0].onSubmit({mode:'static',address:'10.44.11.300',netmask:'255.0.255.0',gateway:'',dns1:'x',dns2:''}).then(()=>null,e=>e.message)");
   assert.equal(bad,'כתובת IP אינה תקינה · מסכה אינה תקינה · DNS ראשי אינו כתובת תקינה'); assert.equal(t.requests.filter(r=>r.method!=='GET').length,0);
-  // כרטיס הניהול לא נהיה רשת הפצה, וכרטיס ההפצה לא עוזב את האופן בלי לכבות DHCP
-  t.run("netEditNic('ens18')");
-  assert.match(await t.run("sheets[1].onSubmit({mode:'deploy'}).then(()=>null,e=>e.message)"),/כרטיס הניהול/);
+  // כרטיס הניהול → "רשת הפצה" ממשיך לחלון של רשת ההפצה (#2668) בלי לכתוב דבר, וכרטיס ההפצה לא עוזב את האופן בלי לכבות DHCP
+  t.run("netEditNic('ens18')"); t.run('globalThis._st=setTimeout; setTimeout=(f)=>{ f(); return 1; }');
+  assert.equal(await t.run("sheets[1].onSubmit({mode:'deploy'}).then(()=>null,e=>e.message)"),null);
+  t.run('setTimeout=_st'); assert.equal(t.run('sheets[2].title'),'רשת הפצה — ens18');
   t.run("netEditNic('ens19')");
-  assert.match(await t.run("sheets[2].onSubmit({mode:'static',address:'10.44.9.1',netmask:'255.255.255.0',gateway:'',dns1:'',dns2:''}).then(()=>null,e=>e.message)"),/כבו קודם את ה-DHCP/);
+  assert.match(await t.run("sheets[3].onSubmit({mode:'static',address:'10.44.9.1',netmask:'255.255.255.0',gateway:'',dns1:'',dns2:''}).then(()=>null,e=>e.message)"),/כבו קודם את ה-DHCP/);
   assert.equal(t.requests.filter(r=>r.method!=='GET').length,0);
 });
 
@@ -447,8 +449,36 @@ test('#1263 the deploy window: network + mask → the server address is derived;
   // הכתובת לא אומתה — ה-DHCP לא נגע, והחלון נשאר פתוח עם הסיבה
   t.fixtures['/net/config/ens19/deploy']={ok:false,server_ip:'10.44.30.1',address:{ok:false},dhcp:null,apply_error:'הכתובת 10.44.30.1 על ens19 לא אומתה מול המצב בפועל — ה-DHCP לא שונה'};
   assert.match(await err(good),/לא אומתה.*ה-DHCP לא שונה/);
-  // כרטיס הניהול — אין חלון בכלל
-  t.run("netEditDeploy('ens18')"); assert.equal(t.run('sheets.length'),1); assert.match(t.run('toasts[toasts.length-1]'),/כרטיס הניהול/);
+  // כרטיס הניהול בלי כתובת ידנית — אין חלון, והטוסט אומר מה לעשות (#2668)
+  t.run("NETCFG.interfaces.find(r=>r.name==='ens18').mode='dhcp'");
+  t.run("netEditDeploy('ens18')"); assert.equal(t.run('sheets.length'),1); assert.match(t.run('toasts[toasts.length-1]'),/כרטיס הניהול: .*קבעו לו קודם כתובת ידנית/);
+  t.run("NETCFG.interfaces.find(r=>r.name==='ens18').mode='static'");   // אותו אובייקט משותף לטסטים הבאים
+});
+
+// ‏#2668: שרת עם כרטיס יחיד — חלון רשת ההפצה על כרטיס הניהול. הכתובת הידנית נשארת כתובת השרת,
+// הרשת אינה שדה, ההסבר על רשת המכללה בחלון, הכפתור אדום (בלי הקלדה, #1270), והבקשה נושאת confirm_management.
+test('#2668 the deploy window on the management card: fixed address, the risk spelled out, a red button, confirm_management',async()=>{
+  const t=await loaded();
+  t.run("netEditDeploy('ens18')");
+  const sh=sheetAt(t.run,0);
+  assert.equal(sh.title,'רשת הפצה — ens18'); assert.equal(sh.sub,'כרטיס הניהול · שרת עם כרטיס יחיד');
+  assert.equal(sh.danger,true,'red button'); assert.equal(sh.verify,undefined,'no typed word');
+  assert.equal(sh.submitLabel,'הדלקת רשת הפצה על כרטיס הניהול');
+  assert.deepEqual(sh.fields.filter(f=>f.id).map(f=>f.id),['range_start','range_end','lease_n','lease_u'],'no network/mask fields, no second card');
+  assert.match(sh.note,/הקונסולה נכנסת דרכו/); assert.match(sh.note,/10\.44\.10\.0[^]*אם זו רשת המכללה, הוא ישבית אותה/);
+  assert.match(sh.note,/או שהבדיקה לא הצליחה לרוץ, ההדלקה נעצרת/);
+  assert.match(sh.note,/הכתובת של השרת נשארת <b dir="ltr">10\.44\.10\.1<\/b>/);
+  const err=(v)=>t.run(`sheets[0].onSubmit(${JSON.stringify(v)}).then(()=>null,e=>e.message)`);
+  const good={range_start:'10.44.10.100',range_end:'10.44.10.200',lease_n:'12',lease_u:'h'};
+  assert.equal(await err({...good,range_start:'10.44.10.1'}),'כתובת השרת (10.44.10.1) נמצאת בתוך הטווח','the kept address, not .1-derived');
+  assert.equal(await err({...good,range_end:'10.44.11.9'}),'הטווח חייב להיות בתוך הרשת');
+  assert.equal(t.requests.filter(r=>r.method!=='GET').length,0);
+  t.fixtures['/net/config/ens18/deploy']={ok:true,server_ip:'10.44.10.1',address:null,dhcp:{ok:true},apply_error:null};
+  assert.equal(await err(good),null);
+  const put=t.requests.find(r=>r.method==='PUT');
+  assert.equal(put.url,'/net/config/ens18/deploy');
+  assert.deepEqual(put.body,{network:'10.44.10.0',netmask:'255.255.255.0',range_start:'10.44.10.100',range_end:'10.44.10.200',
+    lease:'12h',confirm:'ens18',confirm_trunk:false,confirm_management:true});
 });
 
 // ‏#1263 אחרי שלב 1: כל שדה ב-sheet() יושב ב-`.n-f` והתווית היא אחות, לא אם — ההסתרה היא של ה-`.n-f`.

@@ -10,6 +10,11 @@
 # media is exactly what a person in front of the screen cannot diagnose.
 
 INSTALL_LABEL="${INSTALL_LABEL:-IMAGESRV_INSTALL}"
+# A FAT32 label holds 11 characters, upper case: a stick written in Rufus's
+# default "copy files" mode carries IMAGESRV_IN, never the 16-character label
+# of the ISO9660 volume (#2761). The medium is still proved by imagesrv-iso.json.
+INSTALL_LABEL_FAT="${INSTALL_LABEL_FAT:-$(printf '%.11s' "$INSTALL_LABEL" | tr '[:lower:]' '[:upper:]')}"
+INSTALL_MEDIA_FILE="${INSTALL_MEDIA_FILE:-/run/imagesrv/install-media}"
 DHCP_DIR="${DHCP_DIR:-/run/imagesrv/dhcp}"
 CDROM="${CDROM:-/cdrom}"
 INSTALLER_BIN="${INSTALLER_BIN:-/usr/lib/imagesrv/installer/imagesrv-installer}"
@@ -65,6 +70,15 @@ installer_dhcp_all() {
 # The media: the volume label build-iso sets. blkid -L is the positive
 # evidence; a device found by scanning /dev/sr* is the fallback, and both
 # are logged by name (principle 5: "mounted /dev/sr0" beats "mounted").
+# Two ways to write the stick are accepted: a byte copy of the ISO (label
+# IMAGESRV_INSTALL, iso9660) and the files copied onto FAT32 (label cut to
+# 11 characters). The filesystem type is read, not guessed, and passed to mount.
+installer_find_media() {
+    blkid -L "$INSTALL_LABEL" 2>/dev/null && return 0
+    _fm=$(blkid -L "$INSTALL_LABEL_FAT" 2>/dev/null) || return 1
+    case $(blkid "$_fm" 2>/dev/null) in *' TYPE="vfat"'*) printf '%s\n' "$_fm" ;; *) return 1 ;; esac
+}
+
 installer_mount_media() {
     mkdir -p "$CDROM" || return 1
     # The CD/ISO modules are in modules.required for the installer image; init
@@ -74,29 +88,33 @@ installer_mount_media() {
     # load list only has ahci -- disks); without it there is no /dev/sr0 at
     # all, and the label search says "no media" (ESXi, 21/09). ata_generic
     # is the fallback for odd chipsets. Both are in the packed tree.
-    for _m in ata_piix ata_generic ahci sr_mod cdrom isofs usb-storage; do
+    # vfat + its two codepages: the FAT32 stick (#2761).
+    for _m in ata_piix ata_generic ahci sr_mod cdrom isofs usb-storage vfat nls_cp437 nls_ascii; do
         modprobe "$_m" 2>/dev/null || installer_note "module $_m did not load (the media may be unreadable)"
     done
     # give the block layer a moment to enumerate the newly driven controller
     _n=0
     while [ "$_n" -lt 8 ]; do
         [ -b /dev/sr0 ] && break
-        if blkid -L "$INSTALL_LABEL" >/dev/null 2>&1; then break; fi
+        if installer_find_media >/dev/null; then break; fi
         sleep 1; _n=$((_n + 1))
     done
-    _dev=$(blkid -L "$INSTALL_LABEL" 2>/dev/null || true)
+    _dev=$(installer_find_media || true)
     if [ -z "$_dev" ]; then
         for _cand in /dev/sr0 /dev/sr1; do
             [ -b "$_cand" ] || continue
             if blkid "$_cand" 2>/dev/null | grep -q "LABEL=\"$INSTALL_LABEL\""; then _dev=$_cand; break; fi
         done
     fi
-    [ -n "$_dev" ] || { installer_note "no media with label $INSTALL_LABEL"; return 1; }
-    mount -o ro "$_dev" "$CDROM" 2>/dev/null || { installer_note "mount $_dev on $CDROM failed"; return 1; }
+    [ -n "$_dev" ] || { installer_note "no media with label $INSTALL_LABEL (iso9660) or $INSTALL_LABEL_FAT (vfat)"; return 1; }
+    _type=$(blkid "$_dev" 2>/dev/null | sed -n 's/.* TYPE="\([^"]*\)".*/\1/p')
+    if [ -n "$_type" ]; then _tflag="-t $_type"; else _tflag=; fi
+    # shellcheck disable=SC2086 # $_tflag is "-t type" or empty, by construction
+    mount $_tflag -o ro "$_dev" "$CDROM" 2>/dev/null || { installer_note "mount ${_type:+-t $_type }$_dev on $CDROM failed"; return 1; }
     [ -x "$CDROM/imagesrv-src/tools/iso/build-iso.sh" ] || [ -f "$CDROM/imagesrv-iso.json" ] \
-        || { installer_note "$_dev is not an ImageSrv install medium (no imagesrv-iso.json)"; return 1; }
-    printf '%s\n' "$_dev" > /run/imagesrv/install-media
-    installer_note "media $_dev mounted on $CDROM"
+        || { installer_note "$_dev (${_type:-no filesystem type}) is not an ImageSrv install medium (no imagesrv-iso.json)"; return 1; }
+    printf '%s\n' "$_dev" > "$INSTALL_MEDIA_FILE"
+    installer_note "media $_dev (${_type:-type unknown}) mounted on $CDROM"
 }
 
 installer_boot() {

@@ -138,8 +138,9 @@ function liveReadback(row) {
 
 /* --- ‏#1263: "הגדרת כרטיס…" — אופן הגדרה אחד מתוך שלושה -------------------
    רשת הפצה · DHCP מהרשת · כתובת ידנית (הכרעת נדב 10/10). כרטיס הניהול
-   (נבחר בהתקנה, ‏NETCFG.management_interface) — DHCP או ידנית בלבד.
-   הגדרות רשת ההפצה עצמן (רשת, מסכה, טווח, חכירה) נערכות בחלון של לשונית
+   (נבחר בהתקנה, ‏NETCFG.management_interface) — DHCP או ידנית, ו"רשת הפצה"
+   רק כמעבר מפורש לשרת עם כרטיס יחיד (‏#2668): הכתובת שלו נשארת, והחלון של
+   רשת ההפצה מסביר את הסיכון ושומר בכפתור אדום. הגדרות רשת ההפצה עצמן (רשת, מסכה, טווח, חכירה) נערכות בחלון של לשונית
    "רשת הפצה" (‏editDeployNet ב-net.js): כאן "רשת הפצה" מסמן את הכרטיס
    וממשיך לשם. בלי הקלדה (נדב 10/10) — השם בכותרת, והשרת ממשיך
    לקבל `confirm` = השם, מהמסך ולא מהמקלדת. כרטיס הניהול מוגן בהחזרה
@@ -231,7 +232,8 @@ function editNicConfig(name, { add = false } = {}) {
   const note = (mgmt ? `<div class="sheet-note">זה כרטיס הניהול — נבחר בהתקנה, ודרכו נכנסים לקונסולה. שינוי כתובת עלול לנתק אותך: אם לא תאשר תוך ${esc(seconds)} שניות, ההגדרה הקודמת תחזור.</div>` : "")
     + (!add && now === "manual" ? `<div class="sheet-note">הכרטיס אינו מנוהל היום מהקונסולה. שמירה תכתוב לו קובץ ב-/etc/network/interfaces.d, ששורד אתחול.</div>` : "")
     + (add ? "" : liveReadback(row || {}))
-    + `<div class="sheet-note" data-nic-pane="deploy">הגדרות רשת ההפצה — כתובת הרשת, טווח ה-DHCP והחכירה — נערכות בחלון של לשונית "רשת הפצה", שייפתח מכאן. השרת מקבל על הכרטיס את הכתובת הראשונה ברשת.</div>`
+    + (mgmt ? `<div class="sheet-note danger" data-nic-pane="deploy">רשת הפצה על כרטיס הניהול — לשרת עם כרטיס יחיד. ה-DHCP של ההפצה יענה לכל מחשב ברשת של הכרטיס הזה; אם זו רשת המכללה, הוא ישבית אותה. הכתובת של הכרטיס לא משתנה והקונסולה ממשיכה בה. בחלון של רשת ההפצה, שייפתח מכאן, השרת בודק קודם שאין ברשת שרת DHCP אחר.</div>`
+      : `<div class="sheet-note" data-nic-pane="deploy">הגדרות רשת ההפצה — כתובת הרשת, טווח ה-DHCP והחכירה — נערכות בחלון של לשונית "רשת הפצה", שייפתח מכאן. השרת מקבל על הכרטיס את הכתובת הראשונה ברשת.</div>`)
     + `<div class="sheet-note" data-nic-pane="dhcp">הכרטיס יקבל כתובת, מסכה, שער ו-DNS מה-DHCP של הרשת שהוא מחובר אליה.</div>`
     + (now === "deploy" ? `<div class="sheet-note danger" data-nic-pane="leave-deploy">הכרטיס מחלק היום DHCP להפצה. כדי לשנות את אופן ההגדרה, כבו קודם את ה-DHCP ("כיבוי DHCP…" בלשונית רשת הפצה).</div>` : "");
   let added = false;
@@ -245,7 +247,8 @@ function editNicConfig(name, { add = false } = {}) {
                    options: fresh.map((n) => ({ value: n.name, label: `${n.name} — ${nicLinkText(n)}` })) },
                  { id: "description", label: "תיאור", placeholder: "למשל: רשת כיתה 3" }] : []),
       { id: "mode", label: "אופן הגדרה", type: "radio", value: start,
-        options: NIC_MODES.filter(([m]) => !(mgmt && m === "deploy")).map(([value, label]) => ({ value, label })) },
+        options: NIC_MODES.map(([value, label]) => ({ value, label,
+          ...(mgmt && value === "deploy" ? { hint: "שרת עם כרטיס יחיד" } : {}) })) },
       { id: "address", label: "כתובת IP", value: st.address, dir: "ltr" },
       { id: "netmask", label: "מסכה", value: st.netmask || MASKS[0], dir: "ltr" },
       { id: "gateway", label: "שער (לא חובה)", value: st.gateway, dir: "ltr" },
@@ -257,9 +260,6 @@ function editNicConfig(name, { add = false } = {}) {
       const nicName = add ? v.nic : target;
       const problems = nicFormProblems(v.mode, v);
       if (problems.length) throw new Error(problems.join(" · "));
-      if (v.mode === "deploy" && isMgmtNic(nicName)) {
-        throw new Error(`${nicName} הוא כרטיס הניהול — DHCP מהרשת או כתובת ידנית בלבד`);
-      }
       if (now === "deploy" && v.mode !== "deploy") {
         throw new Error("כבו קודם את ה-DHCP של ההפצה על הכרטיס (\"כיבוי DHCP…\" בלשונית רשת הפצה)");
       }
