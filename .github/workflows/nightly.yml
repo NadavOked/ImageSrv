@@ -63,7 +63,7 @@ jobs:
           sha=$(python tests/impeccable_gate.py pin | sed -n 's/^sha256=//p')
           [ -n "$sha" ] || { echo "impeccable_gate.py pin: no sha256" >&2; exit 1; }
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/impeccable
           key: impeccable-${{ steps.impeccable.outputs.sha256 }}
