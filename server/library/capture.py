@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
 from server.agent import registry
@@ -284,10 +285,9 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
 
     @router.post("/{task_id}/preflight")
     async def preflight(task_id: str, request: Request):
-        row = task_for(task_id, request)
-        if row["type"] != "capture":
-            raise HTTPException(400, "בדיקת מקום מיועדת למשימת קליטה")
-        refused = identity_gate(ctx, row["mac"], request, "capture-preflight")
+        # ‏#2750: כמו #2748 — רק קריאת הגוף על הלולאה; כל עבודת ה-sqlite (לפניה
+        # ואחריה) בתהליכון מהמאגר.
+        refused = await run_in_threadpool(_preflight_gate, task_id, request)
         if refused is not None:
             return refused
         try:                                   # #2410/#2416: תקרה, עומק, surrogate
@@ -295,6 +295,15 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         except agent_body.BodyError as exc:
             raise HTTPException(exc.status, "הגוף אינו JSON תקין" if exc.status == 400
                                 else "גוף הבקשה גדול מהתקרה") from None
+        return await run_in_threadpool(_preflight_body, task_id, body)
+
+    def _preflight_gate(task_id: str, request: Request):
+        row = task_for(task_id, request)
+        if row["type"] != "capture":
+            raise HTTPException(400, "בדיקת מקום מיועדת למשימת קליטה")
+        return identity_gate(ctx, row["mac"], request, "capture-preflight")
+
+    def _preflight_body(task_id: str, body: object):
         # ‏#1884: מכאן ההעלאה — צילום הדיסק של הספרייה (קצב הכתיבה ולחץ ה-I/O של הקליטה).
         server_io.begin(ctx.conn, "capture", task_id, ctx.library.root)
         parts = body.get("partitions") if isinstance(body, dict) else None
@@ -354,10 +363,31 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
 
     @router.put("/{task_id}/files/{filename}")
     async def upload_partition(task_id: str, filename: str, request: Request):
+        # ‏#2750: הזרם עצמו לא משתנה (`stream_to`, ‏CAPTURE_IO, ‏#1951/#2742) —
+        # רק עבודת ה-sqlite לפניו ואחריו עוברת לתהליכון מהמאגר.
+        path, refused = await run_in_threadpool(_upload_gate, task_id, filename, request)
+        if refused is not None:
+            return refused
+        gone = None
+        try:
+            got = await stream_to(request, path)
+        except _DiskFull as exc:
+            await run_in_threadpool(_fail, ctx.conn, ctx.library.root, task_id, str(exc))
+            raise HTTPException(507, str(exc))
+        except _StagingGone as exc:
+            gone = str(exc)   # ‏#1470+#532: מצב המשימה למטה מכריע — ביטול = 409
+        await run_in_threadpool(_upload_settle, task_id, path, gone)
+        # ‏#1535: ‏task_id ושם הקובץ באים מה-URL — שבירת שורה אינה מגיעה ליומן,
+        # גם אם בדיקה למעלה תשתנה (לא נשען על SAFE_FILE ועל ה-DB לבדם).
+        log.info("capture %s: received %s", task_id.replace("\r", " ").replace("\n", " "),
+                 filename.replace("\r", " ").replace("\n", " "))
+        return {"ok": True, "sha256": got}
+
+    def _upload_gate(task_id: str, filename: str, request: Request):
         row = task_for(task_id, request)
         refused = identity_gate(ctx, row["mac"], request, "capture-files")
         if refused is not None:
-            return refused
+            return None, refused
         # רשימה לבנה על שם הקובץ: הוא מגיע ממכונה ברשת הלימודית.
         if not SAFE_FILE.fullmatch(filename):
             raise HTTPException(400, "unexpected partition file name")
@@ -377,38 +407,31 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         if reason is not None:
             _fail(ctx.conn, ctx.library.root, task_id, reason)
             raise HTTPException(507, reason)
-        gone = None
-        try:
-            got = await stream_to(request, path)
-        except _DiskFull as exc:
-            _fail(ctx.conn, ctx.library.root, task_id, str(exc))
-            raise HTTPException(507, str(exc))
-        except _StagingGone as exc:
-            gone = str(exc)   # ‏#1470+#532: מצב המשימה למטה מכריע — ביטול = 409
+        return path, None
+
+    def _upload_settle(task_id: str, path: Path, gone: str | None) -> None:
         # ‏#532: תביעת מצב ב-`WHERE`. ‏`task_for` בדק **לפני** ההזרמה,
         # וההזרמה של מחיצה נמשכת דקות — מנהל שביטל בינתיים קיבל
         # `ok: true`, והשורה הזו החזירה את המשימה ל-`running`.
         # ובלינוקס גם תיקיית ה-staging כבר הוסרה, וה-handle הפתוח
         # ממשיך לכתוב אל inode שנמחק.
-        if not update_one(
-            ctx.conn,
-            "UPDATE tasks SET state = 'running', updated_at = ?"
-            " WHERE id = ? AND state IN ('pending', 'running')",
-            (now_iso(), task_id),
-        ):
+        # ‏#54/#2750: ה-UPDATE וה-commit באותו תהליכון (‏`run_in_threadpool`, חיבור
+        # לכל תהליכון) ושניהם בתוך הנעילה — בלי `.commit()` חשוף.
+        with _write_lock, writing(ctx.conn):
+            claimed = update_one(
+                ctx.conn,
+                "UPDATE tasks SET state = 'running', updated_at = ?"
+                " WHERE id = ? AND state IN ('pending', 'running')",
+                (now_iso(), task_id),
+            )
+        if not claimed:
             path.unlink(missing_ok=True)
             upload_sha_path(path).unlink(missing_ok=True)
             raise HTTPException(409, "the task is no longer open")
-        ctx.conn.commit()
         if gone is not None:
             # המשימה פתוחה ובכל זאת התיקייה איננה: אין ראיה לבייטים — כשל בשם, לא "ok".
             _fail(ctx.conn, ctx.library.root, task_id, gone)
             raise HTTPException(500, gone)
-        # ‏#1535: ‏task_id ושם הקובץ באים מה-URL — שבירת שורה אינה מגיעה ליומן,
-        # גם אם בדיקה למעלה תשתנה (לא נשען על SAFE_FILE ועל ה-DB לבדם).
-        log.info("capture %s: received %s", task_id.replace("\r", " ").replace("\n", " "),
-                 filename.replace("\r", " ").replace("\n", " "))
-        return {"ok": True, "sha256": got}
 
     # ‏#1470 (הכרעת נדב 16/10): ‏202 — המניפסט התקבל והבדיקות הזולות עברו,
     # ומחשב הבנייה משתחרר. הקריאה החוזרת של כל קובץ מהדיסק (עיקרון 6) רצה
@@ -416,10 +439,19 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
     # רק כשהיא עוברת.
     @router.put("/{task_id}/manifest", status_code=202)
     async def finish_capture(task_id: str, request: Request):
+        # ‏#2750: כמו #2748 — רק קריאת הגוף על הלולאה; כל עבודת ה-sqlite (לפניה
+        # ואחריה) בתהליכון מהמאגר.
+        row, refused = await run_in_threadpool(_finish_gate, task_id, request)
+        if refused is not None:
+            return refused
+        raw = await request.body()
+        return await run_in_threadpool(_finish_capture_body, task_id, row, raw)
+
+    def _finish_gate(task_id: str, request: Request):
         row = task_for(task_id, request)
         refused = identity_gate(ctx, row["mac"], request, "capture-manifest")
         if refused is not None:
-            return refused
+            return None, refused
         # המזהה נוצר כאן בשרת, ולכן הבדיקה הזאת אינה אמורה להיכשל לעולם —
         # וזו הסיבה שהיא כתובה: המזהה הופך לשם תיקייה, והכלל הזה נאכף
         # בשני המסלולים שמכניסים אימג' לספרייה, לא רק בזה שקלט מבחוץ
@@ -427,9 +459,11 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         if not valid_image_id(row["image_id"]):
             _fail(ctx.conn, ctx.library.root, task_id, f'malformed image id on task: {row["image_id"]!r}')
             raise HTTPException(500, "task carries a malformed image id")
-        folder = staging_dir(ctx.library.root, task_id)
         server_io.end(ctx.conn, "capture", task_id, ctx.library.root)   # ‏#1884: סוף ההעלאה
-        raw = await request.body()
+        return row, None
+
+    def _finish_capture_body(task_id: str, row, raw: bytes):
+        folder = staging_dir(ctx.library.root, task_id)
         try:
             manifest = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError, RecursionError):   # #2447: deep JSON is 400, not 500

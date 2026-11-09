@@ -557,6 +557,10 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+        # ‏#2750: כמו #2748 — הגוף נקרא על הלולאה, עבודת ה-sqlite בתהליכון מהמאגר.
+        return await run_in_threadpool(_agent_login_body, request, body)
+
+    def _agent_login_body(request: Request, body: dict) -> JSONResponse:
         username = body.get("username", "")
         mac = lenient_mac(body.get("mac"))
         if mac is None:
@@ -594,7 +598,9 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+        return await run_in_threadpool(_open_pull_body, request, body)   # #2750
 
+    def _open_pull_body(request: Request, body: dict) -> JSONResponse:
         mac = lenient_mac(body.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
@@ -659,6 +665,11 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             body = {}
+        # ‏#2748: הגוף נקרא כאן, על הלולאה; כל עבודת ה-sqlite רצה בתהליכון מהמאגר
+        # (כמו hello). על הלולאה, DB נעול עצר את כל השרת עד `busy_timeout`.
+        return await run_in_threadpool(_agent_progress_body, request, body)
+
+    def _agent_progress_body(request: Request, body: dict) -> JSONResponse:
         # ‏#855: הזהות נבדקת לפני הדיווח, בסבב ובמשימה כאחד — ורק כשיש MAC
         # לבדוק; ‏MAC שאינו נקרא נשאר `bad_mac` של `reports.ingest`, כי
         # "לא הצלחנו לקרוא את המזהה" קודם ל"המזהה אינו תואם" (עיקרון 5).
@@ -712,6 +723,9 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             body = {}
+        return await run_in_threadpool(_agent_disk_event_body, request, body)   # #2750
+
+    def _agent_disk_event_body(request: Request, body: dict) -> JSONResponse:
         # ‏#997: כמו progress — הזהות נבדקת כשיש MAC לבדוק; MAC שאינו נקרא
         # נשאר `bad_mac`/`bad_event` של `disk_events.ingest`.
         mac = lenient_mac(body.get("mac"))
@@ -736,6 +750,9 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+        return await run_in_threadpool(_agent_local_clone_body, request, body)   # #2750
+
+    def _agent_local_clone_body(request: Request, body: dict) -> JSONResponse:
         mac = lenient_mac(body.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
@@ -761,6 +778,9 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+        return await run_in_threadpool(_agent_firmware_accept_body, request, body)   # #2750
+
+    def _agent_firmware_accept_body(request: Request, body: dict) -> JSONResponse:
         mac = lenient_mac(body.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
@@ -783,7 +803,8 @@ def create_agent_router(ctx: ServerContext,
         mac = lenient_mac(request.query_params.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
-        refused = identity_gate(ctx, mac, request, "agent-log")
+        # ‏#2750: הזהות והקבלה (sqlite) בתהליכון מהמאגר; רק קריאת הזרם על הלולאה.
+        refused = await run_in_threadpool(identity_gate, ctx, mac, request, "agent-log")
         if refused is not None:
             return refused
         declared = request.headers.get("content-length", "")
@@ -796,12 +817,15 @@ def create_agent_router(ctx: ServerContext,
             body += chunk
             if len(body) > agent_logs.MAX_BODY:
                 return _error(413, "log too large", "too_large")
-        result = agent_logs.receive(
-            ctx.conn, mac, request.query_params.get("session_id"),
-            request.query_params.get("reason"), bytes(body),
-            known=registry.lookup(ctx.conn, mac) is not None)
-        status = 200 if result.get("ok") else 403 if result.get("code") == "unknown_machine" else 400
+        result = await run_in_threadpool(_agent_log_receive, request, mac, bytes(body))
+        status =200 if result.get("ok") else 403 if result.get("code") == "unknown_machine" else 400
         return JSONResponse(result, status_code=status)
+
+    def _agent_log_receive(request: Request, mac: str, body: bytes) -> dict:
+        return agent_logs.receive(
+            ctx.conn, mac, request.query_params.get("session_id"),
+            request.query_params.get("reason"), body,
+            known=registry.lookup(ctx.conn, mac) is not None)
 
     @router.post("/agent/shrink-open")
     async def agent_shrink_open(request: Request) -> JSONResponse:
@@ -815,6 +839,9 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             body = {}
+        return await run_in_threadpool(_agent_shrink_open_body, request, body)   # #2750
+
+    def _agent_shrink_open_body(request: Request, body: dict) -> JSONResponse:
         mac = lenient_mac(body.get("mac"))
         if mac is not None:                       # #997; None → bad_mac של open_record
             refused = identity_gate(ctx, mac, request, "shrink-open")
@@ -870,6 +897,9 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+        return await run_in_threadpool(_agent_shrink_close_body, request, body)   # #2750
+
+    def _agent_shrink_close_body(request: Request, body: dict) -> JSONResponse:
         mac, record_id, refused = _shrink_identity(body, request, "shrink-close")
         if refused is not None:
             return refused
@@ -886,6 +916,9 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+        return await run_in_threadpool(_agent_shrink_note_body, request, body)   # #2750
+
+    def _agent_shrink_note_body(request: Request, body: dict) -> JSONResponse:
         mac, record_id, refused = _shrink_identity(body, request, "shrink-note")
         if refused is not None:
             return refused

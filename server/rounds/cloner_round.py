@@ -45,6 +45,7 @@ import time
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
@@ -94,7 +95,11 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         try:                                   # #2410/#2416: תקרה, עומק, surrogate
             body = await agent_body.read_json(request)
         except agent_body.BodyError as exc:
-            return None, None, refuse("?", exc.status, exc.message, exc.code)
+            return None, None, await run_in_threadpool(refuse, "?", exc.status, exc.message, exc.code)
+        # ‏#2750: כמו #2748 — הגוף נקרא על הלולאה, עבודת ה-sqlite בתהליכון מהמאגר.
+        return await run_in_threadpool(_caller_checks, body, request, where)
+
+    def _caller_checks(body: object, request: Request, where: str):
         if not isinstance(body, dict):
             return None, None, refuse("?", 400, "body is not an object", "bad_json")
         mac = lenient_mac(body.get("mac"))
@@ -139,6 +144,9 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         body, mac, machine = await caller(request, "cloner-round")
         if mac is None:
             return machine
+        return await run_in_threadpool(_cloner_round_body, body, mac, machine)   # #2750
+
+    def _cloner_round_body(body: dict, mac: str, machine) -> JSONResponse:
         now = _now()
         with lock:
             if now - last_try.get(mac, -RATE_S) < RATE_S:
@@ -196,6 +204,9 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         body, mac, machine = await caller(request, "cloner-system-partition")
         if mac is None:
             return machine
+        return await run_in_threadpool(_system_partition_body, body, mac, machine)   # #2750
+
+    def _system_partition_body(body: dict, mac: str, machine) -> JSONResponse:
         now = _now()
         with lock:
             held = nonces.pop(mac, None)   # single-use, like the open

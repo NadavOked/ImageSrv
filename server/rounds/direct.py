@@ -29,6 +29,7 @@ import secrets
 import sqlite3
 
 from fastapi import APIRouter, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from server.rounds import drive_rates, prompt_hold, room, room_drivers, sender as sender_module
 from server.agent import registry
@@ -440,15 +441,23 @@ def create_direct_router(ctx) -> APIRouter:
 
     @router.put("/{task_id}/manifest")
     async def put_manifest(task_id: str, request: Request):
+        # ‏#2750: כמו #2748 — רק קריאת הגוף על הלולאה; כל עבודת ה-sqlite (לפניה
+        # ואחריה) בתהליכון מהמאגר.
+        row, refused = await run_in_threadpool(_manifest_gate, task_id, request)
+        if refused is not None:
+            return refused
+        raw = await request.body()
+        return await run_in_threadpool(_put_manifest_body, task_id, row, raw)
+
+    def _manifest_gate(task_id: str, request: Request):
         row = task_for(task_id, request)
         # ‏#997: שומר שני לצד האסימון — כתובת המקור מול חכירת ה-MAC של
         # המשימה. לפני קריאת הגוף, כדי שזר עם אסימון לא יכשיל את המשימה
         # (`_fail`) במניפסט פגום. ייבוא מקומי: `api` מייבא את המודול הזה.
         from server.agent.api import identity_gate
-        refused = identity_gate(ctx, row["mac"], request, "direct-manifest")
-        if refused is not None:
-            return refused
-        raw = await request.body()
+        return row, identity_gate(ctx, row["mac"], request, "direct-manifest")
+
+    def _put_manifest_body(task_id: str, row, raw: bytes):
         try:
             manifest = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError, RecursionError):   # #2447: deep JSON is 400, not 500

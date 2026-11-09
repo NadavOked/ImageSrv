@@ -15,6 +15,7 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from server.core.progress_view import capture_progress
 from server.core.agent_version import server_version
@@ -192,7 +193,10 @@ def create_station_router(ctx: ServerContext,
             return _error(exc.status, exc.message, exc.code)
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
+        # ‏#2750: כמו #2748 — הגוף נקרא על הלולאה, עבודת ה-sqlite בתהליכון מהמאגר.
+        return await run_in_threadpool(_open_from_station_body, request, body)
 
+    def _open_from_station_body(request: Request, body: dict) -> JSONResponse:
         # ‏#997: המכונה שפותחת — לפני הסיסמה. זר בוילן אינו פותח סבב על
         # כיתה שלמה בשם תחנה, גם עם סיסמה שדלפה (ו-`bad_mac` קודם לזהות).
         opener = normalize_mac(body.get("mac"))
