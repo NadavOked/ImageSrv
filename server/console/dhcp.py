@@ -14,6 +14,7 @@ dnsmasq ו-dnsmasq מופעל מחדש.
 import ipaddress
 import logging
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -37,6 +38,12 @@ _first_enable_lock = threading.Lock()
 
 #: תיאור חופשי לכרטיס (settings) — "700" בשביל וילן 700, וכדומה.
 DESC_PREFIX = "nicdesc:"
+
+#: ‏#2805: אחרי `ip link set up` על כרטיס הפצה מושבת — כמה זמן מחכים ל-carrier
+#: לפני "מי כבר עונה". כרטיס פיזי צריך כמה שניות למשא ומתן על מהירות; בלי
+#: carrier ה-DISCOVER אינו יוצא, והבדיקה הייתה נכשלת בסיבה שאינה אומרת "כבל".
+CARRIER_WAIT_S = 10.0
+CARRIER_POLL_S = 0.5
 
 
 # --- ה-render מה-DB — מקום אחד לראוטר, למתג ה-TFTP ולעליית השרת (‏#1013) ---
@@ -192,6 +199,9 @@ def default_hooks() -> Hooks:
         "service_active": dhcp.service_active,
         # ‏#1263: כרטיס הניהול שהמתקין רשם — אותו hook של ראוטר הכתובות.
         "netcfg_management": console_netcfg.installed_management,
+        # ‏#2805: העלאת כרטיס הפצה מושבת לפני "מי כבר עונה", והחזרתו בסירוב.
+        "link_set": dhcp.set_link,
+        "sleep": time.sleep,
     }
 
 
@@ -396,14 +406,18 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
 
     def _gates(name: str, cfg: dhcp.InterfaceConfig,
                before: dhcp.InterfaceConfig, body: dict,
-               management_ok: bool = False) -> str | None:
+               management_ok: bool = False, raise_link: bool = False) -> str | None:
         """כל השומרים שלפני הכתיבה — זורק HTTPException, או מחזיר את
         גרסת ה-dnsmasq כשה-proxy הודלק על גרסה שלא נבדקה. ‏#1263: נקרא גם
         מ-`PUT /net/config/{שם}/deploy` **לפני** שהכתובת של הכרטיס זזה.
 
         ‏`management_ok` (‏#2668, שרת עם כרטיס יחיד): רק חלון רשת ההפצה מעביר
         אותו, אחרי אישור מפורש של המפעיל. הוא ארגומנט ולא שדה בגוף הבקשה —
-        כדי שאף בקשה ל-`PUT /net/interfaces/{שם}` לא תוכל לפתוח אותו."""
+        כדי שאף בקשה ל-`PUT /net/interfaces/{שם}` לא תוכל לפתוח אותו.
+
+        ‏`raise_link` (‏#2805): רק מ-`/deploy`, על כרטיס מושבת — הקישור מועלה
+        (בלי כתובת) כשהבדיקה "מי כבר עונה" אמרה `link_down`, ואז היא רצה שוב.
+        ההחזרה בסירוב — אצל הקורא, שיודע מה היה המצב לפני הבקשה."""
         if cfg.enabled and cfg.proxy:
             raise HTTPException(400, "DHCP מלא ו-proxy על אותו ממשק סותרים זה את זה")
         # הכרעת נדב 11/10: ‏proxy קיים בשביל תחנות כיתה שמקבלות כתובת מה-DHCP
@@ -461,6 +475,8 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
             # שכבה 3: מישהו כבר מחלק כתובות כאן?
             if cfg.enabled and not body.get("ignore_existing"):
                 found = hooks["probe"](name)
+                if raise_link and not found.checked and found.reason == "link_down":
+                    found = _probe_on_raised_link(name)
                 # בדיקה שלא רצה אינה "נקי" — היא "לא יודעים" (‏#53), וברשת
                 # המכללה "לא יודעים" עולה רשת שלמה. פורט 68 תפוס הוא בדיוק
                 # מה שקורה על כרטיס trunk שמקבל כתובת מהמכללה.
@@ -497,6 +513,27 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         if cfg.enabled and not before.enabled:
             _only_the_deploy_nic_or_409(name)
         return risky_proxy
+
+    def _probe_on_raised_link(name: str) -> dhcp.ProbeResult:
+        """‏#2805: ‏`ip link set up` בלי כתובת, המתנה ל-carrier, ו"מי כבר עונה" על
+        הקישור המורם. כל מה שאינו קישור עם carrier — סירוב בשם, והבדיקה **לא**
+        נחשבת (עיקרון 5); תוצאת הבדיקה עצמה נשפטת אצל הקורא כמו תמיד."""
+        error = hooks["link_set"](name, True)
+        if error:
+            raise HTTPException(
+                409, f"כרטיס ההפצה {name} מושבת, והעלאתו נכשלה ({error}). לא ניתן "
+                     "לבדוק אם כבר יש DHCP על הכרטיס. הבדיקה לא רצה.")
+        polls = int(CARRIER_WAIT_S / CARRIER_POLL_S)
+        for attempt in range(polls + 1):
+            nic = next((i for i in hooks["interfaces"]() if i["name"] == name), None)
+            if nic is not None and nic.get("link_up") is True:
+                return hooks["probe"](name)
+            if attempt < polls:
+                hooks["sleep"](CARRIER_POLL_S)
+        raise HTTPException(
+            409, f"כרטיס ההפצה {name} הועלה, אבל אין בו קישור (carrier) גם אחרי "
+                 f"{CARRIER_WAIT_S:g} שניות — בדקו שהכבל מחובר לרשת ההפצה. לא ניתן "
+                 "לבדוק אם כבר יש DHCP על הכרטיס. הבדיקה לא רצה.")
 
     def _commit(name: str, cfg: dhcp.InterfaceConfig,
                 before: dhcp.InterfaceConfig, user, live: dict,
@@ -572,6 +609,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         # ‏#2668: אותה הגדרה של "כרטיס הניהול" (הרישום + כרטיס הקונסולה) לשני הראוטרים.
         "is_management": lambda name: _is_management(name),
         "apply": apply_all,
+        "link_set": lambda name, up: hooks["link_set"](name, up),   # ‏#2805
     }
 
     def _is_management(name: str) -> bool:

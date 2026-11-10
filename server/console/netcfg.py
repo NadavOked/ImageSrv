@@ -604,12 +604,26 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         found = check(cfg, dhcp_cfg, state)
         if found:
             raise HTTPException(400, " · ".join(found))
-        risky = dhcp_steps["gates"](name, dhcp_cfg, dhcp_before, dhcp_body,
-                                    management_ok=on_management)
+        # ‏#2805: כרטיס הפצה מושבת (‏`admin_up` false — כמו אחרי התקנה מה-ISO).
+        # "מי כבר עונה" מעלה אותו לפני הבדיקה, וכל סירוב עד שהכתובת הוחלה
+        # מחזיר אותו למושבת — הוא לא נשאר מורם בשקט אחרי בקשה שנדחתה.
+        was_down = not on_management and live[name].get("admin_up") is False
         address_result = None
-        if netcfg.changed(before, cfg):
-            address_result = await _configure(name, before, cfg, body, request, user, live,
-                                              state)
+        try:
+            risky = dhcp_steps["gates"](name, dhcp_cfg, dhcp_before, dhcp_body,
+                                        management_ok=on_management, raise_link=was_down)
+            if netcfg.changed(before, cfg):
+                address_result = await _configure(name, before, cfg, body, request, user,
+                                                  live, state)
+        except HTTPException as exc:
+            if not was_down:
+                raise
+            error = dhcp_steps["link_set"](name, False)
+            if error is None:
+                raise
+            raise HTTPException(exc.status_code,
+                                f"{exc.detail} · הכרטיס {name} לא הוחזר למושבת: {error}")
+        if address_result is not None:
             if not address_result["ok"] or address_result["rollback"]["pending"]:
                 why = ("ממתינה לאישור שהקונסולה עדיין נגישה — אשרו, ואז שמרו "
                        "שוב את רשת ההפצה" if address_result["ok"] else

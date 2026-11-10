@@ -2395,7 +2395,13 @@ An empty server list is clean only when `checked=true`.
 
 Enabling DHCP with an unchecked probe returns HTTP 409 with a Hebrew `detail`
 message explaining the reason. For `link_down`, it says the deploy card is
-disabled and must be brought up first. The server does not bring it up.
+disabled and must be brought up first. `PUT /api/console/net/interfaces/{name}`
+does not bring it up. `PUT /api/console/net/config/{name}/deploy` does (#2805):
+when the card was admin-down (`admin_up: false`) and the probe says `link_down`,
+it runs `ip link set dev <name> up` (no address), waits up to 10 s for carrier
+(`link_up: true`), and probes again on the raised link. A failed `ip link`, no
+carrier, or an unchecked/positive second probe is a 409 like any other, and
+every refusal before the address is applied sets the card back down.
 The explicit `ignore_existing` override is unchanged. The raw-socket probe
 does not bind UDP port 68, so address-in-use errors do not imply that port is busy.
 
@@ -2760,7 +2766,10 @@ resolv_after, problems, changed}` — הקובץ שייכתב, לפני ואחר
 **הסדר.** כל הבדיקות של שני הצדדים קודם — ‏`netcfg.problems` מול ה-DHCP
 **החדש** (כתובת השרת לא בתוך הטווח, הטווח בתוך הרשת, שער בתוך הרשת), ואז
 שומרי ההדלקה של ראוטר ה-DHCP (‏`confirm`, ‏trunk, ‏#53 "מי כבר עונה", כרטיס
-ההפצה היחיד של #1121) — **לפני** שנוגעים במשהו. אחר כך הכתובת (אותה זרוע
+ההפצה היחיד של #1121) — **לפני** שנוגעים במשהו. ‏**חריג אחד (#2805):** כרטיס
+מושבת (`admin_up: false`, כמו אחרי התקנה מה-ISO) מועלה — קישור בלבד, בלי
+כתובת — **בתוך** "מי כבר עונה", אחרי `confirm` ו-trunk, כדי שהבדיקה תרוץ על
+קישור אמיתי; כל סירוב עד שהכתובת הוחלה מחזיר אותו למושבת. אחר כך הכתובת (אותה זרוע
 החזרה של #56 ואותה קריאה חוזרת), ורק אם היא **אומתה ואינה ממתינה לאישור**
 — ה-DHCP, כולל השלמת ההתקנה של #1088 כשזו ההדלקה הראשונה (הכרטיס כבר
 נושא את הכתובת שנגזרה).

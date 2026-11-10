@@ -45,6 +45,7 @@ from server.net.dhcp_host import (  # noqa: F401  — ה-API של המודול �
     read_active_conf,
     read_installer_conf,
     service_active,
+    set_link,
 )
 
 #: שורת conf פעילה שמשרתת ממשק, לעומת `except-interface=` (שוללת) או הערה.

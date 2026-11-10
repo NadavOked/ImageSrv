@@ -136,7 +136,7 @@ make_swap() {
     _u=""
     [ -n "$2" ] && [ "$2" != "null" ] && _u="-U $2"
     # shellcheck disable=SC2086 # הפיצול של $_u מכוון
-    mkswap $_u "$1" >> "$LOG_FILE" 2>&1
+    "${MKSWAP_BIN:-/usr/bin/mkswap}" $_u "$1" >> "$LOG_FILE" 2>&1   # #2818: busybox sh runs its own applet (no -U) whatever PATH says; util-linux's is packed (BINARIES)
 }
 
 is_sha256() {

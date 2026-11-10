@@ -207,12 +207,16 @@ fi
 # nice (#1493): the native GUI starts as `/usr/bin/nice -n 10`. Debian 13's
 # static busybox (1:1.37.0-6+b9, lab server 16/10) has no nice applet, so
 # coreutils' own binary is packed (coreutils is in the apt list below).
+# mkswap (#2818): busybox's applet has no -U, and the swap must come back with
+# the manifest's UUID (#48). util-linux's binary is packed (copy_bin stops the
+# build without it) and make_swap calls it as /usr/bin/mkswap: busybox sh runs
+# its own applet before anything on PATH (testrunner, 10/11).
 BINARIES=(curl jq zstd pv sgdisk blockdev sha256sum od hdparm ntfsresize openssl
           ntfs-3g ntfs-3g.probe ntfsfix umount blkid df mount ethtool smartctl
           e2fsck resize2fs btrfs xfs_growfs
           udp-receiver udp-sender partclone.ntfs partclone.fat partclone.ext4
           partclone.btrfs partclone.dd
-          dmidecode lspci efibootmgr dmsetup nice)
+          dmidecode lspci efibootmgr dmsetup nice mkswap)
 
 if [ "$SKIP_APT" -eq 0 ]; then
     export DEBIAN_FRONTEND=noninteractive

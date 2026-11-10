@@ -380,6 +380,9 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "management": "",           # ‏#1263: כרטיס הניהול שהמתקין רשם ("" = לא ידוע)
         "foreign": None,            # ‏#1558: מנהל רשת שאינו ifupdown (None = ifupdown)
         "probe": dhcp.ProbeResult(True, ()),   # מי כבר עונה ל-DHCP (‏#53)
+        # ‏#2805: ‏(כרטיס, admin_up בזמן הבדיקה) לכל "מי כבר עונה", ‏(כרטיס, up) לכל
+        # ‏`ip link set`, והאם הקישור מקבל carrier כשהוא מועלה.
+        "probed": [], "links": [], "link_error": None, "carrier": True, "slept": [],
     }
 
     state_dir = tmp_path / "netstate"
@@ -397,6 +400,24 @@ def net_server(tmp_path: Path, images_root: Path, clock):
     def apply_interface(name):
         fake["applied"].append(name)
         return fake["apply_error"]
+
+    def nic(name):
+        return next(n for n in fake["interfaces"] if n["name"] == name)
+
+    def probe(name):
+        """כמו הבדיקה האמיתית: על כרטיס מושבת השליחה נכשלת ב-ENETDOWN (‏#2394)."""
+        up = nic(name).get("admin_up")
+        fake["probed"].append((name, up))
+        if up is False:
+            return dhcp.ProbeResult(False, reason="link_down")
+        return fake["probe"]
+
+    def link_set(name, up):
+        fake["links"].append((name, up))
+        if fake["link_error"]:
+            return fake["link_error"]
+        nic(name).update(admin_up=up, link_up=up and fake["carrier"])
+        return None
 
     hooks = {
         "interfaces": lambda: [dict(n) for n in fake["interfaces"]],
@@ -423,7 +444,9 @@ def net_server(tmp_path: Path, images_root: Path, clock):
     # מוזרקת לשני הצדדים, כי זה בדיוק מה שהבדיקה טוענת עליו.
     dhcp_hooks = {
         "interfaces": lambda: [dict(n) for n in fake["interfaces"]],
-        "probe": lambda name: fake["probe"],
+        "probe": probe,
+        "link_set": link_set,                       # ‏#2805 — לעולם לא `ip link` אמיתי
+        "sleep": fake["slept"].append,
         "apply": lambda text: (fake["dnsmasq"].append(text), None)[1],
         "apply_proxy": lambda text, active: (
             fake["proxy"].append((text, active)), None)[1],
@@ -849,6 +872,105 @@ def test_the_dhcp_safety_gates_run_before_the_address_moves(net_server):
     fake["probe"] = dhcp.ProbeResult(True, ())
     assert put_deploy(net_server, confirm="wrong").status_code == 409
     assert fake["confs"] == {} and fake["applied"] == [] and fake["dnsmasq"] == []
+
+
+def _admin_down(server, name="eth1"):
+    """כרטיס ההפצה כמו אחרי התקנה מה-ISO (‏#2805, ‏ESXi 10/11): מושבת, בלי כתובת."""
+    nic = next(n for n in server["fake"]["interfaces"] if n["name"] == name)
+    nic.update(state="down", admin_up=False, link_up=None, addresses=[])
+
+
+def test_the_first_deploy_save_raises_a_disabled_card_and_probes_on_the_live_link(net_server):
+    """‏#2805: השמירה הראשונה, בדיוק מה שהמסך שולח, על כרטיס מושבת — 200. הקישור
+    מועלה לפני "מי כבר עונה", והבדיקה שהתירה את ההדלקה רצה על הקישור **המורם**."""
+    _admin_down(net_server)
+    response = put_deploy(net_server)
+    assert response.status_code == 200, response.text
+    fake = net_server["fake"]
+    assert fake["links"] == [("eth1", True)]
+    assert fake["probed"] == [("eth1", False), ("eth1", True)]
+    assert response.json()["ok"] is True
+    assert "    address 10.44.20.1" in fake["confs"]["eth1"] and fake["applied"] == ["eth1"]
+    assert "option:tftp-server,10.44.20.1" in fake["dnsmasq"][-1]
+    assert dhcp_setting(net_server).enabled is True
+
+
+@pytest.mark.parametrize("probe, fragment", [
+    (dhcp.ProbeResult(True, ("10.44.20.254",)), "10.44.20.254"),
+    (dhcp.ProbeResult(False, reason="os_error"), "לא ניתן לבדוק"),
+])
+def test_a_probe_on_the_raised_link_that_is_not_clean_refuses_and_lowers_it(
+        net_server, probe, fragment):
+    """עיקרון 5: על הקישור המורם, שרת שנמצא או בדיקה שלא רצה — 409 כמו תמיד, והכרטיס
+    חוזר למושבת. שום דבר לא נכתב."""
+    _admin_down(net_server)
+    fake = net_server["fake"]
+    fake["probe"] = probe
+    response = put_deploy(net_server)
+    assert response.status_code == 409, response.text
+    assert fragment in response.json()["detail"]
+    assert fake["links"] == [("eth1", True), ("eth1", False)]
+    assert fake["confs"] == {} and fake["applied"] == [] and fake["dnsmasq"] == []
+    assert dhcp_setting(net_server).enabled is False
+
+
+def test_no_carrier_after_raising_the_card_is_a_refusal_not_a_probe(net_server):
+    """כרטיס שהועלה ואין בו carrier — הבדיקה לא נשלחת לריק: 409 שאומר "כבל", והכרטיס
+    חוזר למושבת."""
+    _admin_down(net_server)
+    fake = net_server["fake"]
+    fake["carrier"] = False
+    response = put_deploy(net_server)
+    assert response.status_code == 409, response.text
+    assert "carrier" in response.json()["detail"] and "הבדיקה לא רצה" in response.json()["detail"]
+    assert fake["probed"] == [("eth1", False)]
+    assert fake["slept"] and sum(fake["slept"]) >= 10
+    assert fake["links"] == [("eth1", True), ("eth1", False)]
+    assert fake["confs"] == {} and fake["dnsmasq"] == []
+
+
+def test_a_card_that_could_not_be_raised_says_why(net_server):
+    _admin_down(net_server)
+    fake = net_server["fake"]
+    fake["link_error"] = "ip link rc=2: RTNETLINK answers: Operation not permitted"
+    response = put_deploy(net_server)
+    assert response.status_code == 409, response.text
+    assert "Operation not permitted" in response.json()["detail"]
+    assert fake["probed"] == [("eth1", False)]
+    assert fake["confs"] == {} and fake["dnsmasq"] == []
+
+
+def test_the_trunk_gate_refuses_before_the_disabled_card_is_raised(net_server):
+    """הסדר של #2805: העלאה רק בתוך "מי כבר עונה" — אחרי השם ואחרי trunk."""
+    from server.db import set_setting
+    _admin_down(net_server)
+    set_setting(net_server["ctx"].conn, dhcp.SETTING_PREFIX + "eth1",
+                dhcp.InterfaceConfig(name="eth1", trunk=True).to_json())
+    response = put_deploy(net_server)
+    assert response.status_code == 409 and "confirm_trunk" in response.json()["detail"]
+    assert ("eth1", True) not in net_server["fake"]["links"]
+    assert net_server["fake"]["probed"] == []
+
+
+def test_a_refusal_after_the_gates_lowers_the_raised_card_again(net_server):
+    """הכרטיס הועלה והבדיקה נקייה, אבל הכתובת סורבה (‏#1558, מנהל רשת זר) — חוזר למושבת."""
+    _admin_down(net_server)
+    fake = net_server["fake"]
+    fake["foreign"] = "/etc/netplan קיים"
+    response = put_deploy(net_server)
+    assert response.status_code == 409, response.text
+    assert fake["links"] == [("eth1", True), ("eth1", False)]
+    assert fake["confs"] == {} and fake["dnsmasq"] == []
+
+
+def test_the_plain_dhcp_path_still_does_not_raise_a_disabled_card(net_server):
+    """רק רשת ההפצה מעלה כרטיס (‏#2805). ‏`PUT /net/interfaces/{שם}` נשאר כמו ב-#2394."""
+    _admin_down(net_server)
+    body = {"enabled": True, "range_start": "10.44.9.50", "range_end": "10.44.9.200",
+            "netmask": "255.255.255.0", "server_ip": "10.44.9.10", "confirm": "eth1"}
+    response = net_server["admin"].put("/api/console/net/interfaces/eth1", json=body)
+    assert response.status_code == 409 and "מושבת" in response.json()["detail"]
+    assert net_server["fake"]["links"] == []
 
 
 def test_dhcp_client_mode_writes_a_persistent_dhcpcd_command(net_server):

@@ -1502,7 +1502,7 @@ def test_the_table_is_widened_before_the_data_arrives():
     grow = "finish_grow" if "finish_grow" in run else "grow_expanded"
     assert run.index("expand_last") < run.index("restore_partition") \
         < run.index(grow)
-    assert len(re.findall(r"^\s*mkswap ", source, flags=re.M)) == 1
+    assert len(re.findall(r"^\s*\"\$\{MKSWAP_BIN:-/usr/bin/mkswap\}\" ", source, flags=re.M)) == 1   # #2818
 
 
 def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_path):
@@ -1603,6 +1603,7 @@ def swap_box(tmp_path, disks=("sda",)):
         f"chmod 0755 {posix(stub_dir)}/mkswap\n"
         f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
+        f'export MKSWAP_BIN={posix(stub_dir / "mkswap")!r}; '   # #2818: make_swap calls it by path
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "log() { :; }; "
         # ‏/dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
@@ -1791,6 +1792,9 @@ REAL_BINARIES_USED = {
     # #1493 — the GUI starts under /usr/bin/nice (guibridge.sh); Debian 13's
     # busybox-static has no nice applet, so coreutils' binary is packed.
     "nice",
+    # #2818 — busybox's mkswap applet has no -U; make_swap runs util-linux's
+    # by path (/usr/bin/mkswap), since busybox sh prefers an applet over PATH.
+    "mkswap",
 }
 
 #: מקומפל מהמקור בבנאי ולכן אינו ברשימת ה-BINARIES שנאספת מהמערכת.

@@ -95,6 +95,24 @@ def _addresses(name: str) -> list[str]:
     return [line.split()[3] for line in out.splitlines() if len(line.split()) > 3]
 
 
+def set_link(name: str, up: bool) -> str | None:
+    """‏`ip link set dev <name> up|down`, בלי כתובת (‏#2805). מחזיר הודעה או None.
+
+    ‏None פירושו "הפקודה יצאה 0", לא "יש קישור" — את זה קובע `link_up`
+    שנקרא בחזרה מ-`list_interfaces`."""
+    try:
+        done = subprocess.run(
+            ["ip", "link", "set", "dev", name, "up" if up else "down"],
+            capture_output=True, text=True, timeout=5, check=False,
+            stdin=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"ip link: {exc}"
+    if done.returncode != 0:
+        return f"ip link rc={done.returncode}: {(done.stderr or done.stdout).strip()[:200]}"
+    return None
+
+
 # --- מי כבר עונה ל-DHCP כאן? ------------------------------------------------
 
 
