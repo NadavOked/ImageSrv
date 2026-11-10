@@ -5826,7 +5826,10 @@ set-hostname`, ‏`restart_server` = `deploy_net.restart_server_later`).
   ‏#1447 עם ‏Etc/UTC עובר ל-`Asia/Jerusalem`; יומן `timezone_applied` או
   `timezone_apply_failed`. ה-DB שומר UTC כמו תמיד; רק התצוגה מקומית.
 - **`GET /api/console/timesync`** (‏#1773, admin בלבד) →
-  `{"ntp_servers", "mode", "manual_at", "status": {"synchronized", "server", "offset_ms", "checked_at"}}`.
+  `{"ntp_servers", "mode", "manual_at", "status": {"synchronized", "server", "offset_ms", "last_sample", "checked_at"}}`.
+  ‏`last_sample` (‏#2796) — הדגימה הטרייה ביותר ב-`chronyc -n sources` מכל מקור, נבחר או לא:
+  `{"server", "age_s", "offset_ms"}` (המספר שמשמאל לסוגריים, באותו סימן של `offset_ms`), או
+  ‏`null` כשלאף מקור אין דגימה.
   ‏`ntp_servers` ריק פירושו ברירת המחדל של Debian; אחרת עד ארבע כתובות
   IPv4/IPv6 או שמות RFC-1123, מופרדות ברווח. כשל קריאה מחזיר
   `synchronized: null` — לעולם לא הצלחה משוערת.
@@ -5858,7 +5861,10 @@ set-hostname`, ‏`restart_server` = `deploy_net.restart_server_later`).
   סטייה ±x.xxx ms" (או "השעון מקדים/מאחר ב-N ש'" מ-1 ש'). ‏`ok` מתואם ובסטייה מתחת ל-1 ש' ·
   ‏`warn` לא מתואם, או סטייה מ-1 ש' (‏makestep היה אמור לקפוץ) · ‏`bad` סטייה מ-30 ש' — "קודי MFA
   לא יתקבלו" (חלון TOTP ±30 ש') · ‏`off`/"לא נבדק" כשהקריאה נכשלה. ‏`offset_ms` חיובי = השעון
-  מקדים (chronyc "fast"), שלילי = מאחר.
+  מקדים (chronyc "fast"), שלילי = מאחר. **לא מסונכרן (#2796):** ה-"System time" של tracking אינו
+  מוצג (זו הערכה מעדכון השעון האחרון של chrony, לא מדידה), אלא "סטייה לא ידועה (אין מקור זמן
+  נבחר)", ואחריו, כשיש, "דגימה אחרונה מ-<מקור> לפני <גיל>: <סטייה>" מ-`last_sample`. ממנה גם
+  ‏`bad` מ-30 ש'.
   **שעה ידנית (#2765)** — כש-`ntp_manual` דלוק השורה היא **`info`** (מצב חדש: מידע, אינו נספר
   ב"דורש טיפול" — הקונסולה סופרת `warn` ו-`bad` בלבד): ‏"שעה ידנית (בלי שרת זמן) · הוגדרה לאחרונה
   09/11/2026 14:32 · קודי MFA ותוקף תעודת TLS נשענים על השעה הזו" (באזור הזמן של השרת; "מועד
@@ -7324,6 +7330,9 @@ virtio-gpu ו-`video=Virtual-1:d`, ‏09/11; ב-i915 זו הסקה מהמסלו�
 (או `ENOBUFS`, אירועים שאבדו) הוא קורא את מצב המחברים — ב-`drmModeGetConnectorCurrent`,
 הסטטוס שהקרנל כבר מחזיק, **בלי probe ובלי קריאת EDID/DDC**. רק כשמחבר אומר
 `connected` נפתחים `drm` ואז `fbdev`, ושם יש probe אחד, בשביל רשימת המצבים.
+‏**#2802:** ה-socket נפתח **לפני** שה-GUI בודק אם יש מסך, ולכן גם לפני `READY`:
+אירוע מאותו רגע ממתין ב-socket. כשנפתח אחרי `READY`, ‏hotplug שבין הבדיקה לפתיחה
+אבד עד הגיבוי (‏CI הציבורי של v0.91.8 נפל על זה). כשיש מסך, ה-socket נסגר מיד.
 **גיבוי: אותה קריאה זולה כל 30 שניות** (‏`FALLBACK_MS`), כי מ-userspace אין דרך
 לדעת אם לדרייבר יש HPD, ונמדד שיש דרייברים שמשנים את הסטטוס בלי אירוע (virtio-gpu
 ו-bochs ב-QEMU, ‏09/11: `udevadm monitor -k` לא הראה כלום). וגם כשה-socket לא נפתח

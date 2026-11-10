@@ -93,6 +93,8 @@ def test_the_hourly_job_unit_is_not_stricter_than_the_server_probe():
 def test_an_existing_server_gets_the_unit_through_the_upgrade():
     # The server unit lives in deploy/*.service, which server-upgrade.sh installs, daemon-reloads and restarts on.
     upgrade = (REPO / "tools" / "server-upgrade.sh").read_text(encoding="utf-8")
-    assert 'install -m 0644 deploy/*.service "$UNIT_DIR/"' in upgrade
+    # #2795: one by one, through install_atomic (beside the unit, fsync, rename over it)
+    assert 'for f in deploy/*.service "${timers[@]}"; do' in upgrade
+    assert 'install_atomic 0644 "$f" "$UNIT_DIR/${f##*/}"' in upgrade
     assert "systemctl daemon-reload" in upgrade
     assert "systemctl restart imagesrv-server" in upgrade

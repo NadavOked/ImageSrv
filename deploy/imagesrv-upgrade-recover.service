@@ -6,7 +6,10 @@ Before=imagesrv-server.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/imagesrv/tools/server-upgrade-recover.sh
+# #2795: the copy outside the tree, written atomically by the installer and by
+# every upgrade -- the tree is what a cut upgrade leaves half-written. A server
+# no #2795 upgrade has run on yet has no copy: the tree's script, as before.
+ExecStart=/bin/sh -c 'f=/usr/local/sbin/imagesrv-upgrade-recover; [ -s "$$f" ] || { echo "no $$f yet -- running the tree copy"; f=/opt/imagesrv/tools/server-upgrade-recover.sh; }; exec /bin/bash "$$f"'
 
 [Install]
 WantedBy=multi-user.target

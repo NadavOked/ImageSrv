@@ -23,6 +23,11 @@ set -euo pipefail
 DATA_DIR="${IMAGESRV_DATA_DIR:-/var/lib/imagesrv}"
 STATE="${IMAGESRV_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
 UNIT_DIR="${IMAGESRV_UNIT_DIR:-/etc/systemd/system}"
+# #2795: this script's own copy outside the tree (the unit runs it, not the tree
+# a cut checkout leaves half-written); refreshed with the units below.
+RECOVER_COPY="${IMAGESRV_RECOVER_COPY:-/usr/local/sbin/imagesrv-upgrade-recover}"
+# #2795: the checkout back writes its index and HEAD to disk before renaming them.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsync GIT_CONFIG_VALUE_0=objects,index,reference
 DB="$DATA_DIR/imagesrv.db"
 [[ -f "$STATE" ]] || exit 0
 
@@ -75,14 +80,38 @@ tag_units() {
     [[ -n "$listed" ]] || return 1
     sed -n 's#^deploy/\([^/]*\.\(service\|timer\)\)$#\1#p' <<<"$listed"
 }
+# #2795: `install` onto a unit unlinks it and creates a new file -- empty after a
+# power cut until its data reaches the disk, and an empty unit is masked (this
+# one too). Beside it, fsync, rename over, fsync the directory: old or new, never
+# empty. The same function as server-upgrade.sh (this script runs from a copy
+# outside the tree, so it cannot source one).
+install_atomic() {   # install_atomic <mode> <src> <dest>
+    local tmp="${3%/*}/.${3##*/}.tmp"
+    install -m "$1" "$2" "$tmp" && sync "$tmp" && mv -f "$tmp" "$3" && sync "${3%/*}" \
+        || { rm -f "$tmp"; return 1; }
+}
 # The units of the tree on disk now ($PREV) -- *.service and *.timer, so a timer
 # the interrupted version changed goes back too. No timers = none, not an error.
+# The recovery copy first (#2795), as in server-upgrade.sh install_units.
 install_prev_units() {
-    local prev_units
+    local prev_units f
     shopt -s nullglob
     prev_units=(deploy/*.service deploy/*.timer)
     shopt -u nullglob
-    install -m 0644 "${prev_units[@]}" "$UNIT_DIR/"
+    if [[ -f tools/server-upgrade-recover.sh ]]; then
+        install -d "${RECOVER_COPY%/*}" && install_atomic 0755 tools/server-upgrade-recover.sh "$RECOVER_COPY" \
+            || failed "העתקת סקריפט השחזור של $PREV ל-$RECOVER_COPY נכשלה"
+    fi
+    for f in "${prev_units[@]}"; do
+        install_atomic 0644 "$f" "$UNIT_DIR/${f##*/}" || failed "התקנת $f ל-$UNIT_DIR נכשלה"
+    done
+}
+# #2795: what was put back is on the disk before anything says it was.
+sync_back() {
+    local d
+    for d in "$REPO" "$UNIT_DIR" "$HTTP_ROOT"; do
+        [[ ! -e "$d" ]] || sync -f "$d" || failed "sync -f $d נכשל -- מה שהוחזר שם עלול לא לשרוד חיתוך חשמל"
+    done
 }
 
 case "$STAGE" in
@@ -91,7 +120,11 @@ case "$STAGE" in
         [[ "$STAGE" == install ]] || dpkg --configure -a
         rm -f .git/index.lock   # a checkout cut mid-way; nothing else runs git at boot
         units="$(tag_units)" || failed "לא נקראו היחידות של $TAG (git ls-tree) -- לא ידוע מה העדכון הוסיף"
-        git checkout -q --detach "$PREV"
+        # #2795: -f -- a checkout cut before its files reached the disk leaves them
+        # empty, which git reads as local changes and refuses to overwrite. The
+        # tree is ours (server-upgrade.sh checks out without -f, so it started
+        # clean); every file comes back from the objects, synced before `install`.
+        git checkout -q -f --detach "$PREV"
         install_prev_units
         # A unit $PREV does not have (#1957's backup timer) is stopped, disabled and
         # removed -- left on, it runs against a tree without its module. Same rule
@@ -114,6 +147,7 @@ if [[ "$PAYLOAD_SAVED" == 1 ]]; then
         mv -f "$path.restore" "$path"
         cmp -s "$save/$n" "$path"
     done < "$save/list"
+    sync_back   # #2795: the payload put back is on disk before its saved copy goes
     rm -rf "$save"
     note+=" · מטען האתחול הקודם הוחזר"
 fi
@@ -134,6 +168,7 @@ PYEOF
 fi
 
 why="העדכון ל-$TAG נקטע (כיבוי או הפסקת חשמל) בשלב $STAGE, והוחזר באתחול ל-$PREV$note"
+sync_back
 report "$why" rollback
 rm -f "$STATE"
 # ‏#2626: מחיקת הסמן שנכתבה לתיקייה; כשל ב-sync נאמר, לא נבלע (והשחזור אידמפוטנטי).

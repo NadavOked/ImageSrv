@@ -42,7 +42,9 @@ def test_apply_writes_exact_dropin_restarts_and_reads_back():
     result = timesync.apply("ntp.example.org 10.0.0.1", machine.hooks())
     assert machine.written == ["ntp.example.org 10.0.0.1"] and machine.restarts == 1
     assert result == {"synchronized": True, "server": "1.2.3.4",
-                      "offset_ms": -1.25, "checked_at": "2026-10-19T12:34:00+00:00"}
+                      "offset_ms": -1.25, "checked_at": "2026-10-19T12:34:00+00:00",
+                      "last_sample": {"server": "1.2.3.4", "age_s": 10,
+                                      "offset_ms": pytest.approx(-0.01)}}   # #2796
 
 
 def test_default_write_has_exact_file_content(tmp_path, monkeypatch):

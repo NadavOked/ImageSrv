@@ -41,7 +41,7 @@ def test_a_cut_upgrade_disables_and_removes_the_units_it_added(tmp_path, bindir)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     seen = calls(tmp_path)
     assert "systemctl disable --now imagesrv-backup.timer" in seen, seen
-    assert seen.index("git checkout -q --detach v0.48.0") < seen.index(
+    assert seen.index("git checkout -q -f --detach v0.48.0") < seen.index(
         "systemctl disable --now imagesrv-backup.timer") < seen.index("systemctl daemon-reload")
     for name in NEW:
         assert not (units / name).exists(), name

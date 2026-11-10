@@ -132,6 +132,13 @@ int __real_socket(int domain, int type, int proto);
 int __real_bind(int fd, const struct sockaddr *a, socklen_t n);
 int __wrap_socket(int domain, int type, int proto) {
     if (domain != AF_NETLINK) return __real_socket(domain, type, proto);
+    /* #2802: the test holds the netlink back until $FAKE_UEVENT_GATE exists,
+     * and is told when it is held -- the race, decided instead of timed. */
+    const char *gate = getenv("FAKE_UEVENT_GATE");
+    if (gate) {
+        fprintf(stderr, "stub: netlink held\n");
+        while (access(gate, F_OK) != 0) usleep(10000);
+    }
     const char *name = getenv("FAKE_UEVENT_SOCK");
     if (!name) { errno = EAFNOSUPPORT; return -1; }
     int fd = __real_socket(AF_UNIX, SOCK_DGRAM | (type & (SOCK_NONBLOCK | SOCK_CLOEXEC)), 0);
@@ -275,12 +282,16 @@ class _Gui:
         return self.err_path.read_text(encoding="utf-8", errors="replace")
 
     def uevent(self, message: bytes) -> None:
-        """What the kernel multicasts on a hotplug: one datagram."""
+        """What the kernel multicasts on a hotplug: one datagram.
+
+        #2802: every test sends while the GUI should be listening, so a send
+        nobody takes is the GUI not listening -- said, not passed over (it
+        was, and the lost event left a test waiting 15 s for a 30 s fallback)."""
         sender = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:
             sender.sendto(message, "\0" + self.uevent_name)
-        except (ConnectionRefusedError, FileNotFoundError):
-            pass                        # a multicast nobody listens to is not an error
+        except (ConnectionRefusedError, FileNotFoundError) as exc:
+            raise AssertionError(f"the GUI's uevent socket is not open: {exc!r}\n{self.stderr()}") from exc
         finally:
             sender.close()
 
@@ -354,6 +365,31 @@ def test_a_display_that_comes_but_cannot_be_used_is_said_not_waited_for(stub_gui
     assert second.startswith("FAIL display connected but not usable: drm: "), (second, child.stderr())
     assert "drmModeSetCrtc: Device or resource busy" in second and "fbdev: /dev/fb0" in second, second
     assert rc == 1
+
+
+@NATIVE
+def test_a_hotplug_right_after_ready_is_not_lost(stub_gui, tmp_path):
+    """#2802 (public CI of v0.91.8 red): READY was said before the netlink was
+    open, and a hotplug in that window was lost until the 30 s fallback. The
+    stub holds the netlink back and says so -- at that moment nothing may be
+    on stdout yet. Decided by the order of two writes, not by load."""
+    flag, gate = tmp_path / "connected", tmp_path / "gate"
+    child = _Gui(stub_gui, tmp_path, FAKE_CONNECTED=str(flag), FAKE_UEVENT_GATE=str(gate))
+    try:
+        assert child.wait_for("stub: netlink held"), child.stderr()
+        early, _, _ = select.select([child.proc.stdout], [], [], 0)
+        said = child.proc.stdout.readline().decode("utf-8", "replace").strip() if early else ""
+        assert not early, f"said {said!r} while the netlink was not open yet"
+        gate.write_text("")
+        assert child.line().startswith("READY "), child.stderr()
+        flag.write_text("")
+        child.uevent(HOTPLUG)                               # at once: no sleep after READY
+        # 20 s < the 30 s fallback: lit within it, it was the event
+        assert child.wait_for("stub: setcrtc crtc=40 fb=52 conn=30 640x480", 20.0), child.stderr()
+    finally:
+        gate.write_text("")                                 # never leave the child held
+        rc = child.close()
+    assert rc == 0, child.stderr()
 
 
 @NATIVE

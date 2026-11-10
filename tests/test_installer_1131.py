@@ -500,6 +500,8 @@ def _upgrade_env(tmp_path: Path, repo: Path, data: Path) -> dict:
             "IMAGESRV_INITRD_FLAGS": posix(flags),
             "IMAGESRV_ISO_MANIFEST": posix(tmp_path / "no-iso-release.json"),
             "IMAGESRV_HTTP_ROOT": posix(tmp_path / "boot"),
+            # #2795: the recovery script's copy outside the tree -- never /usr/local/sbin
+            "IMAGESRV_RECOVER_COPY": posix(tmp_path / "sbin" / "imagesrv-upgrade-recover"),
             "IMAGESRV_LIVE_WAIT": "1", "PYTHONPATH": posix(REPO)}
 
 

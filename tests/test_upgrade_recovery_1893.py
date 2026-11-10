@@ -170,6 +170,7 @@ def _marker(data: Path, repo: Path, boot: Path, stage: str, *, db_snap_ver: str 
 def _recover(tmp_path: Path, bindir: Path, data: Path):
     return run_bash(f'bash "{posix(RECOVER)}"', tmp_path, bindir, env={
         "IMAGESRV_DATA_DIR": posix(data), "IMAGESRV_UNIT_DIR": posix(tmp_path / "units"),
+        "IMAGESRV_RECOVER_COPY": posix(tmp_path / "sbin" / "imagesrv-upgrade-recover"),
         "PYTHONPATH": posix(REPO)})
 
 
@@ -198,7 +199,7 @@ def test_a_cut_after_the_new_server_migrated_puts_back_this_runs_db_and_payload(
     assert proc.returncode == 0, proc.stdout + proc.stderr
     seen = calls(tmp_path)
     assert "dpkg --configure -a" in seen
-    assert "git checkout -q --detach v0.48.0" in seen
+    assert "git checkout -q -f --detach v0.48.0" in seen         # #2795: -f, a cut checkout
     assert "systemctl daemon-reload" in seen
     assert _version(data / "imagesrv.db") == before
     assert (boot / "initrd.img").read_text() == "older initrd\n"

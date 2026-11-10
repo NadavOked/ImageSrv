@@ -7,6 +7,11 @@ that logs its arguments and whether the marker was already gone when it ran.
 
 **Negative control**: server-upgrade.sh and server-upgrade-recover.sh of
 origin/main (0b48b5b3) -- every test below fails on "no sync -f of the data dir".
+
+#2795: the scripts now also sync *before* the marker moves or goes (what it
+describes must be on disk first), so "no sync while the marker is there" is no
+longer the property; "a sync of the data dir once it is gone" is. The stand-in
+fails only once the marker is gone -- the sync #2626 is about.
 """
 from __future__ import annotations
 
@@ -17,16 +22,28 @@ from test_installer_1131 import (  # noqa: F401 -- bindir is a fixture
 )
 from test_upgrade_recovery_1893 import _box, _marker, _recover
 
-SYNC = ('if [ -e "$FAKE_MARKER" ]; then echo "marker-still-there" >> "$FAKE_LOG"; fi\n'
-        'exit "${FAKE_SYNC_RC:-0}"')
+# present / gone (no marker, and the console's status already names a stage: the
+# run had begun, so the marker was written and removed) / before (the first sync of
+# the first stage, ahead of both). Read from the DB, not from earlier syncs: the
+# code of #2626 syncs only after the removal, and must still pass.
+SYNC = ('if [ -e "$FAKE_MARKER" ]; then at=present\n'
+        'elif python3 "$FAKE_STAGED" "${FAKE_MARKER%/*}/imagesrv.db"; then at=gone; else at=before; fi\n'
+        'echo "sync-saw $* $at" >> "$FAKE_LOG"\n'
+        '[ "$at" != gone ] || exit "${FAKE_SYNC_RC:-0}"')
+STAGED = ("import json, sqlite3, sys\n"
+          "row = sqlite3.connect(sys.argv[1]).execute(\n"
+          "    \"SELECT value FROM settings WHERE key = 'update_status'\").fetchone()\n"
+          "sys.exit(0 if row and json.loads(row[0]).get('stage') else 1)\n")
 
 
-def _sync_calls(tmp_path, data):
-    return [c for c in calls(tmp_path) if c.startswith("sync ")], [c for c in calls(tmp_path) if c == "marker-still-there"]
+def _synced_once_gone(tmp_path):
+    return f"sync-saw -f {posix(tmp_path / 'data')} gone" in calls(tmp_path)
 
 
 def _fake_sync(bindir, monkeypatch, data, rc=0):
     fake_tool(bindir, "sync", SYNC)
+    (bindir / "staged.py").write_text(STAGED, encoding="utf-8", newline="\n")
+    monkeypatch.setenv("FAKE_STAGED", posix(bindir / "staged.py"))
     monkeypatch.setenv("FAKE_MARKER", posix(data / "server-upgrade.state"))
     monkeypatch.setenv("FAKE_SYNC_RC", str(rc))
 
@@ -39,9 +56,7 @@ def test_a_finished_upgrade_syncs_the_data_dir_after_the_marker_is_gone(tmp_path
     _fake_sync(bindir, monkeypatch, data)
     proc = _run_upgrade(tmp_path, bindir, repo, data)
     assert proc.returncode == 0, proc.stderr
-    synced, early = _sync_calls(tmp_path, data)
-    assert f"sync -f {posix(data)}" in synced, calls(tmp_path)      # no sync -f of the data dir
-    assert not early, "sync ran while the marker was still there"
+    assert _synced_once_gone(tmp_path), calls(tmp_path)      # no sync -f of the data dir
     assert not (data / "server-upgrade.state").exists()
 
 
@@ -57,9 +72,7 @@ def test_a_failed_upgrade_syncs_the_data_dir_after_the_marker_is_gone(tmp_path, 
     proc = _run_upgrade(tmp_path, bindir, repo, data)
     assert proc.returncode != 0
     assert any(" fetch " in c for c in calls(tmp_path)), calls(tmp_path)     # the failure path really ran
-    synced, early = _sync_calls(tmp_path, data)
-    assert f"sync -f {posix(data)}" in synced, calls(tmp_path)
-    assert not early
+    assert _synced_once_gone(tmp_path), calls(tmp_path)
 
 
 def test_a_sync_that_fails_is_reported_and_does_not_undo_a_verified_upgrade(tmp_path, bindir, monkeypatch):
@@ -80,9 +93,7 @@ def test_the_recovery_syncs_the_data_dir_after_removing_the_marker(tmp_path, bin
     _fake_sync(bindir, monkeypatch, data)
     proc = _recover(tmp_path, bindir, data)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    synced, early = _sync_calls(tmp_path, data)
-    assert f"sync -f {posix(data)}" in synced, calls(tmp_path)
-    assert not early
+    assert _synced_once_gone(tmp_path), calls(tmp_path)
     assert not (data / "server-upgrade.state").exists()
 
 

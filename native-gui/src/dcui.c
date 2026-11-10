@@ -299,6 +299,11 @@ int dcui_main(const Theme *theme) {
         return fail(why);
     }
     backend_set_tty(DCUI_TTY);
+    /* #2802: subscribed before the display is looked at -- and so before
+     * READY. A hotplug from here on is queued on the socket; opened after
+     * READY (and after the look), one in between waited for the fallback. */
+    char e_uev[160] = "";
+    int uev = uevent_open(e_uev, sizeof e_uev);
     Backend *b = open_display(1, err, sizeof err);
     /* #2768: booted with no display attached. The screen is up anyway, in
      * memory, and goes on the first display connected -- not the text
@@ -311,12 +316,20 @@ int dcui_main(const Theme *theme) {
         if (b) fprintf(stderr, "native-gui: dcui: no display connected yet (%s) -- the screen is drawn in memory "
                                "and shown on the first display connected (#2768)\n", err);
     }
+    if (!waiting && uev >= 0) { close(uev); uev = -1; }     /* a display is there: nothing to wait for */
     if (!b) { snprintf(why, sizeof why, "no screen: %s", err); return fail(why); }
+    if (waiting) {
+        if (uev < 0) fprintf(stderr, "native-gui: dcui: no hotplug events (%s) -- looking for a display every %d s\n",
+                             e_uev, FALLBACK_MS / 1000);
+        else fprintf(stderr, "native-gui: dcui: waiting for a DRM hotplug event (and a look every %d s)\n",
+                     FALLBACK_MS / 1000);
+    }
     int W = backend_width(b), H = backend_height(b);
     DcuiFrame *cur = calloc(1, sizeof *cur), *pending = calloc(1, sizeof *pending);
-    if (!cur || !pending) { backend_close(b); return 1; }
+    if (!cur || !pending) { if (uev >= 0) close(uev); backend_close(b); return 1; }
     present(b, cur, theme);                     /* the empty page until the first frame */
     if (backend_verify(b, err, sizeof err)) {   /* #1362: shown, or say why -- never black */
+        if (uev >= 0) close(uev);
         backend_close(b); free(cur); free(pending);
         return fail(err);
     }
@@ -331,16 +344,8 @@ int dcui_main(const Theme *theme) {
 
     char buf[65536]; size_t used = 0;
     int rc = 0, away = 0;
-    int uev = -1, look = 0;
+    int look = 0;
     long next_look = now_ms() + FALLBACK_MS;
-    if (waiting) {
-        char e_uev[160];
-        uev = uevent_open(e_uev, sizeof e_uev);
-        if (uev < 0) fprintf(stderr, "native-gui: dcui: no hotplug events (%s) -- looking for a display every %d s\n",
-                             e_uev, FALLBACK_MS / 1000);
-        else fprintf(stderr, "native-gui: dcui: waiting for a DRM hotplug event (and a look every %d s)\n",
-                     FALLBACK_MS / 1000);
-    }
     struct pollfd fds[33];
     while (!stop_now) {
         if (waiting && now_ms() >= next_look) look = 1;

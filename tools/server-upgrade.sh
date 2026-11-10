@@ -52,11 +52,42 @@ FLAGS_FILE="${IMAGESRV_INITRD_FLAGS:-/etc/imagesrv/initrd.flags}"
 ISO_MANIFEST="${IMAGESRV_ISO_MANIFEST:-/etc/imagesrv/iso-release.json}"
 HTTP_ROOT="${IMAGESRV_HTTP_ROOT:-/srv/imagesrv/boot}"
 UPGRADE_STATE="${IMAGESRV_UPGRADE_STATE:-$DATA_DIR/server-upgrade.state}"
+# ‏#2795: הסמן שורד חיתוך (fsync, ‏#2623) — אבל מה שהוא מתאר לא שרד: 13 יחידות
+# ריקות ב-/etc/systemd/system (ריקה = masked, גם יחידת השחזור), אובייקטים ריקים
+# ב-.git ו-65 קבצים ריקים בעץ (‏ESXi, 10/11, חיתוך 2 ש' אחרי `packages`).
+# שלושה דברים, כל אחד סוגר חלון אחר:
+#   * sync_upgrade_fs לפני כל מעבר של הסמן (stage, ‏payload_saved, הסרה) — שלב
+#     שהסמן נקב בו הוא שלב שהכתיבות שלו על הדיסק.
+#   * install_atomic ליחידות ולעותק סקריפט השחזור — חיתוך **בתוך** שלב (בין
+#     ה-install ל-sync) משאיר בשם את הישן או את החדש, לא קובץ ריק.
+#   * core.fsync ל-git — אובייקט ו-ref נכתבים לדיסק לפני שמשהו מצביע עליהם.
+# עץ עבודה שנקטע באמצע checkout אינו נכתב אטומית (git אינו עושה fsync לקבצים);
+# השחזור מחזיר אותו ב-`checkout -f` מהאובייקטים, שכבר על הדיסק.
+RECOVER_COPY="${IMAGESRV_RECOVER_COPY:-/usr/local/sbin/imagesrv-upgrade-recover}"
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsync GIT_CONFIG_VALUE_0=objects,index,reference
+sync_upgrade_fs() {   # syncfs לכל מערכת קבצים שהריצה כותבת אליה; כשל = 1, בשם
+    local d
+    for d in "$REPO_DIR" "$UNIT_DIR" "$HTTP_ROOT" "$(dirname "$FLAGS_FILE")" "$(dirname "$UPGRADE_STATE")"; do
+        [[ -e "$d" ]] || continue
+        sync -f "$d" || { echo "server-upgrade: sync -f $d נכשל — מה שנכתב שם עלול לא לשרוד חיתוך חשמל" >&2; return 1; }
+    done
+}
+# ‏`install` ליעד מוחק ויוצר קובץ חדש, וחיתוך לפני שהנתונים שלו נכתבו משאיר קובץ
+# ריק. כותבים לידו, fsync, ‏rename מעליו ו-fsync לתיקייה.
+install_atomic() {   # install_atomic <mode> <src> <dest>
+    local tmp="${3%/*}/.${3##*/}.tmp"
+    install -m "$1" "$2" "$tmp" && sync "$tmp" && mv -f "$tmp" "$3" && sync "${3%/*}" \
+        || { rm -f "$tmp"; return 1; }
+}
 # ‏#2626: מחיקת הסמן היא שינוי של התיקייה — בלי sync אליה, חיתוך חשמל מיד אחריה
 # מחזיר את הסמן והשחזור באתחול ירוץ על עדכון שהצליח. כשל ב-sync נכתב ללוג
 # ולא נבלע; הוא אינו מפיל את הריצה (היא בדרך החוצה, וה-ERR trap היה מחזיר
 # אחורה עדכון שאומת) — ולכן הקריאות הן `drop_marker || :`.
 drop_marker() {
+    # ‏#2795: מה שהריצה השאירה (העץ, היחידות, המטען) — לפני שהסמן שמתאר אותו יורד.
+    # כשל נאמר בלוג (בתוך sync_upgrade_fs), והסמן יורד בכל זאת: סמן שנשאר על עדכון
+    # שאומת היה מחזיר אותו אחורה באתחול הבא.
+    sync_upgrade_fs || :
     rm -f "$UPGRADE_STATE"
     sync -f "$(dirname "$UPGRADE_STATE")"         || { echo "server-upgrade: sync של תיקיית הסמן נכשל — חיתוך חשמל עכשיו עלול להחזיר את $UPGRADE_STATE" >&2; return 1; }
 }
@@ -165,7 +196,8 @@ finally:
     os.close(dir_fd)
 PYEOF
 }
-stage() { STAGE=$1; set_status running; write_recovery_marker; }
+# ‏#2795: sync לפני הסטטוס ולפני הסמן — שניהם אומרים "השלב הקודם נגמר".
+stage() { STAGE=$1; sync_upgrade_fs; set_status running; write_recovery_marker; }
 
 # 0. השרת עסוק? — ‏#1891: אותה הגדרה בדיוק כמו "החל עדכון" והאתחול המתוזמן
 # (‏auto_reboot.busy_reason): סבב, סבב חדר גם בין גלים, קליטה רצה, העברה בין
@@ -300,11 +332,19 @@ timer_files() {
     shopt -u nullglob
     (( ${#files[@]} == 0 )) || printf '%s\n' "${files[@]}"
 }
+# ‏#2795: כל יחידה אטומית (install_atomic). קודם העותק הקבוע של סקריפט השחזור מחוץ
+# לעץ — יחידת השחזור מריצה אותו ולא את העץ שה-checkout דורס בלי הגנה, ויחידה
+# שמצביעה עליו לא תגיע לדיסק לפניו.
 install_units() {
-    local timers
+    local timers f
     mapfile -t timers < <(timer_files)
-    install -m 0644 deploy/*.service "$UNIT_DIR/" || return 1
-    (( ${#timers[@]} == 0 )) || install -m 0644 "${timers[@]}" "$UNIT_DIR/" || return 1
+    if [[ -f tools/server-upgrade-recover.sh ]]; then
+        install -d "${RECOVER_COPY%/*}" && install_atomic 0755 tools/server-upgrade-recover.sh "$RECOVER_COPY" \
+            || return 1
+    fi
+    for f in deploy/*.service "${timers[@]}"; do
+        install_atomic 0644 "$f" "$UNIT_DIR/${f##*/}" || return 1
+    done
 }
 # ‏#1957: טיימר שהגרסה מביאה (#1895: גיבוי המסד) מופעל גם בעדכון, לא רק
 # בהתקנה נקייה. ‏enable --now על טיימר שכבר פעיל אינו משנה דבר.
@@ -379,6 +419,7 @@ restore_payload() {
         cp -p "$PAYLOAD_SAVE/$n" "$path.restore" && mv -f "$path.restore" "$path" \
             && cmp -s "$PAYLOAD_SAVE/$n" "$path" || return 1
     done < "$PAYLOAD_SAVE/list" || return 1
+    sync_upgrade_fs || return 1   # #2795: the restored files are on disk before their copy goes
     rm -rf "$PAYLOAD_SAVE"
 }
 
@@ -570,6 +611,7 @@ fi
 # נותן לו תקרה משלו. בלי זה `install` היה 8:43 מול תקרה של 10 דקות בלי מעבר שלב.
 stage payload
 save_payload || rollback "שמירת עותק של המטען הקודם ב-$PAYLOAD_SAVE נכשלה — לא בונים בלי דרך חזרה"
+sync_upgrade_fs   # #2795: the saved copy is on disk before the marker says to restore it
 write_recovery_marker   # #1893: from here a cut power restores this run's saved payload
 # A verified prebuilt payload (the signed release's, or the current one when its
 # inputs did not change) skips the ~8 min build. Every refusal is named here and

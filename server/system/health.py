@@ -264,6 +264,17 @@ def port_owner(ss_output: str, port: int) -> str | None:
     return None
 
 
+def _offset_he(offset_ms: float) -> str:
+    if abs(offset_ms) >= 1000:
+        return f"השעון {'מקדים' if offset_ms > 0 else 'מאחר'} ב-{abs(offset_ms) / 1000:.0f} ש'"
+    return f"סטייה {offset_ms:+.3f} ms"
+
+
+def _ago_he(seconds: int) -> str:
+    return (f"{seconds} ש'" if seconds < 120 else f"{seconds // 60} דק'" if seconds < 7200
+            else f"{seconds // 3600} שע'")
+
+
 def manual_time_check(set_at: str, zone: str, now: datetime) -> dict:
     """#2765: the operator chose "no time server" (a machine without internet) -- information, never a
     problem, and not counted in "needs attention". Rule 5 still holds: the row says the time is NOT
@@ -294,14 +305,21 @@ def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
     synchronized = status.get("synchronized")
     if synchronized is None:
         return check("time_sync", "שעון", "off", "לא נבדק")
-    offset = status.get("offset_ms")
     parts = [f"מקור {status.get('server') or 'לא ידוע'}", "מסונכרן" if synchronized else "לא מסונכרן"]
-    if offset is None:
-        parts.append("סטייה לא נמדדה")
-    elif abs(offset) >= 1000:
-        parts.append(f"השעון {'מקדים' if offset > 0 else 'מאחר'} ב-{abs(offset) / 1000:.0f} ש'")
+    if synchronized:
+        offset = status.get("offset_ms")
+        parts.append("סטייה לא נמדדה" if offset is None else _offset_he(offset))
     else:
-        parts.append(f"סטייה {offset:+.3f} ms")
+        # #2796: unsynchronised, chronyc's "System time" is the estimate from chrony's last
+        # clock update, not a measurement: after a resume it read -0.019 ms for 5 minutes
+        # while the clock was 352 s behind. It is not shown. The freshest real sample from
+        # `chronyc sources` is, named as such with its source and age, and it decides `bad`.
+        parts.append("סטייה לא ידועה (אין מקור זמן נבחר)")
+        sample = status.get("last_sample")
+        offset = sample["offset_ms"] if sample else None
+        if sample:
+            parts.append(f"דגימה אחרונה מ-{sample['server']} לפני {_ago_he(sample['age_s'])}: "
+                         f"{_offset_he(offset)}")
     if offset is not None and abs(offset) >= 30_000:
         return check("time_sync", "שעון", "bad", " · ".join(parts + ["קודי MFA לא יתקבלו"]))
     steady = synchronized and (offset is None or abs(offset) < 1000)

@@ -178,14 +178,39 @@ def _offset_ms(value: str | None) -> float | None:
     sign = -1 if (match.group(3) or "").lower() == "slow" else 1
     return sign * number * (1000 if unit.startswith("second") else .001 if unit.startswith("micro") else 1)
 
+#: #2796: one row of `chronyc -n sources` -- name, LastRx (seconds, or m/h/d/y) and "Last
+#: sample": the number left of the brackets is the measured offset, adjusted for slews since.
+#: A source never heard from has LastRx "-" and does not match. Units per chronyc: ns/us/ms/s.
+_SAMPLE = re.compile(r"(?m)^[\^=#][*+\-?x~]\s+(\S+)\s+\d+\s+\d+\s+[0-7]+\s+(\d+)([mhdy]?)\s+"
+                     r"([+-]?\d+(?:\.\d+)?)(ns|us|ms|s)\[")
+_SAMPLE_MS = {"ns": 1e-6, "us": 1e-3, "ms": 1.0, "s": 1000.0}
+_AGE_S = {"": 1, "m": 60, "h": 3600, "d": 86400, "y": 31536000}
+
+def _last_sample(sources: str) -> dict | None:
+    """#2796: the freshest real measurement, from any source -- chosen or not.
+
+    Unsynchronised, tracking's "System time" is chrony's estimate from its last clock update
+    (it stayed -0.019 ms while a resumed VM was 352 s behind); a source's last sample is what
+    the wire said. Sign as chronyc documents it -- positive = the local clock is ahead -- the
+    same as ``offset_ms``. None = no source has a sample."""
+    best = None
+    for match in _SAMPLE.finditer(sources):
+        age = int(match.group(2)) * _AGE_S[match.group(3)]
+        if best is None or age < best["age_s"]:
+            best = {"server": match.group(1), "age_s": age,
+                    "offset_ms": float(match.group(4)) * _SAMPLE_MS[match.group(5)]}
+    return best
+
 def status(hooks: Hooks) -> dict:
-    answer = {"synchronized": None, "server": None, "offset_ms": None, "checked_at": hooks["now"]()}
+    answer = {"synchronized": None, "server": None, "offset_ms": None, "last_sample": None,
+              "checked_at": hooks["now"]()}
     try: tracking, sources = hooks["tracking"](), hooks["sources"]()
     except Exception: return answer
     selected = re.search(r"(?m)^\^\*\s+(\S+)", sources)
     answer["synchronized"] = _tracking_value(tracking, "Leap status") == "Normal" and selected is not None
     answer["server"] = selected.group(1) if selected else None
     answer["offset_ms"] = _offset_ms(_tracking_value(tracking, "System time"))
+    answer["last_sample"] = _last_sample(sources)
     return answer
 
 def check_now(hooks: Hooks) -> dict:

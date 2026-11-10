@@ -1154,6 +1154,8 @@ elif [[ ! -f "$SPLASH_RAW" ]]; then
     warn "אין $SPLASH_GUI ואין $SPLASH_RAW — באתחול יוצג מסוף טקסט עד ה-DCUI"
 fi
 # ‏#1893: מחזירה באתחול עדכון שנקטע בהפסקת חשמל (tools/server-upgrade-recover.sh).
+# ‏#2795: מעותק קבוע מחוץ לעץ — עדכון שנקטע משאיר את העץ כתוב למחצה.
+run install -D -m 0755 "$APP_DIR/tools/server-upgrade-recover.sh" /usr/local/sbin/imagesrv-upgrade-recover
 run install -m 0644 "$APP_DIR/deploy/imagesrv-upgrade-recover.service" \
     /etc/systemd/system/imagesrv-upgrade-recover.service
 # ‏#1195: הודעות קרנל (‏`imagesrv-drop` של nftables) הודפסו מעל ה-DCUI על tty1;
