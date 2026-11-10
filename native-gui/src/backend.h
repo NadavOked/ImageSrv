@@ -4,6 +4,8 @@
  *   fbdev -- /dev/fb0, XRGB8888 only (fallback when KMS is unavailable)
  *   mem   -- a 1280x800 framebuffer file (#835) that imagesrv-monitor serves
  *            over RFB; docs/architecture/interfaces.md s15 has the layout
+ *   none  -- #2768: the offscreen image only, 1024x768, while a KMS device has
+ *            no display connected yet (the server screen; never in "auto")
  * All draw into an offscreen cairo image and copy it to the scanout on
  * present(); the mapped scanout memory is uncached and slow to draw into
  * directly. There is no "png" backend: main.c renders straight to a cairo
@@ -16,10 +18,16 @@
 
 typedef struct Backend Backend;
 
-/* kind: "auto" (drm, then fbdev, then mem), "drm", "fbdev" or "mem".
+/* kind: "auto" (drm, then fbdev, then mem), "drm", "fbdev", "mem" or "none".
  * mem_path: the file for "mem" (NULL = /run/imagesrv/fb.mem). NULL + message
  * on failure -- the message names what was tried, never a silent blank. */
 Backend *backend_open(const char *kind, const char *mem_path, char *err, size_t n);
+/* #2768: 1 when a display can still come: a KMS device answers, none of its
+ * connectors is connected, and there is no /dev/fb0. 0 when a display is
+ * there (drm/fbdev failed for another reason), or there is no KMS at all.
+ * Reads the status the kernel holds (drmModeGetConnectorCurrent): no probe,
+ * no EDID read. */
+int backend_display_absent(void);
 int backend_width(const Backend *b);
 int backend_height(const Backend *b);
 cairo_surface_t *backend_surface(Backend *b);     /* offscreen RGB24 */

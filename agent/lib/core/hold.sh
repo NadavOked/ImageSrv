@@ -63,6 +63,11 @@ hold_new_task() {
     case "$_hy" in ""|null|"$HOLD_YIELD_TASK") return 1 ;; esac
     log "hold ended: the server gave a new task ($_hy) after $HOLD_YIELD_TASK failed"
     HOLD_YIELD_TASK=""; HOLD_PROMPT=""
+    # #2743/#2783 (metal 08-09/11): the failure screen ends with its hold. A fail.state
+    # left behind kept the kiosk on "הקליטה נכשלה" under the next capture's shrink
+    # question, whose answers the failure screen then took (main.c) -- and a press
+    # there is a fail.action no hold reads any more, until the next hold acts on it.
+    rm -f "$RUN_DIR/fail.state" "${GUI_DIR:-$RUN_DIR/gui}/fail.action"
 }
 
 # --- #2031: the end-of-task hold (idle.sh end_countdown, #2024), said ---------

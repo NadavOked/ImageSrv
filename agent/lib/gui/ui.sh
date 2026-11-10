@@ -20,6 +20,14 @@ ui_clear() {
     [ "${IMAGESRV_TEST:-0}" = "1" ] || clear 2>/dev/null || printf '\033c'
 }
 
+ui_screen_ours() {
+    # 0 = a screen of ours owns the console: the live GUI (gui.pid) or the static
+    # one (splash.on) -- log()'s own test (common.sh), for the text screens below.
+    # #2783 (metal 09/11): the capture's English lines reached the display under a
+    # live GUI; owner 17/10: no text screen while ours is up.
+    { read -r _uo_p < "$RUN_DIR/gui.pid" && kill -0 "$_uo_p"; } 2>/dev/null || [ -e "$RUN_DIR/splash.on" ]
+}
+
 ui_header() {
     echo "==============================================="
     echo "  ImageSrv"
@@ -154,13 +162,16 @@ ui_error_hold() {
     # away the very evidence the heartbeat exists to produce (#109).
     HOLD_PROMPT="FAILED: $1"   # #906: rides on every hold beat (hold.sh)
     # #1569 (owner 17/10): the same line as one Hebrew screen on the GUI
-    # (failscreen.sh); the tty text below stays behind it, for the journal.
+    # (failscreen.sh); the tty text below only where no screen of ours is up
+    # (#2783 -- failure screen logs the line itself).
     command -v fail_screen >/dev/null 2>&1 && fail_screen hold "$1" || :
-    ui_clear
-    ui_header
-    echo "  FAILED: $1"
-    echo
-    echo "  Leave the computer on and contact IT."
+    ui_screen_ours || {
+        ui_clear
+        ui_header
+        echo "  FAILED: $1"
+        echo
+        echo "  Leave the computer on and contact IT."
+    }
     if [ "${IMAGESRV_TEST:-0}" = "1" ]; then
         echo "TEST-HOLD"
         return

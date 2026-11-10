@@ -26,11 +26,13 @@ do_task() {
 
     _disk=$(json_disk "$RESP" ".task.disk") \
         || log "capture: disk name '$(json_get "$RESP" ".task.disk")' refused -- not a kernel disk name (#1635)"
-    ui_clear; ui_header
-    echo "  Capturing $(json_get "$RESP" ".task.name")"
-    echo "  Source disk: /dev/$_disk"
-    echo
-    echo "  Reading used blocks only. Do not power off."
+    ui_screen_ours || {   # #2783: not under a screen of ours (ui.sh)
+        ui_clear; ui_header
+        echo "  Capturing $(json_get "$RESP" ".task.name")"
+        echo "  Source disk: /dev/$_disk"
+        echo
+        echo "  Reading used blocks only. Do not power off."
+    }
 
     progress_loop "" "$MAC" "$SERVER" "$_tid" &
     _ppid=$!

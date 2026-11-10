@@ -1062,6 +1062,9 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     if (smart_modal(a, e)) return 0;               /* 16/10: the SMART warning window */
     if (!demo && standby_handle(a, e)) return 0;   /* #2079 (mockup 02): back to the boot choice */
     if (a->screen == SCREEN_FAILURE) {             /* #2068: its buttons -- Enter is the first; the agent acts (hold.sh) */
+        /* #2743 (metal 08-09/11): a question drawn over this screen takes the input
+         * first -- its click and '1' were the screen's, and Enter a fail.action */
+        if (shrink_modal(a, e) || ask_modal(a, e)) return 0;
         if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
         if (e->type == UIEV_MOVE) a->ptr_visible = !e->is_touch;
         int b = -1, h = e->type == UIEV_CLICK ? app_hit(a, e->x, e->y) : -1;

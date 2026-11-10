@@ -161,7 +161,7 @@ def test_the_network_row_grows_and_the_next_row_starts_below_it(tmp_path) -> Non
     net = _with(draws, "DNS", "10.10.10.16")
     assert net, [text for _, _, text in draws]
     y, h, _ = net[0]
-    single = _with(draws, "imagesrv-ta", "Asia/Jerusalem")[0][1]   # one line of the same 13px value
+    single = _with(draws, "imagesrv-ta")[0][1]   # one line of the same 13px value (#2764: the name's row no longer carries the zone)
     assert h > 1.5 * single, "the DNS line did not wrap -- the test proves nothing"
     name_y = _with(draws, "שם השרת")[0][0]
     assert name_y >= y + h, f"'שם השרת' at y={name_y} is drawn over the network row ({y}..{y + h})"

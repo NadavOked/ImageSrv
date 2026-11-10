@@ -14,6 +14,7 @@ import re
 import stat
 import subprocess
 import urllib.request
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -27,7 +28,7 @@ from server.agent import loops as agent_loops, hello, identity
 from server.console import auth, monitor
 from server.core import capabilities
 from server.net import deploy_net, dhcp, foreign_vlan, ports
-from server.system import timesync
+from server.system import timesync, timezone as tz_setting
 from server.storage import disk_reserve
 from server.db import last_disk_full, now_iso
 from server import auto_reboot
@@ -263,6 +264,23 @@ def port_owner(ss_output: str, port: int) -> str | None:
     return None
 
 
+def manual_time_check(set_at: str, zone: str, now: datetime) -> dict:
+    """#2765: the operator chose "no time server" (a machine without internet) -- information, never a
+    problem, and not counted in "needs attention". Rule 5 still holds: the row says the time is NOT
+    measured against anything. MFA codes (+-30 s) and the TLS certificate's validity lean on this clock,
+    so the date it was set is shown, and how old it is once that is long (still `info`: Nadav 09/11)."""
+    parts = ["שעה ידנית (בלי שרת זמן)"]
+    if set_at:
+        parts.append(f"הוגדרה לאחרונה {timesync.local_text(set_at, zone)}")
+        age = timesync.manual_age_days(set_at, now)
+        if age is not None and age >= timesync.MANUAL_STALE_DAYS:
+            parts.append(f"עברו {age} ימים — כדאי לוודא שהשעה עדיין נכונה")
+    else:
+        parts.append("מועד ההגדרה לא ידוע")
+    parts.append("קודי MFA ותוקף תעודת TLS נשענים על השעה הזו")
+    return check("time_sync", "שעון", "info", " · ".join(parts))
+
+
 def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
     # Compatibility for callers from before #1773; the live route uses the
     # structured measurement above, including its explicit unknown state.
@@ -422,7 +440,11 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
                 "offset_ms": None}
     else:
         sync = hooks["timesync_status"]() if hooks.get("timesync_status") else {"synchronized": None}
-    results.append(time_sync_check(sync))
+    if timesync.is_manual(ctx.conn):   # #2765: chosen by the operator; a chosen time server that is silent is still a problem
+        results.append(manual_time_check(timesync.manual_at(ctx.conn), tz_setting.zone_name(ctx.conn),
+                                         hooks["now"]() if hooks.get("now") else datetime.now(dt_timezone.utc)))
+    else:
+        results.append(time_sync_check(sync))
     results.append(db_space_check(hooks["db_free"](getattr(ctx, "data_dir", None)),
                                   last_disk_full()))
     # ‏#1895/#1956: גיבוי המסד — "ישן" אחרי יום ושעתיים, אדום על כשל, כתום כשהוא על כונן המסד.

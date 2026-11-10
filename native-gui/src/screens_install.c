@@ -60,9 +60,14 @@ InstallLayout install_frame(App *a,cairo_t *cr,double W,double H){const Theme *t
     install_text_r(cr,t,titles[a->install.view],26,600,l.right,28+top,l.body.w,t->ink);install_text_r(cr,t,subs[a->install.view],14,400,l.right,65+top,l.body.w,t->muted);if(a->install.error[0]&&a->install.view!=INSTALL_FAILED&&a->install.view!=INSTALL_PROGRESS)install_text_r(cr,t,a->install.error,11,600,l.right,87+top,l.body.w,t->danger_fg);
     cairo_rectangle(cr,0,l.footer.y,l.footer.w,1);draw_set(cr,t->hair);cairo_fill(cr);draw_fill_rrect(cr,l.footer,0,t->surface);return l;}
 
+/* #2777: focus just arrived and nothing typed yet -- the next key replaces the text (install.c, select_on_arrival) */
+static int install_field_selected(const App *a,int id){return a->focus==id&&a->install.edit_field!=id;}
 void install_field_draw(App *a,cairo_t *cr,Rect r,const char *label,const char *value,int mask,int id,int enabled){const Theme *t=a->theme;install_text_r(cr,t,label,12,500,r.x+r.w,r.y,r.w,enabled?t->ink:t->muted);   /* .win .n-f>label: --clr-text, 12px 500 */Rect f={r.x,r.y+19,r.w,36};draw_field_box(cr,t,f,a->focus==id&&enabled);   /* .win .n-in and :focus (border + 3px ring) */
+    if(enabled&&a->focus==id){a->install.osk_fy=r.y;a->install.osk_fh=r.h;}   /* #2778: the keyboard on the screen keeps clear of it */
     char shown[300];if(mask&&value[0]){size_t k=0;for(const char *p=value;*p&&k+4<sizeof shown;p++)if((*p&0xc0)!=0x80){memcpy(shown+k,"\xe2\x80\xa2",3);k+=3;}shown[k]=0;}else snprintf(shown,sizeof shown,"%s",value);
-    Text text=text_make(cr,FONT_MONO,13,400,shown,(int)f.w-24,DIR_LTR);double ty=f.y+(f.h-text.h)/2;text_draw(cr,&text,f.x+12,ty,enabled?t->ink:t->muted);if(enabled&&a->focus==id){double caret=f.x+12+text.w+1;cairo_rectangle(cr,caret,ty,1,text.h);draw_set(cr,t->indigo);cairo_fill(cr);}text_free(&text);if(enabled)hit_add(a,f,id);}
+    Text text=text_make(cr,FONT_MONO,13,400,shown,(int)f.w-24,DIR_LTR);double ty=f.y+(f.h-text.h)/2;
+    if(enabled&&value[0]&&install_field_selected(a,id)){cairo_rectangle(cr,f.x+10,ty-1,text.w+4,text.h+2);draw_set(cr,t->indigo_soft);cairo_fill(cr);}   /* #2777: shown selected */
+    text_draw(cr,&text,f.x+12,ty,enabled?t->ink:t->muted);if(enabled&&a->focus==id){double caret=f.x+12+text.w+1;cairo_rectangle(cr,caret,ty,1,text.h);draw_set(cr,t->indigo);cairo_fill(cr);}text_free(&text);if(enabled)hit_add(a,f,id);}
 
 void install_radio(App *a,cairo_t *cr,Rect r,const char *title,const char *desc,int selected,int id){const Theme *t=a->theme;draw_fill_rrect(cr,r,t->radius,selected?t->indigo_soft:t->surface);draw_border_rrect(cr,r,t->radius,selected?t->indigo:t->hair,selected?2:1);double cx=r.x+r.w-24,cy=r.y+23;cairo_arc(cr,cx,cy,8,0,2*M_PI);draw_set(cr,selected?t->indigo:t->hair);cairo_set_line_width(cr,2);cairo_stroke(cr);if(selected){cairo_arc(cr,cx,cy,4,0,2*M_PI);draw_set(cr,t->indigo);cairo_fill(cr);}install_text_r(cr,t,title,15,600,r.x+r.w-44,r.y+12,r.w-58,t->ink);install_text_r(cr,t,desc,12,400,r.x+r.w-20,r.y+42,r.w-40,t->muted);install_focus_ring(a,cr,r,id);hit_add(a,r,id);}
 
@@ -77,35 +82,44 @@ void install_footer(App *a,cairo_t *cr,InstallLayout l,const char *primary,int p
 /* mockup 10/10: the footer says which keys work on this step -- they all
  * did (install.c), and nothing said so; "שלב N מתוך 7" repeated the rail.
  * Right-aligned clear of "הבא" (118) and "חזור" (up to 100), on every step. */
-static const char *install_keys(const InstallState *s){
+/* #2776: Tab on every step, and what Space does on the control in focus (install.c, keys_2776). */
+static int install_eye(int f){return f==HIT_INSTALL_SHOW_PASSWORD||f==HIT_INSTALL_SHOW_CONFIRM||f==HIT_INSTALL_SHOW_ROOT||f==HIT_INSTALL_SHOW_ROOT_CONFIRM;}
+static const char *install_keys(const App *a){
+    const InstallState *s=&a->install;int f=a->focus,link=f>=HIT_INSTALL_SUMMARY_BASE&&f<HIT_INSTALL_SUMMARY_BASE+7;
     switch(s->view){
-    case INSTALL_DISK:return install_raid_offered(s)?"↑↓  בחירת דיסק    ←→  RAID    רווח  אני מבין    Enter  הבא":"↑↓  בחירת דיסק    רווח  אני מבין    Enter  הבא";
+    case INSTALL_DISK:return f==HIT_INSTALL_BOOT_LOCAL?"↑↓  בחירת דיסק    Tab  מעבר    רווח  אתחל מהדיסק    Enter  הבא":install_raid_offered(s)?"↑↓  בחירת דיסק    ←→  RAID    Tab  מעבר    רווח  אני מבין    Enter  הבא":"↑↓  בחירת דיסק    Tab  מעבר    רווח  אני מבין    Enter  הבא";
     case INSTALL_ROLE:case INSTALL_TIME:case INSTALL_BACKUP:return "↑↓ / Tab  מעבר    Enter  הבא    Esc  חזור";   /* #2144: the role step's keys -- options here too */
     case INSTALL_NETWORK:return "↑↓ / Tab  מעבר    רווח  DHCP / סטטי    Enter  הבא    Esc  חזור";
-    case INSTALL_HOSTNAME:case INSTALL_ADMIN:return "Tab / Shift-Tab  מעבר    Enter  הבא    Esc  חזור";
-    case INSTALL_SUMMARY:return "Enter  החל התקנה    Esc  חזור";
-    case INSTALL_PROGRESS:return s->technical_open?"רווח  פרטים טכניים    ↑↓  גלילה":"רווח  פרטים טכניים";
-    case INSTALL_FAILED:return "Enter  נסה שוב    ↑↓  גלילה    Esc  חזרה לבחירת דיסק";
-    default:return "Enter  הפעל מחדש    Esc  בטל הפעלה אוטומטית";
+    case INSTALL_HOSTNAME:return "Tab / Shift-Tab  מעבר    Enter  הבא    Esc  חזור";
+    case INSTALL_ADMIN:return install_eye(f)?"↑↓ / Tab  מעבר    רווח  הצג / הסתר סיסמה    Enter  הבא    Esc  חזור":"↑↓ / Tab  מעבר    Enter  הבא    Esc  חזור";
+    case INSTALL_SUMMARY:return link?"Tab  מעבר    רווח / Enter  שינוי השלב    Esc  חזור":"Tab  שינוי שלב    Enter  החל התקנה    Esc  חזור";
+    case INSTALL_PROGRESS:return s->technical_open?"Tab  מעבר    רווח  פרטים טכניים    ↑↓  גלילה":"Tab  מעבר    רווח  פרטים טכניים";
+    case INSTALL_FAILED:return f==HIT_INSTALL_RETRY?"רווח / Enter  נסה שוב    ↑↓  גלילה    Esc  חזרה לבחירת דיסק":"Enter  נסה שוב    ↑↓  גלילה    Tab  מעבר    Esc  חזרה לבחירת דיסק";
+    default:return s->reboot_at<=0?"Enter  הפעל מחדש":f==HIT_INSTALL_CANCEL_REBOOT?"רווח / Esc  בטל הפעלה אוטומטית    Enter  הפעל מחדש":"Enter  הפעל מחדש    Tab  מעבר    Esc  בטל הפעלה אוטומטית";
     }
 }
+/* #2778 (Nadav 09/11): F5 opens and closes the keyboard on the screen, wherever there is a field to type in */
+void install_keys_line(App *a,char *out,size_t n){snprintf(out,n,"%s%s",install_keys(a),install_text_fields(&a->install)?"    F5  מקלדת מסך":"");}
 static void install_keys_draw(App *a,cairo_t *cr,InstallLayout l){
     double right=l.footer.w-32-118-12-100;if(right<120)return;
-    Text k=text_make(cr,FONT_SANS,12,400,install_keys(&a->install),(int)(right-32),DIR_RTL);
+    char line[320];install_keys_line(a,line,sizeof line);
+    Text k=text_make(cr,FONT_SANS,12,400,line,(int)(right-32),DIR_RTL);
     pango_layout_set_alignment(k.layout,PANGO_ALIGN_RIGHT);
     text_draw_r(cr,&k,right,l.footer.y+(l.footer.h-k.h)/2,a->theme->muted);text_free(&k);}
 
-void screen_install(App *a,cairo_t *cr,double W,double H){InstallLayout l=install_frame(a,cr,W,H);switch(a->install.view){case INSTALL_DISK:install_draw_disk(a,cr,l);break;case INSTALL_ROLE:install_draw_role(a,cr,l);break;case INSTALL_NETWORK:install_draw_network(a,cr,l);break;case INSTALL_HOSTNAME:case INSTALL_ADMIN:install_draw_forms(a,cr,l);break;case INSTALL_TIME:install_draw_time(a,cr,l);break;case INSTALL_BACKUP:install_draw_backup(a,cr,l);break;default:install_draw_final(a,cr,l);break;}install_keys_draw(a,cr,l);}
+void screen_install(App *a,cairo_t *cr,double W,double H){a->install.osk_fh=0;InstallLayout l=install_frame(a,cr,W,H);switch(a->install.view){case INSTALL_DISK:install_draw_disk(a,cr,l);break;case INSTALL_ROLE:install_draw_role(a,cr,l);break;case INSTALL_NETWORK:install_draw_network(a,cr,l);break;case INSTALL_HOSTNAME:case INSTALL_ADMIN:install_draw_forms(a,cr,l);break;case INSTALL_TIME:install_draw_time(a,cr,l);break;case INSTALL_BACKUP:install_draw_backup(a,cr,l);break;default:install_draw_final(a,cr,l);break;}install_keys_draw(a,cr,l);install_draw_osk(a,cr,l);}   /* #2778: last, so its keys are the topmost hits */
 
 /* #1310: the role step in its three states -- green (the demo), not yet
  * checked (next disabled), and a real failure with its reason. */
 static void role_variant(InstallState *s,const char *name){if(strstr(name,"-lab-unknown")){s->lab=INSTALL_LAB_UNCHECKED;return;}if(strstr(name,"-lab")){s->lab=INSTALL_LAB_YES;return;}   /* #1412: the strip, on the shortest and the longest steps */
     if(strstr(name,"-unchosen")){s->disk=-1;s->disk_ack=0;return;}   /* #2147: two disks, none chosen yet */
     if(strstr(name,"-time-org")){s->ntp_org=1;return;}   /* #2144: the mockup's five states */
+    if(strstr(name,"-time-manual")){s->ntp_manual=1;snprintf(s->manual_time,sizeof s->manual_time,"2026-11-09 14:32:00");return;}   /* #2765 */
+    if(strstr(name,"-done-manual")){s->clock=INSTALL_CLOCK_MANUAL;s->ntp_manual=1;return;}
     if(strstr(name,"-backup-other")){s->backup_pick=INSTALL_BACKUP_OTHER;snprintf(s->backup_other,sizeof s->backup_other,"40");return;}   /* #1956 */
     if(strstr(name,"-done-unsynced")){s->clock=INSTALL_CLOCK_UNSYNCED;s->clock_offset[0]=0;return;}
     if(strstr(name,"-done-unchecked")){s->clock=INSTALL_CLOCK_UNCHECKED;s->clock_offset[0]=0;return;}
     if(strstr(name,"-unchecked")){s->primary_checked=s->primary_ok=0;}
     else if(strstr(name,"-failed")){s->primary_checked=1;s->primary_ok=0;snprintf(s->primary_error,sizeof s->primary_error,"אין תשובה מ-192.168.68.250 בפורט 8443 תוך 5 שניות (timeout): חומת אש חוסמת בשקט, או שהכתובת שגויה");}}
-int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-3d-backup",INSTALL_BACKUP},{"install-3e-backup-other",INSTALL_BACKUP},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE},{"install-0c-disk-lab",INSTALL_DISK},{"install-0d-disk-lab-unknown",INSTALL_DISK},{"install-4b-admin-lab",INSTALL_ADMIN},{"install-5d-summary-lab",INSTALL_SUMMARY}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
+int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-3f-time-manual",INSTALL_TIME},{"install-3d-backup",INSTALL_BACKUP},{"install-3e-backup-other",INSTALL_BACKUP},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE},{"install-6d-done-manual",INSTALL_DONE},{"install-0c-disk-lab",INSTALL_DISK},{"install-0d-disk-lab-unknown",INSTALL_DISK},{"install-4b-admin-lab",INSTALL_ADMIN},{"install-5d-summary-lab",INSTALL_SUMMARY}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
     for(size_t i=0;i<sizeof cards/sizeof cards[0];i++){for(int t=0;t<2;t++){install_demo(a,cards[i].view);role_variant(&a->install,cards[i].name);a->theme=themes[t];cairo_surface_t *sf=cairo_image_surface_create(CAIRO_FORMAT_RGB24,w,h);cairo_t *cr=cairo_create(sf);double s=ui_scale(h);a->scale=s;cairo_scale(cr,s,s);screen_install(a,cr,w/s,h/s);cairo_destroy(cr);   /* the scale app_draw uses */char path[512];snprintf(path,sizeof path,"%s-%s-%s.png",prefix,cards[i].name,themes[t]->id);cairo_status_t st=cairo_surface_write_to_png(sf,path);cairo_surface_destroy(sf);if(st!=CAIRO_STATUS_SUCCESS){fprintf(stderr,"native-gui: %s: %s\n",path,cairo_status_to_string(st));return 1;}}}return 0;}

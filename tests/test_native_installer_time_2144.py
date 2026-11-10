@@ -28,7 +28,7 @@ from native import requires_native
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native-gui" / "src"
 MOCKUP_STRINGS = (   # docs/design/mockups-1104/2144-time.html, the strings table -- word for word
-    "שעון השרת", "מאיפה השרת מקבל את השעה. אפשר לשנות אחר כך בקונסולה.", "שרת זמן (NTP)",
+    "שעון השרת", "מאיפה השרת מקבל את השעה. אפשר לשנות אחר כך בקונסולה.", "מקור השעה",   # #2765: was "שרת זמן (NTP)" -- a third source, so the group is the source
     "שרתי הזמן של Debian. צריך גישה לאינטרנט ב-UDP 123.", "כשרשת המכללה חוסמת NTP לאינטרנט.",
     "השעה עכשיו בשרת", "לפי שעון החומרה, עוד בלי סנכרון. הסנכרון נבדק בסוף ההתקנה.",
     "ההתקנה הושלמה — השעון לא סונכרן",
@@ -84,20 +84,51 @@ def test_the_form_sends_the_source_and_its_own_step():
 def test_an_unknown_clock_report_is_not_checked():
     control = _c("install.c")
     assert ('s->clock=!strcmp(eq,"synced")?INSTALL_CLOCK_SYNCED:!strcmp(eq,"unsynced")?'
-            'INSTALL_CLOCK_UNSYNCED:INSTALL_CLOCK_UNCHECKED;') in control
+            'INSTALL_CLOCK_UNSYNCED:!strcmp(eq,"manual")?INSTALL_CLOCK_MANUAL:INSTALL_CLOCK_UNCHECKED;') in control
     assert "enum { INSTALL_CLOCK_UNCHECKED = 0," in _c("install_state.h"), "a zeroed state is 'not checked'"
 
 
 def test_the_summary_has_the_clock_row_and_its_change_opens_step_five():
     final = _c("screens_install_final.c")
-    assert '"שעון השרת",s->ntp_org?s->ntp_servers:"אוטומטי",4);' in final
+    assert 'summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"שעון השרת",src,4);' in final
     assert '"משתמש הניהול",value,6);' in final and '"סיסמת root","נקבעה",6);' in final
     assert "id<HIT_INSTALL_SUMMARY_BASE+7)" in _c("install.c")
 
 
+def test_the_zone_is_on_the_clock_step_and_not_on_the_name_step():
+    """#2764: one place for time. The name's step draws and gates on the name alone."""
+    forms = _c("screens_install_forms.c")
+    name_step = forms[forms.index("static void hostname("):forms.index("static void rule(")]
+    clock_step = forms[forms.index("void install_draw_time("):forms.index("/* #1956")]
+    assert "HIT_INSTALL_TIMEZONE" not in name_step and "s->timezone" not in name_step
+    assert '"אזור זמן",s->timezone,0,HIT_INSTALL_TIMEZONE' in clock_step
+    assert 'install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,s->hostname[0]!=0);' in name_step
+    control = _c("install.c")
+    fields = control[control.index("static int fields("):control.index("/* #1206: the keyboard ring")]
+    # round/1108j: fields() also lists the clock step's text fields for #2778's keyboard, the zone among them --
+    # what must hold is that the name step's branch is the name alone
+    assert "else if(s->view==INSTALL_HOSTNAME)ids[n++]=HIT_INSTALL_HOSTNAME;else" in fields, "the name step's ring is the name alone"
+    assert "else if(s->view==INSTALL_TIME){ids[n++]=HIT_INSTALL_TIMEZONE;" in fields, "the zone is a text field of the clock step"
+    assert "[INSTALL_HOSTNAME]={9,9}" in control and "[INSTALL_TIME]={17,17}" in control
+    assert "if(s->view==INSTALL_TIME)s->field_error[14][0]=s->field_error[20][0]=0;" in control, "the zone's error belongs to the clock step"
+    assert "else if(view==INSTALL_HOSTNAME)first=last=9;" in control
+
+
+def test_the_manual_source_is_sent_as_its_own_answer_and_gates_next():
+    control = _c("install.c")
+    assert 'json_pair(&p, &n, "clock_manual", cm, 1);' in control
+    assert '"ntp_servers","backup_reserve_gb","backup_time","clock_manual"' in control
+    assert "case HIT_INSTALL_MANUAL_TIME:return 20;" in control
+    assert "if(!s->ntp_org&&!s->ntp_manual)return 1;" in control, "a manual time must not be empty"
+    assert "char field_error[21][256];" in _c("install_state.h")
+    # the done screen's manual verdict is information (calm chip), not the orange alert
+    final = _c("screens_install_final.c")
+    assert "if(s->clock==INSTALL_CLOCK_MANUAL){Rect hero" in final and "manual?t->indigo_soft:ok?" in final
+
+
 def test_the_time_on_the_step_never_carries_another_zones_name():
     control = _c("install.c")
-    body = control[control.index("int install_clock_now("):control.index("/* #1310: green")]
+    body = control[control.index("static int clock_tm("):control.index("/* #1310: green")]   # #2765: the zone logic became clock_tm
     assert 'access(path,R_OK)==0' in body and 'snprintf(zone,zn,"UTC")' in body and "gmtime_r" in body
 
 
@@ -124,7 +155,7 @@ static App app;
 static void key(App *a, InstallBridge *b, int k) { Event e = {0}; e.type = UIEV_KEY; e.key = k; install_handle(a, b, &e); }
 static void type(App *a, InstallBridge *b, const char *s) { for (; *s; s++) { Event c = {0}; c.type = UIEV_CHAR; c.ch = *s; install_handle(a, b, &c); } }
 
-/* argv: BRIDGE MODE [TEXT] -- auto | org-empty | org TEXT | summary | report TEXT */
+/* argv: BRIDGE MODE [TEXT [AGE]] -- auto | org-empty | org TEXT | manual TEXT | summary | report TEXT | sent TEXT AGE */
 int main(int argc, char **argv) {
     if (argc < 3) return 2;
     App *a = &app;
@@ -134,7 +165,16 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[2], "auto")) key(a, &b, KEYSYM_ENTER);
     else if (!strcmp(argv[2], "org-empty")) { key(a, &b, KEYSYM_DOWN); key(a, &b, KEYSYM_ENTER); }
     else if (!strcmp(argv[2], "org") && argc > 3) { key(a, &b, KEYSYM_DOWN); key(a, &b, KEYSYM_DOWN); type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER); }
-    else if (!strcmp(argv[2], "summary")) {
+    else if (!strcmp(argv[2], "manual") && argc > 3) {   /* Down x4: org, its field, the manual radio, its field */
+        for (int i = 0; i < 4; i++) key(a, &b, KEYSYM_DOWN);
+        for (int i = 0; i < 40; i++) key(a, &b, KEYSYM_BACKSPACE);
+        type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER);
+    } else if (!strcmp(argv[2], "sent") && argc > 4) {   /* install_manual_sent: the text, typed AGE seconds ago */
+        InstallState *s = &a->install; char out[64];
+        s->ntp_manual = 1; snprintf(s->manual_time, sizeof s->manual_time, "%%s", argv[3]);
+        s->manual_edit_at = monotonic_s() - atof(argv[4]); install_manual_sent(s, out, sizeof out);
+        printf("sent=%%s\n", out); return 0;
+    } else if (!strcmp(argv[2], "summary")) {
         a->install.view = INSTALL_SUMMARY; choose(a, &b, HIT_INSTALL_SUMMARY_BASE + 4); printf("row4=%%d\n", a->install.view);
         a->install.view = INSTALL_SUMMARY; choose(a, &b, HIT_INSTALL_SUMMARY_BASE + 6); printf("row6=%%d\n", a->install.view);
         printf("time=%%d\nadmin=%%d\n", INSTALL_TIME, INSTALL_ADMIN); return 0;
@@ -142,7 +182,8 @@ int main(int argc, char **argv) {
         char text[512]; snprintf(text, sizeof text, "%%s", argv[3]); parse_lines(&a->install, text, "finish");
         printf("clock=%%d\nserver=%%s\noffset=%%s\n", a->install.clock, a->install.clock_server, a->install.clock_offset); return 0;
     } else return 2;
-    printf("moved_on=%%d\nntp_org=%%d\nntp_servers=%%s\n", a->install.view != INSTALL_TIME, a->install.ntp_org, a->install.ntp_servers);
+    printf("moved_on=%%d\nntp_org=%%d\nntp_servers=%%s\nntp_manual=%%d\nmanual_time=%%s\n", a->install.view != INSTALL_TIME,
+           a->install.ntp_org, a->install.ntp_servers, a->install.ntp_manual, a->install.manual_time);
     return 0;
 }
 '''
@@ -162,13 +203,14 @@ def driver(tmp_path_factory) -> Path:
     return binary
 
 
-def _drive(driver: Path, tmp_path: Path, *args: str, error: str = "") -> tuple[dict, dict | None]:
+def _drive(driver: Path, tmp_path: Path, *args: str, error: str = "", manual_error: str = "") -> tuple[dict, dict | None]:
     bridge_cmd = (f'f(){{ cat > "{tmp_path}/$1.json"; case "$1" in '
                   "inventory) printf 'disk=/dev/sda|model=X|size=1|bus=sata|removable=0|has=empty|iso=0\\n' ;; "
                   "progress) printf 'state=ready\\n' ;; "
-                  'validate) [ -z "$NTP_ERR" ] || printf "errors.ntp_servers=%s\\n" "$NTP_ERR" ;; esac; }; f')
+                  'validate) [ -z "$NTP_ERR" ] || printf "errors.ntp_servers=%s\\n" "$NTP_ERR"; '
+                  '[ -z "$CM_ERR" ] || printf "errors.clock_manual=%s\\n" "$CM_ERR" ;; esac; }; f')
     proc = subprocess.run([str(driver), bridge_cmd, *args], capture_output=True, text=True, timeout=30,
-                          stdin=subprocess.DEVNULL, env={**os.environ, "NTP_ERR": error})
+                          stdin=subprocess.DEVNULL, env={**os.environ, "NTP_ERR": error, "CM_ERR": manual_error})
     assert proc.returncode == 0, proc.stdout + proc.stderr
     state = dict(line.split("=", 1) for line in proc.stdout.splitlines())
     sent = tmp_path / "validate.json"
@@ -180,6 +222,7 @@ def test_automatic_is_the_default_and_sends_an_empty_source(driver, tmp_path):
     state, sent = _drive(driver, tmp_path, "auto")
     assert state["moved_on"] == "1" and state["ntp_org"] == "0"
     assert sent["ntp_servers"] == "" and sent["step"] == 6
+    assert sent["clock_manual"] == "" and state["ntp_manual"] == "0", "automatic sends no manual time"
 
 
 @NATIVE
@@ -203,6 +246,47 @@ def test_a_refused_address_keeps_the_person_on_the_step(driver, tmp_path):
 
 
 @NATIVE
+def test_the_manual_time_is_sent_as_typed_and_no_time_server_goes_with_it(driver, tmp_path):
+    """#2765: the radio, its field (reached by the arrow keys in screen order), and what the bridge gets."""
+    state, sent = _drive(driver, tmp_path, "manual", "2026-11-09 14:32")
+    assert state["ntp_manual"] == "1" and state["ntp_org"] == "0" and state["moved_on"] == "1"
+    assert sent["clock_manual"] == "2026-11-09 14:32:00" and sent["ntp_servers"] == "" and sent["step"] == 6
+
+
+@NATIVE
+def test_manual_without_a_time_keeps_next_off(driver, tmp_path):
+    state, sent = _drive(driver, tmp_path, "manual", "")
+    assert state["ntp_manual"] == "1" and state["moved_on"] == "0"
+    assert sent is None, "an empty time is not even sent to the bridge"
+
+
+@NATIVE
+def test_a_refused_manual_time_keeps_the_person_on_the_step(driver, tmp_path):
+    state, sent = _drive(driver, tmp_path, "manual", "2026-02-31 10:00", manual_error="התאריך והשעה אינם תקינים")
+    assert state["moved_on"] == "0"
+    assert sent["clock_manual"] == "2026-02-31 10:00", "a date that does not exist is sent as typed, never 'fixed' into March"
+
+
+@NATIVE
+@pytest.mark.parametrize("typed,age,expected", [
+    ("2026-11-09 14:32", "0", "2026-11-09 14:32:00"),
+    ("2026-11-09 14:32", "125", "2026-11-09 14:34:05"),      # the install starts minutes after the typing
+    ("2026-11-09 14:32:10", "50", "2026-11-09 14:33:00"),
+    ("2026-12-31 23:59", "120", "2027-01-01 00:01:00"),
+    ("2028-02-28 23:59", "61", "2028-02-29 00:00:01"),       # a leap day that exists
+    ("2026-02-31 10:00", "5", "2026-02-31 10:00"),           # not a day: as typed
+    ("2026-13-01 10:00", "5", "2026-13-01 10:00"),
+    ("2026-11-09 24:00", "5", "2026-11-09 24:00"),
+    ("2026-11-09 14:32x", "5", "2026-11-09 14:32x"),
+    ("soon", "5", "soon"),
+    ("", "5", ""),
+])
+def test_the_manual_time_moves_on_with_the_seconds_since_it_was_typed(driver, tmp_path, typed, age, expected):
+    state, _ = _drive(driver, tmp_path, "sent", typed, age)
+    assert state["sent"] == expected
+
+
+@NATIVE
 def test_the_summary_rows_open_the_clock_and_the_admin_steps(driver, tmp_path):
     state, _ = _drive(driver, tmp_path, "summary")
     assert state["row4"] == state["time"] and state["row6"] == state["admin"]
@@ -212,6 +296,7 @@ def test_the_summary_rows_open_the_clock_and_the_admin_steps(driver, tmp_path):
 @pytest.mark.parametrize("report,clock", [
     ("clock=synced\nclock_server=10.44.0.250\nclock_offset_ms=3\n", "1"),
     ("clock=unsynced\nclock_server=10.44.0.250\n", "2"),
+    ("clock=manual\nclock_manual_at=2026-11-09T12:32:00+00:00\n", "3"),   # #2765: the operator's choice
     ("clock=unchecked\n", "0"),
     ("clock=maybe\n", "0"),
     ("user=admin\n", "0"),      # an older bridge, no report at all

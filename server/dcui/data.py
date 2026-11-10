@@ -113,9 +113,10 @@ class Snapshot:
     pre_install: bool = False
     system_updates: str = ""      # #1411: YYYY-MM-DD of the Debian packages; "" = not known
     first_boot_running: bool = False   # #2155: state=installing, within FIRST_BOOT_GRACE_S
-    #: #2144: chrony's answer -- CLOCK_SYNCED / CLOCK_UNSYNCED / CLOCK_UNCHECKED.
+    #: #2144: chrony's answer -- CLOCK_SYNCED / CLOCK_UNSYNCED / CLOCK_UNCHECKED;
+    #: #2765: or CLOCK_MANUAL (chosen by the operator, no chrony measurement at all).
     #: "" only on a frame that carries no clock (pre-install, hand-made samples):
-    #: collect_snapshot always sets one of the three.
+    #: collect_snapshot always sets one of the four.
     clock: str = ""
     clock_server: str = ""        # the configured source, as the operator chose it
     #: #1412: the installing ISO's lab_overlay -- LAB_ISO_LAB / LAB_ISO_CLEAN /
@@ -360,6 +361,8 @@ def lab_iso_state(manifest_file: Path = ISO_MANIFEST) -> str:
 
 
 CLOCK_SYNCED, CLOCK_UNSYNCED, CLOCK_UNCHECKED = "synced", "unsynced", "unchecked"
+#: #2765: the operator chose "no time server" (no internet) -- his time, not a problem
+CLOCK_MANUAL = "manual"
 #: what chrony uses when the setting is empty ("automatic", timesync.DEBIAN_POOLS)
 AUTO_TIME_SOURCE = "debian.pool.ntp.org"
 
@@ -380,6 +383,12 @@ def clock_state(runner: Runner, conn) -> tuple[str, str]:
     hooks = {"tracking": lambda: read(["chronyc", "-n", "tracking"]),
              "sources": lambda: read(["chronyc", "-n", "sources"]),
              "now": lambda: ""}
+    try:
+        manual = timesync.is_manual(conn)
+    except Exception:  # noqa: BLE001 -- an unreadable flag is not "manual": the measurement below decides
+        manual = False
+    if manual:
+        return CLOCK_MANUAL, ""
     answer = timesync.status(hooks)["synchronized"]
     state = (CLOCK_UNCHECKED if answer is None
              else CLOCK_SYNCED if answer else CLOCK_UNSYNCED)

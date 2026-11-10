@@ -110,6 +110,7 @@ done
 
 parse_answers "$ANSWERS_FILE"
 validate_answers
+clock_mark_start   # #2765 (clock.sh): the manual time is the operator's at the START; the install takes minutes
 root_password_hash   # #1632 (finish.sh): no openssl fails here, before the disk is erased
 if [ "$DRY_RUN" -eq 0 ] && [ "${IMAGESRV_TEST:-0}" != 1 ]; then
     [ "$(id -u)" -eq 0 ] || fail not-root "installation requires root"

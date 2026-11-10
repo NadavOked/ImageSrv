@@ -26,17 +26,22 @@ typedef struct {
 #define HIT_INSTALL_NTP_AUTO       1112   /* #2144 */
 #define HIT_INSTALL_NTP_ORG        1113
 #define HIT_INSTALL_NTP_SERVERS    1114
+#define HIT_INSTALL_NTP_MANUAL     1115   /* #2765 */
+#define HIT_INSTALL_MANUAL_TIME    1116
 #define HIT_INSTALL_DISK_BASE      1120
 #define HIT_INSTALL_RAID_BASE      1140   /* #1989: + RAID_* */
 #define HIT_INSTALL_BACKUP_BASE    1150   /* #1956: + backup_pick */
 #define HIT_INSTALL_BACKUP_OTHER_GB 1154
 #define HIT_INSTALL_BACKUP_TIME    1155
+#define HIT_INSTALL_OSK_BASE       1200   /* #2778: + a key of install_osk.h; + OSK_KEYS = the panel itself */
 
 void install_demo(App *a, int view);
 int install_start(App *a, InstallBridge *bridge, int demo);
 int install_handle(App *a, InstallBridge *bridge, const Event *event);
 int install_tick(App *a, InstallBridge *bridge);
 int install_polling(const App *a);
+/* #2778: how many text fields the screen has now -- F5's keyboard has somewhere to type */
+int install_text_fields(InstallState *s);
 int install_password_ready(const InstallState *s);
 /* The password rules, one definition for the screen and the gate: a special
  * character is ANY character that is not an ASCII letter or digit -- the
@@ -44,7 +49,7 @@ int install_password_ready(const InstallState *s);
 void install_password_rules(const char *pw, int *letter, int *digit, int *special);
 /* #1310: "next" on the role screen -- a secondary only after a GREEN check */
 int install_role_ready(const InstallState *s);
-/* #2144: "next" on the clock step -- the organisation's server needs an address */
+/* #2144: "next" on the clock step -- the organisation's server needs an address; #2765: the manual time needs a time */
 int install_time_ready(const InstallState *s);
 /* #1956: "next" on the backup step -- an hour and a size; the engine checks their rules.
  * install_backup_gb is the size as it is sent ("" while "גודל אחר" is empty). */
@@ -54,6 +59,10 @@ int install_backup_ready(const InstallState *s);
  * TZif is on this system, else in UTC and the label says "UTC" -- never another
  * zone's time under the chosen name. Returns the minute drawn. */
 int install_clock_now(const InstallState *s, char *when, size_t n, char *zone, size_t zn);
+/* #2765: the manual time as it is SENT: what is typed, plus the seconds since it was typed (the install
+ * starts when "apply" is pressed, minutes later). A text that is not a real date and time is sent as typed,
+ * and the engine refuses it by name. */
+void install_manual_sent(const InstallState *s, char *out, size_t n);
 const char *install_phase_label(const char *phase);
 void screen_install(App *a, cairo_t *cr, double W, double H);
 int install_render_png(App *a, const char *prefix, int w, int h);

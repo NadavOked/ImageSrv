@@ -167,22 +167,25 @@ int app_hit(const App *a, double x, double y) { (void)a; (void)x; (void)y; retur
 static App app;
 static void key(App *a, InstallBridge *b, int k) { Event e = {0}; e.type = UIEV_KEY; e.key = k; install_handle(a, b, &e); }
 
-/* argv: BRIDGE ZONE|- -- start, go to the server-name step, Tab, and (unless
- * "-") replace what the field holds with ZONE, then Enter. Only symbols the
- * installer had before #1447, so the same driver runs against the old code. */
+/* argv: BRIDGE ZONE|- [name] -- start, go to the clock step (#2764: the zone is
+ * there, with the time; "name" = the server-name step instead), reach the zone
+ * field (Shift-Tab from the first radio; on the name step: Tab), and (unless "-")
+ * replace what the field holds with ZONE, then Enter. */
 int main(int argc, char **argv) {
     if (argc < 3) return 2;
     App *a = &app;
     InstallBridge b = { argv[1], NULL, 0 };
     if (install_start(a, &b, 0)) { printf("start-failed\n"); return 3; }
-    a->install.view = INSTALL_HOSTNAME; refocus(a);
-    key(a, &b, KEYSYM_TAB);
+    int name = argc > 3 && !strcmp(argv[3], "name");
+    a->install.view = name ? INSTALL_HOSTNAME : INSTALL_TIME; refocus(a);
+    key(a, &b, name ? KEYSYM_TAB : KEYSYM_BACKTAB);
     if (strcmp(argv[2], "-")) {
         for (int i = 0; i < 64; i++) key(a, &b, KEYSYM_BACKSPACE);
         for (const char *p = argv[2]; *p; p++) { Event c = {0}; c.type = UIEV_CHAR; c.ch = *p; install_handle(a, &b, &c); }
     }
     key(a, &b, KEYSYM_ENTER);
-    printf("moved_on=%%d\nhostname=%%s\n", a->install.view != INSTALL_HOSTNAME, a->install.hostname);
+    printf("moved_on=%%d\nhostname=%%s\ntimezone=%%s\n", a->install.view != (name ? INSTALL_HOSTNAME : INSTALL_TIME),
+           a->install.hostname, a->install.timezone);
     return 0;
 }
 '''
@@ -202,13 +205,13 @@ def driver(tmp_path_factory) -> Path:
     return binary
 
 
-def _drive(driver: Path, tmp_path: Path, zone: str, error: str = "") -> tuple[dict, dict]:
+def _drive(driver: Path, tmp_path: Path, zone: str, error: str = "", step: str = "time") -> tuple[dict, dict]:
     """The bridge records each action's JSON; ``error`` = its errors.timezone on validate."""
     bridge_cmd = (f'f(){{ cat > "{tmp_path}/$1.json"; case "$1" in '
                   "inventory) printf 'disk=/dev/sda|model=X|size=1|bus=sata|removable=0|has=empty|iso=0\\n' ;; "
                   "progress) printf 'state=ready\\n' ;; "
                   'validate) [ -z "$TZ_ERR" ] || printf "errors.timezone=%s\\n" "$TZ_ERR" ;; esac; }; f')
-    proc = subprocess.run([str(driver), bridge_cmd, zone], capture_output=True, text=True, timeout=30,
+    proc = subprocess.run([str(driver), bridge_cmd, zone, step], capture_output=True, text=True, timeout=30,
                           stdin=subprocess.DEVNULL, env={**os.environ, "TZ_ERR": error})
     assert proc.returncode == 0, proc.stdout + proc.stderr
     state = dict(line.split("=", 1) for line in proc.stdout.splitlines())
@@ -224,12 +227,22 @@ def test_the_gui_starts_at_jerusalem(driver, tmp_path):
 
 
 @NATIVE
-def test_tab_from_the_name_reaches_the_zone_field_and_the_typed_zone_is_sent(driver, tmp_path):
+def test_the_zone_is_typed_on_the_clock_step_and_sent_with_its_step(driver, tmp_path):
+    """#2764: the zone moved from the name's step (4) to the clock's (5, the bridge's step 6)."""
     state, sent = _drive(driver, tmp_path, "Europe/London")
-    assert sent.get("timezone") == "Europe/London" and sent["step"] == 3
+    assert sent.get("timezone") == "Europe/London" and sent["step"] == 6
     # the installer's default name: "imagesrv-server" since #1716 (the product is ImageSrv)
     assert state["hostname"] == "imagesrv-server", "the typing went to the zone, not the name"
     assert state["moved_on"] == "1"
+
+
+@NATIVE
+def test_the_name_step_has_no_zone_field_any_more(driver, tmp_path):
+    """#2764: Tab on the name's step stays in the name -- the zone is not there to reach."""
+    state, sent = _drive(driver, tmp_path, "x", step="name")
+    assert state["timezone"] == "Asia/Jerusalem", "the zone is not what was typed into"
+    assert state["hostname"] == "x", "the typing (after the driver emptied the field) went to the name"
+    assert sent["step"] == 3
 
 
 @NATIVE

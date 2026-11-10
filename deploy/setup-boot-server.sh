@@ -39,6 +39,7 @@ NO_FIREWALL=0
 ADMIN_USER=""
 TIMEZONE=""            # #1447: --timezone; ריק = ההגדרה לא נכתבת (ברירת המחדל של השרת)
 NTP_SERVERS=""         # #2144: --ntp-servers; ריק = אוטומטי (ההגדרה לא נכתבת)
+NTP_MANUAL_AT=""       # #2765: --ntp-manual-at (UTC ISO); שעה ידנית בלי שרת זמן — ההגדרה ntp_manual + מועד הקביעה
 BACKUP_TIME=""         # #1956: --backup-time; ריק = 02:00 (ההגדרה לא נכתבת)
 BACKUP_RESERVE_GB=""   # #1956: --backup-reserve-gb; ריק = 5 (ההגדרה לא נכתבת)
 ADMIN_PASS=""
@@ -313,6 +314,7 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
   --admin-pass-fd FD   קורא את הסיסמה מ-FD שכבר פתוח (האשף משתמש ב-3; אינו argv/env/log)
   --timezone ZONE      אזור הזמן של השרת (tzdata, למשל Asia/Jerusalem) — נכתב להגדרה (#1447)
   --ntp-servers "A B"  שרת הזמן של הארגון (עד 4, ברווח) — ההגדרה של הקונסולה, מקור השעה (#2144)
+  --ntp-manual-at ISO  שעה ידנית בלי שרת זמן (#2765): ISO ב-UTC של הרגע שהמתקין קבע אותה; לא עם --ntp-servers
   --backup-time HH:MM  שעת גיבוי המסד היומי — ההגדרה של הקונסולה (#1956)
   --backup-reserve-gb N המקום השמור לגיבויים ב-GB — ההגדרה של הקונסולה (#1956)
   --tftp-root PATH     ברירת מחדל /srv/tftp
@@ -347,6 +349,7 @@ while [[ $# -gt 0 ]]; do
         --admin-pass-fd) ADMIN_PASS_FD="${2:?}"; shift 2 ;;
         --timezone)    TIMEZONE="${2:?}"; shift 2 ;;
         --ntp-servers) NTP_SERVERS="${2:?}"; shift 2 ;;
+        --ntp-manual-at) NTP_MANUAL_AT="${2:?}"; shift 2 ;;
         --backup-time) BACKUP_TIME="${2:?}"; shift 2 ;;
         --backup-reserve-gb) BACKUP_RESERVE_GB="${2:?}"; shift 2 ;;
         --tftp-root)   TFTP_ROOT="${2:?}"; shift 2 ;;
@@ -978,6 +981,24 @@ fi
 # ‏#2144: שרת הזמן שנבחר במתקין הוא ההגדרה של הקונסולה (#1773, "מקור השעה") —
 # בלעדיה עליית השרת (timesync.apply_on_start) הייתה כותבת ל-chrony "אוטומטי".
 # אותו כלל בדיקה של הקונסולה (timesync.validate); ערך שנדחה נכשל כאן בשמו.
+[[ -z "$NTP_SERVERS" || -z "$NTP_MANUAL_AT" ]] || die "--ntp-servers ו--ntp-manual-at אינם יחד: שעה ידנית היא בלי שרת זמן"
+if [[ -n "$NTP_MANUAL_AT" ]] && (( ! DRY_RUN )); then
+    say "שעה ידנית (בלי שרת זמן), נקבעה: $NTP_MANUAL_AT"
+    NTP_MANUAL_AT="$NTP_MANUAL_AT" python3 - <<PYEOF
+import os, sys
+sys.path.insert(0, "$APP_DIR")
+from datetime import datetime
+from server.system import timesync
+from server.db import connect
+set_at = os.environ["NTP_MANUAL_AT"]
+try:
+    datetime.fromisoformat(set_at)
+except ValueError:
+    sys.exit(f"מועד הקביעה אינו ISO: {set_at}")
+conn = connect("$DATA_DIR/imagesrv.db")
+timesync.save(conn, "", set_at)   # נקרא בחזרה בתוך save — אחרת עליית השרת הייתה כותבת "אוטומטי"
+PYEOF
+fi
 if [[ -n "$NTP_SERVERS" ]] && (( ! DRY_RUN )); then
     say "שרת הזמן של השרת: $NTP_SERVERS"
     NTP_SERVERS="$NTP_SERVERS" python3 - <<PYEOF

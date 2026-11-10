@@ -203,6 +203,7 @@ UUID=$_wh_esp_uuid /boot/efi vfat $_wh_esp_opts 0 1
     # #2144: the source chosen on the "שעון השרת" step, in the file the server
     # rewrites from its setting on every start (clock.sh, timesync.py).
     write_chrony_source
+    resolve_manual_clock   # #2765: the moment the operator's time falls on, for the answers below
     write_target 0600 /etc/imagesrv/answers "disk=$ANSWER_DISK
 role=$ANSWER_ROLE
 primary_url=$ANSWER_PRIMARY_URL
@@ -217,6 +218,7 @@ servers_dns=$ANSWER_SERVERS_DNS
 hostname=$ANSWER_HOSTNAME
 timezone=$ANSWER_TIMEZONE
 ntp_servers=$ANSWER_NTP_SERVERS
+ntp_manual_at=$CLOCK_MANUAL_AT
 backup_time=$ANSWER_BACKUP_TIME
 backup_reserve_gb=$ANSWER_BACKUP_RESERVE_GB
 admin_user=$ANSWER_ADMIN_USER

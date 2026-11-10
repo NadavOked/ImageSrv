@@ -20,7 +20,7 @@ enum {
 #define INSTALL_BACKUP_OTHER 3
 
 /* #2144: what the engine's clock check found (installer/lib/clock.sh) */
-enum { INSTALL_CLOCK_UNCHECKED = 0, INSTALL_CLOCK_SYNCED, INSTALL_CLOCK_UNSYNCED };
+enum { INSTALL_CLOCK_UNCHECKED = 0, INSTALL_CLOCK_SYNCED, INSTALL_CLOCK_UNSYNCED, INSTALL_CLOCK_MANUAL };   /* #2765: MANUAL = no time server, by the operator's choice */
 
 /* #1412: the install medium's lab_overlay (imagesrv-iso.json, via the bridge's
  * inventory). Zero is "not checked": a bridge that did not say is never clean. */
@@ -43,12 +43,19 @@ typedef struct {
     int progress_pct, output_scroll, technical_open, show_password, show_confirm;
     int show_root, show_root_confirm;   /* #1632 */
     int virt, raid;   /* #1989: INSTALL_VIRT_*, RAID_* (install_raid.h) */
+    int edit_field, edit_seen;   /* #2777: the field typed in since the focus came to it; the focus the last key saw */
+    int osk, osk_shift;          /* #2778: the keyboard on the screen -- the view it was opened on (0 = closed); Shift for the next key */
+    double osk_fy, osk_fh;       /* #2778: the focused field as this frame drew it (label and box); osk_fh 0 = not drawn */
     char primary_url[192], hostname[64], password[128], confirm[128], current_password[128];
     char admin_user[64];
     char root_password[128], root_confirm[128];   /* #1632: root's, chosen here (Nadav 24/10) */
     char timezone[64];   /* #1447: tzdata zone, default Asia/Jerusalem */
     int ntp_org;         /* #2144: 0 = automatic (Debian's pools), 1 = the organisation's server */
     char ntp_servers[256];
+    int ntp_manual;      /* #2765: "ידני — בלי שרת זמן" (ntp_org is 0 then): manual_time is the time, in `timezone` */
+    char manual_time[32];   /* "YYYY-MM-DD HH:MM[:SS]" as shown in the field */
+    double manual_edit_at;  /* monotonic moment it was typed or seeded: the install starts later, and the time goes on */
+    int manual_seeded;      /* the text is the clock's own, not typed -- a new zone re-seeds it */
     int backup_pick;     /* #1956: 0..2 = 5/10/20 GB, INSTALL_BACKUP_OTHER = typed; zero is the mockup's default */
     char backup_other[8], backup_time[8];
     int clock;           /* #2144: INSTALL_CLOCK_* -- unchecked until the bridge says otherwise */
@@ -60,7 +67,7 @@ typedef struct {
     char phase[48], title[160], log[256], job[64], error[256], console_url[192], user[64];
     double reboot_at;   /* #1250: monotonic deadline of the auto restart; 0 = not counting (cancelled or fired) */
     int reboot_left;    /* seconds shown on the done screen */
-    char field_error[20][256];   /* 14 = timezone (#1447), 15/16 = root_password/_confirm (#1632), 17 = ntp_servers (#2144), 18/19 = backup_reserve_gb/_time (#1956) */
+    char field_error[21][256];   /* 14 = timezone (#1447), 15/16 = root_password/_confirm (#1632), 17 = ntp_servers (#2144), 18/19 = backup_reserve_gb/_time (#1956), 20 = clock_manual (#2765) */
     char output[INSTALL_OUTPUT_MAX];
     InstallDisk disks[INSTALL_MAX_DISKS];
     InstallNic nics[INSTALL_MAX_NICS];

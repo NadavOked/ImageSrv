@@ -83,6 +83,22 @@ static const char *focus_name(const App *a) {
     case HIT_INSTALL_ROOT_PASSWORD: return "root_password";
     case HIT_INSTALL_ROOT_CONFIRM: return "root_confirm";
 #endif
+    /* #2776: the controls the keyboard reaches on every screen */
+    case HIT_INSTALL_SHOW_PASSWORD: return "show_password";
+    case HIT_INSTALL_SHOW_CONFIRM: return "show_confirm";
+    case HIT_INSTALL_SHOW_ROOT: return "show_root";
+    case HIT_INSTALL_SHOW_ROOT_CONFIRM: return "show_root_confirm";
+    case HIT_INSTALL_DISK_ACK: return "ack";
+    case HIT_INSTALL_BOOT_LOCAL: return "boot_local";
+    case HIT_INSTALL_TECHNICAL: return "technical";
+    case HIT_INSTALL_RETRY: return "retry";
+    case HIT_INSTALL_CANCEL_REBOOT: return "cancel_reboot";
+    }
+    if (a->focus >= HIT_INSTALL_DISK_BASE && a->focus < HIT_INSTALL_DISK_BASE + INSTALL_MAX_DISKS) return "disks";
+    if (a->focus >= HIT_INSTALL_RAID_BASE && a->focus < HIT_INSTALL_RAID_BASE + RAID_CHOICES) return "raid";
+    if (a->focus >= HIT_INSTALL_SUMMARY_BASE && a->focus < HIT_INSTALL_SUMMARY_BASE + 20) {
+        snprintf(buf, sizeof buf, "change%%d", a->focus - HIT_INSTALL_SUMMARY_BASE);
+        return buf;
     }
     if (a->focus >= HIT_INSTALL_NIC_BASE && a->focus < HIT_INSTALL_NIC_BASE + INSTALL_MAX_NICS) {
         snprintf(buf, sizeof buf, "nic%%d", a->focus - HIT_INSTALL_NIC_BASE);
@@ -97,6 +113,12 @@ static void show(const App *a, const char *tok) {
     printf("%%s view=%%d focus=%%s secondary=%%d nic=%%d static=%%d disk=%%d ack=%%d ok=%%d checked=%%d\n", tok,
            s->view, focus_name(a), s->secondary, s->nic, s->static_mode, s->disk, s->disk_ack,
            s->primary_ok, s->primary_checked);
+    /* #2776/#2777: the rest of the state, on a second line the parser joins */
+    printf("+ raid=%%d technical=%%d scroll=%%d reboot=%%d shown=%%d%%d%%d%%d"
+           " address=%%s netmask=%%s gateway=%%s dns=%%s hostname=%%s\n",
+           s->raid, s->technical_open, s->output_scroll, s->reboot_at > 0,
+           s->show_password, s->show_confirm, s->show_root, s->show_root_confirm,
+           s->address, s->netmask, s->gateway, s->dns, s->hostname);
 }
 
 static App app;
@@ -119,6 +141,14 @@ int main(int argc, char **argv) {
         /* #2147: the inventory through the bridge and parse_lines, as on a server */
         if (!strcmp(t, "inventory")) { call(a, &b, "inventory", "{}"); show(a, t); continue; }
         if (!strcmp(t, "CHAR1")) { e.type = UIEV_CHAR; e.ch = '1'; install_handle(a, &b, &e); show(a, t); continue; }
+        /* #2776/#2777: T:TEXT types TEXT one character at a time (one state line
+         * after all of it); goto=VIEW is VIEW's demo state, as a person arrives there */
+        if (!strncmp(t, "T:", 2)) {
+            for (const char *c = t + 2; *c; c++) { Event k = { 0 }; k.type = UIEV_CHAR; k.ch = *c; install_handle(a, &b, &k); }
+            show(a, t); continue;
+        }
+        if (!strncmp(t, "goto=", 5)) { install_demo(a, atoi(t + 5)); refocus(a); show(a, "goto"); continue; }
+        if (!strcmp(t, "no-existing")) { a->install.existing_disk = -1; show(a, t); continue; }
         /* #1632: root=VALUE / rootconfirm=VALUE set the fields (no-ops on a
          * GUI without them); JSON prints what "next" would send, to stderr. */
         if (!strncmp(t, "root=", 5) || !strncmp(t, "rootconfirm=", 12)) {
@@ -137,7 +167,8 @@ int main(int argc, char **argv) {
             e.key = !strcmp(t, "UP") ? KEYSYM_UP : !strcmp(t, "DOWN") ? KEYSYM_DOWN
                   : !strcmp(t, "TAB") ? KEYSYM_TAB : !strcmp(t, "BTAB") ? KEYSYM_BACKTAB
                   : !strcmp(t, "ENTER") ? KEYSYM_ENTER : !strcmp(t, "ESC") ? KEYSYM_ESC
-                  : !strcmp(t, "BKSP") ? KEYSYM_BACKSPACE : 0;
+                  : !strcmp(t, "BKSP") ? KEYSYM_BACKSPACE
+                  : !strcmp(t, "LEFT") ? KEYSYM_LEFT : !strcmp(t, "RIGHT") ? KEYSYM_RIGHT : 0;
             if (!e.key) { fprintf(stderr, "unknown token %%s\n", t); return 2; }
         }
         install_handle(a, &b, &e);
@@ -178,9 +209,12 @@ def _press(driver: Path, tmp_path: Path, view: int, *tokens: str) -> tuple[list[
     for line in proc.stdout.splitlines():
         tok, *pairs = line.split()
         state = dict(pair.split("=", 1) for pair in pairs)
+        if tok == "+":                      # #2776: the second line of the same state
+            states[-1].update(state)
+            continue
         state["key"] = tok
         states.append(state)
-    names = [x.split("=", 1)[0] for x in tokens]
+    names = [x if x.startswith("T:") else x.split("=", 1)[0] for x in tokens]
     assert [s["key"] for s in states] == ["start", *names], proc.stdout
     return states, log.read_text().split()
 
@@ -227,9 +261,10 @@ def test_admin_arrows_move_between_the_fields_like_tab(driver, tmp_path):
     """מסך 5: נמדד ש-Tab עובר מהמשתמש לסיסמה — אבל Tab לא מגיע מהדפדפן.
     ‏#1632: שני שדות ה-root באותו מסך, אחרי אימות סיסמת ה-admin."""
     states, _ = _press(driver, tmp_path, ADMIN, "DOWN", "DOWN", "DOWN", "DOWN", "DOWN", "UP", "TAB", "BTAB")
+    # #2776: the eye ("הצג") after each password is a stop of its own -- the keyboard alone reaches it
     assert _col(states, "focus") == [
-        "admin_user", "password", "confirm", "root_password", "root_confirm", "admin_user",
-        "root_confirm", "admin_user", "root_confirm"]
+        "admin_user", "password", "show_password", "confirm", "show_confirm", "root_password",
+        "show_confirm", "root_password", "show_confirm"]
 
 
 @NATIVE
@@ -394,6 +429,9 @@ def _press_inventory(driver: Path, tmp_path: Path, inventory: tuple[str, ...], *
     states = []
     for line in proc.stdout.splitlines():
         tok, *pairs = line.split()
+        if tok == "+":                      # #2776: the second line of the same state
+            states[-1].update(pair.split("=", 1) for pair in pairs)
+            continue
         states.append({"key": tok, **dict(pair.split("=", 1) for pair in pairs)})
     assert [s["key"] for s in states] == ["start", "inventory", *tokens], proc.stdout
     return states[1:], log.read_text().split(), proc.stderr

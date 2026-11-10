@@ -116,6 +116,8 @@ drmModeConnectorPtr drmModeGetConnector(int fd, uint32_t id) {
     c->modes[0].hdisplay = 64; c->modes[0].vdisplay = 32;
     return c;
 }
+/* #2768: backend_display_absent reads the status without a probe */
+drmModeConnectorPtr drmModeGetConnectorCurrent(int fd, uint32_t id) { return drmModeGetConnector(fd, id); }
 void drmModeFreeConnector(drmModeConnectorPtr c) { free(c->modes); free(c); }
 drmModeEncoderPtr drmModeGetEncoder(int fd, uint32_t id) {
     (void)fd;

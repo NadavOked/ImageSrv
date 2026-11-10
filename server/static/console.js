@@ -91,8 +91,18 @@ async function api(path, options = {}) {
     noteApiFailure(detail);
     throw error;
   }
+  noteServerClock(response);
   return response.json();
 }
+/* ‏#2781: שעון השרת, לא שעון הדפדפן — "10 דקות אחרונות" בפאנל המשימות חייב להיות זהה אצל כל המנהלים.
+   ה-API אינו מחזיר את השעה בגוף התשובה, לכן הסטייה נלקחת מכותרת Date של כל תשובה (דיוק שנייה; בלי הכותרת, למשל
+   בקריאה בין-מקורות ש-CORS מסתיר, נשארים עם שעון הדפדפן). */
+let SERVER_CLOCK_OFFSET = null;
+function noteServerClock(response) {
+  const server = Date.parse((response && response.headers && response.headers.get("Date")) || "");
+  if (Number.isFinite(server)) SERVER_CLOCK_OFFSET = server - Date.now();
+}
+function serverNow() { return Date.now() + (SERVER_CLOCK_OFFSET || 0); }
 const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body || {}) });
 const put = (path, body) => api(path, { method: "PUT", body: JSON.stringify(body || {}) });
 const del = (path) => api(path, { method: "DELETE" });
@@ -1657,7 +1667,7 @@ function machineIsFailed(m) {
 /* שורת הסטטוס והכותרת התחתונה של העץ היו קבועות — ירוק "כל השירותים פעילים" גם כש-/health אדום.
    עכשיו הן נגזרות מאותן בדיקות, וללא נתון הן אפורות ("לא נבדק", עיקרון 5) ולא ירוקות. */
 const SERVICE_DOTS = { API: ["server"], PXE: ["tftp_port", "boot_files"], Multicast: ["udp_sender"] };
-const SERVICE_RANK = { bad: 4, warn: 3, unknown: 2, ok: 1, off: 0, not_applicable: 0 };
+const SERVICE_RANK = { bad: 4, warn: 3, unknown: 2, ok: 1, info: 1, off: 0, not_applicable: 0 };   // ‏#2765: info = ok
 function serviceState(ids) {
   if (!Array.isArray(HEALTH)) return { state: "unknown", detail: "" };
   const found = HEALTH.filter((c) => ids.includes(c.id));
@@ -6335,7 +6345,7 @@ function deleteGroup(gidEnc) {
    docs/design/console-redesign/health.md. בדיקות ועדכון בלבד: המתגים (מוניטור,
    DHCP) עברו לדף הפורטים (הכרעת נדב 17/09 06:12). חמישה מצבים,
    חמישה צבעים — "לא נבדק" לעולם לא ירוק (עיקרון 5). */
-const HEALTH_STATES = { ok: ["ok", "תקין"], warn: ["warn", "אזהרה"], bad: ["err", "תקלה"], off: ["", "כבוי"], not_applicable: ["", "לא ישים"], unknown: ["unk", "לא נבדק"] };
+const HEALTH_STATES = { ok: ["ok", "תקין"], info: ["info", "מידע"], warn: ["warn", "אזהרה"], bad: ["err", "תקלה"], off: ["", "כבוי"], not_applicable: ["", "לא ישים"], unknown: ["unk", "לא נבדק"] };
 function healthStatusClass(state) { return (HEALTH_STATES[state] || HEALTH_STATES.unknown)[0]; }
 function healthStatusLabel(state) { return HEALTH_STATES[state] ? HEALTH_STATES[state][1] : (state || "—"); }
 /* שורות דינמיות למכונה (agent_loop:<mac>, off_vlan:<mac>) מקובצות תחת שורת-קבוצה
@@ -6371,7 +6381,7 @@ function healthRow(c, grouped = false) {
 /* ‏#1300 (console-full.html P.health): שורה קצרה. טקסט גולמי באנגלית (נתיב, שגיאת מערכת) לא
    נכנס לשורה — במקומו שורה עברית קצרה לפי המצב, והטקסט המלא מאחורי "פרטים". משפט עברי ארוך
    נחתך בסימן " — " הראשון, והמשכו ב"פרטים". מה שהשרת אמר אינו נמחק — רק מקופל. */
-const HEALTH_SHORT = { ok: "תקין", warn: "דורש בדיקה", bad: "נמצאה תקלה", off: "כבוי", not_applicable: "לא ישים", unknown: "לא נבדק" };
+const HEALTH_SHORT = { ok: "תקין", info: "מידע", warn: "דורש בדיקה", bad: "נמצאה תקלה", off: "כבוי", not_applicable: "לא ישים", unknown: "לא נבדק" };
 function healthDetailHtml(c) {
   const d = String(c.detail || "");
   if (!d) return "";
@@ -8387,10 +8397,19 @@ let NTP_STATUS = null, ntpError = "";
 function ntpSourceHtml() {
   if (!NTP_STATUS) return settingUnreadHtml(ntpError || "לא נטען");
   const value = NTP_STATUS.ntp_servers;
-  const text = value ? `שרת זמן של הארגון: ${value}` : "אוטומטי (שרתי זמן באינטרנט)";
+  const text = NTP_STATUS.mode === "manual" ? "ידני — בלי שרת זמן"   // #2765
+    : value ? `שרת זמן של הארגון: ${value}` : "אוטומטי (שרתי זמן באינטרנט)";
   return `<span class="sv">${esc(text)}</span> ${ghostBtn("שינוי…", "timesyncSheet()")}`;
 }
+/* ‏#2765: "ידני" — המפעיל קבע את השעה, אין מול מה למדוד. מידע, לא אזהרה ולא "לא מתואם"; עיקרון 5 נשמר:
+   כתוב במפורש שהשעה לא נמדדת, ומתי הוגדרה (תלות של MFA ושל תוקף תעודת TLS בשעה הזו). */
+function ntpManualHtml() {
+  const at = NTP_STATUS.manual_at ? fmtDate(NTP_STATUS.manual_at) + " " + fmtClock(NTP_STATUS.manual_at) : "";
+  const text = at ? `שעה ידנית · הוגדרה לאחרונה ${at} · לא נמדדת מול שרת זמן` : "שעה ידנית · מועד ההגדרה לא ידוע · לא נמדדת מול שרת זמן";
+  return `${UI.pill("info", text)} <span class="muted">אימות דו-שלבי ותעודת TLS נשענים על השעה הזו</span>`;
+}
 function ntpStatusHtml() {
+  if (NTP_STATUS && NTP_STATUS.mode === "manual") return ntpManualHtml();
   if (!NTP_STATUS || !NTP_STATUS.status || NTP_STATUS.status.synchronized == null)
     return `<span class="muted">לא נבדק</span> ${ghostBtn("בדוק עכשיו", "timesyncCheckNow()")}`;
   const s = NTP_STATUS.status;
@@ -8403,13 +8422,18 @@ function ntpStatusHtml() {
 function timesyncSheet() {
   if (!isAdmin() || !NTP_STATUS) return;
   const custom = !!NTP_STATUS.ntp_servers;
+  const now = zoneParts(Date.now());   // ‏#2765: the manual time starts from the server's own clock, in its zone
   sheet({ title: "מקור השעה", submitLabel: "שמירה", fields: [
-    { id: "mode", type: "radio", value: custom ? "custom" : "auto", options: [
+    { id: "mode", type: "radio", value: NTP_STATUS.mode === "manual" ? "manual" : custom ? "custom" : "auto", options: [
       { value: "auto", label: "אוטומטי (שרתי זמן באינטרנט)" },
-      { value: "custom", label: "שרת זמן של הארגון" }] },
-    { id: "servers", label: "כתובות (IP או שם, מופרדות ברווח)", value: NTP_STATUS.ntp_servers, dir: "ltr" }],
+      { value: "custom", label: "שרת זמן של הארגון" },
+      { value: "manual", label: "ידני — בלי שרת זמן", hint: "לשרת בלי אינטרנט. אין מי שיתקן את השעה אחר כך" }] },
+    { id: "servers", label: "כתובות (IP או שם, מופרדות ברווח)", value: NTP_STATUS.ntp_servers, dir: "ltr" },
+    { id: "time", label: "תאריך ושעה (לפי אזור הזמן של השרת)", value: `${now.y}-${now.mo}-${now.d} ${now.h}:${now.mi}:${now.s}`, dir: "ltr",
+      help: "משמש רק ב״ידני״. אימות דו-שלבי (±30 שניות) ותוקף תעודת TLS נשענים על השעה הזו — שעון ידני מתרחק עם הזמן." }],
     onSubmit: async (v) => {
-      await post("/timesync", { ntp_servers: v.mode === "custom" ? v.servers : "" });
+      if (v.mode === "manual") await post("/timesync", { mode: "manual", time: v.time });
+      else await post("/timesync", { ntp_servers: v.mode === "custom" ? v.servers : "" });
       toast("נשמר — נרשם ביומן"); await loadHostCfg(); renderCurrent();
     } });
 }
@@ -10520,8 +10544,30 @@ function activityInitiator(user, role, machine) {
   return user;
 }
 const ACTIVITY_PILL = { pending: "info", running: "info", verifying: "info", open: "info", done: "ok", closed: "", failed: "err", cancelled: "" };
+/* ‏#2781: משימה שהסתיימה מציגה מצב סופי — לא "טרם נקראו בייטים" ולא פס. ‏`error` בהצלחה הוא אזהרה (#927), לא סיבת כישלון. */
+function activityEndLabel(t) {
+  if (t.state === "done") return "הושלם";
+  if (t.state === "cancelled") return "בוטל";
+  const why = String(t.error || "").trim();
+  return why ? "נכשל · " + (why.length > 80 ? why.slice(0, 80) + "…" : why) : "נכשל";
+}
+/* ‏#2781: "נקה משימות שהסתיימו" — תצוגה בלבד, ביומן/בשרת לא נוגעים. נשמר זמן הניקוי (updated_at של השרת,
+   בלי סטיית שעונים) ב-localStorage: שורד רענון ועובד בכל דפדפן. הפיך: משימה שהסתיימה אחריו חוזרת להופיע. */
+const ACTIVITY_CLEARED_KEY = "imagesrv.activity.cleared";
+const ACTIVITY_RECENT_MS = 10 * 60 * 1000;   // ‏#2781: כמו Recent Tasks ב-vCenter — משימה שהסתיימה נשארת 10 דקות
+function activityClearedAt() {
+  try { const v = Date.parse(localStorage.getItem(ACTIVITY_CLEARED_KEY) || ""); return Number.isFinite(v) ? v : 0; } catch (e) { return 0; }
+}
+function clearFinishedTasks() {
+  const times = (CAPTURE_TASKS || []).filter(t => !["pending", "running", "verifying"].includes(t.state))
+    .map(t => Date.parse(t.updated_at || "")).filter(Number.isFinite);
+  if (!times.length) return;
+  try { localStorage.setItem(ACTIVITY_CLEARED_KEY, new Date(Math.max(...times, activityClearedAt())).toISOString()); }
+  catch (e) { toast("לא ניתן לשמור את הניקוי בדפדפן הזה"); return; }
+  renderActivity();
+}
 function activityRows() {
-  const rows = [], recent = [];
+  const rows = [], recent = [], cleared = activityClearedAt();
   const s = OVERVIEW?.session;
   if (s) {
     const ended = s.state === "closed" || s.state === "failed";
@@ -10559,11 +10605,12 @@ function activityRows() {
   if (isAdmin()) for (const t of CAPTURE_TASKS) {
     const active = ["pending", "running", "verifying"].includes(t.state);   // = captureInFlight; inline: this block is also loaded alone (capture_shrink_warning.test.cjs)
     const row = { name: t.name, target: t.folder ? `תיקיית ${t.folder}` : "ספריית האימג'ים", start: t.created_at,
-      end: active ? null : t.updated_at, label: Progress.view(t).label, cls: ACTIVITY_PILL[t.state] || "",
-      by: activityInitiator(t.created_by, t.created_by_role, t.machine || t.mac), ended: !active, pct: Progress.view(t).percent,
+      end: active ? null : t.updated_at, label: active ? Progress.view(t).label : activityEndLabel(t), cls: ACTIVITY_PILL[t.state] || "",
+      by: activityInitiator(t.created_by, t.created_by_role, t.machine || t.mac), ended: !active, pct: active ? Progress.view(t).percent : null,
       open: `openCaptureDetail('${encodeURIComponent(t.id).replace(/'/g, "%27")}')` };   // ‏#1505: פירוט קליטה
     if (active) rows.push(row);
-    else if (["done", "failed", "cancelled"].includes(t.state) && recent.length < 5) recent.push(row);
+    else if (["done", "failed", "cancelled"].includes(t.state) && !(Date.parse(t.updated_at || "") <= cleared)
+      && !(Date.parse(t.updated_at || "") < serverNow() - ACTIVITY_RECENT_MS)) recent.push(row);
   }
   return { rows, recent };
 }
@@ -10583,6 +10630,7 @@ function renderActivity() {
   if (body) body.innerHTML = (rows.length ? rows.map(activityRowHtml).join("") : '<tr><td colspan="6">אין העברות פעילות</td></tr>')
     + recent.map(activityRowHtml).join("");
   if (typeof syncTaskPanel === "function") syncTaskPanel();
+  const all = document.getElementById("allTasksLink"); if (all) all.hidden = !isAdmin();   // ‏#2781: היומן למנהל בלבד
   const count = $(".task-count"); if (count) count.textContent = String(rows.length);
   const summary = $(".task-summary"); if (summary) summary.textContent = overviewError || (rows.length ? rows.length + " העברות פעילות" : "אין העברות פעילות");
 }

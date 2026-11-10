@@ -81,6 +81,9 @@ firstboot_from_answers() {
     # setting (#1773) -- else the server's start rewrites chrony with "automatic".
     # Empty (automatic) or an older ISO's answers: the setting stays unset.
     if [[ -n "$(answers_get ntp_servers)" ]]; then argv+=(--ntp-servers "$(answers_get ntp_servers)"); fi
+    # #2765: "ידני — בלי שרת זמן": the moment the installer set the time, in UTC. Empty (any other
+    # source, or an older ISO's answers): nothing is passed, and the server's setting stays unset.
+    if [[ -n "$(answers_get ntp_manual_at)" ]]; then argv+=(--ntp-manual-at "$(answers_get ntp_manual_at)"); fi
     # #1956: the "גיבוי" step's hour and reserved space become the console's settings.
     # Empty, or an older ISO's answers: the settings stay unset, and the server's defaults hold.
     if [[ -n "$(answers_get backup_time)" ]]; then argv+=(--backup-time "$(answers_get backup_time)"); fi

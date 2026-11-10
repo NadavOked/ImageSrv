@@ -398,7 +398,8 @@ def test_installer_footer_lists_the_working_keys_on_every_step():
                  "INSTALL_SUMMARY", "INSTALL_PROGRESS", "INSTALL_FAILED"):
         assert f"case {view}:" in keys, view
     assert "רווח  אני מבין" in keys                  # install.c: Space ticks it on the disk step
-    assert "install_keys_draw(a,cr,l);}" in frame     # after every step's own drawing
+    # after every step's own drawing; #2778: then only the keyboard on the screen, topmost
+    assert "install_keys_draw(a,cr,l);install_draw_osk(a,cr,l);}" in frame
 
 
 def test_installer_future_steps_are_outlines_not_faint_discs():

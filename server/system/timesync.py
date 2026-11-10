@@ -4,9 +4,16 @@ import ipaddress, re, sqlite3, subprocess, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
-from server.db import get_setting, journal
+from server.db import get_setting, journal, set_settings
 
 SETTING = "ntp_servers"
+#: #2765: a third source -- no time server at all. "1" = the operator set the time by
+#: hand (the machine has no internet), and ``MANUAL_AT_SETTING`` is the UTC moment he did.
+#: ``SETTING`` stays empty then: "automatic" and "manual" are different choices.
+MANUAL_SETTING, MANUAL_AT_SETTING = "ntp_manual", "ntp_manual_at"
+MODE_AUTO, MODE_ORG, MODE_MANUAL = "auto", "org", "manual"
+#: after this many days the health row says how old the manual time is (still information, never a problem)
+MANUAL_STALE_DAYS = 30
 CONF_DIR = Path("/etc/chrony/conf.d")
 CLIENT_CONF, SERVER_CONF = CONF_DIR / "imagesrv.conf", CONF_DIR / "imagesrv-server.conf"
 MAIN_CONF = Path("/etc/chrony/chrony.conf")
@@ -25,6 +32,48 @@ def validate(value: object) -> str:
 
 def configured(conn: sqlite3.Connection) -> str:
     return validate(get_setting(conn, SETTING) or "")
+
+def is_manual(conn: sqlite3.Connection) -> bool:
+    return get_setting(conn, MANUAL_SETTING) == "1"
+
+def manual_at(conn: sqlite3.Connection) -> str:
+    """UTC ISO of the last manual setting; "" = not recorded (said as unknown, never guessed)."""
+    return get_setting(conn, MANUAL_AT_SETTING) or ""
+
+def mode(conn: sqlite3.Connection) -> str:
+    if is_manual(conn): return MODE_MANUAL
+    return MODE_ORG if configured(conn) else MODE_AUTO
+
+_LOCAL_TIME = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$")
+
+def parse_local(value: object, zone: str) -> int:
+    """The operator's "YYYY-MM-DD HH:MM" (or datetime-local's ``T``) in the server's zone -> epoch seconds."""
+    match = _LOCAL_TIME.fullmatch(str(value or "").strip())
+    if not match: raise ValueError("תאריך ושעה בצורה 2026-11-09 14:32")
+    year, month, day, hour, minute, second = (int(part or 0) for part in match.groups())
+    if not 2000 <= year <= 2099: raise ValueError("השנה צריכה להיות בין 2000 ל-2099")
+    try:
+        from zoneinfo import ZoneInfo
+        local = datetime(year, month, day, hour, minute, second, tzinfo=ZoneInfo(zone))
+    except ValueError as exc: raise ValueError(f"תאריך או שעה לא קיימים: {exc}") from exc
+    except Exception as exc: raise RuntimeError(f"אזור הזמן {zone} לא נקרא: {exc}") from exc
+    return int(local.timestamp())
+
+def local_text(iso: str, zone: str) -> str:
+    """"DD/MM/YYYY HH:MM" in the server's zone; UTC (said) when the zone cannot be read."""
+    try: moment = datetime.fromisoformat(iso)
+    except ValueError: return iso
+    if moment.tzinfo is None: moment = moment.replace(tzinfo=timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        return moment.astimezone(ZoneInfo(zone)).strftime("%d/%m/%Y %H:%M")
+    except Exception: return moment.astimezone(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+
+def manual_age_days(iso: str, now: datetime) -> int | None:
+    try: moment = datetime.fromisoformat(iso)
+    except ValueError: return None
+    if moment.tzinfo is None: moment = moment.replace(tzinfo=timezone.utc)
+    return max(0, (now - moment).days)
 
 def _run(command: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout,
@@ -59,6 +108,19 @@ def _write_client(value: str) -> None:
     CLIENT_CONF.write_text("# Managed by ImageSrv — time source (#1773)\n" + MAKESTEP + lines,
                            encoding="utf-8")
 
+def _write_manual() -> None:
+    CONF_DIR.mkdir(parents=True, exist_ok=True)
+    CLIENT_CONF.write_text("# Managed by ImageSrv — time source (#2765): manual, no time server\n", encoding="utf-8")
+
+def _set_time(epoch: int) -> bool:
+    """Sets the system clock, proves it by reading it back (rule 5), then writes the hardware
+    clock. True = the hardware clock too; False = only the running clock (no RTC to write)."""
+    _read(["date", "-u", "-s", f"@{epoch}"])
+    if abs(time.time() - epoch) > 5: raise RuntimeError("השעה לא נקבעה: השעון נקרא בחזרה בערך אחר")
+    try: _read(["hwclock", "--systohc"])
+    except RuntimeError: return False
+    return True
+
 def _write_server(networks: list[str]) -> None:
     CONF_DIR.mkdir(parents=True, exist_ok=True)
     lines = ["# Managed by ImageSrv — NTP service per NIC (#1773)"]
@@ -76,6 +138,7 @@ def _restart() -> None: _read(["systemctl", "restart", "chrony"])
 
 def default_hooks() -> Hooks:
     return {"ensure_confdir": _ensure_confdir, "write": _write_client, "write_server": _write_server,
+            "write_manual": _write_manual, "set_time": _set_time,
             "restart": _restart, "tracking": lambda: _read(["chronyc", "-n", "tracking"]),
             "sources": lambda: _read(["chronyc", "-n", "sources"]), "sleep": time.sleep,
             "now": lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")}
@@ -87,6 +150,16 @@ def apply(value: str, hooks: Hooks) -> dict:
     result = status(hooks)
     if result["synchronized"] is None: raise RuntimeError("מצב סנכרון השעון לא נקרא לאחר השינוי")
     return result
+
+def apply_manual(epoch: int, hooks: Hooks) -> dict:
+    """#2765: no time server; the time is the operator's. chrony is rewritten without sources and
+    restarted FIRST -- a chrony that still had a source could step the clock back after we set it."""
+    try: hooks["ensure_confdir"](); hooks["write_manual"](); hooks["restart"]()
+    except Exception as exc: raise RuntimeError(str(exc)) from exc
+    try: rtc = hooks["set_time"](epoch)
+    except Exception as exc: raise RuntimeError(str(exc)) from exc
+    return {"set_at": datetime.fromtimestamp(epoch, timezone.utc).isoformat(timespec="seconds"),
+            "rtc_written": rtc, "status": status(hooks)}
 
 def apply_server(networks: list[str], hooks: Hooks) -> None:
     checked = [str(ipaddress.ip_network(n, strict=False)) for n in networks]
@@ -124,7 +197,22 @@ def check_now(hooks: Hooks) -> dict:
     raise TimeoutError("שרת הזמן לא ענה תוך 15 שניות")
 
 def apply_on_start(conn: sqlite3.Connection, hooks: Hooks) -> None:
+    if is_manual(conn):   # #2765: the source is "none" -- the time itself is kept by the clock, not set again
+        try: hooks["ensure_confdir"](); hooks["write_manual"](); hooks["restart"]()
+        except Exception as exc: journal(conn, "timesync_apply_failed", f"ידני: {exc}")
+        else: journal(conn, "timesync_applied", "ידני — בלי שרת זמן")
+        return
     value = configured(conn)
     try: apply(value, hooks)
     except Exception as exc: journal(conn, "timesync_apply_failed", f"{value or 'אוטומטי'}: {exc}")
     else: journal(conn, "timesync_applied", value or "אוטומטי")
+
+def save(conn: sqlite3.Connection, value: str, set_at: str | None = None) -> None:
+    """One transaction: the server list, and the manual flag with the moment it was set
+    (``set_at`` None = not manual; the flag goes). Read back before it counts as saved."""
+    if set_at is None:
+        set_settings(conn, {SETTING: value}, remove=(MANUAL_SETTING, MANUAL_AT_SETTING))
+    else:
+        set_settings(conn, {SETTING: "", MANUAL_SETTING: "1", MANUAL_AT_SETTING: set_at})
+    if is_manual(conn) != (set_at is not None) or get_setting(conn, SETTING) != (value if set_at is None else ""):
+        raise RuntimeError("מקור השעה לא נקרא בחזרה כפי שנכתב")

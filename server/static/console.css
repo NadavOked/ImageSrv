@@ -2026,3 +2026,6 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 .nw-alert .act{display:flex;gap:8px}
 /* #1858: "נצפה F1" -- תגית מתחת למצב הדיסק בדף הדיסקים */
 .pill.f1-tag{margin-top:4px;white-space:nowrap}
+/* ‏#2781: כפתור "נקה משימות שהסתיימו" בראש פאנל המשימות — צמוד לצד הסגירה */
+.task-panel-head .btn{height:26px;font-size:var(--t-xs);margin-inline-end:8px}
+.task-panel-head #allTasksLink{margin-inline-start:auto}

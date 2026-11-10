@@ -123,7 +123,8 @@ test('renderActivity does not count a finished, warned capture as an active tran
   const {elements, $} = makeElements();
   const taskPanelBody = {innerHTML: ''};
   const context = vm.createContext({
-    document: {querySelector: (sel) => (sel === '#taskPanel tbody' ? taskPanelBody : null)},
+    document: {querySelector: (sel) => (sel === '#taskPanel tbody' ? taskPanelBody : null), getElementById: () => null},
+    serverNow: () => Date.now(),   // #2781: window of the panel is measured on the server clock
     $, esc: String, isAdmin: () => true, OVERVIEW: {}, sessionImage: () => '', sessionGroup: () => '',
     Progress: {view: () => ({label: ''})}, taskWhen: () => '', sessionStateText: () => '', Date, Number, Math,
     CAPTURE_TASKS: [warnedTask()], overviewError: '',

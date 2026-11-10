@@ -15,7 +15,7 @@
 #include <xf86drmMode.h>
 #include "backend.h"
 
-enum { KIND_DRM, KIND_FBDEV, KIND_MEM };
+enum { KIND_DRM, KIND_FBDEV, KIND_MEM, KIND_NONE };
 
 /* ---- mem: a framebuffer file for the remote monitor (#835) -------------------
  * No display attached (every connector down, so i915 creates no /dev/fb0 --
@@ -180,6 +180,52 @@ static int fb_open(Backend *b, char *err, size_t n) {
     return 0;
 }
 
+/* ---- none (#2768) ------------------------------------------------------------------
+ * A KMS device with no display connected yet. The kernel makes no /dev/fb0
+ * until a connector comes up -- the fbdev setup waits for one ("Cannot find
+ * any crtc or sizes": virtio-gpu in QEMU, 09/11; i915 takes the same DRM
+ * path) -- and KMS has no connector to set a mode on. The screen is drawn
+ * into the offscreen image only; the caller asks for drm/fbdev again and
+ * puts that in its place once backend_display_absent() says a display is
+ * there -- on a DRM hotplug uevent, or a slow fallback (dcui.c). No file and no VT mode:
+ * nothing of this is on any screen, and none is claimed. */
+#define NONE_W 1024
+#define NONE_H 768
+
+static int none_open(Backend *b) {
+    b->w = NONE_W; b->h = NONE_H; b->kind = KIND_NONE;
+    return 0;
+}
+
+int backend_display_absent(void) {
+    int fd = open("/dev/fb0", O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) { close(fd); return 0; }
+    if (errno != ENOENT) return 0;
+    static const char *paths[] = { "/dev/dri/card0", "/dev/dri/card1", "/dev/dri/card2" };
+    int kms = 0;
+    for (int i = 0; i < 3; i++) {
+        fd = open(paths[i], O_RDWR | O_CLOEXEC);
+        if (fd < 0) continue;
+        drmModeRes *res = drmModeGetResources(fd);
+        int lit = 0;
+        if (res) {
+            kms = 1;
+            for (int j = 0; j < res->count_connectors && !lit; j++) {
+                /* Current: the status the kernel already holds (HPD, its own
+                 * poll), no EDID/DDC read -- cheap enough to ask on every event */
+                drmModeConnector *c = drmModeGetConnectorCurrent(fd, res->connectors[j]);
+                if (!c) continue;
+                lit = c->connection == DRM_MODE_CONNECTED;
+                drmModeFreeConnector(c);
+            }
+            drmModeFreeResources(res);
+        }
+        close(fd);
+        if (lit) return 0;                      /* a display is there: not a wait */
+    }
+    return kms;
+}
+
 /* ---- mem ---------------------------------------------------------------------------- */
 
 static void mem_seq_step(Backend *b) {
@@ -261,12 +307,13 @@ Backend *backend_open(const char *kind, const char *mem_path, char *err, size_t 
     if (strcmp(kind, "drm") == 0)        ok = drm_open(b, err, n);
     else if (strcmp(kind, "fbdev") == 0) ok = fb_open(b, err, n);
     else if (strcmp(kind, "mem") == 0)   ok = mem_open(b, mem_path, err, n);
+    else if (strcmp(kind, "none") == 0)  ok = none_open(b);
     else if (strcmp(kind, "auto") == 0) {
         ok = drm_open(b, e1, sizeof e1);
         if (ok) ok = fb_open(b, e2, sizeof e2);
         if (ok) ok = mem_open(b, mem_path, e3, sizeof e3);
         if (ok) snprintf(err, n, "drm: %s / fbdev: %s / mem: %s", e1, e2, e3);
-    } else snprintf(err, n, "unknown backend '%s' (auto|drm|fbdev|mem)", kind);
+    } else snprintf(err, n, "unknown backend '%s' (auto|drm|fbdev|mem|none)", kind);
     if (ok) { free(b); return NULL; }
 
     b->off = cairo_image_surface_create(CAIRO_FORMAT_RGB24, b->w, b->h);
@@ -274,7 +321,7 @@ Backend *backend_open(const char *kind, const char *mem_path, char *err, size_t 
         snprintf(err, n, "cairo: cannot create %dx%d surface", b->w, b->h);
         backend_close(b); return NULL;
     }
-    if (b->kind != KIND_MEM) vt_graphics(b);   /* mem: nothing on a VT to protect */
+    if (b->kind != KIND_MEM && b->kind != KIND_NONE) vt_graphics(b);   /* nothing on a VT to protect */
     return b;
 }
 
@@ -288,8 +335,9 @@ void backend_present(Backend *b) {
     int stride = cairo_image_surface_get_stride(b->off);
     size_t row = (size_t)b->w * 4;
     if (b->kind == KIND_MEM) mem_seq_step(b);   /* odd: a frame is being written */
-    for (int y = 0; y < b->h; y++)
-        memcpy(b->pix + (size_t)y * b->pitch, src + (size_t)y * stride, row);
+    if (b->kind != KIND_NONE)                   /* #2768: none has no scanout */
+        for (int y = 0; y < b->h; y++)
+            memcpy(b->pix + (size_t)y * b->pitch, src + (size_t)y * stride, row);
     if (b->kind == KIND_MEM) mem_seq_step(b);   /* even: the frame is whole */
     if (b->mir_map) {                           /* #1475: same seqlock, RAM to RAM */
         struct memfb_header *mh = (struct memfb_header *)b->mir_map;

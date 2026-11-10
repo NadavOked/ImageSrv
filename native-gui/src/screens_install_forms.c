@@ -5,27 +5,23 @@
 #include "screens_install.h"
 #include "screens_rounds.h"   /* bidi_isolate */
 
-static void kv(App *a,cairo_t *cr,Rect box,const char *key,const char *value,int ltr){const Theme *t=a->theme;install_text_r(cr,t,key,12,500,box.x+box.w-16,box.y+10,box.w*.38,t->muted);if(ltr)install_text_ltr(cr,value,12,400,box.x+16,box.y+10,box.w*.56,t->ink);else install_text_r(cr,t,value,12,400,box.x+box.w*.6,box.y+10,box.w*.55,t->ink);}
+static void kv(App *a,cairo_t *cr,Rect box,const char *key,const char *value,int ltr){const Theme *t=a->theme;install_text_r(cr,t,key,12,500,box.x+box.w-16,box.y+10,box.w*.38,t->muted);if(ltr){Text q=text_make(cr,FONT_MONO,12,400,value,(int)(box.w*.55),DIR_LTR);text_draw(cr,&q,box.x+box.w*.6-q.w,box.y+10,t->ink);text_free(&q);}   /* #2764: the same right edge as the Hebrew values, not the box's left */else install_text_r(cr,t,value,12,400,box.x+box.w*.6,box.y+10,box.w*.55,t->ink);}
 
 static void hostname(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y;   /* the one column (mockup 10/10) */
     install_field_draw(a,cr,(Rect){x,y,w,56},"שם השרת (hostname)",s->hostname,0,HIT_INSTALL_HOSTNAME,1);y+=65;
     install_text_r(cr,t,"שם מחשב — באנגלית, עד 15 תווים: אותיות, ספרות ומקפים; לא מתחיל ולא מסתיים במקף.",12,400,x+w,y,w,t->muted);y+=36;
     if(s->field_error[9][0]){install_text_r(cr,t,s->field_error[9],12,600,x+w,y,w,t->danger_fg);y+=30;}
-    /* #1447 (Nadav 17/10): the server's timezone -- the same field as the name above */
-    install_field_draw(a,cr,(Rect){x,y,w,56},"אזור זמן",s->timezone,0,HIT_INSTALL_TIMEZONE,1);y+=65;
-    if(s->field_error[14][0]){install_text_r(cr,t,s->field_error[14],12,600,x+w,y,w,t->danger_fg);y+=30;}
-    else{install_text_r(cr,t,"שם אזור של tzdata באנגלית, למשל Asia/Jerusalem. השעה במסך השרת ובמסכי התחנות; אפשר לשנות בקונסולה.",12,400,x+w,y,w,t->muted);y+=36;}
     Rect card={x,y,w,190};install_card(cr,t,card);install_text_r(cr,t,"איפה השם יופיע",15,600,x+w-16,y+14,w-32,t->ink);y+=48;
     char hostline[128];snprintf(hostline,sizeof hostline,"Hostname: %s",s->hostname);kv(a,cr,(Rect){x+1,y,w-2,34},"מסך השרת (DCUI)",hostline,1);y+=34;
     kv(a,cr,(Rect){x+1,y,w-2,34},"הקונסולה","כותרת העץ ושורת הסטטוס",0);y+=34;
     kv(a,cr,(Rect){x+1,y,w-2,34},"אצל הראשי","שרתי משנה — אחרי הצימוד",0);y+=34;
     kv(a,cr,(Rect){x+1,y,w-2,34},"תעודת TLS","נכנס ל-SAN יחד עם הכתובת",0);
-    install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,s->hostname[0]!=0&&s->timezone[0]!=0);
+    install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,s->hostname[0]!=0);   /* #2764: the zone is on the clock step (5), where the time is */
 }
 
 static void rule(App *a,cairo_t *cr,double right,double y,const char *label,int ok){const Theme *t=a->theme;Rgb c=ok?t->success_ink:t->muted;cairo_arc(cr,right-7,y+8,7,0,6.283);draw_set_a(cr,c,ok?1:.35);cairo_fill(cr);Text mark=text_make(cr,FONT_SANS,11,600,ok?"✓":"×",0,DIR_RTL);text_draw(cr,&mark,right-7-mark.w/2,y+8-mark.h/2,t->on_ink);text_free(&mark);install_text_r(cr,t,label,12,500,right-22,y,180,c);}
 
-static void password_field(App *a,cairo_t *cr,Rect r,const char *label,const char *value,int field_id,int show_id,int shown){const Theme *t=a->theme;install_field_draw(a,cr,r,label,value,!shown,field_id,1);Text eye=text_make(cr,FONT_SANS,12,400,shown?"הסתר":"הצג",0,DIR_RTL);Rect er={r.x+r.w-eye.w-8,r.y+25,eye.w+8,24};text_draw(cr,&eye,er.x+4,er.y+(er.h-eye.h)/2,t->action_fg);hit_add(a,er,show_id);text_free(&eye);}
+static void password_field(App *a,cairo_t *cr,Rect r,const char *label,const char *value,int field_id,int show_id,int shown){const Theme *t=a->theme;install_field_draw(a,cr,r,label,value,!shown,field_id,1);Text eye=text_make(cr,FONT_SANS,12,400,shown?"הסתר":"הצג",0,DIR_RTL);Rect er={r.x+r.w-eye.w-8,r.y+25,eye.w+8,24};text_draw(cr,&eye,er.x+4,er.y+(er.h-eye.h)/2,t->action_fg);hit_add(a,er,show_id);install_focus_ring(a,cr,er,show_id);text_free(&eye);}   /* #2776: the eye is a stop */
 
 static void admin_screen(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y;
     install_field_draw(a,cr,(Rect){x,y,w,56},"שם משתמש",s->admin_user,0,HIT_INSTALL_ADMIN_USER,1);y+=62;
@@ -51,20 +47,31 @@ static void admin_screen(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a-
 
 /* #2144 (mockup 2144-time, Nadav 04/11): step 5, the console's choice (#1773,
  * הגדרות ← מקור השעה) -- automatic or the organisation's server -- and the time
- * the server has now, from its hardware clock; the sync is checked at the end. */
+ * the server has now, from its hardware clock; the sync is checked at the end.
+ * #2764: the zone (#1447) lives here, not on the name's step -- one place for time;
+ * it is first, because the time below is read in it.
+ * #2765: and a third source, "ידני — בלי שרת זמן": the person's own time, for a
+ * server with no internet. */
 void install_draw_time(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y;
-    install_text_r(cr,t,"שרת זמן (NTP)",12,500,x+w,y,w,t->ink);y+=24;
-    install_radio(a,cr,(Rect){x,y,w,74},"אוטומטי (שרתי זמן באינטרנט)","שרתי הזמן של Debian. צריך גישה לאינטרנט ב-UDP 123.",!s->ntp_org,HIT_INSTALL_NTP_AUTO);y+=86;
-    install_radio(a,cr,(Rect){x,y,w,74},"שרת זמן של הארגון","כשרשת המכללה חוסמת NTP לאינטרנט.",s->ntp_org,HIT_INSTALL_NTP_ORG);y+=90;
+    install_field_draw(a,cr,(Rect){x,y,w,56},"אזור זמן",s->timezone,0,HIT_INSTALL_TIMEZONE,1);y+=62;
+    if(s->field_error[14][0]){install_text_r(cr,t,s->field_error[14],12,600,x+w,y,w,t->danger_fg);y+=28;}
+    else{install_text_r(cr,t,"שם אזור של tzdata באנגלית, למשל Asia/Jerusalem. אפשר לשנות בקונסולה.",12,400,x+w,y,w,t->muted);y+=28;}
+    install_text_r(cr,t,"מקור השעה",12,500,x+w,y,w,t->ink);y+=22;
+    install_radio(a,cr,(Rect){x,y,w,70},"אוטומטי (שרתי זמן באינטרנט)","שרתי הזמן של Debian. צריך גישה לאינטרנט ב-UDP 123.",!s->ntp_org&&!s->ntp_manual,HIT_INSTALL_NTP_AUTO);y+=80;
+    install_radio(a,cr,(Rect){x,y,w,70},"שרת זמן של הארגון","כשרשת המכללה חוסמת NTP לאינטרנט.",s->ntp_org,HIT_INSTALL_NTP_ORG);y+=80;
     if(s->ntp_org){install_field_draw(a,cr,(Rect){x,y,w,56},"כתובות (IP או שם, מופרדות ברווח)",s->ntp_servers,0,HIT_INSTALL_NTP_SERVERS,1);y+=62;
-        if(s->field_error[17][0]){install_text_r(cr,t,s->field_error[17],12,600,x+w,y,w,t->danger_fg);y+=30;}else y+=8;}
+        if(s->field_error[17][0]){install_text_r(cr,t,s->field_error[17],12,600,x+w,y,w,t->danger_fg);y+=28;}else y+=8;}
+    install_radio(a,cr,(Rect){x,y,w,70},"ידני — בלי שרת זמן","לשרת בלי אינטרנט. השעה נקבעת כאן ביד, ואין מי שיתקן אותה אחר כך.",s->ntp_manual,HIT_INSTALL_NTP_MANUAL);y+=80;
+    if(s->ntp_manual){install_field_draw(a,cr,(Rect){x,y,w,56},"תאריך ושעה (לפי אזור הזמן שלמעלה)",s->manual_time,0,HIT_INSTALL_MANUAL_TIME,1);y+=62;
+        if(s->field_error[20][0]){install_text_r(cr,t,s->field_error[20],12,600,x+w,y,w,t->danger_fg);y+=28;}
+        else{install_text_r(cr,t,"אימות דו-שלבי (±30 שניות) ותעודת TLS נשענים על השעה הזו, ושעון ידני מתרחק עם הזמן.",12,400,x+w,y,w,t->muted);y+=28;}}
     char when[64],zone[64];install_clock_now(s,when,sizeof when,zone,sizeof zone);
     Rect card={x,y,w,92};install_card(cr,t,card);
     Text lab=text_make(cr,FONT_SANS,12.5,400,"השעה עכשיו בשרת",0,DIR_RTL);text_draw_r(cr,&lab,x+w-16,y+18,t->muted);
     double right=x+w-16-lab.w-12;text_free(&lab);
     Text tm=text_make(cr,FONT_MONO,15,600,when,0,DIR_LTR);text_draw(cr,&tm,right-tm.w,y+15,t->ink);right-=tm.w+12;text_free(&tm);
     Text zn=text_make(cr,FONT_SANS,12.5,400,zone,0,DIR_LTR);text_draw(cr,&zn,fmax(x+16,right-zn.w),y+18,t->muted);text_free(&zn);
-    install_text_r(cr,t,"לפי שעון החומרה, עוד בלי סנכרון. הסנכרון נבדק בסוף ההתקנה.",12,400,x+w-16,y+54,w-32,t->muted);
+    install_text_r(cr,t,s->ntp_manual?"לפי שעון החומרה. בשעה ידנית אין סנכרון: השעה שהוקלדה נקבעת בסוף ההתקנה.":"לפי שעון החומרה, עוד בלי סנכרון. הסנכרון נבדק בסוף ההתקנה.",12,400,x+w-16,y+54,w-32,t->muted);
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_time_ready(s));
 }
 

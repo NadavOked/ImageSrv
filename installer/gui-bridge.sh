@@ -92,6 +92,7 @@ write_answers() {
         emit hostname "$(field hostname)"
         emit timezone "$(field timezone)"
         emit ntp_servers "$(field ntp_servers)"   # #2144: empty = automatic
+        emit clock_manual "$(field clock_manual)"   # #2765: empty = a time source; else the time, and no time server
         emit backup_time "$(field backup_time)"; emit backup_reserve_gb "$(field backup_reserve_gb)"   # #1956
         emit admin_user "$_wa_user"
         # Before the admin screen the password is legitimately empty; the engine's
@@ -253,7 +254,7 @@ do_finish() {
     # #2144: the engine's clock record, or "unchecked" -- a missing or
     # unreadable record is never "synced" (principle 5)
     _df_clock=$(sed -n 's/^clock=//p' "$CLOCK_FILE" 2>/dev/null | head -n1)
-    case "$_df_clock" in synced|unsynced|unchecked) ;; *) _df_clock=unchecked ;; esac
+    case "$_df_clock" in synced|unsynced|unchecked|manual) ;; *) _df_clock=unchecked ;; esac   # manual: #2765
     emit clock "$_df_clock"
     emit clock_server "$(sed -n 's/^clock_server=//p' "$CLOCK_FILE" 2>/dev/null | head -n1)"
     [ "$_df_clock" = synced ] && emit clock_offset_ms "$(sed -n 's/^clock_offset_ms=\([0-9]*\)$/\1/p' "$CLOCK_FILE" 2>/dev/null | head -n1)"

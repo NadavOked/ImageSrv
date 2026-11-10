@@ -27,6 +27,8 @@ void install_draw_forms(App *a, cairo_t *cr, InstallLayout l);
 void install_draw_time(App *a, cairo_t *cr, InstallLayout l);   /* #2144 */
 void install_draw_backup(App *a, cairo_t *cr, InstallLayout l);   /* #1956 */
 void install_draw_final(App *a, cairo_t *cr, InstallLayout l);
+void install_draw_osk(App *a, cairo_t *cr, InstallLayout l);   /* #2778: the keyboard on the screen, when open */
+void install_keys_line(App *a, char *out, size_t n);   /* #2778: the footer's key line, "F5  מקלדת מסך" where a field is */
 int install_render_png(App *a, const char *prefix, int w, int h);
 
 #endif

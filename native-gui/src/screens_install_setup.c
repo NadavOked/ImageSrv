@@ -81,7 +81,7 @@ static void disk_ack(App *a,cairo_t *cr,Rect r,int enabled){
     InstallState *s=&a->install;const Theme *t=a->theme;int on=enabled&&s->disk_ack;draw_fill_rrect(cr,r,t->radius,on?t->danger_soft:(enabled?t->surface:t->field));draw_border_rrect(cr,r,t->radius,on?t->danger:t->hair,1);
     Rect box={r.x+r.w-38,r.y+12,20,20};draw_fill_rrect(cr,box,4,on?t->danger:t->field);draw_border_rrect(cr,box,4,on?t->danger:t->hair,1);
     if(on)install_text_r(cr,t,"✓",13,600,box.x+17,box.y+1,16,t->on_ink);
-    install_text_r(cr,t,"אני מבין",13,600,r.x+r.w-50,r.y+13,r.w-64,enabled?t->ink:t->muted);if(enabled)hit_add(a,r,HIT_INSTALL_DISK_ACK);
+    install_text_r(cr,t,"אני מבין",13,600,r.x+r.w-50,r.y+13,r.w-64,enabled?t->ink:t->muted);if(enabled){hit_add(a,r,HIT_INSTALL_DISK_ACK);install_focus_ring(a,cr,r,HIT_INSTALL_DISK_ACK);}   /* #2776 */
 }
 
 /* #1989: the RAID choices this server allows, as one row of chips (RTL: the
@@ -96,7 +96,7 @@ static double raid_row(App *a,cairo_t *cr,double x,double y,double w){
     for(int c=0;c<RAID_CHOICES;c++){if(!install_raid_allowed(s,c))continue;int on=s->raid==c;Rect r={cx-cw,y,cw,38};cx-=cw+gap;
         draw_fill_rrect(cr,r,t->radius_sm,on?t->indigo_soft:t->surface);draw_border_rrect(cr,r,t->radius_sm,on?t->indigo:t->hair,on?2:1);
         Text q=text_make(cr,FONT_SANS,13,on?600:500,RAID_OPTS[c].label,(int)cw-8,DIR_RTL);text_draw(cr,&q,r.x+(r.w-q.w)/2,r.y+(r.h-q.h)/2,on?t->indigo:t->ink);text_free(&q);
-        hit_add(a,r,HIT_INSTALL_RAID_BASE+c);}
+        hit_add(a,r,HIT_INSTALL_RAID_BASE+c);if(on&&a->focus>=HIT_INSTALL_RAID_BASE&&a->focus<HIT_INSTALL_RAID_BASE+RAID_CHOICES)install_focus_ring(a,cr,r,a->focus);}   /* #2776: the choice is one stop */
     y+=46;
     if(s->virt==INSTALL_VIRT_UNKNOWN){install_text_r(cr,t,"לא זוהה אם השרת פיזי או וירטואלי — ברירת המחדל: בלי RAID",12,400,x+w,y,w,t->muted);y+=22;}
     return y+4;
@@ -105,14 +105,14 @@ static double raid_row(App *a,cairo_t *cr,double x,double y,double w){
 void install_draw_disk(App *a,cairo_t *cr,InstallLayout l){
     InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;
     Rect table={x,y,w,42+s->ndisks*58};install_card(cr,t,table);disk_head(cr,t,(Rect){x+1,y+1,w-2,40});
-    for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);}y+=table.h+16;
+    for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);}if(a->focus>=HIT_INSTALL_DISK_BASE&&a->focus<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS)install_focus_ring(a,cr,table,a->focus);y+=table.h+16;   /* #2776: the list is one stop */
     y=raid_row(a,cr,x,y,w);
     int selectable=0;for(int i=0;i<s->ndisks;i++)selectable+=!s->disks[i].iso;
     if(s->disk>=0&&s->disk<s->ndisks){char warning[320];const InstallDisk *d=&s->disks[s->disk];if(s->raid!=RAID_NONE)snprintf(warning,sizeof warning,"כל הנתונים ב-%d הכוננים יימחקו, והם יאוחדו למערך %s",install_raid_count(s),RAID_OPTS[s->raid].label);else snprintf(warning,sizeof warning,"כל הנתונים בדיסק %s · %.1f GiB · %s יימחקו",d->model[0]?d->model:"ללא שם",d->size_bytes/1073741824.0,d->path);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},1);}   /* #2147: name, size and device */
     else if(selectable){install_text_r(cr,t,"בחר את הדיסק להתקנה — כל הנתונים בו יימחקו",14,600,x+w,y,w,t->ink);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},0);}   /* #2147: more than one disk, none chosen */
     else{install_text_r(cr,t,"לא נמצא דיסק חוקי להתקנה.",13,600,x+w,y,w,t->danger_fg);y+=48;}
     if(s->field_error[0][0]){install_text_r(cr,t,s->field_error[0],12,600,x+w,y+50,w,t->danger_fg);}
-    if(s->existing_disk>=0&&s->existing_disk<s->ndisks){InstallDisk *d=&s->disks[s->existing_disk];Rect card={x,y+58,w,72};install_card(cr,t,card);install_text_r(cr,t,"נמצאה התקנה קיימת — אתחל מהדיסק",14,600,x+w-16,card.y+14,w-220,t->ink);install_text_ltr(cr,d->model,11,400,x+180,card.y+42,w-210,t->muted);Text boot=btn_label(cr,"אתחל מהדיסק");draw_btn(a,cr,(Rect){x+16,card.y+17,150,38},&boot,BTN_PLAIN,HIT_INSTALL_BOOT_LOCAL);text_free(&boot);}
+    if(s->existing_disk>=0&&s->existing_disk<s->ndisks){InstallDisk *d=&s->disks[s->existing_disk];Rect card={x,y+58,w,72};install_card(cr,t,card);install_text_r(cr,t,"נמצאה התקנה קיימת — אתחל מהדיסק",14,600,x+w-16,card.y+14,w-220,t->ink);install_text_ltr(cr,d->model,11,400,x+180,card.y+42,w-210,t->muted);Text boot=btn_label(cr,"אתחל מהדיסק");draw_btn(a,cr,(Rect){x+16,card.y+17,150,38},&boot,BTN_PLAIN,HIT_INSTALL_BOOT_LOCAL);install_focus_ring(a,cr,(Rect){x+16,card.y+17,150,38},HIT_INSTALL_BOOT_LOCAL);text_free(&boot);}
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,0,s->disk>=0&&s->disk_ack);
 }
 

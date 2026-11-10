@@ -7,8 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <linux/netlink.h>
 #include <linux/vt.h>
 #include "backend.h"
 #include "dcui.h"
@@ -17,6 +20,11 @@
 /* #1362: imagesrv-dcui.service runs on TTYPath=/dev/tty1 */
 #define DCUI_TTY "/dev/tty1"
 #define DCUI_VT 1
+/* #2768: a screen drawn in memory looks for a display on every DRM hotplug
+ * uevent, and on this slow fallback too -- for a driver that changes the
+ * status without an event (virtio-gpu in QEMU, measured 09/11), or a kernel
+ * socket that could not be opened. Owner 09/11: no busy look every 2 s. */
+#define FALLBACK_MS 30000
 
 static void copy(char *dst, size_t n, const char *src) { snprintf(dst, n, "%s", src ? src : ""); }
 #define COPY(dst, src) copy((dst), sizeof (dst), (src))
@@ -221,6 +229,60 @@ static int vt_front(const char *tty, int vt, char *err, size_t n) {
     return rc;
 }
 
+/* drm, then fbdev; NULL + both reasons (#2768: fbdev's alone hid DRM's,
+ * "no connected display", from the screen). `say`: DRM's reason to the
+ * journal too -- once at start, not on every look for a display. */
+static Backend *open_display(int say, char *err, size_t n) {
+    char e_drm[512] = "", e_fb[480] = "";
+    Backend *b = backend_open("drm", NULL, e_drm, sizeof e_drm);
+    if (b) return b;
+    if (say) fprintf(stderr, "native-gui: dcui: drm: %s\n", e_drm);
+    b = backend_open("fbdev", NULL, e_fb, sizeof e_fb);
+    if (!b) snprintf(err, n, "drm: %s; fbdev: %s", e_drm, e_fb);
+    return b;
+}
+
+/* #2768: the kernel's own uevents (netlink group 1) -- not udev's, so
+ * nothing else has to run. -1 + why when the socket cannot be had. */
+static int uevent_open(char *err, size_t n) {
+    int fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
+    if (fd < 0) { snprintf(err, n, "netlink socket: %s", strerror(errno)); return -1; }
+    struct sockaddr_nl a = { .nl_family = AF_NETLINK, .nl_groups = 1 };
+    if (bind(fd, (struct sockaddr *)&a, sizeof a) < 0) {
+        snprintf(err, n, "netlink bind: %s", strerror(errno));
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+/* Drain the socket; 1 when one of the events was a DRM hotplug
+ * (SUBSYSTEM=drm with HOTPLUG=1), or when events were lost (ENOBUFS) and
+ * one may have been among them. */
+static int uevent_drm_hotplug(int fd) {
+    char msg[8192];
+    int hit = 0;
+    for (;;) {
+        ssize_t got = recv(fd, msg, sizeof msg - 1, 0);
+        if (got < 0 && errno == ENOBUFS) { hit = 1; continue; }
+        if (got <= 0) break;
+        msg[got] = 0;
+        int drm = 0, hot = 0;
+        for (char *p = msg; p < msg + got; p += strlen(p) + 1) {
+            if (!strcmp(p, "SUBSYSTEM=drm")) drm = 1;
+            else if (!strcmp(p, "HOTPLUG=1")) hot = 1;
+        }
+        hit |= drm && hot;
+    }
+    return hit;
+}
+
+static long now_ms(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (long)t.tv_sec * 1000L + t.tv_nsec / 1000000L;
+}
+
 /* Answer the backend once, on stdout, in place of READY (#1362): the
  * Python side shows <why> on the text screen it falls back to. */
 static int fail(const char *why) {
@@ -237,10 +299,17 @@ int dcui_main(const Theme *theme) {
         return fail(why);
     }
     backend_set_tty(DCUI_TTY);
-    Backend *b = backend_open("drm", NULL, err, sizeof err);
-    if (!b) {
-        fprintf(stderr, "native-gui: dcui: drm: %s\n", err);
-        b = backend_open("fbdev", NULL, err, sizeof err);
+    Backend *b = open_display(1, err, sizeof err);
+    /* #2768: booted with no display attached. The screen is up anyway, in
+     * memory, and goes on the first display connected -- not the text
+     * screen until a restart. Said in the journal, with both reasons. */
+    int waiting = 0;
+    if (!b && backend_display_absent()) {
+        char e_none[128];
+        b = backend_open("none", NULL, e_none, sizeof e_none);
+        waiting = b != NULL;
+        if (b) fprintf(stderr, "native-gui: dcui: no display connected yet (%s) -- the screen is drawn in memory "
+                               "and shown on the first display connected (#2768)\n", err);
     }
     if (!b) { snprintf(why, sizeof why, "no screen: %s", err); return fail(why); }
     int W = backend_width(b), H = backend_height(b);
@@ -262,8 +331,55 @@ int dcui_main(const Theme *theme) {
 
     char buf[65536]; size_t used = 0;
     int rc = 0, away = 0;
-    struct pollfd fds[32];
+    int uev = -1, look = 0;
+    long next_look = now_ms() + FALLBACK_MS;
+    if (waiting) {
+        char e_uev[160];
+        uev = uevent_open(e_uev, sizeof e_uev);
+        if (uev < 0) fprintf(stderr, "native-gui: dcui: no hotplug events (%s) -- looking for a display every %d s\n",
+                             e_uev, FALLBACK_MS / 1000);
+        else fprintf(stderr, "native-gui: dcui: waiting for a DRM hotplug event (and a look every %d s)\n",
+                     FALLBACK_MS / 1000);
+    }
+    struct pollfd fds[33];
     while (!stop_now) {
+        if (waiting && now_ms() >= next_look) look = 1;
+        /* #2768: on an event (or the fallback) the status the kernel holds is
+         * read -- no probe; drm/fbdev are opened (one probe, for the modes)
+         * only once a connector says it is connected. */
+        if (waiting && look && !backend_display_absent()) {
+            Backend *lit = open_display(0, err, sizeof err);
+            if (!lit && !backend_display_absent())      /* gone and back between the two looks? */
+                lit = open_display(0, err, sizeof err);
+            if (!lit && !backend_display_absent()) {
+                /* a display is there and neither drm nor fbdev opens it: say
+                 * why on the text screen -- not a wait that never ends */
+                snprintf(why, sizeof why, "display connected but not usable: %s", err);
+                fprintf(stderr, "native-gui: dcui: %s\n", why);
+                printf("FAIL %s\n", why);
+                fflush(stdout);
+                rc = 1;
+                break;
+            }
+            if (lit) {
+                backend_close(b);
+                b = lit; waiting = 0;
+                present(b, cur, theme);
+                if (backend_verify(b, err, sizeof err)) {   /* #1362 again: shown, or say why */
+                    snprintf(why, sizeof why, "display connected but not shown: %s", err);
+                    fprintf(stderr, "native-gui: dcui: %s\n", why);
+                    printf("FAIL %s\n", why);
+                    fflush(stdout);
+                    rc = 1;
+                    break;
+                }
+                backend_vt_take(b, SIGUSR1, SIGUSR2);
+                fprintf(stderr, "native-gui: dcui: display connected -- %dx%d (#2768)\n",
+                        backend_width(b), backend_height(b));
+                if (uev >= 0) { close(uev); uev = -1; }
+            }
+        }
+        if (look) { look = 0; next_look = now_ms() + FALLBACK_MS; }
         if (vt_leave) {                         /* another VT asked for the screen */
             vt_leave = 0;
             input_suspend(in, 1);
@@ -281,8 +397,11 @@ int dcui_main(const Theme *theme) {
         if (in) input_rescan(in);
         fds[0].fd = 0; fds[0].events = POLLIN; fds[0].revents = 0;
         int n = 1 + (in ? input_fill_pollfds(in, fds + 1, 31) : 0);
-        int r = poll(fds, n, 1000);
+        int nu = n;                             /* #2768: the uevent socket, last */
+        if (uev >= 0) { fds[nu].fd = uev; fds[nu].events = POLLIN; fds[nu].revents = 0; nu++; }
+        int r = poll(fds, nu, 1000);
         if (r < 0) { if (errno == EINTR) continue; rc = 1; break; }
+        if (uev >= 0 && (fds[n].revents & POLLIN) && uevent_drm_hotplug(uev)) look = 1;
         if (fds[0].revents & (POLLIN | POLLHUP)) {
             ssize_t got = read(0, buf + used, sizeof buf - 1 - used);
             if (got <= 0) break;                /* the backend closed the pipe: done */
@@ -297,7 +416,9 @@ int dcui_main(const Theme *theme) {
             used = strlen(start);
             memmove(buf, start, used + 1);
             if (used >= sizeof buf - 1) used = 0;   /* a line longer than the buffer: drop it */
-            if (fresh && !away) present(b, cur, theme);   /* not master while away */
+            /* not master while away; #2768: nothing to show while waiting -- the
+             * latest frame is drawn once, on the display that comes */
+            if (fresh && !away && !waiting) present(b, cur, theme);
         }
         if (r > 0 && in) {
             input_pump(in, fds + 1, n - 1);
@@ -315,6 +436,7 @@ int dcui_main(const Theme *theme) {
             fflush(stdout);
         }
     }
+    if (uev >= 0) close(uev);
     if (in) input_close(in);
     backend_close(b);
     free(cur); free(pending);

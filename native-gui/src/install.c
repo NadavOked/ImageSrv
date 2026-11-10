@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include "install.h"
 #include "install_raid.h"
+#include "install_osk.h"   /* #2778 */
 
 typedef struct { const char *name, *label; } EngineState;
 static const EngineState ENGINE_STATES[] = {
@@ -57,6 +58,27 @@ static void json_pair(char **p, size_t *n, const char *key, const char *value, i
     json_string(p, n, value);
 }
 
+/* #2765: the typed manual time, moved on by the seconds since it was typed. The wall-clock arithmetic is
+ * zone-free (timegm/gmtime on the numbers as typed); the engine turns the result into an instant in the zone. */
+void install_manual_sent(const InstallState *s, char *out, size_t n) {
+    out[0] = 0;
+    if (!s->ntp_manual) return;
+    int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0; char tail;
+    int got = sscanf(s->manual_time, "%d-%d-%d %d:%d:%d%c", &y, &mo, &d, &h, &mi, &sec, &tail);   /* 6 = with seconds, nothing after */
+    if (got != 6) { sec = 0; got = sscanf(s->manual_time, "%d-%d-%d %d:%d%c", &y, &mo, &d, &h, &mi, &tail); got = got == 5 ? 5 : 0; }
+    struct tm tm = {0}, chk;
+    tm.tm_year = y - 1900; tm.tm_mon = mo - 1; tm.tm_mday = d; tm.tm_hour = h; tm.tm_min = mi; tm.tm_sec = sec;
+    time_t t = got ? timegm(&tm) : 0;
+    if (got) gmtime_r(&t, &chk);
+    if (!got || chk.tm_year != y - 1900 || chk.tm_mon != mo - 1 || chk.tm_mday != d || chk.tm_hour != h || chk.tm_min != mi || chk.tm_sec != sec) {
+        snprintf(out, n, "%s", s->manual_time); return;   /* not a real date: as typed */
+    }
+    double age = s->manual_edit_at > 0 && !s->demo ? monotonic_s() - s->manual_edit_at : 0;
+    if (age < 0) age = 0;
+    t += (time_t)age; gmtime_r(&t, &chk);
+    strftime(out, n, "%Y-%m-%d %H:%M:%S", &chk);
+}
+
 static void config_json(const App *a, char *out, size_t n, int step) {
     const InstallState *s = &a->install;
     char *p = out; *p++ = '{'; n--;
@@ -69,6 +91,7 @@ static void config_json(const App *a, char *out, size_t n, int step) {
     json_pair(&p, &n, "gateway", s->gateway, 1); json_pair(&p, &n, "dns", s->dns, 1);
     json_pair(&p, &n, "hostname", s->hostname, 1); json_pair(&p, &n, "timezone", s->timezone, 1);
     json_pair(&p, &n, "ntp_servers", s->ntp_org ? s->ntp_servers : "", 1);   /* #2144: empty = automatic */
+    { char cm[40]; install_manual_sent(s, cm, sizeof cm); json_pair(&p, &n, "clock_manual", cm, 1); }   /* #2765: empty = a time source */
     json_pair(&p, &n, "backup_time", s->backup_time, 1); json_pair(&p, &n, "backup_reserve_gb", install_backup_gb(s), 1);   /* #1956 */
     json_pair(&p, &n, "admin_user", s->admin_user, 1);
     json_pair(&p, &n, "password", s->password, 1); json_pair(&p, &n, "password_confirm", s->confirm, 1);
@@ -102,7 +125,7 @@ static int run_bridge(const InstallBridge *b, const char *action, const char *in
 }
 
 static int truth(const char *v){return !strcmp(v,"1")||!strcmp(v,"true")||!strcmp(v,"True");}
-static int error_slot(const char *key){static const char *names[]={"disk","role","primary_url","interface","mode","address","netmask","gateway","dns","hostname","admin_user","password","password_confirm","current_password","timezone","root_password","root_password_confirm","ntp_servers","backup_reserve_gb","backup_time"};for(int i=0;i<20;i++)if(!strcmp(key,names[i]))return i;return -1;}
+static int error_slot(const char *key){static const char *names[]={"disk","role","primary_url","interface","mode","address","netmask","gateway","dns","hostname","admin_user","password","password_confirm","current_password","timezone","root_password","root_password_confirm","ntp_servers","backup_reserve_gb","backup_time","clock_manual"};for(int i=0;i<21;i++)if(!strcmp(key,names[i]))return i;return -1;}
 
 static void parse_disk(InstallState *s,char *value){
     if(s->ndisks>=INSTALL_MAX_DISKS){return;}InstallDisk *d=&s->disks[s->ndisks];memset(d,0,sizeof *d);
@@ -147,7 +170,7 @@ static void parse_lines(InstallState *s,char *text,const char *action){
         else if(!strcmp(line,"title"))snprintf(s->title,sizeof s->title,"%s",eq);else if(!strcmp(line,"log"))snprintf(s->log,sizeof s->log,"%s",eq);
         else if(!strcmp(line,"job"))snprintf(s->job,sizeof s->job,"%s",eq);else if(!strcmp(line,"console_url"))snprintf(s->console_url,sizeof s->console_url,"%s",eq);
         else if(!strcmp(line,"user"))snprintf(s->user,sizeof s->user,"%s",eq);
-        else if(!strcmp(line,"clock"))s->clock=!strcmp(eq,"synced")?INSTALL_CLOCK_SYNCED:!strcmp(eq,"unsynced")?INSTALL_CLOCK_UNSYNCED:INSTALL_CLOCK_UNCHECKED;   /* #2144: anything else is "not checked" */
+        else if(!strcmp(line,"clock"))s->clock=!strcmp(eq,"synced")?INSTALL_CLOCK_SYNCED:!strcmp(eq,"unsynced")?INSTALL_CLOCK_UNSYNCED:!strcmp(eq,"manual")?INSTALL_CLOCK_MANUAL:INSTALL_CLOCK_UNCHECKED;   /* #2144: anything else is "not checked" */
         else if(!strcmp(line,"clock_server"))snprintf(s->clock_server,sizeof s->clock_server,"%s",eq);else if(!strcmp(line,"clock_offset_ms"))snprintf(s->clock_offset,sizeof s->clock_offset,"%s",eq);
         else if(!strcmp(line,"virt"))s->virt=!strcmp(eq,"metal")?INSTALL_VIRT_METAL:!strcmp(eq,"virtual")?INSTALL_VIRT_VIRTUAL:INSTALL_VIRT_UNKNOWN;   /* #1989 */
         else if(!strcmp(line,"raid_default")){s->raid=RAID_NONE;install_raid_set(s,install_raid_from_level(eq));}
@@ -189,17 +212,25 @@ int install_start(App *a,InstallBridge *b,int demo){if(demo){install_demo(a,INST
     if(!call(a,b,"progress","{}")&&strcmp(a->install.phase,"ready")){route_engine_state(a,b);b->next_poll=0;}return 0;}
 
 /* #2144: the organisation's server needs at least one address; automatic needs nothing */
-int install_time_ready(const InstallState *s){if(!s->ntp_org)return 1;for(const char *p=s->ntp_servers;*p;p++)if(*p!=' ')return 1;return 0;}
+int install_time_ready(const InstallState *s){if(!s->ntp_org&&!s->ntp_manual)return 1;for(const char *p=s->ntp_manual?s->manual_time:s->ntp_servers;*p;p++)if(*p!=' ')return 1;return 0;}
 const char *install_backup_gb(const InstallState *s){static const char *sizes[]={"5","10","20"};return s->backup_pick==INSTALL_BACKUP_OTHER?s->backup_other:sizes[s->backup_pick];}
 int install_backup_ready(const InstallState *s){return s->backup_time[0]&&install_backup_gb(s)[0];}
-int install_clock_now(const InstallState *s,char *when,size_t n,char *zone,size_t zn){
-    if(s->demo){snprintf(when,n,"14:32 · 04/11/2026");snprintf(zone,zn,"%s",s->timezone);return 14*60+32;}   /* the mockup's, every render */
-    time_t now=time(NULL);struct tm tm;char path[160];const char *z=s->timezone;
+/* The clock's wall time in the chosen zone. Returns 1 when that zone is known to this system, 0 when it
+ * is UTC instead (and `zone` says "UTC") -- never another zone's time under the chosen name. */
+static int clock_tm(const InstallState *s,struct tm *tm,char *zone,size_t zn){
+    if(s->demo){memset(tm,0,sizeof *tm);tm->tm_year=126;tm->tm_mon=10;tm->tm_mday=4;tm->tm_hour=14;tm->tm_min=32;snprintf(zone,zn,"%s",s->timezone);return 1;}   /* the mockup's, every render */
+    time_t now=time(NULL);char path[160];const char *z=s->timezone;
     int known=z[0]&&!strstr(z,"..")&&snprintf(path,sizeof path,"/usr/share/zoneinfo/%s",z)<(int)sizeof path&&access(path,R_OK)==0;
     if(known){const char *old=getenv("TZ");char saved[128]="";int had=old!=NULL;if(had)snprintf(saved,sizeof saved,"%s",old);
-        setenv("TZ",z,1);tzset();localtime_r(&now,&tm);if(had)setenv("TZ",saved,1);else unsetenv("TZ");tzset();snprintf(zone,zn,"%s",z);}
-    else{gmtime_r(&now,&tm);snprintf(zone,zn,"UTC");}   /* the live image without that zone: UTC, said */
-    strftime(when,n,"%H:%M · %d/%m/%Y",&tm);return tm.tm_hour*60+tm.tm_min;}
+        setenv("TZ",z,1);tzset();localtime_r(&now,tm);if(had)setenv("TZ",saved,1);else unsetenv("TZ");tzset();snprintf(zone,zn,"%s",z);}
+    else{gmtime_r(&now,tm);snprintf(zone,zn,"UTC");}   /* the live image without that zone: UTC, said */
+    return known;}
+int install_clock_now(const InstallState *s,char *when,size_t n,char *zone,size_t zn){
+    struct tm tm;clock_tm(s,&tm,zone,zn);strftime(when,n,"%H:%M · %d/%m/%Y",&tm);return tm.tm_hour*60+tm.tm_min;}
+/* #2765: the manual time starts as the clock's own, in the chosen zone -- only when that zone is known here;
+ * a UTC reading under another zone's name would be an hours-wrong default, so then the person types it. */
+static void seed_manual_time(InstallState *s){struct tm tm;char z[64];if(!clock_tm(s,&tm,z,sizeof z)){s->manual_time[0]=0;return;}
+    strftime(s->manual_time,sizeof s->manual_time,"%Y-%m-%d %H:%M:%S",&tm);s->manual_edit_at=monotonic_s();s->manual_seeded=1;}
 
 /* #1310: green is a positive answer to THIS address -- edits reset it (below) */
 int install_role_ready(const InstallState *s){return !s->secondary||(s->primary_checked&&s->primary_ok);}
@@ -207,36 +238,42 @@ int install_role_ready(const InstallState *s){return !s->secondary||(s->primary_
 void install_password_rules(const char *pw,int *letter,int *digit,int *special){*letter=*digit=*special=0;for(const char *p=pw;*p;p++){int l=(*p>='A'&&*p<='Z')||(*p>='a'&&*p<='z'),d=*p>='0'&&*p<='9';*letter|=l;*digit|=d;*special|=!l&&!d;}}
 static int strong(const char *pw,const char *confirm){int letter,digit,special;install_password_rules(pw,&letter,&digit,&special);return strlen(pw)>=8&&letter&&digit&&special&&!strcmp(pw,confirm);}
 int install_password_ready(const InstallState *s){return s->admin_user[0]&&strong(s->password,s->confirm)&&strong(s->root_password,s->root_confirm);}
-static char *field(InstallState *s,int id,size_t *n){switch(id){case HIT_INSTALL_PRIMARY_URL:*n=sizeof s->primary_url;return s->primary_url;case HIT_INSTALL_ADDRESS:*n=sizeof s->address;return s->address;case HIT_INSTALL_NETMASK:*n=sizeof s->netmask;return s->netmask;case HIT_INSTALL_GATEWAY:*n=sizeof s->gateway;return s->gateway;case HIT_INSTALL_DNS:*n=sizeof s->dns;return s->dns;case HIT_INSTALL_HOSTNAME:*n=sizeof s->hostname;return s->hostname;case HIT_INSTALL_TIMEZONE:*n=sizeof s->timezone;return s->timezone;case HIT_INSTALL_ADMIN_USER:*n=sizeof s->admin_user;return s->admin_user;case HIT_INSTALL_PASSWORD:*n=sizeof s->password;return s->password;case HIT_INSTALL_CONFIRM:*n=sizeof s->confirm;return s->confirm;case HIT_INSTALL_CURRENT_PASSWORD:*n=sizeof s->current_password;return s->current_password;case HIT_INSTALL_ROOT_PASSWORD:*n=sizeof s->root_password;return s->root_password;case HIT_INSTALL_ROOT_CONFIRM:*n=sizeof s->root_confirm;return s->root_confirm;case HIT_INSTALL_NTP_SERVERS:*n=sizeof s->ntp_servers;return s->ntp_servers;case HIT_INSTALL_BACKUP_OTHER_GB:*n=sizeof s->backup_other;return s->backup_other;case HIT_INSTALL_BACKUP_TIME:*n=sizeof s->backup_time;return s->backup_time;default:*n=0;return NULL;}}
-static int fields(InstallState *s,int *ids){int n=0;if(s->view==INSTALL_ROLE&&s->secondary)ids[n++]=HIT_INSTALL_PRIMARY_URL;else if(s->view==INSTALL_NETWORK&&s->static_mode){ids[n++]=HIT_INSTALL_ADDRESS;ids[n++]=HIT_INSTALL_NETMASK;ids[n++]=HIT_INSTALL_GATEWAY;ids[n++]=HIT_INSTALL_DNS;}else if(s->view==INSTALL_HOSTNAME){ids[n++]=HIT_INSTALL_HOSTNAME;ids[n++]=HIT_INSTALL_TIMEZONE;}else if(s->view==INSTALL_TIME&&s->ntp_org)ids[n++]=HIT_INSTALL_NTP_SERVERS;else if(s->view==INSTALL_BACKUP){if(s->backup_pick==INSTALL_BACKUP_OTHER)ids[n++]=HIT_INSTALL_BACKUP_OTHER_GB;ids[n++]=HIT_INSTALL_BACKUP_TIME;}else if(s->view==INSTALL_ADMIN){ids[n++]=HIT_INSTALL_ADMIN_USER;if(s->rerun)ids[n++]=HIT_INSTALL_CURRENT_PASSWORD;ids[n++]=HIT_INSTALL_PASSWORD;ids[n++]=HIT_INSTALL_CONFIRM;ids[n++]=HIT_INSTALL_ROOT_PASSWORD;ids[n++]=HIT_INSTALL_ROOT_CONFIRM;}return n;}
+static char *field(InstallState *s,int id,size_t *n){switch(id){case HIT_INSTALL_PRIMARY_URL:*n=sizeof s->primary_url;return s->primary_url;case HIT_INSTALL_ADDRESS:*n=sizeof s->address;return s->address;case HIT_INSTALL_NETMASK:*n=sizeof s->netmask;return s->netmask;case HIT_INSTALL_GATEWAY:*n=sizeof s->gateway;return s->gateway;case HIT_INSTALL_DNS:*n=sizeof s->dns;return s->dns;case HIT_INSTALL_HOSTNAME:*n=sizeof s->hostname;return s->hostname;case HIT_INSTALL_TIMEZONE:*n=sizeof s->timezone;return s->timezone;case HIT_INSTALL_ADMIN_USER:*n=sizeof s->admin_user;return s->admin_user;case HIT_INSTALL_PASSWORD:*n=sizeof s->password;return s->password;case HIT_INSTALL_CONFIRM:*n=sizeof s->confirm;return s->confirm;case HIT_INSTALL_CURRENT_PASSWORD:*n=sizeof s->current_password;return s->current_password;case HIT_INSTALL_ROOT_PASSWORD:*n=sizeof s->root_password;return s->root_password;case HIT_INSTALL_ROOT_CONFIRM:*n=sizeof s->root_confirm;return s->root_confirm;case HIT_INSTALL_NTP_SERVERS:*n=sizeof s->ntp_servers;return s->ntp_servers;case HIT_INSTALL_MANUAL_TIME:*n=sizeof s->manual_time;return s->manual_time;case HIT_INSTALL_BACKUP_OTHER_GB:*n=sizeof s->backup_other;return s->backup_other;case HIT_INSTALL_BACKUP_TIME:*n=sizeof s->backup_time;return s->backup_time;default:*n=0;return NULL;}}
+/* the screen's text fields, in its order. round/1108j: #2764 moved the zone to the clock step and #2765 added
+ * the manual time, while #2778's keyboard reads this list -- the clock step's fields are here, or F5 and a click
+ * open nothing there. stops() and home() take the clock step before this list, so its ring is unchanged. */
+static int fields(InstallState *s,int *ids){int n=0;if(s->view==INSTALL_ROLE&&s->secondary)ids[n++]=HIT_INSTALL_PRIMARY_URL;else if(s->view==INSTALL_NETWORK&&s->static_mode){ids[n++]=HIT_INSTALL_ADDRESS;ids[n++]=HIT_INSTALL_NETMASK;ids[n++]=HIT_INSTALL_GATEWAY;ids[n++]=HIT_INSTALL_DNS;}else if(s->view==INSTALL_HOSTNAME)ids[n++]=HIT_INSTALL_HOSTNAME;else if(s->view==INSTALL_TIME){ids[n++]=HIT_INSTALL_TIMEZONE;if(s->ntp_org)ids[n++]=HIT_INSTALL_NTP_SERVERS;if(s->ntp_manual)ids[n++]=HIT_INSTALL_MANUAL_TIME;}else if(s->view==INSTALL_BACKUP){if(s->backup_pick==INSTALL_BACKUP_OTHER)ids[n++]=HIT_INSTALL_BACKUP_OTHER_GB;ids[n++]=HIT_INSTALL_BACKUP_TIME;}else if(s->view==INSTALL_ADMIN){ids[n++]=HIT_INSTALL_ADMIN_USER;if(s->rerun)ids[n++]=HIT_INSTALL_CURRENT_PASSWORD;ids[n++]=HIT_INSTALL_PASSWORD;ids[n++]=HIT_INSTALL_CONFIRM;ids[n++]=HIT_INSTALL_ROOT_PASSWORD;ids[n++]=HIT_INSTALL_ROOT_CONFIRM;}return n;}
 /* #1206: the keyboard ring. The ESXi web console delivers the arrows but
  * swallows Tab, so Up/Down (and Tab/Shift+Tab) walk every control on the
  * screen -- radio options, fields, the inline check button. Landing on a
  * radio option selects it: the highlighted option is the chosen one, as in
  * the disk list. The disk screen keeps its own handler below. */
 #define INSTALL_MAX_STOPS (INSTALL_MAX_NICS+8)
-static int stops(InstallState *s,int *ids){int n=0;if(s->view==INSTALL_ROLE){ids[n++]=HIT_INSTALL_PRIMARY;ids[n++]=HIT_INSTALL_SECONDARY;if(s->secondary){ids[n++]=HIT_INSTALL_PRIMARY_URL;ids[n++]=HIT_INSTALL_CHECK_PRIMARY;}return n;}if(s->view==INSTALL_NETWORK){for(int i=0;i<s->nnics;i++)ids[n++]=HIT_INSTALL_NIC_BASE+i;ids[n++]=s->static_mode?HIT_INSTALL_STATIC:HIT_INSTALL_DHCP;}if(s->view==INSTALL_TIME){ids[n++]=HIT_INSTALL_NTP_AUTO;ids[n++]=HIT_INSTALL_NTP_ORG;}if(s->view==INSTALL_BACKUP)for(int i=0;i<=INSTALL_BACKUP_OTHER;i++)ids[n++]=HIT_INSTALL_BACKUP_BASE+i;return n+fields(s,ids+n);}
-static int home(InstallState *s){int ids[8];if(s->view==INSTALL_BACKUP)return HIT_INSTALL_BACKUP_BASE+s->backup_pick;if(fields(s,ids))return ids[0];if(s->view==INSTALL_ROLE)return s->secondary?HIT_INSTALL_SECONDARY:HIT_INSTALL_PRIMARY;if(s->view==INSTALL_NETWORK&&s->nic>=0)return HIT_INSTALL_NIC_BASE+s->nic;if(s->view==INSTALL_TIME)return HIT_INSTALL_NTP_AUTO;return 0;}
+static int stops(InstallState *s,int *ids){int n=0;if(s->view==INSTALL_ROLE){ids[n++]=HIT_INSTALL_PRIMARY;ids[n++]=HIT_INSTALL_SECONDARY;if(s->secondary){ids[n++]=HIT_INSTALL_PRIMARY_URL;ids[n++]=HIT_INSTALL_CHECK_PRIMARY;}return n;}if(s->view==INSTALL_NETWORK){for(int i=0;i<s->nnics;i++)ids[n++]=HIT_INSTALL_NIC_BASE+i;ids[n++]=s->static_mode?HIT_INSTALL_STATIC:HIT_INSTALL_DHCP;}if(s->view==INSTALL_TIME){ids[n++]=HIT_INSTALL_TIMEZONE;ids[n++]=HIT_INSTALL_NTP_AUTO;ids[n++]=HIT_INSTALL_NTP_ORG;if(s->ntp_org)ids[n++]=HIT_INSTALL_NTP_SERVERS;ids[n++]=HIT_INSTALL_NTP_MANUAL;if(s->ntp_manual)ids[n++]=HIT_INSTALL_MANUAL_TIME;return n;}   /* #2765: the screen's own order */if(s->view==INSTALL_BACKUP)for(int i=0;i<=INSTALL_BACKUP_OTHER;i++)ids[n++]=HIT_INSTALL_BACKUP_BASE+i;return n+fields(s,ids+n);}
+static int home(InstallState *s){int ids[8];if(s->view==INSTALL_TIME)return HIT_INSTALL_NTP_AUTO;if(s->view==INSTALL_BACKUP)return HIT_INSTALL_BACKUP_BASE+s->backup_pick;if(fields(s,ids))return ids[0];if(s->view==INSTALL_ROLE)return s->secondary?HIT_INSTALL_SECONDARY:HIT_INSTALL_PRIMARY;if(s->view==INSTALL_NETWORK&&s->nic>=0)return HIT_INSTALL_NIC_BASE+s->nic;return 0;}
 /* #2096: a field's message belongs to its last check -- a later screen's slots
  * are emptied when it is entered (the step-1 dry run had already said "invalid
  * NIC" for the empty interface), and a slot when its field changes */
 static const int SCREEN_SLOTS[][2]={[INSTALL_DISK]={0,0},[INSTALL_ROLE]={1,2},[INSTALL_NETWORK]={3,8},[INSTALL_HOSTNAME]={9,9},[INSTALL_TIME]={17,17},[INSTALL_BACKUP]={18,19},[INSTALL_ADMIN]={10,13}};
-static void clear_screen_errors(InstallState *s){if(s->view<INSTALL_DISK||s->view>INSTALL_ADMIN)return;for(int i=SCREEN_SLOTS[s->view][0];i<=SCREEN_SLOTS[s->view][1];i++)s->field_error[i][0]=0;if(s->view==INSTALL_HOSTNAME)s->field_error[14][0]=0;if(s->view==INSTALL_ADMIN)s->field_error[15][0]=s->field_error[16][0]=0;}
-static int slot_of(int id){switch(id){case HIT_INSTALL_PRIMARY_URL:return 2;case HIT_INSTALL_ADDRESS:return 5;case HIT_INSTALL_NETMASK:return 6;case HIT_INSTALL_GATEWAY:return 7;case HIT_INSTALL_DNS:return 8;case HIT_INSTALL_HOSTNAME:return 9;case HIT_INSTALL_ADMIN_USER:return 10;case HIT_INSTALL_PASSWORD:return 11;case HIT_INSTALL_CONFIRM:return 12;case HIT_INSTALL_CURRENT_PASSWORD:return 13;case HIT_INSTALL_TIMEZONE:return 14;case HIT_INSTALL_ROOT_PASSWORD:return 15;case HIT_INSTALL_ROOT_CONFIRM:return 16;case HIT_INSTALL_NTP_SERVERS:return 17;case HIT_INSTALL_BACKUP_OTHER_GB:return 18;case HIT_INSTALL_BACKUP_TIME:return 19;default:return -1;}}
-static void edited(InstallState *s,int id){int i=slot_of(id);if(i>=0)s->field_error[i][0]=0;}
+static void clear_screen_errors(InstallState *s){if(s->view<INSTALL_DISK||s->view>INSTALL_ADMIN)return;for(int i=SCREEN_SLOTS[s->view][0];i<=SCREEN_SLOTS[s->view][1];i++)s->field_error[i][0]=0;if(s->view==INSTALL_TIME)s->field_error[14][0]=s->field_error[20][0]=0;if(s->view==INSTALL_ADMIN)s->field_error[15][0]=s->field_error[16][0]=0;}
+static int slot_of(int id){switch(id){case HIT_INSTALL_PRIMARY_URL:return 2;case HIT_INSTALL_ADDRESS:return 5;case HIT_INSTALL_NETMASK:return 6;case HIT_INSTALL_GATEWAY:return 7;case HIT_INSTALL_DNS:return 8;case HIT_INSTALL_HOSTNAME:return 9;case HIT_INSTALL_ADMIN_USER:return 10;case HIT_INSTALL_PASSWORD:return 11;case HIT_INSTALL_CONFIRM:return 12;case HIT_INSTALL_CURRENT_PASSWORD:return 13;case HIT_INSTALL_TIMEZONE:return 14;case HIT_INSTALL_ROOT_PASSWORD:return 15;case HIT_INSTALL_ROOT_CONFIRM:return 16;case HIT_INSTALL_NTP_SERVERS:return 17;case HIT_INSTALL_MANUAL_TIME:return 20;case HIT_INSTALL_BACKUP_OTHER_GB:return 18;case HIT_INSTALL_BACKUP_TIME:return 19;default:return -1;}}
+static void edited(InstallState *s,int id){int i=slot_of(id);if(i>=0)s->field_error[i][0]=0;
+    if(id==HIT_INSTALL_MANUAL_TIME){s->manual_edit_at=monotonic_s();s->manual_seeded=0;}   /* #2765: typed -- the clock is no longer its source */
+    else if(id==HIT_INSTALL_TIMEZONE&&s->ntp_manual&&s->manual_seeded)seed_manual_time(s);}   /* the seeded text was in the old zone */
 static void pick_nic(InstallState *s,int i){s->nic=i;s->field_error[3][0]=0;seed_from_nic(s);}
 /* #2144: the field's message belongs to the organisation's server; automatic has none */
-static void pick_ntp(InstallState *s,int org){s->ntp_org=org;if(!org)s->field_error[17][0]=0;}
+static void pick_ntp(InstallState *s,int mode){s->ntp_org=mode==1;s->ntp_manual=mode==2;if(mode!=1)s->field_error[17][0]=0;if(mode!=2)s->field_error[20][0]=0;
+    if(mode==2&&!s->manual_time[0])seed_manual_time(s);}   /* #2765: 0 automatic, 1 the organisation's server, 2 manual */
 /* #1956: a refused size belongs to that size */
 static void pick_backup(InstallState *s,int i){s->backup_pick=i;s->field_error[18][0]=0;}
-static void land(App *a,int id){InstallState *s=&a->install;a->focus=id;if(id==HIT_INSTALL_PRIMARY)s->secondary=0;else if(id==HIT_INSTALL_SECONDARY)s->secondary=1;else if(id==HIT_INSTALL_DHCP)s->static_mode=0;else if(id==HIT_INSTALL_STATIC){s->static_mode=1;seed_from_nic(s);}else if(id>=HIT_INSTALL_NIC_BASE&&id<HIT_INSTALL_NIC_BASE+s->nnics)pick_nic(s,id-HIT_INSTALL_NIC_BASE);else if(id==HIT_INSTALL_NTP_AUTO||id==HIT_INSTALL_NTP_ORG)pick_ntp(s,id==HIT_INSTALL_NTP_ORG);else if(id>=HIT_INSTALL_BACKUP_BASE&&id<=HIT_INSTALL_BACKUP_BASE+INSTALL_BACKUP_OTHER)pick_backup(s,id-HIT_INSTALL_BACKUP_BASE);}
+static void land(App *a,int id){InstallState *s=&a->install;a->focus=id;if(id==HIT_INSTALL_PRIMARY)s->secondary=0;else if(id==HIT_INSTALL_SECONDARY)s->secondary=1;else if(id==HIT_INSTALL_DHCP)s->static_mode=0;else if(id==HIT_INSTALL_STATIC){s->static_mode=1;seed_from_nic(s);}else if(id>=HIT_INSTALL_NIC_BASE&&id<HIT_INSTALL_NIC_BASE+s->nnics)pick_nic(s,id-HIT_INSTALL_NIC_BASE);else if(id==HIT_INSTALL_NTP_AUTO)pick_ntp(s,0);else if(id==HIT_INSTALL_NTP_ORG)pick_ntp(s,1);else if(id==HIT_INSTALL_NTP_MANUAL)pick_ntp(s,2);else if(id>=HIT_INSTALL_BACKUP_BASE&&id<=HIT_INSTALL_BACKUP_BASE+INSTALL_BACKUP_OTHER)pick_backup(s,id-HIT_INSTALL_BACKUP_BASE);}
 static void move_focus(App *a,int dir){int ids[INSTALL_MAX_STOPS],n=stops(&a->install,ids),at=-1,h=home(&a->install);if(!n)return;for(int i=0;i<n;i++)if(ids[i]==a->focus)at=i;if(at<0){for(int i=0;i<n;i++)if(ids[i]==h)at=i;if(at>=0){a->focus=h;return;}at=dir>0?-1:0;}land(a,ids[(at+dir+n)%n]);}
 /* Focus follows the screen: after next/back the old field id would keep
  * receiving keystrokes (typed on the admin screen, landed in the hostname;
  * ESXi 21/09), and the first Tab only moved it here. */
 static void refocus(App *a){a->focus=home(&a->install);}
-static int any_errors(const InstallState *s){for(int i=0;i<20;i++)if(s->field_error[i][0])return 1;return 0;}
-static int screen_errors(const InstallState *s,int view){int first=0,last=13;if(view==INSTALL_DISK)last=0;else if(view==INSTALL_ROLE){first=1;last=2;}else if(view==INSTALL_NETWORK){first=3;last=8;}else if(view==INSTALL_HOSTNAME){if(s->field_error[14][0])return 1;first=last=9;}else if(view==INSTALL_TIME)first=last=17;else if(view==INSTALL_BACKUP){first=18;last=19;}else if(view==INSTALL_ADMIN){if(s->field_error[15][0]||s->field_error[16][0])return 1;first=10;last=13;}for(int i=first;i<=last;i++)if(s->field_error[i][0])return 1;return 0;}
+static int any_errors(const InstallState *s){for(int i=0;i<21;i++)if(s->field_error[i][0])return 1;return 0;}
+static int screen_errors(const InstallState *s,int view){int first=0,last=13;if(view==INSTALL_DISK)last=0;else if(view==INSTALL_ROLE){first=1;last=2;}else if(view==INSTALL_NETWORK){first=3;last=8;}else if(view==INSTALL_HOSTNAME)first=last=9;else if(view==INSTALL_TIME){if(s->field_error[14][0]||s->field_error[20][0])return 1;first=last=17;}else if(view==INSTALL_BACKUP){first=18;last=19;}else if(view==INSTALL_ADMIN){if(s->field_error[15][0]||s->field_error[16][0])return 1;first=10;last=13;}for(int i=first;i<=last;i++)if(s->field_error[i][0])return 1;return 0;}
 static void back(App *a){InstallState *s=&a->install;if(s->view==INSTALL_FAILED){s->view=INSTALL_DISK;refocus(a);return;}if(s->view>INSTALL_DISK&&s->view<=INSTALL_SUMMARY){s->view--;refocus(a);}}
 static void check_primary_call(App *a,InstallBridge *b){char json[512],*p=json;size_t n=sizeof json;*p++='{';n--;json_pair(&p,&n,"primary_url",a->install.primary_url,0);if(n>1){*p++='}';*p=0;}a->install.error[0]=0;a->install.primary_checked=1;a->install.primary_ok=0;a->install.primary_name[0]=a->install.primary_version[0]=a->install.primary_fingerprint[0]=0;if(call(a,b,"check-primary",json)){a->install.primary_ok=0;snprintf(a->install.primary_error,sizeof a->install.primary_error,"פעולת הגשר נכשלה: check-primary");}else snprintf(a->install.primary_error,sizeof a->install.primary_error,"%s",a->install.error);a->install.error[0]=0;}
 static void next(App *a,InstallBridge *b){InstallState *s=&a->install;if(s->view==INSTALL_DISK&&(s->disk<0||!s->disk_ack))return;if(s->view==INSTALL_SUMMARY){char json[4096];config_json(a,json,sizeof json,0);s->error[0]=0;if(!call(a,b,"apply",json)&&!any_errors(s)&&!s->error[0]){snprintf(s->phase,sizeof s->phase,"partitioning");s->progress_pct=0;s->view=INSTALL_PROGRESS;b->next_poll=0;}return;}char json[4096];int view=s->view,step=view==INSTALL_ADMIN?0:(view==INSTALL_DISK?1:(view==INSTALL_TIME?6:(view==INSTALL_BACKUP?7:view-INSTALL_DISK)));   /* #2144: 4 is the bridge's "passwords only" */config_json(a,json,sizeof json,step);s->error[0]=0;if(!call(a,b,"validate",json)&&!screen_errors(s,view)){s->view++;clear_screen_errors(s);refocus(a);}}
@@ -246,11 +283,90 @@ static void next(App *a,InstallBridge *b){InstallState *s=&a->install;if(s->view
  * person (principle 5: reported, not swallowed). */
 static void reboot_or_report(App *a,InstallBridge *b){InstallState *s=&a->install;cancel_reboot(s);s->error[0]=0;call(a,b,"eject","{}");if(s->error[0])fprintf(stderr,"native-gui: eject: %s\n",s->error);if(!call(a,b,"reboot","{}"))snprintf(s->error,sizeof s->error,"פקודת reboot חזרה בלי להפעיל מחדש");}
 static void boot_local(App *a,InstallBridge *b){a->install.error[0]=0;if(!call(a,b,"boot-local","{}"))snprintf(a->install.error,sizeof a->install.error,"פקודת boot-local חזרה בלי להפעיל מחדש");}
-static void choose(App *a,InstallBridge *b,int id){InstallState *s=&a->install;if(id==HIT_INSTALL_BACK){back(a);return;}if(id==HIT_INSTALL_NEXT){if(s->view==INSTALL_DONE)reboot_or_report(a,b);else if((s->view!=INSTALL_ADMIN||install_password_ready(s))&&(s->view!=INSTALL_ROLE||install_role_ready(s))&&(s->view!=INSTALL_TIME||install_time_ready(s))&&(s->view!=INSTALL_BACKUP||install_backup_ready(s)))next(a,b);return;}if(id==HIT_INSTALL_PRIMARY)s->secondary=0;else if(id==HIT_INSTALL_SECONDARY){s->secondary=1;refocus(a);}else if(id==HIT_INSTALL_CHECK_PRIMARY)check_primary_call(a,b);else if(id==HIT_INSTALL_DHCP)s->static_mode=0;else if(id==HIT_INSTALL_STATIC){s->static_mode=1;seed_from_nic(s);refocus(a);}else if(id==HIT_INSTALL_NTP_AUTO){pick_ntp(s,0);a->focus=id;}else if(id==HIT_INSTALL_NTP_ORG){pick_ntp(s,1);a->focus=HIT_INSTALL_NTP_SERVERS;}else if(id>=HIT_INSTALL_BACKUP_BASE&&id<HIT_INSTALL_BACKUP_BASE+INSTALL_BACKUP_OTHER){pick_backup(s,id-HIT_INSTALL_BACKUP_BASE);a->focus=id;}else if(id==HIT_INSTALL_BACKUP_BASE+INSTALL_BACKUP_OTHER){pick_backup(s,INSTALL_BACKUP_OTHER);a->focus=HIT_INSTALL_BACKUP_OTHER_GB;}else if(id==HIT_INSTALL_RETRY){s->view=INSTALL_DISK;s->disk_ack=0;refocus(a);}else if(id==HIT_INSTALL_DISK_ACK&&s->disk>=0)s->disk_ack=!s->disk_ack;else if(id==HIT_INSTALL_BOOT_LOCAL)boot_local(a,b);else if(id==HIT_INSTALL_SHOW_PASSWORD)s->show_password=!s->show_password;else if(id==HIT_INSTALL_SHOW_CONFIRM)s->show_confirm=!s->show_confirm;else if(id==HIT_INSTALL_SHOW_ROOT)s->show_root=!s->show_root;else if(id==HIT_INSTALL_SHOW_ROOT_CONFIRM)s->show_root_confirm=!s->show_root_confirm;else if(id==HIT_INSTALL_TECHNICAL)s->technical_open=!s->technical_open;else if(id==HIT_INSTALL_CANCEL_REBOOT)cancel_reboot(s);else if(id==HIT_INSTALL_OUTPUT_UP){s->output_scroll-=5;if(s->output_scroll<0)s->output_scroll=0;}else if(id==HIT_INSTALL_OUTPUT_DOWN)s->output_scroll+=5;else if(id>=HIT_INSTALL_DISK_BASE&&id<HIT_INSTALL_DISK_BASE+s->ndisks){int d=id-HIT_INSTALL_DISK_BASE;if(!s->disks[d].iso){install_pick_disk(s,d);s->disk_ack=0;}}else if(id>=HIT_INSTALL_RAID_BASE&&id<HIT_INSTALL_RAID_BASE+RAID_CHOICES)install_raid_set(s,id-HIT_INSTALL_RAID_BASE);else if(id>=HIT_INSTALL_NIC_BASE&&id<HIT_INSTALL_NIC_BASE+s->nnics)pick_nic(s,id-HIT_INSTALL_NIC_BASE);else if(id>=HIT_INSTALL_SUMMARY_BASE&&id<HIT_INSTALL_SUMMARY_BASE+7){s->view=INSTALL_DISK+id-HIT_INSTALL_SUMMARY_BASE;refocus(a);}else{size_t n;if(field(s,id,&n))a->focus=id;}}
+static void choose(App *a,InstallBridge *b,int id){InstallState *s=&a->install;if(id==HIT_INSTALL_BACK){back(a);return;}if(id==HIT_INSTALL_NEXT){if(s->view==INSTALL_DONE)reboot_or_report(a,b);else if((s->view!=INSTALL_ADMIN||install_password_ready(s))&&(s->view!=INSTALL_ROLE||install_role_ready(s))&&(s->view!=INSTALL_TIME||install_time_ready(s))&&(s->view!=INSTALL_BACKUP||install_backup_ready(s)))next(a,b);return;}if(id==HIT_INSTALL_PRIMARY)s->secondary=0;else if(id==HIT_INSTALL_SECONDARY){s->secondary=1;refocus(a);}else if(id==HIT_INSTALL_CHECK_PRIMARY)check_primary_call(a,b);else if(id==HIT_INSTALL_DHCP)s->static_mode=0;else if(id==HIT_INSTALL_STATIC){s->static_mode=1;seed_from_nic(s);refocus(a);}else if(id==HIT_INSTALL_NTP_AUTO){pick_ntp(s,0);a->focus=id;}else if(id==HIT_INSTALL_NTP_ORG){pick_ntp(s,1);a->focus=HIT_INSTALL_NTP_SERVERS;}else if(id==HIT_INSTALL_NTP_MANUAL){pick_ntp(s,2);a->focus=HIT_INSTALL_MANUAL_TIME;}else if(id>=HIT_INSTALL_BACKUP_BASE&&id<HIT_INSTALL_BACKUP_BASE+INSTALL_BACKUP_OTHER){pick_backup(s,id-HIT_INSTALL_BACKUP_BASE);a->focus=id;}else if(id==HIT_INSTALL_BACKUP_BASE+INSTALL_BACKUP_OTHER){pick_backup(s,INSTALL_BACKUP_OTHER);a->focus=HIT_INSTALL_BACKUP_OTHER_GB;}else if(id==HIT_INSTALL_RETRY){s->view=INSTALL_DISK;s->disk_ack=0;refocus(a);}else if(id==HIT_INSTALL_DISK_ACK&&s->disk>=0)s->disk_ack=!s->disk_ack;else if(id==HIT_INSTALL_BOOT_LOCAL)boot_local(a,b);else if(id==HIT_INSTALL_SHOW_PASSWORD)s->show_password=!s->show_password;else if(id==HIT_INSTALL_SHOW_CONFIRM)s->show_confirm=!s->show_confirm;else if(id==HIT_INSTALL_SHOW_ROOT)s->show_root=!s->show_root;else if(id==HIT_INSTALL_SHOW_ROOT_CONFIRM)s->show_root_confirm=!s->show_root_confirm;else if(id==HIT_INSTALL_TECHNICAL)s->technical_open=!s->technical_open;else if(id==HIT_INSTALL_CANCEL_REBOOT)cancel_reboot(s);else if(id==HIT_INSTALL_OUTPUT_UP){s->output_scroll-=5;if(s->output_scroll<0)s->output_scroll=0;}else if(id==HIT_INSTALL_OUTPUT_DOWN)s->output_scroll+=5;else if(id>=HIT_INSTALL_DISK_BASE&&id<HIT_INSTALL_DISK_BASE+s->ndisks){int d=id-HIT_INSTALL_DISK_BASE;if(!s->disks[d].iso){install_pick_disk(s,d);s->disk_ack=0;}}else if(id>=HIT_INSTALL_RAID_BASE&&id<HIT_INSTALL_RAID_BASE+RAID_CHOICES)install_raid_set(s,id-HIT_INSTALL_RAID_BASE);else if(id>=HIT_INSTALL_NIC_BASE&&id<HIT_INSTALL_NIC_BASE+s->nnics)pick_nic(s,id-HIT_INSTALL_NIC_BASE);else if(id>=HIT_INSTALL_SUMMARY_BASE&&id<HIT_INSTALL_SUMMARY_BASE+7){s->view=INSTALL_DISK+id-HIT_INSTALL_SUMMARY_BASE;refocus(a);}else{size_t n;if(field(s,id,&n))a->focus=id;}}
 
-int install_handle(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;if(e->type==UIEV_MOVE){a->ptr_x=e->x;a->ptr_y=e->y;a->ptr_visible=!e->is_touch;return 0;}if(e->type==UIEV_CLICK){a->ptr_x=e->x;a->ptr_y=e->y;choose(a,b,app_hit(a,e->x,e->y));return 0;}if(e->type==UIEV_SCROLL&&(s->view==INSTALL_FAILED||(s->view==INSTALL_PROGRESS&&s->technical_open))){s->output_scroll-=e->delta*3;if(s->output_scroll<0)s->output_scroll=0;return 0;}/* keyboard-only servers (a rack has a keyboard, rarely a mouse): on the disk
+/* #2777: a field the focus has just come to is "selected" -- the first character
+ * typed replaces what it holds, and Backspace empties it. The network fields are
+ * seeded from the NIC's lease (#2096); typed after the seed, 10.0.0.2 became
+ * "10.0.2.1510.0.0.2" and the step would not go on (metal and QEMU, 09/11). The
+ * focus is compared with the one the previous key saw, so a click, Tab, an arrow
+ * or a new screen all count as arriving; Caps Lock or Alt+Shift in the middle do not. */
+static void select_on_arrival(App *a,const Event *e){InstallState *s=&a->install;
+    if(a->focus!=s->edit_seen){s->edit_field=0;s->edit_seen=a->focus;}
+    if(e->type!=UIEV_CHAR&&!(e->type==UIEV_KEY&&e->key==KEYSYM_BACKSPACE))return;
+    size_t n;char *v=field(s,a->focus,&n);if(!v||s->edit_field==a->focus)return;
+    s->edit_field=a->focus;v[0]=0;   /* the key itself is applied below, as before */
+}
+/* #2776: the keyboard alone reaches every control (a KVM's mouse is not taken,
+ * #2774; the ESXi console has none). The screens stops() leaves without a ring
+ * get one here: on the disk screen the list and the RAID choice are one stop
+ * each -- Up/Down and Left/Right choose in them, as before, and landing never
+ * chooses a disk (#2147) -- then "I understand" and "boot from the disk"; the
+ * summary's "שינוי" links; the details toggle; "נסה שוב"; "בטל"; and on the
+ * admin screen the eye after each password. -1 = the screen keeps stops(). */
+static int ring_2776(App *a,int *ids){InstallState *s=&a->install;int n=0;
+    switch(s->view){
+    case INSTALL_DISK:ids[n++]=HIT_INSTALL_DISK_BASE+(s->disk>=0?s->disk:0);if(install_raid_offered(s))ids[n++]=HIT_INSTALL_RAID_BASE+s->raid;
+        if(s->disk>=0){ids[n++]=HIT_INSTALL_DISK_ACK;}if(s->existing_disk>=0&&s->existing_disk<s->ndisks){ids[n++]=HIT_INSTALL_BOOT_LOCAL;}return n;
+    case INSTALL_SUMMARY:for(int i=0;i<7;i++)ids[n++]=HIT_INSTALL_SUMMARY_BASE+i;return n;
+    case INSTALL_PROGRESS:ids[n++]=HIT_INSTALL_TECHNICAL;return n;
+    case INSTALL_FAILED:ids[n++]=HIT_INSTALL_RETRY;return n;
+    case INSTALL_DONE:if(s->reboot_at>0)ids[n++]=HIT_INSTALL_CANCEL_REBOOT;return n;
+    case INSTALL_ADMIN:{int base[INSTALL_MAX_STOPS],m=stops(s,base);for(int i=0;i<m;i++){ids[n++]=base[i];
+        int eye=base[i]==HIT_INSTALL_PASSWORD?HIT_INSTALL_SHOW_PASSWORD:base[i]==HIT_INSTALL_CONFIRM?HIT_INSTALL_SHOW_CONFIRM:base[i]==HIT_INSTALL_ROOT_PASSWORD?HIT_INSTALL_SHOW_ROOT:base[i]==HIT_INSTALL_ROOT_CONFIRM?HIT_INSTALL_SHOW_ROOT_CONFIRM:0;
+        if(eye)ids[n++]=eye;}return n;}
+    default:return -1;}}
+/* the disk list and the RAID choice are one stop whichever row/chip is current */
+static int same_stop(int focus,int id){if(focus==id)return 1;
+    if(id>=HIT_INSTALL_DISK_BASE&&id<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS)return focus>=HIT_INSTALL_DISK_BASE&&focus<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS;
+    if(id>=HIT_INSTALL_RAID_BASE&&id<HIT_INSTALL_RAID_BASE+RAID_CHOICES){return focus>=HIT_INSTALL_RAID_BASE&&focus<HIT_INSTALL_RAID_BASE+RAID_CHOICES;}return 0;}
+static int is_eye(int id){return id==HIT_INSTALL_SHOW_PASSWORD||id==HIT_INSTALL_SHOW_CONFIRM||id==HIT_INSTALL_SHOW_ROOT||id==HIT_INSTALL_SHOW_ROOT_CONFIRM;}
+/* Tab/Shift+Tab walk the ring (and Up/Down on the admin screen, as stops() did);
+ * Space presses the control in focus; Enter stays the screen's own action, except
+ * on a "שינוי" link -- a focused link opens its step and never starts the install.
+ * Returns 1 when the key was taken here. */
+static int keys_2776(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;
+    select_on_arrival(a,e);
+    int ids[INSTALL_MAX_STOPS],n=ring_2776(a,ids);if(n<0)return 0;
+    int key=e->type==UIEV_KEY?e->key:0,space=e->type==UIEV_CHAR&&e->ch==' ',f=a->focus;
+    int dir=key==KEYSYM_TAB?1:key==KEYSYM_BACKTAB?-1:0;
+    if(!dir&&s->view==INSTALL_ADMIN)dir=key==KEYSYM_DOWN?1:key==KEYSYM_UP?-1:0;
+    if(dir){if(!n)return 1;int at=-1;for(int i=0;i<n;i++)if(same_stop(f,ids[i]))at=i;if(at<0)at=dir>0?-1:0;a->focus=ids[(at+dir+n)%n];return 1;}
+    int link=s->view==INSTALL_SUMMARY&&f>=HIT_INSTALL_SUMMARY_BASE&&f<HIT_INSTALL_SUMMARY_BASE+7;
+    if(link&&(space||key==KEYSYM_ENTER)){choose(a,b,f);return 1;}
+    if(!space&&!(key==KEYSYM_ENTER&&s->view==INSTALL_PROGRESS))return 0;
+    if(s->view==INSTALL_DISK&&f==HIT_INSTALL_BOOT_LOCAL){boot_local(a,b);return 1;}
+    if(s->view==INSTALL_PROGRESS&&f==HIT_INSTALL_TECHNICAL&&key==KEYSYM_ENTER){s->technical_open=!s->technical_open;return 1;}
+    if(s->view==INSTALL_FAILED&&f==HIT_INSTALL_RETRY){choose(a,b,f);return 1;}
+    if(s->view==INSTALL_DONE&&f==HIT_INSTALL_CANCEL_REBOOT){cancel_reboot(s);a->focus=0;return 1;}
+    if(s->view==INSTALL_ADMIN&&is_eye(f)){choose(a,b,f);return 1;}
+    return 0;}
+
+/* #2778 (Nadav 09/11): mouse only. A click on a text field opens the keyboard
+ * on the screen (install_osk.h, drawn by screens_install_osk.c); a field the
+ * keys reached it by does not -- a keyboard has no use for it. Its keys are
+ * the physical keyboard's events, so "selected on arrival" (#2777), the field
+ * rules and a password's mask are those of typing, and the physical keyboard
+ * keeps working under it. "סיום" and F5 close it, and so does leaving the
+ * screen; on a control that is not a field (the eye, a radio) it is hidden and
+ * comes back on the next field -- Tab through the admin screen keeps it, and
+ * it moves off whichever field the focus lands on (screens_install_osk.c). */
+static int on_screen_field(InstallState *s,int id){int ids[8],n=fields(s,ids);for(int i=0;i<n;i++)if(ids[i]==id)return 1;return 0;}
+int install_text_fields(InstallState *s){int ids[8];return fields(s,ids);}
+/* F5 (Nadav 09/11; free in the installer -- Alt+F5 is input.c's VT switch): shown, it
+ * closes; otherwise it opens on the field in focus, or on the screen's first field */
+static void osk_f5(App *a){InstallState *s=&a->install;int ids[8],n=fields(s,ids);
+    if(s->osk==s->view&&on_screen_field(s,a->focus)){s->osk=s->osk_shift=0;return;}
+    if(!n)return;
+    if(!on_screen_field(s,a->focus))a->focus=ids[0];
+    s->osk=s->view;}
+static int osk_press(App *a,InstallBridge *b,int id);
+static int install_event(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;if(e->type==UIEV_MOVE){a->ptr_x=e->x;a->ptr_y=e->y;a->ptr_visible=!e->is_touch;return 0;}
+if(e->type==UIEV_CLICK){a->ptr_x=e->x;a->ptr_y=e->y;int id=app_hit(a,e->x,e->y);if(osk_press(a,b,id))return 0;choose(a,b,id);if(a->focus==id&&on_screen_field(s,id))s->osk=s->view;return 0;}
+if(e->type==UIEV_KEY&&e->key==KEYSYM_F5){osk_f5(a);return 0;}   /* #2778 */if(e->type==UIEV_SCROLL&&(s->view==INSTALL_FAILED||(s->view==INSTALL_PROGRESS&&s->technical_open))){s->output_scroll-=e->delta*3;if(s->output_scroll<0)s->output_scroll=0;return 0;}/* keyboard-only servers (a rack has a keyboard, rarely a mouse): on the disk
  * screen Up/Down pick the disk, Space ticks "I understand"; Space also
  * toggles the technical details on the progress screen. */
+if(keys_2776(a,b,e))return 0;   /* #2776/#2777: every control from the keyboard; a field arrived at is selected */
 if(s->view==INSTALL_DISK&&e->type==UIEV_CHAR&&e->ch==' '){if(s->disk>=0)s->disk_ack=!s->disk_ack;return 0;}
 if(s->view==INSTALL_PROGRESS&&e->type==UIEV_CHAR&&e->ch==' '){s->technical_open=!s->technical_open;return 0;}
 if(s->view==INSTALL_DISK&&e->type==UIEV_KEY&&(e->key==KEYSYM_UP||e->key==KEYSYM_DOWN)){int d=s->disk,old=d,step=e->key==KEYSYM_DOWN?1:-1;for(int i=0;i<s->ndisks;i++){d+=step;if(d<0)d=s->ndisks-1;if(d>=s->ndisks)d=0;if(!s->disks[d].iso){s->disk=d;if(d!=old)s->disk_ack=0;if(s->raid!=RAID_NONE&&!install_disk_suitable(&s->disks[d]))s->raid=RAID_NONE;break;}}return 0;}
@@ -265,6 +381,19 @@ if(e->type==UIEV_CHAR){size_t n;char *v=field(s,a->focus,&n);if(v&&strlen(v)+1<n
      * technical_open left over from a failed run must not eat them later */
     int output=s->view==INSTALL_FAILED||(s->view==INSTALL_PROGRESS&&s->technical_open);
     if(e->key==KEYSYM_ESC){if(s->view==INSTALL_DONE)cancel_reboot(s);else back(a);return 0;}if(e->key==KEYSYM_UP&&output){choose(a,b,HIT_INSTALL_OUTPUT_UP);return 0;}if(e->key==KEYSYM_DOWN&&output){choose(a,b,HIT_INSTALL_OUTPUT_DOWN);return 0;}if(e->key==KEYSYM_BACKSPACE){size_t n;char *v=field(s,a->focus,&n);if(v){size_t z=strlen(v);if(z)v[--z]=0;edited(s,a->focus);if(a->focus==HIT_INSTALL_PRIMARY_URL)s->primary_checked=s->primary_ok=0;}return 0;}if(e->key==KEYSYM_ENTER){if(s->view!=INSTALL_PROGRESS)choose(a,b,s->view==INSTALL_FAILED?HIT_INSTALL_RETRY:HIT_INSTALL_NEXT);return 0;}if(e->key==KEYSYM_TAB||e->key==KEYSYM_BACKTAB||e->key==KEYSYM_UP||e->key==KEYSYM_DOWN)move_focus(a,e->key==KEYSYM_TAB||e->key==KEYSYM_DOWN?1:-1);return 0;}
+/* a key of the open keyboard: Shift is for the next character only; the panel
+ * between the keys takes the click, so it never reaches what is under it */
+static int osk_press(App *a,InstallBridge *b,int id){InstallState *s=&a->install;int k=id-HIT_INSTALL_OSK_BASE;if(!s->osk||s->osk!=s->view||k<0||k>OSK_KEYS)return 0;
+    Event e={0};
+    if(k==OSK_KEYS)return 1;
+    if(k==OSK_SHIFT){s->osk_shift=!s->osk_shift;return 1;}
+    if(k==OSK_DONE){s->osk=s->osk_shift=0;return 1;}
+    if(k==OSK_BKSP){e.type=UIEV_KEY;e.key=KEYSYM_BACKSPACE;}
+    else{e.type=UIEV_CHAR;e.ch=osk_char(k,s->osk_shift);s->osk_shift=0;}
+    install_event(a,b,&e);return 1;}
+int install_handle(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;int done=install_event(a,b,e);
+    if(s->osk&&s->osk!=s->view)s->osk=s->osk_shift=0;   /* #2778: another screen; off the fields it is only hidden */
+    return done;}
 /* the done screen wakes the loop every second while it counts down */
 int install_polling(const App *a){return a->install.view==INSTALL_PROGRESS||a->install.view==INSTALL_TIME||(a->install.view==INSTALL_DONE&&a->install.reboot_at>0);}   /* #2144: the time step's clock */
 static int reboot_tick(App *a,InstallBridge *b,double now){InstallState *s=&a->install;if(s->view!=INSTALL_DONE||s->reboot_at<=0)return 0;if(now>=s->reboot_at){reboot_or_report(a,b);return 1;}int left=(int)ceil(s->reboot_at-now);if(left==s->reboot_left)return 0;s->reboot_left=left;return 1;}

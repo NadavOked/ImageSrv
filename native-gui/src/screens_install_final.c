@@ -21,7 +21,7 @@ static void summary_row(App *a,cairo_t *cr,Rect r,const char *key,const char *va
     install_text_r(cr,t,key,12,500,r.x+r.w-16,r.y+13,150,t->muted);
     install_text_r(cr,t,value,13,500,r.x+r.w-180,r.y+12,r.w-280,t->ink);
     install_text_r(cr,t,"שינוי",12,600,r.x+75,r.y+13,65,t->indigo);
-    hit_add(a,(Rect){r.x+10,r.y+5,85,r.h-10},HIT_INSTALL_SUMMARY_BASE+row);
+    hit_add(a,(Rect){r.x+10,r.y+5,85,r.h-10},HIT_INSTALL_SUMMARY_BASE+row);install_focus_ring(a,cr,(Rect){r.x+10,r.y+5,85,r.h-10},HIT_INSTALL_SUMMARY_BASE+row);   /* #2776 */
 }
 
 /* #2129: the NIC by the name the network screen gives it, and its MAC -- eth0 is
@@ -49,8 +49,11 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
     else{snprintf(value,sizeof value,"%s · %s",d&&d->model[0]?d->model:"—",d?d->path:"");}summary_row(a,cr,(Rect){x+1,y+1,w-2,48},"דיסק",value,0);
     if(s->secondary)snprintf(value,sizeof value,"שרת משנה · ראשי: %s",s->primary_url);else snprintf(value,sizeof value,"שרת ראשי");summary_row(a,cr,(Rect){x+1,y+49,w-2,48},"תפקיד",value,1);
     summary_row(a,cr,(Rect){x+1,y+97,w-2,nh},"כתובת השרת",one,2);text_draw_r(cr,&m2,x+w-181,y+97+12+m1.h+4,t->ink);text_free(&m1);text_free(&m2);
-    snprintf(value,sizeof value,"%s · %s",s->hostname,s->timezone);summary_row(a,cr,(Rect){x+1,y+145+dy,w-2,48},"שם השרת",value,3);
-    summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"שעון השרת",s->ntp_org?s->ntp_servers:"אוטומטי",4);   /* #2144: "שינוי" -> step 5 */
+    summary_row(a,cr,(Rect){x+1,y+145+dy,w-2,48},"שם השרת",s->hostname,3);   /* #2764: the zone is the clock's, below */
+    {char src[700],zone[96],when[64];bidi_isolate(s->timezone,zone,sizeof zone);
+        if(s->ntp_manual){bidi_isolate(s->manual_time,when,sizeof when);snprintf(src,sizeof src,"ידני, בלי שרת זמן · %s · %s",when,zone);}
+        else{char servers[300];bidi_isolate(s->ntp_servers,servers,sizeof servers);snprintf(src,sizeof src,"%s · %s",s->ntp_org?servers:"אוטומטי",zone);}
+        summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"שעון השרת",src,4);}   /* #2144: "שינוי" -> step 5 */
     char at[32],size[32],kept[48];bidi_isolate(s->backup_time,at,sizeof at);snprintf(size,sizeof size,"%s GB",install_backup_gb(s));bidi_isolate(size,kept,sizeof kept);snprintf(value,sizeof value,RLM "%s שמורים על כונן השרת · יומי ב-%s ובכל שינוי אימג׳",kept,at);summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"גיבוי המסד",value,5);   /* #1956: "שינוי" -> step 6 */
     snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+289+dy,w-2,48},"משתמש הניהול",value,6);
     summary_row(a,cr,(Rect){x+1,y+337+dy,w-2,48},"סיסמת root","נקבעה",6);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
@@ -101,7 +104,7 @@ static void output_box(App *a,cairo_t *cr,Rect r){
 
 static void details_toggle(App *a,cairo_t *cr,Rect r){
     InstallState *s=&a->install;const Theme *t=a->theme;Text q=text_make(cr,FONT_SANS,13,600,"פרטים טכניים",(int)r.w,DIR_RTL);text_draw_r(cr,&q,r.x+r.w,r.y,t->indigo);
-    arrow(cr,r.x+r.w-q.w-13,r.y+q.h/2.0,s->technical_open,t->indigo);text_free(&q);hit_add(a,r,HIT_INSTALL_TECHNICAL);   /* #2332: the arrow after the words, as "  ▲" was */
+    arrow(cr,r.x+r.w-q.w-13,r.y+q.h/2.0,s->technical_open,t->indigo);text_free(&q);hit_add(a,r,HIT_INSTALL_TECHNICAL);install_focus_ring(a,cr,r,HIT_INSTALL_TECHNICAL);   /* #2332: the arrow after the words, as "  ▲" was */
 }
 
 static void progress(App *a,cairo_t *cr,InstallLayout l){
@@ -140,7 +143,7 @@ static void failed(App *a,cairo_t *cr,InstallLayout l){
     if(raw)install_text_ltr(cr,s->error,11,400,x+14,y+36,w-28,t->muted);
     y+=76;
     install_text_r(cr,t,"פרטים טכניים",13,600,x+w,y,w,t->ink);y+=30;output_box(a,cr,(Rect){x,y,w,250});
-    Text retry=btn_label(cr,"נסה שוב");double rw=btn_width(&retry);draw_btn(a,cr,(Rect){l.footer.w-32-rw,l.footer.y+(l.footer.h-N_BUTTON_H)/2,rw,N_BUTTON_H},&retry,BTN_PRIMARY,HIT_INSTALL_RETRY);text_free(&retry);
+    Text retry=btn_label(cr,"נסה שוב");double rw=btn_width(&retry);draw_btn(a,cr,(Rect){l.footer.w-32-rw,l.footer.y+(l.footer.h-N_BUTTON_H)/2,rw,N_BUTTON_H},&retry,BTN_PRIMARY,HIT_INSTALL_RETRY);install_focus_ring(a,cr,(Rect){l.footer.w-32-rw,l.footer.y+(l.footer.h-N_BUTTON_H)/2,rw,N_BUTTON_H},HIT_INSTALL_RETRY);text_free(&retry);
 }
 
 /* #1250: the auto restart, below the "remove the media" card so that line
@@ -151,7 +154,7 @@ static void reboot_countdown(App *a,cairo_t *cr,Rect r){
     if(s->reboot_at<=0){install_text_r(cr,t,"ההפעלה מחדש האוטומטית בוטלה. לחץ 'הפעל מחדש' כשתסיים.",13,500,r.x+r.w-20,r.y+18,r.w-40,t->muted);return;}
     draw_fill_rrect(cr,r,t->radius,t->indigo_soft);draw_border_rrect(cr,r,t->radius,t->indigo,1);
     {char secs[32];he_secs(s->reboot_left,secs,sizeof secs);snprintf(line,sizeof line,"הפעלה מחדש אוטומטית בעוד %s",secs);}install_text_r(cr,t,line,15,600,r.x+r.w-20,r.y+18,r.w-160,t->ink);
-    Text c=btn_label(cr,"בטל");double cw=btn_width(&c);draw_btn(a,cr,(Rect){r.x+10,r.y+10,cw,N_BUTTON_H},&c,BTN_PLAIN,HIT_INSTALL_CANCEL_REBOOT);text_free(&c);
+    Text c=btn_label(cr,"בטל");double cw=btn_width(&c);draw_btn(a,cr,(Rect){r.x+10,r.y+10,cw,N_BUTTON_H},&c,BTN_PLAIN,HIT_INSTALL_CANCEL_REBOOT);install_focus_ring(a,cr,(Rect){r.x+10,r.y+10,cw,N_BUTTON_H},HIT_INSTALL_CANCEL_REBOOT);text_free(&c);
 }
 
 /* #2144 (mockup 2144-time, Nadav 04/11): what the engine's clock check found
@@ -162,6 +165,9 @@ static double clock_hero(App *a,cairo_t *cr,double x,double y,double w){
     const InstallState *s=&a->install;const Theme *t=a->theme;
     if(s->clock==INSTALL_CLOCK_SYNCED){Rect hero={x,y,w,92};draw_fill_rrect(cr,hero,t->radius,t->success_soft);
         install_text_r(cr,t,"✓",42,600,x+w-24,y+18,54,t->success_ink);install_text_r(cr,t,"ההתקנה הושלמה.",22,600,x+w-90,y+28,w-115,t->ink);return 92;}
+    if(s->clock==INSTALL_CLOCK_MANUAL){Rect hero={x,y,w,92};draw_fill_rrect(cr,hero,t->radius,t->success_soft);   /* #2765: the person's own choice -- not an alert */
+        install_text_r(cr,t,"✓",42,600,x+w-24,y+18,54,t->success_ink);install_text_r(cr,t,"ההתקנה הושלמה.",22,600,x+w-90,y+16,w-115,t->ink);
+        install_text_r(cr,t,"השעה בשרת נקבעה ידנית, בלי שרת זמן. אפשר לשנות בקונסולה: הגדרות ← מקור השעה.",13,400,x+w-90,y+54,w-115,t->muted);return 92;}
     char server[300],line[700];bidi_isolate(s->clock_server[0]?s->clock_server:"—",server,sizeof server);
     const char *h2,*one,*two;
     if(s->clock==INSTALL_CLOCK_UNSYNCED){h2="ההתקנה הושלמה — השעון לא סונכרן";
@@ -181,11 +187,12 @@ static double clock_hero(App *a,cairo_t *cr,double x,double y,double w){
 
 /* the card's "שעון השרת" row: a chip, and when synced the evidence beside it */
 static void clock_row(App *a,cairo_t *cr,double x,double y,double w){
-    const InstallState *s=&a->install;const Theme *t=a->theme;int ok=s->clock==INSTALL_CLOCK_SYNCED;
+    const InstallState *s=&a->install;const Theme *t=a->theme;int manual=s->clock==INSTALL_CLOCK_MANUAL,ok=s->clock==INSTALL_CLOCK_SYNCED;
     install_text_r(cr,t,"שעון השרת",12,500,x+w-20,y,150,t->muted);
-    const char *word=ok?"מסונכרן":s->clock==INSTALL_CLOCK_UNSYNCED?"לא מסונכרן":"לא נבדק";
+    const char *word=manual?"ידני":ok?"מסונכרן":s->clock==INSTALL_CLOCK_UNSYNCED?"לא מסונכרן":"לא נבדק";   /* #2765: "ידני" is information, drawn as the calm chip */
     Text c=text_make(cr,FONT_SANS,12,600,word,0,DIR_RTL);double cx=x+w-190;Rect chip={cx-c.w-20,y-3,c.w+20,22};
-    draw_fill_rrect(cr,chip,11,ok?t->success_soft:t->warning_soft);text_draw_r(cr,&c,cx-10,y-3+(22-c.h)/2.0,ok?t->success_ink:t->warning_ink);text_free(&c);
+    draw_fill_rrect(cr,chip,11,manual?t->indigo_soft:ok?t->success_soft:t->warning_soft);text_draw_r(cr,&c,cx-10,y-3+(22-c.h)/2.0,manual?t->ink:ok?t->success_ink:t->warning_ink);text_free(&c);
+    if(manual)install_text_r(cr,t,"בלי שרת זמן · הוגדרה בהתקנה",12,400,chip.x-12,y,chip.x-12-x-20,t->ink);
     if(ok){char server[300],proof[400];bidi_isolate(s->clock_server[0]?s->clock_server:"—",server,sizeof server);
         snprintf(proof,sizeof proof,"%s · סטייה %s ms",server,s->clock_offset[0]?s->clock_offset:"?");install_text_r(cr,t,proof,12,400,chip.x-12,y,chip.x-12-x-20,t->ink);}
 }

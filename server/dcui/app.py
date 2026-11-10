@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1127,7 +1128,10 @@ def tick(runtime: Runtime, now: float) -> None:
         runtime.screen = "result"
 
 
-def curses_main(stdscr, data_dir: Path = DATA_DIR, why_text: str = "") -> None:
+def curses_main(stdscr, data_dir: Path = DATA_DIR, why_text: str = "",
+                display_changed=None) -> None:
+    """The text screen. #2768: with `display_changed` (gui.DisplayWatch) it
+    returns once the display hardware changed, so run() tries the GUI again."""
     import curses
     curses.curs_set(0)
     stdscr.keypad(True)
@@ -1141,6 +1145,8 @@ def curses_main(stdscr, data_dir: Path = DATA_DIR, why_text: str = "") -> None:
         runtime.message = f"Graphic screen unavailable: {why_text}"[:72]
     while True:
         now = time.monotonic()
+        if display_changed is not None and display_changed(now):
+            return
         tick(runtime, now)
         _draw(stdscr, _current_lines(runtime, now), curses)
         try:
@@ -1174,16 +1180,29 @@ def run(data_dir: Path = DATA_DIR, text_only: bool = False,
 
     from . import gui
     cmdline = cmdline or CMDLINE
-    if text_only:
-        why = "text screen requested (--text)"
-    else:
+    recovery = False
+    if not text_only:
         try:
             recovery = recovery_boot(cmdline.read_text(encoding="ascii", errors="replace"))
         except OSError as exc:
             print(f"imagesrv-dcui: {cmdline} unreadable ({exc}) -- a normal boot",
                   file=sys.stderr, flush=True)
-            recovery = False
-        why = ("recovery boot: the text screen, so Alt+F2 reaches tty2's login (#2438)"
-               if recovery else gui.run(data_dir))
-    print(f"imagesrv-dcui: text screen: {why}", file=sys.stderr, flush=True)
-    curses.wrapper(curses_main, data_dir, why)
+    while True:
+        watch = None
+        if text_only:
+            why = "text screen requested (--text)"
+        elif recovery:
+            why = "recovery boot: the text screen, so Alt+F2 reaches tty2's login (#2438)"
+        else:
+            # #2768: the state before the attempt -- a display connected while
+            # the GUI was failing is a change too, and worth one more try.
+            watch = gui.DisplayWatch()
+            why = gui.run(data_dir)
+        print(f"imagesrv-dcui: text screen: {why}", file=sys.stderr, flush=True)
+        main = curses_main if watch is None else functools.partial(
+            curses_main, display_changed=watch.changed)
+        curses.wrapper(main, data_dir, why)
+        if watch is None or not watch.fired:
+            return
+        print("imagesrv-dcui: the display changed -- trying the graphical screen again (#2768)",
+              file=sys.stderr, flush=True)
