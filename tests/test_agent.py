@@ -2121,3 +2121,18 @@ def test_a_measured_empty_partition_is_zero_not_null(tmp_path):
 def test_a_measured_partition_reports_the_bytes_it_measured(tmp_path):
     """מדידה שהצליחה עוברת כמות שהיא — Used בקילו-בלוקים כפול 1024."""
     assert _used_bytes(tmp_path, mount_rc=0, used_kib=1024) == str(1024 * 1024)
+
+
+def test_hello_reports_whether_this_boot_started_the_monitor(fake_machine):
+    """‏#2844: השער נקבע באתחול בלבד (שורת הקרנל), וה-hello אומר אותו בגלוי —
+    כדי שהשרת יבדיל "עלתה לפני שהופעל" מ"דלוק ומסרב"."""
+    def hello(flag):
+        return json.loads(sh(
+            f'export SYSROOT={posix(fake_machine["sysroot"])!r} '
+            f'DEVROOT={posix(fake_machine["dev"])!r} '
+            f'RUN_DIR={posix(fake_machine["run"])!r} IFACE=eth0 IP=10.44.12.187 '
+            f'IMAGESRV_MONITOR={flag}; '
+            f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/sysinfo.sh; '
+            f'. {posix(AGENT)}/lib/hw/diskinfo.sh; build_hello'))
+    assert hello(0)["monitor_on"] is False
+    assert hello(1)["monitor_on"] is True

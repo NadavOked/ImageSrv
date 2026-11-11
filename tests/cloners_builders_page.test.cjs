@@ -430,12 +430,12 @@ test('#980 §3: room history (deploy page) from /room/history — newest first, 
   let html=run('roomHistoryHtml()'); balanced(html);
   const rows=[...html.matchAll(/<tr>([^]*?)<\/tr>/g)].map(m=>m[0]).slice(1);
   assert.equal(rows.length,3);
-  assert.match(html,/<th>#<\/th><th>אימג׳<\/th><th>מחשבים<\/th><th>נכתבו<\/th><th>משך<\/th><th[^>]*>מצב<\/th><th[^>]*>תאריך<\/th>/);
-  assert.match(rows[0],/office365<\/td><td>—<\/td><td>1\/4<\/td><td>20 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill err">נכשל<\/span><span class="sub">send_failed<\/span>/,'failed: red pill + the reason, duration from created/closed');
-  assert.match(rows[1],/win11-base<\/td><td>—<\/td><td>6\/6<\/td><td>90 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill ok">הצליח<\/span>/,'every declared drive written → green');
-  assert.match(rows[2],/img_gone<\/td><td>—<\/td><td>2\/6<\/td><td>40 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill warn">2 מתוך 6<\/span>/,'closed short of the target is not green');
+  assert.match(html,/<th>#<\/th><th>אימג׳<\/th><th>מחשבים<\/th><th>נכתבו<\/th><th>גלים<\/th><th>משך<\/th><th[^>]*>מצב<\/th><th[^>]*>תאריך<\/th>/);
+  assert.match(rows[0],/office365<\/td><td>—<\/td><td>1\/4<\/td><td>—<\/td><td>20 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill err">נכשל<\/span><span class="sub">send_failed<\/span>/,'failed: red pill + the reason, duration from created/closed');
+  assert.match(rows[1],/win11-base<\/td><td>—<\/td><td>6\/6<\/td><td>—<\/td><td>90 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill ok">הצליח<\/span>/,'every declared drive written → green');
+  assert.match(rows[2],/img_gone<\/td><td>—<\/td><td>2\/6<\/td><td>—<\/td><td>40 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill warn">2 מתוך 6<\/span>/,'closed short of the target is not green');
   run('ROOM_HISTORY=[{id:"x",state:"closed",image_name:"a",target_drives:2,written_drives:2,opened_by:"n",created_at:"2026-09-10T08:00:00Z",closed_at:null}]'); html=run('roomHistoryHtml()');
-  assert.match(html,/<td>—<\/td><td>2\/2<\/td><td>—<\/td><td[^>]*><span class="pill ok">הצליח/);
+  assert.match(html,/<td>—<\/td><td>2\/2<\/td><td>—<\/td><td>—<\/td><td[^>]*><span class="pill ok">הצליח/);
   run('ROOM_HISTORY=[]'); html=run('roomHistoryHtml()'); assert.match(html,/אין סבבים קודמים בחדר/);
   run('ROOM_HISTORY=null'); html=run('roomHistoryHtml()'); assert.match(html,/note warn[^]*היסטוריית הסבבים לא נקראה/,'unread is said, not shown as empty');
 });

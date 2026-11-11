@@ -41,6 +41,7 @@ struct Input {
     int w, h;
     double px, py;                          /* pointer */
     int moved, touch_moved;
+    int held;                               /* #2778: BTN_LEFT / BTN_TOUCH is down */
     Event q[QUEUE]; int qh, qt;
     time_t last_rescan;
     int scan_done;      /* stop rescanning once a keyboard AND a mouse are here */
@@ -284,6 +285,7 @@ static void read_dev(Input *in, Dev *d) {
             switch (ev[i].type) {
             case EV_KEY:
                 if (ev[i].code == BTN_LEFT || ev[i].code == BTN_TOUCH) {
+                    in->held = ev[i].value != 0;     /* #2778: 1 press, 2 repeat, 0 release */
                     if (ev[i].value == 1) {
                         Event e = { .type = UIEV_CLICK, .x = in->px, .y = in->py,
                                     .is_touch = (d->kinds & DEV_TOUCH) != 0 };
@@ -322,7 +324,8 @@ static void read_dev(Input *in, Dev *d) {
             case EV_SYN:
                 if (in->moved || in->touch_moved) {
                     clamp(in);
-                    Event e = { .type = UIEV_MOVE, .x = in->px, .y = in->py, .is_touch = in->touch_moved && !in->moved };
+                    Event e = { .type = UIEV_MOVE, .x = in->px, .y = in->py, .is_touch = in->touch_moved && !in->moved,
+                                .down = in->held };
                     push(in, e);
                     in->moved = in->touch_moved = 0;
                 }

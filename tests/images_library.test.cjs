@@ -123,7 +123,7 @@ test('a running capture is a grey row inside the table, under "all images", with
   assert.match(html,/indeterminate|לא ידוע/,'pending capture with no denominator is not 0%');
   run('selectImagesFolder("Office")'); assert.doesNotMatch(run('images(0)'),/<tr class="task">/,'/tasks has no folder (#968) — shown only under all images');
 
-  run('CAPTURE_TASKS=[{id:"t9",name:"office365",state:"done",error:"sda: המקור לא הוחזר לגודלו"}]');
+  run('CAPTURE_TASKS=[{id:"t9",type:"capture",name:"office365",state:"done",error:"sda: המקור לא הוחזר לגודלו"}]');
   const warned=run('images(0)'); assert.match(warned,/id="capture-bar"><div class="note warn">.*office365.*המקור לא הוחזר לגודלו/,'#927: a done+error capture stays visible above the table');
 });
 

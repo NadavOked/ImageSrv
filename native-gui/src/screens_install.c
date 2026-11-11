@@ -63,8 +63,8 @@ InstallLayout install_frame(App *a,cairo_t *cr,double W,double H){const Theme *t
 /* #2777: focus just arrived and nothing typed yet -- the next key replaces the text (install.c, select_on_arrival) */
 static int install_field_selected(const App *a,int id){return a->focus==id&&a->install.edit_field!=id;}
 void install_field_draw(App *a,cairo_t *cr,Rect r,const char *label,const char *value,int mask,int id,int enabled){const Theme *t=a->theme;install_text_r(cr,t,label,12,500,r.x+r.w,r.y,r.w,enabled?t->ink:t->muted);   /* .win .n-f>label: --clr-text, 12px 500 */Rect f={r.x,r.y+19,r.w,36};draw_field_box(cr,t,f,a->focus==id&&enabled);   /* .win .n-in and :focus (border + 3px ring) */
-    if(enabled&&a->focus==id){a->install.osk_fy=r.y;a->install.osk_fh=r.h;}   /* #2778: the keyboard on the screen keeps clear of it */
     char shown[300];if(mask&&value[0]){size_t k=0;for(const char *p=value;*p&&k+4<sizeof shown;p++)if((*p&0xc0)!=0x80){memcpy(shown+k,"\xe2\x80\xa2",3);k+=3;}shown[k]=0;}else snprintf(shown,sizeof shown,"%s",value);
+    if(enabled&&a->focus==id){InstallState *s=&a->install;s->osk_field=1;snprintf(s->osk_label,sizeof s->osk_label,"%s",label);memcpy(s->osk_shown,shown,sizeof shown);}   /* #2778: the keyboard's preview row shows it as the field does */
     Text text=text_make(cr,FONT_MONO,13,400,shown,(int)f.w-24,DIR_LTR);double ty=f.y+(f.h-text.h)/2;
     if(enabled&&value[0]&&install_field_selected(a,id)){cairo_rectangle(cr,f.x+10,ty-1,text.w+4,text.h+2);draw_set(cr,t->indigo_soft);cairo_fill(cr);}   /* #2777: shown selected */
     text_draw(cr,&text,f.x+12,ty,enabled?t->ink:t->muted);if(enabled&&a->focus==id){double caret=f.x+12+text.w+1;cairo_rectangle(cr,caret,ty,1,text.h);draw_set(cr,t->indigo);cairo_fill(cr);}text_free(&text);if(enabled)hit_add(a,f,id);}
@@ -77,7 +77,8 @@ void install_radio(App *a,cairo_t *cr,Rect r,const char *title,const char *desc,
 void install_focus_ring(App *a,cairo_t *cr,Rect r,int id){if(a->focus!=id)return;draw_border_rrect(cr,(Rect){r.x-4,r.y-4,r.w+8,r.h+8},a->theme->radius+4,a->theme->indigo,2);}
 
 static void disabled_btn(cairo_t *cr,const Theme *t,Rect r,const char *label){draw_fill_rrect(cr,r,t->radius_sm,t->track);Text q=btn_label(cr,label);   /* .btn:disabled: row-border fill, muted words, no border */text_draw(cr,&q,r.x+(r.w-q.w)/2,r.y+(r.h-q.h)/2,t->muted);text_free(&q);}
-void install_footer(App *a,cairo_t *cr,InstallLayout l,const char *primary,int primary_id,int allow_back,int enabled){const Theme *t=a->theme;double y=l.footer.y+(l.footer.h-N_BUTTON_H)/2;Text p=btn_label(cr,primary);double pw=fmax(118,btn_width(&p));Rect pr={l.footer.w-32-pw,y,pw,N_BUTTON_H};if(enabled)draw_btn(a,cr,pr,&p,BTN_PRIMARY,primary_id);else disabled_btn(cr,t,pr,primary);text_free(&p);if(allow_back){Text b=btn_label(cr,"חזור");double bw=btn_width(&b);draw_btn(a,cr,(Rect){pr.x-bw-12,y,bw,N_BUTTON_H},&b,BTN_PLAIN,HIT_INSTALL_BACK);text_free(&b);}}
+void install_footer_style(App *a,cairo_t *cr,InstallLayout l,const char *primary,int primary_id,int allow_back,int primary_enabled,int primary_style){const Theme *t=a->theme;double y=l.footer.y+(l.footer.h-N_BUTTON_H)/2;Text p=btn_label(cr,primary);double pw=fmax(118,btn_width(&p));Rect pr={l.footer.w-32-pw,y,pw,N_BUTTON_H};if(primary_enabled)draw_btn(a,cr,pr,&p,primary_style,primary_id);else disabled_btn(cr,t,pr,primary);text_free(&p);if(allow_back){Text b=btn_label(cr,"חזור");double bw=btn_width(&b);draw_btn(a,cr,(Rect){pr.x-bw-12,y,bw,N_BUTTON_H},&b,BTN_PLAIN,HIT_INSTALL_BACK);text_free(&b);}}
+void install_footer(App *a,cairo_t *cr,InstallLayout l,const char *primary,int primary_id,int allow_back,int enabled){install_footer_style(a,cr,l,primary,primary_id,allow_back,enabled,BTN_PRIMARY);}
 
 /* mockup 10/10: the footer says which keys work on this step -- they all
  * did (install.c), and nothing said so; "שלב N מתוך 7" repeated the rail.
@@ -107,7 +108,7 @@ static void install_keys_draw(App *a,cairo_t *cr,InstallLayout l){
     pango_layout_set_alignment(k.layout,PANGO_ALIGN_RIGHT);
     text_draw_r(cr,&k,right,l.footer.y+(l.footer.h-k.h)/2,a->theme->muted);text_free(&k);}
 
-void screen_install(App *a,cairo_t *cr,double W,double H){a->install.osk_fh=0;InstallLayout l=install_frame(a,cr,W,H);switch(a->install.view){case INSTALL_DISK:install_draw_disk(a,cr,l);break;case INSTALL_ROLE:install_draw_role(a,cr,l);break;case INSTALL_NETWORK:install_draw_network(a,cr,l);break;case INSTALL_HOSTNAME:case INSTALL_ADMIN:install_draw_forms(a,cr,l);break;case INSTALL_TIME:install_draw_time(a,cr,l);break;case INSTALL_BACKUP:install_draw_backup(a,cr,l);break;default:install_draw_final(a,cr,l);break;}install_keys_draw(a,cr,l);install_draw_osk(a,cr,l);}   /* #2778: last, so its keys are the topmost hits */
+void screen_install(App *a,cairo_t *cr,double W,double H){a->install.osk_field=0;InstallLayout l=install_frame(a,cr,W,H);switch(a->install.view){case INSTALL_DISK:install_draw_disk(a,cr,l);break;case INSTALL_ROLE:install_draw_role(a,cr,l);break;case INSTALL_NETWORK:install_draw_network(a,cr,l);break;case INSTALL_HOSTNAME:case INSTALL_ADMIN:install_draw_forms(a,cr,l);break;case INSTALL_TIME:install_draw_time(a,cr,l);break;case INSTALL_BACKUP:install_draw_backup(a,cr,l);break;default:install_draw_final(a,cr,l);break;}install_keys_draw(a,cr,l);install_draw_osk(a,cr,l);}   /* #2778: last, so its keys are the topmost hits */
 
 /* #1310: the role step in its three states -- green (the demo), not yet
  * checked (next disabled), and a real failure with its reason. */

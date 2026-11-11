@@ -35,8 +35,24 @@ watchdog_expired() {
     [ "$(( $1 - _wd_last ))" -ge 600 ]
 }
 
+watchdog_log_send() {
+    # #2841 (work, 11/11): a cloner rebooted mid-round and its log -- RAM only --
+    # went with it. Once, curl's own ceiling, best effort: the reboot follows
+    # whatever happens. A hardware timer may cut it short: the same reboot.
+    [ -n "${WD_SERVER:-}" ] && [ -n "${WD_MAC:-}" ] || { echo 'watchdog: no server known -- the log is not sent' >&2; return 0; }
+    _wl_s=$(jq -r '.session.id // empty' "$RUN_DIR/response.json" 2>/dev/null); case "$_wl_s" in *[!A-Za-z0-9_.-]*) _wl_s= ;; esac
+    if tail -n 400 "$RUN_DIR/agent.log" 2>/dev/null | tail -c 65536 | gzip -c > "$RUN_DIR/wdlog.gz" 2>/dev/null &&
+        curl -sfS --max-time 10 -H 'Content-Type: application/gzip' --data-binary "@$RUN_DIR/wdlog.gz" \
+            "$WD_SERVER/api/v1/agent/log?mac=$WD_MAC&session_id=$_wl_s&reason=fatal" > /dev/null 2>&1; then
+        echo 'watchdog: the agent log was sent to the server' >&2
+    else
+        echo 'watchdog: the agent log was NOT delivered to the server' >&2
+    fi
+}
+
 watchdog_reboot() {
     echo "watchdog: ${1:-no agent progress for 600s}; rebooting" >&2
+    watchdog_log_send
     while :; do
         reboot -f
         echo 'watchdog: reboot returned; retrying, hardware NOT fed' >&2
@@ -109,8 +125,8 @@ watchdog_start() {
     fi
     WATCHDOG_ACTIVE=1
     watchdog_beat || return 1
-    setsid sh -c '. "$1/watchdog.sh"; RUN_DIR=$2; watchdog_supervise' \
-        sh "$LIB_DIR" "$RUN_DIR" </dev/null >> "$LOG_FILE" 2>&1 &
+    setsid sh -c '. "$1/watchdog.sh"; RUN_DIR=$2; WD_SERVER=$3; WD_MAC=$4; watchdog_supervise' \
+        sh "$LIB_DIR" "$RUN_DIR" "${SERVER:-}" "${MAC:-}" </dev/null >> "$LOG_FILE" 2>&1 &   # #2841: where its log goes
     _wd_supervisor=$!
 }
 

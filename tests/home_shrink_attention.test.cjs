@@ -15,7 +15,7 @@ const today=new Date().toISOString().slice(0,10);
 const MAC='cc:cc:cc:cc:cc:cc';
 
 function capture(over={}) {
-  return {id:'tsk_749e',mac:MAC,machine:'HP-BUILD',name:'Vm',disk:'sdb',folder:'Win',state:'running',
+  return {id:'tsk_749e',type:'capture',mac:MAC,machine:'HP-BUILD',name:'Vm',disk:'sdb',folder:'Win',state:'running',
     bytes_written:50.8e9,bytes_total:null,source_progress:null,error:null,created_at:today+'T13:25:59Z',...over};
 }
 function record(over={}) {

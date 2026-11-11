@@ -60,7 +60,7 @@ def main_loop_starts() -> str:
     return "\n".join(lines[start:end])
 
 
-def run(tmp_path: Path, setup: str, during: str, *, role: str = "cloner", wait: float = 1.5,
+def run(tmp_path: Path, setup: str, during: str, *, role: str = "cloner",
         timeout: int = 90, **env) -> tuple[str, Path]:
     """The agent with its helpers started as in the main loop; the GUI's
     press; `during` (answers, a write that ends); then the journal. stdout =
@@ -76,11 +76,37 @@ def run(tmp_path: Path, setup: str, during: str, *, role: str = "cloner", wait: 
         'export LOG_FILE="$RUN_DIR/agent.log"; mkdir -p "$RUN_DIR/gui" "$RUN_DIR/targets" "$LC"; '
         'watchdog_start() { :; }; monitor_start() { :; }; arm_wol() { return 0; }; sync() { :; }; '
         + setup + '\n'
+        # A ticket is read BEFORE the real tick and acknowledged AFTER it.
+        # power.press.taken alone is too early: power_tick moves the press
+        # before calling power_press. Absence assertions need its completed
+        # response, including power_stop_wait after a simulated write ends.
+        + UNTIL + r'''
+        eval "$(declare -f power_tick | sed '1s/power_tick/_real_power_tick/')"
+        power_tick() {
+            local ticket=""
+            if [ -f "$RUN_DIR/tick.request" ]; then
+                read -r ticket < "$RUN_DIR/tick.request" || exit 1
+            fi
+            _real_power_tick || exit 1
+            if [ -n "$ticket" ]; then echo "$ticket" > "$RUN_DIR/tick.done"; fi
+        }
+        _cycle_n=0
+        power_cycle() {
+            _cycle_n=$((_cycle_n + 1))
+            echo "$_cycle_n" > "$RUN_DIR/tick.next" &&
+                mv "$RUN_DIR/tick.next" "$RUN_DIR/tick.request" || exit 1
+            _until '[ -f "$RUN_DIR/tick.done" ] && grep -qx "$_cycle_n" "$RUN_DIR/tick.done"'
+        }
+        '''
         + main_loop_starts() + '\n'
-        + f': > "$RUN_DIR/gui/power.press"; sleep {wait}\n'      # the GUI: KEY_POWER
+        + ': > "$RUN_DIR/gui/power.press"; power_cycle\n'      # the GUI: KEY_POWER
+        'test -f "$RUN_DIR/power.press.taken" || exit 1\n'
+        '_until \'grep -q "asked on the screen; the write goes on\\|power button: powering off with wake-on-LAN armed\\|the machine stayed on" "$LOG_FILE"\'\n'
         + during + '\n'
-        'kill ${_pwr_pid:-} 2>/dev/null; sleep 0.2\n'
-        'cat "$LOG_FILE" 2>/dev/null; echo "---STATE"; gui_hello_state\n'
+        'power_cycle\n'
+        'kill "$_pwr_pid" || exit 1\n'
+        'wait "$_pwr_pid"; _rc=$?; [ "$_rc" = 143 ] || exit 1\n'
+        'cat "$LOG_FILE" || exit 1; echo "---STATE"; gui_hello_state\n'
     )
     done = hygiene.run_group([BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
                              capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -129,7 +155,7 @@ WRITES = [
 @pytest.mark.parametrize("role,setup,kind", WRITES,
                          ids=["lc-copy", "lc-shrink", "lc-verify", "round", "restore", "class-restore", "capture"])
 def test_a_press_during_a_write_asks_and_the_write_goes_on(tmp_path, role, setup, kind):
-    out, run_dir = run(tmp_path, setup, "sleep 1", role=role)
+    out, run_dir = run(tmp_path, setup, "", role=role)
     log, state = out.split("---STATE", 1)
     assert OFF not in log, log                                 # never off over a write
     assert ask_of(run_dir) == f"1|{kind}", (ask_of(run_dir), log)
@@ -143,7 +169,7 @@ def test_a_press_during_a_write_asks_and_the_write_goes_on(tmp_path, role, setup
 @BASH_ONLY
 def test_continue_keeps_the_write_and_takes_the_question_away(tmp_path):
     out, run_dir = run(tmp_path, 'echo copying > "$LC/phase"',
-                       'printf "1|keep\\n" > "$RUN_DIR/gui/power.answer"; sleep 1')
+                       'printf "1|keep\\n" > "$RUN_DIR/gui/power.answer"')
     assert OFF not in out, out
     assert not ask_of(run_dir), out
     assert not (run_dir / "lc" / "stop.req").exists()
@@ -153,7 +179,7 @@ def test_continue_keeps_the_write_and_takes_the_question_away(tmp_path):
 @BASH_ONLY
 def test_an_answer_to_another_question_is_dropped(tmp_path):
     out, run_dir = run(tmp_path, 'echo copying > "$LC/phase"',
-                       'printf "7|stop\\n" > "$RUN_DIR/gui/power.answer"; sleep 1')
+                       'printf "7|stop\\n" > "$RUN_DIR/gui/power.answer"')
     assert OFF not in out, out
     assert ask_of(run_dir) == "1|localclone|1", out           # still asked
     assert not (run_dir / "lc" / "stop.req").exists()
@@ -164,10 +190,10 @@ def test_an_answer_to_another_question_is_dropped(tmp_path):
 
 @BASH_ONLY
 def test_stop_and_power_off_stops_the_local_clone_by_its_own_stop_then_powers_off(tmp_path):
-    during = ('printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; sleep 1; '
-              'cp "$LC/stop.req" "$RUN_DIR/stop.seen" 2>/dev/null; '
-              'grep -c "powering off" "$LOG_FILE" > "$RUN_DIR/off.before" || :; '
-              'echo stopped > "$LC/phase"; sleep 1')                    # lc_run's end: phase stopped
+    during = ('printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; power_cycle; '
+              'cp "$LC/stop.req" "$RUN_DIR/stop.seen" || exit 1; '
+              'awk \'/powering off/ { n++ } END { print n+0 }\' "$LOG_FILE" > "$RUN_DIR/off.before" || exit 1; '
+              'echo stopped > "$LC/phase"')                    # lc_run's end: phase stopped
     out, run_dir = run(tmp_path, 'echo copying > "$LC/phase"', during)
     assert (run_dir / "stop.seen").is_file(), out                         # the local clone was asked to stop
     assert (run_dir / "stop.seen").read_text().strip() == "stop", out     # lcgui.sh's lc-stop request
@@ -181,7 +207,7 @@ def test_stop_and_power_off_stops_the_local_clone_by_its_own_stop_then_powers_of
 #: more than the 1 s this test slept, the drawers were already "cancelled", and no
 #: cancel was written (full run, 06/11).
 UNTIL = ('_until() { _u=0; until eval "$1"; do _u=$((_u + 1)); '
-         '[ "$_u" -lt 300 ] || { echo "CEILING: $1"; return 1; }; sleep 0.1; done; }; ')
+         '[ "$_u" -lt 300 ] || { echo "CEILING: $1" >&2; exit 1; }; sleep 0.1; done; }; ')
 
 
 @BASH_ONLY
@@ -191,7 +217,7 @@ def test_stop_and_power_off_cancels_every_writing_drawer_and_takes_the_rounds_en
     during = (UNTIL + '_until \'[ -s "$RUN_DIR/power.ask" ]\'; '            # the question is on the screen
               'printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; '
               '_until \'[ -f "$RUN_DIR/targets/sdb/cancel" ] && [ -f "$RUN_DIR/targets/sdc/cancel" ]\'; '
-              'grep -c "powering off" "$LOG_FILE" > "$RUN_DIR/off.before" || :; '
+              'awk \'/powering off/ { n++ } END { print n+0 }\' "$LOG_FILE" > "$RUN_DIR/off.before" || exit 1; '
               # cancel_drawer's end (verdict.sh): the table wiped, then "cancelled"
               'for d in sdb sdc; do echo cancelled > "$RUN_DIR/targets/$d/state"; done; '
               'echo "$(( $(date +%s) + 20 ))|partial|1|3|0" > "$RUN_DIR/end.poweroff"; '
@@ -209,7 +235,7 @@ def test_stop_and_power_off_cancels_every_writing_drawer_and_takes_the_rounds_en
 @BASH_ONLY
 def test_a_write_with_no_stop_of_its_own_is_not_stopped(tmp_path):
     out, run_dir = run(tmp_path, 'echo capturing > "$RUN_DIR/state"',
-                       'printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; sleep 1', role="build")
+                       'printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"', role="build")
     assert OFF not in out, out
     assert not (run_dir / "power.stop").exists(), out
     assert "has no stop -- refused" in out, out
@@ -227,9 +253,10 @@ def test_the_restore_is_stopped_by_its_cancel_and_not_powered_off_before_the_wip
     sr_cancelled wipes the table. "Nothing writes" is no evidence there: the
     restore's own end powers off (srgui.sh), never the listener."""
     setup = RESTORE + 'echo 111-sda > "$RUN_DIR/gui/restore.id"'
-    during = ('printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; sleep 1; '
-              ': > "$RUN_DIR/gui/restore.out"; sr_cancel_watch img1 sda & _cw=$!; sleep 1.5; kill $_cw; '
-              'echo failed > "$RUN_DIR/targets/sda/state"; echo failed > "$RUN_DIR/state"; sleep 1')
+    during = ('printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; power_cycle; '
+              ': > "$RUN_DIR/gui/restore.out"; sr_cancel_watch img1 sda & _cw=$!; '
+              '_until \'[ -s "$RUN_DIR/stream.stopped" ]\'; kill "$_cw" || exit 1; '
+              'echo failed > "$RUN_DIR/targets/sda/state"; echo failed > "$RUN_DIR/state"')
     out, run_dir = run(tmp_path, setup, during, role="build")
     assert (run_dir / "power.stop").is_file(), out                        # "עצור וכבה" was taken
     assert (run_dir / "power.stop").read_text().split("|")[1].strip() == "restore", out
@@ -244,11 +271,23 @@ def test_a_stop_left_from_an_earlier_restore_does_not_stop_the_next_one(tmp_path
     """Review of #1918: a power.stop from a restore before (its power-off did
     not take, the machine went on) must not cancel and power off the next
     restore of the same boot. The stop names its restore; another's is dropped."""
-    setup = RESTORE + 'echo 222-sda > "$RUN_DIR/gui/restore.id"; : > "$RUN_DIR/gui/restore.out"'
-    during = ('sr_cancel_watch img2 sda & _cw=$!; sleep 0.3; '            # the new restore's watcher, running
-              'echo "$(date +%s)|restore|111-sda" > "$RUN_DIR/power.stop"; '   # the earlier restore's stop
-              'sleep 2; kill $_cw 2>/dev/null; sleep 0.3')
-    out, run_dir = run(tmp_path, setup, during, role="build", wait=0.5)
+    # Let the restore watcher inspect the stale stop before the listener
+    # removes it. Otherwise "no cancel" can pass without testing the ID guard.
+    setup = RESTORE + r'''
+        echo 222-sda > "$RUN_DIR/gui/restore.id"; : > "$RUN_DIR/gui/restore.out"
+        eval "$(declare -f power_stop_wait | sed '1s/power_stop_wait/_real_power_stop_wait/')"
+        power_stop_wait() {
+            [ -f "$RUN_DIR/restore.checked" ] || return 0
+            _real_power_stop_wait
+        }
+    '''
+    during = ('echo "$(date +%s)|restore|111-sda" > "$RUN_DIR/power.stop"; '   # the earlier restore's stop
+              '( sleep() { : > "$RUN_DIR/restore.checked"; command sleep "$@"; }; '
+              'sr_cancel_watch img2 sda ) & _cw=$!; '
+              '_until \'[ -f "$RUN_DIR/restore.checked" ]\'; '
+              '_until \'grep -q "a restore that is over (111-sda)" "$LOG_FILE"\'; '
+              'kill "$_cw" || exit 1')
+    out, run_dir = run(tmp_path, setup, during, role="build")
     assert not (run_dir / "gui" / "restore.cancel").exists(), out          # the new restore goes on
     assert not (run_dir / "stream.stopped").exists(), out
     assert not (run_dir / "power.stop").exists(), out                       # the stale stop is gone
@@ -271,9 +310,9 @@ def test_a_capture_is_stopped_by_the_consoles_own_cancel_then_powers_off(tmp_pat
     the upload, the capture fails and puts the source back, then off."""
     setup = ADMIN_CAPTURE + ('console_post() { echo "$*" >> "$RUN_DIR/posted"; '
                              'cp "$CONSOLE_JAR" "$RUN_DIR/jar.used"; printf 200; }')
-    during = ('printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; sleep 1; '
-              'grep -c "powering off" "$LOG_FILE" > "$RUN_DIR/off.before" || :; '
-              'echo failed > "$RUN_DIR/state"; sleep 1')                 # _capture_failed: source back, then failed
+    during = ('printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; power_cycle; '
+              'awk \'/powering off/ { n++ } END { print n+0 }\' "$LOG_FILE" > "$RUN_DIR/off.before" || exit 1; '
+              'echo failed > "$RUN_DIR/state"')                 # _capture_failed: source back, then failed
     out, run_dir = run(tmp_path, setup, during, role="build")
     assert (run_dir / "posted").is_file(), out
     assert (run_dir / "posted").read_text().split()[0] == "tasks/tsk_ab12/cancel", out
@@ -285,7 +324,7 @@ def test_a_capture_is_stopped_by_the_consoles_own_cancel_then_powers_off(tmp_pat
 @BASH_ONLY
 def test_a_capture_the_server_did_not_cancel_goes_on_and_says_so(tmp_path):
     setup = ADMIN_CAPTURE + 'console_post() { printf 409; }'
-    out, run_dir = run(tmp_path, setup, 'printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"; sleep 1', role="build")
+    out, run_dir = run(tmp_path, setup, 'printf "1|stop\\n" > "$RUN_DIR/gui/power.answer"', role="build")
     log, state = out.split("---STATE", 1)
     assert OFF not in log, log
     assert not (run_dir / "power.stop").exists(), log
@@ -294,9 +333,9 @@ def test_a_capture_the_server_did_not_cancel_goes_on_and_says_so(tmp_path):
 
 @BASH_ONLY
 def test_the_question_offers_the_stop_only_with_an_admin_session(tmp_path):
-    out, run_dir = run(tmp_path, ADMIN_CAPTURE, "sleep 1", role="build")
+    out, run_dir = run(tmp_path, ADMIN_CAPTURE, "", role="build")
     assert ask_of(run_dir) == "1|capture|1", out
-    out2, run_dir2 = run(tmp_path / "no-session", ADMIN_CAPTURE + 'rm -f "$RUN_DIR/gui/console.jar"', "sleep 1", role="build")
+    out2, run_dir2 = run(tmp_path / "no-session", ADMIN_CAPTURE + 'rm -f "$RUN_DIR/gui/console.jar"', "", role="build")
     assert ask_of(run_dir2) == "1|capture|0", out2
 
 

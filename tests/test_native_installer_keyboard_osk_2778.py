@@ -74,6 +74,10 @@ static const char *name_of(int id) {
     for (size_t i = 0; i < sizeof NAMES / sizeof NAMES[0]; i++) if (NAMES[i].id == id) return NAMES[i].name;
 #ifdef HIT_INSTALL_OSK_BASE
     int k = id - HIT_INSTALL_OSK_BASE;
+#ifdef HIT_INSTALL_OSK_GRIP
+    if (k == OSK_GRIP) return "osk:grip";
+    if (k == OSK_PREVIEW) return "osk:preview";
+#endif
     if (k == OSK_KEYS) return "osk:panel";
     if (k == OSK_BKSP) return "osk:bksp";
     if (k == OSK_SHIFT) return "osk:shift";
@@ -107,12 +111,17 @@ static void show(const App *a, const char *tok) {
 #else
     int osk = 0, shift = 0;
 #endif
+#ifdef HIT_INSTALL_OSK_GRIP   /* round 3: what the keyboard's preview row shows */
+    const char *preview = s->osk_field ? s->osk_shown : "", *label = s->osk_field ? s->osk_label : "";
+#else
+    const char *preview = "", *label = "";
+#endif
     printf("state\ttok=%s\tview=%d\tfocus=%s\tosk=%d\tshift=%d\taddress=%s\tnetmask=%s\tgateway=%s\tdns=%s"
            "\thostname=%s\tpassword=%s\troot_password=%s\tntp=%s\tbackup_time=%s\tprimary_url=%s"
-           "\tok=%d\tchecked=%d\tshown=%d\n",
+           "\tok=%d\tchecked=%d\tshown=%d\tpreview=%s\tlabel=%s\n",
            tok, s->view, name_of(a->focus), osk, shift, s->address, s->netmask,
            s->gateway, s->dns, s->hostname, s->password, s->root_password, s->ntp_servers, s->backup_time,
-           s->primary_url, s->primary_ok, s->primary_checked, s->show_password);
+           s->primary_url, s->primary_ok, s->primary_checked, s->show_password, preview, label);
 }
 
 /* argv: BRIDGE-CMD TOKEN... -- one state line after every token but "hits". */
@@ -147,6 +156,24 @@ int main(int argc, char **argv) {
             for (int h = a->nhits - 1; h >= 0 && found < 0; h--) if (!strcmp(name_of(a->hits[h].id), t + 6)) found = h;
             if (found < 0) { printf("nohit\t%s\n", t + 6); continue; }
             Rect r = a->hits[found].r; click_at(a, &b, r.x + r.w / 2, r.y + r.h / 2);
+        } else if (!strncmp(t, "drag=", 5)) {
+            /* drag=NAME,DX,DY: press in the middle of NAME, move by half and by all of
+             * (DX,DY) with the button held, let go, and move on 40px -- which must not drag */
+            char name[32]; double dx, dy; int found = -1;
+            if (sscanf(t + 5, "%31[^,],%lf,%lf", name, &dx, &dy) != 3) { fprintf(stderr, "bad %s\n", t); return 2; }
+            for (int h = a->nhits - 1; h >= 0 && found < 0; h--) if (!strcmp(name_of(a->hits[h].id), name)) found = h;
+            if (found < 0) { printf("nohit\t%s\n", name); continue; }
+            Rect r = a->hits[found].r; double x = r.x + r.w / 2, y = r.y + r.h / 2, k = a->scale > 0 ? a->scale : 1;
+            click_at(a, &b, x, y);
+            const double step[][3] = { { .5, .5, 1 }, { 1, 1, 1 }, { 1, 1, 0 }, { 1, 1, 0 } };
+            for (int j = 0; j < 4; j++) {
+                Event m; memset(&m, 0, sizeof m); m.type = UIEV_MOVE;
+                m.x = (x + dx * step[j][0] + (j == 3 ? 40 : 0)) * k; m.y = (y + dy * step[j][1] + (j == 3 ? 40 : 0)) * k;
+#ifdef UIEV_MOVE_DOWN
+                m.down = (int)step[j][2];
+#endif
+                install_handle(a, &b, &m); draw(a);
+            }
         } else if (!strncmp(t, "clickat=", 8)) {
             double x, y; sscanf(t + 8, "%lf,%lf", &x, &y); click_at(a, &b, x, y);
         } else if (!strncmp(t, "T:", 2)) {
@@ -268,11 +295,11 @@ def _keys(text: str) -> list[str]:
 def test_the_keys_type_an_address_over_the_seed(driver, tmp_path):
     """#2777 גם מהעכבר: השדה נבחר בהגעה, והמקש הראשון מחליף את ערך ה-DHCP."""
     states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=address", *_keys("10.0.0.2"),
-                        "click=netmask", *_keys("255.255.255.0"))
+                        "key=TAB", *_keys("255.255.255.0"))   # in the middle of the screen the keyboard is over the mask
     assert states[2]["address"] == "10.44.10.37", "the demo NIC's lease seeds the field (#2096)"
     assert states[-1]["address"] == "10.0.0.2"
     assert states[-1]["netmask"] == "255.255.255.0"
-    assert states[-1]["osk"] == "1", "clicking the next field keeps the keyboard open"
+    assert states[-1]["osk"] == "1", "the next field keeps the keyboard open"
 
 
 @NATIVE
@@ -373,32 +400,40 @@ def test_off_the_fields_it_hides_and_on_a_field_again_it_is_back(driver, tmp_pat
 def test_a_click_between_the_keys_reaches_nothing_under_the_keyboard(driver, tmp_path):
     _, hits, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", "hits")
     assert "osk:panel" in hits["keys"], "no keyboard on the screen"
-    px, py, _, _ = hits["keys"]["osk:panel"]
-    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", f"clickat={px + 3},{py + 3}")
+    px, py, _, ph = hits["keys"]["osk:panel"]   # the bottom corner: below the keys, not the grip
+    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", f"clickat={px + 3},{py + ph - 3}")
     assert states[-1]["focus"] == "password" and states[-1]["osk"] == "1"
     assert states[-1]["password"] == states[1]["password"]
 
 
-# --- איפה המקלדת על המסך ------------------------------------------------------------
+# --- איפה המקלדת על המסך (הכרעת נדב אחרי הצילומים, 09/11: "במרכז, עם אפשרות להזיז") ---
+
+SIZES = ["1024x768", "1280x800", "1920x1080"]
+
+
+def _osk_keys(keys: dict) -> dict:
+    return {k: v for k, v in keys.items() if k.startswith("osk:") and k not in ("osk:panel", "osk:grip", "osk:preview")}
+
 
 @NATIVE
-@pytest.mark.parametrize("size", ["1024x768", "1280x800", "1920x1080"])
+@pytest.mark.parametrize("size", SIZES)
 @pytest.mark.parametrize(("view", "setup", "field"), FIELDS + [(ADMIN, ("lab",), "root_confirm")],
                          ids=[f[2] for f in FIELDS] + ["root_confirm-lab"])
-def test_the_keyboard_never_covers_the_field_or_the_footer(driver, tmp_path, size, view, setup, field):
+def test_it_opens_in_the_middle_of_the_whole_screen(driver, tmp_path, size, view, setup, field):
     _, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={view}", *setup, f"click={field}", "hits")
     keys = hits["keys"]
     sw, sh = hits["screen"]
     assert "osk:panel" in keys, f"{size} {field}: no keyboard on the screen"
-    panel = keys["osk:panel"]
-    assert not _overlap(panel, keys[field]), f"{size} {field}: the keyboard covers the field typed in"
-    for button in ("next", "back"):
-        if button in keys:
-            assert not _overlap(panel, keys[button]), f"{size} {field}: the keyboard covers '{button}'"
-    px, py, pw, ph = panel
-    assert px >= 0 and py >= 0 and px + pw <= sw and py + ph <= sh, f"{size}: off the screen {panel}"
-    osk = {k: v for k, v in keys.items() if k.startswith("osk:") and k != "osk:panel"}
+    px, py, pw, ph = keys["osk:panel"]
+    assert (px + pw / 2, py + ph / 2) == pytest.approx((sw / 2, sh / 2), abs=1), \
+        f"{size} {field}: not in the middle of the screen ({sw}x{sh}): {keys['osk:panel']}"
+    assert px >= 0 and py >= 0 and px + pw <= sw and py + ph <= sh, f"{size}: off the screen {keys['osk:panel']}"
+    osk = _osk_keys(keys)
     assert len(osk) == 51
+    gx, gy, gw, gh = keys["osk:grip"]
+    vx, vy, vw, vh = keys["osk:preview"]
+    assert (gx, gy, gw) == (px, py, pw) and gh >= 24, "the grip is the panel's top strip"
+    assert gy + gh <= vy and vy + vh <= min(y for _x, y, _w, _h in osk.values()), "grip, then the preview row, then the keys"
     for name, (x, y, w, h) in osk.items():
         assert px <= x and x + w <= px + pw and py <= y and y + h <= py + ph, f"{size}: {name} outside the panel"
         assert w >= 30 and h >= 30, f"{size}: {name} is {w}x{h}, too small to click"
@@ -478,39 +513,49 @@ def test_the_key_line_says_no_f5_where_there_is_none(driver, tmp_path, view):
     assert hits["keylines"][0] and "F5" not in hits["keylines"][0], hits["keylines"]
 
 
-# --- מעבר בין שדות כשהלוח פתוח (באג שנדב צילם, 09/11) ----------------------------------
-# במסך הניהול, פוקוס בסיסמה: הלוח (y≈470) חותך את "סיסמת root" (y≈441-477). כשהפוקוס עובר
-# לשדה שהלוח מכסה -- ב-Tab או בלחיצה -- הלוח חייב לזוז ממנו.
+# --- מעבר בין שדות, ושורת התצוגה (הכרעת נדב, 09/11) --------------------------------------
+# הלוח לא קופץ לבד. אם הוא מכסה את השדה שבפוקוס, השדה מוצג גם בתוכו, בשורת תצוגה מעל
+# המקשים: תמיד רואים מה מקלידים, וסיסמה מוצגת מוסתרת. השורה מוצגת תמיד, כדי שהלוח לא
+# ישנה גובה כשהפוקוס עובר.
 
 #: כל מסך עם שדות, ומספר ה-Tab שמקיף את כל הטבעת שלו פעם אחת לפחות
 SCREENS = [
     (ROLE, (), 4), (NETWORK, ("static",), 9), (HOSTNAME, (), 3), (TIME, ("ntp-org",), 4),
     (BACKUP, ("backup-other",), 7), (ADMIN, (), 11), (ADMIN, ("rerun",), 13), (ADMIN, ("lab",), 11),
 ]
+#: השדה -> המפתח שלו בשורת המצב (מה שהשדה מכיל, גלוי)
+SHOWN = {"address": "address", "netmask": "netmask", "gateway": "gateway", "dns": "dns", "hostname": "hostname",
+         "ntp_servers": "ntp", "backup_time": "backup_time", "primary_url": "primary_url"}
+MASKED = {"password", "confirm", "root_password", "root_confirm", "current_password"}
 
 
 def _fields(view: int, setup: tuple) -> set[str]:
     return {f[2] for f in FIELDS if f[0] == view and set(f[1]) <= set(setup)}
 
 
-def _assert_field_clear(snaps: list[dict], states: list[dict], size: str) -> int:
-    """לכל צילום: אם הפוקוס בשדה, הלוח על המסך ואינו חותך את מלבן השדה. מחזיר כמה שדות נבדקו."""
-    checked = 0
+def _assert_preview(snaps: list[dict], states: list[dict], size: str) -> int:
+    """לכל צילום שהפוקוס בו בשדה: הלוח על המסך, שורת התצוגה מראה את השדה, והלוח לא זז."""
+    checked, where = 0, None
     for snap, state in zip(snaps, states):
         field = state["focus"]
         if field not in {f[2] for f in FIELDS}:
             continue
         assert "osk:panel" in snap["keys"], f"{size}: focus on {field}, the open keyboard is not on the screen"
-        assert not _overlap(snap["keys"]["osk:panel"], snap["keys"][field]), \
-            f"{size}: the keyboard cuts {field}, the field in focus: {snap['keys']['osk:panel']} / {snap['keys'][field]}"
+        where = where or snap["keys"]["osk:panel"]
+        assert snap["keys"]["osk:panel"] == where, f"{size}: the keyboard jumped on {field}"
+        assert state["label"], f"{size}: the preview row has no label on {field}"   # an empty field: an empty value
+        if field in SHOWN:
+            assert state["preview"] == state[SHOWN[field]], (field, state["preview"])
+        if field in MASKED:
+            assert set(state["preview"]) <= {"•"}, f"{size}: {field} shown in the clear: {state['preview']!r}"
         checked += 1
     return checked
 
 
 @NATIVE
-@pytest.mark.parametrize("size", ["1024x768", "1280x800", "1920x1080"])
+@pytest.mark.parametrize("size", SIZES)
 @pytest.mark.parametrize(("view", "setup", "tabs"), SCREENS, ids=[f"{v}{'-' + s[0] if s else ''}" for v, s, _ in SCREENS])
-def test_tab_between_fields_with_the_keyboard_open_never_cuts_the_field_in_focus(driver, tmp_path, size, view, setup, tabs):
+def test_tab_between_fields_shows_the_field_in_focus_and_the_keyboard_stays_put(driver, tmp_path, size, view, setup, tabs):
     tokens = [f"size={size}", f"view={view}", *setup, "key=F5", "hits"]
     for _ in range(tabs):
         tokens += ["key=TAB", "hits"]
@@ -520,17 +565,16 @@ def test_tab_between_fields_with_the_keyboard_open_never_cuts_the_field_in_focus
     walked = states[-(2 * tabs + 1):]          # F5 and every Tab after it, one hits snapshot each
     assert set(_col(walked, "osk")) == {"1"}, "the keyboard closed on the way"
     assert {s["focus"] for s in walked} & {f[2] for f in FIELDS} == _fields(view, setup), "the walk missed a field"
-    assert _assert_field_clear(hits["snaps"], walked, size) > 0
+    assert _assert_preview(hits["snaps"], walked, size) > 0
 
 
 @NATIVE
-@pytest.mark.parametrize("size", ["1024x768", "1280x800", "1920x1080"])
+@pytest.mark.parametrize("size", SIZES)
 @pytest.mark.parametrize(("view", "setup", "tabs"), SCREENS, ids=[f"{v}{'-' + s[0] if s else ''}" for v, s, _ in SCREENS])
-def test_a_click_from_field_to_field_with_the_keyboard_open_never_cuts_the_field_in_focus(driver, tmp_path, size, view, setup, tabs):
-    """מכל שדה לכל שדה אחר באותו מסך, בלחיצה במרכזו. מרכז שמתחת ללוח: הלחיצה נופלת על
-    הלוח, והפוקוס לא עובר דרכו. שדה שהלוח חותך בחלקו ונלחץ במקום שגלוי: הלוח זז ממנו."""
+def test_a_click_from_field_to_field_shows_it_in_the_keyboard(driver, tmp_path, size, view, setup, tabs):
+    """מכל שדה לכל שדה אחר, בלחיצה במרכזו. מרכז שמתחת ללוח: הלחיצה נופלת על הלוח, והפוקוס
+    לא עובר דרכו. אחרת הפוקוס עובר, הלוח לא זז, ושורת התצוגה מראה את השדה החדש."""
     names = sorted(_fields(view, setup))
-    clear = 0
     for start in names:
         for target in names:
             if target == start:
@@ -542,20 +586,79 @@ def test_a_click_from_field_to_field_with_the_keyboard_open_never_cuts_the_field
             if _overlap(before["keys"]["osk:panel"], (tx + tw / 2, ty + th / 2, 0.001, 0.001)):
                 assert states[-1]["focus"] == start, f"{size}: a click through the keyboard reached {target}"
                 continue
-            # partly under the keyboard and clicked where it shows (Nadav's root password): it must move off it
             assert states[-1]["focus"] == target
-            clear += _assert_field_clear([after], states[-1:], size)
-    assert clear or len(names) == 1
+            _assert_preview([before, after], states[-2:], size)
 
 
 @NATIVE
-def test_nadavs_case_password_then_tab_to_root_password(driver, tmp_path):
-    """הצילום של נדב: פוקוס בסיסמה והלוח חותך את "סיסמת root". Tab עד אליו -- הלוח עובר."""
-    states, hits, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", "hits",
+def test_nadavs_case_the_root_password_under_the_keyboard_is_shown_in_it(driver, tmp_path):
+    """הצילום של נדב: פוקוס בסיסמה, והלוח מעל "סיסמת root". Tab עד אליו: הלוח לא קופץ,
+    והשדה מוצג בשורת התצוגה, ממוסך, עם התווית שלו."""
+    states, hits, _ = _run(driver, tmp_path, "size=1280x800", f"view={ADMIN}", "click=password", "hits",
                            "key=TAB", "key=TAB", "key=TAB", "key=TAB", "hits")
     assert states[-1]["focus"] == "root_password"
     before, after = hits["snaps"]
     assert _overlap(before["keys"]["osk:panel"], before["keys"]["root_password"]), \
-        "the precondition: with the password in focus the keyboard does sit over the root password"
+        "the precondition: the keyboard does sit over the root password"
     assert "osk:panel" in after["keys"], "Tab through the eye closed the keyboard"
-    assert not _overlap(after["keys"]["osk:panel"], after["keys"]["root_password"])
+    assert after["keys"]["osk:panel"] == before["keys"]["osk:panel"], "the keyboard jumped"
+    assert states[-1]["label"] == "סיסמת root (כניסה מקומית למסך השרת)"
+    assert states[-1]["preview"] == "•" * len("R00t!haifa")
+
+
+@NATIVE
+def test_the_preview_row_follows_typing_and_hides_a_password(driver, tmp_path):
+    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=address", *_keys("10.0"))
+    assert states[2]["label"] == "כתובת IP" and states[2]["preview"] == "10.44.10.37"
+    assert states[-1]["preview"] == "10.0"
+    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", *_keys("ab"), "click=show_password")
+    assert states[-2]["preview"] == "••" and states[-2]["password"] == "ab"
+    assert states[-1]["preview"] == "ab", "the eye shows it in the field and in the row alike"
+
+
+# --- גרירה ------------------------------------------------------------------------------
+
+@NATIVE
+@pytest.mark.parametrize("size", SIZES)
+def test_the_grip_drags_the_keyboard_and_letting_go_stops_it(driver, tmp_path, size):
+    _, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={ADMIN}", "click=password", "hits",
+                      "drag=osk:grip,-90,-70", "hits")
+    before, after = (snap["keys"]["osk:panel"] for snap in hits["snaps"])
+    assert after[0] == pytest.approx(before[0] - 90) and after[1] == pytest.approx(before[1] - 70), \
+        f"{size}: the drag moved it from {before} to {after}; the move after letting go must not count"
+    assert after[2:] == before[2:]
+
+
+@NATIVE
+def test_a_drag_from_a_key_does_not_move_it(driver, tmp_path):
+    """רק פס האחיזה גורר. לחיצה על מקש מקלידה, ותזוזה אחריה לא מזיזה את הלוח."""
+    states, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "hits", "drag=osk:q,-90,-70", "hits")
+    before, after = (snap["keys"]["osk:panel"] for snap in hits["snaps"])
+    assert after == before and states[-1]["hostname"] == "q"
+
+
+@NATIVE
+@pytest.mark.parametrize("size", SIZES)
+@pytest.mark.parametrize(("dx", "dy"), [(-5000, -5000), (5000, 5000), (-5000, 5000), (5000, -5000)])
+def test_the_keyboard_never_leaves_the_screen(driver, tmp_path, size, dx, dy):
+    states, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={NETWORK}", "static", "click=address",
+                           f"drag=osk:grip,{dx},{dy}", "hits")
+    sw, sh = hits["screen"]
+    assert "osk:panel" in hits["keys"]
+    px, py, pw, ph = hits["keys"]["osk:panel"]
+    assert px >= 0 and py >= 0 and px + pw <= sw and py + ph <= sh, (size, hits["keys"]["osk:panel"])
+    assert (px == 0 or px + pw == pytest.approx(sw)) and (py == 0 or py + ph == pytest.approx(sh)), "pushed to the edge"
+    assert states[-1]["osk"] == "1"
+
+
+@NATIVE
+def test_where_it_was_put_it_stays_across_done_f5_and_screens(driver, tmp_path):
+    """זיכרון מיקום, כל עוד המתקין רץ: "סיום", F5 ומעבר מסך לא מחזירים אותו למרכז."""
+    _, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "drag=osk:grip,-120,-150", "hits",
+                      "click=osk:done", "key=F5", "hits")
+    moved, reopened = (snap["keys"].get("osk:panel") for snap in hits["snaps"])
+    assert moved and reopened == moved, "'סיום' + F5 brought it back to the middle"
+    # hostname -> time -> backup -> admin; F5 on the admin screen's first field
+    _, hits2, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "drag=osk:grip,-120,-150",
+                       "key=ENTER", "key=ENTER", "key=ENTER", "key=F5", "hits")
+    assert hits2["keys"].get("osk:panel") == moved, "the next screens opened it elsewhere"

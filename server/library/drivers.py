@@ -27,6 +27,7 @@ import secrets
 import shutil
 import tarfile
 from pathlib import Path, PurePosixPath
+from typing import Callable
 
 from server.library.archive import _clear, _safe_members, _sha256, _shown
 from server.library.images import inside
@@ -301,7 +302,8 @@ class DriverLibrary:
         shutil.rmtree(manifest["_dir"])
         return True
 
-    def import_tar(self, archive: Path) -> dict:
+    def import_tar(self, archive: Path, *,
+                   before_extract: Callable[[int], None] | None = None) -> dict:
         """קולט חבילה מקובץ tar. מחזיר את המניפסט שנקלט.
 
         אותו מבנה כמו `archive.import_tar` (#71): חילוץ לאזור ביניים
@@ -315,6 +317,8 @@ class DriverLibrary:
         try:
             with tarfile.open(archive, "r:*") as tar:
                 members = _safe_members(tar)
+                if before_extract is not None:
+                    before_extract(sum(m.size for m in members))
                 tar.extractall(staging, members=members, filter="data")
             roots = {Path(m.name.replace("\\", "/")).parts[0] for m in members}
             if len(roots) != 1:

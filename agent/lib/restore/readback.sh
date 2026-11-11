@@ -285,7 +285,7 @@ readback_drawers() {
     RB_MODE=$(rb_mode "$_rr_m"); RB_SEED=$(rb_seed)
     _rb_plan "$_rr_m" || { _fail_alive "$*" "$READBACK_NOT_RUN — המניפסט לא נקרא"; return 1; }
     log "readback: mode $RB_MODE, sample seed $RB_SEED, $RB_PERMILLE/1000"
-    _rr_jobs=""; _rr_t0=$(date +%s); RB_TOTAL=$(rb_list_bytes "$RB_LIST")   # #2046: the bar's whole
+    _rr_jobs=""; _rr_t0=$(date +%s); RB_TOTAL=$(rb_list_bytes "$RB_LIST"); log "readback: $RB_TOTAL bytes per disk"; if command -v agent_log_checkpoint > /dev/null; then agent_log_checkpoint; fi   # #2046: the bar's whole; #2841: a cloner's log so far, before the long check
     for _rr_d in $(_rb_live "$@"); do
         target_set "$_rr_d" verifying; _rb_start "$_rr_d" partition_node; _rr_jobs="$_rr_jobs $_rr_d:$RB_PID"
     done

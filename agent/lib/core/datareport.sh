@@ -13,11 +13,13 @@ agent_log_send() {
     # after the power-off and production has no SSH. $1 = session id. The reason
     # is "failed" when any drawer failed, else "round_end". The server filters
     # secrets and anything read from a disk before it stores a byte (#1924).
+    # #2841: $2 = a reason of the caller's own (checkpoint, fatal -- below).
     _al_r=round_end
     for _al_s in "$RUN_DIR"/targets/*/state; do
         [ "$(cat "$_al_s" 2>/dev/null)" = failed ] && _al_r=failed
     done
     [ "$(cat "$RUN_DIR/state" 2>/dev/null)" = failed ] && _al_r=failed
+    [ -z "${2:-}" ] || _al_r=$2
     _al_f="$RUN_DIR/agentlog.gz"
     if tail -n "$AGENT_LOG_LINES" "$LOG_FILE" 2>/dev/null | tail -c "$AGENT_LOG_BYTES" | gzip -c > "$_al_f" 2>/dev/null \
         && curl -sfS --max-time "${HTTP_TIMEOUT:-10}" -H "Content-Type: application/gzip" \
@@ -29,6 +31,27 @@ agent_log_send() {
     fi
     rm -f "$_al_f"
     return 0
+}
+
+# #2841 (work, 11/11): a cloner went quiet mid-read-back and rebooted; the log
+# was sent only at the round's end, which never came -- agent_logs stayed empty.
+_al_session() {   # the open job's session id from the last hello answer; nothing = none
+    _as=$(json_get "${RESP:-$RUN_DIR/response.json}" ".session.id")
+    case "$_as" in null|*[!A-Za-z0-9_.-]*) _as= ;; esac
+    echo "$_as"
+}
+agent_log_checkpoint() {
+    # A cloner's long stage begins (the read-back): the log so far, so that a
+    # machine that goes quiet afterwards -- a reset nothing here can see -- still
+    # left its stream and the start of the check on the server.
+    [ "${D_ROLE:-}" = cloner ] && [ -n "${SERVER:-}" ] && [ -n "${MAC:-}" ] || return 0
+    agent_log_send "$(_al_session)" checkpoint
+}
+agent_log_fatal() {
+    # die_local is about to reboot. Only with a job open (a state file): the
+    # everyday "no work for this machine" of every station sends nothing.
+    [ -s "$RUN_DIR/state" ] && [ -n "${SERVER:-}" ] && [ -n "${MAC:-}" ] || return 0
+    agent_log_send "$(_al_session)" fatal
 }
 
 stage_at() {

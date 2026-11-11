@@ -15,7 +15,7 @@ name" ו-standby. נדב הכריע: אין מסך טקסט חלופי במכו�
    ‏`POST /api/v1/agent/login`.
 2. הקליטה מהגואי (‏`gui_capture`, ‏`guibridge.sh`) מגיעה ל-
    ‏`POST /api/console/tasks/capture` עם הגוף של הקונסולה, ה-cookie,
-   והתיקייה — קיימת, או חדשה שנוצרת קודם. שם בעברית אינו מגיע לשרת.
+   והתיקייה — קיימת, או חדשה שנוצרת קודם. שם בעברית מגיע לשרת (#2842), וסירוב השרת מגיע למסך.
 3. ‏`gui_role` קורא את התפקיד מתשובת הכניסה (#947).
 
 הפלט של כל הרצה הולך לקובץ ולא ל-PIPE (‏`capture_output` ממתין לסגירת
@@ -70,6 +70,8 @@ class Console(HTTPServer):
     """מחזיר את מה שהוגדר לו, וזוכר כל בקשה שהגיעה."""
 
     role = "admin"
+    #: ‏#2842: (status, body) שהשרת המזויף מחזיר ל-POST של קליטה; None = 200 רגיל.
+    capture_answer: tuple[int, dict] | None = None
     folders: list[dict] = []
     requests: list[dict] = []
     state: dict = {}
@@ -124,7 +126,10 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/console/folders":
             self._send(200, {"ok": True})
         elif self.path == "/api/console/tasks/capture":
-            self._send(200, {"id": "tsk_01", "image_id": "img_01"})
+            if self.server.capture_answer:
+                self._send(*self.server.capture_answer)
+            else:
+                self._send(200, {"id": "tsk_01", "image_id": "img_01"})
         else:
             self._send(404, {"detail": "no such path"})
 
@@ -138,6 +143,7 @@ def console():
     httpd.requests = []
     httpd.folders = [dict(f) for f in FOLDERS]
     httpd.role = "admin"
+    httpd.capture_answer = None
     httpd.state = json.loads(json.dumps(STATE))
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -276,13 +282,32 @@ def test_a_gui_capture_into_a_new_folder_creates_it_first(tmp_path, console):
 
 
 @native_tools
-def test_a_hebrew_folder_name_never_reaches_the_server(tmp_path, console):
-    """‏(הכרעת נדב, 30/08: שמות תיקיות ואימג'ים באנגלית או מספרים.)"""
+def test_a_hebrew_folder_and_image_name_reach_the_server(tmp_path, console):
+    """‏#2842: הכלל של הכרעת 30/08 ("אנגלית או מספרים") הוחלף בשרת ב-#327 —
+    `validate_display_name` מתיר עברית — אבל בדיקה בסוכן המשיכה לחסום בשקט.
+    השם נשלח כמו שהוקלד, והשרת הוא הפוסק."""
     result = run_shell(tmp_path, url_of(console),
-                       gui_capture_call("Win11 lab", "מעבדה", "yes"))
+                       gui_capture_call("אופיס 2024 סטנדרט", "מעבדה", "yes"))
+    assert "CAPTURE rc=0" in result["out"], result["out"]
+    assert posted(console, "/api/console/folders") == [{"name": "מעבדה"}]
+    captures = posted(console, "/api/console/tasks/capture")
+    assert [(c["name"], c["folder"]) for c in captures] == [("אופיס 2024 סטנדרט", "מעבדה")]
+
+
+@native_tools
+def test_a_server_refusal_of_the_name_reaches_the_screen_in_its_own_words(tmp_path, console):
+    """‏#2842: השם נדחה בשרת → ה-`detail` שלו (איזה תו אסור) בשורת השגיאה של
+    המסך. עד אז `gui_capture` החזיר 1 בלי מילה, והמסך נראה "חסום"."""
+    detail = "שם האימג' 'a—b' אינו תקין — מותרים אותיות אנגליות או עבריות"
+    console.capture_answer = (400, {"detail": detail})
+    gui = tmp_path / "gui"
+    gui.mkdir()
+    result = run_shell(tmp_path, url_of(console),
+                       f"export GUI_DIR={shlex.quote(posix(gui))}; "
+                       + gui_capture_call("a—b", "Lab", "no"))
     assert "CAPTURE rc=1" in result["out"], result["out"]
-    assert posted(console, "/api/console/folders") == []
-    assert posted(console, "/api/console/tasks/capture") == []
+    shown = (gui / "error").read_text(encoding="utf-8")
+    assert f"form_error={detail}\n" in shown, shown
 
 
 @native_tools

@@ -19,7 +19,7 @@ import shutil
 import tarfile
 import zlib
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from server.core.atomicfile import fsync_dir, fsync_file
 
@@ -182,7 +182,8 @@ def _clear(staging: Path) -> None:
         log.warning("import staging was left behind at %s", staging)
 
 
-def import_tar(archive: Path, images_root: Path, existing_ids: set[str]) -> dict:
+def import_tar(archive: Path, images_root: Path, existing_ids: set[str], *,
+               before_extract: Callable[[int], None] | None = None) -> dict:
     """פורק ארכיון לספרייה. מחזיר את המניפסט שנקלט.
 
     האימות כאן הוא הסיבה שהפונקציה קיימת: אימג' שנכנס מבחוץ נבדק מול
@@ -199,6 +200,8 @@ def import_tar(archive: Path, images_root: Path, existing_ids: set[str]) -> dict
     try:
         with tarfile.open(archive, "r:*") as tar:
             members = _safe_members(tar)
+            if before_extract is not None:
+                before_extract(sum(m.size for m in members))
             tar.extractall(staging, members=members, filter="data")
         return _admit(staging, [m.name.replace("\\", "/") for m in members],
                       images_root, existing_ids, lambda path, _key: _sha256(path))

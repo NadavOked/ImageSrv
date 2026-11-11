@@ -287,19 +287,19 @@ def test_static_includes_are_at_9_9():
 
     page = _index()
     versions = set(re.findall(r'\?v=(\d+\.\d+)"', page))
-    assert versions == {"12.98"}, versions
+    assert versions == {"13.00"}, versions
     # ביקורת 10/10: monitor.html מושך את אותם console.css ו-design-tokens.css — הם נשארו על 3.29 לנצח,
     # ולכן דפדפן שזכר אותם הציג את המוניטור בעיצוב ישן. monitor.js לבדו שומר על גרסה משלו (test_monitor).
     mon = (STATIC / "monitor.html").read_text(encoding="utf-8")
     shared = set(re.findall(r'(?:design-tokens|console)\.css\?v=(\d+\.\d+)"', mon))
-    assert shared == {"12.98"}, shared
+    assert shared == {"13.00"}, shared
     assert 'monitor.js?v=3.42' in mon
 
 
 def test_iso_tab_script_is_included_after_console_js():
     """‏#404: iso.js נשען על UI/api/sheet מ-console.js, ולכן נטען אחריו, באותה גרסה."""
     page = _index()
-    assert '<script src="iso.js?v=12.98"></script>' in page
+    assert '<script src="iso.js?v=13.00"></script>' in page
     assert page.index('src="console.js?v=') < page.index('src="iso.js?v=')
 
 

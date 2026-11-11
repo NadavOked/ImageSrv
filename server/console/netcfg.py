@@ -509,7 +509,9 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                                                netcfg_host.RESOLV_CONF)]
         error = " · ".join(e for e in errors if e) or None
         if error is None:
-            error = hooks["netcfg_apply"](name)
+            # ‏#2840: ifdown/ifup (עד 35 ש') בתהליכון — לא על לולאת האירועים, שעליה
+            # עונים גם הסוכנים, ‏GRUB וכל שאר הקונסולה.
+            error = await asyncio.to_thread(hooks["netcfg_apply"], name)
         if error is None:
             state, gaps = await _settled(cfg)
         else:
@@ -536,8 +538,25 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                 # ‏#2349: אחרי ההמתנה ל-lease — כמה נשאר לאשר **עכשיו**.
                 "rollback": rollback_view(hooks["netcfg_now"]())}
 
+    #: ‏#2840: שמירה של רשת ההפצה שעדיין רצה. שמירה שנייה בזמן הזה נדחית ב-409 ולא
+    #: ממתינה בתור — בשרת העבודה (11/11) 18 ‏PUT של אותה שמירה הוחלו בזה אחר זה,
+    #: ו-dnsmasq הופעל מחדש 15 פעמים ב-4 שניות.
+    deploy_saving: set[str] = set()
+
     @router.put("/{name}/deploy")
     async def configure_deploy(name: str, request: Request, user=Depends(admin_only)):
+        """רשת ההפצה — השמירה עצמה ב-`_save_deploy`; כאן רק "אחת בכל פעם" (‏#2840)."""
+        if deploy_saving:
+            raise HTTPException(
+                409, f"שמירה קודמת של רשת ההפצה ({', '.join(sorted(deploy_saving))}) "
+                     "עדיין רצה — המתינו לתוצאה שלה. השמירה הזו לא הוחלה")
+        deploy_saving.add(name)
+        try:
+            return await _save_deploy(name, request, user)
+        finally:
+            deploy_saving.discard(name)
+
+    async def _save_deploy(name: str, request: Request, user) -> dict:
         """רשת ההפצה (‏#1263): רשת + מסכה, וכתובת השרת **נגזרת** — הראשונה
         ברשת (‏`netcfg.deploy_address`). ה-DHCP של ההפצה (טווח, חכירה) נשמר
         באותה בקשה, על אותו כרטיס.
@@ -569,6 +588,13 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         if member is not None:
             raise HTTPException(
                 409, f"{name} חבר ב-{member.name} — רשת ההפצה נערכת על {member.name}")
+        # ‏#2840: כתובת ששמירה קודמת החילה וממתינה לאישור כבר רשומה ב-DB, ולכן
+        # `netcfg.changed` ריק והשמירה הבאה דילגה על השומר של `_configure` —
+        # ה-DHCP הודלק על כתובת שההחזרה הסירה דקה אחר כך. אותו שומר כמו ‏/second.
+        if netcfg_rollback.read_pending(state_dir) is not None:
+            raise HTTPException(
+                409, "שינוי רשת קודם עדיין ממתין לאישור — אשרו אותו או המתינו "
+                     "שיוחזר, ורק אז שמרו את רשת ההפצה. ה-DHCP לא שונה")
         before = load(name)
         if on_management:
             address, network, netmask = _management_deploy_or_409(name, before, body)
@@ -610,8 +636,11 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         was_down = not on_management and live[name].get("admin_up") is False
         address_result = None
         try:
-            risky = dhcp_steps["gates"](name, dhcp_cfg, dhcp_before, dhcp_body,
-                                        management_ok=on_management, raise_link=was_down)
+            # ‏#2840: "מי כבר עונה" (שניות של האזנה, ‏carrier) — בתהליכון. בשרת העבודה הוא
+            # חסם את לולאת האירועים, כל הקונסולה נתקעה, והלחיצות הצטברו בדפדפן.
+            risky = await asyncio.to_thread(
+                dhcp_steps["gates"], name, dhcp_cfg, dhcp_before, dhcp_body,
+                management_ok=on_management, raise_link=was_down)
             if netcfg.changed(before, cfg):
                 address_result = await _configure(name, before, cfg, body, request, user,
                                                   live, state)
@@ -631,9 +660,10 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                 return {"ok": False, "server_ip": address, "address": address_result,
                         "dhcp": None, "apply_error": f"הכתובת {address} על {name} {why} "
                         "— ה-DHCP לא שונה"}
-        dhcp_result = dhcp_steps["commit"](name, dhcp_cfg, dhcp_before, user,
-                                           dhcp_steps["live"](), risky,
-                                           management_ok=on_management)
+        # ‏#2840: השלמת ההתקנה (grub.cfg, ‏daemon-reload, חומת אש) והפעלת dnsmasq — בתהליכון.
+        dhcp_result = await asyncio.to_thread(
+            dhcp_steps["commit"], name, dhcp_cfg, dhcp_before, user,
+            dhcp_steps["live"](), risky, management_ok=on_management)
         journal(ctx.conn, "net_deploy_saved",
                 f"{name} {network}/{netcfg._prefix_len(netmask)} server={address} "
                 f"range={dhcp_cfg.range_start}-{dhcp_cfg.range_end}", user[0])

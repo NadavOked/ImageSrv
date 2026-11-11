@@ -45,7 +45,15 @@ typedef struct {
     int virt, raid;   /* #1989: INSTALL_VIRT_*, RAID_* (install_raid.h) */
     int edit_field, edit_seen;   /* #2777: the field typed in since the focus came to it; the focus the last key saw */
     int osk, osk_shift;          /* #2778: the keyboard on the screen -- the view it was opened on (0 = closed); Shift for the next key */
-    double osk_fy, osk_fh;       /* #2778: the focused field as this frame drew it (label and box); osk_fh 0 = not drawn */
+    /* #2778: the focused field as this frame drew it -- its label, and what it shows
+     * (dots for a hidden password) -- for the keyboard's preview row; 0 = none drawn */
+    int osk_field;
+    char osk_label[160], osk_shown[300];
+    /* #2778 (Nadav 09/11): where the keyboard is (logical px, top left), its size and the
+     * screen's as last drawn; placed = moved by the person (else it opens in the middle),
+     * kept while the installer runs. drag = the grip is held, gx/gy where it was taken. */
+    int osk_placed, osk_drag;
+    double osk_x, osk_y, osk_w, osk_h, osk_sw, osk_sh, osk_gx, osk_gy;
     char primary_url[192], hostname[64], password[128], confirm[128], current_password[128];
     char admin_user[64];
     char root_password[128], root_confirm[128];   /* #1632: root's, chosen here (Nadav 24/10) */

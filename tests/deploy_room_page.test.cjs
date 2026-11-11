@@ -533,8 +533,8 @@ test('class tab: the existing session code as-is inside cards (row, start/stop, 
   // ‏#980 §3: החדר מ-/room/history; הכיתות (v2) נשארות "דורש API".
   assert.match(html,/היסטוריית הסבבים לא נקראה/,'unread history is said');
   run('ROOM_HISTORY='+JSON.stringify(fixtures['/room/history'])); html=run('deploy(2)'); balanced(html);
-  assert.match(html,/<th>#<\/th><th>אימג׳<\/th><th>מחשבים<\/th><th>נכתבו<\/th><th>משך<\/th><th[^>]*>מצב<\/th><th[^>]*>תאריך<\/th>/);
-  assert.match(html,/win11-base<\/td><td>—<\/td><td>6\/6<\/td><td>90 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill ok">הצליח<\/span>/,'history follows the mockup columns and keeps the result pill');
+  assert.match(html,/<th>#<\/th><th>אימג׳<\/th><th>מחשבים<\/th><th>נכתבו<\/th><th>גלים<\/th><th>משך<\/th><th[^>]*>מצב<\/th><th[^>]*>תאריך<\/th>/);
+  assert.match(html,/win11-base<\/td><td>—<\/td><td>6\/6<\/td><td>—<\/td><td>90 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill ok">הצליח<\/span>/,'history follows the mockup columns and keeps the result pill');
   assert.match(html,/סבבים קודמים בכיתות — <b[^>]*>דורש API<\/b>/);
 });
 

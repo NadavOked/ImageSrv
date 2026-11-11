@@ -349,8 +349,10 @@ static int keys_2776(App *a,InstallBridge *b,const Event *e){InstallState *s=&a-
  * rules and a password's mask are those of typing, and the physical keyboard
  * keeps working under it. "סיום" and F5 close it, and so does leaving the
  * screen; on a control that is not a field (the eye, a radio) it is hidden and
- * comes back on the next field -- Tab through the admin screen keeps it, and
- * it moves off whichever field the focus lands on (screens_install_osk.c). */
+ * comes back on the next field -- Tab through the admin screen keeps it.
+ * It opens in the middle of the screen and its grip drags it; where it was put
+ * it stays while the installer runs. It never jumps by itself: the field in
+ * focus is shown in its preview row as well (screens_install_osk.c). */
 static int on_screen_field(InstallState *s,int id){int ids[8],n=fields(s,ids);for(int i=0;i<n;i++)if(ids[i]==id)return 1;return 0;}
 int install_text_fields(InstallState *s){int ids[8];return fields(s,ids);}
 /* F5 (Nadav 09/11; free in the installer -- Alt+F5 is input.c's VT switch): shown, it
@@ -361,8 +363,13 @@ static void osk_f5(App *a){InstallState *s=&a->install;int ids[8],n=fields(s,ids
     if(!on_screen_field(s,a->focus))a->focus=ids[0];
     s->osk=s->view;}
 static int osk_press(App *a,InstallBridge *b,int id);
-static int install_event(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;if(e->type==UIEV_MOVE){a->ptr_x=e->x;a->ptr_y=e->y;a->ptr_visible=!e->is_touch;return 0;}
-if(e->type==UIEV_CLICK){a->ptr_x=e->x;a->ptr_y=e->y;int id=app_hit(a,e->x,e->y);if(osk_press(a,b,id))return 0;choose(a,b,id);if(a->focus==id&&on_screen_field(s,id))s->osk=s->view;return 0;}
+/* the grip held (Event.down, input.c): the keyboard follows the pointer, inside the screen */
+static void osk_drag_to(App *a,const Event *e){InstallState *s=&a->install;double k=a->scale>0?a->scale:1;
+    if(!s->osk_drag)return;
+    if(!e->down){s->osk_drag=0;return;}
+    s->osk_x=fmax(0,fmin(e->x/k-s->osk_gx,s->osk_sw-s->osk_w));s->osk_y=fmax(0,fmin(e->y/k-s->osk_gy,s->osk_sh-s->osk_h));s->osk_placed=1;}
+static int install_event(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;if(e->type==UIEV_MOVE){a->ptr_x=e->x;a->ptr_y=e->y;a->ptr_visible=!e->is_touch;osk_drag_to(a,e);return 0;}
+if(e->type==UIEV_CLICK){a->ptr_x=e->x;a->ptr_y=e->y;s->osk_drag=0;int id=app_hit(a,e->x,e->y);if(osk_press(a,b,id))return 0;choose(a,b,id);if(a->focus==id&&on_screen_field(s,id))s->osk=s->view;return 0;}
 if(e->type==UIEV_KEY&&e->key==KEYSYM_F5){osk_f5(a);return 0;}   /* #2778 */if(e->type==UIEV_SCROLL&&(s->view==INSTALL_FAILED||(s->view==INSTALL_PROGRESS&&s->technical_open))){s->output_scroll-=e->delta*3;if(s->output_scroll<0)s->output_scroll=0;return 0;}/* keyboard-only servers (a rack has a keyboard, rarely a mouse): on the disk
  * screen Up/Down pick the disk, Space ticks "I understand"; Space also
  * toggles the technical details on the progress screen. */
@@ -383,16 +390,17 @@ if(e->type==UIEV_CHAR){size_t n;char *v=field(s,a->focus,&n);if(v&&strlen(v)+1<n
     if(e->key==KEYSYM_ESC){if(s->view==INSTALL_DONE)cancel_reboot(s);else back(a);return 0;}if(e->key==KEYSYM_UP&&output){choose(a,b,HIT_INSTALL_OUTPUT_UP);return 0;}if(e->key==KEYSYM_DOWN&&output){choose(a,b,HIT_INSTALL_OUTPUT_DOWN);return 0;}if(e->key==KEYSYM_BACKSPACE){size_t n;char *v=field(s,a->focus,&n);if(v){size_t z=strlen(v);if(z)v[--z]=0;edited(s,a->focus);if(a->focus==HIT_INSTALL_PRIMARY_URL)s->primary_checked=s->primary_ok=0;}return 0;}if(e->key==KEYSYM_ENTER){if(s->view!=INSTALL_PROGRESS)choose(a,b,s->view==INSTALL_FAILED?HIT_INSTALL_RETRY:HIT_INSTALL_NEXT);return 0;}if(e->key==KEYSYM_TAB||e->key==KEYSYM_BACKTAB||e->key==KEYSYM_UP||e->key==KEYSYM_DOWN)move_focus(a,e->key==KEYSYM_TAB||e->key==KEYSYM_DOWN?1:-1);return 0;}
 /* a key of the open keyboard: Shift is for the next character only; the panel
  * between the keys takes the click, so it never reaches what is under it */
-static int osk_press(App *a,InstallBridge *b,int id){InstallState *s=&a->install;int k=id-HIT_INSTALL_OSK_BASE;if(!s->osk||s->osk!=s->view||k<0||k>OSK_KEYS)return 0;
+static int osk_press(App *a,InstallBridge *b,int id){InstallState *s=&a->install;int k=id-HIT_INSTALL_OSK_BASE;if(!s->osk||s->osk!=s->view||k<0||k>OSK_PREVIEW)return 0;
     Event e={0};
-    if(k==OSK_KEYS)return 1;
+    if(k==OSK_GRIP){double sc=a->scale>0?a->scale:1;s->osk_drag=1;s->osk_gx=a->ptr_x/sc-s->osk_x;s->osk_gy=a->ptr_y/sc-s->osk_y;return 1;}
+    if(k>=OSK_KEYS)return 1;   /* the panel and the preview row: nothing under them */
     if(k==OSK_SHIFT){s->osk_shift=!s->osk_shift;return 1;}
     if(k==OSK_DONE){s->osk=s->osk_shift=0;return 1;}
     if(k==OSK_BKSP){e.type=UIEV_KEY;e.key=KEYSYM_BACKSPACE;}
     else{e.type=UIEV_CHAR;e.ch=osk_char(k,s->osk_shift);s->osk_shift=0;}
     install_event(a,b,&e);return 1;}
 int install_handle(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;int done=install_event(a,b,e);
-    if(s->osk&&s->osk!=s->view)s->osk=s->osk_shift=0;   /* #2778: another screen; off the fields it is only hidden */
+    if(s->osk&&s->osk!=s->view)s->osk=s->osk_shift=s->osk_drag=0;   /* #2778: another screen; off the fields it is only hidden; where it was stays */
     return done;}
 /* the done screen wakes the loop every second while it counts down */
 int install_polling(const App *a){return a->install.view==INSTALL_PROGRESS||a->install.view==INSTALL_TIME||(a->install.view==INSTALL_DONE&&a->install.reboot_at>0);}   /* #2144: the time step's clock */

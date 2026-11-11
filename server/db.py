@@ -1044,6 +1044,9 @@ ADDED_COLUMNS = [
     # ‏#1837: הסוד שהשרת עזב ב-`monitor_rekeyed` — hello שנבנה לפני האימות
     # ונושא אותו אינו דורס את הסוד הבא (`net_seen`). NULL = אין מה לזכור.
     ("net_devices", "monitor_secret_prev", "TEXT"),
+    # ‏#2844: האם האתחול הנוכחי הפעיל את שירות המוניטור (1/0) — כפי שהסוכן
+    # דיווח ב-hello. NULL = סוכן ישן / לא דיווח; לעולם אינו נקרא כ-0.
+    ("net_devices", "monitor_on", "INTEGER"),
     # ‏#1839: הדיווח (progress) האחרון שהתקבל מהמכונה (`agent_seen`). נפרד
     # מ-`last_seen` (= hello), שעליו נשען room (#1721). NULL = לא דיווחה.
     ("net_devices", "progress_seen", "TEXT"),
@@ -1554,7 +1557,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 14  # ‏14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · ‏13: usb_records/usb_syncs (#1920) · ‏12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 15  # ‏15: net_devices.monitor_on (#2850/#2844, in release/v0.91.11 -- the PR added the column without the bump) · ‏14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · ‏13: usb_records/usb_syncs (#1920) · ‏12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:
@@ -1880,6 +1883,19 @@ def _net_seen_unchanged(row: sqlite3.Row, ip: str | None,
         return False
     age = (now - last).total_seconds()
     return 0 <= age < NET_SEEN_MIN_INTERVAL_SECONDS
+
+
+def note_monitor_on(conn: sqlite3.Connection, mac: str, on: bool | None) -> None:
+    """‏#2844: רושם אם שירות המוניטור רץ באתחול הזה. ‏None (סוכן ישן) = לא נוגעים.
+    נכתב רק כשהערך השתנה, כדי שה-hello לא יהפוך לכתיבה בכל סבב."""
+    if on is None:
+        return
+    row = conn.execute("SELECT monitor_on FROM net_devices WHERE mac = ?", (mac,)).fetchone()
+    if row is None or row["monitor_on"] == int(on):
+        return
+    _settle(conn)
+    with _write_lock, writing(conn):
+        conn.execute("UPDATE net_devices SET monitor_on = ? WHERE mac = ?", (int(on), mac))
 
 
 def net_seen(

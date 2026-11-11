@@ -91,13 +91,18 @@ def arm_hooks(store: dict) -> dict:
         "netcfg_write_resolv": lambda text, path=None: store.__setitem__(
             "resolv", text),
         "netcfg_apply": lambda name: store["applied"].append(name) or None,
+        # ‏#2855: כרטיס בלי קובץ קודם יורד בלי ifup — גם זה בלי לגעת במכונה.
+        "netcfg_down": lambda name: store["downs"].append(name) or None,
+        "netcfg_release": lambda name: store["released"].append(name) or None,
+        "netcfg_main_defines": lambda name: False,
+        "netcfg_state": lambda: netcfg_host.LiveState(True, {}),
     }
 
 
 @pytest.fixture()
 def store() -> dict:
     return {"confs": {"eth1": "new text\n"}, "resolv": "nameserver 8.8.8.8\n",
-            "applied": []}
+            "applied": [], "downs": [], "released": []}
 
 
 def test_the_previous_file_comes_back_word_for_word(tmp_path: Path, store):

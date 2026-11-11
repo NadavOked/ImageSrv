@@ -12,19 +12,31 @@
 # Creating a folder is admin_only, and so is the capture; gui_capture is
 # reached only by an admin session (gui_role).
 
+build_say_refusal() {
+    # #2842: the server's own words (its `detail`, Hebrew: which name rule broke)
+    # to the screen's error line, not only a log line the operator never sees.
+    # $1 = HTTP code, $2 = response file, $3 = English for the log. A detail
+    # that is not a string (a 422's list) is not shown as JSON noise: the
+    # screen then says the request was refused, with the code.
+    _bs_d=$(jq -r 'if (.detail | type) == "string" then .detail else empty end' "$2" 2>/dev/null)
+    gui_error "${_bs_d:-הבקשה נדחתה (http $1)}" "$3 (http $1)"
+    return 0
+}
+
 build_new_folder() {
-    # $1 = folder name (already checked by build_name_ok). Prints the name of
+    # $1 = folder name (the server checks it, #2842). Prints the name of
     # the folder it created. POST /folders is admin_only; a 403 here means
     # the account is not what the menu was built from, and that stops the
     # capture instead of carrying on with a folder that does not exist.
     _nm=$1
-    build_name_ok "$_nm" || return 1
+    [ -n "$_nm" ] || return 1
     printf '{"name":"%s"}' "$(json_escape "$_nm")" \
         > "$RUN_DIR/folder_new.json"
     _code=$(console_post "folders" "$RUN_DIR/folder_new.json" \
         "$RUN_DIR/folder_resp.json") || return 1
     if [ "$_code" != "200" ]; then
         console_say "$_code" "Could not create the folder" >&2
+        build_say_refusal "$_code" "$RUN_DIR/folder_resp.json" 'The folder was not created'
         return 1
     fi
     log "folder created from the build machine: $_nm" >&2
@@ -40,6 +52,7 @@ build_capture_post() {
         "$RUN_DIR/capture_resp.json") || return 1
     if [ "$_code" != "200" ]; then
         console_say "$_code" "The capture was not created"
+        build_say_refusal "$_code" "$RUN_DIR/capture_resp.json" 'The capture was not created'
         return 1
     fi
     # 200 is not a task; the id is. An answer we cannot read is a capture we

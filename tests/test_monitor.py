@@ -1201,3 +1201,57 @@ def test_monitor_fullscreen_is_the_whole_page_with_a_floating_bar():
     assert "document.documentElement.requestFullscreen()" in js
     assert "mon-wrap.requestFullscreen" not in js and ".mon-wrap').requestFullscreen" not in js
     assert "document.fullscreenEnabled" in js and "2500" in js
+
+
+# --- #2844: מכונה שעלתה לפני שהמוניטור הופעל ---------------------------------
+
+def _refused_reason(server, monkeypatch) -> str:
+    monkeypatch.setattr(monitor, "MONITOR_CONNECT_WAIT_SECONDS", 0.01)
+    monkeypatch.setattr(monitor, "MONITOR_CONNECT_BACKOFF", (0,))
+
+    async def connector(_host, _port):
+        raise ConnectionRefusedError("nobody on 5900")
+
+    client = monitor_client(server, "admin", connector)
+    with pytest.raises(WebSocketDisconnect) as caught:
+        with client.websocket_connect(f"/api/console/monitor/{MAC}") as websocket:
+            websocket.receive_bytes()
+    assert caught.value.code == 4502
+    return caught.value.reason
+
+
+def _hello_monitor_on(server, value):
+    body = {**hello_body(MAC), **({} if value is None else {"monitor_on": value})}
+    assert server["anon"].post("/api/v1/agent/hello", json=body).status_code == 200
+
+
+def _stored_monitor_on(server):
+    return server["ctx"].conn.execute(
+        "SELECT monitor_on FROM net_devices WHERE mac = ?", (MAC,)).fetchone()["monitor_on"]
+
+
+def test_hello_monitor_on_is_stored_as_reported_and_unknown_stays_null(server):
+    prepare_secret_machine(server)
+    _hello_monitor_on(server, None)
+    assert _stored_monitor_on(server) is None      # סוכן ישן — לא ידוע, לא "כבוי"
+    _hello_monitor_on(server, False)
+    assert _stored_monitor_on(server) == 0
+    _hello_monitor_on(server, True)
+    assert _stored_monitor_on(server) == 1
+    server["anon"].post("/api/v1/agent/hello", json={**hello_body(MAC), "monitor_on": "yes"})
+    assert _stored_monitor_on(server) == 1         # לא-bool אינו ראיה
+
+
+def test_refused_connect_of_a_machine_that_booted_without_monitor_says_so(server, monkeypatch):
+    prepare_secret_machine(server)
+    _hello_monitor_on(server, False)
+    assert _refused_reason(server, monkeypatch) == monitor.BOOTED_BEFORE_MONITOR
+
+
+@pytest.mark.parametrize("reported", [None, True])
+def test_refused_connect_without_proof_keeps_the_generic_reason(server, monkeypatch, reported):
+    prepare_secret_machine(server)
+    _hello_monitor_on(server, reported)
+    reason = _refused_reason(server, monkeypatch)
+    assert "המכונה סירבה לחיבור" in reason
+    assert monitor.BOOTED_BEFORE_MONITOR not in reason

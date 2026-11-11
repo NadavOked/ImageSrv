@@ -1220,12 +1220,33 @@ static void wait_writable(int timeout_ms)
         poll(fds, (nfds_t)n, timeout_ms);
 }
 
+#ifdef IMAGESRV_TEST_CLOCK
+/* Test build only (tests/test_fanout.py, #2808): the eviction clocks read
+ * milliseconds from the file FANOUT_TEST_CLOCK names, so a test moves time
+ * itself instead of racing a loaded machine. build_initramfs.sh never
+ * defines this; without it the #else branch is the code as it always was.
+ * An unreadable clock aborts: a test that cannot read its clock has not
+ * measured anything (principle 5). */
+static long long now_ms(void)
+{
+    const char *path = getenv("FANOUT_TEST_CLOCK");
+    long long ms;
+    FILE *f = path ? fopen(path, "r") : NULL;
+    if (!f || fscanf(f, "%lld", &ms) != 1) {
+        fprintf(stderr, "fanout: test clock %s unreadable\n", path ? path : "(unset)");
+        abort();
+    }
+    fclose(f);
+    return ms;
+}
+#else
 static long long now_ms(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
+#endif
 
 /* Positive integer from the environment, or fallback. Junk, zero, and
  * overflow (strtoll saturates to LLONG_MAX, ERANGE) are refused out loud

@@ -1029,9 +1029,55 @@ def _mark_lost(conn: sqlite3.Connection, store: SessionStore, wave: sqlite3.Row,
     # ‏`update_one` כבר עשה commit לכל שינוי מצב, ו-`journal` נועל וכותב
     # בעצמו (#379) — ולכן אין כאן `conn.commit()` חשוף (#450, #54).
     for m in marked:
-        journal(conn, "client_lost", f'{m["mac"]} in {wave["id"]}', machine=m["mac"],
-                round_id=wave["id"])
+        open_ = _unreported(m)   # #2841: what it was doing when it went quiet
+        journal(conn, "client_lost", f'{m["mac"]} in {wave["id"]} last={m["state"]}'
+                + (" unreported=" + ",".join(f"{d}:{s}" for d, s in open_) if open_ else ""),
+                machine=m["mac"], round_id=wave["id"])
     return store.members(wave["id"])
+
+
+#: ‏#2841: מצבי יעד שבהם לא נמסרה תוצאה — המגירה עוד נכתבת או נבדקת.
+_OPEN_TARGET_STATES = ("waiting", "writing", "verifying", "naming", "staging")
+_TARGET_HE = {"waiting": "ממתינה", "writing": "בכתיבה", "verifying": "באימות",
+              "naming": "במתן שם", "staging": "בהנחת דרייברים", "unread": "לא נקרא"}
+
+
+def _unreported(member: sqlite3.Row) -> list[tuple[str, str]]:
+    """‏#2841: יעדי החבר שהדיווח האחרון שלו השאיר פתוחים — ``[(dev, state)]``.
+
+    ‏targets_json שלא נקרא אינו "אין יעדים פתוחים" (עיקרון 5): הוא מוחזר כ-
+    ``[("?", "unread")]``, כך שהשורה ביומן אומרת שלא ידוע מה נשאר פתוח."""
+    try:
+        targets = json.loads(member["targets_json"] or "[]")
+    except (TypeError, ValueError):
+        return [("?", "unread")]
+    if not isinstance(targets, list):
+        return [("?", "unread")]
+    return [(str(t.get("dev", "?")), str(t.get("state")))
+            for t in targets
+            if isinstance(t, dict) and t.get("state") in _OPEN_TARGET_STATES]
+
+
+def _lost_before_result(conn: sqlite3.Connection, members: list[sqlite3.Row],
+                        total: int, target: int) -> str | None:
+    """‏#2841: אף מגירה לא נכתבה, ומשכפל הפסיק לדווח באמצע בלי תוצאה — הסיבה
+    בשמה, או ``None`` כשזה לא המקרה (עבודה, 11/11: ‏0/3 שנסגר כ-`room_done`
+    רגיל, והמגירות נשארו "באימות" בלי שאיש אמר שהתוצאה לא הגיעה)."""
+    if total:
+        return None
+    lost = [m for m in members if m["state"] == reports.LOST]
+    if not lost:
+        return None
+    parts = []
+    for m in lost:
+        row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (m["mac"],)).fetchone()
+        name = row["suffix"] if row and row["suffix"] else m["mac"]
+        open_ = _unreported(m)
+        what = (" (" + ", ".join(f"{d} {_TARGET_HE.get(s, s)}" for d, s in open_) + ")"
+                if open_ else "")
+        parts.append(f"{name}{what}")
+    return (f"המשכפל {', '.join(parts)} הפסיק לדווח לפני שדיווח תוצאה"
+            f" — {total}/{target} נכתבו")
 
 
 def _rebase_future(conn: sqlite3.Connection, wave: sqlite3.Row,
@@ -1812,6 +1858,16 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
     # ‏#2201 (ברזל 25/10, ‏room_edc35340): וכך גם חריץ שנבחר ולא היה בו דיסק — נכשל
     # בשמו (`no_disk`), ואין גל 2 שממתין לו.
     from server.rounds import direct                 # noqa: PLC0415
+    # ‏#2841: מדיסק חי אין גל שני — משכפל שנעלם לפני שדיווח, ושום מגירה לא
+    # נכתבה: הסבב נכשל בשמו, לא `room_done written=0/N` שנראה כמו סיום.
+    lost_why = (_lost_before_result(conn, members, total, round_row["target_drives"])
+                if direct.is_build_disk(round_row) else None)
+    if lost_why:
+        if _fail_round(conn, store, round_row, lost_why):
+            journal(conn, "room_failed",
+                    f'{round_row["id"]} {round_row["wave_session_id"]} {lost_why}'
+                    f' written={total}/{round_row["target_drives"]}', round_id=round_row["id"])
+        return
     if (total + len(skipped) + len(cancelled) + no_disk >= round_row["target_drives"]
             or direct.is_build_disk(round_row)):
         # הסגירה היא התביעה: שני תהליכונים שהגיעו לכאן עם אותו גל —

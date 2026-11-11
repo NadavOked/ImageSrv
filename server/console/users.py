@@ -26,6 +26,8 @@ _log = logging.getLogger(__name__)
 #: ‏200K ‏82ms, ‏600K ‏252ms (חציון מ-7).
 _ITERATIONS = 600_000
 _SCHEME = "pbkdf2"
+_DUMMY_SALT = "00000000000000000000000000000000"
+_DUMMY_DIGEST = "00" * 32
 
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(conn)`` — שני
 #: המנגנונים של `db.py`, מאותה סיבה שבגללה `net_seen` קיבל אותם (#272,
@@ -218,14 +220,23 @@ def verify(conn: sqlite3.Connection, username: str, password: str) -> str | None
     # במקומה — זו הכניסה, וזו הבקשה שאחריה.
     row = lookup(conn, username)
     if row is None or row["disabled_at"]:
+        hmac.compare_digest(
+            _derive(password, _DUMMY_SALT, _ITERATIONS), _DUMMY_DIGEST
+        )
         return None
     try:
         scheme, raw_iterations, salt, digest = row["pw_hash"].split("$")
         iterations = int(raw_iterations)
         bytes.fromhex(salt)                    # מלח שאינו hex — רשומה פגומה
     except ValueError:
+        hmac.compare_digest(
+            _derive(password, _DUMMY_SALT, _ITERATIONS), _DUMMY_DIGEST
+        )
         return None
     if scheme != _SCHEME or iterations < 1 or not digest:
+        hmac.compare_digest(
+            _derive(password, _DUMMY_SALT, _ITERATIONS), _DUMMY_DIGEST
+        )
         return None
     if hmac.compare_digest(_derive(password, salt, iterations), digest):
         if iterations < _ITERATIONS:

@@ -20,6 +20,8 @@ void install_radio(App *a, cairo_t *cr, Rect r, const char *title,
 void install_focus_ring(App *a, cairo_t *cr, Rect r, int id);
 void install_footer(App *a, cairo_t *cr, InstallLayout l, const char *primary,
                     int primary_id, int allow_back, int primary_enabled);
+void install_footer_style(App *a, cairo_t *cr, InstallLayout l, const char *primary,
+                          int primary_id, int allow_back, int primary_enabled, int primary_style);
 void install_draw_disk(App *a, cairo_t *cr, InstallLayout l);
 void install_draw_role(App *a, cairo_t *cr, InstallLayout l);
 void install_draw_network(App *a, cairo_t *cr, InstallLayout l);

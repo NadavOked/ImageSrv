@@ -126,11 +126,21 @@ def test_a_power_request_on_the_choice_is_carried_out(tmp_path):
 
 
 def test_a_power_request_that_came_during_the_copy_is_dropped_aloud(tmp_path):
+    # Each request follows the controller's preceding transition. The run()
+    # timeout bounds a missing transition; elapsed time never advances the GUI.
     out = run(tmp_path, BOOT + BEATS + POWER + 'lc_inventory() { :; }; '
               'lc_run() { echo \'{"power_action":"poweroff"}\' > "$RUN_DIR/power.resp"; echo done > "$LC/phase"; }; '
-              'local_clone_arm; ( sleep 1; echo local > "$LC/boot.decision"; sleep 2; echo "sda|sdb|0" > "$LC/start.req"; '
-              '  sleep 3; echo back > "$LC/end.req"; sleep 2; echo server > "$LC/boot.decision" ) > /dev/null 2>&1 & '
-              'local_clone_offer; echo STAYED-ON; kill $_gui_pid',
+              'local_clone_arm; ( set -e; '
+              '  until [ -f "$LOG_FILE" ] && grep -q "boot choice offered" "$LOG_FILE"; do sleep 0.1; done; '
+              '  echo local > "$LC/boot.decision"; '
+              '  until [ -f "$LC/phase" ] && grep -qx idle "$LC/phase" && grep -qx local "$LC/screen"; do sleep 0.1; done; '
+              '  echo "sda|sdb|0" > "$LC/start.req"; '
+              '  until grep -q "a power request came during the copy, not confirmed -- not carried out" "$LOG_FILE"; do sleep 0.1; done; '
+              '  echo back > "$LC/end.req"; '
+              '  until [ "$(grep -c "boot choice offered" "$LOG_FILE")" = 2 ]; do sleep 0.1; done; '
+              '  echo server > "$LC/boot.decision"; '
+              ') & _driver=$!; '
+              'local_clone_offer; wait "$_driver" || exit 1; echo STAYED-ON; kill $_gui_pid',
               LC_BOOT_S="20", ATTENDED_BEAT_S="1")
     assert out.returncode == 0, out.stderr
     assert "a power request came during the copy, not confirmed -- not carried out" in out.stdout, out.stdout

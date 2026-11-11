@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,7 +39,43 @@ def fanout(tmp_path_factory):
     return binary
 
 
-BUFFER = str(4 * 1024 * 1024)
+@pytest.fixture(scope="module")
+def fanout_clocked(tmp_path_factory):
+    """fanout שהשעון שלו נקרא מקובץ שהטסט מזיז (‏IMAGESRV_TEST_CLOCK, ‏#2808).
+    רק הטסטים של שעון הפינוי משתמשים בו; כל השאר רצים על הבנייה הרגילה."""
+    binary = tmp_path_factory.mktemp("build-clocked") / "fanout"
+    subprocess.run(
+        ["gcc", "-O2", "-Wall", "-Wextra", "-Werror", "-DIMAGESRV_TEST_CLOCK",
+         "-o", str(binary), str(SOURCE)],
+        check=True, stdin=subprocess.DEVNULL,
+    )
+    return binary
+
+
+class TestClock:
+    """השעון של fanout_clocked: קובץ של מילישניות שרק הטסט מזיז. כתיבה
+    לקובץ זמני ו-os.replace, כדי ש-fanout לעולם לא יקרא קובץ חצי-כתוב."""
+
+    __test__ = False                       # לא מחלקת טסטים של pytest
+
+    def __init__(self, folder: Path, start_ms: int = 1_000_000):
+        self.path, self._tmp = folder / "clock", folder / "clock.tmp"
+        self.ms = start_ms
+        self._lock = threading.Lock()
+        self._write()
+        self.env = {"FANOUT_TEST_CLOCK": str(self.path)}
+
+    def _write(self):
+        self._tmp.write_text(str(self.ms))
+        os.replace(self._tmp, self.path)
+
+    def advance(self, ms: int):
+        with self._lock:
+            self.ms += ms
+            self._write()
+
+
+BUFFER =str(4 * 1024 * 1024)
 READER_CHUNK = 64 * 1024
 
 # #353: תקרות לקוראים איטיים. ROOM_GRACE_MS הוסר ב-#660; מה שנשאר הוא
@@ -103,8 +140,10 @@ def xxh64_reference(data: bytes) -> str:
     return f"{value:016x}"
 
 
-def reader(path: Path, sink: list, delay: float = 0.0, stop_after: int | None = None):
-    """קורא מ-fifo. `delay` מדמה כונן איטי, `stop_after` כונן שמת."""
+def reader(path: Path, sink: list, delay: float = 0.0, stop_after: int | None = None,
+           clock: TestClock | None = None, tick_ms: int = 0):
+    """קורא מ-fifo. `delay` מדמה כונן איטי, `stop_after` כונן שמת. עם
+    `clock`, כל קריאה מזיזה את השעון של fanout_clocked ב-`tick_ms`."""
     def run():
         total = 0
         with open(path, "rb") as handle:
@@ -118,6 +157,8 @@ def reader(path: Path, sink: list, delay: float = 0.0, stop_after: int | None = 
                 sink.append(chunk)
                 if delay:
                     time.sleep(delay)
+                if clock is not None:
+                    clock.advance(tick_ms)
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
     return thread
@@ -1124,7 +1165,7 @@ def test_a_trickling_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout,
 
 
 @needs_fanout
-def test_a_slow_but_steady_drawer_is_not_evicted_by_the_block_clock(fanout, tmp_path):
+def test_a_slow_but_steady_drawer_is_not_evicted_by_the_block_clock(fanout_clocked, tmp_path):
     """השומר מפני תיקון-יתר של #1796: מגירה של ~2MiB/s (‏64KiB כל ~31ms)
     מעכבת את הזרם -- היא זו שקובעת את הקצב, וזה בדיוק #660 -- אבל מפנה
     קריאה שלמה (≤1MiB) בתוך ~0.5ש', הרבה לפני EVICT_MS (2ש'). הסף האפקטיבי
@@ -1134,15 +1175,24 @@ def test_a_slow_but_steady_drawer_is_not_evicted_by_the_block_clock(fanout, tmp_
     את הזרם, אחרת לא נבדק דבר: חלק מהבייטים שלה עברו בטבעת (‏`through its
     queue` ב-stderr) והמשך הריצה ≥ 4ש'. על הקוד שלפני #1796 הטסט עובר
     (אין שעון); הוא נופל על מוטציה שסופרת את זמן החסימה במצטבר ולא לכל
-    המתנה רצופה -- ראו הבקרה השלילית ב-PR."""
+    המתנה רצופה -- ראו הבקרה השלילית ב-PR.
+
+    השעון של הפינוי הוא שעון הטסט (#2808): כל קריאה של 64KiB מזיזה אותו
+    ב-31ms, כך שהקצב של האיטית הוא 2MiB/s **בשעון ש-fanout רואה**, גם כשה-
+    testrunner עמוס והתהליכון שלה מורעב. לפני כן השעון היה CLOCK_MONOTONIC,
+    ותחת `pytest -n 14` הקורא הורעב ו-fanout פינה אותו (1 מ-20). ההשהיה
+    האמיתית נשארת, כדי שאסרטציית ה-elapsed תמשיך להוכיח עיכוב אמיתי."""
     data = os.urandom(12 * 1024 * 1024)
     fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
     fast: list[bytes] = []
     slow: list[bytes] = []
-    threads = [reader(fifos[0], fast), reader(fifos[1], slow, delay=READER_CHUNK / (2 * 1024 * 1024))]
+    clock = TestClock(tmp_path)
+    delay = READER_CHUNK / (2 * 1024 * 1024)
+    threads = [reader(fifos[0], fast),
+               reader(fifos[1], slow, delay=delay, clock=clock, tick_ms=round(delay * 1000))]
     start = time.monotonic()
-    code, report, err = run_fanout(fanout, fifos, data, buffer=str(2 * 1024 * 1024),
-                                   env=BLOCK_ONLY, timeout=120)
+    code, report, err = run_fanout(fanout_clocked, fifos, data, buffer=str(2 * 1024 * 1024),
+                                   env={**BLOCK_ONLY, **clock.env}, timeout=120)
     elapsed = time.monotonic() - start
     join_readers(threads, 60)
 
@@ -1155,6 +1205,61 @@ def test_a_slow_but_steady_drawer_is_not_evicted_by_the_block_clock(fanout, tmp_
     queued = [line for line in err.splitlines() if f"{fifos[1]} took" in line]
     assert queued and not queued[0].endswith(" 0 of them through its queue"), err
     assert elapsed >= 4, f"הריצה ({elapsed:.2f}s) מהירה מ-2MiB/s -- האיטית לא עיכבה, לא הוכח דבר"
+
+
+@needs_fanout
+def test_a_drawer_that_stopped_reading_is_evicted_once_the_block_clock_passes(fanout_clocked, tmp_path):
+    """הצד השני של הטסט הקודם (#2808): sdb קוראת 1MiB ונעצרת, עם ה-fifo
+    פתוח. בשעון קפוא היא **אינה** מפונה, גם אחרי יותר מ-EVICT_MS של שעון
+    קיר -- השעון של fanout הוא שקובע, לא העומס. כשהטסט מזיז את השעון היא
+    מפונה בשמה (HELD_REASON), וה-stdin היה חסום לפחות EVICT_MS לפי fanout
+    עצמו; sda מקבלת כל בייט."""
+    data = os.urandom(24 * 1024 * 1024)
+    fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
+    clock = TestClock(tmp_path)
+    good: list[bytes] = []
+    stuck: list[bytes] = []
+    release = threading.Event()
+    good_thread = reader(fifos[0], good)
+    stuck_thread = stopping_reader(fifos[1], stuck, 1024 * 1024, release)
+    process = None
+    try:
+        process, fd = start_fanout(fanout_clocked, tmp_path, fifos, 2 * 1024 * 1024,
+                                   {**BLOCK_ONLY, **clock.env})
+        feeder = StdinFeeder(fd, data).start()
+        time.sleep(EVICT_MS / 1000 + STDIN_SLACK_S)          # שעון קיר מעבר לסף
+        frozen_err = (tmp_path / "fanout.err").read_text()
+        assert process.poll() is None and feeder.thread.is_alive(), frozen_err
+        assert "evicting" not in frozen_err, frozen_err
+
+        deadline = time.monotonic() + 30
+        while feeder.thread.is_alive():
+            assert time.monotonic() < deadline, "השעון עבר את הסף ו-sdb לא פונתה"
+            clock.advance(EVICT_MS // 20)
+            time.sleep(0.05)
+        assert feeder.error is None, feeder.error
+        code, report, err = fanout_result(process, tmp_path, timeout=30)
+        good_thread.join(timeout=30)
+    finally:
+        release.set()
+        stop_all(process)
+        stuck_thread.join(timeout=30)
+
+    assert code == 1, (report, err)
+    assert report == {"sda": "ok", "sdb": HELD_REASON}, (report, err)
+    assert "no write progress" not in err, err
+    held = re.search(r"while stdin was held (\d+) ms", err)
+    assert held and int(held.group(1)) >= EVICT_MS, err
+    assert len(b"".join(stuck)) == 1024 * 1024
+    assert hashlib.sha256(b"".join(good)).hexdigest() == hashlib.sha256(data).hexdigest()
+
+
+@needs_fanout
+def test_the_test_clock_is_only_in_the_test_build(fanout, fanout_clocked):
+    """הבנייה של build_initramfs.sh (בלי IMAGESRV_TEST_CLOCK) אינה יודעת על
+    שעון הטסט; הבנייה של הטסטים כן -- אחרת הבדיקה לא רואה דבר (#2808)."""
+    assert b"FANOUT_TEST_CLOCK" not in fanout.read_bytes()
+    assert b"FANOUT_TEST_CLOCK" in fanout_clocked.read_bytes()
 
 
 def stopping_reader(path: Path, sink: list, stop_after: int, release: threading.Event):

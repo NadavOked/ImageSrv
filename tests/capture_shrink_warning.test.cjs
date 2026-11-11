@@ -44,7 +44,7 @@ function makeElements() {
 // what GET /api/console/tasks actually returns (server/library/capture.py, reports.py).
 function warnedTask(overrides = {}) {
   return {
-    id: 't1', mac: 'b4:2e:99:07:1a:c4', name: 'office365', state: 'done',
+    id: 't1', type: 'capture', mac: 'b4:2e:99:07:1a:c4', name: 'office365', state: 'done',
     error: 'sda: המקור לא הוחזר לגודלו אחרי הקליטה: ntfsresize could not grow the filesystem back',
     bytes_written: 20000000000, bytes_total: null, source_progress: null,
     ...overrides,
@@ -62,6 +62,7 @@ async function runLoadCaptures(tasks) {
   });
   vm.runInContext(fs.readFileSync(PROGRESS_JS, 'utf8'), context);
   vm.runInContext(functionSource(CONSOLE_JS, 'captureWarningHtml'), context);
+  vm.runInContext(functionSource(CONSOLE_JS, 'capturesOnly'), context);   // #2845
   vm.runInContext(functionSource(CONSOLE_JS, 'loadCaptures'), context);
   await vm.runInContext('loadCaptures()', context);
   return $('#capture-bar').innerHTML;

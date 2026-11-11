@@ -95,12 +95,37 @@ def test_no_touch_is_the_server_and_nothing_else_changes(tmp_path):
 
 def test_a_touch_stops_the_count_and_the_person_chooses(tmp_path):
     """boot-pause holds the screen past the deadline; "local" then opens the flow."""
-    out = run(tmp_path, BOOT + 'local_clone_arm; '
-              '( sleep 1; echo pause > "$LC/boot.decision"; sleep 5; echo local > "$LC/boot.decision" ) & '
+    # Drive at the loop's sleep seam, after it has checked the deadline.
+    # Freeze date until pause is consumed, then cross the actual boot deadline
+    # and require another complete iteration before choosing local.
+    clock_and_driver = r'''
+        _test_now=100; _test_step=0
+        date() { if [ "$1" = +%s ]; then echo "$_test_now"; else command date "$@"; fi; }
+        sleep() {
+            # The attended beat also sleeps for 1; only drive the choice loop.
+            [ "${FUNCNAME[1]}" = lc_boot_choice ] && [ "$1" = 1 ] || { command sleep "$@"; return $?; }
+            case "$_test_step" in
+                0) IFS='|' read -r _test_deadline _test_paused < "$LC/boot" || exit 1
+                   if [ "$_test_deadline" -gt 0 ]; then
+                       echo pause > "$LC/boot.decision"; _test_step=1
+                   else command sleep 0.1; fi ;;
+                1) grep -q 'touched -- the countdown stops' "$LOG_FILE" || exit 1
+                   grep -qx '0|1' "$LC/boot" || exit 1
+                   _test_now=$((_test_deadline + 1)); _test_step=2 ;;
+                2) [ "$_test_now" -gt "$_test_deadline" ] || exit 1
+                   grep -qx boot "$LC/screen" || exit 1
+                   echo HELD-PAST-DEADLINE
+                   echo local > "$LC/boot.decision"; _test_step=3 ;;
+                *) echo 'unexpected boot iteration' >&2; exit 1 ;;
+            esac
+        }
+    '''
+    out = run(tmp_path, clock_and_driver + BOOT + 'local_clone_arm; '
               'lc_session() { echo SESSION; LC_END=; }; local_clone_offer; kill $_gui_pid',
               LC_BOOT_S="3")
     assert out.returncode == 0, out.stderr
     assert "touched -- the countdown stops" in out.stdout
+    assert "HELD-PAST-DEADLINE" in out.stdout, out.stdout
     assert "SESSION" in out.stdout and "no touch for" not in out.stdout
 
 

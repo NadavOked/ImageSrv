@@ -317,6 +317,32 @@ def _ifup_detached(name: str) -> tuple[int | None, str, str]:
     return code, text, stop_note
 
 
+#: ‏#2840: journald מקבל את הפלט של היחידה בזרם, ולפעמים מאנדקס אותו רגע אחרי
+#: ש-systemd-run חוזר. קריאה ריקה נקראת שוב פעם אחת אחרי ההשהיה הזו.
+JOURNAL_LAG_S = 0.5
+
+
+def _unit_output(unit: str, since: float) -> str:
+    """‏#2840: מה ה-ifup עצמו כתב — הסיבה, ולא רק "קוד 1".
+
+    ‏`systemd-run --quiet` אינו מעביר את הפלט של היחידה: בשרת העבודה (11/11) ההודעה
+    הייתה "(קוד 1):  —" והסיבה ("ifup: unknown interface enp2s0") הייתה רק ביומן.
+    ‏`_SYSTEMD_UNIT=` ולא `-u`: רק מה שהתהליך כתב, בלי שורות ה-"Starting/Failed" של
+    systemd עצמו. שלושה מצבים בשמם (עיקרון 5): נקרא, נקרא וריק, ולא נקרא."""
+    cmd = ["journalctl", f"_SYSTEMD_UNIT={unit}", "--since", f"@{int(since)}",
+           "-o", "cat", "--no-pager", "-q", "-n", "20"]
+    for attempt in range(2):
+        code, text = _run(cmd)
+        if code != 0:
+            return f"הפלט של ifup לא נקרא (journalctl {code}: {(text or '')[:120]})"
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if lines:
+            return "ifup כתב: " + " | ".join(lines[-5:])[:300]
+        if attempt == 0:
+            time.sleep(JOURNAL_LAG_S)
+    return "ביומן אין (עדיין) פלט של ifup"
+
+
 def apply_interface(name: str) -> str | None:
     """‏`ifdown` ואז `ifup`. מחזיר הודעת שגיאה או None.
 
@@ -343,6 +369,7 @@ def apply_interface(name: str) -> str | None:
         if link_code != 0:
             return f"{name}: הפעלת הכרטיס נכשלה (ip link rc={link_code}: {link_text[:200]})"
     down_code, down_text = _run(["ifdown", "--force", name])
+    started = time.time()
     up_code, up_text, stop_note = _ifup_detached(name)
     if up_code is None:
         return f"{name}: לא ניתן להריץ ifup דרך systemd-run ({up_text})"
@@ -351,8 +378,9 @@ def apply_interface(name: str) -> str | None:
         if down_code not in (0, None):
             notes.append(f"ה-ifdown שלפניו החזיר {down_code}: {down_text[:120]}")
         note = f" ({' · '.join(notes)})" if notes else ""
+        said = " · ".join(t for t in (up_text[:200], _unit_output(ifup_unit(name), started)) if t)
         return (f"{name}: ifup נכשל ביחידה {ifup_unit(name)} (קוד {up_code}): "
-                f"{up_text[:200]} — הפלט שלו: journalctl -u {ifup_unit(name)}{note}")
+                f"{said} — הפלט המלא: journalctl -u {ifup_unit(name)}{note}")
     return None
 
 
@@ -364,6 +392,22 @@ def down_interface(name: str) -> str | None:
     if code is None:
         return f"{name}: לא ניתן להריץ ifdown ({text})"
     return None if code == 0 else f"{name}: ifdown החזיר {code}: {text[:200]}"
+
+
+def release_interface(name: str) -> str | None:
+    """‏#2855: מוריד את מה שהקונסולה שמה על כרטיס **שלא היה מנוהל** — בלי ifup.
+
+    אחרי שהקובץ שלו נמחק, ifupdown כבר לא מכיר את הכרטיס (‏"unknown interface"),
+    ולכן ההחזרה למצב "לא מנוהל" היא עצירת יחידת ה-ifup שלו (ושל dhcpcd שבתוכה,
+    ‏#2105) ו-`ip -4 addr flush`. מחזיר הודעה או None; **ההצלחה נקבעת בקריאה
+    החוזרת** (`netcfg_rollback.restore`), לא כאן."""
+    unit = ifup_unit(name)
+    stop_code, stop_text = _run(["systemctl", "stop", unit])
+    code, text = _run(["ip", "-4", "addr", "flush", "dev", name])
+    if code == 0:
+        return None
+    stop = "" if stop_code == 0 else f" (systemctl stop {unit}: {stop_code}: {stop_text[:120]})"
+    return f"{name}: ip addr flush החזיר {code}: {text[:200]}{stop}"
 
 
 def bond_supported(path: str | Path = IFENSLAVE_HOOK) -> bool:
@@ -643,4 +687,5 @@ def default_hooks() -> dict:
         "netcfg_read_bond_module": read_bond_module,
         "netcfg_write_bond_module": write_bond_module,
         "netcfg_main_defines": main_defines,
+        "netcfg_release": release_interface,          # #2855
     }

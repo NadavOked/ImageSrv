@@ -2024,8 +2024,8 @@ int main(int argc, char **argv) {
             input_pump(in, fds, n);
             Event e; int moved = 0;
             while (!done && input_next(in, &e)) {
-                if (e.type == UIEV_MOVE) moved = 1;
-                else scene_dirty = 1;           /* char/key/click change the scene */
+                if (e.type == UIEV_MOVE && !(a.install.active && a.install.osk_drag)) moved = 1;
+                else scene_dirty = 1;           /* char/key/click change the scene; so does dragging the installer's keyboard (#2778) */
                 if (e.type == UIEV_CLICK) {     /* mockup 10/10: the pressed frame, ~150 ms */
                     a.pressed_id = app_hit(&a, e.x, e.y);
                     a.pressed_until = now_s() + 0.15;

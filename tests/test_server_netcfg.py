@@ -383,6 +383,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         # ‏#2805: ‏(כרטיס, admin_up בזמן הבדיקה) לכל "מי כבר עונה", ‏(כרטיס, up) לכל
         # ‏`ip link set`, והאם הקישור מקבל carrier כשהוא מועלה.
         "probed": [], "links": [], "link_error": None, "carrier": True, "slept": [],
+        "downs": [], "released": [],   # ‏#2855: ifdown/flush של החזרה לכרטיס בלי קובץ
     }
 
     state_dir = tmp_path / "netstate"
@@ -419,6 +420,12 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         nic(name).update(admin_up=up, link_up=up and fake["carrier"])
         return None
 
+    def release(name):
+        """כמו `ip -4 addr flush`: הכרטיס נשאר בלי כתובת (‏#2855)."""
+        fake["released"].append(name)
+        nic(name)["addresses"] = []
+        return None
+
     hooks = {
         "interfaces": lambda: [dict(n) for n in fake["interfaces"]],
         "netcfg_read_conf": lambda name, root=None: fake["confs"].get(name),
@@ -435,6 +442,10 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "netcfg_peer_address": lambda request: fake["peer"],   # #2418
         "netcfg_management": lambda: fake["management"],
         "netcfg_foreign_manager": lambda: fake["foreign"],   # #1558
+        # ‏#2855: החזרה של כרטיס בלי קובץ — ifdown, ‏flush וקריאה חוזרת, כולם מדומים.
+        "netcfg_down": lambda name: fake["downs"].append(name) or None,
+        "netcfg_release": release,
+        "netcfg_main_defines": lambda name: False,
     }
     # שתי הלשוניות הן שני ראוטרים, ולכן **שתי** הזרקות: הבדיקה שמוודאת
     # שהצדדים מסכימים חוצה אל `/api/console/net/interfaces` — הראוטר של

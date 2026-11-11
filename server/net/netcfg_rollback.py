@@ -231,6 +231,13 @@ def restore(marker: Pending, hooks: dict | None = None) -> list[str]:
     """
     hooks = {**netcfg_host.default_hooks(), **(hooks or {})}
     errors = []
+    # ‏#2855: כרטיס שלא היה לו קובץ — ‏ifdown **לפני** שהקובץ נמחק, כשה-stanza
+    # עוד מספר ל-ifupdown מה להוריד. קוד היציאה אינו קובע (כרטיס שלא עלה הוא
+    # "not configured"); מה שקובע הוא הקריאה החוזרת שבסוף.
+    unmanaged = [entry.get("name", marker.interface) for entry in marker.files
+                 if entry.get("text") is None]
+    for name in unmanaged:
+        hooks["netcfg_down"](name)
     for entry in marker.files:
         error = hooks["netcfg_write_conf"](entry.get("name", marker.interface),
                                            entry.get("text"),
@@ -241,10 +248,30 @@ def restore(marker: Pending, hooks: dict | None = None) -> list[str]:
         error = hooks["netcfg_write_resolv"](marker.resolv, marker.resolv_path)
         if error:
             errors.append(error)
+    if (marker.interface in unmanaged
+            and hooks["netcfg_main_defines"](marker.interface) is False):
+        errors.extend(_release(marker.interface, hooks))
+        return errors
     error = hooks["netcfg_apply"](marker.interface)
     if error:
         errors.append(error)
     return errors
+
+
+def _release(name: str, hooks: dict) -> list[str]:
+    """‏#2855: כרטיס שחזר ל"לא מנוהל" — בלי ifup (ifupdown כבר לא מכיר אותו:
+    ‏"unknown interface" בשרת העבודה, 11/11). הכתובת יורדת, ו"ירדה" נקבע רק
+    מקריאה חוזרת שנקראה ואינה מראה כתובת על הכרטיס (עיקרון 5)."""
+    error = hooks["netcfg_release"](name)
+    state = hooks["netcfg_state"]()
+    if not state.checked:
+        why = f"{name}: הקובץ הוחזר (אין קובץ), אבל לא נקרא אם הכתובת ירדה: {state.reason}"
+    elif state.addresses.get(name):
+        why = (f"{name}: הקובץ הוחזר (אין קובץ), אבל הכרטיס עדיין נושא "
+               f"{', '.join(state.addresses[name])}")
+    else:
+        return []
+    return [f"{why} ({error})" if error else why]
 
 
 def run_once(state_dir: str | Path, hooks: dict | None = None,

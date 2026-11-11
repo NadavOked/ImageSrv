@@ -13,6 +13,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 # ריצה אחת לכל ענף ב-PR: דחיפה חדשה מבטלת את קודמתה.
 #
 # על main כל ריצה היא הרשומה של מיזוג, ואסור לבטל אותה. זה מה שההערה
@@ -50,6 +53,8 @@ jobs:
       IMAGESRV_REQUIRE_NATIVE: "1"
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}

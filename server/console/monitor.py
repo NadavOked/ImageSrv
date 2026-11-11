@@ -289,6 +289,21 @@ def keep_alive(sock) -> None:
             sock.setsockopt(socket.IPPROTO_TCP, option, value)
 
 
+#: ‏#2844: המכונה עלתה לפני שמתג המוניטור הופעל — שורת הקרנל נקבעת באתחול ואין
+#: שירות שיענה על 5900. לא "סירבה לחיבור", שנראה כתקלה.
+BOOTED_BEFORE_MONITOR = "המכונה עלתה לפני שהמוניטור הופעל — הפעילו אותה מחדש"
+
+
+def booted_without_monitor(conn, mac: str, exc: BaseException) -> bool:
+    """‏True רק כשיש ראיה חיובית: החיבור סורב, והסוכן דיווח ב-hello של האתחול
+    הזה `monitor_on: false`. NULL (סוכן ישן / לא דיווח) או כל כשל אחר = False
+    — "לא ידוע" אינו "עלתה לפני" (עיקרון 5)."""
+    if not isinstance(exc, ConnectionRefusedError):
+        return False
+    row = conn.execute("SELECT monitor_on FROM net_devices WHERE mac = ?", (mac,)).fetchone()
+    return row is not None and row["monitor_on"] == 0
+
+
 def connect_error_reason(exc: OSError | asyncio.TimeoutError) -> str:
     """A short Hebrew reason suitable for the WebSocket close frame."""
     if isinstance(exc, ConnectionRefusedError):
@@ -1135,6 +1150,9 @@ def create_monitor_router(
                 reader, writer = await connect_machine(open_connection, ip)
             except (OSError, asyncio.TimeoutError) as exc:
                 # ‏`finally` משחרר את ההזמנה; כאן רק סוגרים את החיבור.
+                if booted_without_monitor(ctx.conn, canonical, exc):   # ‏#2844
+                    await refuse(canonical, 4502, BOOTED_BEFORE_MONITOR)
+                    return
                 await refuse(canonical, 4502, "שירות המוניטור במכונה אינו זמין לאחר 15 שניות: "
                              f"{connect_error_reason(exc)}")
                 return

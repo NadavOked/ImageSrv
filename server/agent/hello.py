@@ -28,7 +28,7 @@ from server.disks import (disk_sets, crcwarn, disk_failures, drawer_slots, shrin
                           slot_names, smart_history)
 from server.core.agent_version import server_version
 from server.agent.boot_cancel import cancel_gui_tasks_on_boot
-from server.db import disk_full, get_setting, journal, net_seen, note_disk_full
+from server.db import disk_full, get_setting, journal, net_seen, note_disk_full, note_monitor_on
 from server.agent import readbackhash
 from server.disks import f1_marks, model_slots   # #2001; #1858
 from server.learn import never_woke   # #1858
@@ -269,7 +269,8 @@ def _unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
 
 def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
                  disk_probe, firmware, secure_boot, agent_version, local_clone,
-                 optical, optical_reported, hw_inventory, hw_probe, history=True) -> None:
+                 optical, optical_reported, hw_inventory, hw_probe, history=True,
+                 monitor_on=None) -> None:
     # ‏#1858 (07/11): לפני `net_seen` -- הוא מרענן את `last_seen`, ומכונה שהקונסולה הציגה "לא הגיע · ייתכן F1"
     # חדלה להיות כזו. לעולם אינו זורק.
     never_woke.arrived(conn, mac)
@@ -281,6 +282,7 @@ def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
              local_clone=local_clone,
              optical_json=json.dumps(optical) if optical is not None else None,
              update_optical=optical_reported)
+    note_monitor_on(conn, mac, monitor_on)   # ‏#2844
     # ‏#720: המלאי החומרתי (schema 2) נשמר מגורסת — שורה חדשה רק כשהשתנה.
     # ‏None = הסוכן לא שלח (schema 1) או שלח פגום: הגרסה הקודמת נשארת.
     # ‏#2487: ‏`history=False` (מכונה לא רשומה) — שורה אחת ל-MAC, נדרסת במקום:
@@ -308,6 +310,7 @@ def build_answer(
     all_macs: list[str] | None = None,
     monitor_secret: str | None = None,
     monitor_auth: str | None = None,
+    monitor_on: bool | None = None,
     hw_inventory: dict | None = None,
     hw_probe: dict | None = None,
     multicast: dict | None = None,
@@ -349,7 +352,8 @@ def build_answer(
             _record_seen(conn, mac, client_ip, disks, monitor_secret,
                          monitor_auth, prompt, disk_probe, firmware, secure_boot,
                          agent_version, local_clone, optical, optical_reported,
-                         hw_inventory, hw_probe, history=machine is not None)
+                         hw_inventory, hw_probe, history=machine is not None,
+                         monitor_on=monitor_on)
         except sqlite3.OperationalError as exc:
             # ‏#1892: מחיצה מלאה אינה מפילה תשובה שאינה צריכה כתיבה — מכונה לא
             # רשומה מקבלת known:false (עיקרון 1). הכשל נרשם ואדום בבריאות.

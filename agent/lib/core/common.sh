@@ -28,7 +28,7 @@ die_local() {
     # out for one job, and after a small budget serves a local-only menu. An
     # agent that dies before it has a network -- the case that was reproduced
     # on hardware -- never reports anything, and is covered all the same.
-    log "FATAL: $1 -- rebooting; the server decides where the next boot goes"
+    log "FATAL: $1 -- rebooting; the server decides where the next boot goes"; command -v agent_log_fatal >/dev/null 2>&1 && agent_log_fatal || :   # #2841: the log before the reboot (datareport.sh)
     command -v fail_fatal >/dev/null 2>&1 && fail_fatal "$1" || :   # #1569: the reason on a screen first, held FAIL_SHOW_S (failscreen.sh)
     sleep 3
     if [ "${IMAGESRV_TEST:-0}" = "1" ]; then

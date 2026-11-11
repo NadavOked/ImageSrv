@@ -162,3 +162,57 @@ test('no scrollbar is drawn anywhere, and the scrolling regions of a window can 
   assert.match(html, /id="modalBody" tabindex="0"/);
   assert.match(html, /id="drawerBody" tabindex="0"/);
 });
+
+// ‏#2840: שמירה אחת של רשת ההפצה בשרת העבודה הפכה ל-18 ‏PUT ול-15 הפעלות של dnsmasq —
+// כל לחיצה (או Enter) בזמן שהבקשה רצה שלחה עוד אחת. לחיצה אחת = בקשה אחת.
+test('#2840: a submit while onSubmit is still running sends nothing; the button is disabled until it ends', async () => {
+  const {run, get} = setup();
+  run('globalThis.calls = 0; globalThis.finish = null; sheet({title:"רשת הפצה", fields:[{id:"n",label:"n",value:"a"}], onSubmit: () => { calls += 1; return new Promise((ok, no) => { finish = no; }); }})');
+  const first = get('sheet').onsubmit({preventDefault() {}});
+  assert.equal(get('sf-submit').disabled, true, 'disabled while the request runs');
+  for (let i = 0; i < 16; i++) await get('sheet').onsubmit({preventDefault() {}});
+  assert.equal(run('calls'), 1, 'repeated clicks/Enter while it runs do not send again');
+  run('finish(new Error("שינוי רשת קודם עדיין ממתין לאישור"))');
+  await first;
+  assert.equal(get('sf-error').textContent, 'שינוי רשת קודם עדיין ממתין לאישור', 'the refusal stays in the window');
+  assert.equal(get('sf-submit').disabled, false, 'after the answer the button is back');
+  const again = get('sheet').onsubmit({preventDefault() {}});
+  assert.equal(run('calls'), 2, 'a deliberate second save after the answer is sent');
+  run('finish(new Error("x"))');
+  await again;
+});
+
+// ‏#2840 (נדב: "הוא לא הציג כלום וחשבתי שזה תקוע"): כפתור כבוי לבדו אינו משוב — בזמן הבקשה
+// החלון אומר שהיא רצה, ואחרי כמה שניות גם מה צפוי לקרות.
+test('#2840: while the request runs the window says so, and after a few seconds what to expect', async () => {
+  const {run, get} = setup();
+  run('globalThis.timers = []; setTimeout = (fn, ms) => { timers.push([fn, ms]); return timers.length; };');
+  run('globalThis.finish = null; sheet({title:"רשת הפצה", busy:{label:"שומר ומחיל…", slow:"זה צפוי: בודק DHCP אחר", after:5}, onSubmit: () => new Promise((ok) => { finish = ok; })})');
+  const running = get('sheet').onsubmit({preventDefault() {}});
+  assert.equal(get('sf-busy').hidden, false, 'the status line is shown while the request runs');
+  assert.equal(get('sf-busy').textContent, 'שומר ומחיל…');
+  assert.equal(run('timers.length'), 1);
+  assert.equal(run('timers[0][1]'), 5000);
+  run('timers[0][0]()');
+  assert.equal(get('sf-busy').textContent, 'שומר ומחיל… זה צפוי: בודק DHCP אחר', 'after X seconds: what is going on');
+  run('finish()');
+  await running;
+  assert.equal(get('sf-busy').hidden, true, 'gone once the answer is in');
+});
+
+test('#2840: a window without its own text still says it is working', async () => {
+  const {run, get} = setup();
+  run('globalThis.finish = null; sheet({title:"t", onSubmit: () => new Promise((ok) => { finish = ok; })})');
+  const running = get('sheet').onsubmit({preventDefault() {}});
+  assert.equal(get('sf-busy').hidden, false);
+  assert.equal(get('sf-busy').textContent, 'פועל…');
+  run('finish()');
+  await running;
+});
+
+test('#2840: the deploy-network window passes its own "saving and applying" text', () => {
+  const net = fs.readFileSync(path.join(root, 'net.js'), 'utf8');
+  const win = net.slice(net.indexOf('function editDeployNet('), net.indexOf('function deployCardsFields('));
+  assert.match(win, /busy: \{ label: "שומר ומחיל… \(עד כדקה — לא לסגור את החלון\)"/);
+  assert.match(win, /slow: "זה צפוי: השרת בודק שאין ברשת שרת DHCP אחר/);
+});

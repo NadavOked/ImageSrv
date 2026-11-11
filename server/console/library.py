@@ -257,7 +257,9 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
                 raise ArchiveError("לא התקבל קובץ")
             await asyncio.to_thread(room_for, size, "חילוץ האימג' שהועלה")
             manifest = await asyncio.to_thread(
-                import_tar, temp, root, set(await asyncio.to_thread(ctx.library.scan)))
+                import_tar, temp, root, set(await asyncio.to_thread(ctx.library.scan)),
+                before_extract=lambda total: room_for(
+                    total, "חילוץ האימג' שהועלה (גודל לאחר פריסה)"))
         except disk_reserve.ReserveReached as exc:
             raise HTTPException(507, str(exc))
         except HTTPException:

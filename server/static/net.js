@@ -152,6 +152,10 @@ function editDeployNet(name) {
       ...(cards ? cards.fields : []),
     ],
     submitLabel: mgmt ? "הדלקת רשת הפצה על כרטיס הניהול" : "שמירה והחלה",
+    // ‏#2840: השמירה היא בקשה אחת שאורכת שניות (בהגדרה הראשונה — עד כדקה); המפעיל רואה שהיא רצה.
+    busy: { label: "שומר ומחיל… (עד כדקה — לא לסגור את החלון)", after: 5,
+            slow: "זה צפוי: השרת בודק שאין ברשת שרת DHCP אחר, מחיל את הכתובת על הכרטיס ומפעיל את ה-DHCP"
+              + (firstTime || mgmt ? ", ובהגדרה הראשונה גם משלים את ההתקנה ומאתחל את עצמו." : ".") },
     onSubmit: async (raw) => {
       const v = { ...raw, ...fixed };
       const problems = deployFormProblems(v);

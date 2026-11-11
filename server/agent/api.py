@@ -402,6 +402,11 @@ def create_agent_router(ctx: ServerContext,
         monitor_auth = body.get("monitor_auth")
         if monitor_secret is None or not well_formed_monitor_auth(monitor_auth):
             monitor_auth = None
+        # ‏#2844: האם האתחול הזה הפעיל את שירות המוניטור. רק bool הוא ראיה;
+        # סוכן ישן אינו שולח, וחסר נשאר "לא ידוע" (None).
+        monitor_on = body.get("monitor_on")
+        if not isinstance(monitor_on, bool):
+            monitor_on = None
         # ‏#720 (schema 2): המלאי החומרתי — DMI, PCI, TPM — למיפוי דרייברים.
         # פגום נזנח כמו שדה לא ידוע; סוכן ישן אינו שולח אותו, והגרסה
         # השמורה (אם יש) נשארת.
@@ -453,7 +458,7 @@ def create_agent_router(ctx: ServerContext,
             disks=disks, client_ip=client_ip, joining=joining,
             off_vlan=off_vlan,
             all_macs=all_macs, monitor_secret=monitor_secret,
-            monitor_auth=monitor_auth,
+            monitor_auth=monitor_auth, monitor_on=monitor_on,
             hw_inventory=hw_inventory, hw_probe=hw_probe,
             prompt=prompt, disk_probe=disk_probe,
             firmware=firmware, secure_boot=secure_boot,

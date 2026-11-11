@@ -12,6 +12,7 @@ MAC דיווח ב-hello — ומוריד את הקבצים בשמם המדויק
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from pathlib import Path
 
@@ -21,12 +22,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from boot.grub_menu import normalize_mac as lenient_mac
 
 from server.console import auth
+from server.console import library as console_library
+from server.console.library import _write_chunk, UPLOAD_BATCH
 from server.agent import inventory
 from server.rounds import room_drivers
 from server.library.archive import unreadable_message
 from server.agent.api import ServerContext, identity_gate
 from server.db import journal
 from server.library.drivers import DriverError, DriverLibrary, for_model, match
+from server.storage import disk_reserve
+from server.system import inflight
 
 
 def _matches_by_package(conn, library: DriverLibrary) -> dict[str, list[str]]:
@@ -56,22 +61,58 @@ def create_drivers_router(ctx: ServerContext) -> APIRouter:
     @router.post("/drivers/upload")
     async def upload_driver(request: Request, user=Depends(admin_only)):
         """קליטת חבילה מקובץ tar. הגוף הוא הקובץ עצמו, כמו העלאת אימג'."""
-        library.root.mkdir(parents=True, exist_ok=True)
+        with inflight.holding("העלאת דרייבר"):
+            return await _upload_driver(request, user)
+
+    async def _upload_driver(request: Request, user):
+        root = library.root
+        root.mkdir(parents=True, exist_ok=True)
+
+        def room_for(need: int, what: str) -> None:
+            try:
+                free = console_library._library_free(root)
+            except OSError as exc:
+                raise HTTPException(507, f"לא ניתן לקרוא כמה מקום פנוי בשרת: {exc}")
+            refused = disk_reserve.refusal(free, need, what)
+            if refused is not None:
+                raise HTTPException(507, refused)
+
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit():
+            await asyncio.to_thread(
+                room_for, 2 * int(declared), "העלאת הדרייבר (הקובץ ועוד החילוץ שלו)")
+        guard = disk_reserve.StreamGuard(
+            lambda: console_library._library_free(root), "העלאת הדרייבר")
         handle = tempfile.NamedTemporaryFile(delete=False, dir=library.root, suffix=".upload")
         temp = Path(handle.name)
         try:
             with handle:
+                batch = bytearray()
                 async for chunk in request.stream():
-                    handle.write(chunk)
-            if temp.stat().st_size == 0:
+                    batch += chunk
+                    if len(batch) >= UPLOAD_BATCH:
+                        await asyncio.to_thread(_write_chunk, handle, guard, bytes(batch))
+                        batch.clear()
+                if batch:
+                    await asyncio.to_thread(_write_chunk, handle, guard, bytes(batch))
+            size = await asyncio.to_thread(lambda: temp.stat().st_size)
+            if size == 0:
                 raise DriverError("לא התקבל קובץ")
-            manifest = library.import_tar(temp)
+            await asyncio.to_thread(room_for, size, "חילוץ הדרייבר שהועלה")
+            manifest = await asyncio.to_thread(
+                library.import_tar, temp,
+                before_extract=lambda total: room_for(
+                    total, "חילוץ הדרייבר שהועלה (גודל לאחר פריסה)"))
+        except disk_reserve.ReserveReached as exc:
+            raise HTTPException(507, str(exc))
+        except HTTPException:
+            raise
         except DriverError as exc:
             raise HTTPException(400, str(exc))
         except Exception as exc:                       # tar פגום, קלט חתוך
             raise HTTPException(400, unreadable_message(exc))
         finally:
-            temp.unlink(missing_ok=True)
+            await asyncio.to_thread(temp.unlink, missing_ok=True)
         journal(ctx.conn, "driver_upload",
                 f'{manifest["name"]} ({len(manifest["files"])} files)', user[0])
         return {"name": manifest["name"], "files": len(manifest["files"])}

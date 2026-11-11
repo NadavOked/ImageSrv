@@ -26,6 +26,7 @@
 #include "widgets.h"
 #include "he_time.h"   /* #1503 */
 #include "lcui.h"   /* #1918: lc_dialog_box / lc_dialog_head / lc_btn -- the local clone's stop window */
+#include "screens_rounds.h"   /* #2677: eff_drawer, cloner_slot_label */
 
 #define ASK_W_MAX    760.0
 #define ASK_PAD      28.0
@@ -48,6 +49,22 @@ static void left_text(long long at, char *out, size_t n) {
     if (left < 0) left = 0;
     if (left >= 60) snprintf(out, n, "%lld:%02lld דקות", left / 60, left % 60);
     else he_secs(left, out, n);
+}
+
+/* #2677 (metal 07/11): a question row carries the wire port, the cards and the title behind
+ * the dialog name the drawer (cloner_slot_label / lc_disk_label). On cloner 2 port 5 is drawer 4,
+ * so "דיסק 5" named a disk the screen does not have. The row's name is the card's name: the
+ * drawer whose port it is, a local clone's disk, else "דיסק <port>" as before. */
+static void ask_disk_label(const State *s, int port, char *out, size_t n) {
+    for (int i = 0; i < s->ndrawers; i++)
+        if (s->drawers[i].port == port && eff_drawer(s->drawers[i].drawer, port) > 0) {
+            cloner_slot_label(s, eff_drawer(s->drawers[i].drawer, port), out, n); return; }
+    for (int i = 0; i < s->nidisks; i++)
+        if (s->idisks[i].port == port && eff_drawer(s->idisks[i].drawer, port) > 0) {
+            cloner_slot_label(s, eff_drawer(s->idisks[i].drawer, port), out, n); return; }
+    for (int i = 0; i < s->lc.ndisks; i++)
+        if (s->lc.disks[i].port == port) { lc_disk_label(&s->lc.disks[i], out, n); return; }
+    snprintf(out, n, "דיסק %d", port);
 }
 
 /* #1898 (Nadav 22/10): one disk is "הדיסק", more are "הדיסקים" -- the drawers the rows are about
@@ -104,7 +121,8 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H) {
         const char *what = !strcmp(w, "isw_raid_member") ? "מערך RAID של Intel"
                          : !strcmp(w, "ddf_raid_member") ? "מערך RAID מסוג DDF"
                          : !strcmp(w, "linux_raid_member") ? "מערך RAID של לינוקס (md)" : "מערך RAID";
-        if (a->st.nask && a->st.ask[0].port > 0) snprintf(title_s, sizeof title_s, "דיסק %d: נמצא על הדיסק מידע של %s", a->st.ask[0].port, what);
+        if (a->st.nask && a->st.ask[0].port > 0) { char dn[LC_LABEL_MAX]; ask_disk_label(&a->st, a->st.ask[0].port, dn, sizeof dn);
+            snprintf(title_s, sizeof title_s, "%s: נמצא על הדיסק מידע של %s", dn, what); }
         else snprintf(title_s, sizeof title_s, "הדיסק %s: נמצא עליו מידע של %s", a->st.ask_subject, what);
         snprintf(lead_s, sizeof lead_s, "הדיסק היה פעם חלק ממערך (%s). כתיבה תמחק את המידע הזה, והדיסק ייכתב כדיסק רגיל.", w);
         primary = "כתוב ומחק את המידע"; primary_style = BTN_DANGER;
@@ -116,7 +134,8 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H) {
            the focus (Enter), and by itself when the count ends -- what is not read
            becomes zeros, counted. Only "עצור" fails the copy; the source is only read. */
         const int idx = a->st.nask ? a->st.ask[0].idx : 0;
-        if (a->st.nask && a->st.ask[0].port > 0) snprintf(title_s, sizeof title_s, "דיסק %d (המקור): מחיצה %d לא נקראת", a->st.ask[0].port, idx);
+        if (a->st.nask && a->st.ask[0].port > 0) { char dn[LC_LABEL_MAX]; ask_disk_label(&a->st, a->st.ask[0].port, dn, sizeof dn);
+            snprintf(title_s, sizeof title_s, "%s (המקור): מחיצה %d לא נקראת", dn, idx); }
         else snprintf(title_s, sizeof title_s, "דיסק המקור (%s): מחיצה %d לא נקראת", a->st.ask_subject, idx);
         left_text(a->st.nask ? a->st.ask[0].until : 0, left_s, sizeof left_s);
         snprintf(lead_s, sizeof lead_s, "הקריאה נכשלה גם בהעתקה גולמית — כנראה סקטורים פגומים. ההעתקה ממשיכה כמו dd conv=noerror: מה שלא ייקרא ייכתב ביעדים כאפסים וייספר, והיעדים לא יהיו זהים למקור. ממשיך אוטומטית בעוד %s.", left_s);
@@ -160,8 +179,8 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H) {
         ask_gb(orig_s, sizeof orig_s, a->st.ask[i].orig_bytes);
         if (a->st.ask_kind == ASK_RAID || a->st.ask_kind == ASK_BADSECT) continue;   /* its one row is the title */
         if (a->st.ask_kind == ASK_SHARE) {
-            char disk_s[32];
-            if (a->st.ask[i].port > 0) snprintf(disk_s, sizeof disk_s, "דיסק %d", a->st.ask[i].port);
+            char disk_s[LC_LABEL_MAX];
+            if (a->st.ask[i].port > 0) ask_disk_label(&a->st, a->st.ask[i].port, disk_s, sizeof disk_s);
             else snprintf(disk_s, sizeof disk_s, "הדיסק");
             snprintf(line, sizeof line, "%s · מחיצה %d: %s במקום %s", disk_s, a->st.ask[i].idx, orig_s, now_s);
         } else if (a->st.ask[i].fs_only)

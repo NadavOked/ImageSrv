@@ -37,7 +37,11 @@ typedef struct {
                          * NOT changed by it -- the station screens ignore Caps Lock
                          * as before; the server screen applies it (dcui_token) */
     int vt;             /* KEYSYM_VT: 1..12 */
+    int down;           /* UIEV_MOVE (#2778): the left button / a touch is down -- a drag.
+                         * A field of the move, not an event of its own: no screen
+                         * that does not look at it sees anything new */
 } Event;
+#define UIEV_MOVE_DOWN 1   /* #2778: Event.down exists (tests build without it on older trees) */
 
 typedef struct Input Input;
 

@@ -36,7 +36,9 @@ gui_auth() {
 
 gui_capture() {
     [ "$GUI_ROLE" = admin ] || return 1
-    build_name_ok "$name" || return 1
+    # #2842: no name check here. The server owns the rule (images.validate_display_name:
+    # Hebrew allowed) and its refusal reaches the screen (build_capture_post).
+    [ -n "$name" ] || return 1
     # Check against fresh server inventory, not a GUI-supplied device path.
     http_get "$SERVER/api/v1/agent/state?mac=$MAC" > "$RUN_DIR/gui-inventory.json" || return 1
     jq -e --arg dev "$dev" '.known == true and .role == "build" and

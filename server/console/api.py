@@ -745,6 +745,9 @@ def create_console_router(
             row["probe_verdicts"] = probe.verdicts(row["probe"])
             # ‏15/10: מהירות כרטיס ההפצה — ידנית / מדווחת / הונחה 1Gb/s.
             row["nic_speed"] = nic_speed.view(ctx.conn, row["mac"], row["probe"], sampled=True)
+            # ‏#2847: מהירות הקישור **שנמדדה** (Mb/s), בלי ידני ובלי הנחה — כדי שקישור איטי לא יוסתר
+            # בהגדרה ידנית. ‏null = לא נמדד / לא חד-משמעי (עיקרון 5: "לא ידוע" אינו "תקין").
+            row["nic_link_mbps"] = nic_speed.reported(row["probe"])[0]
             row["last_capture"] = last_captures.get(row["mac"])
             row["slot_names"] = names.get(row["mac"], {})
             # ‏#1997: שם שנרשם לפני הכלל ואינו שם מחשב — מוצג כמו שהוא, וכאן

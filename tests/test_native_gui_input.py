@@ -50,6 +50,11 @@ DRIVER = r'''
 #include "%(input_c)s"
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef UIEV_MOVE_DOWN   /* #2778: the button held during a move (a drag); -1 = this input.c has no such field */
+#define HELD(e) (e).down
+#else
+#define HELD(e) -1
+#endif
 
 /* argv: W H MS PATH -- probe PATH, then pump events for MS milliseconds
  * and print each one as "MOVE|CLICK x y is_touch". "ready" goes out first
@@ -73,8 +78,8 @@ int main(int argc, char **argv) {
         Event e;
         while (input_next(in, &e)) {
             if (e.type == UIEV_MOVE || e.type == UIEV_CLICK)
-                printf("%%s %%.3f %%.3f %%d\n", e.type == UIEV_MOVE ? "MOVE" : "CLICK",
-                       e.x, e.y, e.is_touch);
+                printf("%%s %%.3f %%.3f %%d %%d\n", e.type == UIEV_MOVE ? "MOVE" : "CLICK",
+                       e.x, e.y, e.is_touch, HELD(e));
         }
     }
     fflush(stdout);
@@ -99,7 +104,7 @@ def _build_driver(tmp_path: Path) -> Path:
 
 
 def _run(binary: Path, device: evdev_lab.UinputDevice,
-         frames: list[list[tuple[int, int, int]]], tmp_path: Path) -> list[tuple[str, float, float, int]]:
+         frames: list[list[tuple[int, int, int]]], tmp_path: Path, held: bool = False) -> list[tuple]:
     """מריץ את הדרייבר על ההתקן, שולח את המסגרות אחרי `ready`, ומחזיר
     את האירועים שהגואי היה מקבל."""
     out_path = tmp_path / f"{device.name}.out"
@@ -121,8 +126,8 @@ def _run(binary: Path, device: evdev_lab.UinputDevice,
     assert lines and lines[0].startswith("ready"), lines
     events = []
     for line in lines[1:]:
-        kind, x, y, touch = line.split()
-        events.append((kind, float(x), float(y), int(touch)))
+        kind, x, y, touch, is_held = line.split()
+        events.append((kind, float(x), float(y), int(touch)) + ((int(is_held),) if held else ()))
     return events
 
 
@@ -177,3 +182,26 @@ def test_relative_mouse_is_unchanged(driver, tmp_path):
     with evdev_lab.UinputDevice("ic949-mouse", rel=True) as dev:
         events = _run(driver, dev, [[(EV_REL, REL_X, 2), (EV_REL, REL_Y, -1)]], tmp_path)
     assert events == [("MOVE", W / 2 + 2 * 3, H / 2 - 1 * 3, 0)], events
+
+
+@pytest.mark.uinput
+@LAB
+def test_a_move_says_whether_the_button_is_held(driver, tmp_path):
+    """#2778: גרירת מקלדת המסך במתקין. תזוזה עם הכפתור לחוץ נושאת held=1, ואחרי שחרורו held=0.
+    השחרור עצמו אינו אירוע: אף מסך שלא מסתכל על held לא רואה דבר חדש."""
+    ABS_X, ABS_Y, EV_ABS, EV_KEY, BTN_LEFT = (
+        evdev_lab.ABS_X, evdev_lab.ABS_Y, evdev_lab.EV_ABS, evdev_lab.EV_KEY, evdev_lab.BTN_LEFT)
+    with evdev_lab.UinputDevice("ic2778-drag", abs=(W - 1, H - 1)) as dev:
+        events = _run(driver, dev, [
+            [(EV_ABS, ABS_X, 10), (EV_ABS, ABS_Y, 5)],
+            [(EV_KEY, BTN_LEFT, 1)],
+            [(EV_ABS, ABS_X, 20)],
+            [(EV_KEY, BTN_LEFT, 0)],
+            [(EV_ABS, ABS_X, 30)],
+        ], tmp_path, held=True)
+    assert events == [
+        ("MOVE", 10.0, 5.0, 0, 0),
+        ("CLICK", 10.0, 5.0, 0, 0),
+        ("MOVE", 20.0, 5.0, 0, 1),
+        ("MOVE", 30.0, 5.0, 0, 0),
+    ], events

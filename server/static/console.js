@@ -470,7 +470,7 @@ function impactList(items) {
 let SHEET_GEN = 0;
 
 function sheet({ title, sub = "", fields = [], submitLabel = "שמירה", cancelLabel = "ביטול",
-                 danger = false, note = "", size = "", hint = "", extra = null, onSubmit }) {
+                 danger = false, note = "", size = "", hint = "", extra = null, busy = null, onSubmit }) {
   const gen = ++SHEET_GEN;
   const modal = $("#modal");
   const form = $("#sheet");
@@ -515,7 +515,7 @@ function sheet({ title, sub = "", fields = [], submitLabel = "שמירה", cance
   form.className = `sheet win ${winSizeClass(sizeName, "narrow")}`;
   form.innerHTML = `
     <div class="n-h shead"><div><h2 id="sheetTitle">${esc(title)}</h2>${sub ? `<p>${esc(sub)}</p>` : ""}</div>${winCloseBtn('id="sf-x"')}</div>
-    <div class="n-b sbody">${SERVER_CTX ? `<div class="sheet-note${danger ? " danger" : ""}" data-target-server>הפעולה תתבצע על <b>${esc(serverRootName("שרת המשנה"))}</b> (שרת משנה), דרך הערוץ בין השרתים.</div>` : ""}${note}${fields.map(fieldHtml).join("")}<p class="error n-formerr" id="sf-error" role="alert"></p></div>
+    <div class="n-b sbody">${SERVER_CTX ? `<div class="sheet-note${danger ? " danger" : ""}" data-target-server>הפעולה תתבצע על <b>${esc(serverRootName("שרת המשנה"))}</b> (שרת משנה), דרך הערוץ בין השרתים.</div>` : ""}${note}${fields.map(fieldHtml).join("")}<p class="sheet-note n-busy" id="sf-busy" role="status" aria-live="polite" hidden></p><p class="error n-formerr" id="sf-error" role="alert"></p></div>
     <footer class="n-f-bar sfoot">
       <span class="n-hint" id="sf-hint">${esc(hint)}</span>
       <button class="btn" type="button" id="sf-cancel">${esc(cancelLabel)}</button>
@@ -545,8 +545,14 @@ function sheet({ title, sub = "", fields = [], submitLabel = "שמירה", cance
       if (input) input.value = button.getAttribute("data-value");
     };
   }));
+  /* ‏#2840: לחיצה אחת = בקשה אחת. בלי זה כל לחיצה (או Enter) בזמן ש-onSubmit ממתין
+     שלחה עוד בקשה — שמירה אחת של רשת ההפצה הפכה ל-18 ‏PUT ול-15 הפעלות של dnsmasq.
+     הכפתור מושבת בזמן הבקשה וחוזר למצבו הקודם (התקינות של הטופס) אחרי שגיאה; הדגל
+     עוצר גם submit שאינו דרך הכפתור, ו-sync של טופס שמדליק את הכפתור בהקלדה. */
+  let submitting = false;
   form.onsubmit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
     for (const f of fields) {
       if (f.type !== "password" || !f.confirm) continue;
       if ($("#sf-" + f.id).value !== $(`#sf-${f.id}-confirm`).value) {
@@ -565,9 +571,31 @@ function sheet({ title, sub = "", fields = [], submitLabel = "שמירה", cance
       const el = $("#sf-" + f.id);
       values[f.id] = f.type === "checkbox" ? !!(el && el.checked) : (el ? el.value : "");
     });
+    const button = $("#sf-submit");
+    const wasDisabled = button.disabled;
+    const status = $("#sf-busy");
+    submitting = true;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.classList.add("busy");
+    /* ‏#2840 (נדב: "הוא לא הציג כלום וחשבתי שזה תקוע"): מה שקורה — גלוי בחלון, לא רק
+       כפתור כבוי. ‏busy = { label, slow, after } של החלון; בלעדיו טקסט כללי. */
+    const say = (text) => { if (status) { status.textContent = text; status.hidden = !text; } };
+    say((busy && busy.label) || "פועל…");
+    $("#sf-error").textContent = "";
+    const slow = busy && busy.slow
+      ? setTimeout(() => { if (submitting) say(`${busy.label || "פועל…"} ${busy.slow}`); }, (busy.after || 5) * 1000) : null;
     let next;
     try { next = await onSubmit(values); close(); }
     catch (error) { $("#sf-error").textContent = error.message; return; }
+    finally {
+      submitting = false;
+      if (slow) clearTimeout(slow);
+      say("");
+      button.disabled = wasDisabled;
+      button.removeAttribute("aria-busy");
+      button.classList.remove("busy");
+    }
     if (typeof next === "function") next();
   };
 }
@@ -2195,7 +2223,7 @@ function homeNowRows(all = false) {
     rows.push([UI.name(`משיכה — ${p.image_name || ""}`, m.hostname || m.name || m.mac || ""), "יוניקאסט",
       UI.barRow(v.percent, "", v.label), UI.status("run", "מושכת"), ""]);
   }
-  for (const t of CAPTURE_TASKS || []) {
+  for (const t of capturesOnly(CAPTURE_TASKS)) {
     const active = captureInFlight(t);
     if (!all && !active) continue;
     const v = Progress.view(t);
@@ -3094,7 +3122,7 @@ function roomNewWindow(kids) {
        <div class="full muted">היעד: הדיסקים שסומנו בגריד למטה — הפצה ישירה דורשת בחירה מפורשת. סבב יחיד, לא מצטבר.</div>`
     : `<h3 class="n-sec-h full">אימג'</h3><label>תיקייה<select id="rn-folder" onchange="roomFormSet('folder',this.value)">${folderOpts}</select></label>
        <label class="full">אימג'<select id="rn-image" onchange="roomFormSet('image',this.value)"${folder == null ? " disabled" : ""}>${opts}</select></label>
-       ${roomHibNote(chosen)}
+       ${roomHibNote(chosen)}${roomLinkNote(chosen, kids)}
        <div class="full n-help">${chosen && gbCeil(chosen.min_target_bytes) != null ? `האימג' נכנס לדיסק מ-<b>${ltr(gbCeil(chosen.min_target_bytes) + " GB")}</b>. ` : ""}אימג' שלא נכנס למגירה הקטנה ביותר בחדר מושבת ברשימה, עם הסיבה.</div>
        <label>גרסה<select id="rn-version"><option>הנוכחית (ברירת מחדל)</option></select></label>
        <h3 class="n-sec-h full">יעד</h3>
@@ -3482,6 +3510,10 @@ function imageRow(r) {
 /* #1470: `verifying` — מחשב הבנייה שוחרר, והשרת קורא שוב כל קובץ מהדיסק לפני שהאימג' נכנס לספרייה.
    בתהליך (מוצג כפעיל, עם התקדמות) — אבל אינו ניתן לביטול ואינו תופס את מחשב הבנייה. */
 const VERIFYING_LABEL = "מאמת";
+/* ‏#2845: ‏/tasks מחזיר כל סוג משימה (capture, direct_send, ...). בדף האימג'ים ובפעילות
+   "קליטה" היא רק `capture` — שיכפול ישיר (`direct_send`) לא נשמר בשרת ולא עולה אליו;
+   הוא סבב, ומופיע כסבב. */
+function capturesOnly(tasks) { return (tasks || []).filter((t) => t.type === "capture"); }
 function captureInFlight(t) { return t.state === "pending" || t.state === "running" || t.state === "verifying"; }
 function captureProgressCell(t, prefix = "") {
   const v = Progress.view(t), n = t.bytes_written;
@@ -3518,7 +3550,7 @@ function imagesTableHtml() {
   const list = imagesVisible(), admin = isAdmin(), all = IMAGES || [];
   const q = IMG.filter.trim().toLowerCase();
   const tasks = IMAGES_FOLDER == null
-    ? (CAPTURE_TASKS || []).filter((t) => captureInFlight(t) && (!q || String(t.name || "").toLowerCase().includes(q)))
+    ? capturesOnly(CAPTURE_TASKS).filter((t) => captureInFlight(t) && (!q || String(t.name || "").toLowerCase().includes(q)))
     : [];
   if (!all.length && !tasks.length) {
     return UI.empty("אין אימג'ים בספרייה — קלוט ממחשב בנייה או העלה קובץ tar.",
@@ -3553,7 +3585,7 @@ function imagesFilesCard() {
     : "";
   // ‏#1300: "כל האימג'ים" — כותרת בולטת של הטבלה (.fcrumb, console-full.html), לא שביל פירורים קטן.
   const bar = `<div class="dg-bar"><span class="fcrumb">${crumb}</span>${desc}<span class="sp"></span><input type="search" value="${esc(IMG.filter)}" placeholder="חיפוש אימג'" aria-label="סינון אימג'ים" oninput="imagesFilter(this.value)" style="width:180px">${edit}</div>`;
-  const warned = (CAPTURE_TASKS || []).filter((t) => t.state === "done" && t.error).map(captureWarningHtml).join("");
+  const warned = capturesOnly(CAPTURE_TASKS).filter((t) => t.state === "done" && t.error).map(captureWarningHtml).join("");
   const title = IMAGES_FOLDER == null ? "אימג'ים" : IMAGES_FOLDER === "" ? "ללא תיקייה" : IMAGES_FOLDER;
   return `<div class="c12 card"><div class="card-h"><span>${esc(title)}</span></div><div class="split"><div class="side">${imagesTree()}</div><div><div id="capture-bar">${warned}</div>${bar}<div id="img-table">${imagesTableHtml()}</div></div></div></div>`;
 }
@@ -3566,7 +3598,7 @@ function captureStateView(t) {
   return { cls, label };
 }
 function imagesCapturesCard() {
-  const tasks = CAPTURE_TASKS || [];
+  const tasks = capturesOnly(CAPTURE_TASKS);
   const rows = tasks.map((t) => {
     const v = captureStateView(t);
     const active = t.state === "pending" || t.state === "running";   // ניתן לביטול — לא `verifying` (#1470)
@@ -3620,7 +3652,7 @@ function images(tab = 0) {
     : "") + `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`;
   const header = UI.objHeader({ crumbs: [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "מלאי" }, { label: "אימג'ים" }],
     icon: "t-images", name: "ספריית אימג'ים", sub, actions, tab,
-    tabs: IMAGES ? [[tabs[0], all.length], [tabs[1], (CAPTURE_TASKS || []).filter(captureInFlight).length], tabs[2]].concat(tabs.length > 3 ? [isoTabEntry()] : []) : tabs });
+    tabs: IMAGES ? [[tabs[0], all.length], [tabs[1], capturesOnly(CAPTURE_TASKS).filter(captureInFlight).length], tabs[2]].concat(tabs.length > 3 ? [isoTabEntry()] : []) : tabs });
   let body;
   if (!IMAGES) body = `<div class="c12">${pagePlaceholder()}</div>`;
   else if (tab === 1) body = imagesCapturesCard();
@@ -4165,6 +4197,32 @@ function nicSpeedText(n) {
   if (!n || typeof n.speed_mbps !== "number") return "לא ידוע";
   if (n.source === "assumed") return `לא ידוע — הונח ${linkSpeedText(n.speed_mbps)}`;
   return `${linkSpeedText(n.speed_mbps)} (${NIC_SPEED_SOURCE[n.source] || n.source})`;
+}
+/* ‏#2847: מהירות הקישור שנמדדה (/machines.nic_link_mbps) — לא הידנית ולא ההנחה. פחות מ-1000 = כתום:
+   הכרטיס עצמו אינו מדווח מה המקסימום שלו, ולכן הסף הוא Gb/s אחד. ‏null = לא נמדד — לא מציגים כלום. */
+const NIC_FULL_MBPS = 1000;
+function nicLinkMbps(m) { const v = m && m.nic_link_mbps; return typeof v === "number" && v > 0 ? v : null; }
+function nicLinkSlow(m) { const v = nicLinkMbps(m); return v != null && v < NIC_FULL_MBPS; }
+function nicLinkWarn(m) { return `קישור ${linkSpeedText(nicLinkMbps(m))} — כבל או פורט בסוויץ'`; }
+function nicLinkMeta(m) {
+  const v = nicLinkMbps(m);
+  return v == null ? "" : nicLinkSlow(m) ? UI.pill("warn", `קישור ${linkSpeedText(v)}`) : esc(`קישור ${linkSpeedText(v)}`);
+}
+function nicLinkNote(m) { return nicLinkSlow(m) ? UI.note("warn", esc(nicLinkWarn(m))) : ""; }
+function nicLinkStatus(m) {
+  const v = nicLinkMbps(m);
+  if (v == null) return `<span class="muted">לא נמדד</span>`;
+  return UI.status(nicLinkSlow(m) ? "warn" : "ok", nicLinkSlow(m) ? nicLinkWarn(m) : linkSpeedText(v));
+}
+function fmtEta(sec) { return sec < 90 ? `~${Math.round(sec)} שנ'` : sec < 5400 ? `~${Math.round(sec / 60)} דק'` : `~${(sec / 3600).toFixed(1)} שעות`; }
+/* פתיחת סבב: מכונות מסומנות על קישור איטי + זמן משוער = גודל האימג' (הדחוס, מה שמשודר) / הקצב — הגל נתקע על האיטית. */
+function roomLinkNote(img, kids) {
+  const slow = [...new Set(roomSelected(kids).map((x) => x.m.mac))].map(findMachine).filter((m) => m && nicLinkSlow(m));
+  if (!slow.length) return "";
+  const low = Math.min(...slow.map(nicLinkMbps)), bytes = img && Number(img.total_compressed_bytes) > 0 ? Number(img.total_compressed_bytes) : 0;
+  const eta = bytes ? ` זמן משוער לגל: ${fmtEta(bytes * 8 / (low * 1e6))} (לפי גודל האימג' וקצב ${linkSpeedText(low)}).` : "";
+  const names = slow.map((m) => `${esc(machineName(m) || m.mac)} (${ltr(linkSpeedText(nicLinkMbps(m)))})`).join(", ");
+  return `<div class="full">${UI.note("warn", `<b>קישור איטי בסבב:</b> ${names} — כבל או פורט בסוויץ'. הגל מתקדם בקצב האיטית.${eta}`)}</div>`;
 }
 function editNicSpeed(mac) {
   const m = findMachine(mac); if (!m || !isAdmin()) return;
@@ -4755,14 +4813,16 @@ function roomRoundResult(h) {
   if (h.target_drives > 0 && h.written_drives >= h.target_drives) return UI.pill("ok", "הצליח");
   return UI.pill("warn", `${h.written_drives} מתוך ${h.target_drives}`);
 }
+// #989: מספר הגלים שהיו — waits.waves; null = לא נמדד
 function roomHistoryHtml() {
   if (ROOM_HISTORY == null) return UI.note("warn", "היסטוריית הסבבים לא נקראה");
   const active = roomRound();
   if (!ROOM_HISTORY.length && !active) return UI.note("info", "אין סבבים קודמים בחדר");
   const rounds = active ? [active, ...ROOM_HISTORY.filter((h) => h.id !== active.id)] : ROOM_HISTORY;
-  return UI.datagrid({ opt: [5, 6], columns: ["#", "אימג׳", "מחשבים", "נכתבו", "משך", "מצב", "תאריך"],
+  return UI.datagrid({ opt: [6, 7], columns: ["#", "אימג׳", "מחשבים", "נכתבו", "גלים", "משך", "מצב", "תאריך"],
     rows: rounds.map((h, i) => [String(h.wave_number || rounds.length - i), esc(h.image_name || h.image_id || ""), String(h.machine_count ?? h.machines ?? "—"),
-      `${h.written_drives || 0}/${h.target_drives || 0}`, active && h === active ? "פעיל" : esc(roomRoundMinutes(h)), active && h === active ? UI.pill("info", WAVE_HE[h.wave_state] || "פעיל") : roomRoundResult(h) + roomRoundWaits(h),
+      `${h.written_drives || 0}/${h.target_drives || 0}`, active && h === active ? "—" : h.waits && Number.isFinite(h.waits.waves) ? String(h.waits.waves) : "—",
+      active && h === active ? "פעיל" : esc(roomRoundMinutes(h)), active && h === active ? UI.pill("info", WAVE_HE[h.wave_state] || "פעיל") : roomRoundResult(h) + roomRoundWaits(h),
       `<span class="mono">${esc(h.created_at ? (isToday(h.created_at) ? fmtClock(h.created_at) : fmtDate(h.created_at)) : "—")}</span>`]) });
 }
 /* ציר הסבבים של קבוצה: הסבב הפעיל (/overview.session) + ההיסטוריה ("דורש API"). סבבי חדר המשכפלים —
@@ -5160,7 +5220,7 @@ function clonerState(m) {
 function clonerCardHtml(m, admin, room = false) {
   const macEnc = encodeId(m.mac), net = netFor(m.mac), st = room ? roomCardState(m) : clonerState(m), { slots, declared } = machineSlots(m);
   const meta = [esc(st.text), `${slots.length} ${slots.length === 1 ? "חריץ" : "חריצים"}${declared || !slots.length ? "" : " (לפי הדיווח)"}`,
-    net && net.ip ? `<span class="mono">${esc(net.ip)}</span>` : "", esc(NET ? seenAgo(net && net.last_seen) : "לא נקרא")].filter(Boolean).join(" · ");
+    net && net.ip ? `<span class="mono">${esc(net.ip)}</span>` : "", esc(NET ? seenAgo(net && net.last_seen) : "לא נקרא"), nicLinkMeta(m)].filter(Boolean).join(" · ");
   /* #1235: ‏`fresh: null` = הכונן לא דיווח serial (#105) — הסבב סופר לפי serial ואינו יכול
      לדעת אם נכתב. נאמר לפי חריץ, מתחת לגריד (#1033: המלבן עצמו נשאר שתי שורות). ‏`=== null`
      ולא `!fresh`: ‏false = נכתב, ו-undefined = רשומת /machines שאין בה `fresh` כלל. */
@@ -5172,13 +5232,14 @@ function clonerCardHtml(m, admin, room = false) {
   const heldNote = st.held ? UI.note("warn", `<b>${esc(HELD_HE)}</b> — ${esc(heldLine(m, (roomMachine(m.mac) || {}).held || m.held))}`) : "";   // #2031
   const body = slots.length ? `${roundProgress}<div class="slots">${slots.map((s) => slotHtml(m, s, admin)).join("")}</div>${failedLine}${unid}${heldNote}`
     : UI.note("", `מספר החריצים לא הוגדר והמכונה ${m.disks == null ? "מעולם לא דיווחה על דיסקים" : "דיווחה: " + zeroDisksText(m)}.${admin ? ` ${UI.link("הגדר חריצים", `openMachineDetail('${macEnc}','disks')`)}` : ""}`);
+  const linkNote = nicLinkNote(m);   // ‏#2847: גם בלי חריצים מוגדרים
   const wol = `<button class="btn sm" onclick="wakeMachine('${macEnc}')" title="WoL למכונה הזו בלבד (#984); לכל החדר — בכותרת">WoL</button>`;
   const acts = room
     ? (st.held ? heldButton(m) : st.off && roomOperator() ? wol : "")
     : (admin ? `<button class="btn sm" onclick="openMachineDetail('${macEnc}')">פרטים</button><button class="btn sm" onclick="openMachineDetail('${macEnc}','disks')">חריצים</button>${wol}` : "") + (st.held ? heldButton(m) : "");
-  if (!room) return `<div class="mcard${st.cls ? "" : " off"}" data-mac="${esc(m.mac)}"><div class="mcard-h"><span class="st ${st.cls}"><b>${esc(machineName(m) || m.mac)}</b></span><span class="muted">${meta}</span></div>${body}${acts ? `<div class="acts">${acts}</div>` : ""}</div>`;
+  if (!room) return `<div class="mcard${st.cls ? "" : " off"}" data-mac="${esc(m.mac)}"><div class="mcard-h"><span class="st ${st.cls}"><b>${esc(machineName(m) || m.mac)}</b></span><span class="muted">${meta}</span></div>${body}${linkNote}${acts ? `<div class="acts">${acts}</div>` : ""}</div>`;
   const details = meta.split(" · ").slice(1).join(" · ");
-  return `<div class="mcard${st.off ? " off" : ""}${failed.length ? " err" : ""}" data-mac="${esc(m.mac)}"><div class="mcard-h"><b>${esc(machineName(m) || m.mac)}</b>${UI.pill(st.cls, st.text)}${details ? `<span class="muted">${details}</span>` : ""}</div>${body}${acts ? `<div class="acts">${acts}</div>` : ""}</div>`;
+  return `<div class="mcard${st.off ? " off" : ""}${failed.length ? " err" : ""}" data-mac="${esc(m.mac)}"><div class="mcard-h"><b>${esc(machineName(m) || m.mac)}</b>${UI.pill(st.cls, st.text)}${details ? `<span class="muted">${details}</span>` : ""}</div>${body}${linkNote}${acts ? `<div class="acts">${acts}</div>` : ""}</div>`;
 }
 function clonerLegend() {
   return `<div class="legend"><span><i class="sw-ok"></i>SMART תקין / נכתב</span><span><i class="sw-run"></i>כותב</span><span><i class="sw-warn"></i>אזהרה — כותב</span><span><i class="sw-err"></i>אדום — נכשל, מדלג</span><span><i class="sw-empty"></i>חריץ ריק</span></div>`;
@@ -5220,7 +5281,7 @@ function clonerMachHtml(m, admin) {
   const open = admin ? ` role="button" tabindex="0" onclick="openMachineDetail('${macEnc}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openMachineDetail('${macEnc}')}"` : "";
   const held = st.held ? `<div class="mach-note">${esc(heldLine(m, m.held))}</div>` : "";   // #2031
   const acts = admin || st.held ? `<div class="acts">${admin ? `<button class="btn sm" type="button" onclick="event.stopPropagation();openMachineDetail('${macEnc}','disks')">חריצים</button>` : ""}${st.held ? heldButton(m) : ""}</div>` : "";
-  return `<div class="mach${red ? " err" : !st.cls ? " off" : ""}" data-mac="${esc(m.mac)}"${open}><div class="mt"><span>${esc(machineName(m) || m.mac)}</span>${red && st.cls !== "run" ? "" : UI.pill(MACH_PILL[st.cls] || "", st.text)}${red ? UI.pill("err", "דיסק אדום") : ""}</div><div class="ms mono">${esc(m.mac)}</div><div class="dsks">${rows}</div>${unid}${held}${acts}</div>`;
+  return `<div class="mach${red ? " err" : !st.cls ? " off" : ""}" data-mac="${esc(m.mac)}"${open}><div class="mt"><span>${esc(machineName(m) || m.mac)}</span>${red && st.cls !== "run" ? "" : UI.pill(MACH_PILL[st.cls] || "", st.text)}${red ? UI.pill("err", "דיסק אדום") : ""}</div><div class="ms mono">${esc(m.mac)}</div><div class="dsks">${rows}</div>${unid}${nicLinkNote(m)}${held}${acts}</div>`;
 }
 function clonerGridCard(g, kids) {
   const admin = isAdmin();
@@ -5406,7 +5467,8 @@ function builderCardHtml(m, admin) {
     + `<dt>MAC</dt><dd><span class="mono">${esc(m.mac)}</span></dd>`
     + `<dt>דיסקים</dt><dd>${builderDrivesHtml(m)}</dd>`
     + `<dt>קליטה אחרונה</dt><dd>${builderCaptureHtml(m, admin)}</dd>`
-    + `<dt>לפני קליטה</dt><dd>${beforeCaptureHtml(m)}</dd></dl>`;
+    + `<dt>לפני קליטה</dt><dd>${beforeCaptureHtml(m)}</dd>`
+    + `<dt>קישור</dt><dd>${nicLinkStatus(m)}</dd></dl>`;   // ‏#2847: בסוף -- סדר השורות הראשון מקובע במוקאפ
   const acts = admin ? `<div class="acts">${task ? `<button class="btn primary" onclick="openCaptureDetail('${encodeId(task.id)}')">פירוט קליטה</button>` : `<button class="btn primary" onclick="openCapture('${macEnc}').catch(e => toast(e.message))">קליטה</button>`}<button class="btn" onclick="openMachineDetail('${macEnc}')">פתח פרטים</button><button class="btn" onclick="renameMachine('${macEnc}')">שינוי שם</button></div>` : "";
   const help = st.cls ? "" : `<p class="card-help">המחשב לא מחובר עכשיו — קליטה תמתין שיעלה ב-PXE.${admin ? ` אפשר להעיר אותו ${UI.link("דרך WoL", `wakeMachine('${macEnc}')`)}.` : ""}</p>`;
   return `<div class="card bcard" data-mac="${esc(m.mac)}"><div class="card-h"><span>${esc(machineName(m) || m.mac)} ${UI.pill(MACH_PILL[st.cls] || "", st.text)}${task ? " " + UI.pill(task.state === "pending" ? "warn" : "info", task.state === "pending" ? "קליטה ממתינה" : "קליטה רצה") : ""}</span></div><div class="card-b">${kv}${acts}${help}</div></div>`;
@@ -5697,6 +5759,7 @@ function machineDrawerHtml(m) {
     ["MAC", `<span class="mono">${esc(m.mac)}</span>` + (admin ? ` ${UI.link("עריכה", `editMachineMac('${macEnc}')`)}` : "")],
     ["IP אחרון", net && net.ip ? `<span class="mono">${esc(net.ip)}</span>` : `<span class="muted">—</span>`],
     ["כרטיס רשת", esc(nicSpeedText(m.nic_speed)) + (admin ? ` ${UI.link("שנה", `editNicSpeed('${macEnc}')`)}` : "")],
+    ["קישור נמדד", nicLinkStatus(m)],
   ].concat(m.note ? [["הערה", esc(m.note)]] : []));
   const inv = m.inventory, dmi = (inv && inv.dmi) || {};
   let drivers = `<span class="muted">דף הדרייברים לא נטען</span>`;
@@ -10261,7 +10324,7 @@ async function loadCaptures() {
   // ‏#927: קליטה שהסתיימה עם אזהרה (המקור לא הוחזר לגודלו) אינה נעלמת —
   // הודעה מעל טבלת הספרייה. קליטה בתהליך היא שורה בטבלה (#954 גל 2), לא כאן.
   const bar = $("#capture-bar");
-  if (bar) bar.innerHTML = all.filter((t) => t.state === "done" && t.error).map(captureWarningHtml).join("");
+  if (bar) bar.innerHTML = capturesOnly(all).filter((t) => t.state === "done" && t.error).map(captureWarningHtml).join("");
   if (typeof imagesTasksChanged === "function" && imagesTasksChanged(all)) renderCurrent();
 }
 

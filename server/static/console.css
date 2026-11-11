@@ -1182,6 +1182,9 @@ th,.table th,.page .dg th{letter-spacing:.02em}
 /* פס תחתון קבוע */
 .win .n-f-bar{display:flex;align-items:center;gap:8px;padding:14px 24px;border-top:1px solid var(--clr-row-border);background:var(--clr-surface);flex:none;justify-content:flex-start}
 .win .n-hint{flex:1;font-size:var(--t-xs);color:var(--clr-muted);min-width:0}
+/* ‏#2840: שמירה שרצה — סימן תנועה על הכפתור, והטקסט ב-#sf-busy (גלוי גם במובייל, שם ‏.n-hint מוסתר). */
+.btn.busy::before{content:"";display:inline-block;width:11px;height:11px;margin-inline-end:7px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:upd-rot 1s linear infinite}
+@media (prefers-reduced-motion:reduce){.btn.busy::before{animation-duration:3s}}
 .win .n-f-bar .btn,.win .n-btn{height:36px;padding:0 16px;border-radius:var(--r-sm);border:1px solid var(--clr-border);background:transparent;color:var(--clr-text);font-size:var(--t-base);font-weight:500;
   display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;text-decoration:none;transition:transform var(--dur-press) var(--ease),background var(--dur-fast)}
 .win .n-f-bar .btn:hover{background:var(--clr-hover)}

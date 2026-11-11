@@ -122,16 +122,3 @@ console_say() {
         *)   log "$2: no answer from the server (http ${1:-000})" ;;
     esac
 }
-
-build_name_ok() {
-    # Folder and image names are ASCII: letters, digits, dot, underscore,
-    # dash and spaces. Nadav's ruling of 2026-08-30 -- "English or numbers".
-    #
-    # A courtesy check before the POST (guibridge.sh:gui_capture), not
-    # enforcement: the server still accepts any name through the console.
-    case "$1" in
-        "") return 1 ;;
-        *[!A-Za-z0-9._\ -]*) return 1 ;;
-    esac
-    [ "${#1}" -le 60 ]
-}

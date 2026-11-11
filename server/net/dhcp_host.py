@@ -476,8 +476,24 @@ def apply_known_macs(text: str, conf_path: str | Path = KNOWN_MACS_CONF) -> str 
 
     ‏#1828: בלי `--test` (קובץ hostsfile אינו קובץ הגדרה), אבל reload שנכשל
     מחזיר את הקובץ הקודם, כמו השניים שלמעלה.
+
+    ‏#2840/#2853: dnsmasq **כבוי בכוונה** עד שרשת ההפצה מוגדרת (#1088), ו-reload על
+    יחידה לא פעילה נכשל תמיד — בכל התקנה חדשה נרשם "נכשל" והקובץ שנכתב הוחזר
+    לקודם. כש-`systemctl is-active` אומר במפורש `inactive`, הקובץ שנכתב נשאר:
+    dnsmasq יקרא אותו כשיעלה. כל תשובה אחרת — כשל, כמו קודם (עיקרון 5).
     """
-    return _apply_checked(text, Path(conf_path), None, "reload", "dnsmasq")
+    return _apply_checked(text, Path(conf_path), None, "reload", "dnsmasq",
+                          inactive_ok=True)
+
+
+def _explicitly_inactive(unit: str) -> bool:
+    """‏True רק על `inactive` מפורש מ-`systemctl is-active` (קוד 3 = תשובה, לא כשל)."""
+    try:
+        result = subprocess.run(["systemctl", "is-active", unit], capture_output=True,
+                                text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return (result.stdout or "").strip() == "inactive"
 
 
 def _main_test_cmd(path: Path) -> list[str]:
@@ -515,7 +531,7 @@ def _restore(path: Path, previous: str | None) -> str | None:
 
 
 def _apply_checked(text: str, path: Path, test_cmd: list[str] | None,
-                   action: str, unit: str) -> str | None:
+                   action: str, unit: str, inactive_ok: bool = False) -> str | None:
     try:
         previous = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -532,6 +548,10 @@ def _apply_checked(text: str, path: Path, test_cmd: list[str] | None,
         failed = _restore(path, previous)
         return f"{error}. {path} הקודם הוחזר" if failed is None else f"{error}, {failed}"
     error = _systemctl(action, unit)
+    if error and inactive_ok and _explicitly_inactive(unit):
+        log.info("dhcp_host: %s is inactive -- %s written, it is read when %s starts",
+                 unit, path, unit)
+        return None
     if error:
         failed = _restore(path, previous)
         if failed is not None:

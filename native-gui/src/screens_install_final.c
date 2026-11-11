@@ -61,7 +61,8 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
     Rect seq={x,y,fmin(760,w),112};install_card(cr,t,seq);install_text_r(cr,t,"מה יקרה בלחיצה על \"החל התקנה\"",14,600,seq.x+seq.w-16,y+14,seq.w-32,t->ink);
     install_text_r(cr,t,"מחיקת הדיסק ← מערכת בסיס ← חבילות ImageSrv ← מנהל אתחול ← הגדרות",13,500,seq.x+seq.w-16,y+50,seq.w-32,t->ink);
     char after[192],secs[32];he_secs(INSTALL_AUTO_REBOOT_S,secs,sizeof secs);snprintf(after,sizeof after,"בסיום תתבקש להסיר את מדיית ההתקנה; השרת יופעל מחדש אוטומטית אחרי %s.",secs);install_text_r(cr,t,after,12,400,seq.x+seq.w-16,y+78,seq.w-32,t->muted);
-    install_footer(a,cr,l,"החל התקנה",HIT_INSTALL_NEXT,1,1);
+    /* #2097: destructive = red button, no typed word (#1270) */
+    install_footer_style(a,cr,l,"החל התקנה",HIT_INSTALL_NEXT,1,1,BTN_DANGER);
 }
 
 static int phase_index(const char *phase){

@@ -13,6 +13,10 @@
 __attribute__((unused)) static const char *const OSK_LOWER[4] = { "`1234567890-=", "qwertyuiop[]\\", "asdfghjkl;'", "zxcvbnm,./" };
 __attribute__((unused)) static const char *const OSK_UPPER[4] = { "~!@#$%^&*()_+", "QWERTYUIOP{}|", "ASDFGHJKL:\"", "ZXCVBNM<>?" };
 enum { OSK_CHARS = 47, OSK_BKSP = OSK_CHARS, OSK_SHIFT, OSK_SPACE, OSK_DONE, OSK_KEYS };
+/* hit ids past the keys: the panel itself (OSK_KEYS), its grip strip (drags it, Nadav
+ * 09/11: "in the middle, and it can be moved") and the preview row of the field in focus */
+enum { OSK_GRIP = OSK_KEYS + 1, OSK_PREVIEW };
+#define HIT_INSTALL_OSK_GRIP (HIT_INSTALL_OSK_BASE + OSK_GRIP)
 
 /* the character key k types (Space included); 0 for Backspace, Shift and "סיום" */
 static inline int osk_char(int k, int shift) {

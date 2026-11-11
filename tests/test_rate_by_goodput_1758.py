@@ -556,25 +556,50 @@ from server.rounds import sender as sender_module  # noqa: E402
 def test_the_wall_time_runs_from_the_first_byte_to_send_done(engine_env, monkeypatch):
     """‏`wall_s` — מהבייט הראשון של מחיצה 1 ועד `send_done`, כולל המעבר בין
     המחיצות; בלי ההמתנה למקבלים לפני הבייט הראשון."""
+    from types import SimpleNamespace
+
+    # Stamp actual samples, not the test thread's writes: a delayed sampler
+    # must see the same first byte, partition gap and final ACK tail.
+    now = [4.0]
+    seen = []
+    stamps = {0: 4.0, 1_000_000: 10.0, 2_000_000: 14.0}
+    real_progress = sender_module.sender_progress
+
+    def progress(path):
+        got = real_progress(path)
+        if got is not None:
+            now[0] = stamps[got[0]]
+            seen.append(got[0])
+        return got
+
+    monkeypatch.setattr(sender_module, "sender_progress", progress)
+    monkeypatch.setattr(sender_module, "time", SimpleNamespace(
+        monotonic=lambda: now[0], sleep=time.sleep, time=time.time))
     monkeypatch.setattr(sender_module, "PACE_POLL", 0.05)
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert wait_for(lambda: len(recorder.processes) == 1)
+    assert wait_for(lambda: len(recorder.commands) == 1)
     write_log(current_log(recorder), "Starting transfer: f\n" + line(0, 0))
-    time.sleep(0.6)                                  # ממתין למקבלים — לא נספר
+    assert wait_for(lambda: 0 in seen)
     write_log(current_log(recorder), "Starting transfer: f\n" + line(1_000_000, 0))
-    began = time.monotonic()
-    time.sleep(0.4)
+    assert wait_for(lambda: 1_000_000 in seen)
     recorder.processes[0].release()
-    assert wait_for(lambda: len(recorder.processes) == 2)
+    assert wait_for(lambda: len(recorder.commands) == 2)
+    real_wait = recorder.processes[1].wait
+
+    def finish():
+        code = real_wait()
+        now[0] = 17.0                    # send_done includes the final ACK tail
+        return code
+
+    monkeypatch.setattr(recorder.processes[1], "wait", finish)
     write_log(current_log(recorder), "Starting transfer: f\n" + line(2_000_000, 0))
-    time.sleep(0.3)
+    assert wait_for(lambda: 2_000_000 in seen)
     recorder.processes[1].release()
     assert wait_for(lambda: engine.status()["state"] == "done")
-    spanned = time.monotonic() - began
     got = engine.wave_outcome("ses_1")
     assert got.get("wall_s") is not None, got
-    assert 0.6 <= got["wall_s"] <= spanned + 0.2, (got, spanned)
+    assert got["wall_s"] == 7.0, got      # 17 - 10, not 17 - 4 or 17 - 14
 
 
 def test_the_wave_outcome_counts_drops_and_timeouts_over_the_partitions(engine_env):

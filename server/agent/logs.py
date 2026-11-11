@@ -50,7 +50,9 @@ MAX_TEXT = 64 * 1024
 KEEP_PER_MAC = 30
 KEEP_ROWS = 1000
 #: למה נשלח. ‏`failed` = מגירה נכשלה או אף אחת לא הושלמה; ‏`round_end` = הסבב הסתיים.
-REASONS = frozenset({"failed", "round_end"})
+#: ‏#2841: ‏`checkpoint` = משכפל בתחילת האימות שאחרי הכתיבה (השלב הארוך); ‏`fatal` = הסוכן
+#: (‏die_local) או ה-watchdog עומדים לאתחל את המכונה באמצע עבודה.
+REASONS = frozenset({"failed", "round_end", "checkpoint", "fatal"})
 
 _SESSION = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 

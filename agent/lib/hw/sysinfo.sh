@@ -95,6 +95,13 @@ build_hello() {
             _msecret=",\"monitor_secret\":\"$_ms\",\"monitor_auth\":\"hmac\""
     fi
 
+    # #2844: did THIS boot start the monitor service? Only the kernel line
+    # decides (common.sh), so a machine that came up before the console
+    # switch went on says false -- the server can then tell that apart from
+    # a service that is on and refusing.
+    _mon=false; [ "${IMAGESRV_MONITOR:-0}" = 1 ] && _mon=true
+    _msecret="$_msecret,\"monitor_on\":$_mon"
+
     # #720+#1049+#1048: inventory, probe, netprobe fragments (each with a leading comma).
     _wol=""; [ "$(cat "$RUN_DIR/wol_armed" 2>/dev/null)" = false ] && _wol=',"wol_armed":false'
     printf '{"schema":2,"mac":"%s","all_macs":[%s],"ip":"%s","uuid":%s,"firmware":"%s","secure_boot":%s,"agent_version":"%s","memory_bytes":%s,"joining":%s,"disks":[%s],"disk_probe":"%s"%s%s%s}' \
