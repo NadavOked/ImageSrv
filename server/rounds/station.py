@@ -49,7 +49,7 @@ def classrooms_off() -> JSONResponse | None:
     לא בודק סיסמאות (#1282). ‏`None` = הכיתות דלוקות (v1.2)."""
     if capabilities.classrooms():
         return None
-    return _error(409, "כיתות אינן במהדורה זו (v1.2)", "classrooms_off")
+    return _error(409, "כיתות אינן במהדורה זו (v2)", "classrooms_off")
 
 
 def default_prefix(group_id: str) -> str:

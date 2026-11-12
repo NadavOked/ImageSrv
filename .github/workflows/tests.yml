@@ -32,25 +32,40 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  pytest:
+  # ‏#2952: הסוויטה מפוצלת לארבעה runners לכל גרסת פייתון. ‏runner אחד לקח
+  # ‏65–81 דק' לשלב המקבילי לבדו (ריצה 42836177904, ‏10/11: ‏15,547 טסטים
+  # ב-1:05:07 על 3.13 וב-1:21:23 על 3.12), וכל פרסום חיכה לזה.
+  # מי רץ איפה — `tools/git/ci_shard.py`: טסט `serial` תמיד ב-shard 1, וכל
+  # השאר לפי sha256 של ה-nodeid, בלי תלות חדשה. כל shard פוסק על החלק שלו
+  # (אותו lab_gate כמו קודם), וה-job ‏`pytest` שלמטה פוסק על **האיחוד** —
+  # והוא הסטטוס `pytest (3.12)` / ‏`pytest (3.13)` שהשער מחפש
+  # ‏(שער הפרסום דורש בדיוק את שני השמות האלה).
+  shard:
+    name: shard ${{ matrix.shard }}/4 (${{ matrix.python-version }})
     runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11 והפיל טסטים; נעול עד שנתמוך ב-26.04
     # 17/09: 4,200 טסטים = ~18 דק' על runner; 15 ביטל בשקט ארבע ריצות (לא אדום — "cancelled").
-    timeout-minutes: 150
+    # ‏#2952: רבע מסוויטה של ~80 דק' — 60 הם פי שלושה מהצפוי, לא תקרה הדוקה.
+    timeout-minutes: 60
     # שתי גרסאות פייתון, כי לפרויקט יש שתיים ולא אחת: דביאן 13 — הייצור
     # וגם מעבדת ה-VM — מריצה 3.13, ותחנת הפיתוח מריצה 3.12. עד #113 ה-CI
     # בדק רק את 3.12, כל האימות הידני נעשה על 3.13, ואף אחת מהשתיים לא
     # ידעה על השנייה. `fail-fast: false` כי כישלון באחת אינו סיבה לבטל את
     # המדידה של השנייה — צריך לדעת אם זו גרסה או קוד.
+    #
+    # ‏#2952: מספר ה-shards (4) כתוב בשלושה מקומות — הרשימה כאן, ‏`--ci-shard`
+    # ו-`--shards` של ה-merge — ו-tests/test_ci_shard_2952.py מוודא שהם תואמים.
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
+        shard: [1, 2, 3, 4]
     # כאן הכלים אמורים להיות, ולכן חבילה שדילגה היא תקלה ולא הערה:
     # ‏gcc, ‏bash, ‏hivexget ו-libhivex-dev מותקנים בשלב הבא, וחבילת apt
     # ששינתה שם או תמונת runner שהתעדכנה היו משאירות את הבנייה ירוקה
     # עם אפס כיסוי לשלושת הרכיבים המסוכנים ביותר (#52).
     env:
       IMAGESRV_REQUIRE_NATIVE: "1"
+      SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -101,7 +116,7 @@ jobs:
           sha=$(python tests/impeccable_gate.py pin | sed -n 's/^sha256=//p')
           [ -n "$sha" ] || { echo "impeccable_gate.py pin: no sha256" >&2; exit 1; }
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/impeccable
           key: impeccable-${{ steps.impeccable.outputs.sha256 }}
@@ -110,6 +125,22 @@ jobs:
           dest="$HOME/.cache/impeccable/imp"
           python tests/impeccable_gate.py fetch "$dest"
           echo "IMAGESRV_IMPECCABLE_BIN=$dest" >> "$GITHUB_ENV"
+      # ‏#2952: רק ה-shard האחרון אוסף את **כל** העץ, בלי התוסף — המדד
+      # הבלתי תלוי שה-merge משווה אליו את איחוד ה-junit של ארבעת ה-shards.
+      # לפני הסוויטה: כשל באיסוף עוצר כאן, ואין עם מה להשוות.
+      - name: Collect the whole tree for the merge (#2952)
+        if: matrix.shard == 4
+        run: |
+          args=(-p no:cacheprovider -m "not uinput and not vm_it")
+          gate="$RUNNER_TEMP/gate"
+          mkdir -p "$gate"
+          if ! python tools/git/lab_gate.py collect --out "$gate/collected-all.txt" -- "${args[@]}" \
+              < /dev/null > "$gate/collect-all.log" 2>&1; then
+            tail -n 30 "$gate/collect-all.log"
+            echo "gate: CANNOT VERIFY -- collect-only of the whole tree failed"
+            exit 2
+          fi
+          tail -n 1 "$gate/collect-all.log"
       # ‏`set -o pipefail` אינו קישוט: ברירת המחדל של Actions היא
       # ‏`bash -e`, **בלי pipefail**, ולכן `pytest | tee` היה מחזיר את
       # קוד היציאה של `tee` — כלומר 0 תמיד. זה בדיוק הדפוס שעיקרון 5
@@ -125,13 +156,20 @@ jobs:
       # נמצא ב-junit, אין FAILED/ERROR/SKIPPED מחוץ ל-`.github/ci-gate-allowed.json`,
       # ובדיקות הסשן של conftest (יתומים, שולח אמיתי) נרשמו — וריקות.
       # הפלט מחוץ לעץ (`RUNNER_TEMP`): טסט שבודק את העץ לא יראה אותו.
+      #
+      # ‏#2952: אותו דבר בדיוק, על shard אחד: ‏`shard=(...)` נוסף ל-collect
+      # ולשתי הריצות, ולכן ה-collect של ה-shard הוא מה **שה-shard** צריך
+      # להריץ, והפסק כאן הוא על החלק שלו. ב-shards ‏2–4 השלב הסדרתי בוחר אפס
+      # טסטים (כל `serial` הולך ל-1): ‏pytest יוצא 5, ה-junit ריק, וזה תקין —
+      # טסט שהיה צריך לרוץ ולא רץ ייתפס בשמו ב-merge.
       - name: Run the test suite (fanout included)
         run: |
           set -o pipefail
           args=(-p no:cacheprovider -m "not uinput and not vm_it")
+          shard=(-p tools.git.ci_shard --ci-shard "$SHARD/4")
           gate="$RUNNER_TEMP/gate"
           mkdir -p "$gate"
-          if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" \
+          if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" "${shard[@]}" \
               < /dev/null > "$gate/collect.log" 2>&1; then
             tail -n 30 "$gate/collect.log"
             echo "gate: CANNOT VERIFY -- collect-only failed; nothing to compare the run with"
@@ -146,21 +184,26 @@ jobs:
           set +e
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-parallel.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
-            --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
+            "${shard[@]}" --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
           rc1=${PIPESTATUS[0]}
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-serial.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and serial" \
-            --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
+            "${shard[@]}" --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
           rc2=${PIPESTATUS[0]}
           set -e
+          # ה-merge קורא את קודי היציאה מכאן — לפני הפסק, שעלול להכשיל את הצעד.
+          echo "$rc1 $rc2" > "$gate/rc"
           python tools/git/lab_gate.py verdict --collected "$gate/collected.txt" \
             --junit "$gate/run-parallel.xml" --junit "$gate/run-serial.xml" \
             --problems "$gate/problems-parallel.json" --problems "$gate/problems-serial.json" \
             --allowed .github/ci-gate-allowed.json --pytest-rc "$rc1" --pytest-rc "$rc2"
+      # ‏#2952: מה שאינו הסוויטה המפוצלת רץ פעם אחת לכל גרסה, ב-shard האחרון.
+      #
       # ‏#949: חמשת טסטי evdev כותבים ל-/dev/uinput וקוראים /dev/input/event*
       # — במעבדה root, כאן sudo עם אותו אינטרפרטר (אותם site-packages).
       # ‏`-m uinput` בלי טסטים = יציאה 5 של pytest = כישלון, לא "עבר".
       - name: evdev/uinput tests as root (#949)
+        if: matrix.shard == 4
         run: |
           set -o pipefail
           sudo modprobe uinput
@@ -171,6 +214,7 @@ jobs:
       # מה להעלות ממנה. מה שכן שורד הוא הפלט — והוא כבר מכיל את זנב
       # לוג השרת, שהתסריט מדפיס בכל מסלול כישלון.
       - name: End-to-end simulation — four machines against a real server
+        if: matrix.shard == 4
         run: |
           set -o pipefail
           python tools/e2e_simulation.py 2>&1 | tee e2e.log
@@ -181,7 +225,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: logs-py${{ matrix.python-version }}
+          name: logs-py${{ matrix.python-version }}-shard-${{ matrix.shard }}
           path: |
             pytest.log
             pytest-uinput.log
@@ -189,6 +233,7 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
       - name: Agent scripts parse under a real POSIX shell
+        if: matrix.shard == 4
         run: |
           find agent/lib -type f -name '*.sh' -print0 > "$RUNNER_TEMP/agent-lib-files"
           mapfile -d '' -t libs < "$RUNNER_TEMP/agent-lib-files"
@@ -196,3 +241,59 @@ jobs:
           for f in agent/imagesrv-agent agent/init "${libs[@]}"; do
             dash -n "$f" && busybox ash -n "$f"
           done
+
+      # ‏#2952: הראיה של ה-shard ל-merge. ‏`finished` נוצר רק כשכל צעד לפניו
+      # הצליח (ברירת המחדל של `if` היא success()), ונושא את ה-SHA — בלעדיו
+      # ה-merge אדום בשם ה-shard. ההעלאה עצמה תמיד, גם בכישלון: ה-merge צריך
+      # את ה-junit כדי לומר **איזה** טסט נכשל, לא רק "shard 3 אדום".
+      - name: Mark the shard finished (#2952)
+        run: echo "$GITHUB_SHA" > "$RUNNER_TEMP/gate/finished"
+      - name: Hand the evidence to the merge (#2952)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-py${{ matrix.python-version }}-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/gate
+          retention-days: 3
+          if-no-files-found: warn
+          overwrite: true
+
+  # ‏#2952: הפסק על האיחוד, לכל גרסה — הסטטוס `pytest (3.12)` / ‏`pytest (3.13)`.
+  # ‏`!cancelled()` ולא ברירת המחדל: כש-shard נכשל, ברירת המחדל הייתה מדלגת
+  # על ה-job הזה, ו"דילוג" אינו "אדום". והוא אינו נשען על `needs.shard.result`:
+  # זה מצרף את כל שמונת ה-shards של שתי הגרסאות, ו-3.12 אדום היה צובע את
+  # 3.13. הראיה היא ה-artifacts של הגרסה הזאת בלבד: ארבעה, כל אחד עם
+  # ‏`finished` על ה-SHA הזה, וה-junit של כולם יחד מול collect של כל העץ —
+  # כל id שנאסף רץ, ובדיוק ב-shard אחד (‏tools/git/ci_shard.py merge).
+  pytest:
+    name: pytest (${{ matrix.python-version }})
+    needs: shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11 והפיל טסטים; נעול עד שנתמוך ב-26.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      # ‏lab_gate ממפה id לשם ב-junit דרך הקוד של pytest עצמו (`_pytest.junitxml`).
+      - name: Install pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: gate-py${{ matrix.python-version }}-shard-*
+          path: ${{ runner.temp }}/shards
+      - name: Every shard ran, and every collected test ran in exactly one (#2952)
+        env:
+          PY: ${{ matrix.python-version }}
+        run: |
+          python tools/git/ci_shard.py merge --dir "$RUNNER_TEMP/shards" --name "gate-py$PY-shard" \
+            --shards 4 --sha "$GITHUB_SHA" --allowed .github/ci-gate-allowed.json

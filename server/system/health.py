@@ -292,6 +292,10 @@ def manual_time_check(set_at: str, zone: str, now: datetime) -> dict:
     return check("time_sync", "שעון", "info", " · ".join(parts))
 
 
+UNSYNC_WHY = {"no_gateway": "בשרת אין שער ברירת מחדל — שרתי הזמן לא נגישים",
+               "no_dns": "בשרת אין DNS — שמות שרתי הזמן לא יתורגמו"}
+
+
 def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
     # Compatibility for callers from before #1773; the live route uses the
     # structured measurement above, including its explicit unknown state.
@@ -315,6 +319,9 @@ def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
         # while the clock was 352 s behind. It is not shown. The freshest real sample from
         # `chronyc sources` is, named as such with its source and age, and it decides `bad`.
         parts.append("סטייה לא ידועה (אין מקור זמן נבחר)")
+        why = UNSYNC_WHY.get(status.get("network_reason"))   # #2869: the cause, when the server can see it
+        if why:
+            parts.append(why)
         sample = status.get("last_sample")
         offset = sample["offset_ms"] if sample else None
         if sample:

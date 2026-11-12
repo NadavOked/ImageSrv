@@ -2,6 +2,7 @@
 // table · drawer · drawer-dist · warn · warn-table · lockout-last · lockout · handoff · pending ·
 // reverted · kept · new · new-drawer. אותה רתמה של network_page.test.cjs: הקבצים האמיתיים
 // רצים ב-vm מול DOM מזערי ו-fetch מזויף. עיקרון 5: /net/services שלא נקרא = "לא נקרא".
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -57,7 +58,7 @@ function setup(over={}) {
       if(f instanceof Error) return {status:f.status||500,ok:false,headers:{get:()=>null},json:async()=>({detail:f.message})};
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>f ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js','netcfg.js','nicsvc.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js','netcfg.js','nicsvc.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME='+JSON.stringify({username:'nadav',role:'admin',server_name:'שרת',version:'v0.72.0',tls:{fingerprint_sha256:'aa'},capabilities:{enroll_secondary:false,classrooms:false}})
     +'; globalThis.sheets=[]; globalThis.toasts=[]; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; };'

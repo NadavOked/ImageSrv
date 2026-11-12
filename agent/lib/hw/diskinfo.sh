@@ -132,7 +132,7 @@ build_disk_entry() {
 
     printf '{"dev":"%s","size_bytes":%s,"model":"%s","serial":%s,"removable":%s%s,"port":%s,"smart":"%s","smart_reason":"%s"%s}' \
         "$_name" "$_size" "$(json_escape "$_model")" "$_serial_json" \
-        "$_removable" "$_content" "$_port_json" "$_smart" "$(json_escape "$_smart_r")" "$(command -v disk_link_json >/dev/null 2>&1 && disk_link_json "$_name")$(command -v disk_pci_json >/dev/null 2>&1 && disk_pci_json "$_name")$(command -v smart_attrs_hello >/dev/null 2>&1 && smart_attrs_hello "$_name")$(command -v writemark_json >/dev/null 2>&1 && writemark_json "$_name" "$_scheme")$(command -v raid_member_json >/dev/null 2>&1 && raid_member_json "$_name")"   # #432+#1485; #1859: every SMART attribute; #1798 write_mark; #1808 raid_member
+        "$_removable" "$_content" "$_port_json" "$_smart" "$(json_escape "$_smart_r")" "$(command -v disk_link_json >/dev/null 2>&1 && disk_link_json "$_name")$(command -v disk_pci_json >/dev/null 2>&1 && disk_pci_json "$_name")$(command -v smart_attrs_hello >/dev/null 2>&1 && smart_attrs_hello "$_name")$(command -v writemark_json >/dev/null 2>&1 && writemark_json "$_name" "$_scheme")$(command -v raid_member_json >/dev/null 2>&1 && raid_member_json "$_name")$(command -v hw_sata_json >/dev/null 2>&1 && hw_sata_json "$_name")"   # #432+#1485; #1859: every SMART attribute; #1798 write_mark; #1808 raid_member; #2848 sata_issues
 }
 
 list_disks() {

@@ -71,6 +71,11 @@ static void sb_x(cairo_t *cr, double cx, double cy, Rgb c, Rgb soft) {
     draw_set(cr, c); cairo_stroke(cr);
 }
 
+/* #2848: yellow (--clr-yellow) is a fill and a LED; text in it is --clr-yellow-fg (4.5:1 on its soft) */
+static Rgb ink_of(const Theme *t, Rgb c) {
+    return c.r == t->yellow.r && c.g == t->yellow.g && c.b == t->yellow.b ? t->yellow_fg : c;
+}
+
 static Rgb soft_of(const Theme *t, int lvl) {
     return lvl == 2 ? t->danger_soft : lvl == 1 ? t->warning_soft : t->success_soft;
 }
@@ -82,7 +87,7 @@ static const char *chip_he(const char *smart) {
     if (!strcmp(smart, "passed")) return RLM "SMART תקין";   /* RLM: a Latin-first label stays RTL */
     if (!strcmp(smart, "failed_last")) return "נכשל בשיכפול הקודם";
     if (!strcmp(smart, "fail")) return "SMART תקול";
-    if (smart_level(smart) == 1) return "אזהרת SMART";
+    if (smart_level(smart) == 1) return "SMART חצי תקין";   /* #2848 (Nadav 11/11): the console's word too */
     return RLM "SMART לא נבדק";
 }
 
@@ -167,12 +172,24 @@ void sb_hatch(cairo_t *cr, const Theme *t, Rect r) {
     cairo_restore(cr);
 }
 
-/* #2050: how loud a drawer is -- 2 red, 1 orange, 0 plain. The colour rules are the ones
- * that were here (SMART first, then a slow link / CRC / hardware note, then a cut write). */
+/* #2848 (Nadav 11/11): a slow SATA link, or a SATA problem (link_reset / drawer_gone) -- red, not a target, still a source */
+static int sata_red(const IdleDisk *d) { return d && (link_slow(d) || d->sata_bad); }
+
+/* #2848: the one rule (disk_rule.c) on a drawer of the standby screen. The agent's words: "passed" is ok,
+ * failed_last is the smart field (clonergui.sh); no round's write check here -- write_slow 0. */
+static DiskRule sb_rule(const IdleDisk *d) {
+    DiskFacts f = { !strcmp(d->smart, "passed") ? "ok" : d->smart, 0, !strcmp(d->mark, "incomplete"),
+                    link_slow(d), d->sata_issue, 0 };
+    return disk_rule(&f);
+}
+
+/* #2050: how loud a drawer is -- 2 red, 1 yellow or orange, 0 plain (the colour: sb_rule). #2848: red = SMART
+ * failed or a SATA problem; yellow = failed the last clone / a cut write; orange = SMART half-good; the rest of
+ * the hardware note (USB 2.0, an ICRC) is words only. */
 static int sb_accent(const IdleDisk *d) {
-    int lvl = d ? smart_level(d->smart) : 0;
-    if (lvl || !d) return lvl;
-    return link_slow(d) || d->crc_suspect || d->hw[0] || !strcmp(d->mark, "incomplete");
+    if (!d) return 0;
+    int c = sb_rule(d).color;
+    return c == DR_RED ? 2 : c == DR_YELLOW || c == DR_ORANGE ? 1 : 0;
 }
 
 static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
@@ -181,16 +198,17 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
     int unmapped = bay == 0;
     int lvl = d ? smart_level(d->smart) : 0;
     Rgb col = d ? smart_color(t, d->smart) : t->led_idle;
-    int slow = d && !lvl && (link_slow(d) || d->crc_suspect || d->hw[0]);   /* #432/#1366/#1921: the drawer's note, below a SMART warning */
+    int slow = d && !lvl && (link_slow(d) || d->hw[0]);   /* #432/#1921: the drawer's note, below a SMART warning (#2846: no absolute CRC) */
+    int sred = sata_red(d) && lvl < 2;   /* #2848: the SATA problem is the red's reason, over a SMART half-good */
     int inc = d && !lvl && !strcmp(d->mark, "incomplete");      /* #1798: a cut write -- orange, not usable */
-    int acc = sb_accent(d);
-    Rgb acol = lvl ? col : t->warn;
+    int acc = sb_accent(d), yel = d && sb_rule(d).color == DR_YELLOW;   /* #2848: yellow -- not SMART's orange */
+    Rgb acol = acc == 2 ? t->danger : yel ? t->yellow : lvl ? col : t->warn;   /* #2848: red also for a slow SATA link */
     Rgb line = t == &THEME_DARK ? t->art_line : t->art_c;   /* --mark-line: #9AADB8 / #4A5D6B */
     double cy = b.y + b.h / 2;
 
     cairo_save(cr);
     draw_rrect_path(cr, b, 4); cairo_clip(cr);
-    draw_set(cr, acc ? (acc == 2 ? t->danger_soft : t->warning_soft) : d || o ? t->surface : t->porcelain); cairo_paint(cr);
+    draw_set(cr, acc ? (acc == 2 ? t->danger_soft : yel ? t->yellow_soft : t->warning_soft) : d || o ? t->surface : t->porcelain); cairo_paint(cr);
     Rect face = { b.x + SB_GRIP_W + 1, b.y, b.w - SB_GRIP_W - SB_NUM_W - 2, b.h };
     if (!d && !o) sb_hatch(cr, t, face);
     cairo_rectangle(cr, b.x + b.w - SB_NUM_W, b.y, 1, b.h);   /* .num border-inline-end */
@@ -204,13 +222,14 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
     Text nb = text_make(cr, FONT_MONO, 44, 600, num, 0, DIR_LTR);
     Text nl = text_make(cr, FONT_SANS, 11, 400, unmapped ? "לא ממופה" : "מגירה", 0, DIR_RTL);
     double nh = 44 + 6 + nl.h, ny = cy - nh / 2, nr = b.x + b.w - 20;
-    text_draw_r(cr, &nb, nr, ny + (44 - nb.h) / 2.0, acc == 2 ? t->danger_fg : acc ? t->warning_ink : t->ink);
+    text_draw_r(cr, &nb, nr, ny + (44 - nb.h) / 2.0, acc == 2 ? t->danger_fg : yel ? t->yellow_fg : acc ? t->warning_ink : t->ink);
     text_draw_r(cr, &nl, nr, ny + 50, t->muted);
     text_free(&nb); text_free(&nl);
 
     /* .grip: the drawer's LED and the two handle lines */
     double gx = b.x + SB_GRIP_W / 2, gy = cy - 20;
-    sb_led(cr, gx, gy + 5, 10, acc ? acol : d ? col : t->led_idle, soft_of(t, acc), d != NULL, 1);   /* #2050: the LED says the frame's colour */
+    int green = d && (!strcmp(d->smart, "passed") || !strcmp(d->smart, "ok"));   /* #2897: only a SMART read ok is green */
+    sb_led(cr, gx, gy + 5, 10, acc ? acol : d ? col : t->led_idle, yel ? t->yellow_soft : acc || green ? soft_of(t, acc) : t->hover, d != NULL, 1);   /* #2050: the LED says the frame's colour */
     for (int i = 0; i < 2; i++) {
         draw_fill_rrect(cr, (Rect){ gx - 11, gy + 22 + i * 15, 22, 3 }, 1.5, line);
     }
@@ -219,7 +238,7 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
      * model (or "ריק") at the left end */
     double fr = face.x + face.w - 26, fl = face.x + 26;
     char name[SLOT_NAME_MAX + 16], sub[SLOT_NAME_MAX + 48];
-    char lk[48] = "", slow_why[96] = "", conn[64];   /* #432: the link on the sub line, the slow reason */
+    char lk[48] = "", slow_why[320] = "", conn[64];   /* #432: the link on the sub line, the slow reason (#2848: + the hw note) */
     if (unmapped && d) {
         const char *slot_name = d->port >= 1 && d->port <= MAX_DRAWERS ? s->cslot_names[d->port - 1] : "";
         unmapped_label(slot_name, d->conn, d->port, "", name, sizeof name);   /* #2030: never the device name */
@@ -244,7 +263,7 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
         }
     }
     const char *why = d ? reason_he(d) : NULL;
-    Rgb why_c = col;
+    Rgb why_c = ink_of(t, col);
     /* #1858 (mockup 07/11): "נצפה F1 בהדלקה (24/10) · סומן בקונסולה", and under it what the disk's own SMART says */
     char f1_why[160] = "", f1_sub[96] = "";
     if (d && f1_marked(d)) {
@@ -252,16 +271,17 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
                                     !strcmp(d->f1_src, "auto") ? "סומן אוטומטית" : "סומן בקונסולה");
         else snprintf(f1_why, sizeof f1_why, "נצפה F1 בהדלקה");
         const char *sm = d->f1_smart;
-        snprintf(f1_sub, sizeof f1_sub, "%s", !strcmp(sm, "passed") ? "SMART של הדיסק תקין" : !strcmp(sm, "warn") ? "SMART של הדיסק: אזהרה"
+        snprintf(f1_sub, sizeof f1_sub, "%s", !strcmp(sm, "passed") ? "SMART של הדיסק תקין" : !strcmp(sm, "warn") ? "SMART של הדיסק: חצי תקין"
                  : !strcmp(sm, "fail") ? "גם ה-SMART של הדיסק אדום" : !strcmp(sm, "unchecked") ? "SMART של הדיסק לא נבדק" : "");
         why = f1_why;
     }
-    if (!why && inc) { why = "כתיבה לא הושלמה — לא שמיש"; why_c = t->warn; }   /* #1798 */
-    if (!why && slow) {
-        if (link_slow(d)) snprintf(slow_why, sizeof slow_why, "קישור %s מתוך %s Gb/s — לבדוק כבל", d->link, d->link_max);
-        else if (d->crc_suspect) snprintf(slow_why, sizeof slow_why, "כבל או מגירה חשודים — %ld שגיאות", d->crc_suspect);   /* #1366 */
-        why = d->hw[0] && !slow_why[0] ? d->hw : slow_why; why_c = t->warn;   /* #1921: a reset, a drawer that dropped, USB 2.0 */
+    if (sred && !f1_why[0]) {   /* #2848: red -- why, and that it is not written to */
+        if (link_slow(d)) snprintf(slow_why, sizeof slow_why, "קישור SATA %s מתוך %s Gb/s — לא כותבים על הדיסק הזה; לבדוק כבל", d->link, d->link_max);
+        else snprintf(slow_why, sizeof slow_why, "%s — לא כותבים על הדיסק הזה", d->hw[0] ? d->hw : "בעיית SATA במגירה");
+        why = slow_why; why_c = t->danger;
     }
+    if (!why && inc) { why = disk_rule_he("write_incomplete"); why_c = t->yellow_fg; }   /* #1798; #2848: yellow -- a target, never a source */
+    if (!why && slow) { why = d->hw; why_c = t->muted; }   /* #1921: USB 2.0, an ICRC -- a note, not a colour (#2848) */
     /* #1798: a mark that could not be read is "not checked" -- said, never drawn as clean */
     if (!why && d && !strcmp(d->mark, "unchecked")) { why = "לא נבדק אם הכתיבה האחרונה הושלמה"; why_c = t->muted; }
     Text tn = text_make(cr, FONT_SANS, 18, 600, name, 0, DIR_RTL);
@@ -301,8 +321,9 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
         text_draw(cr, &e, fl, cy - e.h / 2.0, t->muted); text_free(&e);
         return;
     }
-    sb_bay_pill(cr, fr - names_w - 22, cy, lvl ? chip_of(d) : inc ? "לא שמיש" : slow ? "אזהרה" : chip_of(d),
-                acc ? t->on_ink : col, acc ? acol : soft_of(t, lvl), acc);
+    sb_bay_pill(cr, fr - names_w - 22, cy, lvl == 2 ? chip_of(d) : sred ? (link_slow(d) ? "קישור SATA איטי" : "בעיית SATA")   /* #2848: the red's reason */
+                : lvl ? chip_of(d) : inc ? "כתיבה לא הושלמה" : slow ? "אזהרה" : chip_of(d),
+                acc ? (yel ? t->yellow_on : t->on_ink) : green || lvl ? col : t->muted, acc ? acol : green || lvl ? soft_of(t, lvl) : t->hover, acc);   /* #2897 */   /* #2848: dark text on yellow */
     char size[32]; disk_size(d->size, size, sizeof size);
     Text sz = text_make(cr, FONT_MONO, 22, 600, size, 0, DIR_LTR);
     Text md = d->model[0] ? text_make(cr, FONT_MONO, 13, 400, d->model, 0, DIR_LTR)
@@ -358,7 +379,10 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     for (int i = 0; i < s->ncopticals; i++) unmapped_opticals += eff_drawer(s->copticals[i].drawer, 0) == 0;
     int n = bays + unmapped_disks + unmapped_opticals;
     double cw = fmin(SB_CAGE_W, W - 2 * N_PAD), x0 = (W - cw) / 2, xr = x0 + cw;
-    double y = head_h + 34;
+    /* #2849: 800x600 / 640x480 (a KVM switch, no EDID) -- tighter spacing and smaller bays, so a
+     * third drawer is not drawn under the status bar */
+    const int compact = H < 700;
+    double y = head_h + (compact ? 14 : 34);
 
     /* .st: the one status line */
     const char *h1 = conn == STANDBY_OK ? "מחובר. ממתין לסבב." : conn == STANDBY_OFF ? "השרת לא עונה" : "ממתין לתשובה מהשרת";
@@ -396,7 +420,7 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     text_draw(cr, &to2, x0, oy, t->ink); oy += to2.h;
     if (to3.layout) text_draw(cr, &to3, x0, oy, t->muted);
     text_free(&to1); text_free(&to2); if (to3.layout) text_free(&to3); text_free(&th); text_free(&tp);
-    y = floor(y + row + 26 + .5);
+    y = floor(y + row + (compact ? 12 : 26) + .5);
     double fwh = sb_fw_banner(a, cr, x0, y, cw);   /* #2080: before the notes and the cage, so the bays shrink to leave it room */
     if (fwh > 0) y += fwh + 12;
 
@@ -412,7 +436,7 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     for (int kind = 0; kind < 2; kind++)
     for (int i = 0; i < ndisk_rows && nn < 2 * MAX_DRAWERS; i++) {
         const IdleDisk *d = disk_rows[i];
-        if (kind == 0 ? !smart_level(d->smart) : !link_slow(d) && !d->crc_suspect && !d->hw[0]) continue;
+        if (kind == 0 ? !smart_level(d->smart) : !sata_red(d) && !d->hw[0]) continue;
         char label[SLOT_NAME_MAX + 16], msg[SLOT_NAME_MAX + 120], lmsg[SLOT_NAME_MAX + 300];   /* #1921: + the hw sentence */
         int bay = eff_drawer(d->drawer, d->port);
         if (bay > 0) cloner_slot_label(s, bay, label, sizeof label);
@@ -421,14 +445,12 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
             unmapped_label(slot_name, d->conn, d->port, d->dev, label, sizeof label);
         }
         if (kind == 0) snprintf(msg, sizeof msg, RLM "%s: %s — לפני כתיבה אליו תופיע שאלה.", label, chip_of(d));
-        else if (link_slow(d)) snprintf(lmsg, sizeof lmsg, RLM "%s: קישור SATA %s מתוך %s Gb/s — לבדוק כבל או מגירה. לפני התחלת סבב תופיע אזהרה.",
-                      label, d->link, d->link_max);
-        else if (d->crc_suspect) snprintf(lmsg, sizeof lmsg, RLM "%s: כבל או מגירה חשודים — %ld שגיאות. לפני התחלת סבב תופיע אזהרה.",
-                      label, d->crc_suspect);   /* #1366 */
+        else if (link_slow(d)) snprintf(lmsg, sizeof lmsg, RLM "%s: קישור SATA %s מתוך %s Gb/s — לבדוק כבל או מגירה. לא כותבים על הדיסק הזה.",
+                      label, d->link, d->link_max);   /* #2848: red, not a target */
         else snprintf(lmsg, sizeof lmsg, RLM "%s: %s", label, d->hw);   /* #1921: the hardware table's sentence */
         notes[nn] = text_make(cr, FONT_SANS, 13, 400, kind == 0 ? msg : lmsg, (int)(cw - 18), DIR_RTL);
-        note_c[nn] = kind == 0 ? smart_color(t, d->smart) : t->warn;
-        note_l[nn] = kind == 0 ? smart_level(d->smart) : 1;
+        note_c[nn] = kind == 0 ? smart_color(t, d->smart) : sata_red(d) ? t->danger : t->muted;   /* #2848: only the SATA problem is a colour */
+        note_l[nn] = kind == 0 ? smart_level(d->smart) : sata_red(d) ? 2 : 0;
         notes_h += (nn ? 6 : 14) + notes[nn].h; nn++;
     }
 
@@ -443,7 +465,7 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     double chrome = 1 + 14 + lh + 10 + 14 + 1, bay_h = SB_BAY_H;
     /* #2080: with the warning on, the bays also leave the way-back button its row (16 + 34) -- it was the 24 that left it room before */
     double room = H - N_STATUS_H - 24 - (fwh > 0 ? 50 : 0) - notes_h - y - chrome - (n - 1) * SB_BAY_GAP;
-    if (n * bay_h > room) bay_h = fmax(SB_BAY_MIN, floor(room / n));
+    if (n * bay_h > room) bay_h = fmax(compact ? 48 : SB_BAY_MIN, floor(room / n));
     Rect cage = { x0, y, cw, chrome + n * bay_h + (n - 1) * SB_BAY_GAP };
     if (conn == STANDBY_OFF) cairo_push_group(cr);   /* [data-conn=off] .cage{opacity:.72} */
     int dark = t == &THEME_DARK;
@@ -474,7 +496,7 @@ void screen_standby(App *a, cairo_t *cr, double W, double H, double head_h) {
     for (int i = 0; i < nn; i++) {
         y += i ? 6 : 14;
         sb_led(cr, xr - 5, y + notes[i].h / 2.0, 10, note_c[i], soft_of(t, note_l[i]), 1, 1);
-        text_draw_r(cr, &notes[i], xr - 18, y, note_c[i]);
+        text_draw_r(cr, &notes[i], xr - 18, y, ink_of(t, note_c[i]));
         y += notes[i].h; text_free(&notes[i]);
     }
     /* #2079 (mockup 02, Nadav 24/10): back to the boot choice -- a local clone or an image from

@@ -329,16 +329,13 @@ LC_ORANGE = LC.replace("|fail|health_failed|Ubuntu|", "|warn|crc|Ubuntu|")   # #
 
 
 @native_gui
-def test_local_clone_a_warned_target_only_through_the_window(driver, tmp_path):
-    out = drive(driver, tmp_path, ["mode:cloner"], LC_ORANGE, "hit:ROLE1.2")
-    assert "sdb:0," in states(out)[-1] and "sdlg=lc_target" in states(out)[-1], out   # still "דלג"
-    skip = drive(driver, tmp_path, ["mode:cloner"], LC_ORANGE, "hit:ROLE1.2", "key:ENTER")
-    assert "sdb:0," in states(skip)[-1] and "sdlg=0" in states(skip)[-1], skip
-    go = drive(driver, tmp_path, ["mode:cloner"], LC_ORANGE, "hit:ROLE1.2", "hit:SDLG_GO")
-    assert "sdb:2," in states(go)[-1], go
-    clean = drive(driver, tmp_path, ["mode:cloner"], LC_ORANGE, "hit:ROLE0.0", "hit:ROLE0.2")   # sda: skip, target again
-    assert "sda:2," in states(clean)[-1] and "sdlg=0" in states(clean)[-1], clean
-
+def test_local_clone_an_orange_target_needs_no_window(driver, tmp_path):
+    """#2848 (Nadav 11/11): "SMART חצי תקין" starts as a target, like green -- no SMART window between
+    the click and the target (it was #1732's "orange only through the window")."""
+    out = drive(driver, tmp_path, ["mode:cloner"], LC_ORANGE, "hit:ROLE1.2")      # "יעד" on it: no window
+    assert "sdb:2," in states(out)[-1] and "sdlg=0" in states(out)[-1], out
+    again = drive(driver, tmp_path, ["mode:cloner"], LC_ORANGE, "hit:ROLE1.0", "hit:ROLE1.2")   # skip, then target
+    assert "sdb:2," in states(again)[-1] and "sdlg=0" in states(again)[-1], again
 
 @native_gui
 def test_local_clone_a_warned_source_passes_the_window_once(driver, tmp_path):

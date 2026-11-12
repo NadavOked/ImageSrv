@@ -7,6 +7,7 @@
 // the operator had no way to learn the build machine's disk was left
 // shrunk. Runs the shipped functions from server/static/console.js, not a
 // copy of them.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,15 +15,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../server/static');
-const CONSOLE_JS = path.join(root, 'console.js');
 const PROGRESS_JS = path.join(root, 'progress.js');
 
-function functionSource(file, name) {
-  const source = fs.readFileSync(file, 'utf8');
+function functionSource(name) {
+  const source = consoleJs();
   const lines = source.split('\n');
   const start = lines.findIndex(
     (line) => new RegExp(`^(\\s*)(async )?function ${name}\\(`).test(line));
-  assert.ok(start >= 0, `renderer ${name} exists in ${path.basename(file)}`);
+  assert.ok(start >= 0, `renderer ${name} exists in console.js`);
   const indent = lines[start].match(/^\s*/)[0];
   const end = lines.findIndex((line, i) => i > start && line.trimEnd() === indent + '}');
   return lines.slice(start, end + 1).join('\n');
@@ -61,9 +61,9 @@ async function runLoadCaptures(tasks) {
     CAPTURE_TASKS: [],
   });
   vm.runInContext(fs.readFileSync(PROGRESS_JS, 'utf8'), context);
-  vm.runInContext(functionSource(CONSOLE_JS, 'captureWarningHtml'), context);
-  vm.runInContext(functionSource(CONSOLE_JS, 'capturesOnly'), context);   // #2845
-  vm.runInContext(functionSource(CONSOLE_JS, 'loadCaptures'), context);
+  vm.runInContext(functionSource('captureWarningHtml'), context);
+  vm.runInContext(functionSource('capturesOnly'), context);   // #2845
+  vm.runInContext(functionSource('loadCaptures'), context);
   await vm.runInContext('loadCaptures()', context);
   return $('#capture-bar').innerHTML;
 }
@@ -99,7 +99,7 @@ test('captureWarningHtml ignores a still-open task even if error is set', () => 
   // that is a *rejection*, not the done-with-warning case #927 is about, and
   // showing it here would duplicate whatever "failed" surfacing exists.
   const context = vm.createContext({esc: String});
-  vm.runInContext(functionSource(CONSOLE_JS, 'captureWarningHtml'), context);
+  vm.runInContext(functionSource('captureWarningHtml'), context);
   const html = vm.runInContext(
     `captureWarningHtml(${JSON.stringify(warnedTask({state: 'running'}))})`, context);
   assert.equal(html, '');
@@ -108,14 +108,14 @@ test('captureWarningHtml ignores a still-open task even if error is set', () => 
 test('machine screen shows the last done+error capture task for that MAC', () => {
   const context = vm.createContext({esc: String,
     CAPTURE_TASKS: [warnedTask(), warnedTask({id: 't0', mac: 'aa:bb:cc:dd:ee:ff'})]});
-  vm.runInContext(functionSource(CONSOLE_JS, 'machineCaptureWarningHtml'), context);
+  vm.runInContext(functionSource('machineCaptureWarningHtml'), context);
   const html = vm.runInContext(`machineCaptureWarningHtml("b4:2e:99:07:1a:c4")`, context);
   assert.match(html, /המקור לא הוחזר לגודלו/);
 });
 
 test('machine screen shows nothing for a MAC with no warned task', () => {
   const context = vm.createContext({esc: String, CAPTURE_TASKS: [warnedTask()]});
-  vm.runInContext(functionSource(CONSOLE_JS, 'machineCaptureWarningHtml'), context);
+  vm.runInContext(functionSource('machineCaptureWarningHtml'), context);
   const html = vm.runInContext(`machineCaptureWarningHtml("00:00:00:00:00:00")`, context);
   assert.equal(html, '');
 });
@@ -131,7 +131,7 @@ test('renderActivity does not count a finished, warned capture as an active tran
     CAPTURE_TASKS: [warnedTask()], overviewError: '',
   });
   // ‏#1255: renderActivity נשען על עוזרי הפאנל (משך/יוזם) שמוגדרים לידו
-  const src = require('node:fs').readFileSync(CONSOLE_JS, 'utf8');
+  const src = consoleJs();
   vm.runInContext(src.slice(src.indexOf('const ACTIVITY_UNKNOWN'), src.indexOf('function editImageDescription')), context);
   vm.runInContext('renderActivity()', context);
   assert.match(taskPanelBody.innerHTML, /אין העברות פעילות/,

@@ -108,9 +108,17 @@ static const char *smart_reason_he(const LcDisk *d) {
 
 static const char *smart_chip(const LcDisk *d, Rgb *fg, Rgb *bg, const Theme *t) {
     int lvl = smart_level(d->smart);
+    /* #2848 (mockup disk-colors, Nadav 11/11): the chip says the rule's reason when it is not SMART's own */
+    DiskRule r = lc_rule(d);
+    if (r.target_reason && strcmp(r.target_reason, "smart_fail")) {
+        *fg = t->danger; *bg = t->danger_soft;
+        return !strcmp(r.target_reason, "link_slow") ? "קישור SATA איטי" : !strcmp(r.target_reason, "write_slow") ? "איטי בסבב הזה" : "בעיית SATA";
+    }
+    if (lvl < 2 && r.source_reason && !strcmp(r.source_reason, "write_incomplete")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return "כתיבה לא הושלמה"; }
     if (lvl == 2) { *fg = t->danger; *bg = t->danger_soft;   /* #1580; #1742: read-only says so */
                     return !strcmp(d->smart_reason, "readonly") ? "קריאה בלבד" : "SMART תקול"; }
-    if (lvl == 1) { *fg = t->warn; *bg = t->warning_soft; return strcmp(d->smart, "failed_last") ? "אזהרת SMART" : "נכשל בשיכפול הקודם"; }
+    if (lvl == 1 && !strcmp(d->smart, "failed_last")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return "נכשל בשיכפול הקודם"; }   /* #2848: yellow */
+    if (lvl == 1) { *fg = t->warn; *bg = t->warning_soft; return "SMART חצי תקין"; }   /* #2848 */
     if (!strcmp(d->smart, "ok") || !strcmp(d->smart, "passed")) { *fg = t->led_ok; *bg = t->success_soft; return RLM "SMART תקין"; }
     *fg = t->muted; *bg = t->hover; return RLM "SMART לא נבדק";
 }
@@ -131,6 +139,8 @@ static void verdict_text(App *a, const LcDisk *d, const LcDisk *src, char *out, 
     *c = t->muted;
     /* #1732 (Nadav 18/10): a red disk is a source or nothing -- "יעד" is grey (lc_target_ok) */
     if (smart_level(d->smart) == 2) { *c = t->danger; snprintf(out, n, "%s", red_refusal_he(d->smart_reason)); return; }   /* #1742: by the reason */
+    DiskRule rule = lc_rule(d);   /* #2848: red says the rule's words -- the sentence the server refuses with */
+    if (!rule.target) { *c = t->danger; snprintf(out, n, "%s", disk_rule_he(rule.target_reason)); return; }
     if (!f || f->verdict == LCV_MEASURING) { snprintf(out, n, "בודק אם נכנס…"); return; }
     lc_gb(need, sizeof need, (double)f->need); lc_gb(have, sizeof have, (double)d->size);
     switch (f->verdict) {
@@ -172,7 +182,8 @@ static double role3(App *a, cairo_t *cr, double x, double cy, int i) {
     double r = box.x + box.w - 1;
     for (int k = 0; k < 3; k++) {
         Rect b = { r - bw[k], box.y + 1, bw[k], 34 };
-        int dis = (rr[k] == LCR_TARGET && !lc_target_ok(a, i)) || (rr[k] == LCR_SOURCE && !d->usable);
+        int dis = (rr[k] == LCR_TARGET && !lc_target_ok(a, i)) || (rr[k] == LCR_SOURCE && !lc_source_ok(d))
+                  || (cur == LCR_SOURCE && rr[k] != LCR_SOURCE);   /* #2848: the source changes by choosing another (role_click) -- grey, and the card says so */
         Rgb fg = t->ink;
         if (cur == rr[k]) {
             if (rr[k] == LCR_SOURCE) { draw_fill_rrect(cr, b, 0, t->indigo); fg = (Rgb){ 1, 1, 1 }; }
@@ -226,12 +237,15 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     /* Nadav 26/10: orange is ONLY a disk on its way to F1 (a SMART warning); F1 is red. The
      * drawer's hardware note (CRC, cable, USB 2.0) and a shrink-to-fit stay words, not the card's
      * colour -- "never the disk's colour" (localclone.h, #1921). #1798's incomplete mark kept. */
-    int orange = lvl == 1 || inc;
-    int emphasis = isrc || lvl == 2 || orange;   /* #2203: source blue > red > orange (mockup 07) */
+    /* #2848 (Nadav 11/11): the one rule -- red (not a target) > yellow (failed the last clone, a cut write:
+     * not a source) > orange (SMART half-good) */
+    int rc = lc_rule(d).color, red = rc == DR_RED, yellow = rc == DR_YELLOW;
+    int orange = rc == DR_ORANGE;
+    int emphasis = isrc || red || yellow || orange;   /* #2203: source blue > red > yellow > orange (mockup 07) */
     int focus = !a->lcu.confirm && a->lcu.focus == LCF_BAY && a->lcu.bay == i;
-    Rgb edge = isrc ? t->indigo : lvl == 2 ? t->danger : orange ? t->warn : t->hair;
-    Rgb fill = isrc ? t->indigo_soft : lvl == 2 ? t->danger_soft : orange ? t->warning_soft : t->surface;
-    Rgb number = isrc ? t->action_fg : lvl == 2 ? t->danger_fg : orange ? t->warning_ink : t->ink;
+    Rgb edge = isrc ? t->indigo : red ? t->danger : yellow ? t->yellow : orange ? t->warn : t->hair;
+    Rgb fill = isrc ? t->indigo_soft : red ? t->danger_soft : yellow ? t->yellow_soft : orange ? t->warning_soft : t->surface;
+    Rgb number = isrc ? t->action_fg : red ? t->danger_fg : yellow ? t->yellow_fg : orange ? t->warning_ink : t->ink;
     double cy = b.y + b.h / 2;
     cairo_save(cr); draw_rrect_path(cr, b, 4); cairo_clip(cr);
     draw_set(cr, fill); cairo_paint(cr);
@@ -273,7 +287,7 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     lc_disk_card_name(d, name, sizeof name); lc_has_text(d, has, sizeof has);   /* #2030: the name IS the connection, so the line under it no longer says it again */
     Text tn = text_make(cr, FONT_SANS, 18, 600, name, 0, DIR_RTL);
     const char *tag = isrc ? "מקור" : role == LCR_TARGET ? "יעד" : NULL;
-    if (lvl && (!isrc || lvl == 1)) { hexc(lvl == 2 ? t->danger_fg : t->warning_ink, col); text_escape(smart_reason_he(d), e1, sizeof e1);
+    if (lvl && (!isrc || lvl == 1)) { hexc(lvl == 2 ? t->danger_fg : yellow ? t->yellow_fg : t->warning_ink, col);   /* #2848 */ text_escape(smart_reason_he(d), e1, sizeof e1);
         snprintf(mk, sizeof mk, "<span foreground='%s'>%s</span>", col, e1); }
     else mk[0] = 0;
     if (hw) {   /* #1921: the drawer's hardware note -- the cable, the drawer, USB 2.0 (words only, #2203) */
@@ -282,7 +296,8 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     }
     Text t1 = mk[0] ? text_make_markup(cr, FONT_SANS, 12, 400, mk, (int)ww, DIR_RTL) : (Text){ NULL, 0, 0 };
     Rgb c3 = t->muted; l3[0] = 0;
-    if (isrc) snprintf(l2, sizeof l2, "%s · יועתק כמו שהוא", has);
+    if (isrc) { snprintf(l2, sizeof l2, "%s · יועתק כמו שהוא", has);
+                snprintf(l3, sizeof l3, "%s", "כדי לבחור אותו כיעד — בחרו מקור אחר"); }   /* #2848: why "יעד" is grey here */
     else if (blk) { verdict_text(a, d, src, l2, sizeof l2, &c3); }
     else if (role == LCR_SKIP) { snprintf(l2, sizeof l2, "לא ישתנה"); verdict_text(a, d, src, l3, sizeof l3, &c3); }
     else { snprintf(l2, sizeof l2, "עליו עכשיו: %s — ", has); verdict_text(a, d, src, l3, sizeof l3, &c3); }
@@ -303,13 +318,13 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
         text_draw(cr, &tg, tr.x + 9, tr.y + (22 - tg.h) / 2, isrc ? (Rgb){ 1, 1, 1 } : t->ink); text_free(&tg);
     }
     by += tn.h + 3; if (t1.layout) { text_draw_r(cr, &t1, fr, by, t->muted); by += t1.h + 3; }
-    if (t2.layout) { text_draw_r(cr, &t2, fr, by, blk ? c3 : inc ? t->warning_ink : t->muted); by += t2.h + 3; }
+    if (t2.layout) { text_draw_r(cr, &t2, fr, by, blk ? c3 : inc ? t->yellow_fg : t->muted); by += t2.h + 3; }
     if (t3.layout) { text_draw_r(cr, &t3, fr, by, c3); text_free(&t3); }
     text_free(&tn); text_free(&t1); text_free(&t2);
     /* .grip */
     double gx = b.x + LS_GRIP / 2;
-    Rgb led = isrc ? t->led_write : blk ? t->danger : lvl == 2 ? t->danger : lvl ? t->warn : t->led_ok;
-    Rgb soft = isrc ? t->indigo_soft : blk || lvl == 2 ? t->danger_soft : lvl ? t->warning_soft : t->success_soft;
+    Rgb led = isrc ? t->led_write : blk || red ? t->danger : yellow ? t->yellow : lvl ? t->warn : t->led_ok;
+    Rgb soft = isrc ? t->indigo_soft : blk || red ? t->danger_soft : yellow ? t->yellow_soft : lvl ? t->warning_soft : t->success_soft;
     sb_led(cr, gx, cy - 15, 10, led, soft, 1, 1);
     for (int k = 0; k < 2; k++) draw_fill_rrect(cr, (Rect){ gx - 10, cy + 2 + k * 14, 20, 3 }, 1.5, t->mark_line);
     cairo_pop_group_to_source(cr); cairo_paint_with_alpha(cr, alpha);
@@ -455,9 +470,9 @@ static double wrow(App *a, cairo_t *cr, double x, double y, double w, int i, con
     if (lvl) {
         char lk[160], am[700], r1[200]; snprintf(lk, sizeof lk, "הוצא את %s מהשיכפול", lb);
         tl = text_make(cr, FONT_SANS, 13, 600, lk, 0, DIR_RTL);
-        text_escape(smart_reason_he(d), r1, sizeof r1); hexc(lvl == 2 ? t->danger : t->warn, col);
+        text_escape(smart_reason_he(d), r1, sizeof r1); hexc(lvl == 2 ? t->danger : !strcmp(d->smart, "failed_last") ? t->yellow_fg : t->warn, col);   /* #2848 */
         snprintf(am, sizeof am, "<span foreground='%s' weight='bold'>%s:</span> %s. הדיסק עלול להיכשל באמצע או אחרי ההתקנה בכיתה.",
-                 col, lvl == 2 ? "SMART תקול" : strcmp(d->smart, "failed_last") ? "אזהרת SMART" : "נכשל בשיכפול הקודם", r1);
+                 col, lvl == 2 ? "SMART תקול" : strcmp(d->smart, "failed_last") ? "SMART חצי תקין" : "נכשל בשיכפול הקודם", r1);
         tw = text_make_markup(cr, FONT_SANS, 13, 400, am, (int)(inner - tl.w - 30), DIR_RTL);
         ah = 8 + fmax(tw.h, tl.h) + 20; h += ah;
     }

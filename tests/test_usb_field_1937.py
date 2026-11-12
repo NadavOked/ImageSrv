@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from test_cloner_gui import BASH, posix
 
 REPO = Path(__file__).resolve().parent.parent
@@ -38,7 +39,7 @@ def test_the_ide_note_is_the_screens_orange_warning_box():
 # --- 5. how to write the stick: Rufus in DD mode (balenaEtcher failed in the field) -----------
 
 def test_rufus_dd_is_the_way_and_etcher_is_not_recommended():
-    js = _src("server/static/console.js")
+    js = console_js()
     sheet = js[js.index("function usbCloneSheet()"):js.index("async function healthUpdateCheck()")]
     assert "צורבים ב-Rufus במצב DD" in sheet and "balenaEtcher נכשל בשטח" in sheet, sheet
     # #1920: the download left the settings row for the דיסק-און-קי page; its only door is that sheet

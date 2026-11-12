@@ -31,6 +31,9 @@
   --clr-success:#318700; --clr-danger:#E12200; --clr-warning:#C25400; --clr-info:#0079B8;
   --clr-success-soft:#EAF4E5; --clr-danger-soft:#FCEDEA; --clr-warning-soft:#FFF2E3;
   --clr-info-soft:#E8F4FA;
+  /* ‏#2848 (נדב 11/11): צהוב — נכשל בשיכפול הקודם / כתיבה לא הושלמה (יעד כן, מקור לא). שונה מהכתום של SMART
+     (--clr-warning). אותם ערכים ב-native-gui/src/theme.c (tests/test_native_console_parity.py). */
+  --clr-yellow:#C99A00; --clr-yellow-soft:#FFF6BF; --clr-yellow-fg:#6B4F00; --clr-yellow-on:#2B2400;   /* -on: text on a yellow fill */
 
   --font-ui:"Segoe UI","Assistant",system-ui,-apple-system,BlinkMacSystemFont,
             "Helvetica Neue",Arial,sans-serif;
@@ -81,14 +84,16 @@
   /* כחול מילוי כהה יותר: לבן עליו 4.8:1 (היה #4c8fbd = 3.5:1). טקסט/קישור על כהה — ‏--clr-action-fg הבהיר. */
   --clr-action:#2f78a8; --clr-action-hover:#276a96; --clr-action-active:#1f5880;
   --clr-action-soft:#223e50;
-  --clr-action-fg:#7bb6dc; --clr-success-fg:#5fbd7a; --clr-danger-fg:#e88a8a; --clr-warning-fg:#e1b34f;
+  --clr-action-fg:#7bb6dc; --clr-success-fg:#5fbd7a; --clr-danger-fg:#e88a8a; --clr-warning-fg:#f0954a;
   --clr-danger-fill:#c24444;
-  --clr-success-soft:#1d3326; --clr-danger-soft:#3a2321; --clr-warning-soft:#33291a; --clr-info-soft:#1d3436;
+  --clr-success-soft:#1d3326; --clr-danger-soft:#3a2321; --clr-warning-soft:#3a2616; --clr-info-soft:#1d3436;
   --r-win:8px; --mat:rgb(28 35 42 / 72%);
   --clr-header:#26343f; --clr-header-hover:#30424e;
 
-  --clr-success:#5fbd7a; --clr-warning:#e1b34f; --clr-danger:#dc6b6b; --clr-info:#61b5b8;
-  --danger-line:#5e3733; --warn-soft:#33291a;
+  --clr-success:#5fbd7a; --clr-warning:#f0954a; --clr-danger:#dc6b6b; --clr-info:#61b5b8;
+  /* ‏#2848 (מוקאפ disk-colors, נדב 11/11): הכתום הכהה זז מ-#e1b34f ל-#f0954a כדי שהצהוב יובחן ממנו */
+  --clr-yellow:#f2e04a; --clr-yellow-soft:#38340f; --clr-yellow-fg:#f2e04a; --clr-yellow-on:#2b2400;
+  --danger-line:#5e3733; --warn-soft:#3a2616;
   --shadow-strong:rgba(0,0,0,.65); --shadow-soft:rgba(0,0,0,.55);
   --shadow-card:0 10px 28px rgba(0,0,0,.28); --shadow-overlay:0 20px 60px rgba(0,0,0,.45);
   --scrim:rgba(5,9,14,.62);

@@ -118,8 +118,8 @@ static double draw_header(App *a, cairo_t *cr, double W) {
      * themes -- always: an uploaded college logo is no longer drawn (Nadav 12/10) */
     right=draw_brand_lockup_r(cr,right,(N_HEADER_H-brand_symbol_height(5))/2,5,1,0)-22;
 
-    const int clone=a->force_cloner||a->force_standby||a->screen==SCREEN_CLONER||a->screen==SCREEN_STANDBY||a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL
-        ||(a->screen==SCREEN_FAILURE&&a->st.fail_cloner);   /* #1569: the failure record says whose failure it is */
+    const int clone=a->force_cloner||a->force_standby||(a->screen==SCREEN_CLONER&&!a->st.task_direct)||a->screen==SCREEN_STANDBY||a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL
+        ||(a->screen==SCREEN_FAILURE&&a->st.fail_cloner);   /* #1569: the failure record says whose failure it is; #2849: the build machine's direct send shows the cloner's card, not its role */
     const int server=a->screen==SCREEN_FAILURE&&a->st.fail_server;   /* #1741: the server's own screen (failgui.sh) */
     const char *role=server?(a->st.fail_server==2?"התקנת שרת":"שרת ImageSrv"):clone?"מחשב שיכפול":"מחשב בנייה";   /* #1252: the "2" was the mockup's */
     /* #2879: an unregistered machine has no known role either -- the failure record says so (field 5 = unknown) */
@@ -283,7 +283,7 @@ static const char *status_keys(const App *a,char *buf,size_t n){
         ? "1–9 / [ ]  בחירת אימג'    Esc / Backspace  לתיקיות    Enter  מחק ושחזר…"
         : "1–9  בחירת תיקייה    Enter  מחק ושחזר…    Esc  חזרה";
     case SCREEN_STANDBY:return standby_back_locked(a)?"אין פעולה במסך הזה":"Esc  חזרה למסך הבחירה";   /* #2079 */   /* "דיסקים: 1 · 2 · 3 SMART" sat where keys go */
-    case SCREEN_PICK:return a->chosen_disk>=0?"Tab / Shift-Tab  מעבר    Alt+Shift  שפה    Enter  התחלה    Esc  חזרה":"Esc  חזרה";   /* #1245 */
+    case SCREEN_PICK:return a->chosen_disk>=0?"Tab / Shift-Tab  מעבר    ↑ ↓  דיסק / תיקייה    רווח  תיקייה חדשה    Alt+Shift  שפה    Enter  התחלה    Esc  חזרה":"↑ ↓ / 1–9  בחירת דיסק    Enter  הדיסק הראשון    Esc  חזרה";   /* #1245 */
     case SCREEN_CLASS:return a->st.has_session?"Enter  התחל עכשיו":"Esc  חזרה";
     case SCREEN_DONE:return "Enter  קליטה נוספת";
     case SCREEN_PROGRESS:return "אין פעולה במסך הזה";   /* mockup 10/10: it said "Esc חזרה" and Esc did nothing */
@@ -595,6 +595,9 @@ void app_route(App *a){
     if(a->force_standby){a->screen=SCREEN_STANDBY;return;}
     if(a->force_cloner){a->screen=(s->ndrawers||s->cloner_image[0])?SCREEN_CLONER:SCREEN_STANDBY;return;}
     if(s->msg_title[0]){a->screen=SCREEN_MESSAGE;return;}
+    /* #2849 (Nadav 11/11): the direct send on the build machine is the cloner's own screen -- the same
+     * drawer cards, the same data (directgui.sh writes the cloners' drawer= records); only the title differs */
+    if(!a->force_progress&&s->task_direct&&(s->task==TASK_PENDING||s->task==TASK_RUNNING)&&(s->ndrawers||s->direct_unread)){a->screen=SCREEN_CLONER;a->watching=1;return;}
     if(a->force_progress||s->task==TASK_PENDING||s->task==TASK_RUNNING){a->screen=SCREEN_PROGRESS;a->watching=1;return;}
     if(a->watching&&(s->task==TASK_DONE||s->task==TASK_FAILED)){
         a->watching=0;a->showing_done=1;

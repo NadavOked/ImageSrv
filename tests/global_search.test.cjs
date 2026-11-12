@@ -1,6 +1,7 @@
 // #554 — חיפוש גלובלי בשורה העליונה. console.js ב-vm מול DOM מזערי; הנתונים מוזרקים לרשימות שהקונסולה כבר טוענת.
 // נבדק: קבוצות לפי תפקיד (deploy לא רואה מחשבים/משתמשים/שרתים), "אין תוצאות", שורת הסינון הראשונה,
 // מקלדת (חצים/Enter/Esc), ו"לא נקרא" כשרשימה נכשלה (עיקרון 5).
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -30,7 +31,7 @@ function setup() {
     localStorage: {getItem: () => null, setItem() {}}, CSS: {escape: (x) => x},
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})})});
-  for (const f of ['progress.js', 'console.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = (s) => JSON.parse(JSON.stringify(vm.runInContext(s, ctx)) ?? 'null');
   const call = (s) => vm.runInContext(s, ctx);
   ctx.__calls = calls;

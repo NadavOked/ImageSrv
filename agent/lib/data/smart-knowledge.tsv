@@ -3,7 +3,7 @@
 # (agent/lib/smartjudge.sh, awk) and by the server (server/smart_names.py) -- the same file.
 # kind: ata (id + the name smartctl printed) | devstat | nvme | nvmebit | selftest | errlog | hw
 # field: raw | value (normalized) | temp (raw degrees C) ; op/value: the rule, '-' = none (info)
-# value 'crc' = the crc_warn_threshold setting (default 500); 'wctemp' = the NVMe disk's own WCTEMP
+# value 'wctemp' = the NVMe disk's own WCTEMP (the CRC counters are hw-issues.tsv's, info -- #2846)
 # verdict when the rule holds: orange | red | hw | info ; a name in neither table = 'לא מוכר'
 # word: the reason word the agent stores (smart.sh SMART_WARN_REASONS) ; media: ssd|hdd|any
 ata	1	Raw_Read_Error_Rate	-	-	-	info	-	any	קצב שגיאות קריאה	קצב השגיאות בקריאה מהמדיה; ב-Seagate הערך הגולמי הוא מונה פעולות ארוז ולא מספר שגיאות.

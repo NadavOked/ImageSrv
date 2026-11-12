@@ -29,6 +29,8 @@ CASES = [
     ("auto_reboot", "monthly", "daily", "הפעלה מחדש אוטומטית"),
     ("auto_reboot_time", "24:00", "23:59", "שעת הפעלה מחדש"),
     ("auto_reboot_weekday", "7", "6", "יום הפעלה מחדש"),
+    ("clone_name_pad", "5", "3", "ריפוד שמות המחשב"),   # #2786
+    ("clone_name_instructor", "IN-S", "TEACH", "סיומת המרצה"),   # #2786
 ]
 
 

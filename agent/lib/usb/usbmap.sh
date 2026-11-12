@@ -150,7 +150,8 @@ usb_drawer_names() {
 usb_drawer_name() {   # $1 = dev, $2 = its port. The name of its connection, or nothing.
     [ -f "$RUN_DIR/drawer_names" ] || return 0
     _dn_k=$(disk_key "$1" "$2"); [ -n "$_dn_k" ] || return 0
-    awk -F'|' -v k="$_dn_k" '$1 == k { print $2; exit }' "$RUN_DIR/drawer_names"
+    _dn_v=$(awk -F'|' -v k="$_dn_k" '$1 == k { print $2; exit }' "$RUN_DIR/drawer_names")
+    [ -z "$_dn_v" ] || printf '%s%s\n' "$_dn_v" "$(disk_ide_role "$1" "$2")"   # #2316: master/slave of one port
 }
 
 usb_default_follow() {

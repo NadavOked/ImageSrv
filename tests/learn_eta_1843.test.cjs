@@ -1,5 +1,6 @@
 // #1843 — זמן סיום צפוי לפי היסטוריה: הקונסולה מציגה את ההערכה מהשרת, ו"אין עדיין הערכה" כשאין.
 // הקצב שנמדד עכשיו (eta_s) גובר — ההערכה מתעדכנת לפי הקצב בפועל. בלי דפדפן: vm מול DOM מזערי.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -23,7 +24,7 @@ function setup() {
     window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js','net.js','capture_detail.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js','capture_detail.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={username:"admin",role:"admin",server_name:"srv",idle_seconds:600,version:"v0.74.2",capabilities:{}}; globalThis.toasts=[]; toast=(m)=>{ toasts.push(m); }; globalThis.drawers=[]; openDrawer=(t,b)=>{ drawers.push(t+"|"+b); };');
   run(`MACHINES=[{mac:"${MAC}",suffix:"בנייה 1",group_id:"grp_BUILD",disks:[]}]; GROUPS=[{id:"grp_BUILD",label:"מחשבי בנייה",role:"build"}]; NET=[]; DISK_FAILURES=[]; SHRINK_RECORDS=[]; MONITOR_ROWS=[]; CAPTURE_TASKS_READ=true;`);

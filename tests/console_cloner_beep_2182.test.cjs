@@ -1,10 +1,11 @@
 // #2182: since #2067 the switch governs five tunes on the cloner and the build machine
 // (agent/lib/core/roundbeep.sh); the description must say so.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 test('#2182: cloner_beep describes all five tunes and the build machine', () => {
   const match = js.match(/\{ key: "cloner_beep"[\s\S]*?\},?\r?\n/);

@@ -42,14 +42,16 @@ lc_gui_state() {
         # #1798: field 16 = the incomplete-write mark (lcinv.sh): incomplete|clean|unchecked|"".
         # #1921: field 17 = the drawer's hardware note (hwissues.sh) -- CRC, link, reset, USB 2.0; never a colour.
         # #2001: field 18 = the name of its connection on the clone stick (usbmap.sh); "" = "דיסק N".
+        # #2848: field 19 = the hw words (hwissues.sh): link_slow / link_reset / drawer_gone make the drawer red.
         { ! command -v usb_default_follow > /dev/null 2>&1 || usb_default_follow; } || :   # #2001: the stick's default follows the disks
         drawer_slots_refresh || :
         for _gs_f in "$LC"/inv/*.line; do
             [ -f "$_gs_f" ] || continue
             IFS='|' read -r _gs_p _gs_d _gs_x < "$_gs_f"; _gs_m=$(disk_drawer "$_gs_d" "${_gs_p:-0}")
-            printf '%s|%s|%s|%s|%s|%s|%s\n' "$([ "${_gs_m%%|*}" = 0 ] && echo 1 || echo 0)" "${_gs_m%%|*}" "$(cat "$_gs_f")" "$_gs_m" \
+            printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$([ "${_gs_m%%|*}" = 0 ] && echo 1 || echo 0)" "${_gs_m%%|*}" "$(cat "$_gs_f")" "$_gs_m" \
                 "$(cat "$LC/inv/$_gs_d.mark" 2>/dev/null)" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_gs_d" "")" \
-                "$(command -v usb_drawer_name >/dev/null 2>&1 && usb_drawer_name "$_gs_d" "${_gs_p:-0}")"
+                "$(command -v usb_drawer_name >/dev/null 2>&1 && usb_drawer_name "$_gs_d" "${_gs_p:-0}")" \
+                "$(command -v hw_words >/dev/null 2>&1 && hw_words "$_gs_d" | tr '\n|' '  ')"
         done | sort -t'|' -k1,1n -k2,2n -k3,3n | sed 's/^[01]|[0-9]*|/lc_disk=/' >> "$_gs_n"
         _gs_src=$(cat "$LC/source" 2>/dev/null)
         if [ -n "$_gs_src" ]; then

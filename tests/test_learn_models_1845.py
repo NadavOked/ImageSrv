@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from console_src import console_js
 from server import db
 from server.rounds import room_precheck
 from server.system import housekeeping
@@ -163,9 +164,10 @@ def test_the_room_learns_the_model_from_finished_waves(room_server):
     # (האזהרה שלפני "התחל" — רק למגירה טרייה; היא נבדקת ב-test_the_precheck_warning_…)
 
 
-def test_the_console_paints_the_slow_model_orange_with_the_server_text():
-    from pathlib import Path
-    js = (Path(__file__).resolve().parents[1] / "server" / "static" / "console.js").read_text(
-        encoding="utf-8")
-    assert "(d.model_speed && d.model_speed.slow === true)) return \"warn\"" in js
+def test_the_console_says_the_slow_model_in_words_not_a_colour():
+    """#2848 (Nadav 11/11): "slower than the usual for its model" is a note in the title -- orange is SMART's alone."""
+    import re
+    js = console_js()
+    slot = re.search(r"^function slotClass\(s\) \{.*?^\}", js, re.M | re.S).group(0)
+    assert "model_speed" not in slot, slot
     assert "if (d.model_speed && d.model_speed.text_he) parts.push(d.model_speed.text_he);" in js

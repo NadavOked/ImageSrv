@@ -38,6 +38,20 @@ static void net_lines(const InstallState *s,char *one,size_t n1,char *two,size_t
     snprintf(two,n2,RLM "%s · %s · %s · %s",s->static_mode?"כתובת סטטית":"DHCP · עכשיו",addr,gwl,dnsl);
 }
 
+/* #2869: a clock that needs the internet -- automatic, or an organisation server given by name -- on a
+ * management NIC with no gateway or no DNS cannot sync, and updates cannot resolve github.com either.
+ * Said before the install, not 50 minutes after it. 1 = warn; the text is in `out`. */
+static int clock_warning(const InstallState *s,char *out,size_t n){
+    if(s->ntp_manual||s->nic<0||s->nic>=s->nnics)return 0;
+    int byname=0;if(s->ntp_org)for(const char *p=s->ntp_servers;*p;p++)if((*p>='g'&&*p<='z')||(*p>='G'&&*p<='Z'))byname=1;   /* a letter beyond hex: a name, not an address */
+    if(s->ntp_org&&!byname)return 0;
+    const InstallNic *c=&s->nics[s->nic];const char *g=s->static_mode?s->gateway:c->gateway,*d=s->static_mode?s->dns:c->dns;
+    if(g[0]&&d[0])return 0;
+    snprintf(out,n,"%s, אבל לכרטיס הניהול אין %s — השעון לא יסונכרן ועדכונים לא יעבדו. הוסיפו שער ו-DNS, או בחרו שרת זמן של הארגון לפי כתובת IP.",
+             s->ntp_org?"בחרתם שרת זמן לפי שם":"בחרתם שעון אוטומטי מהאינטרנט",!g[0]&&!d[0]?"שער ו-DNS":!g[0]?"שער":"DNS");
+    return 1;
+}
+
 static void summary(App *a,cairo_t *cr,InstallLayout l){
     InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;char value[400],url[192];
     /* #2129: the network row is two lines (a third when one wraps); the rows below move down by what it grew */
@@ -63,6 +77,10 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
     Rect seq={x,y,fmin(760,w),112};install_card(cr,t,seq);install_text_r(cr,t,"מה יקרה בלחיצה על \"החל התקנה\"",14,600,seq.x+seq.w-16,y+14,seq.w-32,t->ink);
     install_text_r(cr,t,"מחיקת הדיסק ← מערכת בסיס ← חבילות ImageSrv ← מנהל אתחול ← הגדרות",13,500,seq.x+seq.w-16,y+50,seq.w-32,t->ink);
     char after[192],secs[32];he_secs(INSTALL_AUTO_REBOOT_S,secs,sizeof secs);snprintf(after,sizeof after,"בסיום תתבקש להסיר את מדיית ההתקנה; השרת יופעל מחדש אוטומטית אחרי %s.",secs);install_text_r(cr,t,after,12,400,seq.x+seq.w-16,y+78,seq.w-32,t->muted);
+    {char warn[512];if(clock_warning(s,warn,sizeof warn)){   /* #2869: orange, never blocking */
+        Text tw=text_make(cr,FONT_SANS,13,500,warn,(int)(seq.w-32),DIR_RTL);Rect box={x,y+seq.h+12,seq.w,tw.h+20};
+        draw_fill_rrect(cr,box,t->radius,t->warning_soft);draw_border_rrect(cr,box,t->radius,t->warn,1);
+        text_draw_r(cr,&tw,box.x+box.w-16,box.y+10,t->warning_ink);text_free(&tw);}}
     /* #2097: destructive = red button, no typed word (#1270) */
     install_footer_style(a,cr,l,"החל התקנה",HIT_INSTALL_NEXT,1,1,BTN_DANGER);
 }

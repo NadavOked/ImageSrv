@@ -39,18 +39,20 @@ LOCAL = ("lc_screen=local\nlc_inv=done\nlc_phase=idle\n"
          "message=x|y\n")
 
 
-def _orange(tmp_path, state: str, clean: dict, marked: dict, card: str) -> dict[str, tuple[int, int]]:
+def _orange(tmp_path, state: str, clean: dict, marked: dict, card: str,
+            token: str = "--clr-warning") -> dict[str, tuple[int, int]]:
     binary = _build_gui(tmp_path)
     _render(binary, state.format(**clean), tmp_path / "clean")
     _render(binary, state.format(**marked), tmp_path / "marked")
-    return {theme: (_count(tmp_path / f"clean-{card}-{theme}.png", "--clr-warning", theme),
-                    _count(tmp_path / f"marked-{card}-{theme}.png", "--clr-warning", theme))
+    return {theme: (_count(tmp_path / f"clean-{card}-{theme}.png", token, theme),
+                    _count(tmp_path / f"marked-{card}-{theme}.png", token, theme))
             for theme in ("light", "dark")}
 
 
 @_GUI
-def test_the_standby_bay_of_a_cut_disk_is_orange(tmp_path):
-    seen = _orange(tmp_path, STANDBY, {"mark": "clean"}, {"mark": "incomplete"}, "standby")
+def test_the_standby_bay_of_a_cut_disk_is_yellow(tmp_path):
+    """#2848 (Nadav 11/11): a cut write is yellow -- a target, never a source (was orange)."""
+    seen = _orange(tmp_path, STANDBY, {"mark": "clean"}, {"mark": "incomplete"}, "standby", "--clr-yellow")
     assert all(marked - clean > 300 for clean, marked in seen.values()), seen
 
 
@@ -69,7 +71,7 @@ def test_the_restore_from_the_server_drawer_of_a_cut_disk_is_orange(tmp_path):
 
 
 @_GUI
-def test_the_local_clone_bay_of_a_cut_disk_is_orange_and_says_why(tmp_path):
+def test_the_local_clone_bay_of_a_cut_disk_is_yellow_and_says_why(tmp_path):
     seen = _orange(tmp_path, LOCAL, {"usable": "1", "why": "", "mark": "clean"},
-                   {"usable": "0", "why": MARK_HE, "mark": "incomplete"}, "lcsource")
+                   {"usable": "0", "why": MARK_HE, "mark": "incomplete"}, "lcsource", "--clr-yellow")   # #2848
     assert all(marked - clean > 300 for clean, marked in seen.values()), seen

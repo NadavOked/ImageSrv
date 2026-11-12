@@ -1,6 +1,7 @@
 // ביקורת לחיצות 16/10 (#1016) — התיקונים בקונסולה:
 // ביטול קליטה פעילה נגיש במקלדת ובמגע, בלי אנגלית פנימית במסכים, "grp_grp_X",
 // הפעלת משתמש אינה בחלון אדום, ומחיקת כיתה עם מחשבים לא מבטיחה מה שהשרת מסרב לו.
+const {consoleJs, consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -24,7 +25,7 @@ function setupConsole() {
     fetch: async (url, opts) => { (ctx.__fetches ||= []).push([url, opts && opts.body ? JSON.parse(opts.body) : null]); return {status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}; },
   });
   vm.runInContext(read('progress.js'), ctx);
-  vm.runInContext(read('console.js'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(read(f), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run.fetches = () => ctx.__fetches || [];
   return run;
@@ -34,14 +35,14 @@ test('1016/2: the active-capture cancel button is always visible (not visibility
   const css = read('console.css').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.match(css, /\.page \.dg td \.acts\.always[^{]*\{[^}]*visibility:\s*visible/, 'an .acts.always rule must force visibility:visible');
   assert.match(css, /\.acts\.always \.btn:focus-visible\{[^}]*outline:/, 'and the button has a focus ring');
-  const js = read('console.js');
+  const js = consoleJs();
   const cancels = [...js.matchAll(/<div class="([^"]*)"><button class="btn sm danger" onclick="cancelCapture\(/g)];
   assert.equal(cancels.length, 2, 'both capture-cancel buttons (images card, builder row)');
   for (const m of cancels) assert.match(m[1], /\balways\b/);
 });
 
 test('1016/3: no internal English labels on screen', () => {
-  const js = read('console.js');
+  const js = consoleJs();
   assert.ok(!js.includes('<span class="v">Authenticated</span>'), 'Authenticated label');
   assert.ok(!js.includes('פרטי Session'), 'Session details title');
   assert.ok(!js.includes('מ-/room/history'), 'no API path in the user-facing history caption');

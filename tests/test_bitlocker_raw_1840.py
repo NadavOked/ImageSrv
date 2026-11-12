@@ -31,6 +31,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
 import test_capture_refusals
@@ -118,7 +119,7 @@ def test_the_operator_sees_the_note_before_the_first_byte_and_on_done(tmp_path, 
     assert first == f"מחיצה 3: {NOTE}", first
     report = json.loads((box / "progress.json").read_text(encoding="utf-8"))
     assert report["targets"][0]["error"] == f"מחיצה 3: {NOTE}", report
-    console = (AGENT.parent / "server/static/console.js").read_text(encoding="utf-8")
+    console = console_js()
     assert f'const BL_NOTE = "{NOTE}";' in console
 
 

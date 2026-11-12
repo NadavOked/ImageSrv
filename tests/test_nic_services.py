@@ -399,6 +399,7 @@ def test_firewall_services_and_deploy_completion_carry_the_per_nic_choice(rig, t
         tftp_root=tmp_path, repo_dir=tmp_path, servers_interface="ens33",
         services=svc.firewall_services,
         hooks={"write_grub_cfg": lambda *a: None, "enable_dnsmasq": lambda: None,
+               "interfaces": svc.interfaces,
                "firewall": lambda *a, **k: seen.update(k),
                "restart_server": lambda: None})
     svc.base.deploy = None            # רשת ההפצה טרם הוגדרה — ens34 נעשה הפצה עכשיו

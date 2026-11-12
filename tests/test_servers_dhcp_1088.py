@@ -567,6 +567,7 @@ def _complete_ctx(tmp_path, hooks, servers_interface="eth0"):
 
 def _complete_hooks(calls, *, fw="", restart=None):
     return {
+        "interfaces": lambda: [{"name": "eth0"}, {"name": "eth1"}],
         "write_grub_cfg": lambda url, root: calls.append(("grub", url, root)) or None,
         "enable_dnsmasq": lambda: calls.append(("dnsmasq",)) or None,
         "firewall": lambda repo, deploy_if, servers_if, primary_ip: calls.append(

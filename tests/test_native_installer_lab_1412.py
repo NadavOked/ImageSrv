@@ -136,7 +136,7 @@ def test_a_second_inventory_without_the_line_forgets_the_first_answer(driver):
 # --- the drawing (Linux, pango/cairo) -----------------------------------------------
 
 LIGHT = {"danger_fill": (0xE1, 0x22, 0x00), "warning_bg": (0xFF, 0xF2, 0xE3)}
-DARK = {"danger_fill": (0xC2, 0x44, 0x44), "warning_bg": (0x33, 0x29, 0x1A)}
+DARK = {"danger_fill": (0xC2, 0x44, 0x44), "warning_bg": (0x3A, 0x26, 0x16)}
 
 
 @NATIVE_GUI

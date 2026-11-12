@@ -167,7 +167,7 @@ install_target_packages() {
     fi
     must_run firstboot-copy "could not install firstboot" cp "$CDROM/imagesrv/firstboot.sh" "$TARGET/usr/local/sbin/imagesrv-firstboot"
     must_run firstboot-mode "could not mark firstboot executable" chmod 0755 "$TARGET/usr/local/sbin/imagesrv-firstboot"
-    must_run firstboot-service "could not install firstboot service" cp "$CDROM/imagesrv/imagesrv-firstboot.service" "$TARGET/etc/systemd/system/imagesrv-firstboot.service"
+    must_run firstboot-service "could not install firstboot service" install -m 0644 "$CDROM/imagesrv/imagesrv-firstboot.service" "$TARGET/etc/systemd/system/imagesrv-firstboot.service"   # #2854: a mounted ISO shows files as executable; cp copied that mode and systemd warned on every reload
     must_run firstboot-tty1 "could not reserve tty1 for firstboot progress" chroot "$TARGET" systemctl mask getty@tty1.service
     must_run firstboot-enable "could not enable firstboot service" chroot "$TARGET" systemctl enable imagesrv-firstboot.service
     install_boot_splash

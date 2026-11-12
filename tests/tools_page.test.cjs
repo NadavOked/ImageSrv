@@ -3,6 +3,7 @@
 // סיכון כ-pill, גודל "ארוז"/מספר/"לא נמדד", סינון, "סמן את המומלצים"/"נקה"
 // לקבוצה על היעד שנבחר, ו"שמור" שנדלק רק כשיש שינוי ושולח PUT עם שתי הרשימות.
 // הבדיקה מריצה את console.js המשוגר ב-vm עם fetch מזויף (כמו drivers_page).
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -37,7 +38,7 @@ function setup(fixtures, role = 'admin') {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => f ?? {}};
     },
   });
-  for (const f of ['progress.js', 'console.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   run(`ME={username:"u",role:"${role}",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="tools"; globalThis.rendered=0; renderCurrent=()=>{ rendered++; };`);
   ctx.__toasts = toasts;

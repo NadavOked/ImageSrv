@@ -8,6 +8,7 @@
 //   4. מגירה: עמודת ה-grid מוגבלת (minmax(0,1fr)) — טבלה לא מרחיבה את המגירה.
 //   5. כפתור האישור במחיקת אימג' הוא danger, לא primary.
 //   6. רענון תקופתי משמר פוקוס (F13).
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -44,7 +45,7 @@ function setup(fetchImpl) {
     localStorage: {getItem: () => null, setItem() {}, removeItem() {}}, CSS: {escape: (x) => x},
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {}, fetch: fetchImpl});
   vm.runInContext(read('progress.js'), ctx);
-  vm.runInContext(read('console.js'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(read(f), ctx);
   return {ctx, run: (s) => vm.runInContext(s, ctx), doc};
 }
 

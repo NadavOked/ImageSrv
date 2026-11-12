@@ -5,7 +5,6 @@
 #
 # The words and their sentences are lib/data/hw-issues.tsv (the server reads the same
 # file). What each word means is measured here, from what the machine says about itself:
-#   crc         -- 199/218/210 or devstat CRC over crc_warn_threshold (smartjudge.sh)
 #   icrc_logged -- an ICRC in the disk's own ATA error log (smartjudge.sh; Nadav 21/10)
 #   link_slow   -- the link below what BOTH the port and the disk support (#432; an HP
 #                  8100 is SATA II, so 3.0 Gb/s there is its ceiling, not slow)
@@ -18,8 +17,10 @@
 #                  smartctl's Phy Event counters count since power-on -- neither is read).
 #   usb2       -- the disk sits behind a USB port at 480 Mb/s
 # The machine's IDE mode is usbdiag.sh's (lc_ide), said on the source screen.
-# Each one is said only on positive evidence; one that cannot be read says nothing --
-# and nothing here ever turns a disk green or red (principle 5 stays on the SMART side).
+# Each one is said only on positive evidence; one that cannot be read says nothing.
+# #2848 (Nadav 11/11): a SATA problem -- link_slow, link_reset, drawer_gone -- makes the disk RED
+# (never a target, still a source), on the cloner and in the console alike; icrc_logged and usb2
+# stay a note. Nothing here ever turns a disk green.
 
 DMESG="${DMESG:-dmesg}"
 
@@ -55,7 +56,7 @@ hw_refresh() {
     [ -s "$RUN_DIR/smart/$1.hw0" ] || _hw_dmesg_t > "$RUN_DIR/smart/$1.hw0"   # #1937: identified at
     _hr_t0=$(cat "$RUN_DIR/smart/$1.hw0" 2>/dev/null)
     {
-        awk -F'|' '$1 == "hw" && !seen[$2]++ { print $2 }' "$RUN_DIR/smart/$1.find" 2>/dev/null   # crc, icrc_logged
+        awk -F'|' '$1 == "hw" && !seen[$2]++ { print $2 }' "$RUN_DIR/smart/$1.find" 2>/dev/null   # icrc_logged (#2846: no absolute CRC)
         if command -v disk_link >/dev/null 2>&1; then
             _hr_l=$(disk_link "$1"); _hr_s=${_hr_l% *}; _hr_m=${_hr_l#* }
             case "$_hr_s:$_hr_m" in
@@ -74,9 +75,18 @@ hw_refresh() {
 
 hw_words() { cat "$RUN_DIR/smart/$1.hw" 2>/dev/null; }   # $1 = disk; the cached words, a line each
 
+hw_sata_json() {
+    # $1 = disk. #2848: the hello's ,"sata_issues":[...] -- link_reset / drawer_gone, the SATA problems
+    # the server cannot see (link_slow it reads from link_gbps itself). [] = read, none; null = not read
+    # (no hw_refresh yet, or the file did not read) -- never [] for "could not look" (principle 5).
+    _hs_w=$(awk '$0 == "link_reset" || $0 == "drawer_gone" { printf "%s\"%s\"", n++ ? "," : "", $0 }' \
+        "$RUN_DIR/smart/$1.hw" 2>/dev/null) || { printf ',"sata_issues":null'; return 0; }
+    printf ',"sata_issues":[%s]' "$_hs_w"
+}
+
 hw_note_he() {
-    # $1 = disk, $2 = words not to say (the cloner's screen already draws crc and the
-    # link from their own fields). The sentences of hw-issues.tsv, joined by " · ";
+    # $1 = disk, $2 = words not to say (the cloner's screen already draws the link from
+    # its own fields). The sentences of hw-issues.tsv, joined by " · ";
     # the field separator of a GUI record ('|') never appears in them.
     for _hn_w in $(hw_words "$1"); do
         case " $2 " in *" $_hn_w "*) continue ;; esac

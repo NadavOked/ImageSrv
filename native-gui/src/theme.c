@@ -50,6 +50,7 @@ const Theme THEME_LIGHT = {
  .success_btn = HEX(0x318700), .success_btn_line = HEX(0x318700),
  .node_active_line = HEX(0x0079B8), .node_warn_line = HEX(0xC25400),
  .warn = HEX(0xC25400), .brand_accent = HEX(0xFFFFFF), .action_fg = HEX(0x006394),
+ .yellow = HEX(0xC99A00), .yellow_soft = HEX(0xFFF6BF), .yellow_fg = HEX(0x6B4F00), .yellow_on = HEX(0x2B2400),
  .danger_fill = HEX(0xE12200), .danger_fg = HEX(0xC41E00),
  .shadow_strong = HEX(0x000000), .shadow_strong_a = 0.18, .shadow_card_a = 0.12,
  .radius = 9, .radius_sm = 6,
@@ -88,9 +89,9 @@ const Theme THEME_DARK = {
  .button = HEX(0x1C232A), /* css: :root[data-theme="dark"] | --clr-surface | 0 */
  .button_line = HEX(0x35414B), /* css: :root[data-theme="dark"] | --clr-border | 0 */
  .danger_bg = HEX(0x3A2321), /* css: tokens :root[data-theme="dark"] | --clr-danger-soft | 0 */
- .warning_bg = HEX(0x33291A), /* css: :root[data-theme="dark"] | --clr-warning-soft | 0 */
- .warning_line = HEX(0xE1B34F), /* css: :root[data-theme="dark"] | --clr-warning | 0 */
- .warning_ink = HEX(0xE1B34F), /* css: tokens :root[data-theme="dark"] | --clr-warning-fg | 0 */
+ .warning_bg = HEX(0x3A2616), /* css: tokens :root[data-theme="dark"] | --clr-warning-soft | 0 */
+ .warning_line = HEX(0xF0954A), /* css: tokens :root[data-theme="dark"] | --clr-warning | 0 */
+ .warning_ink = HEX(0xF0954A), /* css: tokens :root[data-theme="dark"] | --clr-warning-fg | 0 */
  .success_bg = HEX(0x1D3326), /* css: tokens :root[data-theme="dark"] | --clr-success-soft | 0 */
  .success_line = HEX(0x5FBD7A), /* css: :root[data-theme="dark"] | --clr-success | 0 */
  .success_ink = HEX(0x5FBD7A), /* css: tokens :root[data-theme="dark"] | --clr-success-fg | 0 */
@@ -103,7 +104,7 @@ const Theme THEME_DARK = {
  .info_soft = HEX(0x1D3436), /* css: tokens :root[data-theme="dark"] | --clr-info-soft | 0 */
  .success_soft = HEX(0x1D3326), /* css: tokens :root[data-theme="dark"] | --clr-success-soft | 0 */
  .danger_soft = HEX(0x3A2321), /* css: tokens :root[data-theme="dark"] | --clr-danger-soft | 0 */
- .warning_soft = HEX(0x33291A), /* css: :root[data-theme="dark"] | --clr-warning-soft | 0 */
+ .warning_soft = HEX(0x3A2616), /* css: tokens :root[data-theme="dark"] | --clr-warning-soft | 0 */
  .bar_done = HEX(0x5FBD7A), /* css: :root[data-theme="dark"] | --bar-done | 0 */
  .bar_idle = HEX(0x35414B), /* css: tokens :root[data-theme="dark"] | --clr-border | 0 */
  .art_bg = HEX(0x11181D), /* css: :root[data-theme="dark"] | --art-bg | 0 */
@@ -122,14 +123,18 @@ const Theme THEME_DARK = {
  .image_line = HEX(0x35414B), /* css: :root[data-theme="dark"] | --clr-border | 0 */
  .image_selected = HEX(0x223E50), /* css: :root[data-theme="dark"] | --clr-action-soft | 0 */
  .image_selected_line = HEX(0x2F78A8), /* css: tokens :root[data-theme="dark"] | --clr-action | 0 */
- .alert_bg = HEX(0x33291A), /* css: .alert | background | 0 */
- .alert_line = HEX(0xE1B34F), /* css: .alert | border | 0 */
+ .alert_bg = HEX(0x3A2616), /* css: tokens :root[data-theme="dark"] | --clr-warning-soft | 0 */
+ .alert_line = HEX(0xF0954A), /* css: tokens :root[data-theme="dark"] | --clr-warning | 0 */
  .alert_ink = HEX(0xE7EDF2), /* css: .alert | color | 0 */
  .success_btn = HEX(0x5FBD7A), /* css: :root[data-theme="dark"] | --clr-success | 0 */
  .success_btn_line = HEX(0x5FBD7A), /* css: :root[data-theme="dark"] | --clr-success | 0 */
  .node_active_line = HEX(0x2F78A8), /* css: tokens :root[data-theme="dark"] | --clr-action | 0 */
- .node_warn_line = HEX(0xE1B34F), /* css: .node.warn | border-color | 0 */
- .warn = HEX(0xE1B34F), /* css: :root[data-theme="dark"] | --clr-warning | 0 */
+ .node_warn_line = HEX(0xF0954A), /* css: tokens :root[data-theme="dark"] | --clr-warning | 0 */
+ .warn = HEX(0xF0954A), /* css: tokens :root[data-theme="dark"] | --clr-warning | 0 */
+ .yellow = HEX(0xF2E04A), /* css: tokens :root[data-theme="dark"] | --clr-yellow | 0 */
+ .yellow_soft = HEX(0x38340F), /* css: tokens :root[data-theme="dark"] | --clr-yellow-soft | 0 */
+ .yellow_fg = HEX(0xF2E04A), /* css: tokens :root[data-theme="dark"] | --clr-yellow-fg | 0 */
+ .yellow_on = HEX(0x2B2400), /* css: tokens :root[data-theme="dark"] | --clr-yellow-on | 0 */
  .brand_accent = HEX(0xFFFFFF), /* css: :root | --clr-header-text | 0 */
  .action_fg = HEX(0x7BB6DC), /* css: tokens :root[data-theme="dark"] | --clr-action-fg | 0 */
  .danger_fill = HEX(0xC24444), /* css: tokens :root[data-theme="dark"] | --clr-danger-fill | 0 */

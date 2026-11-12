@@ -2,6 +2,7 @@
 // קצב = הפרש בין שתי דגימות (bytes_sent, updated_at) של השרת; פחות משתיים =
 // "מודד קצב…" ולא 0. בשלב האימות — פס נע וזמן שעבר מ-seconds_since_update
 // (שעון השרת), ובלי השדה — בלי זמן. console.js + branches.js רצים ב-vm.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -24,7 +25,7 @@ function setup() {
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
-  for (const f of ['progress.js', 'reorder.js', 'console.js', 'branches.js']) {
+  for (const f of ['progress.js', 'reorder.js', ...consoleFiles(), 'branches.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   }
   vm.runInContext('ME={username:"admin",role:"admin",server_name:"ראשי"};', ctx);

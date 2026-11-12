@@ -1,5 +1,6 @@
 // נדב 18/10 — לשונית "שרתי משנה" בהגדרות: רק admin בראשי/עצמאי (enroll_secondary || interbranch_transfer), לא בשרת משנה;
 // מצב ריק עם "+ רישום שרת משנה"; שורה אחת לשרת המשנה עם סטטוס כ-pill; "לא נקרא" ≠ "אין שרתי משנה".
+const {consoleJs: readConsoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -7,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '../server/static');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const consoleJs = read('console.js'), branchesJs = read('branches.js');
+const consoleJs = readConsoleJs(), branchesJs = read('branches.js');
 
 function fn(src, name) {
   const lines = src.split('\n');

@@ -5,8 +5,8 @@
 # console writes the chosen ids to tools-selection.json (interfaces.md §23)
 # and the builder copies that file into the initrd as
 # /etc/imagesrv/tools-selection.json. Both sides read it through here:
-# the builder packs tools_bins of every "build" id, the station offers only
-# those ids. An id this table does not know is a stop, by name, on both
+# the builder packs tools_bins of every "build" id a module runs
+# (tools_has_runner, #1104), the station offers only those ids. An id this table does not know is a stop, by name, on both
 # sides -- never a guess from the catalog's display string ("nvme format"
 # is not a file name).
 #
@@ -47,6 +47,20 @@ tools_bins() {
     esac
 }
 
+tools_has_runner() {
+    # $1 = catalog id -> rc 0 when a station module (tools_<domain>.sh) runs
+    # it, rc 1 for the ids below. #1104: they are in the catalog, but no
+    # module runs them yet -- testdisk/photorec need a wizard, the rest a
+    # destination for what they recover (docs/tools/catalog-runners.md).
+    # The plan does not pack them: a binary nothing on the station can start
+    # is initrd weight. tests/test_tools_packing.py fails when this list and
+    # the real modules drift.
+    case "$1" in
+        testdisk|photorec|scalpel|foremost|extundelete|magicrescue|ddrescue-image|safecopy) return 1 ;;
+    esac
+    return 0
+}
+
 _tools_selection_list() {
     # $1 = file, $2 = key (build / student) -> the ids, one per line. The
     # file is the server's own json.dump of {"schema", "build", "student"}
@@ -73,12 +87,14 @@ tools_bins_plan() {
     # line, deduplicated, in catalog order. rc 1 when a build id is not in
     # tools_bins (the id is named on stderr; nothing is printed on stdout
     # so a caller that packs the answer packs nothing). The "student" list
-    # is parsed and counted only -- classroom stations are v2.
+    # is parsed and counted only -- classroom stations are v2. A build id
+    # that tools_has_runner refuses is not packed, and named on stderr.
     [ -f "$1" ] || { printf 'tools: selection file not found: %s\n' "$1" >&2; return 1; }
-    _plan=""; _bad=""; _n=0
+    _plan=""; _bad=""; _norun=""; _n=0
     for _id in $(_tools_selection_list "$1" build); do
         _n=$((_n + 1))
         _b=$(tools_bins "$_id") || { _bad="$_bad $_id"; continue; }
+        tools_has_runner "$_id" || { _norun="$_norun $_id"; continue; }
         for _one in $_b; do
             case " $_plan " in *" $_one "*) ;; *) _plan="$_plan $_one" ;; esac
         done
@@ -87,6 +103,8 @@ tools_bins_plan() {
         printf 'tools: selection names ids that are not in the catalog table:%s\n' "$_bad" >&2
         return 1
     fi
+    [ -z "$_norun" ] ||
+        printf 'tools: not packed -- no station module runs them yet (#1104):%s\n' "$_norun" >&2
     _s=$(_tools_selection_list "$1" student | wc -l | tr -d ' ')
     printf 'tools: selection %s: %s build ids, %s student ids (student ignored, v2)\n' "$1" "$_n" "$_s" >&2
     for _one in $_plan; do printf '%s\n' "$_one"; done

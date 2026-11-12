@@ -2,6 +2,7 @@
 // אימג' — חלון אחד עם מתג כיוון, בחירת שרת משנה ומיקום אחסון בצד המקבל; מיקום שהאימג' לא נכנס
 // אליו מושבת עם המספרים. console.js + branch_transfer.js רצים ב-vm עם fetch מזויף ו-DOM קטן
 // (רק מה שהחלון קורא: ערכי השדות, ההודעה, כפתור ההתחלה).
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -43,7 +44,7 @@ function setup(fixtures, me = {}) {
       return {status: 404, ok: false, headers: {get: () => null}, json: async () => ({detail: 'אין'})};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'branches.js', 'branch_transfer.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles(), 'branches.js', 'branch_transfer.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   const meJson = JSON.stringify({timezone: 'UTC', username: 'admin', role: 'admin', idle_seconds: 300,
     capabilities: {interbranch_transfer: true, enroll_secondary: true}, ...me});

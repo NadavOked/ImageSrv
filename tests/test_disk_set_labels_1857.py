@@ -31,6 +31,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from agentlib import flat_lib
 from test_cloner_gui import (AGENT, BASH, GUI, IDLE_SGDISK, _build_gui, _pkgconfig, env, posix, sh,
@@ -121,7 +122,7 @@ def test_a_serial_that_is_not_a_string_is_not_looked_up():
 
 
 def test_the_console_shows_the_text_in_the_three_places_a_person_looks_for_a_disk_to_pull():
-    js = (Path(__file__).resolve().parent.parent / "server/static/console.js").read_text(encoding="utf-8")
+    js = console_js()
     boxes = js[js.index("function diskBoxesHtml"):js.index("function diskBrand")]
     assert 'UI.pill("info", d.set_text)' in boxes and "${setTag}" in boxes, "the machine drawer's disk box"
     failures = js[js.index("function diskFailuresCard"):js.index("async function clearDiskFailure")]

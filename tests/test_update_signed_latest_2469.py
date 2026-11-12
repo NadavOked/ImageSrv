@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from server import update as update_mod
 
@@ -133,7 +134,7 @@ def _js(name: str, js: str) -> str:
 
 @requires_native(("node", NODE))
 def test_the_console_warns_about_a_skipped_higher_tag_next_to_the_offer(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     probe = tmp_path / "probe.cjs"
     probe.write_text("""
 const esc = (x) => String(x == null ? "" : x);

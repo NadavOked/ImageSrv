@@ -129,7 +129,7 @@ void sdlg_draw(App *a, cairo_t *cr, double W, double H) {
     bidi_isolate(d->disk[0] ? d->disk : "הדיסק", disk_i, sizeof disk_i);
     snprintf(title, sizeof title, title_fmt(d), disk_i);
     snprintf(state, sizeof state, "%s", d->level == 2 ? "אדום — SMART תקול"
-             : d->retry ? "כתום — נכשל בשיכפול הקודם" : "כתום — אזהרת SMART");
+             : d->retry ? "כתום — נכשל בשיכפול הקודם" : "כתום — SMART חצי תקין");
     char model_i[100], serial_i[100];
     bidi_isolate(d->model[0] ? d->model : "לא דווח", model_i, sizeof model_i);
     bidi_isolate(d->serial[0] ? d->serial : "לא דווח", serial_i, sizeof serial_i);

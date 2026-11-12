@@ -452,7 +452,7 @@ def _hex(value: int) -> tuple[int, int, int]:
 LIGHT = {"porcelain": 0xEEF1F5, "ok": 0x318700, "danger": 0xE12200, "info": 0x0079B8,
          "indigo": 0x0079B8, "header": 0x25333D, "warn": 0xC25400}
 DARK = {"porcelain": 0x151A1F, "ok": 0x5FBD7A, "danger": 0xDC6B6B, "info": 0x61B5B8,
-        "header": 0x26343F, "warn": 0xE1B34F}
+        "header": 0x26343F, "warn": 0xF0954A}   # #2848: the dark orange moved (mockup disk-colors)
 
 
 @pytest.fixture(scope="module")

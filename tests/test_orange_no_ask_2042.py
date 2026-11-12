@@ -19,6 +19,7 @@ import re
 import time
 from pathlib import Path
 
+from console_src import console_js
 from native import requires_native
 from agentlib import agent_sources
 from test_final_report import (  # noqa: F401 -- `reports` is a fixture
@@ -189,7 +190,7 @@ def test_the_round_reports_the_orange_drawer_done_with_its_note(tmp_path, report
 def test_the_room_page_shows_a_done_drawers_warning():
     """RED: roundDskHtml drew a done drawer as a green 100% and dropped its `error` -- the
     orange note reached the server and no one saw it. Static: the line exists, on done only."""
-    js = (REPO / "server/static/console.js").read_text(encoding="utf-8")
+    js = console_js()
     body = js[js.index("function roundDskHtml("):]
     body = body[:body.index("\n}\n")]
     m = re.search(r'const (\w+) = live && d\.state === "done" && d\.error \? `<span class="dline warn">\$\{esc\(d\.error\)\}</span>` : "";', body)

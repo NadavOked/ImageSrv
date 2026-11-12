@@ -140,7 +140,7 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
         else card_used_text(USED_NOW, cu ? cu->used : -1, y->used, sizeof y->used);
     }
     /* the SMART the disk reported (#652), in words and in the one colour mapping:
-     * green ok/unchecked, orange F1, red failed_last */
+     * green ok, grey unchecked (#2897), orange warn, yellow failed_last (#2848), red fail */
     if (idle) { if (!strcmp(idle->cause, "readonly")) snprintf(y->note_buf, sizeof y->note_buf, "%s", smart_he_why(idle->smart, idle->cause));   /* #1742 */
                 else snprintf(y->note_buf, sizeof y->note_buf, "SMART %s", smart_he(idle->smart));
                 y->toned = 1; y->tone = smart_color(t, idle->smart); y->note = y->note_buf; }
@@ -209,6 +209,7 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
  * already asked -- in the screen's row order. A row's button is
  * HIT_BAY_CANCEL_BASE + its index here; its key is the drawer's number. */
 int cloner_cancel_picks(const App *a, CancelPick *out, int max) {
+    if (a->st.task_direct) return 0;   /* #2849: the build machine shows the cloners' drawers -- it cancels none of them */
     ClonerEntry entries[MAX_DRAWERS + 1]; int n = cloner_entries(&a->st, entries), k = 0;
     for (int i = 0; i < n && k < max; i++) {
         const ClonerEntry *e = &entries[i];
@@ -309,7 +310,12 @@ double net_bar(App *a, cairo_t *cr, double x0, double xr, double y) {
 void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     const Theme *t = a->theme; const State *s = &a->st;
     ClonerEntry entries[MAX_DRAWERS + 1]; int n = cloner_entries(s, entries);
-    double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + 22;
+    /* #2849: a KVM switch passes no EDID, and the work's cloner came up at 800x600 / 640x480 -- the
+     * drawers did not fit (no "נכתב עד כה", the third drawer under the status bar). Under 700px the
+     * screen drops the summary tiles (the cage counts the disks, the label carries the speed) and
+     * the spacing, so every drawer keeps its row. 768 and up: the approved layout, untouched. */
+    const int compact = H < 700;
+    double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + (compact ? 10 : 22);
     int nw = 0, nd = 0, nf = 0, ns = 0, nc = 0, ncg = 0, pend = 0, sum = 0, known = 0, eta = -1;   /* #1386: cancelled, cancelling */
     int verifying = 0, waiting = 0, asking = 0, unchecked_done = 0;   /* display counts only; entry_kind is unchanged */
     RbSum rbs = { 0 };                    /* #2046: the check, across the rows */
@@ -375,7 +381,12 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     /* the name is an isolated run and the line opens with an RLM: a Latin-first
      * name ("Office 2024 — סטנדרט") made auto-dir turn the whole line LTR */
     bidi_isolate(s->cloner_image[0] ? s->cloner_image : "ממתין לשידור מהשרת", image, sizeof image);
-    snprintf(label, sizeof label, RLM "שיכפול במקביל · %s%s%s%s", image, dv_any ? " · חבילת דרייברים לפי דגם המגירה" : "",
+    char speed[48] = "";
+    if (compact && rate > 0) snprintf(speed, sizeof speed, " · ⁦%.0f MB/s⁩", rate / 1e6);   /* the tile it came from is gone */
+    char head[96];   /* #2849 (Nadav 11/11): the build machine's direct send -- the one difference is the title */
+    if (s->task_direct) snprintf(head, sizeof head, "הפצה ישירה · משדר מהדיסק %s", s->task_disk);
+    else snprintf(head, sizeof head, "%s", "שיכפול במקביל");
+    snprintf(label, sizeof label, RLM "%s · %s%s%s%s%s", head, image, speed, dv_any ? " · חבילת דרייברים לפי דגם המגירה" : "",
              age[0] ? " · " : "", age);
     snprintf(big, sizeof big, "%s", "—"); left[0] = 0;
     LcEta fe = { "", left, "" };   /* #1843: what stands under the number; just `left` unless the writing branch adds an end */
@@ -391,6 +402,10 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         snprintf(title, sizeof title, "ממתין להחלטה על %s", pdisk);
         snprintf(s2, sizeof s2, "הכתיבה לדיסק הזה מושהית עד שתחליטו, והוא לא נכתב.");
         snprintf(left, sizeof left, "ממתין לתשובה");
+    } else if (!n && s->task_direct) {   /* #2849: the room was not read -- said, never "no disks" */
+        snprintf(title, sizeof title, "%s", s->direct_unread ? "מצב המגירות לא נקרא מהשרת" : "ממתין למחשבי השיכפול");
+        snprintf(s2, sizeof s2, "%s", s->direct_unread ? "השליחה ממשיכה. המגירות יוצגו כשהמצב שלהן ייקרא — אפשר לעקוב גם מהקונסולה."
+                                                        : "המגירות יוצגו כשהמחשבים יצטרפו לסבב.");
     } else if (!n) {
         snprintf(title, sizeof title, "לא נמצאו דיסקים");
         snprintf(s2, sizeof s2, "המחשב הזה לא דיווח על דיסקים מחוברים. חברו דיסק והפעילו מחדש.");
@@ -422,7 +437,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
                                                            : "מבטל דיסק אחד — השאר ממשיכים בלי עצירה.");   /* #1386 */
         else if (ns == 1) snprintf(s2, sizeof s2, "%s דולג. השאר ממשיכים.", skipped_name);
         else if (ns) snprintf(s2, sizeof s2, "%d דיסקים דולגו. השאר ממשיכים.", ns);
-        else snprintf(s2, sizeof s2, "הזרם מהשרת נכתב לכל היעדים יחד.");
+        else snprintf(s2, sizeof s2, "%s", s->task_direct ? "הזרם מהדיסק הזה נכתב לכל היעדים יחד." : "הזרם מהשרת נכתב לכל היעדים יחד.");   /* #2849 */
         if (known) snprintf(big, sizeof big, "%d%%", sum / known);
         if (stalled) snprintf(left, sizeof left, "ממתין לזרם מהשרת");   /* #2055 */
         else if (eta >= 0) {
@@ -453,10 +468,10 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
             }
         }
     }
-    y += lc_hero_eta(a, cr, x0, xr, y, label, title, s2, big, &fe, ended && nf && !held_end) + 16;   /* #2081: the held end title is ink, the rows carry the red */
+    y += lc_hero_eta(a, cr, x0, xr, y, label, title, s2, big, &fe, ended && nf && !held_end) + (compact ? 8 : 16);   /* #2081: the held end title is ink, the rows carry the red */
 
     /* .mets: speed, what was received, the disks -- not on a held end (#2081: no summary cards) */
-    double mw = (cw - 24) / 3, mh = held_end ? -12 : 80;
+    double mw = (cw - 24) / 3, mh = held_end || compact ? -12 : 80;
     char v1[48], v2[64], v3[512] = RLM, c3[240];
     if (rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rate / 1e6); else snprintf(v1, sizeof v1, "%s", stalled ? "0 MB/s" : nw ? "עוד לא נמדדה" : "—");
     if (whole) snprintf(v2, sizeof v2, "%.1f / %.1f GB", most / 1e9, whole / 1e9);
@@ -494,7 +509,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (dv_nomodel) snprintf(p3, sizeof p3, "%s%d בלי דגם", p1[0] || p2[0] ? ", " : "", dv_nomodel);
         snprintf(c3, sizeof c3, "דרייברים: %s%s%s", p1, p2, p3);   /* #2054: "נכתבו" is in the count above */
     }
-    if (!held_end) {
+    if (!held_end && !compact) {
     /* A mixed state may wrap; measure it before laying out all three tiles. */
     Text counts = text_make(cr, FONT_SANS, 19, 600, v3, (int)(mw - 28), DIR_RTL);
     Text caption = text_make(cr, FONT_SANS, 11, 400, c3, (int)(mw - 28), DIR_RTL);
@@ -513,22 +528,36 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     }
     y += mh + 12;
 
-    /* the cage */
-    double foot_h = 40;
-    double room = H - N_STATUS_H - foot_h - 16 - y - (10 + 16 + 8 + 10) - (n > 1 ? (n - 1) * 10 : 0);
+    /* the cage -- #2849: on the build machine's direct send, one per cloner (cloner_group=), its name on it */
+    double foot_h = compact ? 24 : 40;
+    int ngr = s->ncgroups > 0 ? s->ncgroups : 1;
+    double room = H - N_STATUS_H - foot_h - 16 - y - ngr * (10 + 16 + 8 + 10) - (ngr - 1) * 12 - (n > ngr ? (n - ngr) * 10 : 0);
     double bh = dv_line ? LC_BAY_DRV_H : LC_BAY_H;   /* #1331: the row with its drivers line */
-    if (n && n * bh > room) bh = fmax(56, floor(room / n));
-    if (n) {
-        Rect cage = { x0, y, cw, 10 + 16 + 8 + n * bh + (n > 1 ? (n - 1) * 10 : 0) + 10 };
-        char cnt[96]; snprintf(cnt, sizeof cnt, ended ? "%d מתוך %d נכתבו" : checking ? "%d מתוך %d בבדיקה" : "%d מתוך %d כותבים", ended ? nd : nw, n);   /* #1331 mockup v2; #2046 */
-        if (nc || ncg) { size_t u = strlen(cnt);    /* #1386: "1 מתוך 2 כותבים · 1 בוטל" */
+    if (n && n * bh > room) bh = fmax(compact ? (n <= 3 ? 48 : 30) : 56, floor(room / n));   /* #2849: lcbay.c keeps a short row whole */
+    int ci = 0;                                       /* #1386: the row's index among the cancel picks */
+    for (int gi = 0; n && gi < ngr; gi++) {
+        int gn = 0, gw = 0, gd = 0;
+        for (int i = 0; i < n; i++) {
+            int grp = entries[i].drawer ? entries[i].drawer->group : -1;
+            if (s->ncgroups && grp != gi) continue;
+            gn++; gw += entry_kind(&entries[i]) == BAY_WRITING; gd += entry_kind(&entries[i]) == BAY_DONE;
+        }
+        if (!gn) continue;
+        Rect cage = { x0, y, cw, 10 + 16 + 8 + gn * bh + (gn - 1) * 10 + 10 };
+        char cnt[96]; snprintf(cnt, sizeof cnt, ended ? "%d מתוך %d נכתבו" : checking ? "%d מתוך %d בבדיקה" : "%d מתוך %d כותבים",
+                               ended ? (s->ncgroups ? gd : nd) : (s->ncgroups ? gw : nw), s->ncgroups ? gn : n);   /* #1331 mockup v2; #2046 */
+        if (!s->ncgroups && (nc || ncg)) { size_t u = strlen(cnt);    /* #1386: "1 מתוך 2 כותבים · 1 בוטל" */
             if (nc) u += snprintf(cnt + u, sizeof cnt - u, " · %d בוטל", nc);
             if (ncg && u < sizeof cnt) snprintf(cnt + u, sizeof cnt - u, " · %d מבטל", ncg); }
-        double by = lc_cage(a, cr, cage, "יעדים", cnt);
-        int ci = 0;                                   /* #1386: the row's index among the cancel picks */
+        char ctitle[96];
+        if (s->ncgroups) snprintf(ctitle, sizeof ctitle, "מחשב שיכפול %s", s->cgroups[gi]);
+        else snprintf(ctitle, sizeof ctitle, "%s", "יעדים");
+        double by = lc_cage(a, cr, cage, ctitle, cnt);
         for (int i = 0; i < n; i++) {
+            int grp = entries[i].drawer ? entries[i].drawer->group : -1;
+            if (s->ncgroups && grp != gi) continue;
             LcBay g; entry_bay(a, &entries[i], &g);
-            if (g.kind == BAY_WRITING && !strcmp(entries[i].drawer->state, "writing")) {
+            if (g.kind == BAY_WRITING && entries[i].drawer && !strcmp(entries[i].drawer->state, "writing") && !s->task_direct) {
                 g.act = "בטל…"; g.act_hit = HIT_BAY_CANCEL_BASE + ci++;
                 if (g.drawer > 0 && g.drawer < 10) { snprintf(g.act_key_buf, sizeof g.act_key_buf, "%d", g.drawer); g.act_key = g.act_key_buf; }
             } else if (!entries[i].drawer && entries[i].idle) {
@@ -548,7 +577,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         long long l = s->idle_poweroff_at - (long long)time(NULL); if (l < 0) l = 0;
         char secs[32]; he_secs(l, secs, sizeof secs);
         snprintf(note, sizeof note, "המחשב יכבה בעוד %s — כל מקש מבטל.", secs);
-    } else snprintf(note, sizeof note, "%s", ended ? "הסבב הסתיים במחשב הזה."
+    } else snprintf(note, sizeof note, "%s", ended ? (s->task_direct ? "השליחה למגירות הסתיימה." : "הסבב הסתיים במחשב הזה.")
                     : cloner_cancel_picks(a, (CancelPick[MAX_DRAWERS + 1]){ 0 }, MAX_DRAWERS + 1)
                     ? "כשל ביעד אחד לא עוצר את האחרים. לבטל דיסק — המקש של המגירה." : "כשל ביעד אחד לא עוצר את האחרים.");
     /* #2081 (mockup 03, Nadav 24/10): a held end (#2024) -- "כבה את המחשב" is the

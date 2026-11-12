@@ -84,7 +84,8 @@ fi
 # Resolved here, before apt and the compiles, for the same reason as the
 # overlay: an id the table does not know should cost a second, not a build.
 # tools_bins_plan (agent/lib/tools/toolbins.sh -- POSIX sh, bash sources it fine)
-# prints one binary per line and exits 1 naming every unknown id; an empty
+# prints one binary per line and exits 1 naming every unknown id; an id no
+# station module runs is not packed and named on stderr (#1104); an empty
 # "build" list is a valid answer and packs nothing.
 TOOL_BINS=()
 if [ -n "$TOOLS_SELECTION_FILE" ]; then

@@ -3,6 +3,7 @@
 // "replacing" fell through DRAWER_STATE_HE), and a red disk's chip (read-only was "the BIOS will stop at F1").
 // The words are read from the producers' code -- smart.sh, ata_cause.py, the agent's target_set -- never typed here,
 // so a new one with no Hebrew fails by name. The maps themselves: tests/test_reasons_he_1861.py.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -19,7 +20,7 @@ function setup() {
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,RegExp,encodeURIComponent,decodeURIComponent,
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js','branches.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'branches.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   return (code)=>vm.runInContext(code,ctx);
 }
 const run=setup();

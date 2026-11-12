@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server.disks import ata_cause, disk_failures
 from server import db
 from test_smart import BASH, HEALTH_OK, PRELUDE, env, full, make_smartctl, posix
@@ -287,11 +288,19 @@ NODE = shutil.which("node")
 
 @requires_native(("node", NODE))
 def test_the_console_says_read_only_in_red(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     pick = [re.search(r"^const SMART_REASON_HE = .*$", js, re.M),
             re.search(r"^function smartF1Text\(reason\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^const FAILURE_CAUSE_HE = .*$", js, re.M),
             re.search(r"^function linkSlow\(d\) \{.*?^\}", js, re.M | re.S),
+            # #2848: slotClass reads the one rule (diskRule / diskFacts / slotRule)
+            re.search(r"^const SATA_ISSUE_HE = .*$", js, re.M),
+            re.search(r"^function sataIssues\(d\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^const DISK_RULE_RED = .*$", js, re.M),
+            re.search(r"^const DISK_RULE_YELLOW = .*$", js, re.M),
+            re.search(r"^function diskRule\(f\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^function diskFacts\(s\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^function slotRule\(s\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^function slotClass\(s\) \{.*?^\}", js, re.M | re.S)]
     assert all(pick), "a function this test reads is gone from console.js"
     probe = tmp_path / "probe.cjs"
@@ -312,7 +321,7 @@ console.log(JSON.stringify(out));
     assert out["ro"] == READONLY_HE and "F1" not in out["ro"]
     assert out["f1"].startswith("ה-BIOS יעצור ב-F1"), "the SMART reds keep their words"
     assert out["cause"] == READONLY_HE
-    assert (out["memRed"], out["memCable"]) == ("err", "warn"), "read-only memory is red, a cable orange"
+    assert (out["memRed"], out["memCable"]) == ("err", "yel"), "read-only memory is red, a cable yellow (#2848)"
 
 
 # --- after #1735 (#1732 on rc6): every refusal says why --------------------------

@@ -4,6 +4,7 @@
 // say "cannot identify"; the console must say it too, by slot, and never for
 // `fresh: false` (written) or a /machines disk record that has no `fresh`.
 // Runs the shipped renderers from console.js, not copies.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -27,7 +28,7 @@ function setupConsole() {
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
   vm.runInContext(read('progress.js'), ctx);
-  vm.runInContext(read('console.js'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(read(f), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run('ME={username:"admin",role:"admin",capabilities:{}}; MACHINES=[]; GROUPS=[]; DISK_FAILURES=[]; NET=[]; ROOM=null;');
   return run;

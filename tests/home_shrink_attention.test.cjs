@@ -5,6 +5,7 @@
 //   * הקליטה הסתיימה/נכשלה והרשומה פתוחה — האזהרה הקיימת, מילה במילה.
 //   * רשימת הקליטות לא נקראה — "לא נבדק", לא הסתרה (עיקרון 5).
 // בלי דפדפן: console.js רץ ב-vm מול DOM מזערי ו-fetch מזויף, כמו home_overview.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -46,7 +47,7 @@ function setup(tasks, records) {
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] || {}};
     }});
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
-  vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={username:"admin",role:"admin",server_name:"srv",version:"v0.60.0",capabilities:{}}; current="home"; toast=()=>{};');
   run(`IMAGES=[];FOLDERS=[];DISK_FAILURES=[];MACHINES=${JSON.stringify([{mac:MAC,suffix:'HP-BUILD'}])};SHRINK_RECORDS=${JSON.stringify(records)}`);

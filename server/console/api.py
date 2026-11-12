@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from server.console import auth, login as console_login, login_guard, mfa as console_mfa, presence as console_presence, users
 from server.core import capabilities, hostname_rule
 from server.library import minfree
-from server.rounds import drive_rates, nic_speed, room
+from server.rounds import drive_rates, nic_speed, room, room_names
 from server.agent import boot_preview, identity, inventory, probe, readbackhash, registry
 from server.system import backup_target, timezone
 from server.net import dhcp, ports
@@ -103,6 +103,8 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   igmp_querier.SETTING,
                   # ‏#2056/#2059 (מוקאפ 05, נדב 24/10): זמני ההמתנה והכיבוי האוטומטי.
                   *agent_timing.KEYS,
+                  # ‏#2786 (נדב 09/11): תבנית שמות המחשב בשיכפול — ריפוד וסיומת המרצה.
+                  room_names.PAD_SETTING, room_names.INSTRUCTOR_SETTING,
                   auto_reboot.MODE, auto_reboot.TIME, auto_reboot.WEEKDAY}
 
 BOOLEAN_SETTINGS = {
@@ -209,6 +211,15 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
             if day is None:
                 raise HTTPException(400, "יום הפעלה מחדש: מספר שלם 0–6")
             normalized[key] = str(day)
+        elif key == room_names.PAD_SETTING:
+            if room_names.parse_pad(value) is None:
+                raise HTTPException(400, f"ריפוד שמות המחשב: מספר שלם {room_names.PAD_MIN}–{room_names.PAD_MAX}")
+            normalized[key] = str(room_names.parse_pad(value))
+        elif key == room_names.INSTRUCTOR_SETTING:
+            if room_names.parse_instructor(value) is None:
+                raise HTTPException(400, "סיומת המרצה: רק אותיות באנגלית וספרות, "
+                                         f"1–{room_names.INSTRUCTOR_MAX} תווים")
+            normalized[key] = value
         else:  # WRITE_SETTINGS and this validator must stay exhaustive together.
             raise RuntimeError(f"missing settings validator: {key}")
     return normalized
@@ -229,7 +240,7 @@ def _text_field_ok(value: str, what: str) -> None:
 
 
 #: הכרעת נדב 11/10: כיתות כבויות במהדורה = השרת מסרב, לא רק הממשק מסתיר.
-CLASSROOMS_OFF = "כיתות אינן במהדורה זו (v1.2) — השרת אינו יוצר כיתה ואינו פותח סבב כיתה"
+CLASSROOMS_OFF = "כיתות אינן במהדורה זו (v2) — השרת אינו יוצר כיתה ואינו פותח סבב כיתה"
 
 
 def refuse_if_classrooms_off() -> None:
@@ -695,7 +706,6 @@ def create_console_router(
         names = slot_names.all_by_mac(ctx.conn)
         # ‏#2001: מיפוי לפי דגם — מכונה ← דגם ← ברירת מחדל.
         model_maps, models = model_slots.all_maps(ctx.conn), model_slots.models_by_mac(ctx.conn)
-        crc_limit = crcwarn.threshold(ctx.conn)   # #1366
         set_labels = disk_sets.all_labels(ctx.conn)   # ‏#1857: שם הסט והמדבקה לפי סידורי
         fw_counts = firmware_image.change_counts(ctx.conn)   # ‏#2080
         # ‏#2028: הצעת הלמידה למחשב חדש — מנהל בלבד. ‏null = לא נקרא או אינו מנהל, ואז אין הצעה.
@@ -722,12 +732,9 @@ def create_console_router(
             row["drawer_slots_custom"] = stored_slots is not None
             optical_json = row.pop("optical_json")
             row["optical"] = json.loads(optical_json) if optical_json is not None else None
-            # ‏#1366: מונה ה-CRC המוחלט מעל הסף — אותו דגל כמו במסך החדר.
+            # ‏#2846: אין `crc_suspect` — מונה CRC מוחלט הוא היסטוריה, לא מצב של הדיסק (נדב 11/11).
             for d in row["disks"] if isinstance(row["disks"], list) else []:
                 if isinstance(d, dict):
-                    crc = d.get("crc")
-                    read = isinstance(crc, int) and not isinstance(crc, bool) and crc >= 0
-                    d["crc_suspect"] = crcwarn.suspect(crc if read else None, crc_limit)
                     # ‏#1857 (מוקאפ 04): "קוריאים · xx-7" ליד הדיסק; ‏None = בלי סט -- מוצג כמו היום.
                     d["set_text"] = disk_sets.text_of(set_labels, d.get("serial"))
                     serial = d.get("serial")
@@ -1467,6 +1474,9 @@ def create_console_router(
         for key in agent_timing.KEYS:
             values[key] = str(agent_timing.seconds(ctx.conn, key))
         values["agent_timing_applied"] = agent_timing.applied_counts(ctx.conn)
+        # ‏#2786: הערכים שבתוקף — ברירת המחדל (2, ‏INS) כשלא נקבע או כשהשמור פגום.
+        values[room_names.PAD_SETTING] = str(room_names.pad(ctx.conn))
+        values[room_names.INSTRUCTOR_SETTING] = room_names.instructor(ctx.conn)
         mode, at, weekday = auto_reboot.settings(ctx.conn)
         values.update({auto_reboot.MODE: mode, auto_reboot.TIME: at,
                        auto_reboot.WEEKDAY: str(weekday)})

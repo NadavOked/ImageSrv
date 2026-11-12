@@ -30,6 +30,7 @@ from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
 from server.agent import registry
+from server.disks import disk_rule   # #2848
 from server.storage import disk_reserve, history as storage_history, locations as storage_locations
 from server.learn import server_io
 from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
@@ -876,6 +877,10 @@ def order_capture(ctx: ServerContext, body: dict, created_by: str, origin: str) 
         raise HTTPException(400, str(exc))
     if active_task(ctx.conn, mac) is not None:
         raise HTTPException(409, "כבר יש משימה פתוחה למכונה הזו")
+    # ‏#2848 (נדב 11/11): צהוב (נכשל בשיכפול הקודם / כתיבה לא הושלמה) אינו מקור — גם לקליטה.
+    why = disk_rule.source_refusal(ctx.conn, mac, disk)
+    if why:
+        raise HTTPException(409, f"אי אפשר לקלוט מהדיסק {disk}: {why}")
     loc_id = body.get("location_id") or storage_locations.LOCAL_ID
     if not storage_locations.location_writable(ctx.conn, loc_id):
         raise HTTPException(409, "המיקום אינו זמין לקליטה")

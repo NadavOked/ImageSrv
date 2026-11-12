@@ -2,6 +2,7 @@
 // עץ תיקיות + טבלה + חיפוש, העלאה עם הצגת התקדמות ודחייה גלויה, ומחיקה בכפתור אדום בלי הקלדת מילה.
 // בכוונה אין כאן "אתחל מחשב מה-ISO" ולא עמודת "אתחול ברשת" — ההכרעה על הגשת ה-ISO עוד לא התקבלה (#404),
 // וכפתור שאין מאחוריו דבר היה שקר. הבדיקה מריצה את console.js + iso.js ב-vm עם fetch ו-XMLHttpRequest מזויפים.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -41,7 +42,7 @@ function setup(fixtures, {role = 'admin', withIso = true} = {}) {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => f ?? {}};
     },
   });
-  const files = ['progress.js', 'console.js'].concat(withIso ? ['iso.js'] : []);
+  const files = ['progress.js', ...consoleFiles()].concat(withIso ? ['iso.js'] : []);
   for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   run(`ME={username:"u",role:"${role}",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="images"; currentTab=3; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); renderCurrent=()=>{ globalThis.__renders=(globalThis.__renders||0)+1; }; IMAGES=[]; FOLDERS=[]; OVERVIEW=null;`);
@@ -294,6 +295,7 @@ test('the name suggested from a filename is one the server accepts', async () =>
   assert.equal(run(`isoSuggestName("Win11_23H2_Hebrew_x64.iso")`), 'Win11_23H2_Hebrew_x64');
   assert.equal(run(`isoSuggestName("Win 11 (final)!.ISO")`), 'Win 11 _final');
   assert.ok(run(`isoSuggestName("x".repeat(100) + ".iso")`).length <= 48);
+  assert.equal(run(`isoSuggestName("כיתה ג׳ — סטנדרט.iso")`), 'כיתה ג׳ — סטנדרט');   // #2878: what the server now accepts is kept
   assert.equal(run('isoSuggestName("")'), '');
 });
 

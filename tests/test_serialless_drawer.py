@@ -54,6 +54,11 @@ class _Conn:
 
             def __iter__(self):   # #1857: drawer_list also asks disk_sets.labels_for -- no set here
                 return iter(())
+
+
+            def fetchall(self):   # #2848: drawer_list also asks disk_failures.open_for -- none here
+
+                return []
         return _R()
 
 

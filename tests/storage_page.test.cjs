@@ -4,6 +4,7 @@
 // כל מסך מרונדר מ-JSON קבוע; "שמור ועגן" מושבת עד POST /test מוצלח (עיקרון 5);
 // דיסק unknown בלי כפתור פירמוט; פירמוט והסרה בחלון אישור (#1270).
 // הבדיקה מריצה את console.js + storage.js ב-vm עם fetch מזויף (כמו drivers_page).
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -39,7 +40,7 @@ function setup(fixtures, role = 'admin') {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => val ?? {}};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'net.js', 'storage.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles(), 'net.js', 'storage.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   run(`ME={timezone:"UTC",username:"u",role:"${role}",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="storage"; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); confirmSheet=(t,s,l,f)=>sheets.push({title:t,sub:s,submitLabel:l,onSubmit:f}); globalThis.drawer=""; openDrawer=(t,b)=>{ drawer=t+"|"+b; }; closeDrawer=()=>{}; renderCurrent=()=>{};`);
   ctx.__toasts = toasts;

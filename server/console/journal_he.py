@@ -538,6 +538,8 @@ SETTINGS_HE = {
     "min_free_gb": "מינימום מקום פנוי אחרי שחזור (GB)",   # #1354
     "writecheck_min_mbps": "סף מהירות כתיבה לדיסק (MB/s)",   # #2338
     "unregistered_autoboot_seconds": "מחשב לא רשום: עלייה אוטומטית מהדיסק (שניות)",   # #1802
+    "clone_name_pad": "שמות מחשב: מספר ספרות בריפוד",   # #2786
+    "clone_name_instructor": "שמות מחשב: סיומת הדיסק של המרצה",   # #2786
     "intersite_rate_cap_mbps": "הגבלת קצב בין אתרים (Mb/s)",   # #1473
     "igmp_querier": "IGMP querier ברשת ההפצה",   # #1972
     # ‏#2056/#2059 (מוקאפ 05): אותן תוויות כמו בהגדרות הקונסולה; הערך בשניות
@@ -592,6 +594,7 @@ _PRECHECK_SIGN = {"learned=port": "link", "learned=slow_write": "slow", "learned
 #: ‏crcwarn.text_he, ‏learn/ports.py, ‏learn/models.py), בלי המספרים שהיומן אינו נושא.
 PRECHECK_REASON_HE = {"learned=port": "כנראה כבל/מחבר, לא הדיסק", "learned=disk": "הדיסק עצמו",
                       "learned=slow_model": "איטי מהרגיל לדגם",
+                      # #2848: no longer written (a past round's slow write is not warned) -- kept to read older journal lines
                       "learned=slow_write": "בבדיקת הכתיבה הקודמת נמדד איטי"}
 _PRECHECK = re.compile(r"^(\S+) wave=(\S+) (.+)$", re.S)
 _PRECHECK_ITEM = re.compile(r", (?=[0-9a-f]{2}(?::[0-9a-f]{2}){5}:)")

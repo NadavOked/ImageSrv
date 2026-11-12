@@ -1,5 +1,6 @@
 // #1896 (Nadav 22/10): an old image whose two windows partitions are the same size is "לא נבדק" in the
 // library, with a link that marks C:, until it is marked; the sheet offers exactly the server's candidates.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -17,7 +18,7 @@ function setup() {
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async(url,opts)=>{posts.push([url,opts&&opts.body]);return {status:200,ok:true,headers:{get:()=>null},json:async()=>({ok:true})};}});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   return {run:(code)=>vm.runInContext(code,ctx),posts};
 }
 

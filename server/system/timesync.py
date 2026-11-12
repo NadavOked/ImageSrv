@@ -136,10 +136,25 @@ def _write_server(networks: list[str]) -> None:
 
 def _restart() -> None: _read(["systemctl", "restart", "chrony"])
 
+def _network_reason(route_file: str = "/proc/net/route", resolv_file: str = "/etc/resolv.conf") -> str | None:
+    """#2869: why an unsynchronised clock may not reach a time server -- from what the server HAS,
+    not from a guess: "no_gateway" (no default route) or "no_dns" (no nameserver). None = both
+    exist, or a file could not be read (a read that failed says nothing, rule 5)."""
+    try:
+        routes = [line.split() for line in Path(route_file).read_text().splitlines()[1:]]
+        resolv = [line.split() for line in Path(resolv_file).read_text().splitlines()]
+    except OSError:
+        return None
+    if not any(len(f) > 2 and f[1] == "00000000" for f in routes):
+        return "no_gateway"
+    if not any(f[:1] == ["nameserver"] and len(f) > 1 for f in resolv):
+        return "no_dns"
+    return None
+
 def default_hooks() -> Hooks:
     return {"ensure_confdir": _ensure_confdir, "write": _write_client, "write_server": _write_server,
             "write_manual": _write_manual, "set_time": _set_time,
-            "restart": _restart, "tracking": lambda: _read(["chronyc", "-n", "tracking"]),
+            "restart": _restart, "network_reason": _network_reason, "tracking": lambda: _read(["chronyc", "-n", "tracking"]),
             "sources": lambda: _read(["chronyc", "-n", "sources"]), "sleep": time.sleep,
             "now": lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
@@ -211,6 +226,9 @@ def status(hooks: Hooks) -> dict:
     answer["server"] = selected.group(1) if selected else None
     answer["offset_ms"] = _offset_ms(_tracking_value(tracking, "System time"))
     answer["last_sample"] = _last_sample(sources)
+    if answer["synchronized"] is False and hooks.get("network_reason"):
+        try: answer["network_reason"] = hooks["network_reason"]()   # #2869
+        except Exception: answer["network_reason"] = None
     return answer
 
 def check_now(hooks: Hooks) -> dict:

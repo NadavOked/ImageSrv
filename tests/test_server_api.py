@@ -12,6 +12,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom
+from console_src import console_js
 
 
 def hello(server, mac, **kwargs):
@@ -632,7 +633,7 @@ def test_the_console_settings_screen_wires_the_class_deploy_switch():
     import re   # noqa: PLC0415
     from pathlib import Path   # noqa: PLC0415
     static = Path(__file__).resolve().parent.parent / "server" / "static"
-    js = (static / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     # ‏#954 גל 6: מסך ההגדרות הוא טבלת שורות (`SETTING_ROWS`); המתג הוא שורה
     # מסוג switch, הקריאה/כתיבה משותפות לכל המתגים ("true"/"false" כמחרוזת).
     # ‏#1685 (cc2ece3f, עמוד ההגדרות לפי המוקאפ): המתג עבר לכרטיס "deploy",

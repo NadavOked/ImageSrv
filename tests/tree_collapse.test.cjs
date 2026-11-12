@@ -1,4 +1,5 @@
 // הכרעת נדב (שלד, שלב 1): סגירת ענף סוגרת גם כל תת-ענף שבתוכו; החץ רק מחליף מצב ולא מנווט.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -6,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../server/static');
-const source = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+const source = consoleJs();
 const start = source.indexOf('function collapseInventoryDescendants(');
 const end = source.indexOf('/* S4 (#829)');
 assert.ok(start > 0 && end > start, 'tree helpers not found');

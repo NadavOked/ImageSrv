@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_timeouts import make_stubs, run_sh
@@ -196,6 +197,17 @@ def test_full_reads_every_chunk_and_matches_the_manifest(tmp_path):
         assert f"partclone partclone.fat -c {d}1" in res["calls"] and f"partclone partclone.ntfs -c -I {d}3" in res["calls"]
         assert f"readback {d}1 -x" in res["calls"] and f"readback {d}2 -x {SHAPE[2][1]}" in res["calls"]
     assert not any(c.startswith("get ") for c in res["calls"])            # full needs no list: the manifest's XXH64
+    assert "mode full" in log_of(box)
+
+
+def test_inline_outside_the_local_clone_reads_every_chunk_never_a_sample(tmp_path):
+    """#2023: `inline` is the local clone's (readbackinline.sh). A round's drawers
+    that get it read every chunk -- the stricter mode, never the 5% sample."""
+    box = box_for(tmp_path)
+    res = drawers(box, manifest("inline"))
+    assert res["rc"] == 0, res["raw"]
+    assert [res["t"][d]["readback"] for d in ("sdb", "sdc")] == ["verified", "verified"], res["raw"]
+    assert not any(c.startswith("get ") for c in res["calls"])
     assert "mode full" in log_of(box)
 
 
@@ -460,7 +472,7 @@ def test_every_write_path_reads_back_before_it_grows():
 
 
 def test_the_console_says_sampled_and_has_the_switch():
-    js = (AGENT.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert "נבדק במדגם" in js and "לא אומת אחרי הכתיבה" in js and "readbackLine(d)" in js
     assert 'key: "readback_full"' in js and "אימות מלא מוסיף כ-5 דק' לסבב של 4 מגירות" in js
     assert re.search(r"[A-Za-z]{2,}", FAIL) is None and re.search(r"[A-Za-z]{2,}", NOT_RUN) is None

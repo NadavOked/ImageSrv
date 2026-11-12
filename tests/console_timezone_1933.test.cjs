@@ -5,6 +5,7 @@
 //
 // הדפדפן כאן בכוונה בניו יורק: מה שעובר רק כי שעון התחנה במקרה בישראל — נכשל.
 process.env.TZ = 'America/New_York';
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -12,7 +13,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '../server/static');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const SOURCES = {console: read('console.js'), update: read('update_screen.js'), vmu: read('vmupdate.js'),
+const SOURCES = {console: consoleJs(), update: read('update_screen.js'), vmu: read('vmupdate.js'),
                  branches: read('branches.js')};
 
 // פונקציה שאינה קיימת (העוזרים החדשים, על הקוד הישן) אינה נטענת — כדי שהבקרה השלילית תיכשל

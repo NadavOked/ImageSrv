@@ -103,15 +103,16 @@ static RoomGrid room_grid_make(cairo_t *cr, double w, int n, int max_slots,
  * #432: a link slower than its port)? */
 static int room_machine_has_warn(const Machine *m) {
     for (int i = 0; i < m->nroom_drawers; i++)
-        if (m->room_drawers[i].present && (smart_level(m->room_drawers[i].smart) || m->room_drawers[i].link_slow
-                                           || m->room_drawers[i].crc_suspect)) return 1;   /* #1366 */
+        if (m->room_drawers[i].present && (smart_level(m->room_drawers[i].smart) || room_drawer_red(&m->room_drawers[i]))) return 1;
     return 0;
 }
 
 /* #432: the slot's colour -- SMART first (red wins), then a slow link is
  * orange like a SMART warning: it asks, it does not block. */
 static Rgb room_drawer_color(const Theme *t, const RoomDrawer *d) {
-    if (!smart_level(d->smart) && (d->link_slow || d->crc_suspect)) return t->warn;   /* #1366: CRC over the threshold */
+    if (room_drawer_red(d)) return t->danger;   /* #2848 (Nadav 11/11): a SATA problem or a slow write is red; #2846: a CRC count is not a colour */
+    if (d->rule_set) return d->rule_color == DR_YELLOW ? t->yellow : d->rule_color == DR_ORANGE ? t->warn   /* #2848: the server's colour */
+                          : d->rule_color == DR_GREEN ? t->led_ok : smart_color(t, d->smart);
     return smart_color(t, d->smart);
 }
 
@@ -369,7 +370,10 @@ static void live_bay(const Theme *t, const State *s, const Machine *m, const Roo
     /* #432/#1366/#652: the drawer's health, the grid's colour (room_drawer_color: SMART
      * first, then a slow link or a risen CRC); words only when it is not green */
     y->toned = 1; y->tone = room_drawer_color(t, d);
-    y->note = smart_level(d->smart) ? smart_he_why(d->smart, d->smart_reason) :   /* #1742 */ d->link_slow ? "קישור איטי" : d->crc_suspect ? "CRC עלה" : NULL;
+    /* #2848: red / yellow say the server's rule in its words (disk_rule.c, the same sentence as its refusal) */
+    y->note = smart_level(d->smart) == 2 ? smart_he_why(d->smart, d->smart_reason)   /* #1742 */
+            : d->rule_set && (d->rule_color == DR_RED || d->rule_color == DR_YELLOW) && d->rule_reason[0] ? disk_rule_he(d->rule_reason)
+            : d->link_slow ? "קישור SATA איטי" : smart_level(d->smart) ? smart_he_why(d->smart, d->smart_reason) : NULL;
     int pct = live_pct(m, d);
     if (pct >= 0) { snprintf(y->pct, sizeof y->pct, "%d%%", pct > 100 ? 100 : pct); y->share = pct / 100.0; }
     else { snprintf(y->pct, sizeof y->pct, "%s", "—"); y->share = -1; }

@@ -6,6 +6,8 @@
 import re
 from pathlib import Path
 
+from console_src import console_js
+
 ROOT = Path(__file__).resolve().parent.parent / "server"
 STATIC = ROOT / "static"
 CSS = {
@@ -46,7 +48,7 @@ def test_toast_and_backdrop_animate_instead_of_toggling_display():
     css = _read(CSS["console"])
     assert re.search(r"#toast\.show\{[^}]*opacity:1", css)
     assert re.search(r"\.detail-backdrop\.show\{[^}]*opacity:1", css)
-    js = _read(STATIC / "console.js")
+    js = console_js()
     assert 'detailBackdrop").classList.add("show")' in js
     assert 'el.style.display = "none"' not in js.split("function toast(")[1][:400]
 
@@ -66,7 +68,7 @@ def test_f06_modal_and_drawer_use_state_classes_with_origin_and_sheet_duration()
     assert re.search(r"#modal\.show\{[^}]*opacity:1", css)
     assert re.search(r"#modal #modalBox[^{]*\{[^}]*scale\(\.94\)[^}]*transform-origin:var\(--origin", css)
     assert re.search(r"\.drawer\{[^}]*transform:translateX\(-105%\);transition:transform var\(--dur-sheet\)", css)
-    js = _read(STATIC / "console.js")
+    js = console_js()
     assert 'modal.style.display' not in js
     assert "function modalOrigin(" in js and "clearTimeout(modalCleanupTimer)" in js
 

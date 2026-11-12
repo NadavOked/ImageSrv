@@ -277,3 +277,12 @@ def test_an_unreadable_timestamp_makes_the_count_unknown_not_smaller(server):
     listed = _listed(server)
     assert listed["img_7f3a91"]["rounds_30d"] is None
     assert listed["img_2c8e04"]["rounds_30d"] == 1
+
+
+def test_download_declares_the_exact_length_2851(server):
+    """#2851: בלי Content-Length הדפדפן לא מראה אחוזים ולא מזהה הורדה קטועה."""
+    r = server["admin"].get("/api/console/images/img_7f3a91/download")
+    assert r.status_code == 200
+    declared = r.headers.get("content-length")
+    assert declared is not None, "הכותרת Content-Length חסרה"
+    assert int(declared) == len(r.content) > 1024

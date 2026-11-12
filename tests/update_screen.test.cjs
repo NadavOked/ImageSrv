@@ -3,6 +3,7 @@
 // מה נבדק: כל מצב במוקאפ (שלבים, עולה מחדש, חזר, תקרת זמן, חתימה נדחתה, הורדה נכשלה, הוחזר),
 // שהדף נטען מחדש רק על ראיה חיובית (stage done או /health/live עם התג בלי session),
 // ושאחרי 10 דקות בלי התקדמות הדף מפסיק לחכות — לא "ממתין" לנצח (עיקרון 5).
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -53,7 +54,7 @@ function setup({search = '', fixtures = {}} = {}) {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => f ?? {ok: true}};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'update_screen.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles(), 'update_screen.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run('ME={timezone:"UTC",username:"nadav",role:"admin",server_name:"srv",version:"v0.71.0",capabilities:{}}; globalThis.sheets=[]; globalThis.toasts=[];'
     + ' sheet=o=>{sheets.push(o);}; toast=(m,ms,k)=>{toasts.push([m,k||""]);}; renderCurrent=()=>{};');

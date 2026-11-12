@@ -21,6 +21,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from console_src import console_files, console_js
 from server.net import dhcp, netcfg, netcfg_host
 from server.net.netcfg import MODE_DHCP, MODE_MANUAL, MODE_STATIC, NetConfig, StaticRoute
 
@@ -1076,7 +1077,7 @@ def test_units_that_run_ifup_may_write_its_runtime_state(unit_name):
 
 def _js_function(name):
     """מקור פונקציה אחת מ-console.js, עד ה-`function` הבא בתחילת שורה."""
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     start = js.index(f"function {name}")
     return js[start:js.index("\nfunction ", start + 1)]
 
@@ -1097,7 +1098,7 @@ def test_the_network_tab_has_one_nic_panel_not_two():
     """הפאנל הכפול ('כרטיסי רשת' + 'כתובת השרת עצמו') התמזג לאחד. כתובת
     השרת יושבת בכרטיס רשת ההפצה, ואין פאנל נפרד 'כתובת השרת עצמו' ולא
     ה-id-ים הישנים netcfg-body/netcfg-table."""
-    for name in ("index.html", "console.js", "netcfg.js", "net.js"):
+    for name in ("index.html", *console_files(), "netcfg.js", "net.js"):
         text = (REPO / "server" / "static" / name).read_text(encoding="utf-8")
         assert "כתובת השרת עצמו" not in text, name
         assert "netcfg-body" not in text, name
@@ -1135,7 +1136,7 @@ def test_the_edit_dialog_uses_a_real_radio_group_not_prompt_or_confirm():
 def test_sheet_supports_a_radio_field_type():
     """התוספת ל-sheet() ב-console.js (‏#761) — בלי זה netcfg.js קורא
     ל-API שלא קיים, וזה נכשל בשקט בזמן ריצה, לא בבדיקה."""
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert 'f.type === "radio"' in js
 
 

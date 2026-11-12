@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server import db
 from server.learn import waits as learn_waits
 
@@ -96,7 +97,7 @@ def test_the_room_history_carries_the_waits(server):
     _night(conn)
     [h] = server["admin"].get("/api/console/room/history").json()
     assert h["waits"]["smart_hold_s"] == 960 and h["waits"]["open_wait_s"] == 360
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert "roomRoundWaits(h)" in js
     doc = (Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "smart_hold_s" in doc

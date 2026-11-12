@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from console_src import console_js
 from server import db
 from server.rounds import room_precheck
 from server.system import housekeeping
@@ -187,12 +188,10 @@ def test_the_room_learns_from_finished_waves_and_tells_the_next_one(room_server)
     assert any("כנראה כבל/מחבר, לא הדיסק" in t for t in texts), texts
 
 
-def test_the_console_paints_the_learned_connection_orange_with_the_server_text():
-    """כתום (אזהרה, לא אדום) ובטקסט מהשרת — הקונסולה אינה מחשבת הכרעה משלה."""
-    from pathlib import Path
-    js = (Path(__file__).resolve().parents[1] / "server" / "static" / "console.js").read_text(
-        encoding="utf-8")
-    line = next(x for x in js.splitlines() if "function slotClass" not in x
-                and "d.port_suspect === true || d.disk_suspect === true" in x)
-    assert 'return "warn"' in line
+def test_the_console_says_the_learned_connection_in_words_not_a_colour():
+    """‏#2848 (נדב 11/11): מה שנלמד על החיבור הוא הערה ב-title בטקסט מהשרת — לא צבע (כתום הוא של SMART)."""
+    import re
+    js = console_js()
+    slot = re.search(r"^function slotClass\(s\) \{.*?^\}", js, re.M | re.S).group(0)
+    assert "port_suspect" not in slot and "disk_suspect" not in slot, slot
     assert "if (d.learned_he) parts.push(d.learned_he);" in js

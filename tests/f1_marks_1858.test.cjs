@@ -1,11 +1,12 @@
 // #1858 (mockup 07/11, Nadav): "נצפה F1" per disk, by serial -- the console side.
+const {consoleJs: readConsoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.resolve(__dirname, '../server/static', f), 'utf8');
-const consoleJs = read('console.js'), disksJs = read('disks.js');
+const consoleJs = readConsoleJs(), disksJs = read('disks.js');
 
 function fn(js, name) {
   const lines = js.split('\n');

@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from test_end_hold_2024 import CLEAN, end
@@ -103,7 +104,7 @@ def test_a_held_cloner_is_shown_on_and_waiting_with_its_problem_disks(room_serve
 
 def test_the_console_draws_the_sentence_and_the_button():
     """The words and the button are in the console, on every view of the cloner."""
-    js = (Path(__file__).resolve().parents[1] / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert f'const HELD_HE = "{HELD_HE}";' in js
     for where in ("if (m.held) return { cls: \"warn\", text: HELD_HE, held: true };",   # machineState
                   "if (rm.held) return { cls: \"warn\", text: \"דלוק — מחכה ללחיצה\", held: true };",   # roomCardState

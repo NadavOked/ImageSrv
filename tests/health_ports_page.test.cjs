@@ -3,6 +3,7 @@
 // עיקרון 5: "לא נבדק" (unknown) ≠ "כבוי" (off) ≠ "לא מאזין" (bad) — שלושה צבעים;
 // כל endpoint שלא נקרא הוא מצב משלו, לא "אין".
 // הכרעות נדב 17/09: 06:12 המתגים בפורטים ולא בבריאות; 06:25 מתג בכל שורה, 🔒 = הקלדת שם.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -67,7 +68,7 @@ function setup(over={}) {
       if(f===403) return {status:403,ok:false,headers,json:async()=>({detail:'admin only'})};
       return {status:200,ok:true,headers,json:async()=>f ?? {ok:true,verified:true,apply_error:null}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",version:"v0.34.0",capabilities:{}}; globalThis.sheets=[]; globalThis.toasts=[]; globalThis.realSheet = sheet; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; globalThis.selected=[]; selectPageById=(id)=>{ selected.push(id); current=id; }; openMachineDetail=(m)=>{ globalThis.openedMac=m; };');
   run('MACHINES='+JSON.stringify(fixtures['/machines'])+'; GROUPS='+JSON.stringify(fixtures['/groups'])+';');

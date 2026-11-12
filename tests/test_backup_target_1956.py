@@ -30,6 +30,7 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
+from console_src import console_js
 from native import requires_native
 from server.system import backup_job
 from server import db
@@ -356,7 +357,7 @@ NODE = shutil.which("node")
 
 @requires_native(("node", NODE))
 def test_the_console_row_says_what_is_chosen_and_warns_in_orange(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     names = ["backupTargetRowHtml", "backupTargetBody"]
     found = {n: re.search(rf"^function {n}\(.*?^\}}", js, re.M | re.S) for n in names}
     # a helper that is not there (the console before #1956) says nothing -- the assertions fail on what it shows
@@ -404,7 +405,7 @@ console.log(JSON.stringify({ rows, bodies }));
 
 @requires_native(("node", NODE))
 def test_the_console_policy_row_says_the_hour_and_the_space_and_what_it_could_not_read(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     found = {n: re.search(rf"^function {n}\(.*?^\}}", js, re.M | re.S) for n in ("backupPolicyRowHtml", "backupPolicyHelp")}
     src = {n: m.group(0) if m else f"function {n}() {{ return ''; }}" for n, m in found.items()}
     probe = tmp_path / "policy.cjs"
@@ -433,7 +434,7 @@ console.log(JSON.stringify({ row, help, unknown, unread: backupPolicyRowHtml() }
 @requires_native(("node", NODE))
 def test_the_console_windows_post_what_the_server_expects(tmp_path):
     """The real sheet functions, with ``sheet`` and ``post`` as recorders: what is on offer, and what goes out."""
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     names = ("backupPolicyHelp", "backupPolicySheet", "backupTargetBody", "backupTargetSave", "backupTargetSheet",
              "backupTargetFolderSheet")
     found = {n: re.search(rf"^(?:async )?function {n}\(.*?^\}}", js, re.M | re.S) for n in names}
@@ -476,7 +477,7 @@ const SETTINGS = { backup_target: { type: "default", dest: "" },
 
 
 def test_the_console_offers_no_network_destination():
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     sheet = re.search(r"^function backupTargetSheet\(.*?^\}", js, re.M | re.S).group(0)
     assert '"default"' in sheet and '"local"' in sheet
     assert 'value: "smb"' not in sheet and 'value: "nfs"' not in sheet

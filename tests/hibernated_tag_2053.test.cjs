@@ -2,6 +2,7 @@
 // לאימג' שנקלט ממקור מושהה — נגזר מ-`src_unhib` הקיים במניפסט (#2213). ברשימה ליד השם, במגירה
 // (שורת התגים + "המקור בקליטה" בסקירה), ובחלון "התחל סבב" (סיומת ושורה כתומה שאינה חוסמת).
 // בלי השדה — אין תג ואין שורה (עיקרון 5: היעדר אינו "לא היה מושהה").
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -22,7 +23,7 @@ function setup() {
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=(code)=>vm.runInContext(code,ctx);
   run(`ME={username:"admin",role:"admin",server_name:"srv",version:"v0",capabilities:{}}; current="deploy"; renderCurrent=()=>{};`);
   return {run,node};

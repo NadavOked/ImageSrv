@@ -2,6 +2,7 @@
 // (console.js + net.js ב-vm מול DOM מזערי ו-fetch מזויף), לא רק מחרוזות.
 // עיקרון 5: null = "לא נבדק" (אפור), {error} = "לא הצלחנו לבדוק" (כתום),
 // ערך = מוצג; verdicts ריק אינו "הכול תקין".
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -78,7 +79,7 @@ function setup() {
       const key=url.replace('/api/console','').split('?')[0]; requests.push({url,options});
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={username:"admin",role:"admin",server_name:"srv",version:"v0.40.0",capabilities:{}}; current="machines"; sheet=()=>{}; confirmSheet=()=>{}; selectPageById=(id)=>{ globalThis.selected=id; current=id; };');
   for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines'],['HEALTH','/health']]) run(name+'='+JSON.stringify(fixtures[key]));

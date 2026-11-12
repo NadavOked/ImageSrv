@@ -20,6 +20,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from console_src import console_js
 from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
@@ -27,7 +28,7 @@ NODE = shutil.which("node")
 
 
 def _drawer(tmp_path: Path, health_js: str, error: str = "", machines_js: str = "[]") -> dict:
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     fn = re.search(r"^function topNotifications\(\) \{.*?^\}", js, re.M | re.S)
     assert fn, "topNotifications is gone from console.js"
     probe = tmp_path / "probe.cjs"

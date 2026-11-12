@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from server.core.atomicfile import write_atomic
 
@@ -146,7 +147,7 @@ def _js(name: str, js: str) -> str:
 
 @requires_native(("node", NODE))
 def test_the_health_row_offers_show_and_saved_and_the_mark_posts(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     probe = tmp_path / "probe.cjs"
     probe.write_text("""
 const esc = (x) => String(x == null ? "" : x);

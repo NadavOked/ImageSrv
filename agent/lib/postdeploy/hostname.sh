@@ -133,7 +133,7 @@ write_hostname() {
         _write_hostname_linux "$_disk" "$_manifest" "$_name" "$_hostname_plan"
         return $?
     fi
-    [ "$_lin_rc" -eq 0 ] || { _write_hostname_windows; return $?; }
+    case "$_lin_rc${HOSTNAME_OS:-}" in 1*|0windows) _write_hostname_windows; return $? ;; 0linux) _write_hostname_linux "$_disk" "$_manifest" "$_name" "$_hostname_plan"; return $? ;; esac   # #2786: the side a room round chose (drawernames.sh); unset = both
     _write_hostname_both
 }
 

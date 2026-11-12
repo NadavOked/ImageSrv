@@ -1,10 +1,11 @@
 // #2056/#2059 (mockup 05, 24/10): wait / power-off timing rows on the settings page.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 function functionSource(name) {
   const lines = js.split('\n');

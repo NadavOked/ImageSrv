@@ -50,7 +50,9 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # 14: disk_f1_marks (#1858, 08/11; 13 in its PR -- #1920 took 13 first in round/1107c)
                 14: "9030cc575a61b535ed7b5fc2e5f25efa6e88dd730191998856556fc7f3e9dadd",
                 # 15: net_devices.monitor_on (#2844; bumped in release/v0.91.11, Refs #2850)
-                15: "e85bb3510829eaed4560191fd9521eb991f48c78fda25e105309101906780264"}
+                15: "e85bb3510829eaed4560191fd9521eb991f48c78fda25e105309101906780264",
+                # 16: room_rounds.hostnames_json (#2786, 09/11; 15 in its PR -- net_devices.monitor_on took 15 first)
+                16: "4a1651485542b31598a47bb8a738aa505d8b1a19e0b11785c22620cf7995a1bb"}
 
 
 def _fingerprint(conn) -> str:
@@ -89,7 +91,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 15
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'model_slot_maps'").fetchone()
     assert "disk_serial" in [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
 
@@ -110,7 +112,7 @@ def test_both_round_1107c_migrations_run_from_12_and_from_13(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 15
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"usb_records", "usb_syncs", "disk_f1_marks"} <= names
 
@@ -127,7 +129,7 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 15
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "held_at" in columns and "held_json" in columns
 
@@ -144,7 +146,7 @@ def test_a_database_on_14_gains_monitor_on_and_is_stamped_15(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 15
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "monitor_on" in columns
 
@@ -160,7 +162,7 @@ def test_a_database_on_7_gains_the_email_queue_and_is_stamped_8(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 15
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"email_queue", "email_queue_one_pending"} <= names
 
@@ -243,7 +245,7 @@ def test_a_database_on_8_gains_the_account_lockout_table_and_is_stamped_9(tmp_pa
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 15
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"login_account_failures", "idx_login_account_failures"} <= names
 
@@ -262,5 +264,5 @@ def test_a_database_on_9_gains_the_cap_surface_and_old_rows_are_the_console(tmp_
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 15
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
     assert conn.execute("SELECT surface FROM login_account_failures").fetchone()[0] == "console"

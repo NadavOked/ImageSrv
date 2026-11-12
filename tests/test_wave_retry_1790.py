@@ -26,6 +26,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from console_src import console_js
 from native import requires_native
 from server.rounds import room
 from test_server_room import (  # noqa: F401 -- `room_server` is a fixture
@@ -138,8 +139,16 @@ NODE = shutil.which("node")
 def test_the_console_card_shows_a_drawer_written_in_an_earlier_wave_as_written(tmp_path):
     """Wave 2 has no target on port 1: the card said "—" (as for "no report"). It is
     written -- "נכתב", green, 100% -- while a red skip stays "דולג" and a fresh one "—"."""
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     pick = [re.search(r"^function linkSlow\(d\) \{.*?^\}", js, re.M | re.S),
+            # #2848: slotClass reads the one rule (diskRule / diskFacts / slotRule)
+            re.search(r"^const SATA_ISSUE_HE = .*$", js, re.M),
+            re.search(r"^function sataIssues\(d\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^const DISK_RULE_RED = .*$", js, re.M),
+            re.search(r"^const DISK_RULE_YELLOW = .*$", js, re.M),
+            re.search(r"^function diskRule\(f\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^function diskFacts\(s\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^function slotRule\(s\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^function slotClass\(s\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^function bayEmphasis\(s\) \{.*?^\}", js, re.M | re.S),   # #2050: the row's emphasis class
             re.search(r"^function roundDskHtml\(m, s\) \{.*?^\}", js, re.M | re.S)]

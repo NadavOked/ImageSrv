@@ -5,6 +5,7 @@
 // הוא דף `branch` (branches.js).
 // קליק = מציג, דאבל-קליק = פותח/סוגר (#931).
 // console.js + branches.js רצים ב-vm עם fetch מזויף, כמו branches_page.test.cjs.
+const {consoleJs, consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -54,7 +55,7 @@ function setup(fixtures, me = {}, slow = null) {
     },
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'progress.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'drivers.js'), 'utf8'), ctx);   // before branches.js, as in index.html
   vm.runInContext(fs.readFileSync(path.join(root, 'branches.js'), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
@@ -186,7 +187,7 @@ test('the primary server node takes its name from /me (server_name); a double cl
   assert.ok(save, 'the name is the host name — POST /hostname, not a separate display setting');
   assert.ok(!calls.some((c) => c.method === 'POST' && c.url.endsWith('/settings')), 'no POST /settings server_name any more');
   assert.equal(JSON.stringify(save.body), JSON.stringify({hostname: 'imagesrv-ta'}));
-  assert.doesNotMatch(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), /imagesrv-server-names/, 'no localStorage-only rename');
+  assert.doesNotMatch(consoleJs(), /imagesrv-server-names/, 'no localStorage-only rename');
 });
 
 // #1781 (נדב 07/11): הדף "העברות" של שרת משנה נעלם. ההעברה והמשיכה — מתפריט ⋯ של אימג' (branch_transfer.test.cjs).
@@ -197,7 +198,7 @@ test('#1781: the per-secondary "העברות" page is gone — no page, no tree 
   assert.equal(run('typeof loadBranchView'), 'undefined');
   assert.equal(run('typeof startPullFromSecondary'), 'undefined');
   assert.equal(run('BRANCH_VIEWS.some((v) => v[0] === "transfers")'), false);
-  assert.doesNotMatch(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), /openBranchView|BRANCH_NODE|branch-view/);
+  assert.doesNotMatch(consoleJs(), /openBranchView|BRANCH_NODE|branch-view/);
 });
 
 // ---------- #1179: the secondary's tree = the primary's tree ----------

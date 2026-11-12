@@ -1,11 +1,12 @@
 // #1675 — שורת ערך עם יחידה: יחידה עברית אינה עטופה ב-dir="ltr" (שם "0 שגיאות" נקרא "שגיאות 0"),
 // ו-0 של הגדרה שבה 0 = כבוי מוצג "כבויה". ובשורה האחת של ההפעלה מחדש (סידור 17/10).
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 function functionSource(name) {
   const lines = js.split('\n');

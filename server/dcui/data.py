@@ -120,6 +120,7 @@ class Snapshot:
     #: collect_snapshot always sets one of the four.
     clock: str = ""
     clock_server: str = ""        # the configured source, as the operator chose it
+    clock_why: str = ""           # #2869: why the clock cannot sync, when the server can see it ("" = unknown)
     #: #1412: the installing ISO's lab_overlay -- LAB_ISO_LAB / LAB_ISO_CLEAN /
     #: LAB_ISO_UNCHECKED; "" = no ISO manifest (not installed from an ISO)
     lab_iso: str = ""
@@ -403,6 +404,12 @@ def clock_state(runner: Runner, conn) -> tuple[str, str]:
     return state, source
 
 
+def clock_unsynced_why() -> str:
+    """#2869: the cause of an unsynchronised clock the server can see (no gateway / no DNS), or ""."""
+    from server.system import health, timesync
+    return health.UNSYNC_WHY.get(timesync.default_hooks()["network_reason"](), "")
+
+
 def is_pre_install(data_dir: Path = DATA_DIR,
                    status_file: Path = STATUS_FILE) -> bool:
     """The wizard status alone is insufficient once the real DB exists."""
@@ -530,6 +537,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
         "imagesrv-server", "dnsmasq", "nftables")}
     version, version_verified = _version(runner, repo_dir)
     clock, clock_server = clock_state(runner, conn)
+    clock_why = clock_unsynced_why() if clock == CLOCK_UNSYNCED else ""
     return Snapshot(
         hostname=socket.gethostname(), version=version,
         version_verified=version_verified,
@@ -546,7 +554,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
         rollback_seconds=seconds,
         system_updates=system_updates_date(data_dir, manifest_file),
         first_boot_running=first_boot_running(status_file),
-        clock=clock, clock_server=clock_server,
+        clock=clock, clock_server=clock_server, clock_why=clock_why,
         lab_iso=lab_iso_state(manifest_file),
         backup_off=not backup_job.parse_enabled(get_setting(conn, backup_job.ENABLED_SETTING)),
     )

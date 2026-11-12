@@ -2,6 +2,7 @@
 // ‏`error` מגיע מהסוכן גולמי. הטסט עובר על **כל** הסיבות שהסוכן יכול לשים בו (הרשימה למטה, עם המקור של כל אחת),
 // ובודק שאף אחת לא מוצגת באנגלית. סיבות `fanout.c` נקראות מהקוד עצמו — סיבה חדשה שנוספה שם בלי מיפוי ב-console.js
 // מפילה את הטסט הזה, ולא מתגלה מול מכונה. console.js רץ ב-vm מול DOM מזערי, כמו ב-strip_tags.test.cjs.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -18,7 +19,7 @@ function setup() {
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,RegExp,encodeURIComponent,decodeURIComponent,
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   return (raw)=>vm.runInContext(`drawerErrorText(${JSON.stringify(raw)})`,ctx);
 }
 const he=setup();

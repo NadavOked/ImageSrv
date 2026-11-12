@@ -1,11 +1,12 @@
 // #2338 (נדב 03/11) — סף מהירות הכתיבה לפני הזרם הוא שורה בעמוד ההגדרות: "סף מהירות כתיבה לדיסק (MB/s)",
 // מספר שלם 10–500 בכרטיס "שיכפול והפצה", עם ההסבר שדיסק איטי מעכב את כל הגל. נשמר מחלון קטן, כמו שאר המספרים.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 function functionSource(name) {
   const lines = js.split('\n');

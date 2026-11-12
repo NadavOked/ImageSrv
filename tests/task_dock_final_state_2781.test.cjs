@@ -1,5 +1,6 @@
 // #2781: finished/failed tasks in the task dock must show a final state,
 // no progress bar, and never the "not yet read" text of a task that has not started.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -7,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../server/static');
-const src = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+const src = consoleJs();
 function fn(name) {
   const lines = src.split(/\r?\n/);
   const start = lines.findIndex((l) => l.startsWith(`function ${name}(`));

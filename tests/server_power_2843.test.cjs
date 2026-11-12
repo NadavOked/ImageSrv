@@ -6,9 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {consoleJs} = require('./console_src.cjs');   // #2594: the console's files in load order
 
 const root = path.resolve(__dirname, '../server/static');
-const source = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+const source = consoleJs();
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 function node() {

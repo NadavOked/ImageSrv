@@ -587,7 +587,8 @@ def test_an_image_name_is_one_isolated_run_in_an_rtl_line():
     assert r'"\xE2\x81\xA8%s\xE2\x81\xA9"' in iso                      # FSI ... PDI
     assert r'#define RLM "\xE2\x80\x8F"' in _src("screens_rounds.h")
     title = code(body(_src("screens_cloner.c"), "screen_cloner"))
-    assert 'snprintf(label, sizeof label, RLM "שיכפול במקביל · %s%s%s%s", image,' in title   # #1331: + the drivers phrase
+    assert 'snprintf(label, sizeof label, RLM "%s · %s%s%s%s%s", head, image, speed,' in title   # #1331: + the drivers phrase; #2849: + the speed on a small screen
+    assert 'snprintf(head, sizeof head, "%s", "שיכפול במקביל");' in title   # #2849: the build machine's direct send says "הפצה ישירה" there
     assert "bidi_isolate(s->cloner_image[0] ? s->cloner_image" in title
     live = code(body(_src("screens_room.c"), "screen_room"))
     assert "bidi_isolate(s->round_image, image, sizeof image);" in live

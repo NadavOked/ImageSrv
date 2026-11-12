@@ -1,6 +1,7 @@
 // נדב 18/10: "למה ליד חיפה יש עיגול ירוק וליד TA אין?" ו"אין רשת הפצה בחיפה, והוא מראה ירוק בעץ וכתום
 // בסקירה". נקודה אחת לכל שרת בעץ — TA וכל שרת משנה — מאותה פונקציה ומאותן בדיקות /health שהסקירה של אותו
 // שרת מציגה ב"דורש טיפול". מחובר לבדו אינו ירוק; לא נמדד אינו ירוק (עיקרון 5). הקופסה בתחתית העץ יצאה.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -8,7 +9,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../server/static');
-const source = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+const source = consoleJs();
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const cut = (a, b) => { const i = source.indexOf(a), j = source.indexOf(b, i); assert.ok(i > 0 && j > i, a); return source.slice(i, j); };
 

@@ -177,7 +177,7 @@ def test_the_tools_api_does_not_exist_in_v1_404_by_name(server, clients):
     for who, client in (("admin", clients["admin"]), ("anon", anon)):
         r = client.get("/api/console/tools/catalog")
         assert r.status_code == 404, (who, r.status_code, r.text)
-        assert "v1.1" in r.json()["detail"], (who, r.text)
+        assert r.json()["detail"] == "ארגז הכלים אינו במהדורה זו", (who, r.text)   # #2955: בלי הבטחת v1.1
         r = client.put("/api/console/tools/selection", json=TOOLS_BODY)
         assert r.status_code == 404, (who, r.status_code, r.text)
     assert clients["deploy"].get("/api/console/tools/catalog").status_code == 403

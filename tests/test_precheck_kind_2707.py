@@ -8,7 +8,7 @@ titled a link -- the operator goes to the cable when the server learned it is th
 The signs, one table in both places:
 * link -- a slow link, a CRC rise, CRC over the threshold, `port_suspect` (#1844: "כנראה כבל/מחבר"),
   `smart_learned` downshift_rose / timeout_rose (183/188 -- "likely the cable", smart_history.ROSE_LINK);
-* slow write -- `write_slow` (#447), `model_slow` (#1845);
+* slow write -- `model_slow` (#1845) (#2848: a past round's `write_slow`, #447, is no longer warned);
 * suspect disk -- `disk_suspect` (#1844), `smart_learned` critical_rose / hot (#1859);
 * none of them -- "עם אזהרה", never a guessed kind.
 """
@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server.console import journal_he
 from server.console.journal_he import JournalTranslator
 from server.rounds import room
@@ -35,7 +36,7 @@ ROUND = {"id": "room_7f331ae9", "wave_number": 1}
 def warning(**over) -> dict:
     w = {"mac": MAC, "port": 5, "serial": "S5", "link_gbps": 3, "link_max_gbps": 3, "crc_rise": 0, "crc": 0,
          "crc_suspect": False, "smart_learned": None, "port_suspect": False, "disk_suspect": False,
-         "model_slow": False, "write_slow": False}
+         "model_slow": False}
     w.update(over)
     return w
 
@@ -56,7 +57,6 @@ def label(server, *warned) -> str:
     ({"smart_learned": "hot"}, "עם דיסק חשוד"),
     ({"smart_learned": "downshift_rose"}, "עם קישור חשוד"),
     ({"smart_learned": "timeout_rose"}, "עם קישור חשוד"),
-    ({"write_slow": True}, "עם כתיבה איטית"),
     ({"crc_rise": 12}, "עם קישור חשוד"),
 ])
 def test_each_sign_is_its_own_kind(server, over, kind):
@@ -74,7 +74,7 @@ def test_the_disk_itself_is_not_called_a_link(server):
 def test_kinds_join_in_one_order(server):
     setup_classroom(server)
     got = label(server, warning(disk_suspect=True), warning(port=3, link_gbps=1.5, link_max_gbps=6.0),
-                warning(port=4, write_slow=True))
+                warning(port=4, model_slow=True))
     assert got.endswith("עם קישור חשוד או כתיבה איטית או דיסק חשוד"), got
 
 
@@ -96,7 +96,7 @@ def test_the_learned_smart_word_is_in_the_journal_and_in_hebrew(server):
 
 def test_one_table_in_both_places():
     """console.js precheckKind and journal_he.precheck_he: the same nouns and the same smart words per kind."""
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     nouns = dict(re.findall(r'(\w+): "([^"]+)"', re.search(r"const PRECHECK_NOUN_HE = \{([^}]*)\}", js).group(1)))
     assert nouns == journal_he.PRECHECK_NOUN_HE
     for kind, words in journal_he.PRECHECK_SMART_KIND.items():

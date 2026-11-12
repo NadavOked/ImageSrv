@@ -22,6 +22,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from console_src import console_js
 from server.console import auth, monitor
 from server.db import net_seen, set_setting
 from conftest import hello_body
@@ -124,8 +125,7 @@ def test_monitor_is_off_by_default_and_cmdline_flag_follows_the_switch():
 
 
 def test_settings_page_warns_that_enabling_exposes_5900():
-    js = (Path(__file__).resolve().parent.parent
-          / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     # ‏#1300: האזהרה עברה מהערה בראש הדף ל-title של המתג ולכרטיס הצפייה (console-full.html P.monitor)
     assert "כבוי כברירת מחדל — הדלקה חושפת 5900 על וילן ההפצה" in js
     assert "הדלקה חושפת 5900 על וילן ההפצה ותופסת באתחול הבא של כל מכונה" in js
@@ -797,7 +797,7 @@ def test_the_console_translates_only_the_agent_fixed_prompts():
     import re   # noqa: PLC0415
     from pathlib import Path   # noqa: PLC0415
     static = Path(__file__).resolve().parent.parent / "server" / "static"
-    js = (static / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert 'menu: "תפריט"' in js and 'signin: "כניסה"' in js
     # #1713 (f1fef165) removed the uncalled waitingHtml, which read PROMPT_HE[m.prompt];
     # the prompt is shown through promptHe(m.prompt), whose first step is the fixed word.

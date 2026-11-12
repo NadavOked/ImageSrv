@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
+
 REPO = Path(__file__).resolve().parent.parent
 STATIC = REPO / "server" / "static"
 PNG = bytes.fromhex(
@@ -44,7 +46,7 @@ def test_no_branding_module_and_no_router_wiring():
 
 
 def test_the_console_has_no_logo_upload_ui():
-    js = (STATIC / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     for gone in ("branding/logo", "logo-input", "settingsLogoUpload", "settingsLogoClear",
                  "brandingCardHtml", "LOGO_EXISTS", "loadLogo", "לוגו המוסד"):
         assert gone not in js, gone

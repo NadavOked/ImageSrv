@@ -289,14 +289,15 @@ STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=images
 
 
 @_GUI
-def test_the_standby_bay_turns_orange_on_a_slow_link(tmp_path):
+def test_the_standby_bay_turns_red_on_a_slow_link(tmp_path):
+    """#2848 (Nadav 11/11): a slow SATA link is red -- never a target (it was orange, #432)."""
     binary = _build_gui(tmp_path)
     _render(binary, STANDBY.format(link="6.0"), tmp_path / "fast")
     _render(binary, STANDBY.format(link="1.5"), tmp_path / "slow")
     _render(binary, STANDBY.format(link="null"), tmp_path / "unknown")
     for theme in ("light", "dark"):
-        fast = _count(tmp_path / f"fast-standby-{theme}.png", "--clr-warning", theme)
-        slow = _count(tmp_path / f"slow-standby-{theme}.png", "--clr-warning", theme)
-        unknown = _count(tmp_path / f"unknown-standby-{theme}.png", "--clr-warning", theme)
+        fast = _count(tmp_path / f"fast-standby-{theme}.png", "--clr-danger", theme)
+        slow = _count(tmp_path / f"slow-standby-{theme}.png", "--clr-danger", theme)
+        unknown = _count(tmp_path / f"unknown-standby-{theme}.png", "--clr-danger", theme)
         assert slow - fast > 300, (theme, fast, slow)
         assert abs(unknown - fast) < 150, ("unknown is not slow", theme, fast, unknown)

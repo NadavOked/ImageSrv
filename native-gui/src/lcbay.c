@@ -150,23 +150,31 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     int bootbad = g->drv_tone == DRV_BAD, drvwarn = g->drv_tone == DRV_WARN || g->drv_tone == DRV_LWARN;   /* #1331 */
     int toned = g->toned && (g->kind == BAY_WRITING || g->kind == BAY_WAITING);
     /* an orange/red tone (not the healthy green) also colours the bar */
-    int warn = toned && !(g->tone.r == t->led_ok.r && g->tone.g == t->led_ok.g && g->tone.b == t->led_ok.b);
+#define SAME_RGB(p, q) ((p).r == (q).r && (p).g == (q).g && (p).b == (q).b)
+    /* #2897: green (SMART ok) and grey (SMART not checked, --led-idle) are both plain -- no frame, no colour */
+    int neutral = SAME_RGB(g->tone, t->led_ok) || SAME_RGB(g->tone, t->led_idle);
+    int warn = toned && !neutral;
     const char *pill = g->pill ? g->pill : toned ? g->note : NULL;
     Rgb tsoft = { g->tone.r * .15 + t->surface.r * .85, g->tone.g * .15 + t->surface.g * .85, g->tone.b * .15 + t->surface.b * .85 };
     int narrow = b.w < 700;
+    /* #2849: a cloner behind a KVM switch gets no EDID -- 800x600 or 640x480 -- and its rows are
+     * squeezed. Under 72px the row keeps two lines, and the second is "נכתב עד כה" (it replaces
+     * the size/model line, which an idle screen already showed); under 48px (more than three
+     * drawers on 640x480) only the name, the percent and the bar are left. */
+    int tiny = b.h < 48, two = b.h < 72 && g->used[0];
     double numw = narrow ? 64 : 96, ledw = narrow ? 34 : 48, namew = narrow ? 150 : 220, gap = narrow ? 12 : 22;
     double cy = b.y + b.h / 2;
     const int hl = g->flag;   /* #2024 */
     /* #2050: amplify the existing status colours, including verified success.
      * Red > orange > green; a healthy waiting disk is not a verified result. */
-    int health = g->toned && (toned || g->kind == BAY_DONE)
-        && !(g->tone.r == t->led_ok.r && g->tone.g == t->led_ok.g && g->tone.b == t->led_ok.b);
-    int red = bad || bootbad || hl == 2 || (health && g->tone.r == t->danger.r && g->tone.g == t->danger.g && g->tone.b == t->danger.b);
-    int orange = ask || drvwarn || hl == 1 || health || (ok && g->line_warn);
-    int emphasis = red || orange || ok;
-    Rgb edge = red ? t->danger : orange ? t->warn : ok ? t->led_ok : t->hair;
-    Rgb fill = red ? t->danger_soft : orange ? t->warning_soft : ok ? t->success_soft : t->surface;
-    Rgb number = red ? t->danger_fg : orange ? t->warning_ink : ok ? t->success_ink : off ? t->muted : t->ink;
+    int health = g->toned && (toned || g->kind == BAY_DONE) && !neutral;
+    int red = bad || bootbad || hl == 2 || (health && SAME_RGB(g->tone, t->danger));
+    int yellow = !red && health && SAME_RGB(g->tone, t->yellow);   /* #2848: failed the last clone -- its own colour */
+    int orange = !yellow && (ask || drvwarn || hl == 1 || health || (ok && g->line_warn));
+    int emphasis = red || yellow || orange || ok;
+    Rgb edge = red ? t->danger : yellow ? t->yellow : orange ? t->warn : ok ? t->led_ok : t->hair;
+    Rgb fill = red ? t->danger_soft : yellow ? t->yellow_soft : orange ? t->warning_soft : ok ? t->success_soft : t->surface;
+    Rgb number = red ? t->danger_fg : yellow ? t->yellow_fg : orange ? t->warning_ink : ok ? t->success_ink : off ? t->muted : t->ink;
     cairo_save(cr); draw_rrect_path(cr, b, 4); cairo_clip(cr);
     draw_set(cr, fill); cairo_paint(cr);
     if (!emphasis) {
@@ -175,14 +183,17 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     cairo_restore(cr); draw_border_rrect(cr, b, 4, edge, emphasis ? 3 : 1);
 
     /* the drawer number */
-    lc_bay_number(a, cr, b.x + b.w - (narrow ? 14 : 18), cy, narrow ? 30 : 40, g->drawer, number);
+    lc_bay_number(a, cr, b.x + b.w - (narrow ? 14 : 18), cy, tiny ? 18 : narrow ? 30 : 40, g->drawer, number);
 
     /* the disk: name, size and model, and its pill */
     double fr = b.x + b.w - numw - 1 - gap, fl = b.x + ledw + 1 + gap;
     if (g->act && g->act_hit) fl += bay_act(a, cr, fl - gap + 6, cy, g) + gap;   /* #1386: the fifth column */
     Text tn = text_make(cr, FONT_SANS, narrow ? 15 : 18, 600, g->name, (int)namew, DIR_RTL);
-    Text tsb = text_make(cr, FONT_SANS, 12, 400, g->sub, (int)namew, DIR_RTL);
-    pango_layout_set_ellipsize(tsb.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tsb.layout, 0);
+    Text tsb = { NULL, 0, 0 };
+    if (!tiny) {
+        tsb = text_make(cr, FONT_SANS, 12, 400, two ? g->used : g->sub, (int)namew, DIR_RTL);
+        pango_layout_set_ellipsize(tsb.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tsb.layout, 0);
+    }
     Rgb pfg = bad ? t->danger : bootbad ? t->danger_fg : drvwarn ? t->warning_ink : ok ? t->led_ok : ask || going ? t->warning_ink : toned ? g->tone : t->muted;
     Rgb pbg = bad || bootbad ? t->danger_soft : drvwarn ? t->warning_soft : ok ? t->success_soft : ask || going ? t->warning_soft : toned ? tsoft : t->hover;
     if (emphasis) { pfg = t->on_ink; pbg = edge; }
@@ -193,12 +204,13 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
         tsu = text_make(cr, FONT_SANS, 12, 400, g->used, (int)namew, DIR_RTL);
         pango_layout_set_ellipsize(tsu.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tsu.layout, 0);
     }
-    double pill_h = pill && narrow ? (emphasis ? 30 : 24) : 0, used_h = tsu.layout ? 3 + tsu.h : 0;
-    double bh = tn.h + 3 + tsb.h + used_h + pill_h;
+    const int pill_under = pill && narrow && !two && !tiny;   /* #2849: a squeezed row has no third line for it */
+    double pill_h = pill_under ? (emphasis ? 30 : 24) : 0, used_h = tsu.layout ? 3 + tsu.h : 0;
+    double bh = tn.h + (tsb.layout ? 3 + tsb.h : 0) + used_h + pill_h;
     text_draw_r(cr, &tn, fr, cy - bh / 2, off ? t->muted : t->ink);
-    text_draw_r(cr, &tsb, fr, cy - bh / 2 + tn.h + 3, t->muted);
+    if (tsb.layout) text_draw_r(cr, &tsb, fr, cy - bh / 2 + tn.h + 3, t->muted);
     if (tsu.layout) { text_draw_r(cr, &tsu, fr, cy - bh / 2 + tn.h + 3 + tsb.h + 3, t->muted); text_free(&tsu); }
-    if (pill && narrow) sb_bay_pill(cr, fr, cy - bh / 2 + tn.h + 3 + tsb.h + used_h + pill_h / 2, pill, pfg, pbg, emphasis);
+    if (pill_under) sb_bay_pill(cr, fr, cy - bh / 2 + tn.h + 3 + tsb.h + used_h + pill_h / 2, pill, pfg, pbg, emphasis);
     else if (pill) sb_bay_pill(cr, fr - tn.w - 10, cy - bh / 2 + tn.h / 2, pill, pfg, pbg, emphasis);
     text_free(&tn); text_free(&tsb);
 
@@ -239,8 +251,8 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     Rgb led = bad || bootbad ? t->danger : drvwarn ? t->warn : ok ? t->led_ok : ask || going ? t->warn : off ? t->led_idle : toned ? g->tone : t->led_write;
     Rgb soft = bad || bootbad ? t->danger_soft : drvwarn ? t->warning_soft : ok ? t->success_soft : ask || going ? t->warning_soft : toned ? tsoft : t->indigo_soft;
     if (emphasis) { led = edge; soft = fill; }
-    sb_led(cr, gx, cy - 15, 10, led, soft, !off, 1);
-    for (int k = 0; k < 2; k++) draw_fill_rrect(cr, (Rect){ gx - 10, cy + 2 + k * 14, 20, 3 }, 1.5, t->mark_line);
+    sb_led(cr, gx, tiny ? cy : cy - 15, 10, led, soft, !off, 1);
+    for (int k = 0; k < (tiny ? 0 : 2); k++) draw_fill_rrect(cr, (Rect){ gx - 10, cy + 2 + k * 14, 20, 3 }, 1.5, t->mark_line);
 }
 
 /* .met: a metric box -- label, value, the small line under it */

@@ -71,7 +71,7 @@ def _proxy_gate() -> None:
     """‏v1 בלי proxy: נתיבי הקריאה שלו אינם קיימים — 404 לכל קורא, לפני
     auth, כמו ארגז הכלים (`console_tools._edition_gate`)."""
     if not capabilities.classrooms():
-        raise HTTPException(404, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v1.2)")
+        raise HTTPException(404, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v2)")
 
 
 def console_deploy_interface(deploy: "deploy_net.DeployContext | None") -> str | None:
@@ -448,7 +448,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         # רק הממשק מסתיר. כיבוי (proxy=false) תמיד מותר.
         if cfg.proxy and not capabilities.classrooms():
             raise HTTPException(
-                409, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v1.2)")
+                409, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v2)")
         # ‏#1263: כרטיס הניהול (נבחר בהתקנה) הוא לקוח DHCP או כתובת ידנית — לא
         # מחלק כתובות ולא עונה ל-PXE. כיבוי (enabled=false) תמיד מותר.
         # ‏#2668: החריג — DHCP מלא (לא proxy) מחלון רשת ההפצה, וגם אז בלי

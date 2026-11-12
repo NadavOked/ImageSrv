@@ -42,6 +42,7 @@ from typing import Callable
 from server.core.atomicfile import fsync_dir, write_atomic
 from server.core.logtext import one_line
 from server.db import get_setting, set_settings
+from server.net.dhcp_host import list_interfaces
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,18 @@ SERVER_UNIT = "imagesrv-server"
 RESTART_DELAY_SECONDS = 3
 
 Hooks = dict[str, Callable]
+
+
+def missing_nic(name: str, interfaces: list[dict]) -> str | None:
+    """Refuse a missing deploy NIC, including when its presence cannot be checked."""
+    names = [nic["name"] for nic in interfaces]
+    if not names:
+        return f"רשימת כרטיסי הרשת ריקה — לא ניתן לבדוק שכרטיס ההפצה {name} קיים; לא נכתב דבר"
+    if name not in names:
+        return (f"כרטיס ההפצה {name} לא קיים במערכת (יש: {', '.join(names)}) — "
+                "חומת האש, ה-DHCP ו-udp-sender היו מפנים לשם שאינו קיים; "
+                "לא נכתב דבר. בחרו כרטיס בלשונית רשת הפצה")
+    return None
 
 
 def primary_ip_of(url: str, resolve: Callable | None = None) -> tuple[str | None, str | None]:
@@ -329,6 +342,7 @@ def restart_server_later(delay: int = RESTART_DELAY_SECONDS) -> str | None:
 
 def default_hooks(password_hash: str = "") -> Hooks:
     return {
+        "interfaces": list_interfaces,
         # ‏#2437: אותה חתימה כמו hook מוזרק (url, root) — ה-hash נקשר כאן.
         "write_grub_cfg": lambda url, root: write_grub_cfg(url, root, password_hash),
         "enable_dnsmasq": enable_dnsmasq,
@@ -428,6 +442,10 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
         result["errors"].append(
             f"{interface} הוא כרטיס הניהול (הקונסולה נקשרת אליו) — הוא אינו "
             "יכול להיות רשת ההפצה")
+        return result
+    error = missing_nic(interface, hooks["interfaces"]())
+    if error:
+        result["errors"].append(error)
         return result
     steps = [
         ("grub.cfg", lambda: hooks["write_grub_cfg"](url, ctx.tftp_root)),

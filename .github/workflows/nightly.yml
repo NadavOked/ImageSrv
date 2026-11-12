@@ -23,17 +23,23 @@ permissions:
   contents: read
 
 jobs:
+  # #2952: אותו פיצול כמו tests.yml -- ארבעה shards לכל גרסה (tools/git/ci_shard.py),
+  # וה-job `merge` למטה פוסק על האיחוד. ההסבר המלא שם.
   full:
+    name: full ${{ matrix.shard }}/4 (${{ matrix.python-version }})
     runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11 והפיל טסטים; נעול עד שנתמוך ב-26.04
     # #2134: 30 דק' ביטלו את הריצה כל לילה (cancelled, 20-24/10): החבילה לוקחת
-    # ~90 דק' על runner (tests.yml: 150). בדיוק כמו tests.yml -- ביטול אינו אדום.
-    timeout-minutes: 150
+    # ~90 דק' על runner. בדיוק כמו tests.yml -- ביטול אינו אדום.
+    # #2952: shard הוא רבע מזה; 60 הם פי שלושה מהצפוי, כמו ב-tests.yml.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
+        shard: [1, 2, 3, 4]
     env:
       IMAGESRV_REQUIRE_NATIVE: "1"
+      SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -63,7 +69,7 @@ jobs:
           sha=$(python tests/impeccable_gate.py pin | sed -n 's/^sha256=//p')
           [ -n "$sha" ] || { echo "impeccable_gate.py pin: no sha256" >&2; exit 1; }
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/impeccable
           key: impeccable-${{ steps.impeccable.outputs.sha256 }}
@@ -86,15 +92,32 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # #2952: ה-shard האחרון אוסף את כל העץ בלי התוסף -- המדד של ה-merge.
+      - name: Collect the whole tree for the merge (#2952)
+        if: matrix.shard == 4
+        run: |
+          args=(-p no:cacheprovider -m "not uinput and not vm_it")
+          gate="$RUNNER_TEMP/gate"
+          mkdir -p "$gate"
+          if ! python tools/git/lab_gate.py collect --out "$gate/collected-all.txt" -- "${args[@]}" \
+              < /dev/null > "$gate/collect-all.log" 2>&1; then
+            tail -n 30 "$gate/collect-all.log"
+            echo "gate: CANNOT VERIFY -- collect-only of the whole tree failed"
+            exit 2
+          fi
+          tail -n 1 "$gate/collect-all.log"
+
       # #2263: ב-31/10 הריצה הסדרתית לקחה 142 מתוך 150 דקות.
       # כעת אותם שני שלבים כמו tests.yml: מקבילי, ואז serial, עם פסק משותף.
+      # #2952: על shard אחד -- `shard=(...)` ב-collect ובשתי הריצות, כמו tests.yml.
       - name: Full suite
         run: |
           set -o pipefail
           args=(-p no:cacheprovider -m "not uinput and not vm_it")
+          shard=(-p tools.git.ci_shard --ci-shard "$SHARD/4")
           gate="$RUNNER_TEMP/gate"
           mkdir -p "$gate"
-          if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" \
+          if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" "${shard[@]}" \
               < /dev/null > "$gate/collect.log" 2>&1; then
             tail -n 30 "$gate/collect.log"
             echo "gate: CANNOT VERIFY -- collect-only failed; nothing to compare the run with"
@@ -105,26 +128,74 @@ jobs:
           set +e
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-parallel.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
-            --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
+            "${shard[@]}" --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
           rc1=${PIPESTATUS[0]}
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-serial.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and serial" \
-            --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
+            "${shard[@]}" --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
           rc2=${PIPESTATUS[0]}
           set -e
+          echo "$rc1 $rc2" > "$gate/rc"
           python tools/git/lab_gate.py verdict --collected "$gate/collected.txt" \
             --junit "$gate/run-parallel.xml" --junit "$gate/run-serial.xml" \
             --problems "$gate/problems-parallel.json" --problems "$gate/problems-serial.json" \
             --allowed .github/ci-gate-allowed.json --pytest-rc "$rc1" --pytest-rc "$rc2"
 
       - name: End-to-end simulation
+        if: matrix.shard == 4
         run: python tools/e2e_simulation.py
+
+      # #2952: הראיה ל-merge -- `finished` רק כשהכול לפניו הצליח, וההעלאה תמיד.
+      - name: Mark the shard finished (#2952)
+        run: echo "$GITHUB_SHA" > "$RUNNER_TEMP/gate/finished"
+      - name: Hand the evidence to the merge (#2952)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-py${{ matrix.python-version }}-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/gate
+          retention-days: 3
+          if-no-files-found: warn
+          overwrite: true
+
+  # #2952: הפסק על האיחוד לכל גרסה -- ארבעה shards עם `finished` על ה-SHA הזה,
+  # וה-junit של כולם מול collect של כל העץ (tools/git/ci_shard.py merge).
+  # `!cancelled()`: כש-shard נכשל, ברירת המחדל הייתה מדלגת על הפסק.
+  merge:
+    name: full (${{ matrix.python-version }})
+    needs: full
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04  # #2401: ubuntu-latest עבר ל-26.04 ב-04/11 והפיל טסטים; נעול עד שנתמוך ב-26.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: gate-py${{ matrix.python-version }}-shard-*
+          path: ${{ runner.temp }}/shards
+      - name: Every shard ran, and every collected test ran in exactly one (#2952)
+        env:
+          PY: ${{ matrix.python-version }}
+        run: |
+          python tools/git/ci_shard.py merge --dir "$RUNNER_TEMP/shards" --name "gate-py$PY-shard" \
+            --shards 4 --sha "$GITHUB_SHA" --allowed .github/ci-gate-allowed.json
 
   # ‏Issue אחד לכשל, ולא אחד ללילה: ריצה שנכשלת שבוע ברצף תייצר שבע
   # שורות רעש שמתארות את אותה תקלה. השאילתה מחפשת Issue פתוח עם אותה
   # תווית, ומוסיפה תגובה במקום לפתוח חדש.
   report:
-    needs: full
+    needs: [full, merge]
     if: failure()
     # zizmor excessive-permissions (#315): `issues: write` only where it is used, not on the test job.
     permissions:

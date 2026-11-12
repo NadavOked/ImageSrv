@@ -1,5 +1,6 @@
 // הכרעת נדב 11/10: פתיחה/סגירה בעץ כמו המוקאפ — לחיצה על שורה (לא דאבל-קליק), חץ רק מחליף מצב.
 // ועוד: תפקיד עם קבוצה אחת מציג את המחשבים ישירות תחתיו; עם שתיים — צמתי קבוצה כמו קודם.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -7,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../server/static');
-const source = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+const source = consoleJs();
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const cut = (a, b) => { const i = source.indexOf(a), j = source.indexOf(b); assert.ok(i > 0 && j > i, a); return source.slice(i, j); };
 

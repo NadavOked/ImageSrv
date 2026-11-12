@@ -31,8 +31,10 @@ pytest.importorskip("fastapi")
 
 #: עברית עדיין יכולה להיות פסולה — מסיבה אחרת (פיסוק, רווח, אורך).
 #: `בדיקות!` בודק בדיוק את זה: אותיות עבריות מותרות, סימן קריאה לא.
-BAD = ["Office — מעודכן", "בדיקות!", " leading", "-dash-first", "x" * 49, "a\nb", ""]
-GOOD = ["LAB1", "Office 2024", "אופיס 2024", "כיתה יב", "tiny11 v2", "linux_base", "a.b-c", "X"]
+# #2878: the Latin apostrophe stays out; a long dash or a geresh cannot start a name, a long dash cannot end one
+BAD = ["it's", "—start", "end—", "׳start", "כיתה ג׳ ", "בדיקות!", " leading", "-dash-first", "x" * 49, "a\nb", ""]
+GOOD = ["LAB1", "Office 2024", "אופיס 2024", "כיתה יב", "tiny11 v2", "linux_base", "a.b-c", "X",
+        "כיתה ג׳", "מעבדה מ״ב", "תשפ״ו", "אופיס 2024 — סטנדרט", "Office — מעודכן"]   # #2878 (Nadav 11/11)
 
 
 # --- 1+2: תיקיות ---------------------------------------------------------------

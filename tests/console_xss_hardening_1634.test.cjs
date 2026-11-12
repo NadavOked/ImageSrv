@@ -12,6 +12,7 @@
 // (3) openModalContent ran new Function(okFn) on a string.
 // (4) A static guard: no '${esc(' inside an on*="..." handler is left
 //     anywhere in server/static.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -36,7 +37,7 @@ function setup() {
     window: {addEventListener() {}, matchMedia: () => ({matches: false})}, localStorage: {getItem: () => null, setItem() {}}, CSS: {escape: (x) => x},
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})})});
-  for (const f of ['progress.js', 'console.js', 'disks.js', 'vmupdate.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, {filename: f});
+  for (const f of ['progress.js', ...consoleFiles(), 'disks.js', 'vmupdate.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, {filename: f});
   const run = (s) => vm.runInContext(s, ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",capabilities:{classrooms:true}};');
   return {ctx, run, node};

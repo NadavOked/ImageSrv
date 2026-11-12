@@ -1,5 +1,6 @@
 // #1093: ערכת נושא לפי משתמש. בלי דפדפן — console.js + ה-inline של
 // index.html רצים ב-vm מול localStorage ו-matchMedia מזויפים.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -81,7 +82,7 @@ function setup({cache = null, systemDark = false} = {}) {
     },
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'progress.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run('ME={username:"admin",role:"admin",idle_seconds:300,theme:"auto",capabilities:{}};');
   return {

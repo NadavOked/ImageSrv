@@ -40,3 +40,23 @@ def refusal(name: object, what: str = "השם") -> str | None:
     if not isinstance(name, str) or not name:
         return f"{what} ריק — {RULE}"
     return f"{what} '{name}' אינו חוקי — {RULE}"
+
+
+#: ‏#2786 (נדב 09/11): ההודעה הקצרה מתחת לשדה, כשמנסים להקליד תו אסור.
+CHARS_HE = "רק אותיות באנגלית, ספרות ומקף"
+
+
+def computer_name_refusal(name: object, what: str = "שם המחשב") -> str | None:
+    """‏#2786: שם שנכתב לדיסק בסבב שיכפול — הכלל למעלה, **וגם לא כולו ספרות**.
+
+    ‏Windows מסרב לשם מחשב שכולו ספרות (‏NetBIOS), ולינוקס (RFC 1123) מקבל
+    אותו — החיתוך של שניהם אוסר. התוספת כאן ולא ב-``is_valid``: הכלל ההוא
+    חל גם על שם השרת ועל רישום מכונות, והמתקין והסוכן משוכפלים מולו (#1997);
+    הרחבתו היא שאלה נפרדת. הקונסולה (``console.js``, ‏``cloneNameRefusal``)
+    מחזיקה את אותו כלל, וטסט משווה ביניהם."""
+    refused = refusal(name, what)
+    if refused is not None:
+        return refused
+    if name.isdigit():
+        return f"{what} '{name}' כולו ספרות — Windows אינו מקבל שם כזה. {RULE}"
+    return None

@@ -98,12 +98,8 @@ def word(attr_id: int, vendor: str | None) -> str | None:
     return r["word"] if r is not None else None
 
 
-def _holds(r: dict, x: int, crc: int, wctemp: int | None) -> bool:
-    if r["value"] == "crc":
-        if not crc:
-            return False   # crc_warn_threshold 0 = the note is off (crcwarn.py)
-        t = crc
-    elif r["value"] == "wctemp":
+def _holds(r: dict, x: int, wctemp: int | None) -> bool:
+    if r["value"] == "wctemp":
         if wctemp is None:
             return False
         t = wctemp
@@ -113,7 +109,7 @@ def _holds(r: dict, x: int, crc: int, wctemp: int | None) -> bool:
 
 
 def judge_ata(attr_id: int, vendor: str | None, value: int | None, raw: int | None, *,
-              media: str | None = None, crc: int = 0) -> str:
+              media: str | None = None) -> str:
     """One ATA attribute, as smartjudge.sh judges it: "unknown", "info", "ok", or the
     verdict of the rule that held ("orange" / "red" / "hw"). `media` ssd|hdd|None."""
     r = row(attr_id, vendor)
@@ -132,7 +128,7 @@ def judge_ata(attr_id: int, vendor: str | None, value: int | None, raw: int | No
         x = raw
     if x is None:
         return "info"
-    return r["verdict"] if _holds(r, x, crc, None) else "ok"
+    return r["verdict"] if _holds(r, x, None) else "ok"
 
 
 def hw_sentence(word_: str) -> str | None:

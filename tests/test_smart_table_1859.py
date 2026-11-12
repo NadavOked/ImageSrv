@@ -103,10 +103,12 @@ def test_an_attribute_the_tables_do_not_know_keeps_the_vendors_name_and_is_unkno
     assert by_id["213"][3] == "15728639"
 
 
-def test_the_cable_row_over_the_threshold_says_hardware(tmp_path):
-    """199 at 163 over crc_warn_threshold: `h` -- the drawer/cable note, never the disk's colour (#1921)."""
+def test_the_cable_row_is_information_whatever_the_threshold(tmp_path):
+    """#2846 (Nadav 11/11): 199 at 163, the setting at 100 -- no `h`: an absolute count is history.
+    The row stays the cable's (`k`: a rise there is not "replace the disk") and critical (`c`)."""
     _, by_id, _ = run_table(tmp_path, MZ7LN, script='json_get() { case "$2" in .crc_warn_threshold) echo 100 ;; *) echo null ;; esac; }; ')
-    assert "h" in by_id["199"][2] and "o" not in by_id["199"][2] and "R" not in by_id["199"][2]
+    fl = by_id["199"][2]
+    assert "h" not in fl and "o" not in fl and "R" not in fl and "k" in fl and "c" in fl, fl
 
 
 def test_nvme_rows_come_after_ata_by_the_tables_key_and_media_errors_are_critical(tmp_path):

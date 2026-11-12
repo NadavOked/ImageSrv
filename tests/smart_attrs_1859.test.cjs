@@ -2,6 +2,7 @@
 // what rose since the previous round ("להחליף את הדיסק" on a critical one), says "אין עדיין השוואה" with no
 // previous round -- never "stable" -- and says why a disk is orange. The view is GET /machines/{mac}/smart
 // (server/disks/smart_history.py describe); console.js runs in a vm, as in reasons_he_1861.test.cjs.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -17,7 +18,7 @@ function setup() {
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,RegExp,encodeURIComponent,decodeURIComponent,
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   return (code)=>vm.runInContext(code,ctx);
 }
 const run=setup();
@@ -60,7 +61,7 @@ test('#1921: a hardware note is said beside the disk -- the drawer/cable, never 
 
 test('an orange disk says why -- once, without "SMART SMART"', () => {
   const said=run(`smartText({smart:'warn',smart_reason:'ssd_worn'})`);
-  assert.equal(said,'SMART אזהרה — הדיסק שחוק — 90% או יותר');
+  assert.equal(said,'SMART חצי תקין — הדיסק שחוק — 90% או יותר');
   const box=text(run(`diskBoxesHtml({mac:${JSON.stringify(MAC)},disks:[{dev:'sda',port:1,smart:'warn',smart_reason:'reallocated',size_bytes:500107862016,model:'X'}]})`));
   assert.doesNotMatch(box,/SMART SMART/); assert.match(box,/סקטורים שהועברו \(5\)/);
 });
@@ -76,7 +77,7 @@ test('#2706: a drawer the machine has not read since it booted says what the las
   const said=run(`smartText({smart:'unchecked',smart_round:{verdict:'ok',reason:'ok',at:'2026-11-08T05:14:43Z'}})`);
   assert.match(said,/^SMART לא נבדק מאז שהמכונה עלתה · בסבב \(.+\): SMART תקין$/);
   const warn=run(`smartText({smart:'unchecked',smart_round:{verdict:'warn',reason:'reallocated',at:'2026-11-08T05:14:43Z'}})`);
-  assert.match(warn,/בסבב \(.+\): SMART אזהרה — סקטורים שהועברו \(5\)/);
+  assert.match(warn,/בסבב \(.+\): SMART חצי תקין — סקטורים שהועברו \(5\)/);
   assert.equal(run(`smartText({smart:'unchecked',smart_round:{verdict:'unchecked',reason:'timeout',at:'x'}})`),'SMART לא נבדק','the round did not read it either');
   assert.equal(run(`smartText({smart:'unchecked',smart_round:null})`),'SMART לא נבדק');
   assert.equal(run(`smartText({smart:'ok',smart_round:{verdict:'fail',reason:'health_failed',at:'x'}})`),'SMART תקין','a reading of this boot is the word');

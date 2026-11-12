@@ -5,6 +5,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
+const {consoleJs}=require('./console_src.cjs');   // #2594: the console's files in load order
 const root=path.join(path.resolve(__dirname,'..'),'server/static');
 
 function setup() {
@@ -20,7 +21,7 @@ function setup() {
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx); vm.runInContext(consoleJs(),ctx);
   const run=(code)=>vm.runInContext(code,ctx);
   run(`ME={username:"admin",role:"admin",server_name:"srv",version:"v0",capabilities:{}}; current="machines";`);
   return {run};

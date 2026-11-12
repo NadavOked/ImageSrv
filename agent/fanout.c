@@ -1427,6 +1427,8 @@ static void make_room(size_t n, int reading)
     }
 }
 
+#include "fanout-inline.h"
+
 int main(int argc, char **argv)
 {
     const char *hash_path = NULL, *sha_path = NULL, *progress_path = NULL;
@@ -1444,6 +1446,8 @@ int main(int argc, char **argv)
         return hash_only(strcmp(argv[1], "--sha256") == 0);
     if (argc >= 2 && strcmp(argv[1], "--readback") == 0)
         return readback(argc, argv);
+    if (argc >= 2 && strcmp(argv[1], "--inline-write") == 0)
+        return inline_write(argc, argv);
     while (argi < argc && (strcmp(argv[argi], "-H") == 0 || strcmp(argv[argi], "-S") == 0 ||
                            strcmp(argv[argi], "-P") == 0 || strcmp(argv[argi], "-U") == 0)) {
         const char **slot = strcmp(argv[argi], "-H") == 0 ? &hash_path :

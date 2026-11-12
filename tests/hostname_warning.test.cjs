@@ -5,6 +5,7 @@
 // and the machine drawer showed nothing at all. Same pattern as #927
 // (captureWarningHtml): done + error = orange `.notice.warn`, never red.
 // Runs the shipped console.js in a vm, not a copy of the functions.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -32,7 +33,7 @@ function setup() {
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'progress.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   run('ME={username:"u",role:"admin",idle_seconds:300,capabilities:{}}; toast=()=>{};');
   return run;

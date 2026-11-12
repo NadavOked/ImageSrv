@@ -11,6 +11,7 @@
 // [151,298,186,244]px ברגע ש*שורה אחרת* עברה hover (הטבלה כולה "קפצה" —
 // זה בדיוק התלונה); אחרי התיקון העמודות [151,298,186,244]px קבועות בשני
 // המצבים.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -109,7 +110,7 @@ function setupConsole() {
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
   vm.runInContext(read('progress.js'), ctx);
-  vm.runInContext(read('console.js'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(read(f), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   return run;
 }

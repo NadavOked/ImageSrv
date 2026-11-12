@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 from server.agent import timing as agent_timing, bootguard, inventory, probe, registry, unknown_screen
 from server.agent import answer_failure   # #2666
 from server.core import capabilities
-from server.rounds import direct, room, room_drivers
+from server.rounds import direct, room, room_drivers, room_names
 from server.library import minfree
 from server.system import timezone
 from server.disks import (disk_sets, crcwarn, disk_failures, drawer_slots, shrink_records,
@@ -548,6 +548,10 @@ def build_answer(
         # ‏#1269: החריצים שלה שנבחר להם דגם דרייברים. ‏null = הסבב בלי
         # דרייברים, והסוכן אינו שואל דבר — ההתנהגות מלפני ה-Issue.
         answer["session"]["driver_ports"] = room_drivers.ports_for(round_row, mac)
+        # ‏#2786: שם המחשב לכל חריץ של המכונה הזו (`{"<port>": name}`) ולאיזו מערכת
+        # הפעלה לכתוב אותו. ‏null = הסבב בלי שמות, והסוכן אינו נוגע בשם שבאימג'.
+        answer["session"]["hostnames"] = room_names.for_mac(round_row, mac)
+        answer["session"]["hostname_os"] = room_names.os_for(round_row)
     answer["ui"] = _ui(conn, has_open_session=session["state"] == "open",
                        off_vlan=off_vlan, role=machine["role"])
     return answer

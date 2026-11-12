@@ -109,7 +109,10 @@ static void tbay(App *a, cairo_t *cr, Rect b, const LcTgt *g) {
 
 void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     const Theme *t = a->theme; const LcState *l = &a->st.lc;
-    double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + 22;
+    /* #2849: 800x600 / 640x480 (a KVM switch, no EDID) -- as on the cloner's round screen: no
+     * summary tiles and no partition strip, the speed in the label, every target keeps its row */
+    const int compact = H < 700;
+    double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + (compact ? 10 : 22);
     char sl[LC_LABEL_MAX], lb[300], h1[200], s2[200]; const LcDisk *src = disk_of(a, l->run_src);
     label_dev(a, l->run_src, sl, sizeof sl);
     char mi[96]; bidi_isolate(src && src->model[0] ? src->model : l->run_src, mi, sizeof mi);
@@ -147,9 +150,13 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (rbs.bars) lc_pct(big, sizeof big, rbs.sum / rbs.bars); else snprintf(big, sizeof big, "—");
         snprintf(lt, sizeof lt, "נבדק");
     }
-    y += lc_hero(a, cr, x0, xr, y, lb, h1, s2, big, lt, 0) + 16;   /* lcbay.c */
+    if (compact && span >= LC_RATE_MIN && rate > 0) {
+        size_t u = strlen(lb); snprintf(lb + u, sizeof lb - u, " · ⁦%.0f MB/s⁩", rate / 1e6);
+    }
+    y += lc_hero(a, cr, x0, xr, y, lb, h1, s2, big, lt, 0) + (compact ? 8 : 16);   /* lcbay.c */
     /* .mets -- speed (right), copied, time passed (left) */
     double mw = (cw - 24) / 3, mh = 80;
+    if (!compact) {
     char v1[48], v2[160], v3[32], c1[48], c2[48], hint[160] = "", ch[96] = "בלוקים בשימוש בלבד";
     if (span >= LC_RATE_MIN && rate >= 0) snprintf(v1, sizeof v1, "%.0f MB/s", rate / 1e6); else snprintf(v1, sizeof v1, "עוד לא נמדדה");
     double gc = l->copied / 1e9, gt = whole ? l->total / 1e9 : gc;
@@ -174,8 +181,9 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     } else
     met(a, cr, (Rect){ x0, y, mw, mh }, "זמן שעבר", v3, "", t->muted);
     y += mh + 12;
+    }
     /* .parts -- the biggest partition gets 2.4 shares, as the mockup's Windows */
-    if (l->nparts) {
+    if (l->nparts && !compact) {
         int bigi = 0; for (int i = 1; i < l->nparts; i++) if (layout_bytes(&l->parts[i]) > layout_bytes(&l->parts[bigi])) bigi = i;
         double shares = l->nparts - 1 + 2.4, unit = (cw - 6 * (l->nparts - 1)) / shares, px = xr;
         for (int i = 0; i < l->nparts; i++) {
@@ -186,7 +194,7 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     }
     /* the targets */
     int n = l->ntgts; double bh = 96, room = H - N_STATUS_H - 16 - 40 - 12 - y - (10 + 16 + 8 + 10) - (n > 1 ? (n - 1) * 10 : 0);
-    if (n && n * bh > room) bh = fmax(64, floor(room / n));
+    if (n && n * bh > room) bh = fmax(compact ? (n <= 3 ? 48 : 30) : 64, floor(room / n));   /* #2849 */
     Rect cage = { x0, y, cw, 10 + 16 + 8 + n * bh + (n > 1 ? (n - 1) * 10 : 0) + 10 };
     char cnt[64]; snprintf(cnt, sizeof cnt, checking ? "%d מתוך %d בבדיקה" : "%d מתוך %d כותבים", checking ? rbs.verifying : !strcmp(l->phase, "done") ? 0 : alive, n);   /* #2046 */
     double by = lc_cage(a, cr, cage, "יעדים", cnt);   /* lcbay.c */

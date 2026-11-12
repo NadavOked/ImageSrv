@@ -156,8 +156,8 @@ gui_state() {
                       (.slot_name // ""),
                       # #432: ok / slow / unknown ("" = an older server); only slow colours.
                       (.link_state // ""),
-                      # #1366: the CRC count when over crc_warn_threshold, "" = not (or unread).
-                      (if .crc_suspect == true then (.crc // "") else "" end),
+                      # the absolute CRC count of #1366 -- empty since #2846 (Nadav 11/11: history, not a state).
+                      "",
                       # #1495: the drawer by the mapping (null = not in it -> 0; an
                       # older server without the field -> "" = by port), and the connection.
                       (if has("drawer") then (.drawer // 0) else "" end),
@@ -172,7 +172,8 @@ gui_state() {
                       (.dev // ""), (.cancel.text_he? // ""), (if .cancel.done? == true then 1 else 0 end),
                       # #1331: the storage driver made boot-start (bootstorage.sh) -- state, service, error; T8: then drivers.linux (state, module, error|reason; no object = no fields). #1742: 27 = smart_reason, only when there is one (24-26 then empty).
                       (.drivers.boot.state // ""), (.drivers.boot.service // ""), (.drivers.boot.error // .drivers.boot.reason // ""), (if (.drivers.linux | type) == "object" then (.drivers.linux | (.state // ""), (.module // ""), (.error // .reason // "")) elif (.smart_reason // "") != "" then "", "", "" else empty end), (.smart_reason // "" | select(. != ""))]
-                     | map(clean) | join("|"))),
+                     | map(clean) | join("|")),
+                  "room_drawer_rule=" + ([$mi, .serial] + (.rule | if type == "object" then [(.color // ""), (if .target == true then 1 elif .target == false then 0 else "" end), (if .source == true then 1 elif .source == false then 0 else "" end), (.reason // "")] else ["", "", "", ""] end) | map(clean) | join("|"))),   # #2848 (Nadav 11/11): the server one rule (disk_rule.py), shown and not re-made
                 # #1495: every drawer of the mapping, empty ones too, with its slot name.
                 (($m.drawer_slots // []) | to_entries[] | .value as $k |
                   "room_slot=" + ([$mi, (.key + 1), ($k | conn), (($m.slot_names // {})[$k] // "")]
@@ -198,7 +199,7 @@ gui_state() {
                 "$GUI_DIR/session.json" >> "$GUI_DIR/state.next" || return 1
             cp "$GUI_DIR/session.json" "$GUI_DIR/session-shown.next" &&
                 mv "$GUI_DIR/session-shown.next" "$GUI_DIR/session-shown.json" || return 1 ;;
-    esac
+    esac; if command -v direct_gui_records > /dev/null 2>&1; then direct_gui_records >> "$GUI_DIR/state.next" || return 1; fi   # #2849: the cloners' drawers on a direct send (directgui.sh; gui_libs loads it, a test pins that)
     # #1560: a round opened from this GUI ended -> the agent asks (roomflow.sh).
     # A watch that could not read the room is retried next beat, never an end.
     [ ! -f "$RUN_DIR/room.watch" ] || room_end_watch || :

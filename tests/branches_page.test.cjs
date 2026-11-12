@@ -4,6 +4,7 @@
 // (preview SPKI → קוד). מוניטור למכונת שרת המשנה נשאר דרך monitor.html?node=.
 // console.js + branches.js + storage_nodes.js (קבוצות) + reorder.js רצים
 // ב-vm עם fetch מזויף, כמו secondaries_tree.test.cjs.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -52,7 +53,7 @@ function setup(fixtures, me = {}) {
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'progress.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'reorder.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'branches.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'storage_nodes.js'), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
@@ -137,7 +138,7 @@ test('the servers tab lists each secondary with a measured connection, not a fro
   assert.match(html, /Builder-H/); assert.match(html, /מחשב בנייה · מחובר/);
   assert.match(html, /קליטה פעילה · Haifa capture/);
   assert.match(html, /Cloner-H/); assert.match(html, /משכפל · מחובר/);
-  assert.match(html, /SMART תקין/); assert.match(html, /SMART אזהרה/);
+  assert.match(html, /SMART תקין/); assert.match(html, /SMART חצי תקין/);
   assert.match(html, /פתח סבב/); assert.match(html, /מוניטור/);
 });
 

@@ -94,7 +94,7 @@ def selection_driver(tmp_path_factory):
     return binary
 
 
-CHIPS = {"SMART תקול", "קריאה בלבד", "אזהרת SMART", "נכשל בשיכפול הקודם", "SMART תקין", "SMART לא נבדק"}
+CHIPS = {"SMART תקול", "קריאה בלבד", "SMART חצי תקין", "נכשל בשיכפול הקודם", "SMART תקין", "SMART לא נבדק"}
 CABLE ="שגיאות CRC רבות בקישור — כבל או מגירה חשודים, לא הדיסק"
 
 
@@ -133,8 +133,8 @@ def _pixel(image, x, y):
     ({"source": True}, "action"),
     ({"smart": "fail"}, "danger"),
     ({"smart": "warn"}, "warning"),
-    ({"smart": "failed_last"}, "warning"),
-    ({"mark": "incomplete"}, "warning"),
+    ({"smart": "failed_last"}, "yellow"),   # #2848 (Nadav 11/11): its own colour -- a target, never a source
+    ({"mark": "incomplete"}, "yellow"),
     ({"hw": CABLE}, None),  # Nadav 26/10: a cable/CRC note is words, not the card colour -- orange is SMART only.
     ({"verdict": "shrink"}, None),  # Nadav 26/10: a shrink-to-fit is not orange.
     ({"smart": "fail", "hw": CABLE, "mark": "incomplete"}, "danger"),
@@ -168,7 +168,7 @@ def test_selection_card_frame_fill_number_and_dividers(selection_driver, tmp_pat
     # at ~4.1:1 on the light soft fills) -- only their -fg inks. The SMART chip is
     # left out: it sits on its own pill, the same as on a plain card.
     if tone and theme == "light":
-        raw = {_token("--clr-" + k, theme) for k in ("danger", "warning", "success")}
+        raw = {_token("--clr-" + k, theme) for k in ("danger", "warning", "success", "yellow")}
         inside = [(tuple(map(int, f[3:6])), " ".join(f[6:])) for f in (line.split() for line in lines)
                   if f[0] == "T" and x <= float(f[1]) <= x + w and y <= float(f[2]) <= y + h
                   and " ".join(f[6:]).lstrip("‏") not in CHIPS]

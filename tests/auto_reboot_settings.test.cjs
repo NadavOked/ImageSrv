@@ -1,8 +1,9 @@
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 // סידור ההגדרות (נדב 17/10): ההפעלה מחדש היא שורה אחת בקבוצת "עדכונים ותחזוקה" ("כל יום ב-03:00"),
 // וחלון אחד עורך את שלושת הערכים — לא שלוש שורות עם שלושה כפתורי "שינוי".

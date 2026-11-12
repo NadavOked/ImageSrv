@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS room_rounds (
     target_slots_json TEXT,                -- בחירת דיסקי יעד לכל מכונה; NULL=סבב ישן
     expand_partition TEXT,                 -- בחירת ההרחבה לכל גלי הסבב (#59); NULL=אוטומטי
     driver_models_json TEXT,               -- דגם דרייברים לכל דיסק יעד (#1269); NULL=בלי דרייברים
+    hostnames_json  TEXT,                  -- שם מחשב לכל דיסק יעד (#2786); NULL=השם שבאימג' נשאר
     -- ‏#715: המקור. 'library' = udp-sender של השרת על אימג' מהספרייה;
     -- 'build_disk' = מחשב הבנייה משדר מהדיסק שלו, ו-image_id הוא מזהה
     -- חי (live_…) שהמניפסט שלו הוא live_manifest_json. סבב יחיד, בלי גלים.
@@ -1082,6 +1083,9 @@ ADDED_COLUMNS = [
     # ‏#1269: דגם הדרייברים שנבחר לכל דיסק יעד (`server/rounds/room_drivers.py`).
     # NULL = הסבב בלי דרייברים — בדיוק ההתנהגות מלפני ה-Issue.
     ("room_rounds", "driver_models_json", "TEXT"),
+    # ‏#2786: שם המחשב שנבחר לכל דיסק יעד (`server/rounds/room_names.py`).
+    # NULL = בלי שמות — השם שבאימג' נשאר, ההתנהגות מלפני ה-Issue.
+    ("room_rounds", "hostnames_json", "TEXT"),
     # הדיווח האחרון כפי שהגיע, יעד-יעד. סבב החדר סופר ממנו אילו
     # מגירות (לפי serial) נכתבו בהצלחה.
     ("session_members", "targets_json", "TEXT"),
@@ -1318,6 +1322,7 @@ def _rebuild_state_tables(conn: sqlite3.Connection) -> None:
                     target_slots_json TEXT,
                     expand_partition TEXT,
                     driver_models_json TEXT,
+                    hostnames_json TEXT,
                     source_kind TEXT NOT NULL DEFAULT 'library',
                     source_mac TEXT,
                     source_disk TEXT,
@@ -1336,14 +1341,14 @@ def _rebuild_state_tables(conn: sqlite3.Connection) -> None:
                 INSERT INTO room_rounds_new
                     (id, image_id, target_drives, written_drives, written_serials,
                      skipped_serials, cancelled_serials,
-                     target_slots_json, expand_partition, driver_models_json,
+                     target_slots_json, expand_partition, driver_models_json, hostnames_json,
                      source_kind, source_mac,
                      source_disk, source_task_id, live_manifest_json, state,
                      wave_session_id, wave_number, opened_by, created_at, closed_at,
                      failed_reason)
                 SELECT id, image_id, target_drives, written_drives, written_serials,
                        skipped_serials, cancelled_serials,
-                       target_slots_json, expand_partition, driver_models_json,
+                       target_slots_json, expand_partition, driver_models_json, hostnames_json,
                        source_kind, source_mac,
                        source_disk, source_task_id, live_manifest_json, state,
                        wave_session_id, wave_number, opened_by, created_at, closed_at,
@@ -1557,7 +1562,7 @@ def _restrict_mode(path: str) -> None:
 #: ‏``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 15  # ‏15: net_devices.monitor_on (#2850/#2844, in release/v0.91.11 -- the PR added the column without the bump) · ‏14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · ‏13: usb_records/usb_syncs (#1920) · ‏12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 16  # ‏16: room_rounds.hostnames_json (#2786; 15 in its PR -- net_devices.monitor_on took 15 first in release/v0.91.11) · ‏15: net_devices.monitor_on (#2850/#2844, in release/v0.91.11 -- the PR added the column without the bump) · ‏14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · ‏13: usb_records/usb_syncs (#1920) · ‏12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · ‏11: journal.machine/round_id/class_id (#1296) ·‏10: login_account_failures.surface (#2443, Fable) · ‏9: login_account_failures (#2443) · ‏8: email_queue (#1751) · ‏7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:

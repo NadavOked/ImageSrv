@@ -77,7 +77,33 @@ disk_drawer() {
     else
         case "$_dd_k" in sata:*) _dd_n=${_dd_k#sata:} ;; esac
     fi
-    printf '%s|%s' "${_dd_n:-0}" "$(_ds_conn "$_dd_k")"
+    printf '%s|%s%s' "${_dd_n:-0}" "$(_ds_conn "$_dd_k")" "$(disk_ide_role "$1" "$2")"
+}
+
+_ds_target() {
+    # $1 = a SCSI device path, .../H:C:T:L. Prints T (on IDE: 0 = master, 1 = slave).
+    _dt_t=${1##*/}
+    case "$_dt_t" in *[!0-9:]*|*:*:*:*:*) return 1 ;; [0-9]*:[0-9]*:[0-9]*:[0-9]*) ;; *) return 1 ;; esac
+    _dt_t=${_dt_t#*:*:}; printf '%s' "${_dt_t%%:*}"
+}
+
+disk_ide_role() {
+    # $1 = dev, $2 = its port. " · ראשי" / " · משני" when another device sits
+    # on the same ATA port with another SCSI target: master and slave of one
+    # IDE channel share ataN, and only T of H:C:T:L tells them apart (#2316).
+    # Display only -- port, key and drawer stay one for both (drawerselect.sh
+    # refuses such a drawer). Alone on its port: nothing, the name as before.
+    case "$2" in ''|0|*[!0-9]*) return 0 ;; esac
+    _di_t=$(_ds_target "$(readlink -f "$SYSROOT/sys/block/$1/device" 2>/dev/null)") || return 0
+    for _di_b in "$SYSROOT"/sys/block/*; do
+        [ "${_di_b##*/}" != "$1" ] || continue
+        _di_l=$(readlink -f "$_di_b/device" 2>/dev/null) || continue
+        [ "$(port_from_path "$_di_l")" = "$2" ] || continue
+        _di_o=$(_ds_target "$_di_l") || continue
+        [ "$_di_o" != "$_di_t" ] || continue
+        if [ "$_di_t" = 0 ]; then printf ' · ראשי'; else printf ' · משני'; fi
+        return 0
+    done
 }
 
 drawer_slots_records() {

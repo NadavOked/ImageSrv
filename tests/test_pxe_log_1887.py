@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server import db
 from server.net import pxe_log
 
@@ -122,5 +123,5 @@ def test_a_machine_missing_from_the_wave_says_what_dhcp_saw(conn):
     got = room._with_pxe(conn, [{"mac": OTHER, "reason": "off"}, {"mac": MAC, "reason": "drawers"}])
     assert got[0]["pxe"] == {"state": "no_tftp", "he": pxe_log.STATES_HE["no_tftp"]}
     assert "pxe" not in got[1]                       # הצטרף — אין שאלת PXE
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert 'x.pxe && x.pxe.state !== "hello"' in js

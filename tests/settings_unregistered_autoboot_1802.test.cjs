@@ -1,12 +1,13 @@
 // #1802 (נדב 04/11) — מחשב לא רשום ברשת ההפצה נשאר על המסך עד F2. השורה בעמוד ההגדרות:
 // "מחשב לא רשום: עלייה אוטומטית מהדיסק אחרי N שניות" — מספר שלם 0–600 בכרטיס "שיכפול והפצה",
 // 0 = "כבויה" (ברירת המחדל). נשמר מחלון קטן, כמו שאר המספרים.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 const KEY = 'unregistered_autoboot_seconds';
 
 function functionSource(name) {

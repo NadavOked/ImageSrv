@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from console_src import console_js
+
 STATIC = Path(__file__).resolve().parent.parent / "server" / "static"
 
 
@@ -17,7 +19,7 @@ def _css() -> str:
 
 
 def _js() -> str:
-    return (STATIC / "console.js").read_text(encoding="utf-8")
+    return console_js()
 
 
 def _rule(css: str, selector: str) -> str:

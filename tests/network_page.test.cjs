@@ -4,6 +4,7 @@
 // עיקרון 5: "בפועל" ≠ "מוגדר" ≠ "לא נקרא" — כל מקור שנכשל הוא מצב משלו, לא "אין".
 // ‏#1263: כרטיס = חלון "הגדרת כרטיס…" (שלושה אופנים), רשת ההפצה = חלון משלה; בלי הקלדת שם — חוץ מכיבוי DHCP (#53).
 // ‏#705: "מה מותר על כל וילן" — רק ממה ש-/ports.bind אומר; בלעדיו "דורש API", לא המצאה.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -90,7 +91,7 @@ function setup(over={},me={}) {
       if(f===409) return {status:409,ok:false,headers:{get:()=>null},json:async()=>({detail:'not standalone'})};
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>f ?? {ok:true,verified:true,apply_error:null}};
     }});
-  for(const f of ['progress.js','console.js','net.js','netcfg.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js','netcfg.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME='+JSON.stringify({timezone:'UTC',username:'nadav',role:'admin',server_name:'שרת המכללה',version:'v0.38.1',capabilities:{enroll_secondary:true,classrooms:true},...me})
     +'; globalThis.sheets=[]; globalThis.toasts=[]; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; };'

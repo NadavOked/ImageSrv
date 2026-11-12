@@ -3,6 +3,7 @@
 // בלי דפדפן: console.js + net.js + progress.js רצים ב-vm מול DOM מזערי ו-fetch מזויף.
 // עיקרון 5: "לא נבדק" ≠ ירוק; ROOM null (לא נקרא) ≠ חדר בלי סבב; /tasks שלא נקרא ≠ אין קליטות.
 // מוסכמת נדב: "דיסק N · SATA N-1", לעולם לא sd*.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -34,7 +35,7 @@ test('#2050 drawer emphasis: red/orange problems and read-back green get the fra
     [{state:'writing',smart:'warn',cancel:'admin'},''],             // cancelling: grey, as on the GUI
     [{state:'cancelled',smart:'fail'},''],
   ];
-  for (const render of ['dskRowHtml','roundDskHtml','slotHtml'])
+  for (const render of ['roundDskHtml','slotHtml'])
     for (const [disk,tone] of cases) {
       const [c]=cls(render,disk);
       if (tone) assert.match(c,new RegExp(`(^| )bay-emphasis ${tone}$`),`${render} ${JSON.stringify(disk)}`);
@@ -42,9 +43,43 @@ test('#2050 drawer emphasis: red/orange problems and read-back green get the fra
     }
   // the words stay: the writing orange drawer still says its percent, the failed one "נכשל"
   assert.match(cls('roundDskHtml',{state:'writing',smart:'warn',bytes_written:37,bytes_total:100})[1],/<b>37%<\/b>/);
-  assert.match(cls('dskRowHtml',{state:'failed',smart:'ok',error:'x'})[1],/<b>נכשל<\/b>/);
   assert.match(cls('slotHtml',{state:'failed',smart:'ok',error:'x'})[1],/<span class="bay-chip">נכשל<\/span>/);
   assert.match(cls('slotHtml',{smart:'warn'})[1],/<span class="bay-chip">אזהרה<\/span>/);
+});
+
+// #2848 (Nadav 11/11): red = SMART failed, a slow SATA link, slow in THIS round -- never a target; orange = SMART
+// half-good; yellow (its own colour) = failed the last clone / a cut write -- a target, never a source. A slow
+// write of a past round (last_write_check) colours nothing. A CRC rise, the learned port/disk and "slow for its
+// model" are words in the title, not a colour.
+test('#2848 slot colours: a slow SATA link or write is red; CRC rise and learning findings colour nothing', () => {
+  const {run}=setup();
+  const c=(d,fail)=>run(`slotClass({disk:${JSON.stringify(d)}${fail ? `,fail:${JSON.stringify(fail)}` : ''}})`);
+  assert.equal(c({smart:'ok',link_gbps:1.5,link_max_gbps:6}),'err');
+  assert.equal(c({smart:'ok',link_state:'slow'}),'err');
+  assert.equal(c({smart:'ok',write_slow:true}),'err');                      // this round's write check
+  assert.equal(c({smart:'ok',last_write_check:{slow:true}}),'ok');          // a past round's: nothing
+  assert.equal(c({smart:'warn'}),'warn');
+  assert.equal(c({smart:'failed_last'}),'yel');
+  assert.equal(c({smart:'ok',write_mark:'incomplete'}),'yel');
+  assert.equal(c({smart:'ok'},{cause:'cable'}),'yel');                       // the server's failure record
+  assert.equal(c({smart:'ok'},{cause:'readonly'}),'err');                    // #1742: read-only is red
+  assert.equal(c({smart:'ok',rule:{color:'red',target:false,source:true}}),'err');   // the server's own rule wins
+  for (const d of [{crc_rise:12},{crc_delta:3},{port_suspect:true},{disk_suspect:true},{smart_learned:'critical_rose'},{model_speed:{slow:true}}])
+    assert.equal(c({smart:'ok',...d}),'ok',JSON.stringify(d));
+  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',crc_rise:12}},{smart:'ok',crc_rise:12})`),/שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים/,'the rise is still said, as words (#2848: one wording)');
+});
+
+// #2848: a SATA problem the hello says (hwissues.sh: link_reset / drawer_gone) is red too, and its words are said;
+// [] (read, none), null (not read) and a word that is not a SATA problem colour nothing.
+test('#2848 slot colours: the hello sata_issues are red; [] / null / a note are not', () => {
+  const {run}=setup();
+  const c=(d)=>run(`slotClass({disk:${JSON.stringify(d)}})`);
+  assert.equal(c({smart:'ok',sata_issues:['link_reset']}),'err');
+  assert.equal(c({smart:'ok',sata_issues:['drawer_gone']}),'err');
+  for (const v of [[],null,['usb2'],'link_reset']) assert.equal(c({smart:'ok',sata_issues:v}),'ok',JSON.stringify(v));
+  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',sata_issues:['link_reset']}},{smart:'ok',sata_issues:['link_reset']})`),/הקישור למגירה התאפס/);
+  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',write_slow:true}},{smart:'ok',write_slow:true})`),/נפסל כאיטי בבדיקת הכתיבה בסבב הזה/,'the red says why');
+  assert.doesNotMatch(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',last_write_check:{slow:true,text_he:'בבדיקת הכתיבה הקודמת נמדד איטי'}}},{smart:'ok',last_write_check:{slow:true,text_he:'בבדיקת הכתיבה הקודמת נמדד איטי'}})`),/איטי/,'a past round leaves no mark');
 });
 
 // #2201 (the server's half): a selected drawer with no disk is closed for the round -- the server moves its
@@ -165,7 +200,7 @@ function setup({roundOpen=false}={}) {
       if(fixtures[key]===403) return {status:403,ok:false,json:async()=>({detail:'admin only'})};
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",version:"v0.32.1",capabilities:{}}; current="machines"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; }; selectPageById=(id)=>{ globalThis.selected=id; current=id; }; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; };');
   for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines'],['ROOM','/room'],['ROOM_HISTORY','/room/history'],['CAPTURE_TASKS','/tasks']]) run(name+'='+JSON.stringify(fixtures[key]));
@@ -188,7 +223,8 @@ const card=(html,mac)=>html.slice(html.indexOf(`data-mac="${mac}"`)).split(/<div
 
 const MACH=/<div class="mach[^"]*" data-mac=/g;
 const mach=(html,mac)=>html.slice(html.indexOf(`<div class="mach`, html.indexOf(`data-mac="${mac}"`)-60)).split(/(?=<div class="mach[ "])/)[0];
-const dsk=(html,n)=>{ const m=html.match(new RegExp(`<div class="dsk[^"]*" data-slot="${n}"[^]*?</b></div>`)); assert.ok(m,'missing dsk '+n); return m[0]; };
+// #2848 (mockup disk-colors, Nadav 11/11): a drawer card (.lbay) per slot -- the local-clone bay of the GUI
+const dsk=(html,n)=>{ const m=html.split(/(?=<div class="lbay)/).find(x=>new RegExp(`^<div class="lbay[^"]*" data-slot="${n}"`).test(x)); assert.ok(m,'missing bay '+n); return m; };
 
 test('#1485 cloners page = console-full.html P.cloners: header (counters, add, power off all), no tabs, no KPIs; the tree leaf and the group open the same page', () => {
   const {run}=setup();
@@ -201,32 +237,32 @@ test('#1485 cloners page = console-full.html P.cloners: header (counters, add, p
   assert.doesNotMatch(html,/class="kpi/,'no KPI strip in the mockup');
   assert.match(html,/<button class="btn" onclick="openAddMachine\(\{group:'grp_CLONERS'\}\)">\+ מחשב שיכפול<\/button><button class="btn danger" onclick="poweroffRoom\('grp_CLONERS'\)">כיבוי כולם…<\/button>/);
   assert.doesNotMatch(between(html,'obj-actions','<div class="body">'),/openRoomRound|wakeRoom/,'a round opens from the deploy page');
-  assert.match(html,/class="card-h"><span>המחשבים והחריצים <small>לחיצה על כרטיס פותחת פרטים<\/small>/);
+  assert.match(html,/class="card-h"><span>המחשבים והחריצים <small>הכרטיסים לקריאה בלבד — הבחירה נעשית במחשב או בחלון התחל סבב · לחיצה על כרטיס פותחת פרטים<\/small>/);
   assert.match(html,/class="card-h"><span>מחשבים שלא דיווחו</);
   assert.doesNotMatch(html,/בקרוב|disabled/);
   run("selectMachinesRole('cloner')"); const leaf=run('machines(0)');
-  assert.match(leaf,/obj-name">מחשבי שיכפול</); assert.match(leaf,/<div class="rgrid">/,'the tree leaf renders the same mockup page');
+  assert.match(leaf,/obj-name">מחשבי שיכפול</); assert.match(leaf,/<div class="rgrid lbgrid">/,'the tree leaf renders the same mockup page');
   run('openRoomRound()'); assert.equal(run("document.getElementById('modalTitle').textContent"),'התחל סבב','the room window still opens (deploy page)');
 });
 
-test('#1485 cloner cards (.mach): name + status pill, MAC, one row per slot "דיסק N" · bar · status, card click → panel, "חריצים" → panel on the disks tab; never sd*', () => {
+test('#1485/#2848 cloner cards (.mach): name + status pill, MAC, a drawer card per slot (number · connection · reason · SMART chip · size), card click → panel, "חריצים" → panel on the disks tab; never sd*', () => {
   const {run}=setup();
   run("openClass('grp_CLONERS')"); const html=run('machines(0)'); balanced(html);
-  const grid=between(html,'<div class="rgrid">','מחשבים שלא דיווחו');
+  const grid=between(html,'<div class="rgrid lbgrid">','מחשבים שלא דיווחו');
   assert.equal((grid.match(MACH)||[]).length,3); assert.doesNotMatch(grid,/sd[abc]/,'never sd*');
   const c1=mach(grid,C1), c2=mach(grid,C2), c3=mach(grid,C3);
-  assert.match(c1,/^<div class="mach" data-mac="a0:48:1c:8a:18:40" role="button" tabindex="0" onclick="openMachineDetail\('a0%3A48%3A1c%3A8a%3A18%3A40'\)" onkeydown="[^"]+"><div class="mt"><span>מחשב 1<\/span><span class="pill ok">מחובר<\/span><\/div><div class="ms mono">a0:48:1c:8a:18:40<\/div>/);
-  assert.equal((c1.match(/<div class="dsk vacant" data-slot="\d" title="דיסק \d · SATA \d · ריק"><span>דיסק \d<\/span><div class="bar"><i style="--w:0%"><\/i><\/div><b>ריק<\/b><\/div>/g)||[]).length,2,'drawer_count=2, nothing reported in them → two empty rows');
-  assert.match(dsk(c2,1),/<div class="dsk" data-slot="1" title="SATA 0 · 870 EVO · S5Y30 · SMART תקין"><span>דיסק 1<\/span><div class="bar ok"><i style="--w:100%"><\/i><\/div><b>תקין<\/b><\/div>/,'SMART ok = green');
-  assert.match(dsk(c2,2),/<span>דיסק 2<\/span><div class="bar idle"><i style="--w:100%"><\/i><\/div><b>לא נבדק<\/b>/,'unchecked is grey, never green (principle 5)');
-  assert.match(dsk(c2,3),/title="SATA 2 · 870 EVO · S5Y2NX0R12345 · נכשל בשיכפול הקודם 15\/09\/2026 · כבל\/חריץ SATA 2"><span>דיסק 3<\/span><div class="bar warn"><i style="--w:100%"><\/i><\/div><b>אזהרה<\/b>/,'#1580: failed last time = orange');
+  assert.match(c1,/^<div class="mach lbm" data-mac="a0:48:1c:8a:18:40" role="button" tabindex="0" onclick="openMachineDetail\('a0%3A48%3A1c%3A8a%3A18%3A40'\)" onkeydown="[^"]+"><div class="mt"><span>מחשב 1<\/span><span class="pill ok">מחובר<\/span><\/div><div class="ms mono">a0:48:1c:8a:18:40<\/div>/);
+  assert.equal((c1.match(/<div class="lbay t-empty" data-slot="\d" title="דיסק \d · SATA \d · ריק"><div class="lb-n"><b>\d<\/b><span>מגירה<\/span><\/div><div class="lb-txt"><div class="lb-t"><b>SATA \d<\/b><\/div><div class="lb-l">ריק<\/div><\/div><\/div>/g)||[]).length,2,'drawer_count=2, nothing reported in them → two empty, dashed cards');
+  assert.match(dsk(c2,1),/^<div class="lbay" data-slot="1" title="SATA 0 · 870 EVO · S5Y30 · SMART תקין"><div class="lb-n"><b>1<\/b><span>מגירה<\/span><\/div><div class="lb-txt"><div class="lb-t"><b>SATA 0<\/b><\/div><\/div><div class="lb-meta"><span class="lb-chip c-green"><i><\/i>SMART תקין<\/span><div class="lb-sz"><b><bdi dir="ltr">256GB<\/bdi><\/b><span class="mono">870 EVO<\/span><\/div><\/div><\/div>/,'SMART ok = green: a plain card, read only -- no [יעד][דלג], no tag outside a round');
+  assert.match(dsk(c2,2),/^<div class="lbay" data-slot="2"[^]*<span class="lb-chip c-grey"><i><\/i>SMART לא נבדק<\/span>/,'#2897: unchecked is grey, never green (principle 5)');
+  assert.match(dsk(c2,3),/^<div class="lbay t-yellow" data-slot="3" title="SATA 2 · 870 EVO · S5Y2NX0R12345 · נכשל בשיכפול הקודם 15\/09\/2026 · כבל\/חריץ SATA 2">[^]*<div class="lb-l yel">נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו<\/div>[^]*<span class="lb-chip c-yellow"><i><\/i>נכשל בשיכפול הקודם<\/span>/,'#2848: failed last time = yellow (#1580 was orange), the rule sentence on the card');
   run(`MACHINES.find(m=>m.mac==='${C2}').disks.find(d=>d.serial==='S5Y2NX0R12345').smart='fail'`);   // #1580: SMART fail = red
-  const c2r=mach(between(run('machines(0)'),'<div class="rgrid">','מחשבים שלא דיווחו'),C2);
-  assert.match(dsk(c2r,3),/<div class="bar err"><i style="--w:100%"><\/i><\/div><b>אדום<\/b>/,'SMART fail = red');
-  assert.match(c2r,/^<div class="mach err"[^>]*><div class="mt"><span>מחשב 2<\/span><span class="pill err">דיסק אדום<\/span><\/div>/,'a red disk paints the card red and its one pill says so (mockup CLONE-04 stPill: "דיסק אדום" instead of the state)');
+  const c2r=mach(between(run('machines(0)'),'<div class="rgrid lbgrid">','מחשבים שלא דיווחו'),C2);
+  assert.match(dsk(c2r,3),/^<div class="lbay t-red" data-slot="3"[^]*<div class="lb-l bad">אדום: SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת<\/div>[^]*<span class="lb-chip c-red"><i><\/i>SMART לא תקין<\/span>[^]*<span class="lb-st">לא משתתף<\/span>/,'SMART fail = red, never a target: the rule sentence and "לא משתתף"');
+  assert.match(c2r,/^<div class="mach lbm"[^>]*><div class="mt"><span>מחשב 2<\/span><span class="pill err">דיסק אדום<\/span><\/div>/,'the drawer is red, the machine card stays neutral; its one pill says so (mockup CLONE-04 stPill: "דיסק אדום" instead of the state)');
   assert.match(run('machines(0)'),/obj-sub" title="3 מחשבים · 2 מחוברים · 1 דיסק אדום · דיסק אחד נכשל בשיכפול הקודם">/,'the mockup header counts red disks; the orange failure is still said');
   assert.match(c2,/<div class="acts"><button class="btn sm" type="button" onclick="event.stopPropagation\(\);openMachineDetail\('78%3Aac%3Ac0%3A9b%3A11%3Ac2','disks'\)">חריצים<\/button><\/div>/);
-  assert.match(c3,/^<div class="mach off"/,'not connected → dashed'); assert.match(c3,/מעולם לא דיווח על דיסקים/);
+  assert.match(c3,/^<div class="mach lbm off"/,'not connected → dashed'); assert.match(c3,/מעולם לא דיווח על דיסקים/);
   assert.doesNotMatch(grid,/editDrawerCount|monitorMachine\(|clearDiskFailure/,'the count dialog is gone; clearing a red disk is in the panel');
   const silent=between(html,'מחשבים שלא דיווחו');
   assert.match(silent,/<b>מחשב 3<\/b><\/td><td>מעולם לא<\/td><td><button class="btn sm" onclick="wakeMachine\('78%3Aac%3Ac0%3A9b%3A11%3Ac3'\)">WoL<\/button>/,'never seen → listed with WoL');
@@ -237,15 +273,15 @@ test('#1485 cloner cards during a round: write % per drawer from /room, failure 
   const {run}=setup({roundOpen:true});
   run("openClass('grp_CLONERS')"); const html=run('machines(0)'); balanced(html);
   assert.match(html,/pill info">סבב פעיל — גל 2, 2\/5</);
-  const c2=mach(between(html,'<div class="rgrid">','מחשבים שלא דיווחו'),C2);
+  const c2=mach(between(html,'<div class="rgrid lbgrid">','מחשבים שלא דיווחו'),C2);
   assert.match(c2,/<span class="pill info">בסבב · 38%/);
-  assert.match(dsk(c2,1),/<div class="bar "><i style="--w:38%"><\/i><\/div><b>38%<\/b>/);
-  assert.match(dsk(c2,2),/CRC \+3 · לבדוק כבל · ללא תזוזה 90 ש&#39;[^]*<div class="bar warn"><i style="--w:37%"><\/i><\/div><b>37%<\/b>/,'CRC delta and stall are orange');
-  assert.match(dsk(c2,3),/<div class="bar err"><i style="--w:100%"><\/i><\/div><b>נכשל<\/b>/);
+  assert.match(dsk(c2,1),/^<div class="lbay" data-slot="1"[^]*<span class="lb-st">כותב 38%<\/span>/);
+  assert.match(dsk(c2,2),/^<div class="lbay" data-slot="2" title="[^"]*שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים · ללא תזוזה 90 ש&#39;[^]*<div class="lb-l warn">שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים<\/div>[^]*<span class="lb-st">כותב 37%<\/span>/,'#2848: the CRC rise and the stall are words, not the colour');
+  assert.match(dsk(c2,3),/^<div class="lbay t-red" data-slot="3"[^]*<div class="lb-l bad">נכשל בסבב — [^<]+<\/div>[^]*<span class="lb-chip c-red"><i><\/i>נכשל בסבב<\/span>[^]*<span class="lb-st">נכשל<\/span>/);
   run('ROOM.stream_stalled=true'); assert.match(run('machines(0)'),/pill warn">סבב פעיל — גל 2, 2\/5 · הזרם עצר</);
   run('ROOM=null'); const unread=run('machines(0)');
   assert.match(unread,/pill ">החדר לא נקרא</);
-  assert.match(dsk(mach(unread,C2),1),/<b>תקין<\/b>/,'unread room falls back to the hello report, not to "nothing"');
+  assert.match(dsk(mach(unread,C2),1),/<span class="lb-chip c-green"><i><\/i>SMART תקין<\/span>/,'unread room falls back to the hello report, not to "nothing"');
 });
 
 test('#1485 mapping: drawer_slots picks which connection is "דיסק N"; an unmapped drive is "SATA n · לא ממופה" (never a guessed number); a CD/DVD drive is its own row, never a disk', () => {
@@ -255,11 +291,11 @@ test('#1485 mapping: drawer_slots picks which connection is "דיסק N"; an unm
   run("openClass('grp_CLONERS')"); const html=run('machines(0)'); balanced(html);
   const c2=mach(html,C2);
   assert.deepEqual([...c2.matchAll(/data-slot="(\d*)"/g)].map(m=>m[1]),['1','2',''],'two mapped drawers, then the unmapped drive');
-  assert.match(dsk(c2,1),/title="SATA 2 · 870 EVO · S5Y2NX0R12345[^"]*נכשל בשיכפול הקודם[^"]*"><span>דיסק 1<\/span>[^]*<b>אזהרה<\/b>/,'SATA 2 is disk 1 on this machine — and its red memory follows the port');
-  assert.match(dsk(c2,2),/title="SATA 0 · 870 EVO · S5Y30[^"]*"><span>דיסק 2<\/span>/);
-  assert.match(c2,/<div class="dsk unmapped" data-slot="" title="SATA 1 — לא ממופה לאף דיסק · 870 EVO · S5Y31[^"]*"><span>SATA 1<\/span><div class="bar"><i style="--w:0%"><\/i><\/div><b>לא ממופה<\/b><\/div>/);
+  assert.match(dsk(c2,1),/title="SATA 2 · 870 EVO · S5Y2NX0R12345[^"]*נכשל בשיכפול הקודם[^"]*"><div class="lb-n"><b>1<\/b>[^]*<b>SATA 2<\/b>[^]*c-yellow"><i><\/i>נכשל בשיכפול הקודם/,'SATA 2 is disk 1 on this machine — and its failure memory follows the port');
+  assert.match(dsk(c2,2),/title="SATA 0 · 870 EVO · S5Y30[^"]*"><div class="lb-n"><b>2<\/b>/);
+  assert.match(dsk(c2,''),/^<div class="lbay" data-slot="" title="SATA 1 — לא ממופה לאף דיסק · 870 EVO · S5Y31[^"]*"><div class="lb-n"><b>—<\/b><span>מגירה<\/span><\/div><div class="lb-txt"><div class="lb-t"><b>SATA 1<\/b><\/div><div class="lb-l warn">לא ממופה<\/div>/,'no number is guessed: "—" and the words');
   const c1=mach(html,C1);
-  assert.match(c1,/<div class="dsk opt" data-slot="3" title="כונן CD\/DVD · SATA 2 · HL-DT-ST DVDRAM · ממופה כדיסק 3 — לא יעד"><span>CD\/DVD<\/span>[^]*<b>SATA 2<\/b>/,'the slot of a CD drive is never "empty"');
+  assert.match(c1,/<div class="lbay t-empty" data-slot="3" title="כונן CD\/DVD · SATA 2 · HL-DT-ST DVDRAM · ממופה כדיסק 3 — לא יעד">[^]*<b>כונן CD\/DVD<\/b><\/div><div class="lb-l">SATA 2 · לא יעד<\/div>/,'the slot of a CD drive is never "empty"');
   assert.equal(run(`failureWhere(DISK_FAILURES[0])`),'מחשב 2 · דיסק 1 · SATA 2','the red-disk line names the mapped number');
   run(`MACHINES.find(m=>m.mac==='${C2}').drawer_slots=['sata:1','sata:2']`);
   assert.equal(run(`failureWhere(DISK_FAILURES[0])`),'מחשב 2 · SATA 2 (לא ממופה)','an unmapped port is said, not numbered');
@@ -280,9 +316,10 @@ test('#1033/#1485: a 12×3 fixture renders 36 disk rows, stacked by disk number'
   run(`MACHINES=${JSON.stringify(machines12)};`);
   run("NET=[]; DISK_FAILURES=[]; MONITOR_ROWS=[]; ROOM=null;");
   run("openClass('grp_CLONERS')"); const html=run('machines(0)'); balanced(html);
-  const grid=between(html,'<div class="rgrid">','מחשבים שלא דיווחו');
+  const grid=between(html,'<div class="rgrid lbgrid">','מחשבים שלא דיווחו');
   assert.equal((grid.match(MACH)||[]).length,12);
-  assert.equal((grid.match(/<div class="dsk" data-slot="\d" title="[^"]*"><span>דיסק \d<\/span><div class="bar ok"><i style="--w:100%"><\/i><\/div><b>תקין<\/b><\/div>/g)||[]).length,36);
+  assert.equal((grid.match(/<div class="lbay" data-slot="\d" title="[^"]*"><div class="lb-n"><b>\d<\/b>/g)||[]).length,36);
+  assert.equal((grid.match(/<span class="lb-chip c-green"><i><\/i>SMART תקין<\/span>/g)||[]).length,36);
   for(const mac of macs) assert.deepEqual([...mach(grid,mac).matchAll(/data-slot="(\d)"/g)].map(m=>Number(m[1])),[1,2,3]);
 });
 
@@ -492,7 +529,7 @@ test('#1485 panel "דיסקים" tab = the mockup table (דיסק | חיבור |
   assert.match(t,/<tr class="" data-slot="1"><td><b>דיסק 1<\/b><\/td><td><span class="mono" title="SATA 0">דיסק 1<\/span><\/td>/,'#1375: the connection by drawer number (SATA k-1 in the title)');
   assert.match(t,/<td><span class="mono"><bdi dir="ltr">256GB<\/bdi><\/span> <span class="cap">870<\/span><\/td><td><\/td>/,'#1375: SMART ok = an empty cell, not a constant "תקין"');
   assert.match(t,/data-slot="2">[^]*?<span class="n-chip n">לא נבדק<\/span>/,'unchecked is grey');
-  assert.match(t,/data-slot="3">[^]*?<span class="n-chip w">נכשל בשיכפול הקודם<\/span>[^]*?clearDiskFailure\(7\)">נקה<\/a>/,'the red disk is cleared here now');
+  assert.match(t,/data-slot="3">[^]*?<span class="n-chip y">נכשל בשיכפול הקודם<\/span>[^]*?clearDiskFailure\(7\)">נקה<\/a>/,'the red disk is cleared here now');
   assert.match(t,/<tr class="opt" data-slot=""><td><b>כונן CD\/DVD<\/b><\/td><td><span class="mono">SATA 4<\/span><\/td><td><span class="muted">HL-DT-ST DVDRAM<\/span><\/td><td><span class="muted">—<\/span><\/td>/,'the CD drive is a row of its own, not a slot, never "empty"');
   assert.match(t,/<div class="map-tools"><button class="btn sm" type="button" onclick="openSlotMap\('78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)">מיפוי חיבורים…<\/button><\/div>/);
   assert.doesNotMatch(html,/editDrawerCount|מספר חריצי SATA/,'the separate count dialog is gone');

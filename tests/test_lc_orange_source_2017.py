@@ -105,8 +105,8 @@ def _choose(driver: Path, tmp_path: Path, smart: str, reason: str, *events: str,
 START = "lc-start|sdc|sda,sdb|0"
 
 
-@pytest.mark.parametrize("smart,reason", [("warn", "reported_uncorrectable"),   # #1859: 187 > 0, before F1
-                                          ("failed_last", "disk")])            # failed the previous clone, SMART working
+# #2848 (Nadav 11/11): failed_last is yellow -- never a source (test_disk_red_rules_2848), so only warn is asked here
+@pytest.mark.parametrize("smart,reason", [("warn", "reported_uncorrectable")])   # #1859: 187 > 0, before F1
 @pytest.mark.parametrize("answer", ["key:ENTER", "key:ESC", "SDLG_GO"])       # every answer goes on: nothing to cancel
 def test_an_orange_source_is_a_notice_with_one_button_and_the_copy_starts(driver, tmp_path, smart, reason, answer):
     out = _choose(driver, tmp_path, smart, reason, "NEXT", answer, "GO")
@@ -149,7 +149,7 @@ def test_the_notice_card_is_drawn(tmp_path):
 FOCUS_GO, FOCUS_CANCEL = "@ focus=3", "@ focus=4"   # LCF_GO ("מחק והעתק"), LCF_CANCEL ("חזרה")
 
 
-@pytest.mark.parametrize("smart,reason", [("warn", "reported_uncorrectable"), ("failed_last", "disk")])
+@pytest.mark.parametrize("smart,reason", [("warn", "reported_uncorrectable")])   # #2848: failed_last is never a source
 def test_an_orange_source_on_the_stick_is_enter_enter_enter(driver, tmp_path, smart, reason):
     out = _choose(driver, tmp_path, smart, reason, "key:ENTER", "key:ENTER", "key:ENTER", usb=True)
     steps = [l for l in out if l.startswith("@ key:")]
@@ -246,7 +246,7 @@ MIN_CHIP_PX = 300   # a pill is ~100 x 22 px; the row's own background is indigo
 
 
 @pytest.mark.parametrize("smart,reason,slot", [("ok", "ok", 0), ("warn", "reported_uncorrectable", 1),
-                                               ("failed_last", "disk", 1), ("fail", "health_failed", 2)])
+                                               ("fail", "health_failed", 2)])   # #2848: failed_last is never a source
 def test_the_source_row_carries_the_smart_chip_in_its_colour(chip_driver, tmp_path, smart, reason, slot):
     src = max((v for k, v in _soft_pixels(chip_driver, tmp_path, smart, reason).items() if k == "bay2"), default=None)
     assert src is not None, "no source bay"

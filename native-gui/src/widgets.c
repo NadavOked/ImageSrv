@@ -147,7 +147,7 @@ void draw_field(App *a, cairo_t *cr, Rect r, const char *value, int mask,
  * browser's disclosure arrow at the inline end (left in RTL). */
 void draw_select(App *a, cairo_t *cr, Rect r, const char *shown, int id) {
     const Theme *t = a->theme;
-    field_box(a, cr, r, a->dd_open == id);
+    field_box(a, cr, r, a->dd_open == id || a->focus == id);   /* #2872: the keyboard focus rings a select too */
     double inner_w = r.w - 13 - 13 - 14;        /* 14 for the arrow */
     Text v = text_make_field(cr, shown, (int)inner_w, 0);
     cairo_save(cr);

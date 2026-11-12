@@ -27,6 +27,8 @@ int smart_level(const char *smart) {
 
 Rgb smart_color(const Theme *t, const char *smart) {
     int lvl = smart_level(smart);
+    if (!strcmp(smart, "failed_last")) return t->yellow;   /* #2848 (Nadav 11/11): yellow -- a target, never a source */
+    if (!lvl && strcmp(smart, "ok") && strcmp(smart, "passed")) return t->led_idle;   /* #2897: not checked is grey, never green */
     return lvl == 2 ? t->danger : lvl == 1 ? t->warn : t->led_ok;
 }
 
@@ -36,7 +38,7 @@ const char *smart_he(const char *smart) {
     if (!strcmp(smart, "passed") || !strcmp(smart, "ok")) return "תקין";   /* #1861: dsmart carries smart.sh's "ok" */
     if (!strcmp(smart, "failed_last")) return "נכשל בשיכפול הקודם";
     if (!strcmp(smart, "fail")) return "SMART תקול";
-    if (!strcmp(smart, "warn")) return "אזהרה";
+    if (!strcmp(smart, "warn")) return "חצי תקין";   /* #2848 (Nadav 11/11): "SMART חצי תקין", as the console */
     return smart;
 }
 
@@ -52,6 +54,7 @@ const char *red_refusal_he(const char *reason) {
 
 const char *smart_he_why(const char *smart, const char *reason) {
     if (smart && !strcmp(smart, "fail") && reason && !strcmp(reason, "readonly")) return smart_reason_text(reason);
+    if (smart && !strcmp(smart, "warn")) return "SMART חצי תקין";   /* #2848: the word alone under a drawer */
     return smart_he(smart);
 }
 
@@ -203,10 +206,18 @@ int room_selectable(const RoomDrawer *d) {
     return d->present && d->port >= 1 && eff_drawer(d->drawer, d->port) > 0;
 }
 
-/* #1732 (Nadav 18/10): a red drawer (SMART fail) is drawn in its colour but is
- * never a target -- never picked, never sent; the server refuses it too (room.py). */
+/* #2848 (Nadav 11/11): red = SMART failed, a slow SATA link or a SATA problem (link_reset / drawer_gone),
+ * or slow in THIS round's write check -- never a target, still a source. The server decides (room_drawer_rule=,
+ * drawer_list[].rule); the console's slotClass reads the same. */
+int room_drawer_red(const RoomDrawer *d) {
+    if (d->rule_set) return !d->rule_target;   /* the server's decision (room.py, disk_rule.py) -- shown, not re-made */
+    return smart_level(d->smart) == 2 || d->link_slow;   /* an older server: what the hello itself says */
+}
+
+/* #1732 (Nadav 18/10): a red drawer is drawn in its colour but is never a target -- never
+ * picked, never sent; the server refuses a SMART red too (room.py), the rest the console does not offer. */
 int room_pickable(const RoomDrawer *d) {
-    return room_selectable(d) && smart_level(d->smart) < 2;
+    return room_selectable(d) && !room_drawer_red(d);
 }
 
 void room_drawer_label(const Machine *m, const RoomDrawer *d, char *out, size_t n) {

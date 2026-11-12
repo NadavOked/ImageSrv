@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import sqlite3
 
-from server.disks import crcwarn, smart_history
-from server.learn import models as learn_models, ports as learn_ports
+from server.disks import smart_history
+from server.learn import ports as learn_ports
 
 #: ‏verdict של disk_event שבו מונה ה-CRC נקרא באמת (‏`smart.sh`). ‏`unchecked`
 #: נקרא רק כשהסיבה היא `no_health` — ‏smartctl פתח את הדיסק וקרא מאפיינים.
@@ -80,18 +80,14 @@ def drawer_fields(conn: sqlite3.Connection, disk: dict, mac: str | None = None) 
         # ‏None = לא נמדד (אין מונה עכשיו, או אין סבב קודם שקרא אותו) — לא 0.
         # שלילי (דיסק אחר עם אותו סידורי, מונה שאופס) אינו "עלה".
         "crc_rise": max(0, crc - base) if base is not None else None,
-        # ‏#1366: המונה המוחלט מעל `crc_warn_threshold` — כתום גם בגל ראשון,
-        # שבו אין "עלייה". ‏None = המונה לא נקרא (לא "תקין").
-        "crc_suspect": crcwarn.suspect(crc, crcwarn.threshold(conn)) if crc is not None else None,
         # ‏#1859: מה שהשרת למד מאז הסבב הקודם של הסידורי (‏None = כלום, או לא נקרא עכשיו), ו-
         # ‏`smart_compared` — יש בכלל סבב קודם להשוות אליו (‏False = "אין עדיין השוואה").
         **_learned(conn, disk),
         # ‏#1844: מה שהשרת למד על החיבור ועל הדיסק מהגלים הקודמים — "כנראה כבל/מחבר"
         # (‏`port_suspect`) או "הדיסק עצמו" (‏`disk_suspect`). המלצה, לא חסימה.
         **_ports(conn, disk, mac),
-        # ‏#447 (ברזל 03/11): בדיקת הכתיבה האחרונה של הסידורי מול הסף הקבוע — דיסק שנפסל
-        # "איטי" לפני הזרם מוזהר בסבב/גל הבא שלו. ‏`slow: None` = לא נמדד, לא "תקין".
-        "last_write_check": learn_models.last_check(conn, disk.get("serial") or None),
+        # ‏#2848 (נדב 11/11): "איטי" הוא של הסבב שבו נמדד בלבד (‏`drawer_list[].write_slow`) — מדידה
+        # מסבב קודם אינה מוזהרת ואינה צובעת (בוטל ה-`last_write_check` של #447).
     }
 
 
@@ -160,14 +156,12 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
                 continue
             slow = d.get("link_state") == "slow"
             rise = d.get("crc_rise") or 0
-            suspect = d.get("crc_suspect") is True    # #1366
             learned = smart_history.LEARNED_HE.get(d.get("smart_learned") or "")   # #1859
             ported = d.get("learned_he")                                            # #1844
             speed = d.get("model_speed") if isinstance(d.get("model_speed"), dict) else {}
             model_slow = speed.get("slow") is True                                  # #1845
-            check = d.get("last_write_check") if isinstance(d.get("last_write_check"), dict) else {}
-            write_slow = check.get("slow") is True                                  # #447
-            if not slow and rise <= 0 and not suspect and not learned and not ported                     and not model_slow and not write_slow:
+            # ‏#2846 (נדב 11/11): מונה CRC מוחלט הוא היסטוריה ולא מצב — רק עלייה (`rise`) מזהירה.
+            if not slow and rise <= 0 and not learned and not ported and not model_slow:
                 continue
             parts = []
             if slow:
@@ -176,24 +170,20 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
                 # עברית לפני "CRC": אחרת "6.0 Gb/s · CRC +12" הוא ריצת LTR אחת והסדר מתהפך
                 parts.append(f"מונה CRC עלה ב-{rise} מאז הסבב הקודם")
             text = " · ".join(parts) + " — לבדוק כבל או מגירה" if parts else ""
-            if suspect:
-                text = " · ".join(x for x in (crcwarn.text_he(d["crc"]), text) if x)
             if learned:
                 text = " · ".join(x for x in (learned, text) if x)
             if ported:
                 text = " · ".join(x for x in (ported, text) if x)
             if model_slow:
                 text = " · ".join(x for x in (speed.get("text_he"), text) if x)
-            if write_slow:
-                text = " · ".join(x for x in (check.get("text_he"), text) if x)
             out.append({
                 "mac": m["mac"], "machine": m.get("name"), "port": d.get("port"),
                 "serial": d.get("serial"), "slot_name": d.get("slot_name"),
                 "link_gbps": d.get("link_gbps"), "link_max_gbps": d.get("link_max_gbps"),
-                "crc_rise": d.get("crc_rise"), "crc": d.get("crc"), "crc_suspect": suspect,
+                "crc_rise": d.get("crc_rise"), "crc": d.get("crc"),
                 "smart_learned": d.get("smart_learned"),
                 "port_suspect": d.get("port_suspect"), "disk_suspect": d.get("disk_suspect"),
-                "model_slow": model_slow, "write_slow": write_slow,
+                "model_slow": model_slow,
                 "text_he": f"{m.get('name') or m['mac']} · {_slot(m, d.get('port'), d)}: {text}",
             })
     return out

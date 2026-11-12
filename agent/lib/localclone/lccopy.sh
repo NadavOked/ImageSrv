@@ -14,8 +14,7 @@
 # "ok", partclone exited 0, the target relay (fanout) exited 0, and the xxh64 of what
 # the target pipeline consumed equals the xxh64 of what was read from the
 # source. A failing target fails alone; the source failing fails every one.
-# No full read-back DURING the copy (owner, 13/10: it would double the time);
-# #1805 (owner, 19/10): after it, every target is read back against the source (readback.sh).
+# #2023: opt-in inline full read-back; otherwise the after-copy check (#1805).
 
 LC_STALL_S="${LC_STALL_S:-${WAIT_STREAM_STALL_S:-300}}"
 
@@ -64,15 +63,19 @@ _lc_target_pipeline() {
         # ‏#1438: fanout מגבב ומעביר ל-partclone (צינור 1MB) במקום tee של busybox,
         # שמעתיק 1KB בכל קריאה. נמדד במחשב שיכפול 2: ‏195 → 246MB/s (בלי גיבוב: 258).
         # shellcheck disable=SC2046 # partclone_mode flags are a word list
-        { "$_lt_pcl" $(partclone_mode "$_lt_pcl" -r) -s - -O "$_lt_node" \
-            -L "$_lt_t/partclone.log" < "$_lt_t/relay" 2>> "$LOG_FILE"
+        { if [ "${LC_INLINE:-0}" = 1 ]; then
+              rb_inline_restore "$1" "$3" "$_lt_node" < "$_lt_t/relay"
+          else
+              "$_lt_pcl" $(partclone_mode "$_lt_pcl" -r) -s - -O "$_lt_node" \
+                  -L "$_lt_t/partclone.log" < "$_lt_t/relay" 2>> "$LOG_FILE"
+          fi
           echo "$?" > "$_lt_t/pipeline.rc"; } &
         _lt_pp=$!
         # shellcheck disable=SC2016 # $$ is sh -c's own. #2045: reader.pid = the feed's reader, drawer_watch (verdict.sh) kills it
         sh -c 'echo "$$" > "$1"; shift; exec "$@"' fanout "$_lt_t/reader.pid" fanout -H "$_lt_t/sha.out" 16777216 \
             "$_lt_t/relay" < "$_lt_t/feed" > "$_lt_t/relay.out" 2>> "$LOG_FILE"
         echo "$?" > "$_lt_t/tee.rc"   # ‏rc של הממסר: 0 רק אם partclone לקח הכול
-        wait_pid "$_lt_pp" "$WAIT_DRAWER_S" "partclone של יעד $1 (מחיצה $3)" \
+        wait_pid "$_lt_pp" "${LC_INLINE_WAIT:-$WAIT_DRAWER_S}" "הכתיבה ליעד $1 (מחיצה $3)" \
             || echo "$WAIT_TIMED_OUT" > "$_lt_t/pipeline.rc"
     ) &
     echo "$!" > "$_lt_t/pipeline.pid"
@@ -115,6 +118,8 @@ lc_stream() {
     [ "${LC_EXP_DIRECT:-0}" = 1 ] && { lc_exp_direct "$@"; return; }   # lctune.sh: a measurement, never "ok"
     _ls_i="$1"; _ls_fs="$2"; _ls_src="$3"; shift 3
     _ls_r="$LC/run"; _ls_pcl=$(partclone_for_fs "$_ls_fs"); _ls_feeds=""
+    LC_INLINE=0; LC_INLINE_WAIT=$WAIT_DRAWER_S
+    if command -v rb_inline_select >/dev/null 2>&1; then rb_inline_select "$_ls_i" "$_ls_fs" "$_ls_src" "$@"; fi
     for _ls_t in "$@"; do
         _ls_d="$RUN_DIR/targets/$_ls_t"
         [ "$(cat "$_ls_d/state")" = failed ] && continue; assert_target "$_ls_t" || continue   # #2429: before its fifo
@@ -168,7 +173,7 @@ lc_stream() {
     for _ls_t in "$@"; do
         _ls_pf="$RUN_DIR/targets/$_ls_t/pipeline.pid"
         [ -f "$_ls_pf" ] && [ ! -f "$RUN_DIR/targets/$_ls_t/dead" ] || continue   # #2045: drawer_watch failed it
-        wait_pid "$(cat "$_ls_pf")" "$WAIT_DRAWER_S" "יעד $_ls_t (מחיצה $_ls_i)" && continue
+        wait_pid "$(cat "$_ls_pf")" "${LC_INLINE_WAIT:-$WAIT_DRAWER_S}" "יעד $_ls_t (מחיצה $_ls_i)" && continue
         unblock_fifo "$RUN_DIR/targets/$_ls_t/feed"
         fail_written_target "$_ls_t" "מחיצה $_ls_i: פג הזמן — היעד הפסיק לכתוב"
     done
@@ -199,6 +204,7 @@ lc_judge() {
     # then the NTFS backup boot sector partclone -r does not write (#1487).
     _lj_d="$RUN_DIR/targets/$1"
     [ "$(cat "$_lj_d/state")" = failed ] && return 0
+    if command -v rb_inline_judge >/dev/null 2>&1 && rb_inline_judge "$1" "$2"; then return 0; fi   # #2023
     _lj_line=$(grep -F "$_lj_d/feed " "$LC/run/fanout.out" 2>/dev/null)
     _lj_rc=$(cat "$_lj_d/pipeline.rc" 2>/dev/null); _lj_tee=$(cat "$_lj_d/tee.rc" 2>/dev/null)
     _lj_sha=$(awk '{print $1}' "$_lj_d/sha.out" 2>/dev/null)
@@ -227,6 +233,9 @@ lc_copy() {
     # streamed (some targets may have failed on the way), 1 = no target
     # left, 2 = stopped. The measurement knobs (lctune.sh) hold for the copy only.
     _lk_m="$1"; _lk_src="$2"; shift 2
+    if command -v rb_inline_begin >/dev/null 2>&1; then
+        rb_inline_begin || { _fail_alive "$*" "$READBACK_NOT_RUN — המצב לא נשמר"; return 1; }
+    fi
     lc_tune_begin "$_lk_src" "$@"
     _lc_copy_parts "$@"; _lk_rc=$?
     lc_tune_end "$@"

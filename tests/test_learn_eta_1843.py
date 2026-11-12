@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server import db
 from server.learn import eta as learn_eta
 
@@ -265,7 +266,7 @@ def test_the_console_shows_the_forecast_from_the_server():
     כשאין. בגל רץ, ‏"נותרו ~X" של #410 (הקצב שנמדד עכשיו) גובר: ההערכה מההיסטוריה
     מוצגת רק עד שהוא נמדד — כך היא מתעדכנת לפי הקצב בפועל, והשורה נשארת זהה לגואי."""
     static = Path(__file__).resolve().parents[1] / "server" / "static"
-    js = (static / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert "function forecastText(f, liveEta)" in js
     assert "אין עדיין הערכת סיום" in js
     assert "forecastText(r.forecast, null)" in js                      # גל פתוח

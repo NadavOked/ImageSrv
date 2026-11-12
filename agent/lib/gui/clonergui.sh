@@ -203,8 +203,6 @@ cloner_cdisks() {
     _cg_idle="$GUI_DIR/cdisk.unsorted"
     : > "$_cg_idle" || return 1
     disk_failures_refresh || :   # #874: זיכרון השרת מה-hello האחרון; כשל = הקובץ הקודם
-    # ‏#1366: סף ה-CRC המוחלט מה-hello (הגדרה בקונסולה); ריק = שרת ישן — לא צובעים.
-    _cg_crcmax=$(json_get "$RUN_DIR/response.json" ".crc_warn_threshold" 2>/dev/null)
     for _cg_d in $1; do
         _cg_dport=$(disk_port "$_cg_d")
         case "$_cg_dport" in ''|*[!0-9]*) _cg_dport=0 ;; esac
@@ -223,18 +221,16 @@ cloner_cdisks() {
         # ריק כשירוק. ‏disk_failure_cause יושב ב-failmark.sh: גם השער קורא אותו.
         [ "$_cg_dsmart" != fail ] && _cg_dcause=$(disk_failure_cause "$_cg_d") && _cg_dsmart=failed_last   # #1580: red SMART wins
         case "$_cg_dsmart" in fail|warn) _cg_dcause=$(smart_field "$_cg_d" 2) ;; esac   # #1366: why F1; #1859: why orange -- field 6
-        # #1366: 199 only when smartctl read it (disk_link_json's rule), over the hello's threshold
-        _cg_crc=$(disk_link_json "$_cg_d" | sed -n 's/.*"crc":\([0-9][0-9]*\).*/\1/p')
-        case "$_cg_crcmax" in ''|0|*[!0-9]*) _cg_crc= ;; *) [ -n "$_cg_crc" ] && [ "$_cg_crc" -gt "$_cg_crcmax" ] || _cg_crc= ;; esac
         _cg_link=$(disk_link "$_cg_d")   # #432: "<speed> <max>", null = not read -- fields 7/8
         # #1858: "נצפה F1" by serial -- the date and source (14/15), and the disk's own SMART beneath the red (16; empty = not known)
         _cg_f1=$(command -v disk_f1_observed >/dev/null 2>&1 && disk_f1_observed "$_cg_d") || _cg_f1="|"
         _cg_f1u=$(command -v disk_f1_under >/dev/null 2>&1 && [ "$_cg_f1" != "|" ] && disk_f1_under "$_cg_d")
         case "$_cg_f1u" in ok) _cg_f1u=passed ;; esac
-        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
-            "$_cg_dmodel" "$_cg_dsize" "$_cg_dsmart" "$_cg_dcause" "${_cg_link% *}" "${_cg_link#* }" "$_cg_crc" "$_cg_dn" \
-            "$(writemark_state "$_cg_d")" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_cg_d" "crc link_slow")" "$_cg_f1" "$_cg_f1u" \
-            >> "$_cg_idle" || return 1   # #1798: field 12 -- incomplete|clean|unchecked; #1921: 13 -- the drawer's hw note (crc/link have 7-9)
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
+            "$_cg_dmodel" "$_cg_dsize" "$_cg_dsmart" "$_cg_dcause" "${_cg_link% *}" "${_cg_link#* }" "" "$_cg_dn" \
+            "$(writemark_state "$_cg_d")" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_cg_d" "link_slow")" "$_cg_f1" "$_cg_f1u" \
+            "$(command -v hw_words >/dev/null 2>&1 && hw_words "$_cg_d" | tr '\n|' '  ')" \
+            >> "$_cg_idle" || return 1   # #1798: field 12 -- incomplete|clean|unchecked; #1921: 13 -- the drawer's hw note (the link has 7-8; 9, #1366's absolute CRC, is empty since #2846); #2848: 17 -- the hw words
     done
     sort -t'|' -k1,1n -k2,2n -k3,3n "$_cg_idle" > "$_cg_idle.sorted" || return 1
     sed 's/^[01]|[0-9]*|/cdisk=/' "$_cg_idle.sorted"

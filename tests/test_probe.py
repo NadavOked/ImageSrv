@@ -118,7 +118,7 @@ def test_the_agent_loads_probe_sh():
 def test_a_bare_sysroot_is_null_or_empty_never_invented(fake_machine):
     p = probe_of(fake_machine["sysroot"])
     json.dumps(p)  # תקין
-    assert isinstance(p["probe_seconds"], int)
+    assert p["probe_seconds"] is None   # #2852: measured from /proc/uptime; a bare sysroot has none -- null, not a guess
     assert p["power"] is None
     assert p["rtc"] is None
     assert p["cpu"] is None
@@ -425,6 +425,8 @@ def test_missing_optional_tools_are_null_not_ok(fake_machine):
 
 def test_hello_schema_2_carries_probe(fake_machine):
     libs = f'. {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh;'
+    (fake_machine["sysroot"] / "proc").mkdir(exist_ok=True)
+    (fake_machine["sysroot"] / "proc" / "uptime").write_text("100.40 90.00" + chr(10))   # #2852: probe_seconds comes from /proc/uptime
     first = _agent_hello(fake_machine, libs)
     assert first["schema"] == 2
     assert "probe" not in first
@@ -472,3 +474,26 @@ def test_probe_is_cached_in_run_dir_between_hellos(fake_machine):
 def test_probe_without_a_writable_run_dir_still_answers(fake_machine):
     p = probe_of(fake_machine["sysroot"], extra="export RUN_DIR=/nonexistent/dir; ")
     assert "probe_seconds" in p
+
+
+def test_probe_seconds_is_monotonic_when_the_wall_clock_jumps_back_2852(fake_machine):
+    """#2852: the agent aligns the clock mid-probe (`date` went back 24 s): probe_seconds was -24.
+    It is measured from /proc/uptime now: the 5 s the probe really took, and null when unreadable."""
+    sysroot = fake_machine["sysroot"]
+    (sysroot / "proc").mkdir(exist_ok=True)
+    (sysroot / "proc" / "uptime").write_text("100.40 90.00\n")
+    # `date` steps back 24 s between its two readings; the encryption step is "the probe taking 5 s"
+    jump = ('date() { n=$(cat "$SYSROOT/.d" 2>/dev/null || echo 0); echo $((n+1)) > "$SYSROOT/.d"; '
+            'echo $((1000 - n * 24)); }; '
+            'probe_encryption() { echo "105.90 0" > "$PROC_ROOT/uptime"; printf "[]"; }; ')
+
+    def run() -> dict:
+        out = sh(f"export SYSROOT={posix(sysroot)!r}; "
+                 f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
+                 f". {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; "
+                 + jump + 'printf "{\\"x\\":0%s}" "$(_probe_fresh)"')
+        return json.loads(out)["probe"]
+
+    assert run()["probe_seconds"] == 5
+    (sysroot / "proc" / "uptime").unlink()
+    assert run()["probe_seconds"] is None

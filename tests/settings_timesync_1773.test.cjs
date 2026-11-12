@@ -1,7 +1,8 @@
+const {consoleJs} = require('./console_src.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const js = fs.readFileSync('server/static/console.js', 'utf8');
+const js = consoleJs();
 
 test('general settings render time source and clock state directly after timezone', () => {
   const zone = js.indexOf('label: "אזור זמן"');

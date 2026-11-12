@@ -23,7 +23,7 @@ from server.storage import disk_reserve
 from server.agent.api import ServerContext
 from server.library.images import validate_display_name
 from server.library.library_scrub import forget_scrub, last_scrubs, scrub_library
-from server.library.archive import ArchiveError, import_tar, tar_stream, unreadable_message
+from server.library.archive import ArchiveError, import_tar, tar_size, tar_stream, unreadable_message
 from server.db import get_setting, journal, set_setting
 from server.rounds.sessions import ROOM_PREFIX
 from server.system import inflight
@@ -196,10 +196,17 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
         if manifest is None:
             raise HTTPException(404, "אימג' לא קיים")
         journal(ctx.conn, "image_download", f'{image_id} "{manifest["name"]}"', user[0])
+        headers = {"Content-Disposition": f'attachment; filename="{image_id}.tar"'}
+        # ‏#2851: האורך ידוע מראש (tar_size = אותם קבצים וריפוד כמו tar_stream), ואז הדפדפן
+        # מראה אחוזים ומזהה הורדה קטועה. לא הצלחנו לחשב = בלי כותרת, לא ניחוש.
+        try:
+            headers["Content-Length"] = str(tar_size(Path(manifest["_dir"])))
+        except (ArchiveError, OSError):
+            pass
         return StreamingResponse(
             tar_stream(Path(manifest["_dir"]), image_id),
             media_type="application/x-tar",
-            headers={"Content-Disposition": f'attachment; filename="{image_id}.tar"'},
+            headers=headers,
         )
 
     @router.post("/images/upload")

@@ -3,6 +3,7 @@
 // כאובייקט, לשוניות "נראו ברשת"/"דיסקים אדומים". בלי דפדפן: console.js + net.js
 // רצים ב-vm מול DOM מזערי ו-fetch מזויף, והפלט נבדק כטקסט.
 // עיקרון 5: disks null/[]/רשימה הם שלושה מצבים; "לא נקרא" ≠ ריק; "לא נבדק" לא ירוק.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -72,7 +73,7 @@ function setup() {
       if(fixtures[key]===403) return {status:403,ok:false,json:async()=>({detail:'admin only'})};
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={username:"admin",role:"admin",server_name:"srv",version:"v0.31.1",capabilities:{classrooms:true}}; current="machines"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; }; selectPageById=(id)=>{ globalThis.selected=id; current=id; };');
   for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines']]) run(name+'='+JSON.stringify(fixtures[key]));

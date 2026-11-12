@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
@@ -92,6 +93,6 @@ def test_console_relative_times_have_a_singular():
     net = (STATIC / "net.js").read_text(encoding="utf-8")
     assert '"לפני שעה"' in net and '"לפני יום"' in net and '"לפני שנייה"' in net
     assert "ימים`" in net and "${Math.round(seconds / 86400)} ימים" not in net
-    js = (STATIC / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     skew = js[js.index("function probeSkewText"):js.index("function machineVerdictsHtml")]
     assert '"יום"' in skew and '"שעה"' in skew and '"שנייה"' in skew

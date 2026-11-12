@@ -2,6 +2,7 @@
 // לחיצת-יד RFB, ומרוץ 4409. ורשימת "מחשבים מחוברים" לא התעדכנה לבד. הטסט מריץ את console.js האמיתי
 // מול DOM מזערי שמפענח innerHTML לעץ (בלי jsdom), ובודק זהות (===) של אלמנט ה-iframe.
 // בקרה שלילית: על console.js שלפני #1851 — אלמנט חדש בכל רינדור, ואין דגימה של /monitor/machines.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -104,7 +105,7 @@ function setup(fixtures) {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => v || {}};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'net.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles(), 'net.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run('ME={username:"admin",role:"admin",idle_seconds:300,capabilities:{}}; toast=()=>{}; current="monitor";');
   const content = body.querySelector('#content');

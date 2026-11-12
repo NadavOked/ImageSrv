@@ -7,6 +7,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
+const {consoleJs}=require('./console_src.cjs');   // #2594: the console's files in load order
 const root=path.resolve(__dirname,'../server/static');
 
 function setup(tasks) {
@@ -25,7 +26,7 @@ function setup(tasks) {
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
-  vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
+  vm.runInContext(consoleJs(),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={username:"admin",role:"admin",server_name:"srv",capabilities:{}}; current="images";');
   run(`IMAGES=[];FOLDERS=[];OVERVIEW={};CAPTURE_TASKS=${JSON.stringify(tasks)};CAPTURE_TASKS_READ=true`);

@@ -26,10 +26,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.console import auth
-from server.rounds import drawer_cancel, drive_rates, room_drivers, room_precheck
+from server.rounds import drawer_cancel, drive_rates, room_drivers, room_names, room_precheck
 from server.library import drivers, minfree
 from server.agent import registry, reports
-from server.disks import disk_events, disk_failures, disk_sets, drawer_slots, slot_names
+from server.disks import disk_events, disk_failures, disk_rule, disk_sets, drawer_slots, slot_names
 from server.storage import locations as storage_locations
 from server.disks import model_slots   # #2001
 from server.db import _write_lock, journal, now_iso, update_one, writing
@@ -43,11 +43,18 @@ from server.agent import timing as agent_timing   # #2056
 from server.library.images import required_bytes, restore_refusal
 from server.library.imagefit import validate_expand_choice
 from server.rounds.sessions import SessionError, SessionStore, SessionSuperseded
+#: ‏#2594: חישובי המצב הטהורים של הסבב יושבים ב-`room_state` ומיובאים לכאן בחזרה,
+#: כך ש-`room.<שם>` ממשיך לעבוד לכל קורא קיים (גם בטסטים).
+from server.rounds.room_state import (  # noqa: F401 -- re-export (#2594)
+    _cancelled, _closed, _disks, _expected, _fresh_disks, _no_disk_count, _port,
+    _red, _remaining, _roster, _selected_ports, _skipped, _unconfirmed, _written,
+    active_round, fresh_serials, has_fresh_drawers, ready_drives, red_drives,
+    target_disks, target_ports, visible_round, wave_drives,
+)
 from server.core.tasks import request_origin
 
-#: ‏#1732: מה שהמפעיל קורא על דיסק אדום — אותו משפט כמו בסוכן (smartgate.sh).
-#: עד #2044 ישב ב-`smart_ask.py`, שהוסר עם שאלת ה-SMART.
-SMART_RED_HE = "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת"
+#: ‏#1732: מה שהמפעיל קורא על דיסק אדום — אותו משפט כמו בסוכן (smart.sh). ‏#2848: מהכלל האחד.
+SMART_RED_HE = disk_rule.REASON_HE["smart_fail"]
 
 log = logging.getLogger("imagesrv.room")
 
@@ -88,31 +95,6 @@ REWAKE_BOOT_SECONDS = 180
 RATE_STALE_S = 30
 
 
-# --- שאילתות טהורות ----------------------------------------------------------
-
-
-def active_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM room_rounds WHERE state = 'active' LIMIT 1"
-    ).fetchone()
-
-
-def visible_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    """מצב החדר החי או הכושל שעדיין דורש את תשומת לב המפעיל."""
-    # החי קודם: חדר שנפתח מחדש באותה שנייה שבה הקודם נכשל חולק איתו
-    # `created_at`, והסדר לבדו החזיר את הכושל למסך (rowid שובר את השוויון).
-    row = conn.execute(
-        "SELECT * FROM room_rounds WHERE state IN ('active', 'closing') "
-        "ORDER BY created_at DESC, rowid DESC LIMIT 1"
-    ).fetchone()
-    if row is None:
-        row = conn.execute(
-            "SELECT * FROM room_rounds ORDER BY created_at DESC, rowid DESC LIMIT 1"
-        ).fetchone()
-    return (row if row is not None
-            and row["state"] in ("active", "closing", "failed") else None)
-
-
 def fail_wave(conn: sqlite3.Connection, session_id: str, reason: str,
               *, commit: bool = True) -> bool:
     """הופך כשל שולח לסופי בחדר; רק מפעיל יכול לפתוח אותו מחדש.
@@ -128,85 +110,6 @@ def fail_wave(conn: sqlite3.Connection, session_id: str, reason: str,
         return conn.execute(sql, args).rowcount == 1
     with writing(conn):
         return update_one(conn, sql, args)
-
-
-def _expected(round_row: sqlite3.Row, machines: int) -> int:
-    """‏17/10: כמה מחשבים בגל — מחשבי הסבב, לא כל הקבוצה ("1/3 מחשבים" בקונסולה על
-    סבב של מחשב אחד). לגל של חדר השיכפולים המספר אינו תנאי התחלה (`maybe_start`)."""
-    roster = _roster(round_row)
-    return len(roster) if roster else max(1, machines)
-
-
-def _roster(round_row: sqlite3.Row) -> list[str] | None:
-    """‏נדב 17/10: גל של סבב עם בחירה מעיר ומצרף רק את מחשבי השיכפול שבה —
-    ‏`wol_sent grp_CLONERS count=3` העיר את כל החדר, כולל מכונה שאסור להעיר.
-    ‏None = סבב ישן בלי בחירה: כל הקבוצה, כמו קודם (‏`store.open`)."""
-    raw = round_row["target_slots_json"]
-    return None if raw is None else sorted({item["mac"] for item in json.loads(raw)})
-
-
-def _written(round_row: sqlite3.Row) -> set[str]:
-    return set(json.loads(round_row["written_serials"]))
-
-
-def _skipped(round_row: sqlite3.Row) -> set[str]:
-    """‏#1760 (ברזל D6b, 18/10): המגירות שהסוכן דילג עליהן כאדומות בסבב הזה —
-    ‏SMART נכשל או קריאה בלבד. אדום **לעולם אינו יעד** (‏#1732), ולכן מגירה כזו
-    סגורה: לא נכתבה, אבל גם אינה "טרייה" — היא אינה פותחת גל ואינה מעירה."""
-    return set(json.loads(round_row["skipped_serials"] or "[]"))
-
-
-def _cancelled(round_row: sqlite3.Row) -> set[str]:
-    """‏#1936 (FI O2, 21/10): המגירות שמפעיל ביטל בסבב הזה ("בטל דיסק זה", #1386).
-    ביטול של מפעיל **סופי לסבב**: המגירה סגורה, לא נכתבה ואינה נכשלה — היא אינה
-    פותחת גל, אינה מעירה ואינה נכתבת שוב בגל הבא. בסבב הבא היא ירוקה ונכתבת רגיל."""
-    return set(json.loads(round_row["cancelled_serials"] or "[]"))
-
-
-def _closed(round_row: sqlite3.Row) -> set[str]:
-    """מה שהסבב כבר אינו ממתין לו: נכתב, דולג כאדום (#1760), או בוטל בידי מפעיל (#1936)."""
-    return _written(round_row) | _skipped(round_row) | _cancelled(round_row)
-
-
-def _no_disk_count(round_row: sqlite3.Row) -> int:
-    """‏#2201: כמה חריצים נסגרו בסבב כי לא היה בהם דיסק (`target_slots[].no_disk`)."""
-    return sum(len(item.get("no_disk") or [])
-               for item in json.loads(round_row["target_slots_json"] or "[]"))
-
-
-def _remaining(round_row: sqlite3.Row) -> int:
-    """כמה מגירות הסבב עוד צריך לכתוב: היעד פחות מה שנכתב, פחות מה שדולג כאדום
-    (#1760), פחות מה שמפעיל ביטל (#1936), ופחות חריץ שנבחר ולא היה בו דיסק (#2201) —
-    שלושתן סוגרות את המקום שלהן ביעד, הן אינן ממתינות להחלפה."""
-    return (round_row["target_drives"] - round_row["written_drives"]
-            - len(_skipped(round_row)) - len(_cancelled(round_row))
-            - _no_disk_count(round_row))
-
-
-def _red(disk: dict) -> bool:
-    """‏#1732: ה-hello האחרון אמר `smart: "fail"` (‏SMART נכשל או קריאה בלבד, #1742)."""
-    return disk.get("smart") == "fail"
-
-
-def _selected_ports(round_row: sqlite3.Row | None, mac: str) -> set[int] | None:
-    """הפורטים שנבחרו לכתיבה עבור המכונה הזאת בסבב. ‏None = סבב ישן (כל
-    הדיסקים). קבוצה ריקה = המכונה לא נבחרה כלל."""
-    if round_row is None or round_row["target_slots_json"] is None:
-        return None
-    for item in json.loads(round_row["target_slots_json"]):
-        if item["mac"] == mac:
-            return set(item["ports"])
-    return set()
-
-
-def _unconfirmed(round_row: sqlite3.Row, mac: str) -> set[int]:
-    """‏#1954: חריצים שנבחרו כשהמשכפל היה כבוי ועוד לא אומת שהדיסק בהם הוא זה
-    שנבחר (‏`expect` שלא נפתר — hello בלי מלאי). אינם נכתבים: "לא בדקנו" אינו
-    "אותו דיסק" (עיקרון 5)."""
-    for item in json.loads(round_row["target_slots_json"] or "[]"):
-        if item.get("mac") == mac and isinstance(item.get("expect"), dict):
-            return {int(port) for port in item["expect"]}
-    return set()
 
 
 def wake_check(conn: sqlite3.Connection, mac: str, disks) -> None:
@@ -263,123 +166,6 @@ def wake_check(conn: sqlite3.Connection, mac: str, disks) -> None:
                 f" chosen={serial} found={now or 'missing'}", machine=mac, round_id=round_row["id"])
 
 
-def target_ports(round_row: sqlite3.Row | None, mac: str,
-                 disks: list | None) -> list[int] | None:
-    """‏`session.target_ports` של מחשב שיכפול בגל: מה שהמכונה כותבת **בגל הזה**.
-
-    ‏#1790 (ברזל D2, 19/10, ‏room_41d7feed): גל 2 קיבל את כל החריצים שנבחרו, והמשכפל
-    כתב מחדש גם את מגירה 3 שכבר הצליחה בגל 1 (~6 דקות וכתיבה מלאה על דיסק תקין).
-    חריץ יוצא מהרשימה רק על **ראיה חיובית** (עיקרון 5): המלאי של ה-hello הזה עצמו
-    (`disks`) אומר שבחריץ יושב דיסק שהסידורי שלו כבר סגור **בסבב הזה** — נכתב
-    (`written_serials`) או דולג כאדום (`skipped_serials`, ‏#1760). דיסק שהוחלף (סידורי
-    אחר), דיסק בלי סידורי, או hello בלי מלאי — החריץ נשאר, והמגירה נכתבת.
-    ‏None = סבב ישן בלי בחירה (‏`_selected_ports`)."""
-    ports = _selected_ports(round_row, mac)
-    if ports is None:
-        return None
-    ports -= _unconfirmed(round_row, mac)     # #1954: chosen asleep, not yet seen to be the same disk
-    if round_row is None or not isinstance(disks, list):
-        return sorted(ports)
-    closed = _closed(round_row)
-    done, open_ = set(), set()
-    for d in disks:
-        if not isinstance(d, dict):
-            continue
-        serial = d.get("serial")
-        (done if isinstance(serial, str) and serial and serial in closed else open_).add(d.get("port"))
-    return sorted(p for p in ports if p not in done or p in open_)
-
-
-def target_disks(ports: list[int] | None, disks: list | None) -> list[dict] | None:
-    """‏#2448: ‏`session.target_disks` — לכל חריץ ב-`target_ports`, ה-serial והגודל שהקונסולה
-    מציגה בו: מה שהמלאי של **ה-hello הזה עצמו** (`disks`) שם שם. הסוכן משווה אליהם את מה
-    שנקשר ב-`target_init` (‏`drawer_shown`, ‏drawerselect.sh), ודיסק שנכנס לחריץ אחרי ה-hello
-    נכשל ("המגירה הוחלפה אחרי שנבחרה") במקום להיכתב.
-
-    חריץ שאין בו בדיוק דיסק אחד במלאי (ריק, או ששניים טוענים לו), או בלי serial/גודל —
-    ‏`null` בשדה: הסוכן אינו מוצא בו "אותו דיסק" ואינו כותב (עיקרון 5). ‏None = אין מה
-    לשלוח (סבב ישן בלי בחירה, או hello בלי מלאי) — הסוכן ממשיך לפי החריץ בלבד, כמו קודם."""
-    if ports is None or not isinstance(disks, list):
-        return None
-    out = []
-    for port in ports:
-        here = [d for d in disks if isinstance(d, dict) and _port(d.get("port")) == port]
-        one = here[0] if len(here) == 1 else {}
-        serial, size = one.get("serial"), _port(one.get("size_bytes"))
-        out.append({"port": port,
-                    "serial": serial if isinstance(serial, str) and serial else None,
-                    "size_bytes": size if size and size > 0 else None})
-    return out
-
-
-def _disks(conn: sqlite3.Connection, mac: str) -> list[dict]:
-    row = conn.execute(
-        "SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)
-    ).fetchone()
-    if row is None or not row["disks_json"]:
-        return []
-    disks = json.loads(row["disks_json"])
-    return disks if isinstance(disks, list) else []
-
-
-def fresh_serials(conn: sqlite3.Connection, mac: str, written: set[str],
-                  selected_ports: set[int] | None = None) -> list[str]:
-    """המגירות של המכונה שעוד לא נכתבו בסבב הנוכחי. ‏selected_ports מסנן
-    לפורטים שנבחרו בלבד (‏None = כל הדיסקים, סבב ישן).
-
-    ‏#105: כונן בלי serial נשאר מחוץ לרשימה **בכוונה** — `_tally` סופר
-    לפי serial, וכונן שנספר כאן כ"טרי" היה מצרף את המכונה לכל גל וכותב
-    אותו שוב ושוב בלי שייספר לעולם. הוא אינו נעלם: `drawer_list` מחזיר
-    לו `fresh: None`, והמסך אומר "לא ניתן לזהות את הכונן" בחריץ שלו."""
-    return [d["serial"] for d in _fresh_disks(conn, mac, written, selected_ports)]
-
-
-def _fresh_disks(conn: sqlite3.Connection, mac: str, written: set[str],
-                 selected_ports: set[int] | None) -> list[dict]:
-    return [
-        d for d in _disks(conn, mac)
-        if isinstance(d, dict) and d.get("serial") and d["serial"] not in written
-        and (selected_ports is None or d.get("port") in selected_ports)
-        and not _red(d)                     # #1760: red is never a target -- not fresh
-    ]
-
-
-def wave_drives(conn: sqlite3.Connection, session_id: str) -> list[dict]:
-    """‏#447: הכוננים שהגל הזה יכתוב — לפיהם נבחרת תקרת הקצב שלו.
-
-    אותן מגירות ש-`ready_drives` סופר: טריות, ובפורטים שנבחרו, של המכונות
-    שהצטרפו. גל שאינו גל של סבב חדר פעיל — רשימה ריקה, והגל יוצא בקצב
-    הפתיחה (`drive_rates.choose`)."""
-    round_row = conn.execute(
-        "SELECT * FROM room_rounds WHERE wave_session_id = ? AND state = 'active'",
-        (session_id,),
-    ).fetchone()
-    if round_row is None:
-        return []
-    written = _closed(round_row)
-    return [
-        {"serial": d["serial"], "model": d.get("model") or None,
-         "mac": member["mac"], "port": d.get("port")}
-        for member in conn.execute(
-            "SELECT mac FROM session_members WHERE session_id = ? ORDER BY mac",
-            (session_id,))
-        for d in _fresh_disks(conn, member["mac"], written,
-                              _selected_ports(round_row, member["mac"]))
-    ]
-
-
-def has_fresh_drawers(conn: sqlite3.Connection, mac: str) -> bool:
-    """שער ההצטרפות לגל: מכונה שהמגירות שלה כבר נכתבו נשארת בהמתנה.
-
-    בלי סבב חדר פעיל אין מה לסנן — מצטרפים כרגיל.
-    """
-    round_row = active_round(conn)
-    if round_row is None:
-        return True
-    return bool(fresh_serials(conn, mac, _closed(round_row),
-                              _selected_ports(round_row, mac)))
-
-
 def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
                 member: sqlite3.Row | None = None,
                 selected_ports: set[int] | None = None,
@@ -414,6 +200,7 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
             cancels = drawer_cancel.by_dev(conn, member["session_id"], mac)
     drawers = []
     disks = _disks(conn, mac)
+    failures = disk_rule.machine_failures(conn, mac, disks)   # #2848: "נכשל בשיכפול הקודם" -- צהוב
     set_labels = disk_sets.labels_for(conn, disks)   # ‏#1857: שאילתה אחת לכל המגירות
     round_smart = disk_events.last_by_serial(   # ‏#2706: מה שהסבב האחרון קרא -- שאילתה אחת
         conn, [d["serial"] for d in disks if isinstance(d, dict) and isinstance(d.get("serial"), str) and d["serial"]])
@@ -507,14 +294,36 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
             # ‏`incomplete` / `clean` / `unchecked`. ‏None = סוכן ישן — לא "תקין".
             "write_mark": disk.get("write_mark")
             if disk.get("write_mark") in ("incomplete", "clean", "unchecked") else None,
+            # ‏#2848 (נדב 11/11): בעיית SATA מה-hello (‏`link_reset` / ‏`drawer_gone`, ‏hwissues.sh) — אדום,
+            # לא יעד, כן מקור. ‏None = סוכן ישן או לא נקרא — לא "תקין"; ‏[] = נקרא, אין.
+            "sata_issues": _sata_issues(disk.get("sata_issues")),
             # ‏#710: הגודל שהסוכן דיווח (sysinfo.sh), כדי שהגריד יראה קיבולת
             # אמיתית לכל דיסק ולא 0. חסר => 0, לא נחסם (עיקרון 5).
             "size_bytes": _int(disk.get("size_bytes")),
             # ‏#432: קישור ה-SATA (מהירות/מקסימום/מצב) ועליית מונה ה-CRC מאז
             # הסבב הקודם של הדיסק. ‏None/`unknown` = לא נקרא — לא "תקין".
             **room_precheck.drawer_fields(conn, disk, mac),
+            # ‏#2848 (נדב 11/11): "איטי" אדום **רק בסבב שבו נמדד** — בדיקת הכתיבה של היעד הזה
+            # בגל הזה (‏`targets[].write_preflight`). מדידה מסבב קודם (`last_write_check`) אינה
+            # צובעת: הסבב הבא מודד מחדש, ודיסק שאינו איטי עוד חוזר לצבע של ה-SMART שלו.
+            "write_slow": _write_slow(target),
         })
+        # ‏#2848: הכלל האחד — הצבע, מקור/יעד והסיבה, כמו שהשרת אוכף (`_validate_target_slots`).
+        drawers[-1]["rule"] = disk_rule.judge_disk(drawers[-1], failures, write_slow=drawers[-1]["write_slow"])
     return drawers
+
+
+def _write_slow(target: dict) -> bool:
+    pre = target.get("write_preflight")
+    return isinstance(pre, dict) and pre.get("state") in ("slow", "failed")
+
+
+SATA_ISSUES = ("link_reset", "drawer_gone")
+
+
+def _sata_issues(value) -> list[str] | None:
+    """‏#2848: רק המילים המוכרות; מה שאינו רשימה = לא נקרא (None), לא "אין"."""
+    return [w for w in value if w in SATA_ISSUES] if isinstance(value, list) else None
 
 
 def _write_mbps(target: dict) -> int | None:
@@ -577,37 +386,6 @@ def _stalled_s(moved_at: str | None) -> int | None:
     return STALL_SECONDS if elapsed < 0 else int(elapsed)
 
 
-def ready_drives(conn: sqlite3.Connection, store: SessionStore,
-                 round_row: sqlite3.Row) -> int:
-    """כמה כוננים טריים מחוברים למכונות שכבר הצטרפו לגל הפתוח."""
-    written = _closed(round_row)
-    return sum(
-        len(fresh_serials(conn, member["mac"], written,
-                          _selected_ports(round_row, member["mac"])))
-        for member in store.members(round_row["wave_session_id"])
-    )
-
-
-def red_drives(conn: sqlite3.Connection, store: SessionStore,
-               round_row: sqlite3.Row) -> int:
-    """‏#1760: כמה מגירות שהגל הפתוח היה ממתין להן ה-hello האחרון אומר שהן
-    אדומות (ולא נכתבו או נסגרו כבר) — הסוכן ידלג עליהן, והגל אינו ממתין להן.
-    המכונות: מי שנבחר לסבב (‏roster) — גם מי שלא הצטרף, כי משכפל שכל מגירותיו
-    אדומות אינו מצטרף לעולם (‏has_fresh_drawers); סבב ישן בלי בחירה — מי שהצטרף."""
-    closed = _closed(round_row)
-    roster = _roster(round_row)
-    macs = roster if roster is not None else [
-        m["mac"] for m in store.members(round_row["wave_session_id"])]
-    count = 0
-    for mac in macs:
-        ports = _selected_ports(round_row, mac)
-        count += sum(
-            1 for d in _disks(conn, mac)
-            if isinstance(d, dict) and d.get("serial") and d["serial"] not in closed
-            and (ports is None or d.get("port") in ports) and _red(d))
-    return count
-
-
 def precheck_now(conn: sqlite3.Connection, store: SessionStore,
                  round_row: sqlite3.Row) -> list[dict]:
     """‏#432: אותן אזהרות ש-`status_view` מציג, על חברי הגל הפתוח — ברגע
@@ -640,8 +418,6 @@ def journal_precheck(conn: sqlite3.Connection, round_row: sqlite3.Row,
             item += f" link={w['link_gbps']:.1f}/{w['link_max_gbps']:.1f}"
         if w["crc_rise"]:
             item += f" crc+{w['crc_rise']}"
-        if w.get("crc_suspect"):
-            item += f" crc={w['crc']}"   # #1366: the absolute count over the threshold
         if w.get("smart_learned"):
             item += f" smart={w['smart_learned']}"   # #2707: #1859's word -- the journal says its kind too
         if w.get("port_suspect"):
@@ -650,8 +426,6 @@ def journal_precheck(conn: sqlite3.Connection, round_row: sqlite3.Row,
             item += " learned=disk"      # #1844: the same disk in different connections
         if w.get("model_slow"):
             item += " learned=slow_model"   # #1845: slower than the usual for its model
-        if w.get("write_slow"):
-            item += " learned=slow_write"   # #447: its last write check was under the fixed floor
         items.append(item)
     # שורה אחת, בלי תקרת `_one_line`: תשע מגירות לא ייחתכו באמצע (סידורי מה-hello
     # הוא קלט חיצוני — רק שבירות השורה מוחלפות).
@@ -786,14 +560,18 @@ def _validate_target_slots(conn: sqlite3.Connection, raw) -> list[dict]:
         if not set(ports) <= live:
             raise ValueError(
                 f"אי אפשר לפתוח סבב: אחת המגירות שנבחרו ב־{mac} אינה מחוברת")
-        # ‏#1732 (נדב 18/10): דיסק אדום (SMART נכשל, כפי שדווח ב-hello) לעולם
-        # אינו יעד — בכל מסלול שעובר כאן (סבב חדר, סבב ממסך משכפל, הפצה
-        # ישירה), גם כשהמסך לא סינן אותו. הסוכן מדלג עליו גם הוא (smartgate.sh).
-        red = sorted(d.get("port") for d in disks
-                     if d.get("smart") == "fail" and d.get("port") in ports)
+        # ‏#1732 (נדב 18/10): דיסק אדום לעולם אינו יעד — בכל מסלול שעובר כאן (סבב חדר, סבב
+        # ממסך משכפל, הפצה ישירה), גם כשהמסך לא סינן אותו. ‏#2848 (נדב 11/11): "אדום" הוא
+        # הכלל האחד (`disk_rule`) — SMART נכשל, קישור SATA איטי, בעיית SATA — באותו טקסט
+        # שהמסכים כותבים. ‏"איטי בסבב הזה" אינו כאן: סבב שעוד לא נפתח לא מדד דבר.
+        failures = disk_rule.machine_failures(conn, mac, disks)
+        judged = {d.get("port"): disk_rule.judge_disk(d, failures) for d in disks
+                  if d.get("serial") and d.get("port") in ports}
+        red = sorted(p for p, v in judged.items() if not v["target"])
         if red:
+            port, why = red[0], judged[red[0]]
             raise ValueError(
-                f"אי אפשר לפתוח סבב: דיסק {red[0]} ב־{mac} — {SMART_RED_HE}")
+                f"אי אפשר לפתוח סבב: דיסק {port} ב־{mac} — {why['target_reason_he']}")
         item = {"mac": mac, "ports": sorted(ports)}
         # ‏#1954 (נדב 22/10): משכפל כבוי — הבחירה היא לפי הדיווח האחרון שלו, ולכן היא
         # נקשרת ל-serial של כל דיסק שנבחר. כשהוא עולה (`wake_check`) — אותו דיסק נכתב,
@@ -813,7 +591,8 @@ def library_packages(ctx) -> list[dict]:
 
 
 def open_round(ctx, image_id: str, target_drives: int, user: str,
-               target_slots=None, expand_partition=None, driver_models=None) -> dict:
+               target_slots=None, expand_partition=None, driver_models=None,
+               hostnames=None) -> dict:
     manifest = ctx.library.get(image_id)
     if manifest is None:
         raise ValueError("אימג' לא קיים בספרייה")
@@ -848,6 +627,8 @@ def open_round(ctx, image_id: str, target_drives: int, user: str,
             "מספר היעדים בסבב קטן ממספר הדיסקים שנבחרו לגל הראשון")
     # ‏#1269: דגם דרייברים לכל דיסק יעד — אופציונלי; מאומת לפני כל כתיבה.
     chosen_drivers = room_drivers.validate(driver_models, selected, library_packages(ctx))
+    # ‏#2786: שם מחשב לכל דיסק יעד — אופציונלי; מאומת לפני כל כתיבה, כמו הדרייברים.
+    chosen_names = room_names.validate(hostnames, selected, target_drives, manifest)
     # ‏#953: אימג' שאינו נכנס למגירה הקטנה ביותר שדווחה אינו נפתח — לא רק
     # מושבת במסך. הסירוב נוקב במגירה ובמספרים; ‏409 כמו כל התנגשות עם מצב
     # החדר. בלי דיווח (`None`) אין סירוב — בדיקה 2.7 במכונה תסרב לה לבדה.
@@ -865,12 +646,13 @@ def open_round(ctx, image_id: str, target_drives: int, user: str,
     round_id = "room_" + secrets.token_hex(4)
     ctx.conn.execute(
         "INSERT INTO room_rounds (id, image_id, target_drives, target_slots_json,"
-        " expand_partition, driver_models_json, state, wave_session_id, opened_by,"
-        " created_at) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)",
+        " expand_partition, driver_models_json, hostnames_json, state, wave_session_id,"
+        " opened_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)",
         (round_id, image_id, target_drives,
          json.dumps(selected, separators=(",", ":")),
          expand_choice,
          json.dumps(chosen_drivers, ensure_ascii=False) if chosen_drivers else None,
+         json.dumps(chosen_names, ensure_ascii=False) if chosen_names else None,
          wave_id, user, now_iso()),
     )
     ctx.conn.commit()
@@ -881,7 +663,9 @@ def open_round(ctx, image_id: str, target_drives: int, user: str,
             # ‏#59: אותו כלל כמו session_open — "auto" אינו נרשם, כדי
             # שסבב שלא נגע בהרחבה לא ייראה כמו החלטה שמישהו קיבל.
             + (f" expand={expand_choice}" if expand_choice != "auto" else "")
-            + (f" drivers={len(chosen_drivers)}" if chosen_drivers else ""),
+            + (f" drivers={len(chosen_drivers)}" if chosen_drivers else "")
+            + (f" names={chosen_names['names'][0]['name']}..{chosen_names['names'][-1]['name']}"
+               if chosen_names else ""),
             user, round_id=round_id)
     return {"id": round_id, "wave_session_id": wave_id}
 
@@ -1593,10 +1377,6 @@ def _tally(conn: sqlite3.Connection, round_row: sqlite3.Row,
             cancelled - written)
 
 
-def _port(value) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
 def _reported_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
                       member: sqlite3.Row) -> set[int]:
     """‏#2201: החריצים שהמשכפל קיבל לגל הזה (`target_ports`) ואין להם יעד בדיווח שלו.
@@ -2171,7 +1951,9 @@ def status_view(ctx) -> dict:
             "stream_stalled": _stream_stalled(machines),
             # ‏#953: הרצפה שהמסך משווה אליה כל אימג' לפני פתיחת סבב — אותה
             # רצפה בדיוק שהשרת מסרב לפיה, ממקום אחד. ‏null = אין דיווח.
-            "disk_floor": disk_floor(ctx.conn)}
+            "disk_floor": disk_floor(ctx.conn),
+            # ‏#2786: ריפוד וסיומת המרצה לתבנית השמות — גם למפעיל הפצה.
+            "clone_names": room_names.settings_view(ctx.conn)}
     if round_row is not None:
         slots = (json.loads(round_row["target_slots_json"])
                  if round_row["target_slots_json"] else None)
@@ -2193,6 +1975,8 @@ def status_view(ctx) -> dict:
             "expand_partition": round_row["expand_partition"] or "auto",
             # ‏#1269: דגם הדרייברים לכל דיסק יעד; ‏null = הסבב בלי דרייברים.
             "driver_models": room_drivers.view(round_row),
+            # ‏#2786: שם המחשב לכל דיסק יעד; ‏null = השם שבאימג' נשאר.
+            "hostnames": room_names.view(round_row),
             "written_drives": round_row["written_drives"],
             # ‏#1760: מגירות שדולגו כאדומות — סגורות, לא נכתבו, ואינן "נותרו".
             "skipped_drives": len(_skipped(round_row)),
@@ -2364,6 +2148,8 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
             # ‏#715: `source: {kind: build_disk, mac, disk}` — המקור הוא דיסק
             # במחשב הבנייה, אין `image_id`, והיעדים הם בחירה מפורשת.
             if isinstance(source, dict) and source.get("kind") == _direct().BUILD_DISK:
+                if body.get("hostnames") is not None:   # #2786: לא נשמט בשקט
+                    raise ValueError("שמות מחשב — רק בסבב מהספרייה, לא בהפצה ישירה")
                 return _direct().open_direct_round(
                     ctx, source, body.get("target_slots"),
                     body.get("target_drives"), user[0],
@@ -2375,6 +2161,7 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
                 body.get("target_slots"),          # #1410: explicit, non-empty selection is required
                 body.get("expand_partition"),      # #59: בחירת ההרחבה (אופציונלי)
                 body.get("driver_models"),         # #1269: דרייברים לכל דיסק (אופציונלי)
+                body.get("hostnames"),             # #2786: שם מחשב לכל דיסק (אופציונלי)
             )
         except SessionError as exc:       # לפני ValueError — הוא יורש ממנו
             raise HTTPException(409, str(exc))

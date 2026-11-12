@@ -23,14 +23,11 @@ static const char *folder_shown(const App *a) {
     return a->st.nfolders ? "בחרו תיקייה" : "אין תיקיות — צרו חדשה ב-\"+ חדשה\"";
 }
 
-void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h) {
-    const Theme *t = a->theme;
+/* The disks of the picker in the order they are drawn: internal only, by drawer.
+ * #2872: the keyboard walks this same list, so "1" is the first card on screen. */
+int pick_disk_order(const App *a, int *idx) {
     const State *s = &a->st;
-    double inner = card_width(W) - 2 * N_PAD;
-    Head hd = head_make(cr, "בחר דיסק לקליטת אימג׳", "בחר את דיסק המקור שממנו ייווצר האימג'.", inner);
-
-    /* drawDisks: internal disks only (removable filtered out) */
-    int idx[MAX_DISKS], n = 0;
+    int n = 0;
     for (int i = 0; i < s->ndisks; i++) if (!s->disks[i].removable) idx[n++] = i;
     for (int i = 1; i < n; i++) {
         int v = idx[i], vd = s->disks[v].slot_known ? eff_drawer(s->disks[v].drawer, 0) : 0;
@@ -43,6 +40,17 @@ void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h) {
         }
         idx[j] = v;
     }
+    return n;
+}
+
+void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h) {
+    const Theme *t = a->theme;
+    const State *s = &a->st;
+    double inner = card_width(W) - 2 * N_PAD;
+    Head hd = head_make(cr, "בחר דיסק לקליטת אימג׳", "בחר את דיסק המקור שממנו ייווצר האימג'.", inner);
+
+    /* drawDisks: internal disks only (removable filtered out) */
+    int idx[MAX_DISKS], n = pick_disk_order(a, idx);
 
     /* nativePick .disk-row: grid 44px | 1fr | auto, gap 12, padding 12, radius 3;
      * .disk-main strong 12px + small 9px muted ("/dev/nvme0n1 · 1.0 TB");
@@ -143,6 +151,11 @@ void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h) {
         sel_r = (Rect){ x + bw + N_ACTION_GAP, y, inner - bw - N_ACTION_GAP, in_h };
         draw_select(a, cr, sel_r, folder_shown(a), HIT_FOLDER);
         draw_btn(a, cr, (Rect){ x, y + (row_h - btn_h) / 2, bw, btn_h }, &nf, BTN_PLAIN, HIT_NEWFOLDER);
+        if (a->focus == HIT_NEWFOLDER) {   /* #2872: the keyboard is here -- the ring of a focused field, round the button */
+            Rect b = { x, y + (row_h - btn_h) / 2, bw, btn_h }, ring = { b.x - 1.5, b.y - 1.5, b.w + 3, b.h + 3 };
+            draw_rrect_path(cr, ring, RADIUS_SM + 1.5);
+            draw_set_a(cr, t->indigo, .25); cairo_set_line_width(cr, 3); cairo_stroke(cr);
+        }
         y += row_h;
         if (a->newfolder_shown) {
             draw_field(a, cr, (Rect){ x, y, inner, in_h }, a->folder_new, 0, "שם התיקייה החדשה", HIT_FOLDER_NEW);

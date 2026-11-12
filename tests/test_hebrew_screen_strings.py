@@ -35,6 +35,7 @@ import re
 from pathlib import Path
 
 from agentlib import lib_files
+from console_src import console_js
 
 import pytest
 
@@ -245,7 +246,7 @@ def _attended_questions() -> list[tuple[str, str]]:
 
 
 def _prompt_he() -> dict[str, str]:
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     block = re.search(r"const PROMPT_HE = \{(.*?)\};", js, re.S)
     assert block, "PROMPT_HE לא נמצא ב-console.js"
     pairs = re.findall(r'(?:"([^"]*)"|([A-Za-z_]\w*))\s*:\s*"([^"]*)"', block.group(1))

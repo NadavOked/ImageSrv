@@ -1,11 +1,12 @@
 // Nadav 18/10: automatic logout when idle -- a switch, and "אחרי N דקות" while it is on. Minutes in the
 // console, seconds on the server (console_idle_seconds; 0 = off; a fresh install: 600 = on, 10 minutes).
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 function functionSource(name) {
   const lines = js.split('\n');

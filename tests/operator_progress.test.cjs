@@ -1,4 +1,5 @@
 // Run the shipped renderers, including on the pre-fix sources. No DOM package.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -7,7 +8,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../server/static');
 
 function functionSource(file, name) {
-  const source = fs.readFileSync(path.join(root, file), 'utf8');
+  const source = consoleJs();
   const lines = source.split('\n');
   const start = lines.findIndex(line => new RegExp(`^(\\s*)(async )?function ${name}\\(`).test(line));
   assert.ok(start >= 0, `renderer ${name} exists`);

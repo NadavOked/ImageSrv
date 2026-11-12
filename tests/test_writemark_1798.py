@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from console_src import console_js
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
 from test_capture_refusals import capture_run, refusal_reason
@@ -320,7 +321,7 @@ def test_the_kiosk_carries_the_mark_as_lc_disk_field_16(tmp_path):
     fields = line[len("lc_disk="):].split("|")
     # field 17 is #1921's hardware note, 18 #2001's stick connection name (both empty
     # here); the mark stays field 16
-    assert len(fields) == 18 and fields[13:16] == ["2", "SATA 1", "incomplete"], fields
+    assert len(fields) == 19 and fields[13:16] == ["2", "SATA 1", "incomplete"], fields
 
 
 #: sgdisk -p of a disk whose write was cut: the marked partitions.
@@ -419,6 +420,9 @@ def test_the_room_drawer_list_carries_the_mark_and_an_old_agent_is_not_clean():
                 def fetchone(self):
                     return {"disks_json": json.dumps(disks)}
 
+                def fetchall(self):   # #2848: drawer_list asks disk_failures.open_for -- none here
+                    return []
+
                 def __iter__(self):   # #1857: drawer_list also asks disk_sets.labels_for -- no set here
                     return iter(())
             return _R()
@@ -434,7 +438,8 @@ def test_the_room_drawer_list_carries_the_mark_and_an_old_agent_is_not_clean():
 
 
 def test_the_console_says_it_in_orange_and_still_offers_the_disk_as_a_target():
-    js = (AGENT.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert f'const WRITE_MARK_HE = "{MARK_HE}";' in js
-    assert 'if (d.write_mark === "incomplete") why.push(WRITE_MARK_HE);' in js   # a warning in the pick grid
-    assert 'if (d.write_mark === "incomplete") return chip("w", WRITE_MARK_HE);' in js   # "w" = orange
+    # #2848: the one rule reads the mark -- yellow: a target, never a source (the pick grid says the rule's words)
+    assert 'write_incomplete: d.write_mark === "incomplete"' in js and 'write_incomplete: "כתיבה לא הושלמה' in js
+    assert 'if (d.write_mark === "incomplete") return chip("y", WRITE_MARK_HE);' in js   # #2848: "y" = yellow, a target

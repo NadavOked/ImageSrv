@@ -27,6 +27,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from console_src import console_js
 from native import requires_native  # noqa: E402
 from test_server_room import CLONER1, CLONER2, _open_with_slots, cloner_hello, room, room_server  # noqa: E402,F401
 
@@ -149,7 +150,7 @@ NODE = shutil.which("node")
 
 @requires_native(("node", NODE))
 def test_the_console_lets_a_sleeping_cloners_disk_be_ticked_and_says_wol(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     names = ["roomPickSlots", "roomWakeSkipped"]
     pick = {n: re.search(rf"^function {n}\(.*?^\}}", js, re.M | re.S) for n in names}
     assert pick["roomPickSlots"], "roomPickSlots is gone from console.js"
@@ -166,6 +167,7 @@ let IMAGES = [], DEPLOY = { form: { image: "" } };
 const ROOM = { machines: [{ mac: "m1", awake: false }, { mac: "m2", awake: true }] };
 const roomMachine = (mac) => ROOM.machines.find((x) => x.mac === mac);
 const slotClass = () => "ok";
+const slotRule = () => ({ color: "green", source: true, target: true });   // #2848
 const machineSlots = (m) => ({ slots: [{ n: 1, disk: { port: 1, serial: "S1", size_bytes: 1 }, fail: null }] });
 """ + "\n".join(src.values()) + """
 const slots = roomPickSlots([{ mac: "m1", name: "1" }, { mac: "m2", name: "2" }]);

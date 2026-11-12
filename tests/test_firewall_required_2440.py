@@ -90,6 +90,7 @@ def test_completing_the_install_without_a_firewall_continues_with_a_warning(tmp_
     from server.db import connect
     conn = connect(tmp_path / "x.db")
     hooks = {
+        "interfaces": lambda: [{"name": "eth1"}],
         "write_grub_cfg": lambda url, root: None,
         "enable_dnsmasq": lambda: None,
         "firewall": lambda repo, **kw: deploy_net.regenerate_firewall(
@@ -112,8 +113,11 @@ def test_nic_services_on_a_server_without_a_firewall_journal_it(tmp_path, images
         servers_interface="eth0",
         hooks={"firewall": lambda repo, **kw: deploy_net.regenerate_firewall(
             repo, **kw, conf=tmp_path / "absent.conf")})
+    # ‏#1810: הצעד בודק שכרטיס ההפצה (eth1) קיים לפני שהוא מחולל כללים —
+    # רשימת הכרטיסים מוזרקת (#113), לא נקראת מהמכונה שמריצה את הבדיקה.
     app = server.app.create_app(tmp_path / "data", images_root, "http://10.44.9.10:8080",
-                                deploy=deploy)
+                                deploy=deploy, health_hooks={
+                                    "interfaces": lambda: [{"name": "eth0"}, {"name": "eth1"}]})
     ctx = app.state.ctx
     assert ctx.nic_services.hooks["firewall"](ctx.nic_services) is None
     events = [r["event"] for r in ctx.conn.execute("SELECT event FROM journal")]

@@ -1,11 +1,12 @@
 // #1857 (mockup 04): the disks page + sets tab. disks.js runs in a vm with the few console.js helpers stubbed.
+const {consoleJs: readConsoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const disks = fs.readFileSync(path.resolve(__dirname, '../server/static/disks.js'), 'utf8');
-const consoleJs = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const consoleJs = readConsoleJs();
 
 function make(state = {}) {
   const sheets = [];

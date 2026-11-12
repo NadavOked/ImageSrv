@@ -2,6 +2,7 @@
 // Gmail = כתובת + סיסמת אפליקציה בלבד; Microsoft = מזהה אפליקציה + tenant תחת "מתקדם", ומשפט הסבר ליד
 // "התחבר" כשהם ריקים; Relay = "הכי פשוט…"; בלי "המייל כפי שנשלח" ובלי "שליחה עכשיו"; השרת קובע.
 // בלי דפדפן: progress.js + console.js + email_alerts.js ב-vm מול DOM מזערי ו-fetch מזויף.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -44,7 +45,7 @@ function setup(fixtures={}) {
       if(f && f.__status) return {status:f.__status,ok:false,json:async()=>({detail:f.detail})};
       return {status:200,ok:true,json:async()=>f ?? {}};
     }});
-  for(const f of ['progress.js','console.js','branches.js','email_alerts.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'branches.js','email_alerts.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",version:"v0.78.0",capabilities:{}}; SETTINGS={}; current="settings"; globalThis.sheets=[]; globalThis.toasts=[];'
     +'sheet=o=>{sheets.push(o);}; toast=(m,ms,kind)=>{toasts.push([m,kind]);}; renderCurrent=()=>{globalThis.rendered=(globalThis.rendered||0)+1;};'
@@ -56,14 +57,15 @@ const lastSheet=(s)=>s.run('sheets[sheets.length-1]');
 test('the tab: admin only, never in a secondary context, and its own index when there are no secondaries', () => {
   const s=setup();
   assert.equal(s.run('emailAlertsAllowed()'),true);
-  s.run('currentTab=1; EM_VIEW=null; EM_ERR=""');
+  // ‏#2786: "שמות מחשב" היא תמיד הלשונית השנייה — הלשוניות האלה זזות אחריה באחת.
+  s.run('currentTab=2; EM_VIEW=null; EM_ERR=""');
   assert.match(s.run('settings()'),/התראות במייל/);
-  assert.match(s.run('settings()'),/טוען…/,'tab 1 is the email tab when there is no "שרתי משנה" tab');
-  s.run('ME.capabilities={enroll_secondary:true}; BRANCH_READY=true; BRANCH_NODES=[]; BRANCH_ERR=""; currentTab=2');
+  assert.match(s.run('settings()'),/טוען…/,'tab 2 is the email tab when there is no "שרתי משנה" tab');
+  s.run('ME.capabilities={enroll_secondary:true}; BRANCH_READY=true; BRANCH_NODES=[]; BRANCH_ERR=""; currentTab=3');
   const html=s.run('settings()');
-  assert.ok(html.indexOf('שרתי משנה')<html.indexOf('התראות במייל'),'order: כללי, שרתי משנה, התראות במייל');
+  assert.ok(html.indexOf('שרתי משנה')<html.indexOf('התראות במייל'),'order: כללי, שמות מחשב, שרתי משנה, התראות במייל');
   assert.match(html,/טוען…/);
-  s.run('currentTab=1'); assert.match(s.run('settings()'),/אין עדיין שרת משנה/,'tab 1 stays the secondaries tab');
+  s.run('currentTab=2'); assert.match(s.run('settings()'),/אין עדיין שרת משנה/,'tab 2 stays the secondaries tab');
   s.run('ME.role="deploy"'); assert.equal(s.run('emailAlertsAllowed()'),false);
   s.run('ME.role="admin"; SERVER_CTX="n1"'); assert.equal(s.run('emailAlertsAllowed()'),false);
 });

@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server import db
 from server.rounds import drive_rates
 
@@ -83,7 +84,7 @@ def test_the_journal_says_the_rate_came_from_another_drawer_count(conn):
 
 def test_the_room_screen_explains_the_drawers_basis():
     """הבסיס החדש מוסבר למפעיל במסך החדר, ולא מוצג כמילה גולמית."""
-    source = (STATIC / "console.js").read_text(encoding="utf-8")
+    source = console_js()
     table = source[source.index("const WAVE_RATE_WHY"):]
     table = table[:table.index("};")]
     assert re.search(r"\bdrawers:\s*\"[^\"]+\"", table), table

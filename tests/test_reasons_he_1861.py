@@ -28,6 +28,7 @@ from agentlib import flat_lib, lib_files
 
 import pytest
 
+from console_src import console_js
 from server.console import journal_he
 from server.agent import reports
 from server.disks.ata_cause import CAUSES
@@ -36,7 +37,6 @@ from test_smart import BASH, HEALTH_FAIL, HEALTH_OK, PRELUDE, full, preflight
 REPO = Path(__file__).resolve().parent.parent
 LIB = flat_lib()
 ROUNDS = REPO / "native-gui" / "src" / "screens_rounds.c"
-CONSOLE = REPO / "server" / "static" / "console.js"
 HEBREW = re.compile("[א-ת]")
 
 needs_bash = pytest.mark.skipif(BASH is None, reason="bash נדרש לסוכן ה-POSIX")
@@ -228,14 +228,14 @@ def test_the_native_gui_has_words_for_every_verdict():
 
 
 def _js_map(name: str) -> dict[str, str]:
-    block = re.search(r"const " + name + r" = \{([^}]*)\}", _read(CONSOLE))
+    block = re.search(r"const " + name + r" = \{([^}]*)\}", console_js())
     assert block, f"{name} is gone from console.js"
     return dict(re.findall(r'(\w+):\s*"([^"]+)"', block.group(1)))
 
 
 def test_the_console_has_words_for_every_reason():
     said = set(_js_map("SMART_REASON_HE")) | set(_js_map("FAILURE_CAUSE_HE")) | set(_js_map("SMART_UNCHECKED_HE"))
-    if "SMART_WARN_HE" in _read(CONSOLE):   # #1859
+    if "SMART_WARN_HE" in console_js():   # #1859
         said |= set(_js_map("SMART_WARN_HE"))
     assert not set(reason_words()) - said, sorted(set(reason_words()) - said)
 

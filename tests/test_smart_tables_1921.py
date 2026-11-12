@@ -94,10 +94,12 @@ def test_both_files_are_well_formed_and_no_name_is_in_both():
     smart = {(r["kind"], r["id"], r["name"]) for r in smart_names._load(smart_names.SMART_TABLE)}
     hw = {(r["kind"], r["id"], r["name"]) for r in smart_names._load(smart_names.HW_TABLE)}
     assert not smart & hw
-    # CRC is the hardware table's, never the disk's colour (Nadav 20/10)
+    # CRC is the hardware table's, never the disk's colour (Nadav 20/10) -- and since #2846 (Nadav
+    # 11/11) an absolute count is information only: no rule, no note. Only a rise is said (crc_delta).
     for i, n in ((199, "UDMA_CRC_Error_Count"), (199, "CRC_Error_Count"), (218, "CRC_Error_Count"), (210, "SATA_CRC_Error_Count")):
-        assert smart_names.ATA[(i, n)]["table"] == "hw" and smart_names.ATA[(i, n)]["verdict"] == "hw"
-    assert set(smart_names.HW) == {"link_slow", "link_reset", "drawer_gone", "usb2", "ide", "crc", "icrc_logged"}
+        r = smart_names.ATA[(i, n)]
+        assert (r["table"], r["verdict"], r["op"], r["word"]) == ("hw", "info", None, "crc"), r
+    assert set(smart_names.HW) == {"link_slow", "link_reset", "drawer_gone", "usb2", "ide", "icrc_logged"}
 
 
 def test_every_orange_and_red_word_has_its_sentence_everywhere():
@@ -111,23 +113,23 @@ def test_every_orange_and_red_word_has_its_sentence_everywhere():
     assert {r["word"] for r in rows if r["verdict"] == "red"} == {"media_readonly", "health_failed"}
 
 
-# --- the real cloner-2 disks: CRC moves to the drawer, the disk is green -------------------
+# --- the real cloner-2 disks: green, and their CRC history says nothing (#2846) -----------
 
 
-@pytest.mark.parametrize("name,crc", [("cloner2-sda.txt", "1752"), ("cloner2-sdb.txt", "1694"),
-                                      ("cloner2-sdc.txt", None), ("cloner2-sdd.txt", "667")])
-def test_the_cloner2_disks_are_green_and_crc_is_a_drawer_note(tmp_path, name, crc):
+@pytest.mark.parametrize("name", ["cloner2-sda.txt", "cloner2-sdb.txt", "cloner2-sdc.txt", "cloner2-sdd.txt"])
+def test_the_cloner2_disks_are_green_and_their_crc_history_is_no_note(tmp_path, name):
+    """1752 / 1694 / 667 -- history (#2846): no hw finding, no drawer note, whatever the setting."""
     found = judge(fixture(name), tmp_path)
     assert [f for f in found if f[0] in ("red", "orange", "unknown")] == [], found   # every name known
-    assert [f[5] for f in found if f[0] == "hw"] == ([crc] if crc else [])
-    verdict, rec, run = probe(tmp_path, fixture(name), crc=500)
+    assert [f for f in found if f[0] == "hw"] == [], found
+    verdict, rec, run = probe(tmp_path, fixture(name), crc=1)
     assert (verdict, rec[:2]) == ("ok", ["ok", "ok"])
-    assert ("crc" in (run / "smart" / "sda.hw").read_text().split()) == bool(crc)
+    assert "crc" not in (run / "smart" / "sda.hw").read_text().split()
 
 
-def test_the_server_says_crc_as_a_drawer_note_not_the_disks_colour(tmp_path):
-    """Coordinator 20/10: the server works the same way with both tables -- the console's disk view
-    carries the hardware note, and the CRC row is the hardware table's, not a disk verdict."""
+def test_the_server_shows_crc_as_information_only(tmp_path):
+    """Coordinator 20/10: the server works the same way with both tables. #2846: the CRC row is the
+    hardware table's, as information -- no note, whatever crc_warn_threshold holds."""
     from server import db
     from server.disks import smart_history
     conn = db.connect(tmp_path / "t.db")
@@ -136,17 +138,10 @@ def test_the_server_says_crc_as_a_drawer_note_not_the_disks_colour(tmp_path):
                      [198, 0, 0, 0, 48211, "Host_Reads_GiB"]], "nvme": None}
     view = smart_history.describe(conn, {"serial": "S9", "dev": "sda", "smart_attrs": attrs})
     by = {a["id"]: a for a in view["attributes"]}
-    assert (by[199]["table"], by[199]["verdict"]) == ("hw", "hw")
+    assert (by[199]["table"], by[199]["verdict"]) == ("hw", "info")
     assert (by[5]["table"], by[5]["verdict"]) == ("smart", "ok")
     assert by[198]["verdict"] == "info" and by[198]["critical"] is False, "OCZ's host reads are not 198 (#1922)"
-    assert [h["word"] for h in view["hw"]] == ["crc"] and "לא הדיסק" in view["hw"][0]["he"]
-    db.set_setting(conn, "crc_warn_threshold", "0")
-    assert smart_history.describe(conn, {"serial": "S9", "dev": "sda", "smart_attrs": attrs})["hw"] == []
-
-
-def test_crc_threshold_0_is_the_note_off(tmp_path):
-    """crcwarn.py: 0 = off (the server's default is 500 since 21/10); the agent follows it."""
-    assert judge(fixture("cloner2-sda.txt"), tmp_path, crc=0) == []
+    assert view["hw"] == [], view["hw"]
 
 
 # --- by (id, name) -----------------------------------------------------------------------
@@ -193,7 +188,7 @@ def test_the_agent_and_the_server_judge_every_attribute_alike(tmp_path):
             if not m:
                 continue
             i, n, value, raw = int(m[1]), m[2], int(m[3]), int(m[4])
-            server = smart_names.judge_ata(i, n, value, raw, media=media, crc=500)
+            server = smart_names.judge_ata(i, n, value, raw, media=media)
             agent = found.get((i, n), "ok" if server in ("ok", "info") else None)
             assert agent == server or (server in ("ok", "info") and (i, n) not in found), (f.name, i, n, server, agent)
 
@@ -413,7 +408,7 @@ def test_the_hw_words_are_read_again_after_the_write():
 
 def test_the_hw_sentences_come_from_the_table():
     from server.disks import smart_names
-    for w in ("link_slow", "link_reset", "drawer_gone", "usb2", "ide", "crc", "icrc_logged"):
+    for w in ("link_slow", "link_reset", "drawer_gone", "usb2", "ide", "icrc_logged"):
         out = sh(f'export SMART_KB={posix(DATA)}; . {posix(AGENT)}/lib/smart/smartjudge.sh; smart_kb_he {w} | od -An -c | tr -d " \\n" | head -c 40')
         assert out.returncode == 0 and out.stdout.strip(), w   # bytes printed (od: no locale in the way)
         he = smart_names.hw_sentence(w)

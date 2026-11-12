@@ -67,6 +67,9 @@ PAIRS = [
     ("--clr-danger-fg", "--clr-bg"),
     ("--clr-warning-fg", "--clr-surface"), ("--clr-warning-fg", "--clr-warning-soft"),
     ("--clr-warning-fg", "--clr-bg"),
+    # #2848: yellow -- its words on its own fill, and dark words on the yellow chip
+    ("--clr-yellow-fg", "--clr-surface"), ("--clr-yellow-fg", "--clr-yellow-soft"), ("--clr-yellow-fg", "--clr-bg"),
+    ("--clr-yellow-on", "--clr-yellow"),
 ]
 
 

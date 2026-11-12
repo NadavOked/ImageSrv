@@ -2,6 +2,7 @@
 // (logs/2026-09-14/224824-front-design-audit.md): selector, מאפיין, שורת CSS.
 // בלי דפדפן ובלי JSDOM: console.js רץ ב-vm מול DOM מזערי שמדמה רק את מה
 // שהעץ צריך (classList/attributes/parentElement), והשאר נבדק כטקסט.
+const {consoleJs, consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -103,7 +104,7 @@ function setup(build = buildTree) {
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
   vm.runInContext(read('progress.js'), ctx);
-  vm.runInContext(read('console.js'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(read(f), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run('ME={username:"admin",role:"admin",idle_seconds:300,capabilities:{}}; toast=()=>{};');
   return {run, tree, document};
@@ -194,7 +195,7 @@ test('#1300 rail: on a wide screen ☰ toggles full tree ↔ icon rail, and the 
   run('localStorage={getItem(){throw new Error("blocked")},setItem(){throw new Error("blocked")}}; NAV_PREF="rail"; restoreNav()');
   assert.equal(app.getAttribute('data-nav'), 'full', 'unreadable storage = the full tree, no crash');
   run('navButton()'); assert.equal(app.getAttribute('data-nav'), 'rail', 'and toggling still works without storage');
-  assert.doesNotMatch(read('console.js'), /nav-collapsed|setNavCollapsed|NAV_COLLAPSE_KEY|restoreNavCollapsed/, 'the old hide-the-tree collapse is gone');
+  assert.doesNotMatch(consoleJs(), /nav-collapsed|setNavCollapsed|NAV_COLLAPSE_KEY|restoreNavCollapsed/, 'the old hide-the-tree collapse is gone');
 });
 test('#1300 rail: up to 900px the rail is the default whatever is stored; ☰ opens the full tree as a drawer and does not change the stored choice; Escape never touches the wide choice', () => {
   const {run, tree, document} = setup();
@@ -525,7 +526,7 @@ test('#1300 rail: up to 900px the column is the rail (not hidden — the content
   assert.match(css, /@media \(max-width:900px\)\{\.main\{grid-template-columns:var\(--rail-w\) minmax\(0,1fr\)\}\}/);
   assert.doesNotMatch(css, /\.sidebar\{display:none\}/, 'the sidebar is never removed — narrow shows the rail');
   assert.doesNotMatch(css, /\.sidebar\.open\{[^}]*position:fixed/, 'the old whole-sidebar overlay is gone');
-  assert.match(read('console.js'), /function navIsNarrow\(\) \{ return window\.matchMedia\("\(max-width:900px\)"\)\.matches; \}/);
+  assert.match(consoleJs(), /function navIsNarrow\(\) \{ return window\.matchMedia\("\(max-width:900px\)"\)\.matches; \}/);
 });
 test('#1300: every way into a page or a drawer from the tree closes the overlay', () => {
   const {run, tree} = setup();
@@ -538,7 +539,7 @@ test('#1300: every way into a page or a drawer from the tree closes the overlay'
 // ‏#1303: "אימות ספרייה" בתפריט "+ פעולה" הציג "בקרוב" למרות ש-POST /images/scrub קיים — מחובר ל-scrubLibrary();
 // ה-stubs המתים של soon() נמחקו (כלל נדב 11/10: מה שבוטל — נמחק, לא מוסתר).
 test('#1303: the library-verify action is the real scrub, and the soon() stubs are gone', () => {
-  const js = read('console.js');
+  const js = consoleJs();
   assert.match(js, /\["אימות ספרייה", "scrubLibrary\(\)"\]/);
   for (const dead of ['function soon()', 'function createImage()', 'function openNewImage()', 'function verifyLibrary()', 'function exportRounds()',
     'function runHealthCheck()', 'function openServicesDrawer()', 'function testNetwork()', 'function rollbackNetwork()']) assert.ok(!js.includes(dead), dead);

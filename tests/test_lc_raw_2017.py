@@ -321,7 +321,7 @@ def test_a_raw_partition_that_the_table_grew_keeps_its_filesystem(tmp_path):
 
 def test_an_mbr_disk_is_refused_by_its_v11_name():
     text = (AGENT / "lib" / "localclone" / "lcinv.sh").read_text(encoding="utf-8")
-    assert 'mbr) _li_why="טבלת MBR — שיכפול מקומי של MBR יגיע ב-v1.1"' in text
+    assert 'mbr) _li_why="טבלת MBR — שיכפול מקומי של MBR עוד לא נתמך"' in text
     assert "מעתיק GPT בלבד" not in text
 
 

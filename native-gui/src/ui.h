@@ -300,8 +300,11 @@ typedef struct {
     char drv_boot[12], drv_bsvc[24], drv_berr[160];
     /* #1331 T8: room_drawer fields 24-26 -- drivers.linux: state, module, error|reason */
     char drv_lstate[12], drv_lmod[12], drv_ldet[160];
-    int link_slow;      /* #432: room_drawer field 12 = link_state "slow" -- orange like a SMART warning */
-    long crc_suspect;   /* #1366: field 13 -- the CRC count over crc_warn_threshold, orange; 0 = no */
+    int link_slow;      /* #432: room_drawer field 12 = link_state "slow"; #2848 (Nadav 11/11): red, not a target */
+    /* #2848: room_drawer_rule=mi|serial|color|target|source|reason -- the server's one rule (disk_rule.py):
+     * rule_color DR_* (disk_rule.h), rule_target / rule_source 0/1, rule_reason its word. rule_set 0 = an
+     * older server: no line, the drawer's own SMART and link decide as before. */
+    int rule_set, rule_color, rule_target, rule_source; char rule_reason[24];
     char slot_name[SLOT_NAME_MAX];
     int drawer; char conn[32];
     /* 17/10: room_drawer fields 16-17 -- the drawer's own target in the wave:
@@ -353,18 +356,24 @@ typedef struct {
     /* #2055: a drawer_moved= record -- when its bytes last moved (epoch; 0 = not said) */
     long long moved;
     RbBar rb;   /* #2046: a drawer_rbp= record -- the read-back's bar and verdict */
+    int group;  /* #2849: the cloner_group= it came under (build machine, direct send); -1 = none */
 } Drawer;
 /* A physically connected disk shown on the cloner's IDLE screen (no round yet),
  * so the operator sees what is plugged in before a broadcast starts. */
 typedef struct { int port; char dev[32], model[48]; unsigned long long size; char smart[16];
                  char cause[32]; /* #874: cable|disk|unclassified for failed_last, else ""; #1921: 32 -- reported_uncorrectable */
                  char link[8], link_max[8]; /* #432: "6.0" Gb/s; "" = not read, never "fine" */
-                 long crc_suspect; /* #1366: field 9 -- the CRC count over crc_warn_threshold; 0 = not over / not read */
                  int drawer; char conn[32];
                  char mark[12]; /* #1798: field 12 -- incomplete|unchecked; "" = clean or not reported */
                  char hw[240]; /* #1921: field 13 -- the drawer's hardware note (hw-issues.tsv), never the disk's colour */
                  char f1_date[12], f1_src[8]; /* #1858: fields 14/15 -- "נצפה F1" by serial: YYYY-MM-DD and manual|auto; "" = not marked */
-                 char f1_smart[16]; /* #1858: field 16 -- the disk's own SMART beneath the F1 red (passed|warn|fail|unchecked); "" = not known */ } IdleDisk;
+                 char f1_smart[16]; /* #1858: field 16 -- the disk's own SMART beneath the F1 red (passed|warn|fail|unchecked); "" = not known */
+                 int sata_bad; /* #2848: field 17 (the hw words) has a SATA problem (hw_words_red) -- red */
+                 int sata_issue; /* #2848: of those, link_reset / drawer_gone (the slow link is link_slow()) */ } IdleDisk;
+/* #2848 (Nadav 11/11): hwissues.sh's words, space-separated -- link_slow / link_reset / drawer_gone is a SATA
+ * problem: the disk is red, never a target, still a source. usb2 and icrc_logged stay a note. */
+int hw_words_red(const char *words);
+int hw_words_has(const char *words, const char *word);   /* #2848: one word of hwissues.sh's, space-separated */
 typedef struct { char conn[32], name[SLOT_NAME_MAX]; int set; } ClonerBay;
 /* #2030: cused=dev|size|used -- the size of a disk of this cloner and the bytes
  * in use on it (diskused.sh). used -1 = not measured: said so, never 0. */
@@ -394,6 +403,9 @@ typedef struct State {
     Machine machines[MAX_MACHINES];     int nmachines;
     ClassGroup classes[MAX_CLASSES];    int nclasses;
     Drawer drawers[MAX_DRAWERS];        int ndrawers;
+    /* #2849: the build machine's direct send draws the cloner's screen -- one group per cloner
+     * (cloner_group=name|mac, directgui.sh), and direct_targets=unread when the room was not read */
+    char cgroups[MAX_DRAWERS][64];      int ncgroups; int direct_unread;
     IdleDisk idisks[MAX_DRAWERS];       int nidisks;   /* cloner idle inventory */
     ClonerBay cbays[MAX_DRAWERS];        int ncbays;
     CUsed cuseds[MAX_DRAWERS + 4];       int ncuseds;   /* #2030: any disk the cloner has, drawers or not */
@@ -756,6 +768,7 @@ int app_typing_lang(const App *a);
 void screen_login(App *a, cairo_t *cr, double W, double H, double head_h);
 void screen_menu(App *a, cairo_t *cr, double W, double H, double head_h);
 void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h);
+int pick_disk_order(const App *a, int *idx);   /* #2872: the picker's disks as drawn; the keyboard walks them */
 void screen_progress(App *a, cairo_t *cr, double W, double H, double head_h);
 void screen_done(App *a, cairo_t *cr, double W, double H, double head_h);
 void screen_message(App *a, cairo_t *cr, double W, double H, double head_h);

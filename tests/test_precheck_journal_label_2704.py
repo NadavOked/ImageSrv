@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server.console import journal_he
 from server.console.journal_he import JournalTranslator
 from server.rounds import room
@@ -32,10 +33,11 @@ ROUND = {"id": "room_7f331ae9", "wave_number": 1}
 
 
 def warning(**over) -> dict:
-    """The metal row (05-447-precheck-before-join.json): link 3/3, CRC 0, write_slow."""
+    """The metal row (05-447-precheck-before-join.json): link 3/3, CRC 0, a slow write. #2848 (Nadav 11/11):
+    a past round's slow write (#447's ``write_slow``) is no longer warned -- the slow kind is ``model_slow``."""
     w = {"mac": MAC, "port": 5, "serial": "naa.5000039fd2c449b0", "link_gbps": 3, "link_max_gbps": 3,
          "crc_rise": 0, "crc": 0, "crc_suspect": False, "port_suspect": False, "disk_suspect": False,
-         "model_slow": False, "write_slow": True}
+         "model_slow": True}
     w.update(over)
     return w
 
@@ -54,22 +56,23 @@ def test_a_slow_write_alone_is_not_called_a_link_or_crc_warning(server):
     label, text = line(server, warning())
     assert "קישור" not in label and "CRC" not in label, label
     assert "כתיבה איטית" in label, label
-    assert "learned=slow_write" in text, "the raw token is the evidence -- it stays"
-    assert "בבדיקת הכתיבה הקודמת נמדד איטי" in text, text
+    assert "learned=slow_model" in text, "the raw token is the evidence -- it stays"
+    assert "איטי מהרגיל לדגם" in text, text
 
 
 def test_a_slow_link_is_a_link_warning(server):
     setup_classroom(server)
-    label, text = line(server, warning(link_gbps=1.5, link_max_gbps=6.0, write_slow=False))
+    label, text = line(server, warning(link_gbps=1.5, link_max_gbps=6.0, model_slow=False))
     assert "קישור חשוד" in label and "כתיבה איטית" not in label, label
     assert "link=1.5/6.0" in text and "קישור 1.5 מתוך 6.0 Gb/s" in text, text
 
 
-def test_a_crc_rise_and_a_crc_over_the_threshold_are_link_warnings_said_in_hebrew(server):
+def test_a_crc_rise_is_a_link_warning_and_an_absolute_count_is_not_journaled(server):
+    """#2846: a stale ``crc_suspect`` on the warning (an old caller) writes no ``crc=``."""
     setup_classroom(server)
-    label, text = line(server, warning(crc_rise=12, crc_suspect=True, crc=812, write_slow=False))
+    label, text = line(server, warning(crc_rise=12, crc_suspect=True, crc=812, model_slow=False))
     assert "קישור חשוד" in label, label
-    assert "מונה CRC עלה ב-12 מאז הסבב הקודם" in text and "812 שגיאות" in text, text
+    assert "מונה CRC עלה ב-12 מאז הסבב הקודם" in text and "812 שגיאות" not in text, text
 
 
 def test_a_slow_write_on_a_slow_link_is_both(server):
@@ -81,9 +84,9 @@ def test_a_slow_write_on_a_slow_link_is_both(server):
 
 def test_two_drawers_of_two_kinds_are_both(server):
     setup_classroom(server)
-    label, text = line(server, warning(), warning(port=3, link_gbps=1.5, link_max_gbps=6.0, write_slow=False))
+    label, text = line(server, warning(), warning(port=3, link_gbps=1.5, link_max_gbps=6.0, model_slow=False))
     assert "קישור חשוד או כתיבה איטית" in label, label
-    assert "קישור 1.5 מתוך 6.0 Gb/s" in text and "בבדיקת הכתיבה הקודמת נמדד איטי" in text, text
+    assert "קישור 1.5 מתוך 6.0 Gb/s" in text and "איטי מהרגיל לדגם" in text, text
 
 
 @pytest.mark.parametrize("flag,token,he", [
@@ -93,7 +96,7 @@ def test_two_drawers_of_two_kinds_are_both(server):
 ])
 def test_every_learned_reason_is_said_in_hebrew(server, flag, token, he):
     setup_classroom(server)
-    _, text = line(server, warning(write_slow=False, **{flag: True}))
+    _, text = line(server, warning(**{"model_slow": False, flag: True}))
     assert token in text and he in text, text
 
 
@@ -114,7 +117,7 @@ def test_the_general_label_names_no_cause():
 
 def test_the_kinds_are_the_room_pages_words():
     """One rule, two places: the room note (#2670) and the journal say the same kind."""
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     body = re.search(r"const PRECHECK_NOUN_HE = \{([^}]*)\}", js).group(1)   # #2707: one table of nouns
     for words in journal_he.PRECHECK_NOUN_HE.values():
         assert f'"{words}"' in body, words
@@ -136,5 +139,6 @@ def test_the_reasons_are_the_screens_sentences():
     he = journal_he.PRECHECK_REASON_HE
     assert ports.PORT_HE.startswith(he["learned=port"]) and ports.DISK_HE.startswith(he["learned=disk"])
     assert models.SLOW_HE.startswith(he["learned=slow_model"])
-    assert models.LAST_SLOW_HE.startswith(he["learned=slow_write"])
+    # #2848: learned=slow_write is no longer written; a journal line from before still reads in Hebrew
+    assert journal_he.precheck_he(f"r wave=1 {MAC}:5 learned=slow_write")[1] == ["בבדיקת הכתיבה הקודמת נמדד איטי"]
     assert journal_he.precheck_he(f"r wave=1 {MAC}:5 crc=812")[1] == [crcwarn.text_he(812)]

@@ -14,7 +14,7 @@
 
 let ISOS = null, ISO_FOLDERS = null, isoErr = "", ISO_FOLDER = null, ISO_FILTER = "", ISO_KEY = "";
 const ISO_TAB = 3;
-const ISO_NAME_RULE = "אותיות אנגליות או עבריות, ספרות, רווח, נקודה, מקף וקו תחתון; עד 48 תווים";
+const ISO_NAME_RULE = "אותיות אנגליות או עבריות, ספרות, רווח, נקודה, מקף, מקף ארוך (—), גרש עברי (׳), גרשיים (״) וקו תחתון; עד 48 תווים";
 
 function isoAllowed() { return isAdmin() && !SERVER_CTX; }
 function isoTabOpen() { return current === "images" && isoAllowed() && currentTab === ISO_TAB; }
@@ -113,7 +113,7 @@ function isoActions() {
 /* הצעת שם מתוך שם הקובץ: רק תווים שהשרת מקבל. זו הצעה בשדה שהמפעיל רואה ויכול לערוך — השרת עצמו לא מנקה. */
 function isoSuggestName(filename) {
   const stem = String(filename || "").replace(/\.iso$/i, "");
-  return stem.replace(/[^A-Za-z0-9א-ת ._-]/g, "_").replace(/^[^A-Za-z0-9א-ת]+|[^A-Za-z0-9א-ת]+$/g, "").slice(0, 48);
+  return stem.replace(/[^A-Za-z0-9א-ת׳״— ._-]/g, "_").replace(/^[^A-Za-z0-9א-ת]+|[^A-Za-z0-9א-ת׳״]+$/g, "").slice(0, 48);
 }
 
 function openIsoUpload() {

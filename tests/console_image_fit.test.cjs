@@ -3,6 +3,7 @@
 // decimal GB, bytes in the tooltip), how much is used (null = "לא ידוע",
 // never 0 -- a partition that would not mount, #84), and how much it weighs
 // on the server. Runs the shipped console.js in a vm, not a copy.
+const {consoleJs, consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -30,7 +31,7 @@ function setup() {
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'progress.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   run('ME={username:"u",role:"admin",idle_seconds:300,capabilities:{}}; toast=()=>{};');
   return run;
@@ -51,7 +52,7 @@ test('market disk fit uses decimal sold sizes and unknown stays a dash', () => {
     [501e9, '512 GB'], [3e12, '4 TB'], [5e12, '> 4 TB'], [0, '—']]) {
     assert.equal(run(`fitsDisk(${bytes})`), want);
   }
-  assert.match(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), /"מתאים לדיסק"/);
+  assert.match(consoleJs(), /"מתאים לדיסק"/);
 });
 
 test('the library table and the image drawer both use it', () => {

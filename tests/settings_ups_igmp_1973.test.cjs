@@ -1,12 +1,13 @@
 // ‏#1972 + #1973 (נדב 22/10): מתג ה-IGMP querier בכרטיס "שיכפול והפצה", ושורת ה-UPS
 // בכרטיס "כללי" — המצב השמור והקריאה האחרונה של המנטר. בלי דפדפן: console.js ב-vm.
+const {consoleJs} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const root=path.resolve(__dirname,'../server/static');
-const js=fs.readFileSync(path.join(root,'console.js'),'utf8');
+const js=consoleJs();
 
 function setup() {
   const node=()=>({value:'',innerHTML:'',textContent:'',dataset:{},style:{removeProperty(){}},

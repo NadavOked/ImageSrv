@@ -33,6 +33,7 @@ from starlette.concurrency import run_in_threadpool
 
 from server.rounds import drive_rates, prompt_hold, room, room_drivers, sender as sender_module
 from server.agent import registry
+from server.disks import disk_rule
 from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.library.images import restore_refusal
 from server.rounds.sessions import SessionError
@@ -108,6 +109,11 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
         raise ValueError(
             f"מחשב הבנייה לא דיווח דיסק בשם {disk!r}"
             + (f" (דיווח: {', '.join(sorted(devs))})" if devs else " (לא דיווח דיסקים)"))
+    # ‏#2848 (נדב 11/11): צהוב — נכשל בשיכפול הקודם / כתיבה לא הושלמה — אינו מקור, בכל מסלול
+    # (קונסולה, קיוסק מחשב הבנייה), באותו טקסט שהמסכים כותבים (`disk_rule`).
+    why = disk_rule.source_refusal(ctx.conn, mac, disk)
+    if why:
+        raise ValueError(f"אי אפשר להעתיק מהדיסק {disk}: {why}")
     selected = room._validate_target_slots(ctx.conn, target_slots)
     count = sum(len(item["ports"]) for item in selected)
     if target_drives is not None and int(target_drives) != count:

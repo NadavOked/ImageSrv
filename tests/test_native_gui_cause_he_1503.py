@@ -21,12 +21,12 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from server.disks.ata_cause import CAUSES
 
 REPO = Path(__file__).resolve().parent.parent
 ROUNDS = REPO / "native-gui" / "src" / "screens_rounds.c"
-CONSOLE = REPO / "server" / "static" / "console.js"
 CC = shutil.which("cc") or shutil.which("gcc")
 HEBREW = re.compile("[א-ת]")
 
@@ -47,7 +47,7 @@ def _function(name: str) -> str:
 
 
 def _console_words() -> dict[str, str]:
-    block = re.search(r"const FAILURE_CAUSE_HE = \{([^}]*)\}", CONSOLE.read_text(encoding="utf-8"))
+    block = re.search(r"const FAILURE_CAUSE_HE = \{([^}]*)\}", console_js())
     assert block, "FAILURE_CAUSE_HE is gone from console.js"
     return dict(re.findall(r'(\w+):\s*"([^"]+)"', block.group(1)))
 

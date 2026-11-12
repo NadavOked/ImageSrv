@@ -54,6 +54,8 @@ MAP = {
     "node_active_line": "--clr-action", "node_warn_line": "--clr-warning",
     "warn": "--clr-warning", "brand_accent": "--clr-header-text",
     "action_fg": "--clr-action-fg",
+    # #2848 (Nadav 11/11): yellow -- failed the last clone / a cut write; not SMART's orange
+    "yellow": "--clr-yellow", "yellow_soft": "--clr-yellow-soft", "yellow_fg": "--clr-yellow-fg", "yellow_on": "--clr-yellow-on",
 }
 
 

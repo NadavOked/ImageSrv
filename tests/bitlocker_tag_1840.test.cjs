@@ -1,6 +1,7 @@
 // #1840 (הכרעת נדב 07/11): אימג' עם כרך BitLocker שנקלט סקטור-אחר-סקטור — `bitlocker` ב-/api/console/images.
 // "חובה שזה יהיה גלוי למפעיל": תג כתום ברשימה ובמגירה, שורת "הצפנה" בסקירה, וסיומת + שורה כתומה
 // בבחירת האימג' לסבב — אותם רכיבים כמו "מצב שינה" (#2053), בלי לחסום ובלי לשאול.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -21,7 +22,7 @@ function setup() {
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=(code)=>vm.runInContext(code,ctx);
   run(`ME={username:"admin",role:"admin",server_name:"srv",version:"v0",capabilities:{}}; current="deploy"; renderCurrent=()=>{};`);
   run(`IMAGES=${JSON.stringify(IMAGES)}`);

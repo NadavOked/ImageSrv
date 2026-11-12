@@ -1,13 +1,14 @@
 // שדות שם משתמש / סיסמה / קוד תמיד באנגלית: dir="ltr" (טקסט וסמן משמאל),
 // התוויות נשארות עברית RTL, וכפתור "הצג" יושב בצד ימין פיזי בתוך השדה
 // עם padding-right כך שאינו מכסה את מה שהוקלד. בדיקת מקור סטטית.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('path');
 const root = path.resolve(__dirname, '../server/static');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-const js = read('console.js');
+const js = consoleJs();
 const css = read('console.css');
 
 function inputTag(src, id) {

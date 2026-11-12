@@ -4,6 +4,7 @@
 // עמוד own בלי לשוניות, מתג #827 בכותרת, "נראה" מ-/net, "מה על המסך" מ-prompt,
 // WoL למכונה לא-מחוברת (#984). הבדיקה מריצה את console.js המשוגר ב-vm
 // עם fetch מזויף — החזרת render:pagePlaceholder מפילה אותה התנהגותית.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -36,7 +37,7 @@ function setup(fixtures) {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => fixtures[key] || {}};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'net.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);   // net.js: ago()
+  for (const f of ['progress.js', ...consoleFiles(), 'net.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);   // net.js: ago()
   const run = s => vm.runInContext(s, ctx);
   run('ME={username:"admin",role:"admin",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="monitor";');
   ctx.__toasts = toasts;
@@ -81,7 +82,7 @@ function setupWithDom(fixtures, putResponses = {}) {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => fixtures[key] || {}};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'net.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles(), 'net.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   run('ME={username:"admin",role:"admin",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="monitor";');
   ctx.__toasts = toasts;

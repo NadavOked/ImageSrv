@@ -142,6 +142,7 @@ def _unresolved_ctx(tmp_path, hooks) -> deploy_net.DeployContext:
 def test_deploy_completion_refuses_a_firewall_with_8443_open_to_the_whole_nic(tmp_path):
     calls: list = []
     hooks = {"write_grub_cfg": lambda url, root: None, "enable_dnsmasq": lambda: None,
+             "interfaces": lambda: [{"name": "eth1"}],
              "firewall": lambda *a, **k: calls.append(("fw", k)) or None,
              "restart_server": lambda: calls.append(("restart",)) or None}
     result = deploy_net.complete(_unresolved_ctx(tmp_path, hooks), None,

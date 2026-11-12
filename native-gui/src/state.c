@@ -86,6 +86,15 @@ static int parse_drawer(const char *s) {
 }
 
 /* #695: room-grid helpers. */
+int hw_words_has(const char *words, const char *word) {
+    char w[256], k[40]; snprintf(w, sizeof w, " %s ", words); snprintf(k, sizeof k, " %s ", word);
+    return strstr(w, k) != NULL;
+}
+
+int hw_words_red(const char *words) {
+    return hw_words_has(words, "link_slow") || hw_words_has(words, "link_reset") || hw_words_has(words, "drawer_gone");
+}
+
 static Machine *machine_at(State *s, unsigned long long index) {
     if (index >= (unsigned long long)s->nmachines) return NULL;
     return &s->machines[index];
@@ -299,8 +308,7 @@ void state_parse(State *s, FILE *fp) {
             else if (!mapped_record && port == 0) m->slot_names[actual_port - 1][0] = 0;
             d->fallback = mapped_record ? 0 : port == 0;
             d->link_slow = !strcmp(f[11], "slow");
-            unsigned long long crc;
-            d->crc_suspect = parse_uint(f[12], &crc) && crc > 0 && crc < 100000000ULL ? (long)crc : 0;
+            /* f[12] was #1366's absolute CRC count -- not a state of the disk (Nadav 11/11, #2846); not read */
             d->drawer = mapped_record ? parse_drawer(f[13]) : 0;
             if (mapped_record) cp(d->conn, sizeof d->conn, f[14]);
             /* 17/10: the drawer's own target. Absent (an older agent) = the
@@ -315,6 +323,24 @@ void state_parse(State *s, FILE *fp) {
             if (nf >= 23 && d->drv_state[0]) drv_boot_fields(d->drv_boot, d->drv_bsvc, d->drv_berr, f + 20);
             if (nf >= 26 && d->drv_state[0]) drv_linux_fields(d->drv_lstate, d->drv_lmod, d->drv_ldet, f + 23);   /* #1331 T8 */
             if (nf >= 27) cp(d->smart_reason, sizeof d->smart_reason, f[26]);   /* #1742 */
+        } else if (KEY("room_drawer_rule")) {
+            /* #2848: machine-index|serial|color|target|source|reason -- the server's rule, after its
+             * room_drawer=, matched by serial (an unidentified drawer has none, and is never a target anyway) */
+            unsigned long long mi;
+            if (split(val, f, 6) != 6 || !parse_uint(f[0], &mi) || !f[1][0]) continue;
+            Machine *m = machine_at(s, mi);
+            if (!m) continue;
+            static const char *const colors[] = { "grey", "green", "orange", "yellow", "red" };
+            int c = -1;
+            for (int k = 0; k < 5; k++) if (!strcmp(f[2], colors[k])) c = k;
+            if (c < 0 || (strcmp(f[3], "0") && strcmp(f[3], "1")) || (strcmp(f[4], "0") && strcmp(f[4], "1"))) continue;   /* unknown = no rule */
+            for (int i = m->nroom_drawers - 1; i >= 0; i--)
+                if (!strcmp(m->room_drawers[i].serial, f[1])) {
+                    RoomDrawer *d = &m->room_drawers[i];
+                    d->rule_set = 1; d->rule_color = c; d->rule_target = f[3][0] == '1'; d->rule_source = f[4][0] == '1';
+                    cp(d->rule_reason, sizeof d->rule_reason, f[5]);
+                    break;
+                }
         } else if (KEY("room_warn")) {
             /* #432: one line of round.precheck; an empty one is not a warning */
             if (!val[0]) continue;
@@ -394,6 +420,15 @@ void state_parse(State *s, FILE *fp) {
             DriverModel *dm = &s->driver_models[s->ndriver_models++];
             cp(dm->vendor, sizeof dm->vendor, f[0]);
             cp(dm->model, sizeof dm->model, f[1]);
+        } else if (KEY("cloner_group")) {
+            /* #2849: cloner_group=name|mac -- the drawer= records after it are that cloner's */
+            if (s->ncgroups >= MAX_DRAWERS) continue;
+            int nf = split(val, f, 2);
+            cp(s->cgroups[s->ncgroups++], sizeof s->cgroups[0], f[0][0] || nf < 2 ? f[0] : f[1]);
+        } else if (KEY("direct_targets")) {
+            s->direct_unread = !strcmp(val, "unread");   /* #2849: the room was not read -- said, not an empty list */
+        } else if (KEY("drawer") && s->ndrawers >= MAX_DRAWERS) {
+            s->hidden_disks++;                        /* #2849: several cloners can pass eight -- "+N נוספים" */
         } else if (KEY("drawer") && s->ndrawers < MAX_DRAWERS) {
             int nf = split(val, f, 20);
             if (nf < 5) continue;                     /* malformed -- no phantom drawer */
@@ -402,6 +437,7 @@ void state_parse(State *s, FILE *fp) {
             if (!parse_uint(f[3], &bytes)) continue;
             if (!parse_uint(f[4], &total)) continue;
             Drawer *d = &s->drawers[s->ndrawers++];
+            d->group = s->ncgroups - 1;               /* #2849: -1 = no cloner_group= (the cloner itself) */
             d->port = (int)port;                      /* 0 = no SATA slot derived */
             cp(d->dev, sizeof d->dev, f[1]);
             cp(d->state, sizeof d->state, f[2]);
@@ -447,7 +483,7 @@ void state_parse(State *s, FILE *fp) {
              * first (#688). The 5th field (#709) and the 6th (#874: the
              * server's cause for failed_last) are optional so an older agent
              * still parses. */
-            int nf = split(val, f, 16);   /* #1495: drawer and connection are fields 10/11; #1798: the mark 12; #1921: hw 13; #1858: F1 mark 14-16 */
+            int nf = split(val, f, 17);   /* #1495: drawer and connection are fields 10/11; #1798: the mark 12; #1921: hw 13; #1858: F1 mark 14-16; #2848: hw words 17 */
             if (nf < 4) continue;
             unsigned long long port, size;
             if (!parse_uint(f[0], &port) || port > INT_MAX) continue;
@@ -483,8 +519,7 @@ void state_parse(State *s, FILE *fp) {
                 int ok = strlen(v) == 3 && v[0] >= '0' && v[0] <= '9' && v[1] == '.' && v[2] >= '0' && v[2] <= '9';
                 cp(k ? id->link_max : id->link, sizeof id->link, ok ? v : "");
             }
-            unsigned long long crc;
-            id->crc_suspect = nf >= 9 && parse_uint(f[8], &crc) && crc > 0 && crc < 100000000ULL ? (long)crc : 0;
+            /* f[8] was #1366's absolute CRC count -- not a state of the disk (Nadav 11/11, #2846); not read */
             id->drawer = nf >= 10 ? parse_drawer(f[9]) : 0;
             if (nf >= 11) cp(id->conn, sizeof id->conn, f[10]);
             /* #1798: the incomplete-write mark on the disk (writemark.sh). Only the two
@@ -500,6 +535,8 @@ void state_parse(State *s, FILE *fp) {
                 if (nf >= 16 && (!strcmp(f[15], "passed") || !strcmp(f[15], "warn") || !strcmp(f[15], "fail") || !strcmp(f[15], "unchecked")))
                     cp(id->f1_smart, sizeof id->f1_smart, f[15]);
             }
+            id->sata_bad = nf >= 17 && hw_words_red(f[16]);   /* #2848: an older agent without the field = 0, as before */
+            id->sata_issue = nf >= 17 && (hw_words_has(f[16], "link_reset") || hw_words_has(f[16], "drawer_gone"));
         } else if (KEY("cused") && s->ncuseds < MAX_DRAWERS + 4) {
             /* #2030: cused=dev|size|used -- used -1 (or anything unreadable) = not measured */
             if (split(val, f, 3) < 3) continue;

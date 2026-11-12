@@ -2,6 +2,7 @@
 // יציאה (כולל יציאה אוטומטית בחוסר פעילות): הוא החזיק את הגשר — מקלדת ועכבר למכונה — ואת המנעול (4409).
 // הטסט מריץ את console.js האמיתי ובודק שהיציאה מוציאה את ה-iframe מה-DOM ומנקה את הבחירה.
 // בקרה שלילית: על console.js שלפני #1853 ה-iframe נשאר בדף.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -31,7 +32,7 @@ test('logging out (showLogin) takes the monitor viewer iframe out of the page an
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
-  for (const f of ['progress.js', 'console.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run('ME={username:"noc",role:"admin",idle_seconds:300,capabilities:{}}; current="monitor"; MON_SEL="aa:bb:cc:dd:ee:01";');
   frame('monitor.html?mac=aa%3Abb%3Acc%3Add%3Aee%3A01&name=Builder');

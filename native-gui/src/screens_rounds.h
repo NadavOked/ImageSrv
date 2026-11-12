@@ -53,6 +53,8 @@ void cloner_bay_conn(const State *s, int bay, char *out, size_t n);
 void cloner_slot_label(const State *s, int bay, char *out, size_t n);
 int room_selectable(const RoomDrawer *d);
 int room_pickable(const RoomDrawer *d);   /* #1732: selectable and not red */
+int room_drawer_red(const RoomDrawer *d);
+#include "disk_rule.h"   /* #2848: the one rule (DR_* colours, disk_rule_he) */   /* #2848: SMART failed, a SATA problem or a slow write -- not a target */
 /* Nadav 17/10: is this cloner picked as a whole machine (a->room_pick)? */
 int room_picked(const App *a, const char *mac);
 void room_drawer_label(const Machine *m, const RoomDrawer *d, char *out, size_t n);

@@ -1,5 +1,6 @@
 // שלב 1 (מוקאפ הקונסולה): מסגרת החלונות האחידה. sheet() ו-openModalContent() מציירים כותרת + X תמיד,
 // פס תחתון קבוע (ביטול לידו, ראשי בקצה), רוחב לפי סוג, סיסמה אחת עם מדיניות חיה, ו-dropzone אחד.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -7,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../server/static');
-const source = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+const source = consoleJs();
 
 function node() {
   const classes = new Set();

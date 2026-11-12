@@ -5,6 +5,7 @@
 // מכונה" שחושבת בלקוח לפי אותם כללים של drivers.match (pci / pci_any / דגם;
 // מזהה בלי class = כל class), מחיקה בחלון אישור, "לא נקרא" ≠ ריק.
 // הבדיקה מריצה את console.js + drivers.js המשוגרים ב-vm עם fetch מזויף.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -38,7 +39,7 @@ function setup(fixtures, role = 'admin') {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => f ?? {}};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'net.js', 'drivers.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
+  for (const f of ['progress.js', ...consoleFiles(), 'net.js', 'drivers.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
   run(`ME={username:"u",role:"${role}",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="drivers"; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); globalThis.drawer=""; openDrawer=(t,b)=>{ drawer=t+"|"+b; }; renderCurrent=()=>{};`);
   ctx.__toasts = toasts;

@@ -292,6 +292,13 @@ hello_rc=<HTTP status>               # response code observed for that hello
 image=<id>|<name>|<folder>          # /api/console/images
 machine=<name>|<mac>|<awake>|<joined>|<fresh_drawers>|<state>|<pct>|<moving>|<error>
 room_drawer=<machine-index>|<port or 0>|<serial>|<model>|<size>|<smart>|<fresh>|<selected>|<drivers>|<detail>
+room_drawer_rule=<machine-index>|<serial>|<color>|<target 1/0>|<source 1/0>|<reason>
+                                    # #2848 (Nadav 11/11): right after its room_drawer=, matched by serial -- the
+                                    # server's one rule (drawer_list[].rule, server/disks/disk_rule.py), shown and not
+                                    # re-made: color red|yellow|orange|green|grey (disk_rule.h DR_*); target 0 = never
+                                    # picked; reason the rule's word, said with disk_rule_he() -- the sentence the server
+                                    # refuses with. An empty or unknown color = no rule (an older server): the drawer's
+                                    # own SMART and link decide, as before
                                     # #1235: fresh 1 = ready, 0 = written, -1 = no serial (GET /room
                                     # fresh:null, #105) -- shown as "לא ניתן לזהות את הכונן בחריץ N"
                                     # #1269: drivers = staged / skipped / failed from drawer_list[].drivers,
@@ -301,13 +308,12 @@ room_drawer=<machine-index>|<port or 0>|<serial>|<model>|<size>|<smart>|<fresh>|
                                     # operator's name of the slot; NVMe by serial). Empty / absent = "דיסק N"
                                     # #432: |<link state> -- a 12th field, drawer_list[].link_state:
                                     # ok / slow / unknown; only "slow" colours the slot orange (SMART red wins)
-                                    # #1366: |<crc> -- a 13th field, the CRC count when drawer_list[].crc_suspect
+                                    # #1366: |<crc> -- a 13th field, always empty since #2846 (no absolute CRC)
                                     # #1386: |<dev>|<cancel text>|<cancel done> -- fields 18-20: the device the
                                     # "בטל…" button names, drawer_list[].cancel.text_he ("בוטל על ידי nadav ·
                                     # 16:06", empty = not cancelled), 1 = the agent reported `cancelled`
                                     # #1331: |<boot state>|<boot service>|<boot error> -- fields 21-23,
                                     # drawer_list[].drivers.boot (guistate.sh); empty = not reported
-                                    # (over crc_warn_threshold); empty = not over / not read. Orange like slow
                                     # #1495: |<drawer>|<conn> -- fields 14-15, drawer_list[].drawer (null -> 0
                                     # = not in the mapping) and the connection ("SATA 2", "NVMe 03:00.0").
                                     # The grid places a drawer by this number, never by port; a 0 is an extra
@@ -349,6 +355,11 @@ updated=<epoch seconds>             # #410: when the agent wrote this snapshot -
                                     # "עודכן לפני N שניות" (דקות, שעות) and keep counting when the file stops changing
 
 # #st-cloner (clonergui.sh, the kiosk's local truth)
+# #2849: the build machine's direct send draws this same card (directgui.sh): its drawer= records are the
+# cloners' drawers from GET /room (drawer_list of the round's targets), each cloner's after its own
+cloner_group=<name>|<mac>           # #2849: the drawer= records that follow are this cloner's -- one cage per
+                                    # cloner, "מחשב שיכפול <name>"; absent (the cloner itself) = one cage, "יעדים"
+direct_targets=unread               # #2849: the room was not read -- "מצב המגירות לא נקרא מהשרת", never "no disks"
 drawer=<port>|<dev>|<state>|<bytes>|<total>|<error>|<rate_bps>|<eta_s>|<drawer>|<conn>
                                     # #410: fields 7-8 measured by the kiosk on the local counter; -1 / absent
                                     # (a six-field record) = not measured -- the line shows bytes only
@@ -377,7 +388,13 @@ net=back|<seconds>|<epoch>          # #2067: the bytes moved again -- it was gon
                                     # #2644: the build machine's restore card (--screen progress, srgui.sh) carries
                                     # the same two records and draws the same bar over the card; <seconds> there is
                                     # also the ceiling of its HTTP stream (restore.sh stream_source)
-cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>|<mark>|<hw>|<f1date>|<f1src>|<f1smart>
+cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>|<mark>|<hw>|<f1date>|<f1src>|<f1smart>|<hwwords>
+                                    # #2848 (Nadav 11/11): <hwwords> = hwissues.sh's words, space-separated --
+                                    # link_slow / link_reset / drawer_gone = red (not a target, still a source);
+                                    # usb2 / icrc_logged stay the <hw> note, in words, no colour.
+                                    # The drawer's colour and roles are disk_rule() (src/disk_rule.c -- the same
+                                    # table as the server's and the console's): red never a target; yellow
+                                    # (<smart> failed_last, <mark> incomplete, --clr-yellow) a target, never a source
                                     # the idle inventory (no round targets) -- see the #1304 table below;
                                     # #1495: fields 10-11 as drawer= fields 9-10
                                     # #1859: <cause> also carries why a `warn` disk is orange (a smart.sh
@@ -560,8 +577,8 @@ status bar, no background art. What each part is drawn from:
 | SMART chip, its colour, the bar on the bay, the orange/red line under the cage | `cdisk=` field 5 by the #872 rule: `failed_last` red, `fail` (and an old agent's `warn`) orange, the rest green; `unchecked` says "SMART לא נבדק" |
 | the reason under the name | `fail` → "ה-BIOS יעצור ב-F1 — SMART: …" by field 6, the SMART reason (#1366: `health_failed` / `pending_sectors` 197 / `uncorrectable` 198); `fail` with `readonly` (#1742) → "הדיסק במצב קריאה בלבד"; `failed_last` → field 6, the server's cause (כבל/חריץ, הדיסק) |
 | "נצפה F1" (#1858) | `cdisk=` fields 14–16 (`f1mark.sh`): the date (`YYYY-MM-DD`), the source (`manual|auto`) and the disk's own SMART beneath the red (`passed|warn|fail|unchecked`, empty = not known). The disk arrives red (`fail`, cause `f1_observed`); the chip says "נצפה F1", the line "נצפה F1 בהדלקה (24/10) · סומן בקונסולה", under it what its SMART says. A malformed date or source draws no mark. The same disk makes the F1 notice of the power-off windows (`f1_notice`: the idle one, and the end-of-task count #1560). |
-| the hardware note (#1921) | `cdisk=` field 13: the sentence of `agent/lib/data/hw-issues.tsv` (a link reset, a drawer that dropped, USB 2.0 -- CRC and the link keep fields 9/7-8). Drawn like the CRC line: the bay's bar orange, the sentence under the name and under the cage; the SMART chip stays SMART -- never the disk's colour. `lc_disk=` field 17 is the same note on the local/USB screen, after the SATA line |
-| the CRC line (#1366) | `cdisk=` field 9: the CRC count when over the hello's `crc_warn_threshold` (empty = not over, not read, or an older server). The bay orange like a slow link, "כבל או מגירה חשודים — N שגיאות" under the name (when SMART and the link have no reason of their own), and a line under the cage |
+| the hardware note (#1921) | `cdisk=` field 13: the sentence of `agent/lib/data/hw-issues.tsv` (a link reset, a drawer that dropped, USB 2.0 -- the link keeps fields 7-8). Drawn like a slow link: the bay's bar orange, the sentence under the name and under the cage; the SMART chip stays SMART -- never the disk's colour. `lc_disk=` field 17 is the same note on the local/USB screen, after the SATA line |
+| the CRC line (#1366) | **Removed (#2846, Nadav 11/11):** an absolute CRC count is the disk's history, not a state. `cdisk=` field 9 and `room_drawer=` field 13 stay in the record and are always empty; the screen reads neither. |
 | the link, "· 6.0 Gb/s" after SATA N-1, and its orange line (#432) | `cdisk=` fields 7–8 (`disk_link`: the speed and the port's maximum, `null` = not read → "קישור לא ידוע", never blank and never green). Below the maximum: the bay's bar and border orange, "קישור 1.5 מתוך 6.0 Gb/s — לבדוק כבל" under the name (when SMART has no reason of its own), and a line under the cage. The SMART chip and LED stay SMART |
 | the warning frame and "זה מכוון" (#2080, mockup 06) | `fw_warn=` (above). Between the status line and the cage; the bays shrink to leave it room and the way-back button its row. The button says `fw-accept`; the server's 200 takes the warning away, anything else is a toast and the warning stays |
 | IP, MAC | `--ip` / `--mac` (the kiosk's) |

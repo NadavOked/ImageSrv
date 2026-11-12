@@ -81,7 +81,7 @@ lc_inv_disk() {
     _li_ss=$(logical_block_size "$_li_node")
     _li_sch=$(disk_scheme "$_li_node")
     if [ "$_li_sch" != gpt ]; then
-        case "$_li_sch" in none) _li_why="אין עליו טבלת מחיצות" ;; mbr) _li_why="טבלת MBR — שיכפול מקומי של MBR יגיע ב-v1.1" ;; *) _li_why="לא הצלחנו לקרוא את הדיסק" ;; esac
+        case "$_li_sch" in none) _li_why="אין עליו טבלת מחיצות" ;; mbr) _li_why="טבלת MBR — שיכפול מקומי של MBR עוד לא נתמך" ;; *) _li_why="לא הצלחנו לקרוא את הדיסק" ;; esac
     elif [ "$_li_ss" != 512 ]; then
         _li_why="גודל סקטור ${_li_ss:-לא ידוע} — נתמך 512 בלבד"
     elif ! lc_parts "$1" "$LC/inv/$1.parts"; then

@@ -26,6 +26,7 @@ import re
 import shutil
 from pathlib import Path
 
+from console_src import console_js
 from native import requires_native
 from test_cloner_gui import (AGENT, BASH, PORTS, PRELUDE as CLONER_PRELUDE, _build_gui, _pkgconfig,
                              env, posix, sh, target)
@@ -57,7 +58,7 @@ def _fn(text: str, head: str) -> str:
 
 def test_the_gui_and_the_console_say_the_same_words():
     c = _fn((SRC / "lcbay.c").read_text(encoding="utf-8"), "void lc_bay_linux(")
-    js = _fn((ROOT / "server/static/console.js").read_text(encoding="utf-8"), "function linuxDriversText(")
+    js = _fn(console_js(), "function linuxDriversText(")
     c_words = {_norm(m) for m in re.findall(r'"(לינוקס:[^"]*)"', c)}
     js_words = {_norm(m) for m in re.findall(r'[`"](לינוקס:[^`"]*)[`"]', js)}
     assert len(c_words) == 6, c_words

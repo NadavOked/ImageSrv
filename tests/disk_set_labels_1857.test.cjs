@@ -1,6 +1,7 @@
 // #1857 (mockup 04): the set and sticker of a disk ("קוריאים · xx-7") beside the disk in the console -- on the machine
 // drawer's disk boxes, in the red disks table (so the person knows which disk to pull) and in the drawer's tooltip.
 // The server adds `set_text` (null = no set); a disk with no set looks exactly as it did. console.js runs in a vm.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -16,7 +17,7 @@ function setup() {
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,RegExp,encodeURIComponent,decodeURIComponent,
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   return (code)=>vm.runInContext(code,ctx);
 }
 const run=setup();

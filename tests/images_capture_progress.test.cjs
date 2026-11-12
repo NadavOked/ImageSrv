@@ -3,6 +3,7 @@
 // ‏50.8GB שכבר נכתבו. "אימות" הוא sha256 — אין מה לאמת לפני סוף הקליטה.
 // ההתקדמות עוברת לעמודת "בשימוש" (המצב של השורה): "נקלט… N% · מחיצה K מתוך M",
 // ובלי מכנה — כמה נכתב לשרת, במספר. בלי דפדפן: console.js ב-vm, הפלט כטקסט.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -27,7 +28,7 @@ function setup(tasks) {
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
-  vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={username:"admin",role:"admin",server_name:"srv",capabilities:{}}; current="images";');
   run(`IMAGES=[];FOLDERS=[];OVERVIEW={};CAPTURE_TASKS=${JSON.stringify(tasks)}`);

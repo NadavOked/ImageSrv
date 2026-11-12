@@ -18,6 +18,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import hello_body  # noqa: E402
+from console_src import console_js
 from test_cloner_round_server import now  # noqa: E402,F401  (autouse: the route's clock, past the rate limit)
 from test_machine_identity import identity_server  # noqa: E402,F401
 from test_server_room import room_server  # noqa: E402,F401
@@ -81,7 +82,7 @@ def test_server_cloner_round_refuses_its_own_red_drawer(identity_server):
 
 def test_console_has_no_write_button_and_no_confirmed_flag_for_red():
     """RED: על הקוד הישן console.js פתח חלון "לכתוב על דיסק אדום?" ושלח `confirmed: true`."""
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert "confirmed: true" not in js
     assert "לכתוב על דיסק אדום?" not in js
     assert RED in js

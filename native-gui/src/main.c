@@ -345,6 +345,7 @@ static int fields_on(const App *a, int *out) {
     case SCREEN_PICK:
         if (a->chosen_disk >= 0) {
             out[n++] = HIT_NAME; out[n++] = HIT_DESC;
+            out[n++] = HIT_FOLDER; out[n++] = HIT_NEWFOLDER;   /* #2872: the folder is reachable without a mouse */
             if (a->newfolder_shown) out[n++] = HIT_FOLDER_NEW;
         }
         break;
@@ -584,6 +585,20 @@ static int disk_smart_ask(App *a, int kind, int i) {
 }
 
 /* smart_seen: the SMART warning window was answered "קלוט ממנו בכל זאת" */
+/* #2872: the capture picker's keyboard. */
+static void pick_step_disk(App *a, int step) {
+    int idx[MAX_DISKS], n = pick_disk_order(a, idx), at = -1;
+    if (!n) return;
+    for (int i = 0; i < n; i++) if (idx[i] == a->chosen_disk) at = i;
+    at = at < 0 ? (step > 0 ? 0 : n - 1) : (at + step + n) % n;
+    if (a->chosen_disk < 0) a->focus = HIT_NAME;   /* like the click: the form opens on the name */
+    a->chosen_disk = idx[at];
+}
+static void pick_toggle_newfolder(App *a) {
+    a->newfolder_shown = !a->newfolder_shown;
+    if (a->newfolder_shown) a->focus = HIT_FOLDER_NEW;
+}
+
 static void start_capture(App *a, int smart_seen) {
     char name[96]; snprintf(name, sizeof name, "%s", a->name); trim(name);
     if (a->chosen_disk < 0 || !name[0]) {
@@ -1273,6 +1288,13 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             for (int i = 0; i < n; i++) if (p[i].drawer == e->ch - '0') { cdlg_open(a, 0, i, 0); break; }
             break;
         }
+        /* #2872: the capture picker by keyboard -- a digit picks that disk, Space is "+ חדשה" when it is focused */
+        if (a->screen == SCREEN_PICK && a->chosen_disk < 0 && e->ch >= '1' && e->ch <= '9') {
+            int idx[MAX_DISKS], nd = pick_disk_order(a, idx);
+            if (e->ch - '1' < nd) { a->chosen_disk = idx[e->ch - '1']; a->focus = HIT_NAME; }
+            break;
+        }
+        if (a->screen == SCREEN_PICK && a->focus == HIT_NEWFOLDER && e->ch == ' ') { pick_toggle_newfolder(a); break; }
         size_t n; char *buf = field_buf(a, a->focus, &n);
         if (!buf || !field_visible(a, a->focus)) break;
         if (a->focus == HIT_ROOM_TARGET && (e->ch < '0' || e->ch > '9')) break;   /* type=number */
@@ -1310,6 +1332,14 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             break;
         }
         if (e->key == KEYSYM_BACKSPACE && a->dd_open == HIT_ROOM_IMAGE) { a->pick_in_folder = 0; break; }
+        if (a->screen == SCREEN_PICK && !a->dd_open && (e->key == KEYSYM_UP || e->key == KEYSYM_DOWN)) {
+            int step = e->key == KEYSYM_DOWN ? 1 : -1;   /* #2872: on the folder select it walks the folders, elsewhere the disks */
+            if (a->chosen_disk >= 0 && a->focus == HIT_FOLDER) {
+                int nf = a->st.nfolders, at = a->folder_sel;
+                if (nf > 0) a->folder_sel = at < 1 ? (step > 0 ? 1 : nf) : (at - 1 + step + nf) % nf + 1;
+            } else pick_step_disk(a, step);
+            break;
+        }
         int ids[8], n = fields_on(a, ids);
         if ((e->key == KEYSYM_TAB || e->key == KEYSYM_BACKTAB) && n) {
             int k = -1;                              /* Shift-Tab walks back (mockup 10/10) */
@@ -1320,6 +1350,8 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             else if (a->screen == SCREEN_RESTORE && a->restore_image_sel > 0) {
                 if (restore_ready(a)) a->confirm = CONFIRM_RESTORE;    /* #1270: Enter asks, Enter again erases */
             }
+            else if (a->screen == SCREEN_PICK && a->chosen_disk < 0) pick_step_disk(a, 1);          /* #2872: Enter on the list takes the first disk */
+            else if (a->screen == SCREEN_PICK && a->focus == HIT_NEWFOLDER) pick_toggle_newfolder(a);
             else if (a->screen == SCREEN_PICK) start_capture(a, 0);
             else if (a->screen == SCREEN_DONE) { a->showing_done = 0; go_menu(a); emit1("again"); }
             else if (a->screen == SCREEN_CLASS && a->st.has_session) { if (class_gate(a)) emit1("class-start"); }
@@ -1460,9 +1492,9 @@ static void sample_state(State *s) {
     snprintf(s->sess_group, sizeof s->sess_group, "כיתה 12");
     s->sess_open = 1; s->joined = 3; s->expected = 14; s->starts_in = 272;
     s->ndrawers = 3;
-    s->drawers[0] = (Drawer){ 1, "sda", "writing", "", 44814663680ULL, 85899345920ULL, 98000000, 419, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 } };   /* #410 */
-    s->drawers[1] = (Drawer){ 2, "sdb", "failed", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 } };
-    s->drawers[2] = (Drawer){ 3, "sdc", "waiting", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 } };
+    s->drawers[0] = (Drawer){ 1, "sda", "writing", "", 44814663680ULL, 85899345920ULL, 98000000, 419, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };   /* #410 */
+    s->drawers[1] = (Drawer){ 2, "sdb", "failed", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
+    s->drawers[2] = (Drawer){ 3, "sdc", "waiting", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
     s->cuseds[0] = (CUsed){ "sda", 500107862016ULL, 214748364800LL };   /* #2030: size, bytes in use (a failed write: not measured) */
     s->cuseds[1] = (CUsed){ "sdb", 500107862016ULL, -1 };
     s->cuseds[2] = (CUsed){ "sdc", 240057409536ULL, 61234567890LL };
@@ -1572,8 +1604,8 @@ static void png_cancel_sample(App *a, const char *card) {
         snprintf(a->st.machine_name, sizeof a->st.machine_name, "CLONER-02");
         a->st.idisks[0] = (IdleDisk){ .port = 1, .dev = "sda", .model = "Samsung SSD 870 EVO", .size = 500107862016ULL, .smart = "ok" };
         a->st.idisks[1] = (IdleDisk){ .port = 2, .dev = "sdb", .model = "WDC WD5000AAKX", .size = 500107862016ULL, .smart = "ok" };
-        a->st.drawers[0] = (Drawer){ 1, "sda", "writing", "", 12285713408ULL, 19500000000ULL, 68000000, 120, 1, "SATA 0", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 } };
-        a->st.drawers[1] = (Drawer){ 2, "sdb", "writing", "", 7995000000ULL, 19500000000ULL, 68000000, 240, 2, "SATA 1", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 } };
+        a->st.drawers[0] = (Drawer){ 1, "sda", "writing", "", 12285713408ULL, 19500000000ULL, 68000000, 120, 1, "SATA 0", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
+        a->st.drawers[1] = (Drawer){ 2, "sdb", "writing", "", 7995000000ULL, 19500000000ULL, 68000000, 240, 2, "SATA 1", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
     }
     int n = cloner_cancel_picks(a, p, MAX_CANCEL_PICKS);
     if (!strcmp(card, "cloner-canceled")) {

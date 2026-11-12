@@ -54,7 +54,7 @@ static int verdict_of(const char *v) {
 }
 
 int lc_state_line(State *s, const char *key, char *val) {
-    LcState *l = &s->lc; char *f[18];   /* lc_disk splits into 18 (#1921's hw note, #2001's name) */
+    LcState *l = &s->lc; char *f[19];   /* lc_disk splits into 19 (#1921's hw note, #2001's name, #2848's hw words) */
     if (strncmp(key, "lc_", 3)) return 0;
     if (!strcmp(key, "lc_round")) l->round_open = !strcmp(val, "open");   /* #1367: anything else draws nothing */
     else if (!strcmp(key, "lc_screen")) l->screen = !strcmp(val, "boot") ? LC_SCREEN_BOOT : !strcmp(val, "local") ? LC_SCREEN_LOCAL
@@ -73,7 +73,7 @@ int lc_state_line(State *s, const char *key, char *val) {
     else if (!strcmp(key, "lc_inv")) l->inv_done = !strcmp(val, "done");
     else if (!strcmp(key, "lc_phase")) cpy(l->phase, sizeof l->phase, val);
     else if (!strcmp(key, "lc_disk") && l->ndisks < LC_MAX_DISKS) {
-        int nf = lc_split(val, f, 18);   /* #1798: the mark is field 16; #1921: the hw note 17; #2001: the name 18 */
+        int nf = lc_split(val, f, 19);   /* #1798: the mark is field 16; #1921: the hw note 17; #2001: the name 18; #2848: words 19 */
         if (nf < 13) return 1;
         LcDisk *d = &l->disks[l->ndisks++];
         d->port = atoi(f[0]); cpy(d->dev, sizeof d->dev, f[1]); cpy(d->model, sizeof d->model, f[2]);
@@ -92,6 +92,10 @@ int lc_state_line(State *s, const char *key, char *val) {
             cpy(d->mark, sizeof d->mark, f[15]);   /* #1798: anything else draws nothing */
         if (nf >= 17) cpy(d->hw, sizeof d->hw, f[16]);
         if (nf >= 18) cpy(d->name, sizeof d->name, f[17]);
+        if (nf >= 19) {   /* #2848: hwissues.sh's words -- a SATA problem is red */
+            d->sata_bad = hw_words_red(f[18]); d->link_slow = hw_words_has(f[18], "link_slow");
+            d->sata_issue = hw_words_has(f[18], "link_reset") || hw_words_has(f[18], "drawer_gone");
+        }
     } else if (!strcmp(key, "lc_src")) {
         int nf = lc_split(val, f, 5); cpy(l->src, sizeof l->src, f[0]); cpy(l->src_measure, sizeof l->src_measure, f[1]);
         l->src_hibernated = nf >= 5 && !strcmp(f[4], "hibernated");   /* #2069: anything else says nothing */
@@ -176,8 +180,20 @@ const LcFit *lc_fit_of(const App *a, const char *dev) {
     return NULL;
 }
 
+DiskRule lc_rule(const LcDisk *d) {
+    /* the agent's words: "passed" is ok; failed_last is the smart field (lcinv.sh); a local clone measures no
+     * write check of a round -- write_slow 0 */
+    DiskFacts f = { !strcmp(d->smart, "passed") ? "ok" : d->smart, 0, !strcmp(d->mark, "incomplete"),
+                    d->link_slow, d->sata_issue, 0 };
+    return disk_rule(&f);
+}
+
+int lc_red(const LcDisk *d) { return !lc_rule(d).target; }
+
+int lc_source_ok(const LcDisk *d) { return d->usable && lc_rule(d).source; }
+
 int lc_target_ok(const App *a, int i) {
-    if (smart_level(a->st.lc.disks[i].smart) == 2) return 0;   /* #1732: red (SMART fail) is never a target */
+    if (lc_red(&a->st.lc.disks[i])) return 0;   /* #1732: red (SMART fail) is never a target; #2848: nor a bad SATA link */
     const LcFit *f = lc_fit_of(a, a->st.lc.disks[i].dev);
     return !f || f->verdict == LCV_FITS || f->verdict == LCV_SHRINK || f->verdict == LCV_MEASURING;
 }
@@ -200,7 +216,7 @@ int lc_targets(const App *a, int *idx, int max) {
 
 int lc_can_go(const App *a) {
     int idx[LC_MAX_DISKS], n = lc_targets(a, idx, LC_MAX_DISKS), s = lc_source_index(a);
-    if (!n || s < 0 || !a->st.lc.disks[s].usable) return 0;
+    if (!n || s < 0 || !lc_source_ok(&a->st.lc.disks[s])) return 0;   /* #2848: never a yellow source */
     for (int k = 0; k < n; k++) {
         const LcFit *f = lc_fit_of(a, a->st.lc.disks[idx[k]].dev);
         if (!f || (f->verdict != LCV_FITS && f->verdict != LCV_SHRINK)) return 0;   /* measured, and allowed */
@@ -225,16 +241,17 @@ static void measure_source(App *a) {
     emit_line(line);
 }
 
-/* SMART that asks before writing (fail, orange) or failed the last clone (red): "דלג" by default. */
+/* A SOURCE with SMART fail or orange is asked about first (open_confirm). #2848 (Nadav 11/11): a TARGET is
+ * "דלג" by default only when it is red -- orange ("SMART חצי תקין") starts as a target, like green. */
 static int smart_skip(const LcDisk *d) { return smart_level(d->smart) > 0; }
 
 static void set_source(App *a, int i) {
-    if (i < 0 || i >= a->st.lc.ndisks || !a->st.lc.disks[i].usable) return;
+    if (i < 0 || i >= a->st.lc.ndisks || !lc_source_ok(&a->st.lc.disks[i])) return;   /* #2848 */
     int old = lc_source_index(a);
     if (old == i) return;
     set_stored(a, a->st.lc.disks[i].dev, LCR_SOURCE);
     /* the mockup's swap -- 16/10: a warned disk is a target only through the SMART window */
-    if (old >= 0) set_stored(a, a->st.lc.disks[old].dev, smart_skip(&a->st.lc.disks[old]) ? LCR_SKIP : LCR_TARGET);
+    if (old >= 0) set_stored(a, a->st.lc.disks[old].dev, lc_red(&a->st.lc.disks[old]) ? LCR_SKIP : LCR_TARGET);   /* #2848 */
     measure_source(a);
 }
 
@@ -247,13 +264,13 @@ static void smart_ask(App *a, int kind, int i) {
 
 /* #1722: a source is proposed only with a system on it -- a partition table
  * and a filesystem the inventory read (os) -- never on "usable" alone. */
-static int proposable(const LcDisk *d) { return d->usable && d->os[0]; }
+static int proposable(const LcDisk *d) { return lc_source_ok(d) && d->os[0]; }   /* #2848: not yellow */
 
 /* #1722: the person's last lc-start, all of it or nothing: every disk of it
  * still here with the serial it had, and the source still a source. */
 static void restore_last(App *a) {
     const LcUi *u = &a->lcu; const LcDisk *s = u->last_src[0] ? lc_disk_by_dev(a, u->last_src) : NULL;
-    if (!s || !s->usable || strcmp(s->serial, u->last_src_serial)) return;
+    if (!s || !lc_source_ok(s) || strcmp(s->serial, u->last_src_serial)) return;
     for (int k = 0; k < u->nlast; k++) {
         const LcDisk *t = lc_disk_by_dev(a, u->last_tgt[k]);
         if (!t || strcmp(t->serial, u->last_tgt_serial[k])) return;
@@ -279,7 +296,7 @@ static void default_roles(App *a) {
          * drawer 1 -- or no source ("בחרו מקור"), never another disk in its place. The stick is the same rule: its
          * mapping is the "מיפוי חיבורים" of its settings (#1959/#2001), which moves the drawers, and with them the proposal. */
         for (int i = 0; i < l->ndisks; i++)
-            set_stored(a, l->disks[i].dev, i == src ? LCR_SOURCE : smart_skip(&l->disks[i]) ? LCR_SKIP : LCR_TARGET);
+            set_stored(a, l->disks[i].dev, i == src ? LCR_SOURCE : lc_red(&l->disks[i]) ? LCR_SKIP : LCR_TARGET);   /* #2848 */
     }
     a->lcu.bay = src >= 0 ? src : 0; a->lcu.focus = LCF_BAY; a->lcu.confirm = a->lcu.stop = 0; a->lcu.touched = 0;
 }
@@ -319,7 +336,7 @@ void lc_after_reload(App *a) {
     if (!a->lcu.nroles) default_roles(a);
     /* #1722: a source the drawers no longer allow (no table, the layout not read) is not one */
     int s = lc_source_index(a);
-    if (s >= 0 && !l->disks[s].usable) set_stored(a, l->disks[s].dev, LCR_SKIP);
+    if (s >= 0 && !lc_source_ok(&l->disks[s])) set_stored(a, l->disks[s].dev, LCR_SKIP);   /* #2848: nor a yellow one */
     /* a disk that appeared since the roles were set has none stored: "דלג", never a target by surprise */
     if (a->lcu.bay >= l->ndisks) a->lcu.bay = 0;
     if (!strcmp(l->phase, "idle")) measure_source(a);
@@ -355,8 +372,6 @@ static void role_click(App *a, int i, int r) {
     if (r == LCR_SOURCE) { set_source(a, i); return; }
     if (stored_role(a, dev) == LCR_SOURCE) return;             /* the source changes by choosing another */
     if (r == LCR_TARGET && !lc_target_ok(a, i)) return;        /* "לא נכנס" / "לא נבדק" cannot be a target */
-    /* 16/10: a warned drawer becomes a target only through the SMART window */
-    if (r == LCR_TARGET && stored_role(a, dev) != LCR_TARGET && smart_skip(&a->st.lc.disks[i])) { smart_ask(a, SDLG_LC_TARGET, i); return; }
     set_stored(a, dev, r);
 }
 
@@ -391,7 +406,7 @@ static void cycle_role(App *a, int dir) {
     for (int n = 0; n < 3; n++) {
         at = (at + dir + 3) % 3;
         if (order[at] == LCR_TARGET && !lc_target_ok(a, i)) continue;
-        if (order[at] == LCR_SOURCE && !a->st.lc.disks[i].usable) continue;
+        if (order[at] == LCR_SOURCE && !lc_source_ok(&a->st.lc.disks[i])) continue;
         role_click(a, i, order[at]); return;
     }
 }

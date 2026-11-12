@@ -27,7 +27,7 @@
 # until the server has made its list.
 #
 # The outcome of a disk, never folded (principle 5):
-#   verified    every chunk of every partition matched.
+#   verified    every chunk of every partition matched. (repaired: #2023, readbackinline.sh -- orange.)
 #   sampled     the drawn chunks matched -- "נבדק במדגם".
 #   unverified  nothing to compare with (no list yet; a direct send is served "full"
 #               since #2218): the disk is done and says so -- never "verified". "unfetched" (#1907): the
@@ -191,7 +191,7 @@ _rb_apply() {
     # $1 = disk, $2 = its result line. The one place a result becomes a state.
     _ra_t="$RUN_DIR/targets/$1"; rm -f "$_ra_t/readback" "$_ra_t/readback_reason" "$_ra_t/readback_why"
     case "$2" in
-        verified\|*|sampled\|*|unverified\|*|unfetched\|*)
+        verified\|*|sampled\|*|unverified\|*|unfetched\|*|repaired\|*)
             _ra_s=${2%%|*}; [ "$_ra_s" != unfetched ] || { _ra_s=unverified; echo list_not_fetched > "$_ra_t/readback_why"; }   # #1907
             echo "$_ra_s" > "$_ra_t/readback"; printf '%s' "${2#*|}" > "$_ra_t/readback_reason"
             log "$1: read back: ${2%%|*} -- ${2#*|}" ;;
@@ -225,8 +225,8 @@ _rb_live() {   # $@ = disks. The ones still being written: not failed, not cance
     done
 }
 
-rb_mode() {   # $1 = a JSON file with readback_mode (the manifest, or the last hello). sample|full.
-    case "$(jq -r '.readback_mode // "sample"' "$1" 2>/dev/null)" in full) echo full ;; *) echo sample ;; esac
+rb_mode() {   # $1 = a JSON file with readback_mode (the manifest, or the last hello). sample|full; inline (#2023) = full here, rb_inline_begin.
+    case "$(jq -r '.readback_mode // "sample"' "$1" 2>/dev/null)" in full|inline) echo full ;; *) echo sample ;; esac
 }
 
 rb_seed() {   # the sample's seed: drawn, and logged -- the same seed draws the same chunks.

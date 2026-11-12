@@ -81,8 +81,16 @@ def env(run: Path, dev: Path, sysroot: Path | None = None, smartctl: str = "") -
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} '
         f'IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff SERVER=http://x; '
     )
-    if sysroot is not None:
-        out += f'export SYSROOT={posix(sysroot)!r}; '
+    if sysroot is None:
+        # The host's /sys must not leak into the test: the testrunner has a real /sys/block/sdb whose
+        # ro is 1 (11/11), and smart_ro_check read it as "read-only = red" on the fake sdb. A sysroot
+        # of our own, with every disk of `dev` writable -- what the tests mean by "a disk".
+        sysroot = run.parent / f"{run.name}-sysroot"
+        for d in (dev.iterdir() if dev.is_dir() else ()):
+            (sysroot / "sys" / "block" / d.name).mkdir(parents=True, exist_ok=True)
+            (sysroot / "sys" / "block" / d.name / "ro").write_text("0\n", newline="\n")
+        sysroot.mkdir(exist_ok=True)
+    out += f'export SYSROOT={posix(sysroot)!r}; '
     if smartctl:
         out += f'export SMARTCTL={smartctl!r}; '
     return out

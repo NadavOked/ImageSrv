@@ -15,20 +15,19 @@
 SMART_KB="${SMART_KB:-${LIB_DIR:-/usr/lib/imagesrv}/data}"
 
 smart_judge() {
-    # $1 = smartctl -x output, $2 = the CRC threshold (crc_warn_threshold; 0 or empty = off).
+    # $1 = smartctl -x output. (#2846: no CRC threshold -- the CRC counters are info rows.)
     # One finding a line: verdict|word|kind|key|name|value -- verdict red|orange|hw|unknown.
     # Nothing printed for a rule that did not hold, nor for an information row.
     # 1 = a table could not be read: no finding is evidence of nothing then (principle 5).
     [ -s "$SMART_KB/smart-knowledge.tsv" ] && [ -s "$SMART_KB/hw-issues.tsv" ] || return 1
-    awk -v crc="${2:-0}" -v kb1="$SMART_KB/smart-knowledge.tsv" -v kb2="$SMART_KB/hw-issues.tsv" '
+    awk -v kb1="$SMART_KB/smart-knowledge.tsv" -v kb2="$SMART_KB/hw-issues.tsv" '
         function lead(s) { gsub(/,/, "", s); sub(/^[^0-9]*/, "", s); sub(/[^0-9].*/, "", s); return s }
         function hex(s,   v, i, c) { v = 0; s = tolower(s); sub(/^0x/, "", s)
             for (i = 1; i <= length(s); i++) { c = index("0123456789abcdef", substr(s, i, 1)); if (!c) return -1; v = v * 16 + c - 1 }
             return v }
         function holds(k, x,   t) {
-            t = (V[k] == "crc") ? crc + 0 : (V[k] == "wctemp") ? wctemp : V[k] + 0
+            t = (V[k] == "wctemp") ? wctemp : V[k] + 0
             if (V[k] == "wctemp" && wctemp == "") return 0      # no WCTEMP printed: not judged (below: unknown)
-            if (V[k] == "crc" && crc + 0 == 0) return 0          # crc_warn_threshold 0 = the note is off (crcwarn.py)
             return (O[k] == ">" && x > t) || (O[k] == ">=" && x >= t) || (O[k] == "<" && x < t) || (O[k] == "<=" && x <= t)
         }
         function say(k, key, name, x) { if (W[k] != "") print C[k] "|" W[k] "|" K[k] "|" key "|" name "|" x }
@@ -108,9 +107,7 @@ smart_judge_disk() {
     # disk's own worst: "red <word>", "orange <word>" (the first of SMART_WARN_REASONS
     # that holds -- smart.sh) or nothing. hw lines stay in the file for hw_words (hwissues.sh).
     _jd_f="$RUN_DIR/smart/$1.find"
-    _jd_crc=$(json_get "$RUN_DIR/response.json" ".crc_warn_threshold" 2>/dev/null)
-    case "$_jd_crc" in ''|*[!0-9]*) _jd_crc=0 ;; esac   # an older server: off, as clonergui.sh
-    smart_judge "$RUN_DIR/smart/$1.out" "$_jd_crc" > "$_jd_f.next" || { rm -f "$_jd_f.next"; return 1; }
+    smart_judge "$RUN_DIR/smart/$1.out" > "$_jd_f.next" || { rm -f "$_jd_f.next"; return 1; }
     mv "$_jd_f.next" "$_jd_f"
     _jd_r=$(awk -F'|' '$1 == "red" { print $2; exit }' "$_jd_f")
     [ -n "$_jd_r" ] && { printf 'red %s' "$_jd_r"; return 0; }

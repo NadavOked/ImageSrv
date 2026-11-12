@@ -5,6 +5,7 @@
 // 3. בלי מיפוי שמור: חיבור עם דיסק פעיל, ריק כבוי. מה שסומן פעיל נשאר פעיל.
 // 4. הוספה ידנית: סוג ומספר בלבד, בלי PCI.
 // בלי דפדפן: console.js + net.js + progress.js ב-vm מול DOM מזערי ו-fetch מזויף.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -49,7 +50,7 @@ function setup({c2={},admin=true,fail=null,fail409=false,wiring=null,wiringFail=
       if(options.method==='PUT' && fail) return {status:400,ok:false,headers:{get:()=>null},json:async()=>({detail:fail})};
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true,machines:[C1,C2]}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run(`ME={username:"nadav",role:"${admin?'admin':'deploy'}",server_name:"srv",version:"v0.67.1",capabilities:{}}; current="machines"; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{}; openDrawer=(t,h)=>{ globalThis.drawerHtml=h; }; setDrawerBody=(h)=>{ globalThis.drawerHtml=h; }; loadMachines=async()=>{ globalThis.reloaded=(globalThis.reloaded||0)+1; };`);
   for(const [name,key] of [['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines'],['ROOM','/room'],['ROOM_HISTORY','/room/history']]) run(name+'='+JSON.stringify(fixtures[key]));

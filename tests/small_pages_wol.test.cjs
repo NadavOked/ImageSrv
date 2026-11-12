@@ -3,6 +3,7 @@
 // בלי דפדפן: console.js + net.js + progress.js רצים ב-vm מול DOM מזערי ו-fetch
 // מזויף. עיקרון 5: כל endpoint שלא נקרא הוא מצב משלו, לא "ריק"; "נשלח" ≠
 // "התעוררה" (#528). #1270: מחיקת משתמש = חלון אישור.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -53,7 +54,7 @@ function setup(over={}) {
       if(f===204) return {status:204,ok:true,headers:hdr,json:async()=>({})};
       return {status:200,ok:true,headers:hdr,json:async()=>f ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",idle_seconds:600,version:"v0.35.0",capabilities:{classrooms:true}}; globalThis.sheets=[]; globalThis.toasts=[]; sheet = o => { sheets.push(o); }; toast=(m)=>{ toasts.push(m); }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; globalThis.selected=[]; selectPageById=(id)=>{ selected.push(id); current=id; }; globalThis.drawer=""; openDrawer=(t,b)=>{ drawer=t+"|"+b; }; globalThis.idleRestarted=0; startIdleWatch=()=>{ idleRestarted++; };');
   run('MACHINES='+JSON.stringify(fixtures['/machines'])+'; GROUPS='+JSON.stringify(fixtures['/groups'])+'; NET=[]; DISK_FAILURES=[]; SHRINK_RECORDS=[];');
@@ -142,7 +143,8 @@ test('settings (סידור 17/10, המוקאפ settings-redesign): four groups, 
   assert.match(groupOf('אבטחה'),/<dt>תעודת TLS<\/dt><dd><span class="muted">בלי TLS \(loopback בלבד\)<\/span><\/dd>/);
   assert.match(groupOf('עדכונים ותחזוקה'),/<dt title="[^"]*">הפעלה מחדש אוטומטית<\/dt><dd[^>]*><span class="sv">כבוי<\/span> <button[^>]*autoRebootSheet\(\)">שינוי…</);
   assert.match(groupOf('עדכונים ותחזוקה'),/גיבוי הגדרות<\/dt><dd[^>]*><button[^>]*onclick="confirmSettingsBackup\(\)">הורדה…</);
-  assert.doesNotMatch(html,/role="tablist"|aria-label="ערכת נושא"/,'"מראה" is in my account, not here');
+  assert.doesNotMatch(html,/aria-label="ערכת נושא"|>מראה</,'"מראה" is in my account, not here');
+  assert.deepEqual([...html.matchAll(/role="tab"[^>]*>([^<]+)</g)].map((m)=>m[1]),['כללי','שמות מחשב'],'#2786: the one extra tab is "שמות מחשב"');
   // ‏#1302 (נדב 12/10): אין אפשרות להחליף לוגו — אין כרטיס "מיתוג", אין העלאה ואין הסרה.
   assert.doesNotMatch(html,/<span>מיתוג<|logo-input|settingsLogo|branding/);
 });

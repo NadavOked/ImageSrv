@@ -23,6 +23,7 @@ pytestmark = pytest.mark.usefixtures("classrooms_on")
 
 from fastapi.testclient import TestClient
 
+from console_src import console_js as read_console_js
 from server.net import dhcp
 from server.console import users
 from server.app import create_app
@@ -234,7 +235,7 @@ def test_both_console_screens_warn_when_the_dhcp_update_failed():
     מרובה — קוראת את `network.error` ומציגה את האזהרה. מאז #954 גל 3 כולן
     ב-`console.js` (‏`machines.js` נמחק). בדיקת תוכן: אין דפדפן בחבילה,
     וה-JS הוא vanilla."""
-    console_js = (STATIC / "console.js").read_text(encoding="utf-8")
+    console_js = read_console_js()
     assert "r.network" in console_js and WARNING in console_js
     assert not (STATIC / "machines.js").exists(), "machines.js חזר — מי קורא לו?"
     calls = console_js.count("dhcpNotice(") - console_js.count("function dhcpNotice(")

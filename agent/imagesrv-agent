@@ -16,17 +16,17 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/waits.sh"
 . "$LIB_DIR/jsonq.sh"
 . "$LIB_DIR/gptboot.sh"
-. "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/diskinfo.sh"; . "$LIB_DIR/inventory.sh"; . "$LIB_DIR/fwimage.sh"; . "$LIB_DIR/probe.sh"; . "$LIB_DIR/probe_bg.sh"; . "$LIB_DIR/netprobe.sh"; . "$LIB_DIR/cablelive.sh"; . "$LIB_DIR/disklink.sh"   # #720+#1049+#1048(+#1968); #432 link speed per disk
+. "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/diskinfo.sh"; . "$LIB_DIR/inventory.sh"; . "$LIB_DIR/fwimage.sh"; . "$LIB_DIR/probe.sh"; . "$LIB_DIR/probedisplay.sh"; . "$LIB_DIR/probe_bg.sh"; . "$LIB_DIR/netprobe.sh"; . "$LIB_DIR/cablelive.sh"; . "$LIB_DIR/disklink.sh"   # #720+#1049+#1048(+#1968); #432 link speed per disk
 . "$LIB_DIR/decide.sh"
 . "$LIB_DIR/progress.sh"; . "$LIB_DIR/datareport.sh"   # #1882-#1889: what the server keeps beyond the report
 . "$LIB_DIR/pull.sh"; . "$LIB_DIR/opengate.sh"   # אחרי progress.sh: pull_close קורא ל-report_final (#562); #2657: the open-round gate sends a report
 . "$LIB_DIR/expand.sh"; . "$LIB_DIR/grow.sh"; . "$LIB_DIR/ntfsunhib.sh"; . "$LIB_DIR/expandshare.sh"; . "$LIB_DIR/writemark.sh"   # ההרחבה: לפני הזרם ואחריו (#478); diskfit calls _expand_candidate (#1354); #1798 the mark
 . "$LIB_DIR/bootcadb.sh"; . "$LIB_DIR/discard.sh"; . "$LIB_DIR/restore.sh"; . "$LIB_DIR/streamid.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/writecheck.sh"; . "$LIB_DIR/writeback.sh"   # #672/#1217/#1366/#1969: restore preflights; #1826 session_stream; #1841 early EIO
-. "$LIB_DIR/drawers.sh"; . "$LIB_DIR/drawerfeed.sh"; . "$LIB_DIR/verdict.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/ntfsboot.sh"; . "$LIB_DIR/readback.sh"; . "$LIB_DIR/rbprog.sh"; . "$LIB_DIR/readbacklc.sh"   # #1805 read-back after the write; (#704 slot names; #1487 NTFS backup boot) הזרם, הפסק עליו (#520), והראיה על כשל (#874)
+. "$LIB_DIR/drawers.sh"; . "$LIB_DIR/drawerfeed.sh"; . "$LIB_DIR/verdict.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/ntfsboot.sh"; . "$LIB_DIR/readback.sh"; . "$LIB_DIR/rbprog.sh"; . "$LIB_DIR/readbacklc.sh"; . "$LIB_DIR/readbackinline.sh"   # #1805 read-back after the write; (#704 slot names; #1487 NTFS backup boot) הזרם, הפסק עליו (#520), והראיה על כשל (#874)
 . "$LIB_DIR/manifest.sh"
 . "$LIB_DIR/bootca.sh"; . "$LIB_DIR/hibernation.sh"; . "$LIB_DIR/shrinkplan.sh"; . "$LIB_DIR/shrink.sh"; . "$LIB_DIR/shrinkmem.sh"; . "$LIB_DIR/shrinkoffer.sh"   # לפני capture.sh: capture_disk קורא להם (#85, #651, #87, #926, #929)
 . "$LIB_DIR/capturedetail.sh"; . "$LIB_DIR/capturegate.sh"; . "$LIB_DIR/captureview.sh"; . "$LIB_DIR/capture.sh"; . "$LIB_DIR/capturesink.sh"; . "$LIB_DIR/directsend.sh"; . "$LIB_DIR/directrecv.sh"   # #2213: the capture's RAM views; #1952: direct_finished; #715: pass 1 is capture_disk
-. "$LIB_DIR/hostname.sh"; . "$LIB_DIR/unattend.sh"; . "$LIB_DIR/hostname_linux.sh"; . "$LIB_DIR/bootentry.sh"; . "$LIB_DIR/bootstorage.sh"; . "$LIB_DIR/linuxdrivers.sh"; . "$LIB_DIR/postdeploy.sh"   # #720: driver staging, after the name; #433: Boot#### before it; #1331: boot-start storage + Linux initramfs check
+. "$LIB_DIR/hostname.sh"; . "$LIB_DIR/unattend.sh"; . "$LIB_DIR/hostname_linux.sh"; . "$LIB_DIR/drawernames.sh"; . "$LIB_DIR/bootentry.sh"; . "$LIB_DIR/bootstorage.sh"; . "$LIB_DIR/linuxdrivers.sh"; . "$LIB_DIR/postdeploy.sh"   # #720: driver staging, after the name; #2786: a drawer's name; #433: Boot#### before it; #1331: boot-start storage + Linux initramfs check
 . "$LIB_DIR/sitehooks.sh"   # #1266: a site/lab overlay's start hooks; the product ships none
 . "$LIB_DIR/watchdog.sh"; . "$LIB_DIR/monitor.sh"; . "$LIB_DIR/installer_boot.sh"   # #690: RFB, role+flag gated; #1190: init-only (inert here, load gate #84)
 . "$LIB_DIR/ui.sh"; . "$LIB_DIR/failscreen.sh"   # #1569: the one failure screen behind ui_error_hold and die_local
@@ -38,7 +38,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/hold.sh"; . "$LIB_DIR/task.sh"   # #1217: do_task, split from this file
 . "$LIB_DIR/poll.sh"; . "$LIB_DIR/idle.sh"; . "$LIB_DIR/roundbeep.sh"   # #434/#1967: idle power-off and audible result
 . "$LIB_DIR/guiparent.sh"; . "$LIB_DIR/localboot.sh"; . "$LIB_DIR/splash.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: no GUI -> BootNext to the local disk + told to the server; 17/10: the static screen; #1709: the GUI init started
-. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/drawerselect.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: the set and sticker per disk (kiosk; here for the load gate); #2201: resolve_target_drawers; #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
+. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/directgui.sh"; . "$LIB_DIR/drawerselect.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: the set and sticker per disk (kiosk; here for the load gate); #2201: resolve_target_drawers; #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
 . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcsize.sh"; . "$LIB_DIR/lcplan.sh"; . "$LIB_DIR/lcsnap.sh"; . "$LIB_DIR/lctune.sh"; . "$LIB_DIR/lccopy.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/localclone.sh"; . "$LIB_DIR/lcwait.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/syspartgui.sh"   # #1896: C: from the screen; #1322: local clone (lcgui.sh runs in the kiosk); 16/10: restore from the server
 . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/drawergate.sh"   # #928: the shrink question; 11/10: grow-back / end-of-capture dialogs
 . "$LIB_DIR/guibridge.sh"   # run in imagesrv-kiosk; sourced here for the load gate
@@ -131,8 +131,8 @@ do_restore_drawers() {
     # shellcheck disable=SC2086 # the disk list is a word list on purpose
     WRITEMARK_HOLD=1; EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") run_restore_drawers "multicast" "$SERVER" "$1" "$RUN_DIR/manifest.json" $_disks
     _rc=$?; crc_delta_measure $_disks; smart_note_apply $_disks   # #872: 199 פעם אחת אחרי הכתיבה, בהצלחה ובכשל; #2042: the orange note
-    # shellcheck disable=SC2086 # #1269: drivers by the chosen model, per drawer, before the report
-    [ "$_rc" -eq 0 ] && stage_drawer_drivers "$2" "$RUN_DIR/manifest.json" $_disks
+    # shellcheck disable=SC2086 # #2786: each drawer's computer name, then #1269: drivers by the chosen model, per drawer, before the report
+    [ "$_rc" -eq 0 ] && { name_drawers $_disks; stage_drawer_drivers "$2" "$RUN_DIR/manifest.json" $_disks; }
     # shellcheck disable=SC2086 # #1877: each done drawer's mark comes off after its drivers; one that stays fails that drawer
     WRITEMARK_HOLD=0; writemark_release_done $_disks || { _f=$(_machine_state "$_disks"); echo "$_f" > "$RUN_DIR/state"; [ "$_f" != failed ] || _rc=1; }
 

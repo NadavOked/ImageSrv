@@ -37,6 +37,7 @@ from pathlib import Path
 import pytest
 
 from boot import grub_lock
+from console_src import console_js
 from native import requires_native
 from server.system import grub_password
 from test_grub_lock_2437 import grub_check
@@ -533,7 +534,7 @@ def test_no_password_file_and_an_unreadable_one_say_so_without_a_view(tmp_path, 
 
 @requires_native(("node", NODE))
 def test_the_settings_row_hides_it_until_shown_and_a_secondary_shows_its_own(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     names = ["grubPasswordRowHtml", "grubPasswordSheet"]
     found = {n: re.search(rf"^function {n}\(.*?^\}}", js, re.M | re.S) for n in names}
     src = {n: m.group(0) if m else f"function {n}() {{ return ''; }}" for n, m in found.items()}

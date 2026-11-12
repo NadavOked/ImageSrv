@@ -1,6 +1,7 @@
 // #1912 / #1213: a room machine the server gave up on (member state "lost", #450) must not
 // look like one that is still writing. The card showed "בסבב · 63%" -- the last percent -- as
 // if the copy were running. "lost" = we do not know whether anything was written (principle 5).
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -20,7 +21,7 @@ function setup(member) {
     window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run(`ME={username:"admin",role:"admin",server_name:"srv",version:"v0.0.0",capabilities:{classrooms:true}};`);
   const room={round:{id:'rnd_1',image_id:'img_1',target_drives:2,written_drives:0,remaining_drives:2,wave_number:1,wave_state:'running',ready_drives:2,opened_by:'nadav',source:{kind:'library'}},

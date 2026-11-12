@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server.vm import vmdisk, vmnet
 
 # --- 1. רשת (‏#1468: macvtap — הטבלה חוסמת את משתמש ה-VM ואת האורח במארח) -----
@@ -242,7 +243,7 @@ def test_bitlocker_is_canonical_and_matches_the_source(tmp_path):
 def test_bitlocker_warning_matches_the_agent_and_console():
     root = Path(__file__).resolve().parent.parent
     shell = (root / "agent/lib/capture/hibernation.sh").read_text(encoding="utf-8")
-    console = (root / "server/static/console.js").read_text(encoding="utf-8")
+    console = console_js()
     note = re.search(r'^CAPTURE_BITLOCKER_NOTE="([^"]+)"', shell, re.M)
     js_note = re.search(r'const BL_NOTE = "([^"]+)"', console)
     assert note is not None and js_note is not None

@@ -2,7 +2,6 @@
    תוכן העמודים (נתונים אמיתיים) נכנס בשלבים הבאים. */
 "use strict";
 
-const $ = (sel) => document.querySelector(sel);
 let ME = null;
 /* #1081: v1 hides classrooms. v2 turns ME.capabilities.classrooms on. */
 function classroomsOn() {
@@ -27,110 +26,6 @@ let HEALTH = null, NETCFG = null;
 let MONITOR = null, monitorError = "";
 let PORTS = null, portsError = "";
 let USERS = null, JOURNAL = null;   // ‏#954 גל 6: JOURNAL = השורות שנטענו (LOG.rows), USERS = /users
-
-/* עיקרון 5: "השרת לא ענה" ו"השרת ענה בשגיאה" הם שני מצבים. כשל רשת של
-   fetch (TypeError / "Failed to fetch" / NetworkError / AbortError) הופך
-   כאן, במקום אחד, להודעה בעברית עם `error.network = true` ובלי `status`;
-   4xx/5xx ממשיכים להציג את ה-`detail` של השרת עם `error.status`. */
-const NET_DOWN_HE = "השרת לא עונה — בדוק שהוא דלוק ונסה שוב";
-async function apiFetch(url, options) {
-  try {
-    return await fetch(url, options);
-  } catch (e) {
-    const name = e && e.name;
-    if (name === "TypeError" || name === "AbortError" || name === "NetworkError"
-        || /failed to fetch|networkerror|load failed|network request failed/i.test(String(e && e.message))) {
-      const error = new Error(NET_DOWN_HE);
-      error.network = true;
-      noteApiFailure(NET_DOWN_HE);
-      throw error;
-    }
-    throw e;
-  }
-}
-/* ה-toast צובע "שגיאה" רק כשהטקסט שלו בא מכשל API שזה עתה קרה — כך
-   `toast(e.message)` ב-200 האתרים הקיימים נצבע נכון בלי לשנות אף אחד מהם. */
-let lastApiFailure = { text: "", at: 0 };
-function noteApiFailure(text) { lastApiFailure = { text: String(text), at: Date.now() }; }
-/* ‏#1179: "הקשר שרת". כשנבחר שרת משנה בעץ, SERVER_CTX הוא המזהה שלו, וכל בקשת קונסולה
-   הולכת דרך ה-relay של הראשי (‏/storage-nodes/{id}/console/…, ‏8443) — אותן
-   פונקציות ה-load וה-render של הראשי מציירות את שרת המשנה, ולכן אותם עמודים ואותן לשוניות.
-   ‏/me, כניסה ויציאה הם של המשתמש בראשי. גם post/put/del בהקשר שרת משנה הולכים ל-relay
-   (שלב 2) — לעולם לא לנתיב של הראשי; ה-relay מעביר רק פעולות מהרשימה המותרת
-   (משתמשים · הגדרות · רשת) ומסרב לשאר. העלאה/הורדה של קבצים אינה עוברת בערוץ (JSON
-   בלבד) — נחסמת כאן, כדי שלא תפעל על הראשי. */
-let SERVER_CTX = null, PRIMARY_ME = null;
-const PRIMARY_ONLY_PATH = /^\/(me|login|logout|session)(\/|\?|$)/;
-const SECONDARY_READ_ONLY = "לא זמין על שרת המשנה מכאן — קבצים (העלאה/הורדה) אינם עוברים בערוץ בין השרתים";
-function consoleUrl(path, primary = false) {
-  if (primary || !SERVER_CTX || PRIMARY_ONLY_PATH.test(path)) return "/api/console" + path;
-  return `/api/console/storage-nodes/${encodeId(SERVER_CTX)}/console${path}`;
-}
-function secondaryReadOnly() {
-  if (!SERVER_CTX) return false;
-  noteApiFailure(SECONDARY_READ_ONLY);
-  return true;
-}
-async function api(path, options = {}) {
-  const { primary = false, ...fetchOptions } = options;
-  const response = await apiFetch(consoleUrl(path, primary), {
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    ...fetchOptions,
-  });
-  if (response.status === 401) { showLogin(); throw new Error("לא מחובר"); }
-  if (!response.ok) {
-    let detail = "שגיאה " + response.status;
-    // ‏#1073: `message_he` הוא החוזה של סירובים עם קוד (`deploy_no_console`
-    // בכניסה) — מוצג כלשונו; `detail` הוא הצורה של HTTPException.
-    let code;
-    try { const body = await response.json(); detail = body.message_he || body.detail || detail; code = body.code; } catch (e) {}
-    const error = new Error(detail);
-    error.status = response.status;   // ‏#936: הקורא מבחין בין 403/409 לכשל אמיתי
-    error.code = code;                // ‏#1891: סירוב עם קוד (`update_busy`) — הקורא מציע עקיפה
-    noteApiFailure(detail);
-    throw error;
-  }
-  noteServerClock(response);
-  return response.json();
-}
-/* ‏#2781: שעון השרת, לא שעון הדפדפן — "10 דקות אחרונות" בפאנל המשימות חייב להיות זהה אצל כל המנהלים.
-   ה-API אינו מחזיר את השעה בגוף התשובה, לכן הסטייה נלקחת מכותרת Date של כל תשובה (דיוק שנייה; בלי הכותרת, למשל
-   בקריאה בין-מקורות ש-CORS מסתיר, נשארים עם שעון הדפדפן). */
-let SERVER_CLOCK_OFFSET = null;
-function noteServerClock(response) {
-  const server = Date.parse((response && response.headers && response.headers.get("Date")) || "");
-  if (Number.isFinite(server)) SERVER_CLOCK_OFFSET = server - Date.now();
-}
-function serverNow() { return Date.now() + (SERVER_CLOCK_OFFSET || 0); }
-const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body || {}) });
-const put = (path, body) => api(path, { method: "PUT", body: JSON.stringify(body || {}) });
-const del = (path) => api(path, { method: "DELETE" });
-
-/* ‏#1129: הברחה מפורשת של ששת התווים, לא textContent→innerHTML — הסריאליזציה
-   של הדפדפן ממירה רק `&<>` בצומת טקסט, ו-esc() משמש ב-67 attributes
-   (`value="…"`, `title="…"`, `data-*`). ערך עם `"` היה סוגר את ה-attribute
-   ומזריק `onfocus=`; המקורות אינם בשליטת המפעיל (שמות שיתופי SMB/NFS
-   מסריקת רשת, IQN, ‏switch_name מ-LLDP, dmidecode). בתוך `onclick="fn('…')"`
-   זה עדיין לא מספיק — שם משתמשים ב-encodeId + decodeURIComponent. */
-const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
-function esc(text) {
-  return (text == null ? "" : String(text)).replace(/[&<>"'`]/g, (c) => ESC_MAP[c]);
-}
-/* הטקסט של HTML שהקונסולה עצמה בנתה, בלי התגיות — ל-title (שעובר esc() אחר כך).
-   מעבר אחד, תו אחרי תו, ולא ‏/<[^>]*>/g: ה-regex הוא הסרה "חלקית" (CodeQL
-   js/incomplete-multi-character-sanitization) — מ-"<<b>script>" הוא משאיר "<script>".
-   כאן כל "<" פותח תגית שנזרקת עד ה-">" שסוגר אותה, ולכן בפלט לא נשאר "<" אחד.
-   ישויות (&#39;) נשארות כמו שהן; עברית ושאר התווים עוברים ללא שינוי. */
-function stripTags(html) {
-  let out = "", inTag = false;
-  for (const ch of String(html == null ? "" : html)) {
-    if (inTag) { if (ch === ">") inTag = false; }
-    else if (ch === "<") inTag = true;
-    else out += ch;
-  }
-  return out;
-}
 
 /* ---------- #954: שפת העיצוב המשותפת — רכיבי רינדור לכל עמוד חדש ----------
    המקור: docs/design/console-redesign (README §"שפת העיצוב", המוקאפים
@@ -604,66 +499,6 @@ function sheet({ title, sub = "", fields = [], submitLabel = "שמירה", cance
 function confirmSheet(title, sub, submitLabel, onConfirm, impacts = null, danger = true) {
   sheet({ title, sub: impacts ? sub : sub, submitLabel, danger, onSubmit: onConfirm, note: impacts ? impactList(impacts) : "" });
 }
-
-/* ---------- ערכת צבעים ---------- */
-/* #1093: נשמר בשרת (users.theme): auto / light / dark — ערך אחד לקונסולה
-   ול-GUI של מחשב הבנייה. ‏#1499 (נדב 16/10): ברירת המחדל לכולם בהיר —
-   auto = בהיר, ושום דבר לא עוקב אחרי מערכת ההפעלה. המתג מחליף בין בהיר
-   לכהה ונשמר למשתמש. localStorage הוא מטמון בלבד — מונע הבהוב בטעינה
-   כשהבחירה אינה auto, ונמחק ב-logout וב-auto. */
-const THEME_KEY = "imagesrv-theme";
-const THEME_CYCLE = ["light", "dark"];
-const THEME_TITLE = { light: "בהיר", dark: "כהה" };
-let themePref = "auto";
-
-function currentTheme() {
-  return themePref === "dark" ? "dark" : "light";
-}
-
-function paintTheme() {
-  const id = currentTheme();
-  document.documentElement.setAttribute("data-theme", id);
-  const button = $("#theme-toggle");
-  if (!button) return;
-  button.innerHTML = uiIcon(id === "dark" ? "sun" : "moon");
-  button.title = THEME_TITLE[id];
-}
-
-function applyTheme(pref) {
-  themePref = pref === "dark" || pref === "light" ? pref : "auto";
-  if (themePref === "auto") {
-    if (typeof localStorage.removeItem === "function") localStorage.removeItem(THEME_KEY);
-  } else {
-    localStorage.setItem(THEME_KEY, themePref);
-  }
-  paintTheme();
-}
-
-function applyServerTheme(me) {
-  const t = me && me.theme;
-  applyTheme(t === "light" || t === "dark" ? t : "auto");
-}
-
-/* בחירה מפורשת (כרטיס "מראה" ב"החשבון שלי"): אותו מנגנון כמו הכפתור שבכותרת, ונשמרת בשרת (users.theme). */
-function setThemePref(pref) {
-  if (!THEME_CYCLE.includes(pref)) return;
-  applyTheme(pref);
-  if (!ME) return;
-  ME.theme = pref;
-  const done = put("/me/theme", { theme: pref }).catch((e) => toast(e.message));
-  if (current === "account") renderCurrent();   // הכרטיס "מראה" עבר ל"החשבון שלי" (נדב 17/10)
-  return done;
-}
-/* ‏#1499: מה שרואים מתחלף — auto מצויר בהיר, ולכן הלחיצה ממנו היא לכהה. */
-function toggleTheme() {
-  const next = currentTheme() === "dark" ? "light" : "dark";
-  applyTheme(next);
-  if (!ME) return;
-  ME.theme = next;
-  return put("/me/theme", { theme: next }).catch((e) => toast(e.message));
-}
-
-$("#theme-toggle").addEventListener("click", toggleTheme);
 
 /* מתגי הצגת סיסמה במסך הכניסה — delegation ב-bindLogin. */
 
@@ -2524,7 +2359,7 @@ function roomStats(kids) {
   return {
     slots: all.reduce((n, x) => n + x.slots.length, 0), filled: pick((s) => s.disk).length,
     writing: pick((s) => s.live && (s.live.state === "writing" || s.live.state === "verifying")),
-    red: pick((s) => s.disk && slotClass(s) === "err"), warn: pick((s) => s.disk && slotClass(s) === "warn"),
+    red: pick((s) => s.disk && slotClass(s) === "err"), warn: pick((s) => s.disk && ["warn", "yel"].includes(slotClass(s))),
     empty: pick((s, m) => !s.disk && !!(roomMachine(m.mac) || {}).awake),   // חריץ פנוי = במכונה מחוברת; מכונה כבויה נספרת פעם אחת
     off: kids.filter((m) => { const rm = roomMachine(m.mac); return rm && !rm.awake; }),
     awake: kids.filter((m) => { const rm = roomMachine(m.mac); return rm && rm.awake; }).length,
@@ -2763,9 +2598,9 @@ const PRECHECK_LINK_ROSE = ["downshift_rose", "timeout_rose"];   // #1859 smart_
 const PRECHECK_DISK_ROSE = ["critical_rose", "hot"];             // a critical attribute, hot while writing -- the disk
 function precheckSigns(x) {
   const out = [];
-  if ((x.crc_rise || 0) > 0 || x.crc_suspect === true || x.port_suspect === true || PRECHECK_LINK_ROSE.includes(x.smart_learned)
+  if ((x.crc_rise || 0) > 0 || x.port_suspect === true || PRECHECK_LINK_ROSE.includes(x.smart_learned)
     || (x.link_gbps != null && x.link_max_gbps != null && x.link_gbps < x.link_max_gbps)) out.push("link");
-  if (x.write_slow === true || x.model_slow === true) out.push("slow");
+  if (x.model_slow === true) out.push("slow");   // #2848: a past round's slow write (#447's write_slow) is not warned
   if (x.disk_suspect === true || PRECHECK_DISK_ROSE.includes(x.smart_learned)) out.push("disk");
   return out;
 }
@@ -2932,7 +2767,8 @@ function roomMachHtml(m, r) {
   const bootRisk = slots.filter((s) => s.live && s.disk.drivers && driversTone(s.disk.drivers) === "bad");   // ‏#1331: הדיסק עלול לא לעלות
   const red = failed.length > 0 || bootRisk.length > 0;
   const name = (s) => slotLabel(m, s.n, s.disk);
-  const why = (s) => s.noDisk ? "אין דיסק במגירה" : s.disk.state === "failed" ? drawerErrorText(s.disk.error) : s.fail ? failureCauseText(s.fail) : "SMART נכשל";
+  const why = (s) => s.noDisk ? "אין דיסק במגירה" : s.disk.state === "failed" ? drawerErrorText(s.disk.error) : s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail)
+    : DISK_RULE_SHORT[slotRule(s).target_reason] || "SMART נכשל";   // #2848: the rule's reason, short on the card
   let sub;
   if (failed.length) sub = esc(failed.map((s) => `${name(s)} אדום — ${why(s)}`).join("; ")) + (done.length ? `; ${esc(done.map(name).join(", "))} ${done.length === 1 ? "משוחזר" : "משוחזרים"}` : "");
   else if (st.held) sub = esc(`${HELD_HE} — ${heldLine(m, rm.held)}`);   // #2031
@@ -2996,7 +2832,7 @@ function roomNotes(kids, st, hint = "") {
   }
   if (roomRound()) {
     const warn = st.warn.filter((x) => !asked.has(x.m.mac)), red = st.red.filter((x) => !asked.has(x.m.mac));
-    if (warn.length) out.push(UI.note("warn", `<b>${esc(whereList(warn))}</b> — SMART אזהרה / CRC / קישור איטי: <b>הסוכן ממשיך לכתוב</b> (כתום = כותב), והדיסק ייבדק שוב באימות. דילוג מרחוק — <b title="אין endpoint לדילוג על מגירה">דורש API</b>.${clears(warn).length ? " " + clears(warn).join(" · ") : ""}`));
+    if (warn.length) out.push(UI.note("warn", `<b>${esc(whereList(warn))}</b> — ${SMART_HALF_HE} / CRC שעלה / קישור איטי: <b>הסוכן ממשיך לכתוב</b> (כתום = כותב), והדיסק ייבדק שוב באימות. דילוג מרחוק — <b title="אין endpoint לדילוג על מגירה">דורש API</b>.${clears(warn).length ? " " + clears(warn).join(" · ") : ""}`));
     /* ‏#1767: אדום הוא שלוש סיבות שונות (slotClass) — הכתיבה בסבב נכשלה, קריאה בלבד (#1742), SMART נכשל.
        הערה לכל סיבה, בסיבה שלה; רק ל-SMART נכשל "לא כותבים... מדולג" — דיסק שהכתיבה אליו נכשלה כן נכתב. */
     const redWhy = (s) => s.disk.state === "failed" ? (s.disk.error ? `הכתיבה בסבב נכשלה: ${drawerErrorText(s.disk.error)}` : "הכתיבה בסבב נכשלה")
@@ -3027,11 +2863,11 @@ function roomPickSlots(kids) {
     return machineSlots(m).slots.map((s) => {
       const d = s.disk, key = d && d.port != null ? `${m.mac}@${d.port}` : "";
       const health = d ? slotClass({ disk: d, fail: s.fail }) : "empty";
+      const rule = d ? slotRule({ disk: d, fail: s.fail }) : null;   // #2848: the server's own decision (room.py)
       const tooSmall = !!(d && Number.isFinite(need) && need > 0 && Number(d.size_bytes) < need);
-      const preflightRed = !!(d && d.write_preflight && ["slow", "failed"].includes(d.write_preflight.state));
-      const red = health === "err" || tooSmall || preflightRed;
+      const red = health === "err" || tooSmall || !!(rule && !rule.target);
       // #1485: כונן שאינו ממופה (‏s.n null) אינו יעד — השרת מקבל רק פורט שבמיפוי
-      return { m, s, d, awake, key, health, tooSmall, preflightRed, red, wol: !awake, ok: !!d && !!d.serial && d.port != null && s.n != null && !red };
+      return { m, s, d, awake, key, health, rule, tooSmall, red, wol: !awake, ok: !!d && !!d.serial && d.port != null && s.n != null && !red };
     });
   });
 }
@@ -3053,45 +2889,43 @@ function roomPick(key) {
 }
 function roomPickSet(list, on) { list.forEach((x) => { if (on) DEPLOY.form.sel[x.key] = true; else delete DEPLOY.form.sel[x.key]; }); DEPLOY.err = ""; roomRoundRender(); }
 function roomPickMachine(mac) {
-  const list = roomPickSlots(roomMachines()).filter((x) => x.ok && x.health !== "warn" && x.m.mac === mac);
+  const list = roomPickSlots(roomMachines()).filter((x) => x.ok && x.health !== "warn" && x.health !== "yel" && x.m.mac === mac);
   roomPickSet(list, true);
 }
 function roomPickClearMachine(mac) { roomPickSet(roomPickSlots(roomMachines()).filter((x) => x.m.mac === mac), false); }
 function roomPickAll() {
-  roomPickSet(roomPickSlots(roomMachines()).filter((x) => x.ok && x.health !== "warn"), true);
+  roomPickSet(roomPickSlots(roomMachines()).filter((x) => x.ok && x.health !== "warn" && x.health !== "yel"), true);
 }
 function roomPickClearAll() { roomPickSet(roomPickSlots(roomMachines()), false); }
-function roomPickWarning(d) {
-  const why = [];
-  if (d.smart === "fail") why.push(smartF1Text(d.smart_reason)); else if (d.smart === "warn") why.push("SMART אזהרה");
-  else if (d.smart === "failed_last") why.push("נכשל בשיכפול הקודם — \"נסה שוב\" כותב");   // #1580: orange
-  if (d.write_mark === "incomplete") why.push(WRITE_MARK_HE);   // #1798: orange -- still a target
-  if (d.crc_suspect === true) why.push(`כבל או מגירה חשודים — ${d.crc} שגיאות`);
-  else if ((d.crc_delta || 0) > 0) why.push(`CRC +${d.crc_delta}`); else if ((d.crc_rise || 0) > 0) why.push(`CRC +${d.crc_rise}`);
-  if (linkSlow(d)) why.push(linkText(d));
-  return why.join(" · ");
+/* ‏#2848 (מוקאפ disk-colors, נדב 11/11): המגירות בחלון הן כרטיסי המגירה של המסך המקומי (bayCardHtml) —
+   צבע מלא, ובכל כרטיס [יעד][דלג] כמו בגואי. "יעד" של מגירה אדומה (או קטנה מהאימג') מושבת, והסיבה כתובה. */
+function roomPickTo(key, on) {
+  if (!!DEPLOY.form.sel[key] !== on) roomPick(key);
 }
 function roomPickGrid(kids) {
   const all = roomPickSlots(kids), ready = all.filter((x) => x.ok), nsel = ready.filter((x) => DEPLOY.form.sel[x.key]).length;
+  const selectedImage = (IMAGES || []).find((i) => i.id === DEPLOY.form.image) || {};
   const cards = kids.map((m) => {
     const mine = all.filter((x) => x.m.mac === m.mac), awake = mine.length ? mine[0].awake : !!(roomMachine(m.mac) || {}).awake;
     const pick = mine.filter((x) => x.ok), n = pick.filter((x) => DEPLOY.form.sel[x.key]).length;
     const sub = !awake ? "כבוי · יידלק ב-WoL" : "ער";
     const slots = mine.map((x) => {
-      const label = rowLabel(x.m, x.s);   // #1485: the mapped number; an unmapped drive is said, not numbered
-      if (!x.d) return `<div class="dk st-e" role="img" aria-label="${esc(label)} ריק">${esc(label)} · ${x.s.optical ? "כונן CD/DVD" : "ריק"}</div>`;
-      const warn = !x.red && x.health === "warn", cls = x.red ? "d" : warn ? "w" : "g", on = x.ok && !!DEPLOY.form.sel[x.key];
-      const selectedImage = (IMAGES || []).find((i) => i.id === DEPLOY.form.image) || {};
+      if (!x.d) return bayCardHtml(x.m, x.s);
+      const on = x.ok && !!DEPLOY.form.sel[x.key], label = rowLabel(x.m, x.s);
       const fitWhy = x.tooSmall ? imageFitReason(selectedImage, { name: machineName(x.m), port: x.s.n, label: slotLabel(x.m, x.s.n, x.s.disk), size_bytes: Number(x.d.size_bytes) }) : null;
-      const preflight = x.d.write_preflight || null;
-      const why = fitWhy || (x.preflightRed ? (preflight.reason || (preflight.state === "slow" ? "בדיקת הכתיבה איטית" : "בדיקת הכתיבה נכשלה")) : x.red ? (smartText(x.d) || "הדיסק אינו ניתן לבחירה") : roomPickWarning(x.d))
-        || (x.wol && x.ok ? "לפי הדיווח האחרון — דיסק אחר בחריץ ידולג" : "");   // #1954
-      const state = x.red ? "לא ניתן לסימון" : x.wol ? "יידלק ב-WoL" : warn ? "אזהרה" : "נכנס";   // #1954
-      return `<label class="dk st-${cls}${on ? " sel" : ""}" data-key="${esc(x.key)}"><input class="dk-in" type="checkbox"${on ? " checked" : ""}${x.ok ? ` onchange="roomPick(${jsStr(x.key)})"` : " disabled"}><span class="dk-t">${esc(label)}</span><span class="dk-sz">${ltr(marketedDiskSize(x.d.size_bytes))}</span><span class="dk-br">${esc(x.d.model || "דגם לא ידוע")}</span>${why ? `<span class="dk-why">${esc(why)}</span>` : ""}<span class="n-chip${cls === "g" ? "" : cls === "w" ? " w" : " d"}">${esc(x.s.n == null ? "לא ממופה" : state)}</span></label>`;
+      const lines = [];
+      if (fitWhy) lines.push(["bad", fitWhy]);
+      if (x.s.n == null) lines.push(["bad", "לא ממופה — אינו יעד"]);   // #1485: the server takes only a mapped port
+      else if (x.ok && x.wol) lines.push(["muted", "לפי הדיווח האחרון — דיסק אחר בחריץ ידולג"]);   // #1954
+      if (!x.red && x.d && !x.d.serial) lines.push(["muted", "אין מספר סידורי — אינו יעד"]);
+      const state = x.red ? "" : x.wol ? "יידלק ב-WoL" : x.ok ? "נכנס" : "";
+      if (state) lines.push([x.wol ? "muted" : "ok", state]);
+      const seg = `<span class="lb-seg" role="group" aria-label="${esc(label)}"><button type="button" aria-pressed="${on}"${x.ok ? ` onclick="roomPickTo(${jsStr(x.key)},true)"` : ` disabled title="${esc(x.red ? "לא יכול להיות יעד" : "אינו ניתן לבחירה")}"`}>יעד</button><button type="button" aria-pressed="${!on}"${x.ok ? ` onclick="roomPickTo(${jsStr(x.key)},false)"` : ""}>דלג</button></span>`;
+      return bayCardHtml(x.m, x.s, { tone: x.red ? "red" : undefined, tag: on ? "יעד" : "", sel: on, lines, act: seg, led: true, attrs: ` data-key="${esc(x.key)}"` });
     }).join("");
-    return `<section class="rn-m${!awake ? " off" : ""}" data-mac="${esc(m.mac)}"><div class="rn-mh"><div class="rn-nm"><h4>${esc(machineName(m))}</h4><span class="st"><i class="led${awake ? " ok" : ""}"></i>${sub}</span></div><span class="rn-cnt" aria-live="polite"><b>${n}</b> מתוך ${pick.length} נבחרו</span><button class="btn sm" type="button" onclick="roomPickMachine(${jsStr(m.mac)})">בחר הכול</button><button class="btn sm" type="button" onclick="roomPickClearMachine(${jsStr(m.mac)})">נקה</button></div><div class="rn-ds">${slots || `<div class="muted">לא דווחו מגירות</div>`}</div></section>`;
+    return `<section class="rn-m${!awake ? " off" : ""}" data-mac="${esc(m.mac)}"><div class="rn-mh"><div class="rn-nm"><h4>${esc(machineName(m))}</h4><span class="st"><i class="led${awake ? " ok" : ""}"></i>${sub}</span></div><span class="rn-cnt" aria-live="polite"><b>${n}</b> מתוך ${pick.length} נבחרו</span><button class="btn sm" type="button" onclick="roomPickMachine(${jsStr(m.mac)})">בחר הכול</button><button class="btn sm" type="button" onclick="roomPickClearMachine(${jsStr(m.mac)})">נקה</button></div><div class="lbays">${slots || `<div class="muted">לא דווחו מגירות</div>`}</div></section>`;
   }).join("");
-  return `<h3 class="n-sec-h full">מחשבים ומגירות</h3><div class="full rn-pick"><div class="rn-ph"><span>${ready.length} מגירות ניתנות לבחירה · <b>${nsel} נבחרו</b></span><span class="rn-all"><button type="button" class="btn sm" onclick="roomPickAll()">בחר הכול</button><button type="button" class="btn sm" onclick="roomPickClearAll()">נקה הכול</button></span></div><ul class="rn-legend" aria-label="מקרא"><li><i class="rn-sw sel"></i>נבחר</li><li><i class="rn-sw g"></i>נכנס</li><li><i class="rn-sw w"></i>אזהרה — אפשר לסמן</li><li><i class="rn-sw d"></i>לא ניתן לסימון</li><li><i class="rn-sw e"></i>ריק</li></ul>` + (kids.length ? `<div class="rn-grid">${cards}</div>` : `<div class="muted">אין משכפלים בחדר</div>`) + `<p class="muted">"בחר הכול" מסמן רק מגירות ירוקות; מגירה באזהרה מסמנים בנפרד. מחשב כבוי יידלק ב-WoL כשהסבב נפתח.</p></div>`;
+  return `<h3 class="n-sec-h full">מחשבים ומגירות</h3><div class="full rn-pick"><div class="rn-ph"><span>${ready.length} מגירות ניתנות לבחירה · <b>${nsel} נבחרו</b></span><span class="rn-all"><button type="button" class="btn sm" onclick="roomPickAll()">בחר הכול</button><button type="button" class="btn sm" onclick="roomPickClearAll()">נקה הכול</button></span></div>` + (kids.length ? `<div class="rn-grid">${cards}</div>` : `<div class="muted">אין משכפלים בחדר</div>`) + `<p class="muted">"בחר הכול" מסמן רק מגירות ירוקות או שלא נבדקו; כתומה וצהובה מסמנים בנפרד. מחשב כבוי יידלק ב-WoL כשהסבב נפתח.</p>${diskColorLegend()}</div>`;
 }
 /* חלון סבב חדר חדש: אימג' ("נכנס לדיסק מ-X GB"; #953: מה שלא נכנס למגירה
    הקטנה מושבת עם הסיבה — לא מוסתר) → מקור (ספרייה / דיסק מחשב בנייה, #715) → פתח סבב
@@ -3130,21 +2964,23 @@ function roomNewWindow(kids) {
        <div><span class="n-lbl">המגירה הקטנה ביותר בחדר</span><div class="rn-floor">${floor ? ltr(marketedDiskSize(floor.size_bytes)) : "לא ידוע"}</div><div class="n-help">${floorNote}</div></div></div>`;
   const err = DEPLOY.err ? UI.note("err", `הסבב לא נפתח: ${esc(DEPLOY.err)}`) : "";
   const submit = op ? "" : `<div class="full muted">פתיחת סבב — למנהל או למפעיל הפצה.</div>`;
-  return `<div class="rnew">${err ? `<div class="full">${err}</div>` : ""}<div class="full">${source}</div>${fields}${roomPickGrid(kids)}${roomDriversBlock(kids, direct)}${submit}</div>`;
+  return `<div class="rnew">${err ? `<div class="full">${err}</div>` : ""}<div class="full">${source}</div>${fields}${roomPickGrid(kids)}${roomDriversBlock(kids, direct)}${roomNamesBlock(kids, direct)}${submit}</div>`;
 }
 /* ‏#1485 (נדב 16/10, המוקאפ S350): הפעולה הראשית בשורת התחתית של החלון — תמיד גלויה, גם כשהגריד ארוך —
    ולצידה הסיכום ("נבחרו N דיסקים ב-M מחשבים · משוער K גלים"). ‏null = אין מה לפתוח (לא מפעיל). */
 /* שורת התחתית של החלון: "פתח סבב" ממתין לדיסק מסומן (פעולה שעוד אין לה קלט — לא "דורש API"). */
 function roomFooterSync(kids) {
   const st = roomSubmitState(kids), ok = document.getElementById("modalOk"), hint = document.getElementById("modalHint");
-  if (ok) { ok.disabled = !st.n || !!DEPLOY.busy; if (ok.setAttribute) ok.setAttribute("aria-busy", String(!!DEPLOY.busy)); }
-  if (hint) { hint.textContent = st.text; hint.className = "n-hint rn-sum" + (st.n ? "" : " need"); if (hint.setAttribute) hint.setAttribute("aria-live", "polite"); }
+  if (ok) { ok.disabled = !st.n || !!st.bad || !!DEPLOY.busy; if (ok.setAttribute) ok.setAttribute("aria-busy", String(!!DEPLOY.busy)); }   // #2786: שם שלא ייכתב חוסם
+  if (hint) { hint.textContent = st.text; hint.className = "n-hint rn-sum" + (st.n && !st.bad ? "" : " need"); if (hint.setAttribute) hint.setAttribute("aria-live", "polite"); }
 }
 function roomSubmitState(kids) {
   const f = DEPLOY.form, nsel = roomSelected(kids).length, direct = f.src === "build_disk";
   const target = f.target !== "" ? f.target : String(roomTargetDefault(kids).n);
   const machines = new Set(roomSelected(kids).map((x) => x.m.mac)).size, waves = nsel ? Math.ceil((direct ? nsel : Number(target) || nsel) / nsel) : 0;
-  return { n: nsel, text: nsel ? `נבחרו ${nsel} ${nsel === 1 ? "דיסק" : "דיסקים"} ב-${machines} ${machines === 1 ? "מחשב" : "מחשבים"} · משוער ${waves === 1 ? "גל אחד" : `${waves} גלים`}` : "יש לסמן לפחות דיסק אחד" };
+  const nm = nsel ? nmSummary(kids) : { bad: "", text: "" };   // #2786
+  if (nm.bad) return { n: nsel, bad: true, text: `${nm.bad}. הסבב לא ייפתח` };
+  return { n: nsel, text: nsel ? `נבחרו ${nsel} ${nsel === 1 ? "דיסק" : "דיסקים"} ב-${machines} ${machines === 1 ? "מחשב" : "מחשבים"} · משוער ${waves === 1 ? "גל אחד" : `${waves} גלים`}${nm.text}` : "יש לסמן לפחות דיסק אחד" };
 }
 /* ‏#1269: דרייברים לפי דגם, לכל דיסק יעד — אופציונלי, כבוי כברירת מחדל. אין "אוטומטי": החומרה
    שזוהתה היא של המשכפל, לא של המכונה שתקבל את הדיסק (interfaces.md §17) — דגם מפורש או "בלי".
@@ -3202,6 +3038,171 @@ function roomDriverChoice(kids) {
   }
   return { slots: [...by].map(([mac, ports]) => ({ mac, ports })), models };
 }
+/* ---------- ‏#2786 (נדב 09/11, המוקאפ המאושר ב-PR #2788): שמות מחשב בפתיחת סבב ----------
+   המתג כבוי = השם שבאימג' נשאר (הגוף כמו לפני ה-Issue). "תבנית": קידומת, ‏"-INS" לדיסק הראשון כש"הוסף
+   דיסק מרצה" מסומן, ו-"-01"… לשאר; "פרטני": שם לכל דיסק. הסדר: משכפל לפי המספר בשמו, ובתוכו SATA 0, 1,
+   2 — אותו סדר בתצוגה ובמה שנשלח (שם לכל mac+port, ‏`hostnames` ב-POST /room). הכלל הוא של Windows
+   ולינוקס יחד, וזהה לזה שבשרת (‏`hostname_rule.computer_name_refusal`): תו אסור לא נכנס לשדה בכלל,
+   והקידומת מוגבלת מראש ל-15 פחות הסיומת הארוכה ביותר שתתווסף בסבב הזה (נדב 09/11). */
+const NM_MAX = 15, NM_CHARS_HE = "רק אותיות באנגלית, ספרות ומקף", NM_BAD = /[^A-Za-z0-9-]/g;
+const NM_CHARS_HINT = `אותיות באנגלית, ספרות ומקף. השם המלא עד ${NM_MAX} תווים (מגבלת Windows).`;
+const nmLtr = (s) => `⁦${s}⁩`;   // ‏שם באנגלית בתוך משפט בעברית (textContent): "-INS" לא הופך ל-"INS-"
+let NM_FILTERED = false;   // ‏ההקלדה האחרונה ניסתה תו אסור — ההודעה הקצרה מתחת לשדה
+function cloneNameRefusal(name) {
+  if (!name) return "ריק";
+  if (name.length > NM_MAX) return `ארוך מ-${NM_MAX} תווים`;
+  if (/[^A-Za-z0-9-]/.test(name)) return "עם תווים לא מותרים";
+  if (/^-|-$/.test(name)) return "מתחיל או נגמר במקף";
+  if (/^[0-9]+$/.test(name)) return "כולו ספרות — Windows אינו מקבל שם כזה";
+  return "";
+}
+function nmForm() {
+  const f = DEPLOY.form;
+  if (!f.nm) f.nm = { on: false, mode: "tmpl", prefix: "", ins: false, indiv: {}, os: { windows: true, linux: true } };
+  return f.nm;
+}
+function nmCfg() { const c = (ROOM && ROOM.clone_names) || {}; return { pad: Number(c.pad) || 2, suf: c.instructor || "INS" }; }
+function nmPad(n, w) { return String(n).padStart(w, "0"); }
+/* הדיסקים שסומנו, בסדר השמות: משכפל לפי המספר בשמו (משכפל 2 לפני משכפל 10), ואז SATA לפי הפורט */
+function nmDisks(kids) {
+  const name = (x) => String(machineName(x.m));
+  return roomSelected(kids).slice().sort((a, b) => name(a).localeCompare(name(b), "en", { numeric: true }) || Number(a.d.port) - Number(b.d.port));
+}
+function nmTemplate(n, nm, cfg) {
+  const out = [];
+  for (let i = 0, k = 0; i < n; i++) out.push(nm.ins && i === 0 ? `${nm.prefix}-${cfg.suf}` : `${nm.prefix}-${nmPad(++k, cfg.pad)}`);
+  return out;
+}
+/* הסיומת הארוכה ביותר שתתווסף לקידומת בסבב הזה: "-INS" (כשמסומן) או "-" + המספר הגבוה אחרי ריפוד */
+function nmTail(n, nm, cfg) {
+  const students = n - (nm.ins ? 1 : 0), a = nm.ins && n > 0 ? `-${cfg.suf}` : "", b = students > 0 ? `-${nmPad(students, cfg.pad)}` : "";
+  return b.length >= a.length ? b : a;
+}
+function nmPrefixMax(n, nm, cfg) { return Math.max(1, NM_MAX - nmTail(n, nm, cfg).length); }
+function nmNames(kids) {
+  const nm = nmForm(), disks = nmDisks(kids);
+  const names = nm.mode === "tmpl" ? (nm.prefix ? nmTemplate(disks.length, nm, nmCfg()) : disks.map(() => "")) : disks.map((x) => nm.indiv[x.key] || "");
+  return disks.map((x, i) => ({ x, name: names[i] }));
+}
+function nmDual() {
+  const img = (IMAGES || []).find((i) => i.id === DEPLOY.form.image), roles = new Set(((img && img.expand_partitions) || []).map((p) => p.role));
+  return roles.has("windows") && roles.has("linux");
+}
+function nmTarget(kids) { const f = DEPLOY.form; return f.target !== "" ? Number(f.target) || 0 : roomTargetDefault(kids).n; }
+/* הקידומת ארוכה מדי לסבב הזה — אחרי שינוי במספר הדיסקים, בסיומת או בריפוד: מסומנת ומוסברת, לא מקוצרת */
+function nmPrefixWhy(kids) {
+  const nm = nmForm(), n = nmDisks(kids).length, tail = nmTail(n, nm, nmCfg());
+  return nm.prefix && nm.prefix.length + tail.length > NM_MAX ? `עם ${nmLtr(tail)} השם יהיה ${nm.prefix.length + tail.length} תווים` : "";
+}
+/* למה הסבב לא ייפתח בגלל השמות; "" = אין סיבה (או שהמתג כבוי) */
+function nmProblem(kids) {
+  const nm = nmForm(), rows = nmNames(kids);
+  if (!nm.on || !rows.length) return "";
+  if (nmTarget(kids) > rows.length) return 'שמות מחשב רק לסבב של גל אחד — "כמה דיסקים בסך הכול" גדול ממספר הדיסקים שסומנו';
+  if (nm.mode === "tmpl" && !nm.prefix) return "חסרה קידומת";
+  const why = nm.mode === "tmpl" ? nmPrefixWhy(kids) : "";
+  if (why) return `${why} — עד ${NM_MAX}`;
+  const names = rows.map((r) => r.name), empty = names.filter((s) => !s).length;
+  if (empty) return `חסר שם ל-${empty} ${empty === 1 ? "דיסק" : "דיסקים"}`;
+  const long = names.filter((s) => s.length > NM_MAX).length;
+  if (long) return `יש ${long} שמות ארוכים מ-${NM_MAX} תווים`;
+  const bad = names.find((s) => cloneNameRefusal(s));
+  if (bad) return `השם ${nmLtr(bad)} ${cloneNameRefusal(bad)}`;
+  if (nmDual() && !nm.os.windows && !nm.os.linux) return "סמנו לפחות מערכת הפעלה אחת";
+  return "";
+}
+function nmRowsHtml(kids) {
+  const nm = nmForm(), rows = nmNames(kids), n = rows.length, cut = nm.mode === "tmpl" && n > 10;
+  return rows.map((r, i) => {
+    if (cut && i === 7) return `<tr class="gap"><td colspan="3">· · · עוד ${n - 9} דיסקים בגלילה · · ·</td></tr>`;
+    if (cut && i > 7 && i < n - 2) return "";
+    const ins = nm.mode === "tmpl" && nm.ins && i === 0;
+    const cell = nm.mode === "indiv"
+      ? `<input class="nm-in${r.name && !cloneNameRefusal(r.name) ? "" : " bad"}" dir="ltr" maxlength="${NM_MAX}" value="${esc(r.name)}" data-key="${esc(r.x.key)}" oninput="nmIndivInput(this)" aria-label="שם לדיסק ${i + 1}"><span class="miss"${r.name ? " hidden" : ""}>חסר שם</span>`
+      : r.name ? `<span class="lbl${ins ? " ins" : ""}">${esc(r.name)}</span>${ins ? `<small class="insn">מרצה</small>` : ""}` : `<span class="miss">חסרה קידומת</span>`;
+    return `<tr><td>${esc(machineName(r.x.m))}</td><td><b>${Number(r.x.d.port) - 1}</b> <span class="muted">· ${esc(rowLabel(r.x.m, r.x.s))}</span></td><td>${cell}</td></tr>`;
+  }).join("");
+}
+function nmRuleText(kids) {
+  const nm = nmForm(), cfg = nmCfg(), stu = nmDisks(kids).length - (nm.ins ? 1 : 0);
+  return stu > 0 ? `מספור התלמידים: <bdi dir="ltr">${nmPad(1, cfg.pad)}–${nmPad(stu, cfg.pad)}</bdi>` : "";
+}
+function nmNoteHtml(kids) {
+  const nm = nmForm(), names = nmNames(kids).map((r) => r.name);
+  if (nm.mode === "indiv") return "דיסק שנכשל שומר את השם שכתבתם לו, והשמות של שאר הדיסקים לא זזים.";
+  return `דיסק שנכשל שומר את המספר שלו: אם ${ltr(names[1] || "…")} ייכשל, ${ltr(names[2] || "…")} נשאר עם שמו והמספר לא עובר לדיסק אחר, כדי שהשם יתאים למדבקה.`;
+}
+function nmLeftText(kids) {
+  const nm = nmForm(), left = nmPrefixMax(nmDisks(kids).length, nm, nmCfg()) - nm.prefix.length;
+  return `נשארו ${Math.max(0, left)} תווים`;
+}
+function nmCharsHtml() { return NM_FILTERED ? NM_CHARS_HE : NM_CHARS_HINT; }
+function roomNamesBlock(kids, direct) {
+  if (direct) return "";   // ‏הפצה ישירה: השרת מסרב לשמות שם (room_names) — הקטע אינו מוצג
+  const nm = nmForm(), cfg = nmCfg(), tmpl = nm.mode === "tmpl";
+  const sw = `<label class="n-sw nm-sw"><input type="checkbox" role="switch" id="nm-on"${nm.on ? " checked" : ""} aria-label="לכתוב שמות מחשב חדשים" onchange="nmSet('on',this.checked)"><span class="track"></span></label>`;
+  const head = `<div class="nm-h"><h5>שמות מחשב</h5>${sw}${nm.on ? `<b>לכתוב לכל דיסק שם מחשב חדש</b>${tmpl ? "" : `<span class="sub">דיסק בלי שם חוסם את פתיחת הסבב</span>`}` : `<span class="sub">כבוי: כל מחשב נשאר עם השם שבאימג'</span>`}</div>`;
+  if (!nm.on) return `<div class="full nm" id="nm">${head}</div>`;
+  const n = nmDisks(kids).length, why = tmpl ? nmPrefixWhy(kids) : "";
+  const left = tmpl
+    ? `<div><span class="lab">קידומת <small class="nm-left-n" id="nm-left-n">${esc(nmLeftText(kids))}</small></span><input class="nm-in nm-prefix${!nm.prefix || why ? " bad" : ""}" id="nm-prefix" dir="ltr" maxlength="${nmPrefixMax(n, nm, cfg)}" value="${esc(nm.prefix)}" oninput="nmPrefixInput(this)" aria-label="קידומת" aria-describedby="nm-prefix-why"></div>`
+      + `<p class="hint2 bad" id="nm-prefix-why"${why ? "" : " hidden"}>${esc(why)}</p>`
+      + `<label class="chk"><input type="checkbox"${nm.ins ? " checked" : ""} onchange="nmSet('ins',this.checked)">הוסף דיסק מרצה <small>הדיסק הראשון מקבל ${ltr(cfg.suf)}</small></label>`
+      + `<p class="hint2" id="nm-rule">${nmRuleText(kids)}</p>`
+    : `<p class="hint2 ink">כותבים שם לכל דיסק בטבלה. הסדר כמו בתבנית: משכפל, ואז SATA.</p>`;
+  const chars = `<p class="hint2${NM_FILTERED ? " bad" : ""}" id="nm-chars" aria-live="polite">${nmCharsHtml()}</p>`;
+  const os = nmDual() ? `<div class="nm-os"><b>לכתוב את השם ל:</b><label class="chk"><input type="checkbox"${nm.os.windows ? " checked" : ""} onchange="nmSet('windows',this.checked)">Windows</label><label class="chk"><input type="checkbox"${nm.os.linux ? " checked" : ""} onchange="nmSet('linux',this.checked)">לינוקס</label><p class="hint2">באימג' הזה יש שתי מערכות הפעלה. ברירת המחדל: שם אחד לשתיהן. אפשר לסמן רק אחת.</p></div>` : "";
+  return `<div class="full nm on" id="nm">${head}<div class="nm-body"><div class="nm-left"><div class="n-seg nm-mode" role="group" aria-label="איך לתת שמות"><button type="button" aria-pressed="${tmpl}" onclick="nmSet('mode','tmpl')">תבנית</button><button type="button" aria-pressed="${!tmpl}" onclick="nmSet('mode','indiv')">פרטני</button></div>${left}${chars}</div>`
+    + `<div class="nm-right"><h6>תצוגה מקדימה <small id="nm-count">· ${n} ${n === 1 ? "דיסק" : "דיסקים"}</small></h6><div class="nm-scroll"><table class="nm-tbl"><thead><tr><th>משכפל</th><th>SATA</th><th>שם שייכתב</th></tr></thead><tbody id="nm-rows">${n ? nmRowsHtml(kids) : `<tr><td colspan="3" class="muted">סמנו דיסקים בגריד כדי לראות את השמות</td></tr>`}</tbody></table></div></div></div>`
+    + `<div class="nm-foot"><p class="nm-note" id="nm-note">${nmNoteHtml(kids)}</p></div>${os}</div>`;
+}
+/* לחיצה (מתג, מצב, מרצה, מערכת): החלון נבנה מחדש — אין שדה שמקלידים בו באמצע */
+function nmSet(key, value) {
+  const nm = nmForm();
+  if (key === "windows" || key === "linux") nm.os[key] = !!value; else nm[key] = value;
+  NM_FILTERED = false; DEPLOY.err = ""; roomRoundRender();
+}
+/* הקלדה: רק מה שתלוי בה מתעדכן במקום — השדה שמקלידים בו לא נבנה מחדש ולא מאבד את הסמן */
+function nmRefresh() {
+  const kids = roomMachines(), nm = nmForm(), set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; return el; };
+  if (nm.on && nm.mode === "tmpl") {
+    set("nm-rows", nmRowsHtml(kids)); set("nm-left-n", esc(nmLeftText(kids))); set("nm-rule", nmRuleText(kids)); set("nm-note", nmNoteHtml(kids));
+    const why = nmPrefixWhy(kids), w = set("nm-prefix-why", esc(why)), pre = document.getElementById("nm-prefix");
+    if (w) w.hidden = !why;
+    if (pre) pre.classList.toggle("bad", !nm.prefix || !!why);
+  }
+  const chars = set("nm-chars", nmCharsHtml());
+  if (chars) chars.classList.toggle("bad", NM_FILTERED);
+  roomFooterSync(kids);
+}
+/* התו האסור לא נכנס לשדה: מסוננים לפני שנשמרים, וההודעה הקצרה אומרת למה */
+function nmClean(el) { const raw = String(el.value), clean = raw.replace(NM_BAD, ""); if (clean !== raw) el.value = clean; NM_FILTERED = clean !== raw; return clean; }
+function nmPrefixInput(el) { nmForm().prefix = nmClean(el); nmRefresh(); }
+function nmIndivInput(el) {
+  const v = nmClean(el), key = el.getAttribute("data-key");
+  if (v) nmForm().indiv[key] = v; else delete nmForm().indiv[key];
+  el.classList.toggle("bad", !v || !!cloneNameRefusal(v));
+  const miss = el.parentNode && el.parentNode.querySelector ? el.parentNode.querySelector(".miss") : null;
+  if (miss) miss.hidden = !!v;
+  nmRefresh();
+}
+/* מה שנשלח: ‏null = המתג כבוי; אחרת שם לכל mac+port, ו-os רק לאימג' עם שתי מערכות */
+function nmChoice(kids) {
+  const nm = nmForm();
+  if (!nm.on) return null;
+  const problem = nmProblem(kids);
+  if (problem) return { problem };
+  const hostnames = { names: nmNames(kids).map((r) => ({ mac: r.x.m.mac, port: r.x.d.port, name: r.name })) };
+  if (nmDual()) hostnames.os = ["windows", "linux"].filter((k) => nm.os[k]);
+  return { hostnames };
+}
+/* שורת הסיכום בתחתית החלון: "· שמות: X עד Y", או למה הסבב לא ייפתח */
+function nmSummary(kids) {
+  const nm = nmForm();
+  if (!nm.on || DEPLOY.form.src === "build_disk") return { bad: "", text: "" };
+  const bad = nmProblem(kids), names = nmNames(kids).map((r) => r.name);
+  return { bad, text: bad || !names.length ? "" : ` · שמות: ${nmLtr(names[0])} עד ${nmLtr(names[names.length - 1])}` };
+}
 /* ‏#2053: השורה הכתומה מתחת לבחירת האימג' — רק מודיעה: "פתח סבב" לא נחסם ואין שאלה. המיכל תמיד
    קיים (מוסתר כשאין מה לומר), כדי שבחירה ברשימה תעדכן אותו במקום — בלי לבנות את החלון מחדש. */
 function roomHibBody(img) {
@@ -3221,6 +3222,8 @@ function roomFormSet(key, value) {
   if (key === "folder") { DEPLOY.form.image = ""; value = value === "" ? null : value === "-" ? "" : value; }   // ‏תיקייה אחרת = אימג' חדש
   DEPLOY.form[key] = value;
   if (key === "image") roomHibSync();   // ‏#2053
+  if (key === "target" && nmForm().on) nmRefresh();   // ‏#2786: יותר מגל אחד חוסם שמות — נאמר מיד
+  if (key === "image" && nmForm().on) roomRoundRender();   // ‏#2786: אימג' עם שתי מערכות — תיבות Windows / לינוקס
   if (key === "src" || key === "builder" || key === "drv" || key === "folder") roomRoundRender();
 }
 function roomRoundRender() {
@@ -3250,12 +3253,15 @@ async function openRoomRoundSubmit() {
   const drv = DEPLOY.err ? null : roomDriverChoice(roomMachines());   // ‏#1269
   if (drv && !drv.models.length) DEPLOY.err = 'לא נבחר דגם לאף דיסק — בחרו דגם, או כבו את "להוסיף דרייברים"';
   else if (drv) body.driver_models = drv.models;
+  const names = DEPLOY.err || f.src === "build_disk" ? null : nmChoice(roomMachines());   // ‏#2786
+  if (names && names.problem) DEPLOY.err = names.problem;
+  else if (names) body.hostnames = names.hostnames;
   if (DEPLOY.err) { roomRoundRender(); return; }
   DEPLOY.busy = true;
   try {
     await post("/room", body);
     toast("הסבב נפתח — החדר הוער ב-WoL");
-    DEPLOY.form.image = ""; DEPLOY.form.folder = null; DEPLOY.form.target = ""; DEPLOY.form.drv = false; DEPLOY.form.drvMap = {}; DEPLOY.form.sel = {};
+    DEPLOY.form.image = ""; DEPLOY.form.folder = null; DEPLOY.form.target = ""; DEPLOY.form.drv = false; DEPLOY.form.drvMap = {}; DEPLOY.form.sel = {}; DEPLOY.form.nm = null;
     closeModal();
     await loadDeploy();
   } catch (e) {
@@ -3281,7 +3287,7 @@ async function reopenRoom() {
   if (!roomOperator() || !r || r.state !== "failed") return;
   try {
     await post("/room", { image_id: r.image_id, target_drives: r.target_drives,
-      target_slots: r.target_slots, expand_partition: r.expand_partition });
+      target_slots: r.target_slots, expand_partition: r.expand_partition, hostnames: r.hostnames || null });   // #2786: אותם שמות
     toast("הסבב נפתח מחדש");
     await loadDeploy();
   } catch (e) { toast("הסבב לא נפתח מחדש: " + e.message, 6000); }
@@ -4399,7 +4405,7 @@ function f1DiskWhere(m, d) {
   return n != null ? `מגירה ${n}` : connText(connKey(d));
 }
 function f1SmartHe(d) {
-  return d.smart === "ok" ? "SMART תקין" : d.smart === "fail" && d.smart_reason !== "f1_observed" ? "SMART אדום" : d.smart === "warn" ? "SMART כתום"
+  return d.smart === "ok" ? "SMART תקין" : d.smart === "fail" && d.smart_reason !== "f1_observed" ? "SMART אדום" : d.smart === "warn" ? SMART_HALF_HE
     : d.smart === "fail" ? "" : "SMART לא נבדק";
 }
 function f1MarkSheet(macEnc) {
@@ -5006,9 +5012,11 @@ function smartF1Text(reason) {
   if (reason === "f1_observed") return SMART_REASON_HE.f1_observed;   // #1858: seen on the BIOS's F1 stop -- not "SMART תקול"
   return `ה-BIOS יעצור ב-F1 — SMART: ${SMART_REASON_HE[reason] || reason || "תקלה"}`;
 }
+/* #2848 (נדב 11/11): המילה של הכתום — אותה בקונסולה ובמשכפל (native-gui: chip_he/smart_chip). */
+const SMART_HALF_HE = "SMART חצי תקין";
 function smartText(d) {
   if (d.smart === "ok") return "SMART תקין";
-  if (d.smart === "warn") return d.smart_reason ? `SMART אזהרה — ${smartReasonHe(d.smart_reason)}` : "SMART אזהרה";   // #1859: why orange
+  if (d.smart === "warn") return d.smart_reason ? `${SMART_HALF_HE} — ${smartReasonHe(d.smart_reason)}` : SMART_HALF_HE;   // #1859: why orange
   if (d.smart === "fail") return smartF1Text(d.smart_reason);   // #1580: red, never written
   if (d.smart === "failed_last") return "נכשל בשיכפול הקודם";
   /* #2706: the machine did not read SMART since it booted (a cloner woken into a round sends its one hello
@@ -5079,13 +5087,63 @@ function machineSlots(m) {
   const slots = driveRows(mm, src).map((r) => ({ ...r, live: live && r.disk ? r.disk : null, fail: r.optical ? null : rowFailure(m, r, fails) }));
   return { slots, live, declared: true };
 }
-/* צבע החריץ (#1580): אדום (SMART תקול / נכשל בסבב) > כתום (נכשל בשיכפול הקודם, אזהרה, CRC עלה/חשוד)
-   > כחול (כותב/מאמת) > ירוק (SMART תקין / נכתב) > אפור (לא נבדק) · מקווקו = ריק. */
+/* צבע החריץ (#1580; ‏#2848, נדב 11/11): אדום = SMART תקול / נכשל בסבב / קריאה בלבד / קישור SATA איטי /
+   בעיית SATA (‏`sata_issues` מה-hello: הקישור התאפס / המגירה התנתקה) / כתיבה איטית (#447) — לא יעד, כן מקור. כתום = SMART חצי תקין / נכשל בשיכפול הקודם. כל השאר (עליית CRC,
+   ממצאי למידה, איטי לדגם) — הערה ב-title, לא צבע. > כחול (כותב/מאמת) > ירוק > אפור (לא נבדק) · מקווקו = ריק. */
+const SATA_ISSUE_HE = { link_reset: "הקישור למגירה התאפס", drawer_gone: "המגירה התנתקה בזמן העבודה" };   // hw-issues.tsv
+function sataIssues(d) {
+  return Array.isArray(d.sata_issues) ? d.sata_issues.filter((w) => w in SATA_ISSUE_HE) : [];
+}
+function sataText(d) {
+  return sataIssues(d).map((w) => SATA_ISSUE_HE[w]).join(" · ");
+}
+/* ‏#2848 (נדב 11/11): הכלל האחד — אותה טבלה כמו `server/disks/disk_rule.py` ו-`native-gui/src/disk_rule.c`
+   (‏tests/test_disk_rule_parity_2848.py מריץ את שלושתם על אותם דיסקים). אדום: לא יעד, כן מקור. צהוב (נכשל
+   בשיכפול הקודם / כתיבה לא הושלמה): כן יעד, לא מקור. ‏"איטי" — רק של הסבב הזה (`write_slow` של השרת):
+   מדידה מסבב קודם אינה צובעת. */
+const CRC_ROSE_HE = "שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים";   // #2848: the one wording
+const DISK_RULE_RED = ["smart_fail", "link_slow", "sata_issue", "write_slow"];
+const DISK_RULE_YELLOW = ["failed_last", "write_incomplete"];
+const DISK_RULE_HE = {
+  smart_fail: "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת",
+  link_slow: "קישור SATA איטי — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו",
+  sata_issue: "בעיית SATA (הקישור התאפס או המגירה התנתקה) — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו",
+  write_slow: "נפסל כאיטי בבדיקת הכתיבה בסבב הזה — לא כותבים עליו בסבב הזה; אפשר להעתיק ממנו",
+  failed_last: "נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו",
+  write_incomplete: "כתיבה לא הושלמה — לא מעתיקים ממנו; אפשר לכתוב עליו",
+};
+/* הסיבה בקצרה — לכרטיס המכונה; המשפט המלא (DISK_RULE_HE) בבחירת היעדים ובסירוב של השרת */
+const DISK_RULE_SHORT = { smart_fail: "SMART נכשל", link_slow: "קישור SATA איטי", sata_issue: "בעיית SATA",
+  write_slow: "איטי בבדיקת הכתיבה", failed_last: "נכשל בשיכפול הקודם", write_incomplete: "כתיבה לא הושלמה" };
+function diskRule(f) {
+  const on = {
+    smart_fail: f.smart === "fail", link_slow: f.link_slow === true, sata_issue: f.sata_issue === true,
+    write_slow: f.write_slow === true, failed_last: f.failed_last === true || f.smart === "failed_last",
+    write_incomplete: f.write_incomplete === true,
+  };
+  const red = DISK_RULE_RED.find((r) => on[r]) || null, yellow = DISK_RULE_YELLOW.find((r) => on[r]) || null;
+  const color = red ? "red" : yellow ? "yellow" : f.smart === "warn" ? "orange" : f.smart === "ok" ? "green" : "grey";
+  return { color, source: !yellow, target: !red, reason: red || yellow, source_reason: yellow, target_reason: red };
+}
+/* העובדות של חריץ: ה-hello (או drawer_list) ורשומת הכשל שלו (`s.fail`, ‏/disk-failures). ‏readonly — אדום (#1742). */
+function diskFacts(s) {
+  const d = s.disk || {}, ro = !!(s.fail && s.fail.cause === "readonly");
+  return { smart: ro ? "fail" : d.smart || "unchecked", failed_last: !!s.fail && !ro, write_incomplete: d.write_mark === "incomplete",
+    link_slow: linkSlow(d), sata_issue: sataIssues(d).length > 0, write_slow: d.write_slow === true };
+}
+/* השרת מחשב (`drawer_list[].rule`); בלי סבב (‏/machines) — אותו כלל כאן. */
+function slotRule(s) {
+  const r = s.disk && s.disk.rule;
+  return r && typeof r === "object" && typeof r.color === "string" ? r : diskRule(diskFacts(s));
+}
 function slotClass(s) {
   if (!s.disk) return "empty";
   const d = s.disk;
-  if (d.state === "failed" || d.smart === "fail" || (s.fail && s.fail.cause === "readonly")) return "err";   // #1580: SMART fail red; failed last orange; #1742: read-only red
-  if (s.fail || d.smart === "failed_last" || d.smart === "warn" || d.smart_learned || (d.crc_delta != null && d.crc_delta > 0) || linkSlow(d) || d.crc_rise > 0 || d.crc_suspect === true || d.port_suspect === true || d.disk_suspect === true || (d.model_speed && d.model_speed.slow === true)) return "warn";   // #1366: crc_suspect · #1844/#1845: learned
+  if (d.state === "failed") return "err";   // נכשל בסבב הזה -- האדום של הסבב עצמו
+  const c = slotRule(s).color;   // #2848: red > yellow > orange
+  if (c === "red") return "err";
+  if (c === "yellow") return "yel";
+  if (c === "orange") return "warn";
   if (d.state === "writing" || d.state === "verifying") return "run";
   if (d.smart === "ok" || d.state === "done") return "ok";
   return "";
@@ -5100,6 +5158,7 @@ function bayEmphasis(s) {
   const colour = slotClass(s), drv = d.drivers ? driversTone(d.drivers) : "";
   const done = d.state === "done" || (!!s.live && !d.state && d.fresh === false && !d.skipped_red);
   if (colour === "err" || drv === "bad") return " bay-emphasis err";
+  if (colour === "yel") return " bay-emphasis yel";   // #2848: yellow -- its own colour, not SMART's orange
   if (colour === "warn" || drv === "warn" || (done && (d.error || d.readback === "unverified"))) return " bay-emphasis warn";
   return done && (d.readback === "verified" || d.readback === "sampled") ? " bay-emphasis ok" : "";
 }
@@ -5125,10 +5184,11 @@ function diskTitle(m, s, d) {
   if (s.fail) parts.push(`נכשל בשיכפול הקודם ${fmtDate(s.fail.at)} · ${failureCauseText(s.fail)}`);   // #1580: orange
   else if (d.state === "failed") parts.push(`נכשל בסבב${d.error ? " — " + d.error : ""}`);
   if (s.live && d.state && d.state !== "failed") parts.push(DRAWER_STATE_HE[d.state] || d.state);
-  if (d.crc_delta != null && d.crc_delta > 0) parts.push(`CRC +${d.crc_delta} · לבדוק כבל`);
+  // #2848 (מוקאפ disk-colors, נדב 11/11): CRC רק כשהמונה עלה — בנוסח אחד, הערה ולא צבע
+  if ((d.crc_delta != null && d.crc_delta > 0) || d.crc_rise > 0) parts.push(CRC_ROSE_HE);
   if (d.link_state || "link_gbps" in d) parts.push(linkText(d));            // ‏#432: רשומה שנושאת קישור (גם "לא ידוע")
-  if (d.crc_rise > 0) parts.push(`CRC +${d.crc_rise} מאז הסבב הקודם`);
-  if (d.crc_suspect === true) parts.push(`כבל או מגירה חשודים — ${d.crc} שגיאות`);   // #1366: the absolute count over crc_warn_threshold
+  if (sataIssues(d).length) parts.push(sataText(d));   // #2848: red -- the words of the hello
+  if (d.write_slow === true) parts.push(DISK_RULE_HE.write_slow);   // #2848: red -- in this round only
   if (d.learned_he) parts.push(d.learned_he);   // #1844: what the server learned on this connection / disk (text from the server)
   if (d.model_speed && d.model_speed.text_he) parts.push(d.model_speed.text_he);   // #1845: slower than the usual for its model
   if (d.write_mbps != null) parts.push(`כתיבה לפני הגל: ${d.write_mbps} MB/s`);       // #1366: null = not measured, never shown as 0
@@ -5197,11 +5257,11 @@ function slotHtml(m, s, admin) {
   let bar = "";
   if (s.live && d.state) {
     const pct = d.bytes_total > 0 ? 100 * (d.bytes_written || 0) / d.bytes_total : d.state === "done" ? 100 : null;
-    bar = UI.barRow(pct, d.state === "failed" ? "err" : d.state === "done" ? "ok" : cls === "warn" ? "warn" : "");
+    bar = UI.barRow(pct, d.state === "failed" ? "err" : d.state === "done" ? "ok" : cls === "warn" || cls === "yel" ? cls : "");
   }
   const clear = s.fail && admin ? `<button class="btn sm" onclick="clearDiskFailure(${Number(s.fail.id)})">נקה</button>` : "";
-  const emph = bayEmphasis(s);   // #2050: the words of the chip are the cloner card's (dskRowHtml)
-  const chip = !emph ? "" : `<span class="bay-chip">${d.state === "failed" ? "נכשל" : emph.endsWith("err") ? "אדום" : emph.endsWith("warn") ? "אזהרה" : "נכתב"}</span>`;
+  const emph = bayEmphasis(s);   // #2050
+  const chip = !emph ? "" : `<span class="bay-chip">${d.state === "failed" ? "נכשל" : emph.endsWith("err") ? "אדום" : emph.endsWith("yel") ? "לא מקור" : emph.endsWith("warn") ? "אזהרה" : "נכתב"}</span>`;
   return `<div class="disk ${cls}${emph}" data-slot="${s.n ?? ""}" title="${title}"><b>${esc(rowLabel(m, s))}</b>${chip}${cap}${bar}${clear}</div>`;
 }
 /* ‏#2603: חבר סבב ש-`room._mark_lost` סימן `lost` (#450) — השרת ויתר עליו; ‏`state: "lost"` ב-/room (machines[].state)
@@ -5249,45 +5309,95 @@ function clonerLegend() {
    "דיסק N" · פס · מצב), לחיצה פותחת את הפאנל, "חריצים" פותח אותו בלשונית "דיסקים" — ושם
    המיפוי לחיבורים. אחריו "מחשבים שלא דיווחו" עם WoL. סבב נפתח מדף ההפצה; היסטוריית הסבבים שם. */
 const MACH_PILL = { ok: "ok", warn: "warn", err: "err", run: "info" };
-function dskRowHtml(m, s) {
-  const d = s.disk, title = esc(diskTitle(m, s, d));
-  const emph = bayEmphasis(s);   // #2050
-  const row = (label, bar, status, cls = "", act = "") => `<div class="dsk${cls ? " " + cls : ""}${emph}" data-slot="${s.n ?? ""}" title="${title}"><span>${esc(label)}</span>${bar}<b>${esc(status)}</b>${act}</div>`;
-  const full = (cls) => `<div class="bar ${cls}"><i style="--w:100%"></i></div>`, none = `<div class="bar"><i style="--w:0%"></i></div>`;
-  if (s.optical) return row("CD/DVD", none, rowConn(s), "opt");
-  if (s.n == null) return row(rowLabel(m, s).replace(/ \(לא ממופה\)$/, ""), none, "לא ממופה", "unmapped");
-  if (!d) return row(slotLabel(m, s.n, null), none, m.disks == null ? "לא דווח" : "ריק", "vacant");
-  const cls = slotClass(s);
-  // #1386: "בטל דיסק זה" — בוטל: אפור, פס ריק (הדיסק ריק עכשיו, לא "41%"); ביקשו ועוד לא בוצע: "מבטל…".
-  if (s.live && d.state === "cancelled") return row(slotLabel(m, s.n, d), none, "בוטל", "cancelled");
-  if (s.live && d.state === "writing" && d.cancel) return row(slotLabel(m, s.n, d), `<div class="bar warn"><i style="--w:0%"></i></div>`, "מבטל…", "cancelling");
-  if (s.live && d.state) {
-    const pct = d.bytes_total > 0 ? Math.round(100 * (d.bytes_written || 0) / d.bytes_total) : d.state === "done" ? 100 : 0;
-    const status = d.state === "failed" ? "נכשל" : d.state === "done" ? "נכתב" : d.state === "verifying" ? "מאמת" : `${pct}%`;
-    return row(slotLabel(m, s.n, d), `<div class="bar ${d.state === "failed" ? "err" : d.state === "done" ? "ok" : cls === "warn" ? "warn" : ""}"><i style="--w:${d.state === "failed" ? 100 : pct}%"></i></div>`, status);
+/* ‏#2848 (מוקאפ disk-colors, נדב 11/11): כרטיס מגירה — רכיב השיכפול המקומי (lcbay, screens_local.c) בקונסולה,
+   אותו סדר מימין לשמאל: מספר המגירה · החיבור והסיבה · שבב SMART · גודל ודגם · הפעולה. הצבע מלא (רקע בגוון
+   + מסגרת עבה) ומגיע מ-slotClass — הכלל, לא נגזר כאן מחדש. אותן מילים כמו השבב של הגואי (smart_chip). */
+const BAY_TONE = { err: "red", yel: "yellow", warn: "orange" };
+function bayChip(s) {
+  const d = s.disk, r = slotRule(s);
+  if (d.state === "failed") return ["red", "נכשל בסבב"];
+  if (r.color === "red") {
+    const tr = r.target_reason;
+    if (tr === "smart_fail") return ["red", (s.fail && s.fail.cause === "readonly") || d.smart_reason === "readonly" ? "קריאה בלבד" : "SMART לא תקין"];
+    return ["red", tr === "link_slow" ? "קישור SATA איטי" : tr === "write_slow" ? "איטי בסבב הזה" : "בעיית SATA"];
   }
-  const status = cls === "err" ? "אדום" : cls === "warn" ? "אזהרה" : cls === "ok" ? "תקין" : "לא נבדק";
-  return row(slotLabel(m, s.n, d), full(cls === "err" ? "err" : cls === "warn" ? "warn" : cls === "ok" ? "ok" : "idle"), status);
+  if (r.color === "yellow") return ["yellow", r.source_reason === "write_incomplete" ? "כתיבה לא הושלמה" : "נכשל בשיכפול הקודם"];
+  if (r.color === "orange") return ["orange", SMART_HALF_HE];
+  return d.smart === "ok" ? ["green", "SMART תקין"] : ["grey", "SMART לא נבדק"];   // #2897: unchecked is grey, never green
 }
-/* ‏console-full.html P.cloners (stPill): תגית אחת — "דיסק אדום" במקום מחובר/לא מחובר, כמו בטבלת המחשבים
-   (נדב 18/10). בסבב תגית הסבב נשארת לצידה — ההתקדמות אינה נבלעת באדום. */
+/* השורות מתחת לחיבור: למה הצבע, ולאדום — המשפט של הכלל מהשרת (`drawer_list[].rule.target_reason_he`;
+   בלי סבב אין rule מהשרת, ו-DISK_RULE_HE הוא אותו משפט — tests/test_disk_rule_parity_2848.py). */
+function bayLines(s) {
+  const d = s.disk, r = slotRule(s), out = [];
+  if (d.state === "failed") out.push(["bad", "נכשל בסבב" + (d.error ? " — " + drawerErrorText(d.error) : "")]);
+  if (r.color === "red") {
+    const tr = r.target_reason;
+    const why = tr === "smart_fail" ? (s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail) : smartText(d))
+      : tr === "link_slow" ? linkText(d) : tr === "sata_issue" ? sataText(d) : "איטי בסבב הזה — נמדד מחדש בסבב הבא";
+    out.push(["red", why], ["bad", "אדום: " + (r.target_reason_he || DISK_RULE_HE[tr])]);
+  } else if (r.color === "yellow") out.push(["yel", r.source_reason_he || DISK_RULE_HE[r.source_reason]]);
+  else if (r.color === "orange") out.push(["warn", smartText(d)]);
+  if ((d.crc_delta != null && d.crc_delta > 0) || d.crc_rise > 0) out.push(["warn", CRC_ROSE_HE]);   // a note, not a colour
+  return out;
+}
+/* opts: ‏tone (ברירת מחדל — slotClass), ‏tag ("יעד" ליד החיבור), ‏lines נוספות, ‏act (הפעולה משמאל), ‏led, ‏sel, ‏attrs. */
+function bayCardHtml(m, s, opts = {}) {
+  const d = s.disk, n = s.n != null ? String(s.n) : "—", conn = s.optical ? "כונן CD/DVD" : rowConn(s);
+  const name = s.n != null ? slotName(m, s.n, d) : null;   // #704: a named drawer keeps its name beside the connection
+  const head = `<div class="lb-n"><b>${esc(n)}</b><span>מגירה</span></div>`;
+  if (!d) return `<div class="lbay t-empty" data-slot="${s.n ?? ""}"${opts.attrs || ""} title="${esc(diskTitle(m, s, null))}">${head}<div class="lb-txt"><div class="lb-t"><b>${esc(name ? `${name} · ${conn}` : conn)}</b></div><div class="lb-l">${s.optical ? `${esc(rowConn(s))} · לא יעד` : m.disks == null ? "לא דווח" : "ריק"}</div></div></div>`;
+  const tone = opts.tone != null ? opts.tone : BAY_TONE[slotClass(s)] || "", [ctone, ctext] = bayChip(s);
+  const lines = [...bayLines(s), ...(opts.lines || [])].map(([c, t]) => `<div class="lb-l ${c}">${esc(t)}</div>`).join("");
+  const tag = opts.tag ? `<span class="lb-tag">${esc(opts.tag)}</span>` : "";
+  const sz = d.size_bytes ? ltr(marketedDiskSize(d.size_bytes)) : "—";
+  return `<div class="lbay${tone ? " t-" + tone : ""}${opts.sel ? " sel" : ""}" data-slot="${s.n ?? ""}"${opts.attrs || ""} title="${esc(diskTitle(m, s, d))}">${head}`
+    + `<div class="lb-txt"><div class="lb-t"><b>${esc(name ? `${name} · ${conn}` : conn)}</b>${tag}</div>${lines}</div>`
+    + `<div class="lb-meta"><span class="lb-chip c-${ctone}"><i></i>${esc(ctext)}</span><div class="lb-sz"><b>${sz}</b><span class="mono">${esc(d.model || "דגם לא ידוע")}</span></div>`
+    + `${opts.act || ""}</div>${opts.led ? `<span class="lb-led" aria-hidden="true"><i></i><s></s></span>` : ""}</div>`;
+}
+/* דף "מחשבי שיכפול" — לקריאה בלבד: התג משמאל אומר מה קורה במגירה בסבב; בלי סבב — רק אדום אומר
+   "לא משתתף" (הוא לעולם אינו יעד). */
+function bayStatus(s) {
+  const d = s.disk;
+  if (slotRule(s).color === "red" && !(s.live && d.state)) return "לא משתתף";
+  if (!s.live || !d.state) return s.live && d.selected ? "ממתין" : "";
+  if (d.state === "cancelled") return "בוטל";
+  if (d.state === "writing" && d.cancel) return "מבטל…";
+  if (d.state === "failed") return "נכשל";
+  if (d.state === "done") return "נכתב";
+  if (d.state === "verifying") return "מאמת";
+  if (d.state === "writing") return `כותב ${d.bytes_total > 0 ? Math.round(100 * (d.bytes_written || 0) / d.bytes_total) : 0}%`;
+  return "ממתין";
+}
+/* ‏console-full.html P.cloners (stPill) + מוקאפ disk-colors (נדב 11/11): שם, תגית, מה שממתין לאדם כפס כתום,
+   MAC, וכרטיס מגירה לכל חריץ. "דיסק אדום" במקום מחובר/לא מחובר; בסבב תגית הסבב נשארת לצידה. */
 function clonerMachHtml(m, admin) {
   const macEnc = encodeId(m.mac), st = clonerState(m), { slots } = machineSlots(m);
   const red = slots.some((s) => s.disk && slotClass(s) === "err");
   const unid = slots.filter((s) => s.disk && s.disk.fresh === null)
     .map((s) => `<div class="mach-note">לא ניתן לזהות את הכונן ב${s.n != null ? `חריץ ${s.n}` : esc(rowConn(s))} — אין לו מספר סידורי</div>`).join("");
-  const rows = slots.length ? slots.map((s) => dskRowHtml(m, s)).join("")
+  const rows = slots.length ? slots.map((s) => { const t = s.disk ? bayStatus(s) : ""; return bayCardHtml(m, s, { act: t ? `<span class="lb-st">${esc(t)}</span>` : "", lines: s.disk && s.n == null ? [["warn", "לא ממופה"]] : [] }); }).join("")
     : `<div class="mach-note">${m.disks == null ? "מעולם לא דיווח על דיסקים" : esc(zeroDisksText(m))}</div>`;
   const open = admin ? ` role="button" tabindex="0" onclick="openMachineDetail('${macEnc}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openMachineDetail('${macEnc}')}"` : "";
+  const banner = st.cls === "warn" ? `<div class="lb-ban">${esc(st.text)}</div>` : "";   // the mockup's orange strip: waiting for a person
   const held = st.held ? `<div class="mach-note">${esc(heldLine(m, m.held))}</div>` : "";   // #2031
   const acts = admin || st.held ? `<div class="acts">${admin ? `<button class="btn sm" type="button" onclick="event.stopPropagation();openMachineDetail('${macEnc}','disks')">חריצים</button>` : ""}${st.held ? heldButton(m) : ""}</div>` : "";
-  return `<div class="mach${red ? " err" : !st.cls ? " off" : ""}" data-mac="${esc(m.mac)}"${open}><div class="mt"><span>${esc(machineName(m) || m.mac)}</span>${red && st.cls !== "run" ? "" : UI.pill(MACH_PILL[st.cls] || "", st.text)}${red ? UI.pill("err", "דיסק אדום") : ""}</div><div class="ms mono">${esc(m.mac)}</div><div class="dsks">${rows}</div>${unid}${nicLinkNote(m)}${held}${acts}</div>`;
+  const pill = banner || (red && st.cls !== "run") ? "" : UI.pill(MACH_PILL[st.cls] || "", st.text);
+  return `<div class="mach lbm${!st.cls ? " off" : ""}" data-mac="${esc(m.mac)}"${open}><div class="mt"><span>${esc(machineName(m) || m.mac)}</span>${pill}${red ? UI.pill("err", "דיסק אדום") : ""}</div>${banner}<div class="ms mono">${esc(m.mac)}</div><div class="lbays">${rows}</div>${unid}${nicLinkNote(m)}${held}${acts}</div>`;
+}
+/* המקרא — אותו מקרא בחלון "התחל סבב" ובדף "מחשבי שיכפול" (מוקאפ disk-colors). */
+function diskColorLegend() {
+  return `<div class="lb-legend"><b>מקרא — צבע מלא: רקע בגוון + מסגרת עבה</b><ul>`
+    + `<li><i class="lb-sw green"></i>ירוק — SMART תקין: כרטיס רגיל, בלי צביעה. מקור ויעד</li><li><i class="lb-sw orange"></i>כתום — SMART חצי תקין: מקור (חלון הודעה) ויעד</li>`
+    + `<li><i class="lb-sw yellow"></i>צהוב — נכשל בשיכפול הקודם / כתיבה לא הושלמה: יעד בלבד</li><li><i class="lb-sw red"></i>אדום — SMART לא תקין · איטי בסבב הזה · קישור SATA איטי: מקור בלבד</li>`
+    + `<li><i class="lb-sw grey"></i>אפור — SMART לא נבדק: לא ירוק</li></ul>`
+    + `<p>CRC היסטורי הוא הערה ולא צבע. "איטי" נמדד מחדש בכל סבב. הצבע לא לבד: בכל כרטיס כתובים המילים והסיבה.</p></div>`;
 }
 function clonerGridCard(g, kids) {
   const admin = isAdmin();
-  const body = kids.length ? `<div class="rgrid">${sortMachinesBySuffix(kids).map((m) => clonerMachHtml(m, admin)).join("")}</div>`
+  const body = kids.length ? `<div class="rgrid lbgrid">${sortMachinesBySuffix(kids).map((m) => clonerMachHtml(m, admin)).join("")}</div>${diskColorLegend()}`
     : UI.empty("אין מחשבי שיכפול רשומים — הוסיפו את הראשון (MAC + שם).", admin ? `<button class="btn primary" onclick="openAddMachine({group:'${encodeId(g.id)}'})">+ מחשב שיכפול</button>` : "");
-  return UI.card({ title: "המחשבים והחריצים", small: admin && kids.length ? "לחיצה על כרטיס פותחת פרטים" : "", cls: "c12", body });
+  return UI.card({ title: "המחשבים והחריצים", small: kids.length ? "הכרטיסים לקריאה בלבד — הבחירה נעשית במחשב או בחלון התחל סבב" + (admin ? " · לחיצה על כרטיס פותחת פרטים" : "") : "", cls: "c12", body });
 }
 /* מחשב "לא דיווח": אין hello מעל 10 דקות (‏/net.last_seen), או שלא נראה מעולם. ‏/net לא נקרא = לא נבדק. */
 function silentMachines(kids) {
@@ -5538,7 +5648,7 @@ function diskFailuresCard() {
     const setText = (f && f.set_text) || (d && d.set_text) || "";   // #1857: איזה דיסק להחליף -- הסט והמדבקה
     const why = f ? [failureCauseText(f), f.error].filter(Boolean).join(" · ") : smartF1Text(d.smart_reason);
     const smart = !d ? `<span class="muted">לא נבדק</span>` : d.smart === "fail" ? UI.pill("err", "נכשל") : d.smart === "ok" ? UI.pill("ok", "תקין")
-      : d.smart === "warn" ? UI.pill("warn", "אזהרה") : `<span class="muted">לא נבדק</span>`;
+      : d.smart === "warn" ? UI.pill("warn", "חצי תקין") : `<span class="muted">לא נבדק</span>`;   // #2848
     const items = [["פרטים", `openMachineDetail('${macEnc}')`]];
     if (f && isAdmin()) items.push(["נקה אחרי החלפה", `clearDiskFailure(${Number(f.id)})`]);
     return { attrs: `class="clk" onclick="mchRowClick(event,'${macEnc}')"`, cells: [`<b>${esc(m ? machineName(m) : f.mac)}</b>`, `${esc(where)}${size}${setText ? ` · <b>${esc(setText)}</b>` : ""}`, esc(why), smart, UI.rowMenu(m ? machineName(m) : f.mac, items)] };
@@ -5595,7 +5705,7 @@ function diskBoxesHtml(m) {
     const n = d.port != null ? Number(d.port) : i + 1;   // תחנת כיתה: בלי מיפוי (#1485 — משכפל/בנייה בלבד)
     const red = fails.find((f) => (f.mac === m.mac && f.port != null ? Number(f.port) === n : f.serial && f.serial === d.serial));
     const inc = d.write_mark === "incomplete";   // #1798: orange, below SMART's red
-    const cls = d.smart === "fail" ? "err" : red || inc || d.smart === "warn" || d.smart === "failed_last" ? "warn" : d.smart === "ok" ? "ok" : "";   // #1580: SMART fail red, failed last orange
+    const cls = ["err", "yel", "warn"][["red", "yellow", "orange"].indexOf(slotRule({ disk: d, fail: red }).color)] || (d.smart === "ok" ? "ok" : "");   // #2848: the one rule
     const smart = smartText(d);   // #1859: one wording ("SMART SMART אזהרה" was the old warn), with why
     const mark = inc ? ` · ${WRITE_MARK_HE}` : d.write_mark === "unchecked" ? " · לא נבדק אם הכתיבה האחרונה הושלמה" : "";
     const setTag = d.set_text ? UI.pill("info", d.set_text) : "";   // #1857 (מוקאפ 04): הסט והמדבקה ליד הדיסק; בלי סט -- כמו היום
@@ -6013,10 +6123,11 @@ function moveMachineSheet(mac) {
 function smartPill(d, fail) {
   const chip = (cls, text) => `<span class="n-chip${cls ? " " + cls : ""}">${esc(text)}</span>`;
   if (d.smart === "fail") return chip("d", d.smart_reason === "readonly" ? "קריאה בלבד" : "SMART תקול");     // #1580: red, never written; #1742
-  if (d.write_mark === "incomplete") return chip("w", WRITE_MARK_HE);   // #1798: not a source; a target
-  if (fail || d.smart === "failed_last") return chip("w", "נכשל בשיכפול הקודם");
+  if (d.write_mark === "incomplete") return chip("y", WRITE_MARK_HE);   // #1798: not a source; a target -- #2848: yellow
+  if ((fail && fail.cause !== "readonly") || d.smart === "failed_last") return chip("y", "נכשל בשיכפול הקודם");   // #2848: yellow
+  if (fail) return chip("d", "קריאה בלבד");   // #1742: a read-only record is red
   if (d.smart === "ok") return "";   // #1375 (נדב 07/11): תג רק כשיש בעיה — "תקין" קבוע הוא רעש; ראיה חיובית (smart==="ok") = שקט
-  if (d.smart === "warn") return chip("w", "אזהרה");
+  if (d.smart === "warn") return chip("w", SMART_HALF_HE);   // #2848
   return chip("n", "לא נבדק");
 }
 /* ‏#1375 (נדב 17/10): בלשונית "דיסקים" חיבור נקרא במספר המגירה — "דיסק 1", לא "SATA 0" — כמו "דיסק 1/2/3"
@@ -8633,7 +8744,7 @@ function settings() {
   if (!SETTINGS && !settingsError) return pagePlaceholder();
   // ‏#1751: "התראות במייל" — admin בלבד, לא בהקשר שרת משנה (email_alerts.js; בלעדיו — בלי הלשונית)
   const extra = [settingsSecondariesAllowed() && "שרתי משנה", typeof emailAlertsAllowed === "function" && emailAlertsAllowed() && "התראות במייל"].filter(Boolean);
-  const tabs = extra.length ? ["כללי", ...extra] : [];
+  const tabs = ["כללי", "שמות מחשב", ...extra];   // ‏#2786: "שמות מחשב" — ריפוד וסיומת המרצה
   const tab = tabs.length ? Math.min(currentTab, tabs.length - 1) : 0;
   const sub = SETTINGS ? ["הגדרות השרת", ME && ME.version ? `גרסה ${ME.version}` : "", "כל שינוי נשמר מיד ונרשם ביומן"].filter(Boolean).map(esc).join(" · ") : `‏/settings לא נקרא: ${esc(settingsError)}`;
   const pill = !SETTINGS ? UI.pill("err", "לא נקרא") : "";
@@ -8641,10 +8752,41 @@ function settings() {
     icon: "t-sliders", name: "הגדרות", sub, pill, tabs, tab });
   const body = !SETTINGS
     ? UI.note("err", `לא הצלחתי לקרוא את ההגדרות: ${esc(settingsError)}`)
+    : tabs[tab] === "שמות מחשב" ? settingsNamesTab()
     : tabs[tab] === "שרתי משנה" ? settingsSecondariesTab()
     : tabs[tab] === "התראות במייל" ? emailAlertsTab()
     : `${backupOffBarHtml(backupOffFromSettings())}<div class="set-col">${SETTING_GROUPS.map(settingsGroupHtml).join("")}</div>`;   // #2865
   return `<div class="page aligned settings">${header}<div class="body">${body}</div></div>`;
+}
+/* ‏#2786: ערכי ברירת המחדל לתבנית השמות בחלון "התחל סבב". ריפוד נשמר בלחיצה; הסיומת — רק אותיות באנגלית
+   וספרות (תו אחר לא נכנס לשדה), עד 8, כך שתשאיר לקידומת לפחות 6 מתוך 15 התווים. */
+const NM_SUF_MAX = 8;
+function settingsNamesTab() {
+  const pad = Number(SETTINGS.clone_name_pad) || 2, suf = SETTINGS.clone_name_instructor || "INS", admin = isAdmin();
+  const segs = [1, 2, 3, 4].map((n) => `<button type="button" aria-pressed="${n === pad}"${admin ? ` onclick="nmSettingSave('clone_name_pad','${n}')"` : " disabled"}>${n}</button>`).join("");
+  const rows = [
+    ["מספר ספרות בריפוד", `<div class="n-seg nm-pad" role="group" aria-label="מספר ספרות בריפוד">${segs}</div>`, "", "ברירת מחדל 2, כמו 01. מספר שגדול מהריפוד לא נחתך"],
+    ["סיומת הדיסק של המרצה", `<input class="nm-suf" id="nm-suf" dir="ltr" maxlength="${NM_SUF_MAX}" value="${esc(suf)}" aria-label="סיומת המרצה" aria-describedby="nm-suf-why"${admin ? ` oninput="nmSufInput(this)" onchange="nmSettingSave('clone_name_instructor',this.value)"` : " disabled"}><span class="nm-suf-why" id="nm-suf-why">${esc(nmSufLeft(suf))}</span>`, "", "הדיסק הראשון בסבב מקבל אותה במקום מספר. ברירת מחדל INS"],
+    ["כך זה ייראה", `<span class="set-ex" id="nm-set-ex">${nmSetExHtml(pad, suf)}</span>`, "", "לפי הערכים למעלה, עם הקידומת 100"],
+  ];
+  return `<div class="set-col"><section class="set-grp">${UI.card({ title: "שמות מחשב בשיכפול", small: 'ערכי ברירת המחדל לחלון "התחל סבב"', body: settingsKv(rows) })}<p class="set-foot">השינוי חל על סבבים שייפתחו מעכשיו. שמות שכבר נכתבו לדיסקים לא משתנים. סיומת: אותיות באנגלית וספרות, עד ${NM_SUF_MAX} תווים.</p></section></div>`;
+}
+function nmSetExHtml(pad, suf) { return `<span class="lbl ins">100-${esc(suf || "…")}</span><span class="lbl">100-${nmPad(1, pad)}</span><span class="lbl">100-${nmPad(2, pad)}</span><span class="muted">…</span>`; }
+function nmSufLeft(suf) { return `עם ${nmLtr("-" + suf)} נשארים לקידומת עד ${NM_MAX - 1 - suf.length} תווים`; }
+function nmSufInput(el) {
+  const raw = String(el.value), clean = raw.replace(/[^A-Za-z0-9]/g, "");
+  if (clean !== raw) el.value = clean;
+  const why = document.getElementById("nm-suf-why"), ex = document.getElementById("nm-set-ex");
+  if (why) { why.textContent = clean !== raw ? "רק אותיות באנגלית וספרות" : clean ? nmSufLeft(clean) : "הסיומת ריקה — לא תישמר"; why.classList.toggle("bad", clean !== raw || !clean); }
+  el.classList.toggle("bad", !clean);
+  if (ex) ex.innerHTML = nmSetExHtml(Number(SETTINGS && SETTINGS.clone_name_pad) || 2, clean);
+}
+async function nmSettingSave(key, value) {
+  if (!isAdmin()) return;
+  if (key === "clone_name_instructor" && !/^[A-Za-z0-9]{1,8}$/.test(value)) { toast("סיומת המרצה: אותיות באנגלית וספרות, 1–8 תווים — לא נשמר"); return; }
+  try { await post("/settings", { [key]: value }); toast("נשמר — נרשם ביומן"); }
+  catch (e) { toast("לא נשמר: " + e.message, 6000); }
+  await loadSettingsData();
 }
 async function loadSettingsData() {
   try { SETTINGS = await api("/settings"); settingsError = ""; }
@@ -10301,7 +10443,7 @@ function stuckNote(stuck, mac) {
    דיסק שאיננו תקין או שנעשתה עליו הכרעה מוצג, כדי לא להציף.
    ‏#1580 (נדב 17/10): שלושה צבעים — fail (SMART תקול) אדום ולא נכתב, failed_last
    (נכשל בשיכפול הקודם) כתום, ok/unchecked ירוק; warn מסוכן ישן — כתום. */
-const SMART_HE = {ok: "תקין", warn: "SMART אזהרה", fail: "ה-BIOS יעצור ב-F1",   // #1366
+const SMART_HE = {ok: "תקין", warn: SMART_HALF_HE, fail: "ה-BIOS יעצור ב-F1",   // #1366
                   failed_last: "נכשל בשיכפול הקודם", unchecked: "לא נבדק"};
 const DECISION_HE = {replace: "להחלפה", rescue: "נכתב שוב", skip: "דולג"};
 function disksHtml(disks) {
@@ -10892,8 +11034,3 @@ const UI_ICON_PATHS = {
   "t-usb": '<rect x="7" y="10" width="10" height="11" rx="2"/><path d="M9.5 10V3.5h5V10M11 6.5h.01M13 6.5h.01"/>'   /* ‏#1920 (נדב 07/11, אפשרות א): מקל USB — מחבר וגוף */
 };
 function uiIcon(name) { return '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">'+(UI_ICON_PATHS[name] || UI_ICON_PATHS.list)+'</svg>'; }
-
-function encodeId(value) { return encodeURIComponent(value).replaceAll("'", "%27"); }
-/* ‏#1634: ערך כמחרוזת JS בתוך on*="…". ‏esc() אינו מספיק שם — הדפדפן מפענח &#39; חזרה ל-' לפני שה-JS רץ;
-   אחרי encodeId לא נשאר גרש, & או < לפענח, והפונקציה מקבלת את הערך המקורי. */
-function jsStr(value) { return `decodeURIComponent('${encodeId(value == null ? "" : value)}')`; }

@@ -45,11 +45,15 @@ def run(ctx) -> None:
           slots == {1: "sdb", 2: "sdc", 3: "sda"},
           str(view["machines"][0]["drawer_list"]))
 
-    # ‏#1410: בחירה מפורשת — כל שלוש המגירות של המכונה
+    # ‏#1410: בחירה מפורשת — כל שלוש המגירות של המכונה. ‏#2786: עם שם מחשב לכל
+    # מגירה, לפי SATA (פורט 1 = SATA 0 = הדיסק הראשון, המרצה).
+    names = [{"mac": ctx.cloner.mac, "port": p, "name": n}
+             for p, n in ((1, "LAB-INS"), (2, "LAB-01"), (3, "LAB-02"))]
     status, opened = ctx.deploy.json("POST", "/api/console/room",
                                      {"image_id": ctx.image_a, "target_drives": 3,
-                                      "target_slots": [{"mac": ctx.cloner.mac, "ports": [1, 2, 3]}]})
-    check("סבב חדר נפתח (יעד: 3 כוננים)", status == 200, str(opened))
+                                      "target_slots": [{"mac": ctx.cloner.mac, "ports": [1, 2, 3]}],
+                                      "hostnames": {"names": names}})
+    check("סבב חדר נפתח (יעד: 3 כוננים, שם מחשב לכל מגירה)", status == 200, str(opened))
 
     # הגל הראשון: המכונה מצטרפת, המגירות הטריות מכסות את היתרה — יוצא.
     wait_until(lambda: (v := _room(ctx))["round"]
@@ -65,10 +69,16 @@ def run(ctx) -> None:
           str(view["machines"][0]["drawer_list"]))
     check("היתרה: כונן אחד", view["round"]["remaining_drives"] == 1,
           str(view["round"]))
+    # ‏#2786: כל מגירה שנכתבה קיבלה את השם של החריץ שלה; זו שנכשלה — לא קיבלה שם.
+    check("גל 1: שם לכל מגירה לפי החריץ שלה, לא למגירה שנכשלה",
+          ctx.cloner.named[:1] == [{"sdb": "LAB-INS", "sda": "LAB-02"}], str(ctx.cloner.named))
 
     # הגל השני משלים את המגירה — היעד הושג והסבב נסגר מעצמו.
     wait_until(lambda: _room(ctx)["round"] is None,
                "היעד הושג (3/3) והסבב נסגר מעצמו")
+    # ‏#2786: דיסק שנכשל שומר את המספר שלו — בגל 2 החריץ האמצעי מקבל את אותו LAB-01.
+    check("גל 2: המגירה שנכשלה נכתבת עם השם של החריץ שלה",
+          len(ctx.cloner.named) == 2 and ctx.cloner.named[1]["sdc"] == "LAB-01", str(ctx.cloner.named))
     status, overview = ctx.console.json("GET", "/api/console/overview")
     check("לא נשאר סבב פעיל במערכת", overview["session"] is None,
           str(overview["session"]))

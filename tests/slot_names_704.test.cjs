@@ -3,6 +3,7 @@
 // המפתח: sata:<port> (השם הולך עם החריץ), serial:<serial> לכונן בלי port.
 // בלי שם — התצוגה כמו היום ("דיסק N", SATA 0 → דיסק 1). השם הוא תווית בלבד.
 // בלי דפדפן: console.js + net.js + progress.js ב-vm מול DOM מזערי ו-fetch מזויף.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -44,42 +45,43 @@ function setup({names2={'sata:2':'האמצעית','serial:NV-1':'דיסק מיו
       const key=url.replace('/api/console','').split('?')[0]; requests.push({url,options});
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run(`ME={username:"nadav",role:"${admin?'admin':'deploy'}",server_name:"srv",version:"v0.67.1",capabilities:{}}; current="machines"; sheet = o => { globalThis.formOptions=o; }; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{}; selectPageById=(id)=>{ current=id; }; openDrawer=(t,h)=>{ globalThis.drawerHtml=h; }; setDrawerBody=(h)=>{ globalThis.drawerHtml=h; };`);
   for(const [name,key] of [['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines'],['ROOM','/room'],['ROOM_HISTORY','/room/history'],['CAPTURE_TASKS','/tasks']]) run(name+'='+JSON.stringify(fixtures[key]));
   run('CAPTURE_TASKS_READ=true; ROOM_KEY=JSON.stringify(ROOM);');
   return {run,requests,fixtures};
 }
-// ‏#1485: the cloner page is the mockup's .mach card — a row per slot: <span>label</span> · bar · <b>status</b>
+// ‏#1485 + #2848 (mockup disk-colors 11/11): the cloner page is the .mach card with a drawer card (.lbay) per slot:
+// the number, then <b>name · connection</b> (or the connection alone)
 const card=(html,mac)=>{ const i=html.lastIndexOf('<div class="mach',html.indexOf(`data-mac="${mac}"`)); return html.slice(i).split(/(?=<div class="mach[ "])/)[0]; };
-const slot=(html,n)=>{ const m=html.match(new RegExp(`<div class="dsk[^"]*" data-slot="${n}"[^>]*>[^]*?</b></div>`)); assert.ok(m,'slot '+n); return m[0]; };
+const slot=(html,n)=>{ const m=html.split(/(?=<div class="lbay)/).find(x=>x.startsWith('<div class="lbay')&&new RegExp(`^<div class="lbay[^"]*" data-slot="${n}"`).test(x)); assert.ok(m,'slot '+n); return m; };
 const diskTab=(html)=>{ const i=html.indexOf('">דיסקים</div>'); assert.ok(i>=0,'no disks section'); const to=html.indexOf('<div class="sec"',i); return html.slice(i,to<0?undefined:to); };
 
 test('grid: a named slot shows its name; an unnamed slot stays "דיסק N"; the number survives in the tooltip', () => {
   const {run}=setup();
   run("openClass('grp_CLONERS')"); const html=run('machines(0)');
   const c2=card(html,C2);
-  assert.match(slot(c2,1),/<span>דיסק 1<\/span>/,'no name → as today');
-  assert.match(slot(c2,3),/<span>דיסק 3<\/span>/);
+  assert.match(slot(c2,1),/<div class="lb-n"><b>1<\/b><span>מגירה<\/span><\/div><div class="lb-txt"><div class="lb-t"><b>SATA 0<\/b>/,'no name → the number and the connection');
+  assert.match(slot(c2,3),/<b>3<\/b>[^]*<b>SATA 2<\/b>/);
   const c1=card(html,C1);
-  assert.match(slot(c1,2),/<span>תחתונה<\/span><div class="bar"><i style="--w:0%"><\/i><\/div><b>ריק<\/b>/,'an empty slot keeps its name — the name is the slot, not the disk');
+  assert.match(slot(c1,2),/<b>תחתונה · SATA 1<\/b><\/div><div class="lb-l">ריק<\/div>/,'an empty slot keeps its name — the name is the slot, not the disk');
   assert.match(slot(c1,2),/title="דיסק 2 · SATA 1 · ריק"/,'the tooltip still says the number');
-  assert.match(slot(c1,1),/<span>דיסק 1<\/span>[^]*<b>ריק<\/b>/);
+  assert.match(slot(c1,1),/<b>1<\/b>[^]*<b>SATA 0<\/b><\/div><div class="lb-l">ריק<\/div>/);
 });
 
 test('grid during a round: the name follows the slot — a new disk (other serial) in SATA 1 is still "האמצעית"', () => {
   const {run}=setup({round:true});
   run("openClass('grp_CLONERS')"); const html=run('machines(0)');
   const s2=slot(card(html,C2),2);
-  assert.match(s2,/<span>האמצעית<\/span>/);
+  assert.match(s2,/<b>האמצעית · SATA 1<\/b>/);
   assert.match(s2,/title="דיסק 2 · SATA 1 · 870 EVO · S-9/,'named slot: the tooltip opens with "דיסק N"');
 });
 
 test('a name is escaped, never HTML', () => {
   const {run}=setup({names2:{'sata:1':'a<b>&"'}});
   run("openClass('grp_CLONERS')"); const html=run('machines(0)');
-  assert.match(slot(card(html,C2),1),/<span>a&lt;b&gt;&amp;&quot;<\/span>/);
+  assert.match(slot(card(html,C2),1),/<b>a&lt;b&gt;&amp;&quot; · SATA 0<\/b>/);
 });
 
 test('drawer disk table: drawers 1..N by the mapping, then drives outside it (named NVMe keeps its name); naming is in the #2001 window', () => {
@@ -107,7 +109,7 @@ test('drawer disk table: marketing size and vendor; SMART is a chip only on a pr
     {dev:'sdc',port:3,serial:'c',model:'KINGSTON X',size_bytes:931*1024**3,smart:'fail'}];`);
   const html=diskTab(run(`machineDrawerHtml(findMachine('${C2}'))`));
   assert.match(html,/256GB<\/bdi><\/span> <span class="cap">Samsung<\/span><\/td><td><\/td>/,'#1375: ok = no chip');
-  assert.match(html,/500GB<\/bdi><\/span> <span class="cap">Western<\/span><\/td><td><span class="n-chip w">אזהרה<\/span>/);
+  assert.match(html,/500GB<\/bdi><\/span> <span class="cap">Western<\/span><\/td><td><span class="n-chip w">SMART חצי תקין<\/span>/);
   assert.match(html,/1TB<\/bdi><\/span> <span class="cap">Kingston<\/span><\/td><td><span class="n-chip d">SMART תקול<\/span>/,'#1580: SMART fail is red');
 });
 
@@ -132,13 +134,13 @@ test('the drawer for a non-admin has no mapping button, and the window does not 
 test('without any names everything reads exactly as before', () => {
   const {run}=setup({names1:{},names2:{}});
   run("openClass('grp_CLONERS')"); const html=run('machines(0)');
-  for(const n of [1,2,3]) assert.match(slot(card(html,C2),n),new RegExp(`<span>דיסק ${n}</span>`));
+  for(const n of [1,2,3]) assert.match(slot(card(html,C2),n),new RegExp(`<div class="lb-n"><b>${n}</b><span>מגירה</span></div><div class="lb-txt"><div class="lb-t"><b>SATA ${n-1}</b>`));
   assert.match(slot(card(html,C1),2),/title="דיסק 2 · SATA 1 · ריק"/);
   const {run:run2}=setup({names1:{},names2:{}});
   // old server: no slot_names field at all
   run2('MACHINES.forEach(m=>delete m.slot_names)');
   run2("openClass('grp_CLONERS')");
-  assert.match(slot(card(run2('machines(0)'),C2),1),/<span>דיסק 1<\/span>/);
+  assert.match(slot(card(run2('machines(0)'),C2),1),/<b>1<\/b><span>מגירה<\/span><\/div><div class="lb-txt"><div class="lb-t"><b>SATA 0<\/b>/);
 });
 
 test('#1375 (Nadav 07/11): the disks tab shows no "תקין" -- a chip only on a problem; no reading stays "לא נבדק" (rule 5); the list column is capacity', () => {
@@ -151,6 +153,6 @@ test('#1375 (Nadav 07/11): the disks tab shows no "תקין" -- a chip only on a
   assert.doesNotMatch(html,/>תקין</,'ok is silence, not a constant badge');
   assert.match(html,/256GB<\/bdi><\/span> <span class="cap">Samsung<\/span><\/td><td><\/td>/);
   assert.match(html,/500GB<\/bdi><\/span> <span class="cap">Western<\/span><\/td><td><span class="n-chip n">לא נבדק<\/span>/,'unread SMART is not "ok" and not hidden');
-  assert.match(html,/<span class="n-chip w">אזהרה<\/span>/);
+  assert.match(html,/<span class="n-chip w">SMART חצי תקין<\/span>/);
   assert.equal(run(`disksCell({disks:[{size_bytes:0},{size_bytes:512110190592}]})`),'<span class="muted">גודל לא ידוע</span> · <bdi dir="ltr">512GB</bdi>','a drive with no size is said, not dropped');
 });

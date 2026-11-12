@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server.console import auth, users
 from server.interserver import storage_nodes
 
@@ -307,7 +308,7 @@ def test_the_console_hides_nothing_on_a_secondary_but_the_hierarchy():
     allowed = HIERARCHY_CAPS | EDITION_CAPS
     assert caps and caps <= allowed, caps
     assert "classrooms" in caps
-    js = (STATIC / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     used = set(re.findall(r"capabilities(?:\?\.|\.)(\w+)", js))
     used |= set(re.findall(r"\bcaps\.(\w+)", js))
     assert used and used <= allowed, used

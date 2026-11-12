@@ -1,4 +1,8 @@
-"""#1366 (Nadav 13/10) in the native GUI: the absolute CRC threshold and the F1 reason.
+"""#1366 (Nadav 13/10) in the native GUI: the F1 reason -- and the absolute CRC, gone (#2846).
+
+Nadav 11/11 (#2846, #2848): an absolute CRC count is the disk's history, not a state.
+The record fields stay (``cdisk=`` 9, ``room_drawer=`` 13) and are always empty; the GUI
+reads neither, so an older agent that still fills them colours nothing. Before #2846:
 
 The links:
 
@@ -50,16 +54,14 @@ def _standby_record(tmp_path: Path, smart: str, hello: dict | None) -> list[str]
     return line.split("|")
 
 
-@pytest.mark.parametrize("smart, hello, want", [
-    ("ok ok 0 0 0 667", {"crc_warn_threshold": 500}, "667"),     # 13/10: the disk that failed at 0.86GB
-    ("ok ok 0 0 0 500", {"crc_warn_threshold": 500}, ""),        # over, not at
-    ("ok ok 0 0 0 55242", {"crc_warn_threshold": 0}, ""),        # 0 = off
-    ("ok ok 0 0 0 1752", {"schema": 1}, ""),                     # an older server: no threshold, no colour
-    ("ok ok 0 0 0 1752", None, ""),                              # no hello answer read yet
-    ("unchecked open_failed 0 0 0 0", {"crc_warn_threshold": 500}, ""),   # 199 never read
+@pytest.mark.parametrize("smart, hello", [
+    ("ok ok 0 0 0 42355", {"crc_warn_threshold": 500}),     # 11/11, the work disks: history
+    ("ok ok 0 0 0 59165", {"crc_warn_threshold": 1}),
+    ("ok ok 0 0 0 667", {"crc_warn_threshold": 500}),       # #1366's own case
+    ("ok ok 0 0 0 1752", None),
 ])
-def test_the_standby_record_carries_the_crc_only_over_the_threshold(tmp_path, smart, hello, want):
-    assert _standby_record(tmp_path, smart, hello)[8] == want
+def test_the_standby_record_never_carries_an_absolute_crc(tmp_path, smart, hello):
+    assert _standby_record(tmp_path, smart, hello)[8] == ""
 
 
 @pytest.mark.parametrize("reason", ["health_failed", "pending_sectors", "uncorrectable"])
@@ -69,15 +71,16 @@ def test_a_fail_carries_its_f1_reason_in_field_six(tmp_path, reason):
 
 
 @requires_native(("bash", BASH), "jq", why="gui_state builds the state with jq")
-def test_gui_state_carries_the_crc_as_field_13(tmp_path, monkeypatch):
+def test_gui_state_leaves_field_13_empty_even_from_an_old_server(tmp_path, monkeypatch):
+    """A server from before #2846 still sends ``crc_suspect: true`` -- the agent says nothing."""
     room = json.loads(json.dumps(precheck.ROOM))
     first, second = room["machines"][0]["drawer_list"]
-    first.update(crc=667, crc_suspect=True)
+    first.update(crc=42355, crc_suspect=True)
     second.update(crc=137, crc_suspect=False)
     monkeypatch.setattr(precheck, "ROOM", room)
     lines = gui_state_lines(tmp_path)
     crc = {l.split("|")[1]: l.split("|")[12] for l in lines if l.startswith("room_drawer=0|")}
-    assert crc == {"1": "667", "2": ""}, lines
+    assert crc == {"1": "", "2": ""}, lines
 
 
 STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagesrv-ta\n"
@@ -87,14 +90,13 @@ STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=images
 
 
 @_GUI
-def test_the_standby_bay_turns_orange_over_the_crc_threshold(tmp_path):
+def test_the_standby_bay_ignores_a_crc_count_from_an_old_agent(tmp_path):
+    """#2846: field 9 filled (an agent from before) draws exactly what an empty one does."""
     binary = _build_gui(tmp_path)
     _render(binary, STANDBY.format(smart="passed", cause="", crc=""), tmp_path / "clean")
-    _render(binary, STANDBY.format(smart="passed", cause="", crc="667"), tmp_path / "crc")
+    _render(binary, STANDBY.format(smart="passed", cause="", crc="42355"), tmp_path / "crc")
     for theme in ("light", "dark"):
-        clean = _count(tmp_path / f"clean-standby-{theme}.png", "--clr-warning", theme)
-        crc = _count(tmp_path / f"crc-standby-{theme}.png", "--clr-warning", theme)
-        assert crc - clean > 300, (theme, clean, crc)
+        assert (tmp_path / f"crc-standby-{theme}.png").read_bytes() == (tmp_path / f"clean-standby-{theme}.png").read_bytes(), theme
 
 
 @_GUI
@@ -115,7 +117,7 @@ ROOM_LIVE = (f"machine=CLONE-01|{C1}|1|1|2|waiting|-1|0|\n"
 
 
 @_GUI
-def test_the_live_room_slot_turns_orange_over_the_crc_threshold(tmp_path):
+def test_the_live_room_slot_ignores_a_crc_count_from_an_old_agent(tmp_path):
     binary = _build_gui(tmp_path)
     _render(binary, ROOM_LIVE.format(crc=""), tmp_path / "a")
     _render(binary, ROOM_LIVE.format(crc="1752"), tmp_path / "b")
@@ -123,4 +125,4 @@ def test_the_live_room_slot_turns_orange_over_the_crc_threshold(tmp_path):
         # every room screen of the render (the grid of the distribute screen draws the slots)
         a = sum(_count(f, "--clr-warning", theme) for f in tmp_path.glob(f"a-room*-{theme}.png"))
         b = sum(_count(f, "--clr-warning", theme) for f in tmp_path.glob(f"b-room*-{theme}.png"))
-        assert b - a > 100, (theme, a, b, sorted(p.name for p in tmp_path.glob("b-*.png")))
+        assert b == a, (theme, a, b, sorted(p.name for p in tmp_path.glob("b-*.png")))

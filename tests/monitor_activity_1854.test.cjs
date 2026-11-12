@@ -2,13 +2,14 @@
 // במסך המכונה נזרק אחרי console_idle_seconds (ברירת מחדל 10 דק'). monitor.js ו-console.js רצים
 // כאן בשני הקשרים נפרדים, מחוברים ב-BroadcastChannel מזויף אחד — כמו שני מסמכים באותו origin.
 // בקרה שלילית: על הקוד שלפני #1854 monitor.js אינו שולח דבר, ו-noteActivity של הקונסולה לא נקרא.
+const {consoleJs: readConsoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '../server/static');
-const consoleJs = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+const consoleJs = readConsoleJs();
 
 function bus() {
   const channels = [];

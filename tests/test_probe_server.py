@@ -39,6 +39,7 @@ GOOD = {
     "probe_seconds": 0,
     "netprobe": None,
     "ntfs": None,    # #980 §6
+    "display": None,  # #2849: the probe's screen field -- absent in this sample = not reported
 }
 
 

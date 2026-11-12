@@ -3,6 +3,7 @@
 // machine was saved but will not get GRUB until the network is fixed. Until
 // now only the presence of the text was checked (test_known_macs.py); this
 // runs the function itself, so a dhcpNotice() that swallows the failure fails.
+const {consoleJs} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -11,7 +12,7 @@ const vm=require('node:vm');
 const root=process.env.CONSOLE_STATIC_ROOT || path.resolve(__dirname,'../server/static');
 
 function load() {
-  const src=fs.readFileSync(path.join(root,'console.js'),'utf8');
+  const src=consoleJs();
   const start=src.indexOf('function dhcpNotice(');
   assert.ok(start>=0,'dhcpNotice is gone from console.js');
   const end=src.indexOf('\n}\n',start);

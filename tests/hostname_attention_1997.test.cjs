@@ -4,6 +4,7 @@
 // מסמן (`name_problem` / `label_problem` / `server_name_problem`) והקונסולה
 // מציגה; הכלל עצמו אינו משוכפל ל-JS.
 // בלי דפדפן: console.js רץ ב-vm מול DOM מזערי, כמו home_shrink_attention.
+const {consoleJs, consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -24,7 +25,7 @@ function setup() {
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
-  vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('toast=()=>{}; HEALTH=[]; SHRINK_RECORDS=[]; HOME.net=[]; HOME.nodes=[];');
   return run;
@@ -74,7 +75,7 @@ test('all names valid = no name item (the rule lives on the server; the console 
 });
 
 test('the add-machine form says the name is an English computer name, not "free"',()=>{
-  const src=fs.readFileSync(path.join(root,'console.js'),'utf8');
+  const src=consoleJs();
   assert.doesNotMatch(src,/שם חופשי לבנייה ולשיכפול/);
   assert.match(src,/שם מחשב — באנגלית, עד 15 תווים/);
 });

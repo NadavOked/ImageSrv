@@ -30,6 +30,9 @@ class SimMachine(threading.Thread):
         self.silent_after_join = False       # נופלת מיד אחרי שהצטרפה
         self.write_plans: list[list[tuple]] = []
         self.handled_sessions: set[str] = set()
+        #: ‏#2786: לכל גל — השם שהסוכן היה כותב לכל מגירה שנכתבה עד הסוף (dev → שם),
+        #: מתוך `session.hostnames` לפי החריץ שלה, כמו `name_drawers` (drawernames.sh).
+        self.named: list[dict[str, str]] = []
         self.error: Exception | None = None
         self._manifests: dict[str, dict] = {}
         self._stop = threading.Event()
@@ -91,6 +94,11 @@ class SimMachine(threading.Thread):
                           "bytes_total": total, "state": outcome,
                           "error": error})
         report("writing", midway)
+        names = session.get("hostnames")
+        if names is not None:
+            port_of = {d["dev"]: d.get("port") for d in self.disks}
+            self.named.append({t["dev"]: names.get(str(port_of.get(t["dev"])))
+                               for t in final if t["state"] == "done"})
         outcomes = {t["state"] for t in final}
         report("failed" if outcomes == {"failed"} else "done", final)
 

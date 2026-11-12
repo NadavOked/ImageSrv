@@ -1,5 +1,6 @@
 // drawerEnhance מעביר את כפתורי .acts / קופסת border-top לשורת הפעולות של המגירה. מה שאינו כפתור
 // (הסבר, "בקרוב", תווית WoL) אסור שייעלם בשקט. בלי jsdom: DOM מזערי בתוך vm, ו-console.js האמיתי.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -32,7 +33,7 @@ function load() {
     window:{addEventListener(){},matchMedia:()=>({matches:false})},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
-  vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   return {nodes,ctx,run:s=>vm.runInContext(s,ctx)};
 }
 

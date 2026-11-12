@@ -2,6 +2,7 @@
 // view-only/take-control strip, the "גם X צופה ב-VM" presence strip, the mandatory
 // save decision, the controller's approve/deny dialog, the image ⋯ item, and the
 // paste-as-typing guard. Runs the shipped console.js + vmupdate.js, not copies.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -31,7 +32,7 @@ function setup({user = 'nadav', role = 'admin'} = {}) {
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });
   vm.runInContext(read('progress.js'), ctx);
-  vm.runInContext(read('console.js'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(read(f), ctx);
   vm.runInContext(read('vmupdate.js'), ctx);
   const run = (s) => vm.runInContext(s, ctx);
   run(`ME={timezone:"UTC",username:${JSON.stringify(user)},role:${JSON.stringify(role)},capabilities:{}};`);

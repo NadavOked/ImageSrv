@@ -3,6 +3,7 @@
 // ו-fetch מזויף. עיקרון 5: "לא נבדק" ≠ ירוק; ROOM null (לא נקרא) ≠ חדר בלי סבב.
 // הכרעת נדב 16/09: כתום = בלי תשובה ממשיך לכתוב, אדום = בלי תשובה מדלג — לעולם לא "דלג בשניהם".
 // עיקרון 7: עצירת סבב מאחורי חלון אישור (#1270). "דיסק N · SATA N-1", לעולם לא sd*.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -86,7 +87,7 @@ function setup({room=roomIdle(),role='admin',session=null,prompts={}}={}) {
       if(v&&v.__status) return {status:v.__status,ok:false,json:async()=>({detail:v.detail})};
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>v ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run(`ME={username:"${role}",role:"${role}",server_name:"srv",version:"v0.32.1",capabilities:{classrooms:true}}; current="deploy"; sheet = o => { globalThis.formOptions=o; }; selectPageById=(id)=>{ globalThis.selected=id; current=id; }; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; activateTab=(i)=>{ globalThis.activated=i; }; monitorMachine=(mac)=>{ globalThis.monitored=mac; };`);
   for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['NET','/net'],['ROOM','/room'],['IMAGES','/images']]) run(name+'='+JSON.stringify(fixtures[key]));
@@ -150,7 +151,7 @@ test('the mockup-only controls are not in the product: "מצב לדוגמה" (ac
     assert.doesNotMatch(html,/מצב לדוגמה|הצג מה השתנה|data-round=|hint-demo|chgSw/);
     assert.doesNotMatch(html,/סבב \d/,'room_rounds.id is "room_xxxx" -- there is no "round 12" to show');
   }
-  for (const f of ['console.js','index.html','console.css']) {
+  for (const f of [...consoleFiles(),'index.html','console.css']) {
     const src=fs.readFileSync(path.join(root,f),'utf8');
     assert.doesNotMatch(src,/מצב לדוגמה|הצג מה השתנה|data-round=|hint-demo/,f);
   }
@@ -324,7 +325,7 @@ test('running wave (mockup P.deploy): a card per cloner — name, "מחובר", 
   const c1=mach(grid,C1), c2=mach(grid,C2), c3=mach(grid,C3);
   assert.match(c1,new RegExp(`^data-mac="${C1}" title="${C1}"><div class="mt"><span>מחשב 1</span><span class="pill ok">מחובר</span></div><div class="ms"><bdi dir="ltr">10\\.44\\.12\\.118</bdi></div><div class="dsks">`),'name + "מחובר" + IP; the MAC is the tooltip');
   assert.match(c1,/<div class="dsk" data-slot="1" title="SATA 0 · 870 EVO · S5Y10 · כותב · SMART תקין"><span>דיסק 1<\/span><div class="bar " role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="38"><i style="--w:38%"><\/i><\/div><b>38%<\/b>/,'"דיסק N" · bar · percent, the mockup row; the state word is in the tooltip');
-  assert.match(c2,/<div class="dsk bay-emphasis warn" data-slot="2" title="SATA 1 · 870 EVO · S5Y31 · כותב · CRC \+3 · לבדוק כבל · SMART אזהרה"><span>דיסק 2<\/span><div class="bar warn"[^>]*><i style="--w:37%"><\/i><\/div><b>37%<\/b>/);
+  assert.match(c2,/<div class="dsk bay-emphasis warn" data-slot="2" title="SATA 1 · 870 EVO · S5Y31 · כותב · שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים · SMART חצי תקין"><span>דיסק 2<\/span><div class="bar warn"[^>]*><i style="--w:37%"><\/i><\/div><b>37%<\/b>/);
   assert.match(c2,/<div class="dsk bad bay-emphasis err" data-slot="3" title="[^"]*נכשל בסבב — queue overflow: target lost bytes[^"]*"><span>דיסק 3<\/span><div class="bar err"><i style="--w:100%"><\/i><\/div><b>נכשל<\/b><\/div>/,'a write that failed says "נכשל" (principle 4), never a quiet skip');
   assert.match(grid,new RegExp(`<div class="mach err" data-mac="${C2}"`),'a machine with a failed drawer is red');
   assert.match(c2,/<span>מחשב 2<\/span><span class="pill err">דיסק אדום<\/span><\/div><div class="ms">דיסק 3 אדום — הדיסק לא עמד בקצב — אבדו בייטים<\/div>/,'which disk and why, on the card');
@@ -338,7 +339,7 @@ test('running wave (mockup P.deploy): a card per cloner — name, "מחובר", 
   assert.match(d2,/<div class="ms">דיסק 3 אדום — הדיסק לא עמד בקצב — אבדו בייטים; דיסק 1 משוחזר<\/div>/,'what was written is said next to what failed');
   assert.match(d2,/<div class="dsk" data-slot="1" [^>]*><span>דיסק 1<\/span><div class="bar ok"[^>]*aria-valuenow="100"><i style="--w:100%"><\/i><\/div><b>100%<\/b>/);
   const notes=between(html,'<div class="c12 rnotes">');
-  assert.match(notes,/<div class="note warn">[^]*?<b>מחשב 2 · דיסק 2<\/b> — SMART אזהרה \/ CRC \/ קישור איטי: <b>הסוכן ממשיך לכתוב<\/b> \(כתום = כותב\)[^]*?דילוג מרחוק — <b[^>]*>דורש API<\/b>/);
+  assert.match(notes,/<div class="note warn">[^]*?<b>מחשב 2 · דיסק 2<\/b> — SMART חצי תקין \/ CRC שעלה \/ קישור איטי: <b>הסוכן ממשיך לכתוב<\/b> \(כתום = כותב\)[^]*?דילוג מרחוק — <b[^>]*>דורש API<\/b>/);
   // #1767: drawer 3's write failed in the round (smart ok) -- the red note says that, not "SMART נכשל" (see the test below)
   assert.match(notes,/<div class="note err">[^]*?<b>מחשב 2 · דיסק 3<\/b> — אדום: <b>הכתיבה בסבב נכשלה: הדיסק לא עמד בקצב — אבדו בייטים<\/b>\. /);
   assert.doesNotMatch(notes,/דלג בשניהם|onclick="[^"]*skip/,'never "skip both", never an invented skip endpoint');
@@ -651,20 +652,23 @@ test('#1269 drivers: loadDeploy reads /room/driver-models; a failed read is "unr
   assert.doesNotMatch(c2,/data-slot="2" title="[^"]*דרייברים/,'drivers null = the step did not run — nothing said');
 });
 
-/* ‏#1275: גריד בחירת הדיסקים — checkbox אמיתי; אדום/כבוי/ריק חסומים. */
+/* ‏#1275: גריד בחירת הדיסקים; אדום/כבוי/ריק חסומים. ‏#2848 (מוקאפ disk-colors, נדב 11/11): כל מגירה היא כרטיס
+   המגירה של המסך המקומי (.lbay), צבע מלא, ו-[יעד][דלג] כמו בגואי במקום checkbox. */
+const bay=(html,key)=>{ const m=html.split(/(?=<div class="lbay)/).find(x=>x.includes(`data-key="${key}"`)); assert.ok(m,'missing bay '+key); return m; };
 const pk=(html)=>between(html,'<div class="full rn-pick">','<details class="full rn-drv"');
 const pcard=(html,mac)=>(html.split('<section class="rn-m').find(c=>c.includes(`data-mac="${mac}"`))||'').split('<section class="rn-m')[0];
 
-test('#1275 pick grid: one card per cloner and one checkbox label per present disk; nothing selected by default', () => {
+test('#1275/#2848 pick grid: one card per cloner and one drawer card per present disk, each with [יעד][דלג]; nothing selected by default', () => {
   const {run}=setup(); const html=run('roomNewWindow(roomMachines())'); balanced(html);
   const g=pk(html);
   assert.equal((g.match(/<section class="rn-m/g)||[]).length,3,'a card per cloner, the off one included');
-  assert.equal((g.match(/<label class="dk st-/g)||[]).length,5,'one label tile per present disk');
-  assert.equal((g.match(/type="checkbox"/g)||[]).length,5,'every present drawer uses a real checkbox');
-  assert.doesNotMatch(g,/class="dk[^"]* sel/,'no default selection');
-  assert.match(g,/דיסק 1<\/span><span class="dk-sz"><bdi[^>]*>256GB<\/bdi>/,'rows use the existing marketed disk size helper');
-  assert.match(g,/<span class="n-chip">נכנס<\/span>/,'green: the mockup pill (n-chip — the window is not .page)');
-  assert.match(g,/<span class="n-chip w">אזהרה<\/span>/,'warning: orange chip');
+  assert.equal((g.match(/<div class="lbay[^"]*" data-slot="\d" data-key="/g)||[]).length,5,'one drawer card per present disk');
+  assert.equal((g.match(/<span class="lb-seg" role="group"/g)||[]).length,5,'every present drawer has [יעד][דלג]');
+  assert.doesNotMatch(g,/class="lbay[^"]* sel"/,'no default selection'); assert.doesNotMatch(g,/aria-pressed="true"[^>]*>יעד</,'"דלג" is pressed everywhere');
+  assert.match(g,/<div class="lb-sz"><b><bdi[^>]*>256GB<\/bdi><\/b>/,'cards use the existing marketed disk size helper');
+  assert.match(g,/<div class="lb-l ok">נכנס<\/div>/,'green: "נכנס" in green, like the GUI line');
+  assert.match(g,/<span class="lb-chip c-orange"><i><\/i>SMART חצי תקין<\/span>/,'warning: the orange chip says SMART חצי תקין');
+  assert.doesNotMatch(g,/type="checkbox"|class="dk /,'no checkbox tiles left');
   assert.match(g,/5 מגירות ניתנות לבחירה/); assert.match(g,/בחר הכול/); assert.match(g,/נקה הכול/);
   assert.deepEqual(JSON.parse(run('JSON.stringify(roomSubmitState(roomMachines()))')),{n:0,text:'יש לסמן לפחות דיסק אחד'},'the footer summary; the action is disabled until a disk is ticked');
   assert.match(pcard(html,C3),/כבוי · יידלק ב-WoL/);
@@ -674,44 +678,52 @@ test('#1275 pick grid: selection keeps warning colour, adds blue selection state
   const {run}=setup();
   run(`roomFormSet('target','5'); roomPick('${C2}@2')`); let html=run('roomNewWindow(roomMachines())'); balanced(html);
   const c2=pcard(html,C2);
-  assert.match(c2,new RegExp(`class="dk st-w sel" data-key="${C2}@2"><input class="dk-in" type="checkbox" checked`),'selected warning keeps orange class and gains selection');
-  assert.match(c2,/<b>1<\/b> מתוך 3 נבחרו/); assert.match(c2,/class="dk st-g" data-key=/);
+  assert.match(c2,new RegExp(`<div class="lbay t-orange sel" data-slot="2" data-key="${C2}@2"`),'selected warning keeps orange and gains selection');
+  assert.match(bay(c2,`${C2}@2`),/<b>SATA 1<\/b><span class="lb-tag">יעד<\/span>/,'the "יעד" tag beside the connection, as in the GUI');
+  assert.match(bay(c2,`${C2}@2`),/<button type="button" aria-pressed="true" onclick="roomPickTo\([^"]+,true\)">יעד<\/button><button type="button" aria-pressed="false" onclick="roomPickTo\([^"]+,false\)">דלג<\/button>/);
+  assert.match(c2,/<b>1<\/b> מתוך 3 נבחרו/); assert.match(c2,/<div class="lbay" data-slot="1" data-key=/);
   assert.equal(run('roomSubmitState(roomMachines()).text'),'נבחרו דיסק 1 ב-מחשב 1 · משוער 5 גלים'.replace('דיסק 1','1 דיסק').replace('מחשב 1','1 מחשב'));
   run('openRoomRound()'); assert.equal(run("document.getElementById('modalOk').disabled"),false,'a ticked disk enables the footer action');
-  run(`roomPick('${C2}@2')`); assert.doesNotMatch(pcard(run('roomNewWindow(roomMachines())'),C2),/st-w sel/,'second click clears');
+  run(`roomPickTo('${C2}@2',true)`); assert.match(pcard(run('roomNewWindow(roomMachines())'),C2),/t-orange sel/,'"יעד" again keeps it');
+  run(`roomPickTo('${C2}@2',false)`); assert.doesNotMatch(pcard(run('roomNewWindow(roomMachines())'),C2),/t-orange sel/,'"דלג" clears');
   run(`roomPickMachine('${C2}')`); html=run('roomNewWindow(roomMachines())'); assert.match(pcard(html,C2),/<b>2<\/b> מתוך 3 נבחרו/,'machine select-all skips orange');
   run(`roomPickClearMachine('${C2}')`); assert.match(pcard(run('roomNewWindow(roomMachines())'),C2),/<b>0<\/b> מתוך 3 נבחרו/);
   run('roomPickAll()'); assert.match(run('roomSubmitState(roomMachines()).text'),/נבחרו 4 דיסקים ב-2 מחשבים/,'room select-all selects green only');
   run('roomPickClearAll()'); assert.equal(run('roomSubmitState(roomMachines()).n'),0);
 });
 
-test('#1275 safety: off, empty, unidentified, and red drawers cannot be ticked; red checkbox is disabled', () => {
+test('#1275 safety: off, empty, unidentified, and red drawers cannot be ticked; red "יעד" is disabled', () => {
   const room=roomIdle();
   room.machines[0].drawer_list=[drawer('sda',1,'S5Y10',{smart:'fail',smart_reason:'pending_sectors'}),drawer('sdb',2,null,{smart:'ok',size_bytes:null})];   // אדום (#1580: SMART fail); בלי serial וגודל
-  // #1580 (נדב 17/10): נכשל בשיכפול הקודם = כתום — הסוכן שואל "נסה שוב", ובלי תשובה כותב.
+  // #2848 (נדב 11/11): נכשל בשיכפול הקודם = צהוב — יעד כן, מקור לא (היה כתום, #1580). "בחר הכול" אינו מסמן אותו.
   room.machines[1].drawer_list=[drawer('sda',1,'S5Y30',{smart:'failed_last',smart_reason:'cable'})];                     // חריצים 2,3 ריקים
   const {run}=setup({room});
   run(`roomPick('${C3}@1'); roomPick('${C2}@2'); roomPick('${C2}@3'); roomPick('${C1}@2')`);   // כולם נדחים
   const html=run('roomNewWindow(roomMachines())'); balanced(html); assert.equal(run('roomSubmitState(roomMachines()).n'),0,'nothing selectable was selected');
   const c1=pcard(html,C1);
-  assert.match(c1,new RegExp(`class="dk st-d" data-key="${C1}@1"><input class="dk-in" type="checkbox" disabled`),'red is a disabled checkbox');
-  assert.match(c1,/<span class="n-chip d">לא ניתן לסימון<\/span>/,'red: the red chip');
-  assert.match(c1,new RegExp(`data-key="${C1}@2"><input class="dk-in" type="checkbox" disabled`),'no serial → disabled'); assert.match(c1,/class="dk-sz"><bdi[^>]*>—<\/bdi>/);
-  assert.equal((pcard(html,C2).match(/class="dk st-e"/g)||[]).length,2,'two dashed empty slots');
-  assert.match(pcard(html,C2),/class="dk st-w"[^>]*>[\s\S]*נכשל בשיכפול הקודם — &quot;נסה שוב&quot; כותב/,'#1580: failed last time is orange, retry');
+  assert.match(c1,new RegExp(`<div class="lbay t-red" data-slot="1" data-key="${C1}@1"`),'red');
+  assert.match(bay(c1,`${C1}@1`),/<button type="button" aria-pressed="false" disabled title="לא יכול להיות יעד">יעד<\/button>/,'red: "יעד" is disabled and says why');
+  assert.match(bay(c1,`${C1}@1`),/<div class="lb-l bad">אדום: SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת<\/div>/,'red says the rule sentence');
+  assert.match(bay(c1,`${C1}@2`),/aria-pressed="false" disabled title="אינו ניתן לבחירה">יעד</,'no serial → disabled'); assert.match(bay(c1,`${C1}@2`),/<div class="lb-sz"><b>—<\/b>/);
+  assert.match(bay(c1,`${C1}@2`),/אין מספר סידורי — אינו יעד/,'and says why');
+  assert.equal((pcard(html,C2).match(/class="lbay t-empty"/g)||[]).length,2,'two dashed empty slots');
+  assert.match(pcard(html,C2),/class="lbay t-yellow"[^>]*>[\s\S]*נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו/,'#2848: failed last time is yellow -- a target, never a source');
   run(`roomPick('${C1}@1')`); assert.equal(run('roomSubmitState(roomMachines()).n'),0,'red cannot enter selection state');
 });
 
-test('#1366 start-round colours: CRC/F1/link are orange; slow write preflight is red and cannot be ticked', () => {
-  const room=roomIdle();
+test('#1366/#2846/#2848 start-round colours: a slow SATA link and a slow write are red and cannot be ticked; an absolute CRC count says nothing', () => {
+  const room=roomIdle(); room.machines[0].drawer_count=3;
   room.machines[0].drawer_list=[
     drawer('sda',1,'S5Y10',{smart:'ok',crc_suspect:true,crc:17,link_state:'slow',link_gbps:1.5,link_max_gbps:6}),
-    drawer('sdb',2,'S5Y11',{smart:'ok',write_preflight:{state:'slow',reason:'איטי — 23 MB/s'}}),
+    drawer('sdb',2,'S5Y11',{smart:'ok',write_slow:true}),   // #2848: this round's write check (the server's write_slow)
+    drawer('sdc',3,'S5Y12',{smart:'ok',last_write_check:{slow:true,mbps:23,text_he:'בבדיקת הכתיבה הקודמת נמדד איטי'}}),   // a past round
   ];
   const {run}=setup({room}); const html=run('roomNewWindow(roomMachines())'); const c1=pcard(html,C1);
-  assert.match(c1,/class="dk st-w"[^>]*>[\s\S]*כבל או מגירה חשודים — 17 שגיאות · קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה/);
-  assert.match(c1,new RegExp(`class="dk st-d" data-key="${C1}@2"><input class="dk-in" type="checkbox" disabled[\\s\\S]*איטי — 23 MB/s`));
-  run(`roomPick('${C1}@2')`); assert.doesNotMatch(run('roomNewWindow(roomMachines())'),new RegExp(`data-key="${C1}@2"[^>]*>[\\s\\S]*type="checkbox" checked`));
+  assert.match(bay(c1,`${C1}@1`),/^<div class="lbay t-red"[^]*<div class="lb-l red">קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה<\/div><div class="lb-l bad">אדום: קישור SATA איטי — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו<\/div>[^]*c-red"><i><\/i>קישור SATA איטי<[^]*disabled title="לא יכול להיות יעד">יעד</);
+  assert.doesNotMatch(c1,/מגירה חשודים|17 שגיאות/,'#2846: a crc_suspect from an old server is not drawn');
+  assert.match(bay(c1,`${C1}@2`),/^<div class="lbay t-red"[^]*<div class="lb-l red">איטי בסבב הזה — נמדד מחדש בסבב הבא<\/div><div class="lb-l bad">אדום: נפסל כאיטי בבדיקת הכתיבה בסבב הזה[^]*c-red"><i><\/i>איטי בסבב הזה<[^]*disabled title="לא יכול להיות יעד">יעד</);
+  assert.match(bay(c1,`${C1}@3`),/^<div class="lbay" data-slot="3"[^]*onclick="roomPickTo\([^"]+,true\)">יעד</,'#2848: a past round leaves no mark -- green, a target');
+  run(`roomPick('${C1}@2')`); assert.doesNotMatch(bay(run('roomNewWindow(roomMachines())'),`${C1}@2`),/ sel"|aria-pressed="true"[^>]*>יעד</);
 });
 
 test('#1275 pick grid: the round carries the selection as target_slots (library and direct); nothing selected is refused locally with the reason and posts nothing', async () => {
@@ -762,11 +774,12 @@ function roomOpenWave(extra={}) {
   return r;
 }
 
-test('#432: a slow drawer is orange with the link and CRC rise in its tooltip; an unread link says "unknown" and is never called fine', () => {
+test('#432/#2848: a slow drawer is red with the link and CRC rise in its tooltip; an unread link says "unknown" and is never called fine', () => {
   const {run}=setup({room:roomOpenWave()});
   const html=run('deploy(0)'); balanced(html);
-  assert.match(mach(html,C2),/<div class="dsk bay-emphasis warn" data-slot="2" title="[^"]*קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה · CRC \+12 מאז הסבב הקודם · SMART תקין">/);
+  assert.match(mach(html,C2),/<div class="dsk bad bay-emphasis err" data-slot="2" title="[^"]*שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים · קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה · SMART תקין">/);
   assert.match(mach(html,C1),/<div class="dsk" data-slot="1" title="[^"]*קישור 6\.0 מתוך 6\.0 Gb\/s · SMART תקין">/);
+  assert.match(mach(html,C2),/דיסק 2 אדום — קישור SATA איטי/,'#2848: the red line names the link, not "SMART נכשל"');
   assert.match(mach(html,C1),/<div class="dsk" data-slot="2" title="[^"]*קישור SATA לא ידוע · SMART תקין">/,'unknown is said, not hidden');
   assert.doesNotMatch(mach(html,C1),/לא ידוע · לבדוק כבל/);
   assert.equal(run("linkSlow({link_gbps:3,link_max_gbps:6})"),true,'/machines carries only the numbers');
@@ -789,9 +802,9 @@ test('#432: an open wave with a precheck warning shows it in orange; "start" ask
 });
 
 test('#2670: the precheck title follows the kind of warning — link, slow write, or both — not always "suspect link"', () => {
-  const LINK={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:1.5,link_max_gbps:6,crc_rise:null,write_slow:false,text_he:WARN_TEXT};
+  const LINK={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:1.5,link_max_gbps:6,crc_rise:null,model_slow:false,text_he:WARN_TEXT};
   const CRC={...LINK,port:3,serial:'S5Y32',link_gbps:6,crc_rise:12,text_he:'מחשב 2 · דיסק 3: מונה CRC עלה ב-12'};
-  const WRITE={mac:C2,machine:'מחשב 2',port:4,serial:'S5Y33',link_gbps:6,link_max_gbps:6,crc_rise:null,crc_suspect:false,write_slow:true,text_he:'מחשב 2 · דיסק 4: כתיבה איטית'};
+  const WRITE={mac:C2,machine:'מחשב 2',port:4,serial:'S5Y33',link_gbps:6,link_max_gbps:6,crc_rise:null,crc_suspect:false,model_slow:true,text_he:'מחשב 2 · דיסק 4: כתיבה איטית'};
   const title=(precheck)=>{ const html=setup({room:roomOpenWave({precheck})}).run('deploy(0)'); balanced(html);
     const m=html.match(/<b>לפני ההתחלה — ([^<]*)<\/b>/); assert.ok(m,'the note is there'); return m[1]; };
   assert.equal(title([LINK]),'מגירה אחת בגל עם קישור חשוד');
@@ -803,7 +816,7 @@ test('#2670: the precheck title follows the kind of warning — link, slow write
 });
 
 test('#2707: "the disk itself" and "slower than its model" are not a suspect link; no known sign is "a warning"', () => {
-  const BASE={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:6,link_max_gbps:6,crc_rise:null,crc_suspect:false,write_slow:false,text_he:'מחשב 2 · דיסק 2: …'};
+  const BASE={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:6,link_max_gbps:6,crc_rise:null,crc_suspect:false,model_slow:false,text_he:'מחשב 2 · דיסק 2: …'};
   const title=(precheck)=>{ const html=setup({room:roomOpenWave({precheck})}).run('deploy(0)'); balanced(html);
     const m=html.match(/<b>לפני ההתחלה — ([^<]*)<\/b>/); assert.ok(m,'the note is there'); return m[1]; };
   assert.equal(title([{...BASE,disk_suspect:true}]),'מגירה אחת בגל עם דיסק חשוד');
@@ -812,7 +825,7 @@ test('#2707: "the disk itself" and "slower than its model" are not a suspect lin
   assert.equal(title([{...BASE,smart_learned:'critical_rose'}]),'מגירה אחת בגל עם דיסק חשוד');
   assert.equal(title([{...BASE,smart_learned:'downshift_rose'}]),'מגירה אחת בגל עם קישור חשוד');
   assert.equal(title([{...BASE}]),'מגירה אחת בגל עם אזהרה','no sign it knows: never a guessed kind');
-  assert.equal(title([{...BASE,disk_suspect:true},{...BASE,port:3,link_gbps:1.5},{...BASE,port:4,write_slow:true}]),
+  assert.equal(title([{...BASE,disk_suspect:true},{...BASE,port:3,link_gbps:1.5},{...BASE,port:4,model_slow:true}]),
     '3 מגירות בגל עם קישור חשוד או כתיבה איטית או דיסק חשוד');
 });
 
@@ -905,4 +918,22 @@ test('#1936: a drawer the operator cancelled in an earlier wave says "בוטל",
   s.run("ROOM.machines[0].drawer_list[1].cancelled_round=false");
   html=s.run('deploy(0)');
   assert.match(mach(html,C1),/<div class="dsk" data-slot="2"[^>]*><span>דיסק 2<\/span><div class="bar ok"[^>]*><i style="--w:100%"><\/i><\/div><b>נכתב<\/b>/);
+});
+
+// #2848 (mockup disk-colors, Nadav 11/11): the rule's colours on the start-round cards -- yellow is a target that
+// "בחר הכול" never ticks, grey is "SMART לא נבדק" (never green), red is never a target; one legend for both screens.
+test('#2848 start-round cards: yellow is a target but not in "בחר הכול"; grey says "SMART לא נבדק"; the legend is there', () => {
+  const room=roomIdle();
+  room.machines[0].drawer_list=[drawer('sda',1,'Y1',{smart:'ok',write_mark:'incomplete'}),drawer('sdb',2,'G1',{smart:'ok'}),drawer('sdc',3,'U1',{})];
+  room.machines[0].drawer_count=3;
+  const {run}=setup({room});
+  run('roomPickAll()'); let html=run('roomNewWindow(roomMachines())'); balanced(html);
+  const c1=pcard(html,C1);
+  assert.match(bay(c1,`${C1}@1`),/^<div class="lbay t-yellow" data-slot="1"/,'yellow');
+  assert.doesNotMatch(bay(c1,`${C1}@1`),/ sel"/,'"בחר הכול" does not tick yellow');
+  assert.match(bay(c1,`${C1}@1`),/<span class="lb-chip c-yellow"><i><\/i>כתיבה לא הושלמה<\/span>/);
+  assert.match(bay(c1,`${C1}@2`),/^<div class="lbay sel" data-slot="2"/,'green is ticked');
+  assert.match(bay(c1,`${C1}@3`),/<span class="lb-chip c-grey"><i><\/i>SMART לא נבדק<\/span>/,'grey, never green (principle 5)');
+  run(`roomPickTo('${C1}@1',true)`); assert.match(bay(pcard(run('roomNewWindow(roomMachines())'),C1),`${C1}@1`),/^<div class="lbay t-yellow sel"/,'yellow is a target by hand');
+  assert.match(html,/<div class="lb-legend"><b>מקרא — צבע מלא: רקע בגוון \+ מסגרת עבה<\/b>[^]*אפור — SMART לא נבדק/);
 });

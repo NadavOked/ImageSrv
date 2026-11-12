@@ -39,6 +39,7 @@ KNOWN_KEYS = (
     "kernel", "pstore", "oem_key", "disks", "encryption", "probe_seconds",
     "netprobe",  # #1048: cable + LLDP, sibling in hello, stored in this row
     "ntfs",  # #980 §6: hibernated/dirty per NTFS partition (ntfs-3g.probe), before a capture
+    "display",  # #2849: fb0 size + DRM connectors (EDID bytes, first mode) -- the KVM switch case
 )
 #: תקרות — ‏hello אינו מאומת, ו-probe בן מגה-בייט אינו probe.
 STR_LIMIT = 200

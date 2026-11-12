@@ -2,6 +2,7 @@
 // לא ספירה של 9 דקות שחוטפת את המכונה. המחזיק רואה את הבקשה עם אשר/סרב. ו"פתח בחלון נפרד"
 // מוציא את ה-iframe מהדף. בקרה שלילית: על הקוד שלפני #1852 4409 נכנס לניסיון החוזר, אין כפתור,
 // ואין monitorPopOut.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -124,7 +125,7 @@ test('a view moved to another window (4410) or handed over (4411) is not retried
 });
 
 test('"פתח בחלון נפרד" takes the iframe out of the console page', () => {
-  const js = fs.readFileSync(path.join(root, 'console.js'), 'utf8');
+  const js = consoleJs();
   const lines = js.split('\n');
   const start = lines.findIndex((l) => /^function monitorPopOut\(/.test(l));
   assert.ok(start >= 0, 'monitorPopOut exists');

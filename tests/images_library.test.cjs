@@ -2,6 +2,7 @@
 // — עץ תיקיות, טבלת התיקייה, בחירה מרובה, גרירה = העברה/סדר, מגירת אימג',
 // לשוניות קליטות/אחסון. בלי דפדפן: console.js רץ ב-vm מול DOM מזערי ו-fetch
 // מזויף, והפלט נבדק כטקסט. עיקרון 5: "לא נקרא"/"לא ידוע" אינם "אין"/0.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -55,7 +56,7 @@ function setup() {
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] || {ok:true}};
     }});
   vm.runInContext(fs.readFileSync(path.join(root,'progress.js'),'utf8'),ctx);
-  vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",version:"v0.31.0",capabilities:{classrooms:true}}; current="images"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; };');
   for(const [name,key] of [['OVERVIEW','/overview'],['IMAGES','/images'],['FOLDERS','/folders'],['CAPTURE_TASKS','/tasks']]) run(name+'='+JSON.stringify(fixtures[key]));

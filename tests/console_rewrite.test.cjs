@@ -1,4 +1,5 @@
 // Local renderer/adapter checks. No browser or server dependencies.
+const {consoleJs, consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -36,7 +37,7 @@ function setup() {
       return {status:200,ok:true,headers:{get:()=>key==='/journal'?'true':null},json:async()=>fixtures[key] || {}};
     }});
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../server/static/progress.js'),'utf8'),ctx);
-  vm.runInContext(fs.readFileSync(path.join(root,'console.js'),'utf8'),ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",idle_seconds:300,capabilities:{interbranch_transfer:true,classrooms:true}};');
   for(const [name,key] of [['OVERVIEW','/overview'],['IMAGES','/images'],['FOLDERS','/folders'],['MACHINES','/machines'],['GROUPS','/groups']]) run(name+'='+JSON.stringify(fixtures[key]));
@@ -156,7 +157,7 @@ test('every enabled script compiles together without global collisions',()=>{
   // codeql[js/incomplete-multi-character-sanitization] false positive: test code -- the string only feeds assert.match on the repo's own files and is never rendered (#291)
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<!--[\s\S]*?-->/g,'');
   for(const m of html.matchAll(/<script src="([^?]+)\?v=/g)) {
-    if(['console.js','progress.js'].includes(m[1]))continue;
+    if([...consoleFiles(),'progress.js'].includes(m[1]))continue;
     const file=path.join(root,m[1]);
     vm.runInContext(fs.readFileSync(fs.existsSync(file)?file:path.resolve(__dirname,'../server/static',m[1]),'utf8'),ctx);
   }
@@ -169,7 +170,7 @@ test('all static includes carry the same ?v= and color literals stay in tokens',
   const versions=[...html.matchAll(/(?:src|href)="[^"?]+\?v=([^"&]+)/g)].map(m=>m[1]);
   assert.ok(versions.length>=5,'expected the static includes to carry ?v=');
   assert.deepEqual([...new Set(versions)],[versions[0]],'includes disagree on ?v=: '+versions.join(','));
-  for(const file of ['console.css','console.js','index.html']) {
+  for(const file of ['console.css',...consoleFiles(),'index.html']) {
     // Comments are not colors: "// #822:" is an Issue reference, not #822.
     // codeql[js/incomplete-multi-character-sanitization] false positive: test code -- the string only feeds assert.match on the repo's own files and is never rendered (#291)
     const s=fs.readFileSync(path.join(root,file),'utf8').replace(/\/\*[\s\S]*?\*\//g,'').replace(/(^|\s)\/\/.*$/gm,'$1').replace(/<!--[\s\S]*?-->/g,'');
@@ -199,7 +200,7 @@ test("#1129: server ids inside onclick=\"fn('…')\" go through encodeId, which 
   assert.doesNotMatch(run('encodeId('+JSON.stringify(evil)+')'),/'/,'encodeId must not leave a raw quote');
   assert.equal(run('decodeURIComponent(encodeId('+JSON.stringify(evil)+'))'),evil,'round-trip');
   // The two capture-cancel buttons carry the id encoded, not esc()'d (#1266: the SSH port switch is gone).
-  const js=fs.readFileSync(path.join(root,'console.js'),'utf8');
+  const js=consoleJs();
   assert.doesNotMatch(js,/onclick="cancelCapture\('\$\{esc\(/);
   assert.doesNotMatch(js,/onclick="portSwitch\('\$\{esc\(/);
   assert.match(js,/cancelCapture\(decodeURIComponent\('\$\{encodeId\(t\.id\)\}'\)\)/);

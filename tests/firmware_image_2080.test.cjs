@@ -1,10 +1,11 @@
 // #2080 (mockup 06): "קושחה וחיבורים" in the machine drawer, and the machines-page markers.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 function fn(name) {
   const lines = js.split('\n');

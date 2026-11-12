@@ -264,16 +264,16 @@ probe_encryption() {
     printf ']'
 }
 
+_probe_up() { _pu=$(cut -d' ' -f1 "$PROC_ROOT/uptime" 2>/dev/null) || return 1; _pu=${_pu%%.*}; case "$_pu" in ''|*[!0-9]*) return 1 ;; esac; printf '%s' "$_pu"; }
 _probe_fresh() {
-    _t0=$(date +%s 2>/dev/null) || _t0=""
-    _power=$(probe_power); _rtc=$(probe_rtc); _cpu=$(probe_cpu)
+    _t0=$(_probe_up) || _t0=""; _power=$(probe_power); _rtc=$(probe_rtc); _cpu=$(probe_cpu)
     _mem=$(probe_memory); _th=$(probe_thermal); _nic=$(probe_nic)
     _pci=$(probe_pci_without_driver); _kn=$(probe_kernel)
     _pst=$(probe_pstore); _oem=$(probe_oem_key)
-    _dk=$(probe_disks); _en=$(probe_encryption); _nt=$(command -v probe_ntfs >/dev/null 2>&1 && probe_ntfs || _pn)   # #980: hibernation.sh
-    _t1=$(date +%s 2>/dev/null) || _t1=""
-    _sec=null; [ -n "$_t0" ] && [ -n "$_t1" ] && _sec=$((_t1 - _t0))
-    printf ',"probe":{"power":%s,"rtc":%s,"cpu":%s,"memory":%s,"thermal":%s,"nic":%s,"pci_without_driver":%s,"kernel":%s,"pstore":%s,"oem_key":%s,"disks":%s,"encryption":%s,"ntfs":%s,"probe_seconds":%s}' \
+    _dk=$(probe_disks); _en=$(probe_encryption); _nt=$(command -v probe_ntfs >/dev/null 2>&1 && probe_ntfs || _pn); _dp=$(command -v probe_display >/dev/null 2>&1 && probe_display || _pn)   # #980: hibernation.sh; #2849: probedisplay.sh
+    _t1=$(_probe_up) || _t1=""
+    _sec=null; [ -n "$_t0" ] && [ -n "$_t1" ] && [ "$_t1" -ge "$_t0" ] && _sec=$((_t1 - _t0))   # #2852: /proc/uptime, not `date` (the clock is aligned mid-probe: -24); unreadable or backwards = null
+    printf ',"probe":{"power":%s,"rtc":%s,"cpu":%s,"memory":%s,"thermal":%s,"nic":%s,"pci_without_driver":%s,"kernel":%s,"pstore":%s,"oem_key":%s,"disks":%s,"encryption":%s,"ntfs":%s,"display":%s,"probe_seconds":%s}' \
         "$_power" "$_rtc" "$_cpu" "$_mem" "$_th" "$_nic" "$_pci" \
-        "$_kn" "$_pst" "$_oem" "$_dk" "$_en" "$_nt" "$_sec"
+        "$_kn" "$_pst" "$_oem" "$_dk" "$_en" "$_nt" "$_dp" "$_sec"
 }

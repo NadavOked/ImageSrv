@@ -26,6 +26,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from console_src import console_js
 from native import requires_native
 from test_agent import BASH, posix
 from test_readback_agent_1805 import box_for, manifest, prelude, run
@@ -190,7 +191,7 @@ NODE = shutil.which("node")
 
 @requires_native(("node", NODE))
 def test_the_console_says_the_list_did_not_come_down_in_orange(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     fn = re.search(r"^function readbackLine\(d\) \{.*?^\}", js, re.M | re.S)
     assert fn, "readbackLine is gone from console.js"
     probe = tmp_path / "probe.cjs"

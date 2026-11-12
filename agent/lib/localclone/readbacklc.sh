@@ -28,6 +28,8 @@ readback_local() {
     # read whole (size_bytes). The mode is the last hello's (`readback_mode`).
     _rl_m=$1; _rl_src=$2; shift 2; mkdir -p "$RUN_DIR/readback"
     RB_ALL="$RUN_DIR/readback/all"; RB_MODE=$(rb_mode "$RUN_DIR/response.json"); RB_SEED=$(rb_seed)
+    # Freeze the selected mode for the copy: a later hello must not discard its evidence.
+    [ ! -f "${LC:-$RUN_DIR/lc}/run/inline/mode" ] || RB_MODE=$(cat "${LC:-$RUN_DIR/lc}/run/inline/mode")
     # #2017: a partition copied raw is read raw (its fs may be one partclone refused); one copied
     # through bad sectors (rescued) is not read at all -- the source would not read back.
     _rl_x="${LC:-$RUN_DIR/lc}/run/rescued"; [ -f "$_rl_x" ] || _rl_x=/dev/null
@@ -35,6 +37,11 @@ readback_local() {
         "$_rl_m" > "$RB_ALL.in" 2>> "$LOG_FILE" && awk -F'|' -v x="$(cut -d'|' -f1 "$_rl_x" | tr '\n' ' ')" \
             'BEGIN { n = split(x, a, " "); for (i = 1; i <= n; i++) r[a[i]] } !($1 in r)' "$RB_ALL.in" > "$RB_ALL" \
         || { _fail_alive "$*" "$READBACK_NOT_RUN — תוכנית המחיצות לא נקראה"; return 1; }
+    _rl_inl=0
+    if [ "$RB_MODE" = inline ]; then
+        rb_inline_collect "$@" || { _fail_alive "$*" "$READBACK_NOT_RUN — תוצאות הקריאה במקביל לא נקראו"; return 1; }
+        RB_MODE=full; _rl_inl=1
+    fi
     _rl_live=$(_rb_live "$@"); [ -n "$_rl_live" ] || return 1
     RB_TOTAL=$(rb_lc_bytes "$_rl_m" "$RB_ALL")   # #2046: the bar's whole -- an estimate (rbprog.sh)
     log "readback: local clone, mode $RB_MODE, sample seed $RB_SEED, $RB_PERMILLE/1000"
@@ -61,9 +68,12 @@ readback_local() {
             else RB_RESULT="sampled|נבדק במדגם — $(grep -c '^[0-9]* c ' "$RUN_DIR/readback/$_rl_t/got") חתיכות של 4MiB תאמו למקור"
             fi
         fi
-        case "$RB_RESULT" in verified\|*|sampled\|*) [ ! -s "$_rl_x" ] \
+        # #2023: chunks rewritten during the copy and then read back right -- orange, never "verified"
+        if [ "$_rl_inl" = 1 ] && [ "${RB_RESULT%%|*}" = verified ] && _rl_fix=$(rb_inline_repaired "$_rl_t"); then RB_RESULT="repaired|$_rl_fix"; fi
+        case "$RB_RESULT" in verified\|*|sampled\|*|repaired\|*) [ ! -s "$_rl_x" ] \
             || RB_RESULT="unverified|מחיצות שהועתקו במצב הצלה ($(cut -d'|' -f1 "$_rl_x" | tr '\n' ' '| sed 's/ $//')) לא נבדקו מול המקור, שאינו נקרא — השאר: ${RB_RESULT#*|}" ;; esac
         _rb_apply "$_rl_t" "$RB_RESULT"
+        [ "${RB_RESULT%%|*}" != repaired ] || echo "${RB_RESULT#*|}" > "$RUN_DIR/targets/$_rl_t/error"   # done, and the orange line
     done
     log "readback: the source and $(echo "$_rl_jobs" | wc -w | tr -d " ") target(s) in $(( $(date +%s) - _rl_t0 ))s ($RB_MODE)"
     _any_alive "$*"

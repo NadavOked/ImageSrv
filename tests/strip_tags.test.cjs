@@ -1,6 +1,7 @@
 // stripTags (console.js): הטקסט של HTML שהקונסולה בנתה, ל-title. החליף את ‏/<[^>]*>/g —
 // הסרה "חלקית" שמ-"<<b>script>" משאירה "<script>" (CodeQL js/incomplete-multi-character-sanitization,
 // שער ה-CodeQL הציבורי 16/10). console.js רץ ב-vm מול DOM מזערי, כמו ב-task_panel.test.cjs.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -16,7 +17,7 @@ function setup() {
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,encodeURIComponent,decodeURIComponent,
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles()]) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   return (s)=>vm.runInContext(s,ctx);
 }
 

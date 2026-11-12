@@ -1,12 +1,13 @@
 // apple-design F06: החלון נפתח/נסגר במצבי class (לא display), נקודת המוצא לפי הכפתור,
 // והניקוי של sheet-mode ממתין לסוף ה-fade ובטל בפתיחה חוזרת.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const source = consoleJs();
 const start = source.indexOf('const MODAL_CLOSE_MS');
 const end = source.indexOf('function toast(');
 assert.ok(start > 0 && end > start, 'modal helpers not found');

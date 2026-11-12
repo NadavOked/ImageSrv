@@ -864,6 +864,9 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
                      if h and "interfaces" in h), None)
     if "interfaces" not in hooks and injected is not None:
         hooks["interfaces"] = injected
+    if (deploy is not None and "interfaces" not in (deploy.hooks or {})
+            and injected is not None):
+        deploy.hooks = {**(deploy.hooks or {}), "interfaces": injected}
     if "dnsmasq" not in hooks and (dhcp_hooks is not None or sync_dnsmasq):
         merged = {**console_dhcp.default_hooks(), **(dhcp_hooks or {})}
 
@@ -882,6 +885,10 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
             proxy = deploy_net.firewall_proxy_interfaces(ctx.conn)
             proxy_args = {"proxy_interfaces": proxy} if proxy else {}
             if per is None:      # חזרנו ל"היום" — הכללים לפי שני התפקידים
+                if deploy.state.interface:
+                    error = deploy_net.missing_nic(deploy.state.interface, nic.interfaces())
+                    if error:
+                        return error
                 error = regenerate(deploy.repo_dir, deploy_if=deploy.state.interface,
                                    servers_if=deploy.servers_interface,
                                    primary_ip=deploy.primary_ip, **proxy_args)

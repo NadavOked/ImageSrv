@@ -19,6 +19,8 @@ from __future__ import annotations
 import socket
 from pathlib import Path
 
+from console_src import console_js
+
 REPO = Path(__file__).resolve().parent.parent
 STATIC = REPO / "server" / "static"
 
@@ -40,7 +42,7 @@ def test_index_html_has_no_static_secondary_server():
 
 
 def test_console_js_builds_secondaries_from_the_api_and_names_from_me():
-    js = _read("console.js")
+    js = console_js()
     assert "populateSidebarSecondaries" in js
     assert 'api("/storage-nodes")' in js
     assert "ME.server_name" in js

@@ -1,12 +1,13 @@
 // ‏#2028 (נדב 23/10; מוקאפ 2028-learning, אושר 06/11): שורת המתג, חלון הלמידה והצעת הלמידה למחשב חדש.
 // ‏learning.js ב-vm, מול מסגרת מזערית. החלק שבחלון "מיפוי חיבורים" נבדק ב-slot_map_2001.test.cjs.
+const {consoleJs: readConsoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const js = fs.readFileSync(path.resolve(__dirname, '../server/static/learning.js'), 'utf8');
-const consoleJs = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const consoleJs = readConsoleJs();
 const index = fs.readFileSync(path.resolve(__dirname, '../server/static/index.html'), 'utf8');
 
 function ctx({admin = true, role = 'cloner', state = null, fail = null, secondary = null} = {}) {

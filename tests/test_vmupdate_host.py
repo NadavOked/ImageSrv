@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from native import requires_native
 from test_installer_1131 import (
     BASH, _fake_repo, _seed_db, _status, _upgrade_env, calls, fake_tool, posix, run_bash,
@@ -295,7 +296,7 @@ def test_a_tag_without_the_host_script_is_a_version_without_the_feature(tmp_path
 
 
 def test_the_console_says_verified_but_when_there_is_a_warning():
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     body = js[js.index("function updateStatusHtml"):js.index("function fmtWhenShort")]
     warn = body.index("status.verified && status.warning)")
     assert 'return UI.note("warn"' in body[warn:warn + 120]

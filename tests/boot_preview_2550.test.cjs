@@ -2,6 +2,7 @@
 // ב-vm מול DOM מזערי ו-fetch מזויף, והפלט נבדק כטקסט (כמו machines_page.test.cjs).
 // ההחלטה היא של השרת (`decide()`); כאן נבדקים המילים, והעיקרון: לא נקרא / לא ידוע ≠ "דיסק מקומי" (עיקרון 5),
 // קריאה אחת לכל החדר, וקריאה שנכשלה אינה משאירה תצוגה ישנה שנראית עדכנית.
+const {consoleJs, consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -39,7 +40,7 @@ function setup(preview) {
       if(fixtures[key] instanceof Error) throw fixtures[key];
       return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true}};
     }});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={username:"admin",role:"admin",server_name:"srv",version:"v0.31.1",capabilities:{}}; current="machines"; toast=(t)=>{ globalThis.toasted=t; };');
   for(const [name,key] of [['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['IMAGES','/images']]) run(name+'='+JSON.stringify(fixtures[key]));
@@ -145,7 +146,7 @@ test('#2550 "בדיקה מחדש" is the same single call, and a failed one says
 });
 
 test('#2550 the status poll refreshes the preview only on the machines page and not more often than the interval', () => {
-  const src=fs.readFileSync(path.join(root,'console.js'),'utf8');
+  const src=consoleJs();
   const poll=src.slice(src.indexOf('function startStatusWatch()'),src.indexOf('/* ‏#1255: פאנל'));
   assert.match(poll,/current === "machines" && Date\.now\(\) - BOOT_PREVIEW_AT > BOOT_PREVIEW_EVERY_MS\) loadBootPreview\(\)/);
   assert.match(src,/const BOOT_PREVIEW_EVERY_MS = 10000;/);

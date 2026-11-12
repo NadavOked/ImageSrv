@@ -77,6 +77,7 @@ typedef struct {
  Rgb node_active_line;
  Rgb node_warn_line;
  Rgb warn;
+ Rgb yellow, yellow_soft, yellow_fg, yellow_on;   /* #2848: failed the last clone / a cut write -- a target, never a source (--clr-yellow*) */
  Rgb brand_accent;
  Rgb action_fg;      /* text and strokes in the action colour (console --clr-action-fg) */
  Rgb danger_fill;    /* a destructive button's fill (console --clr-danger-fill): white text on it */

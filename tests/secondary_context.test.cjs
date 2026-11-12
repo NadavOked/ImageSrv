@@ -4,6 +4,7 @@
 // load/render functions draw the answer: the same tabs and cards by construction.
 // Phase 1 is read-only: post/put/del in that context are refused before any request.
 // All the console scripts run in a vm with a stub fetch, in index.html's order.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -52,7 +53,7 @@ function setup(fixtures) {
       return {status: 200, ok: true, headers: {get: () => null}, json: async () => (value === undefined ? {} : JSON.parse(JSON.stringify(value)))};
     },
   });
-  for (const f of ['progress.js', 'console.js', 'reorder.js', 'net.js', 'netcfg.js', 'storage_nodes.js', 'drivers.js', 'storage.js', 'disks.js', 'branches.js']) {
+  for (const f of ['progress.js', ...consoleFiles(), 'reorder.js', 'net.js', 'netcfg.js', 'storage_nodes.js', 'drivers.js', 'storage.js', 'disks.js', 'branches.js']) {
     vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, {filename: f});
   }
   const run = (s) => vm.runInContext(s, ctx);
@@ -116,14 +117,15 @@ test('every page of the secondary has the primary\'s tabs and cards — same nam
     }
     assert.ok(cardsOf(first).length + tabs.length > 0 || /class="obj/.test(first), `${page}: something was drawn`);
     // נדב 18/10: הלשונית "שרתי משנה" בהגדרות קיימת בראשי בלבד — בהקשר שרת משנה היא אינה קיימת כלל.
+    // ‏#2786: "שמות מחשב" קיימת בשניהם — ערכי התבנית של כל שרת לסבבים שלו.
     const count = page === 'settings' ? 1 : Math.max(1, tabs.length);
-    if (page === 'settings') assert.equal(JSON.stringify(tabs), JSON.stringify(['כללי', 'שרתי משנה']), 'settings: the primary has the secondaries tab');
+    if (page === 'settings') assert.equal(JSON.stringify(tabs), JSON.stringify(['כללי', 'שמות מחשב', 'שרתי משנה']), 'settings: the primary has the secondaries tab (#2786: after "שמות מחשב")');
     for (let i = 0; i < count; i++) {
       const p = setup(both());
       const s = setup(both());
       const primary = await draw(p, page, i, false);
       const secondary = await draw(s, page, i, true);
-      assert.equal(JSON.stringify(tabsOf(secondary)), JSON.stringify(page === 'settings' ? [] : tabsOf(primary)), `${page} tab ${i}: tabs`);
+      assert.equal(JSON.stringify(tabsOf(secondary)), JSON.stringify(page === 'settings' ? ['כללי', 'שמות מחשב'] : tabsOf(primary)), `${page} tab ${i}: tabs`);
       assert.equal(JSON.stringify(cardsOf(secondary)), JSON.stringify(cardsOf(primary)), `${page} tab ${i}: cards`);
       assert.doesNotMatch(secondary, /לא הצלחתי לצייר את העמוד/, `${page} tab ${i} rendered`);
     }

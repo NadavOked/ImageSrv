@@ -4,6 +4,7 @@
 // (בקרה שלילית) מפילה את הטסט התנהגותית, לא ב-collection.
 // #517: console.js / netcfg.js. #516: כשל /logout
 // בחוסר פעילות אינו "נותקת" ודאית.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -12,8 +13,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../server/static');
 
 // חילוץ מקור של פונקציה בודדת לפי שמה (אותה גישה כמו operator_progress).
-function functionSource(file, name) {
-  const source = fs.readFileSync(path.join(root, file), 'utf8');
+function functionSource(file, name, source = fs.readFileSync(path.join(root, file), 'utf8')) {
   const lines = source.split('\n');
   const start = lines.findIndex(line =>
     new RegExp(`^(\\s*)(async )?function ${name}\\(`).test(line));
@@ -23,8 +23,8 @@ function functionSource(file, name) {
   return lines.slice(start, end + 1).join('\n');
 }
 
-function load(ctx, file, name) {
-  vm.runInContext(functionSource(file, name), ctx);
+function load(ctx, file, name, source) {
+  vm.runInContext(functionSource(file, name, source), ctx);
   return ctx[name];
 }
 
@@ -33,7 +33,7 @@ const tick = () => new Promise(r => setTimeout(r, 10));
 /* --- מקום 1: fmtBytes — null אינו אפס אמיתי ---------------------------- */
 test('site1 fmtBytes: unread (null/undefined/NaN) differs from real zero', () => {
   const ctx = vm.createContext({});
-  const fmt = load(ctx, 'console.js', 'fmtBytes');
+  const fmt = load(ctx, 'console.js', 'fmtBytes', consoleJs());
   // ראיה חיובית: null נבדל מ-0
   assert.notEqual(fmt(null), fmt(0), 'null must not render the same as real zero');
   assert.equal(fmt(null), '–');
@@ -47,7 +47,7 @@ test('site1 fmtBytes: unread (null/undefined/NaN) differs from real zero', () =>
 /* --- מקום 2: sessionClassMachines — כשל אינו רשימה ריקה ---------------- */
 test('site2 sessionClassMachines: read failure returns unread sentinel, not empty list', async () => {
   const ctx = vm.createContext({SESSION_MACHINES: {group: null, list: []}, api: null});
-  const fn = load(ctx, 'console.js', 'sessionClassMachines');
+  const fn = load(ctx, 'console.js', 'sessionClassMachines', consoleJs());
 
   ctx.api = async () => { throw new Error('network down'); };
   const failed = await fn('g1');
@@ -70,7 +70,7 @@ test('site3 refreshStatus: /overview failure marks the card stale, not silent', 
     ME: {role: 'deploy'},
     $: () => ({textContent: '', innerHTML: '', classList: {add() {}, remove() {}, toggle() {}}}),
   });
-  const fn = load(ctx, 'console.js', 'refreshStatus');
+  const fn = load(ctx, 'console.js', 'refreshStatus', consoleJs());
   await fn();
   assert.equal(staleCalls, 1, 'a failed /overview must flag staleness, not return silently');
 });
@@ -128,7 +128,7 @@ function idleWatchContext(postImpl) {
 
 test('site5 startIdleWatch: failed /logout does not declare a certain disconnect', async () => {
   const env = idleWatchContext(async () => { throw new Error('שגיאה 500'); });
-  const fn = load(env.ctx, 'console.js', 'startIdleWatch');
+  const fn = load(env.ctx, 'console.js', 'startIdleWatch', consoleJs());
   fn();
   const tickFn = env.intervalCb();
   assert.ok(tickFn, 'idle watch scheduled a timer');
@@ -150,7 +150,7 @@ test('site5 startIdleWatch: failed /logout does not declare a certain disconnect
 
 test('site5 startIdleWatch: successful /logout still declares idle disconnect', async () => {
   const env = idleWatchContext(async () => ({}));
-  const fn = load(env.ctx, 'console.js', 'startIdleWatch');
+  const fn = load(env.ctx, 'console.js', 'startIdleWatch', consoleJs());
   fn();
   await env.intervalCb()();
   assert.equal(env.ctx.ME, null, 'confirmed logout still clears the local session');

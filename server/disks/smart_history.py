@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from server.disks import crcwarn, smart_names
+from server.disks import smart_names
 from server.db import _write_lock, now_iso, writing
 
 #: a rise in one of these since the previous round: "replace the disk" (orange). #1921: by
@@ -210,13 +210,12 @@ def describe(conn: sqlite3.Connection, disk: dict) -> dict:
     before_nvme = _nvme(json.loads(prev["attrs_json"] or "{}")) if prev is not None else {}
     rose = _rose(now, before)
     rows, hw = [], []
-    crc = crcwarn.threshold(conn)
     for i in sorted(now):
         r = now[i]
         he, note, known = smart_names.name(i, r["vendor"] or (before.get(i) or {}).get("vendor"))
         failing = r["value"] is not None and r["thresh"] not in (None, 0) and r["value"] <= r["thresh"]
         vend = r["vendor"] or (before.get(i) or {}).get("vendor")
-        verdict = smart_names.judge_ata(i, vend, r["value"], r["raw"], crc=crc)   # #1921: the agent's judge, same tables
+        verdict = smart_names.judge_ata(i, vend, r["value"], r["raw"])   # #1921: the agent's judge, same tables
         tr = smart_names.row(i, vend)
         if verdict == "hw" and tr is not None and tr["word"] not in [h["word"] for h in hw]:
             hw.append({"word": tr["word"], "he": smart_names.hw_sentence(tr["word"])})

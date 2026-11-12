@@ -118,7 +118,15 @@ def test_dd_zero_needs_nothing_beyond_busybox():
 # --- the plan (what the builder packs) ----------------------------------------------
 
 
+def has_runner(tool_id: str) -> bool:
+    out = sh(f"tools_has_runner {tool_id!r}; echo rc=$?")
+    rc = out.stdout.strip()
+    assert rc in ("rc=0", "rc=1"), (tool_id, out.stdout, out.stderr)
+    return rc == "rc=0"
+
+
 def test_the_plan_is_the_union_of_the_selected_ids_binaries(tmp_path):
+    """‏magicrescue נבחר ואין לו מודול (#1104): הוא אינו בתוכנית, ונקוב בשמו."""
     chosen = ["disk-blkdiscard", "win-users", "win-blank-password", "magicrescue",
               "disk-dd-zero", "nvme-sanitize", "disk-nvme-format"]
     sel = selection(tmp_path, chosen, student=["photorec"])
@@ -126,21 +134,53 @@ def test_the_plan_is_the_union_of_the_selected_ids_binaries(tmp_path):
     assert out.returncode == 0, out.stderr
     expected = []
     for tool_id in chosen:
+        if tool_id == "magicrescue":
+            continue
         for b in bins_of(tool_id):
             if b not in expected:
                 expected.append(b)
-    assert out.stdout.split() == expected == \
-        ["blkdiscard", "chntpw", "magicrescue", "recoverjpeg", "nvme"]
+    assert out.stdout.split() == expected == ["blkdiscard", "chntpw", "nvme"]
     assert "7 build ids, 1 student ids (student ignored, v2)" in out.stderr
+    assert "not packed -- no station module runs them yet (#1104): magicrescue\n" in out.stderr
 
 
-def test_the_whole_catalog_plans_every_binary_once(tmp_path):
+def test_the_whole_catalog_plans_every_runnable_binary_once(tmp_path):
+    """‏#1104: הקטלוג כולו נבחר → נארזים רק הבינארים של מזהים שיש להם מודול.
+    בינארי שרק מזהה בלי מודול צריך (testdisk, ‏ddrescue…) אינו בתוכנית."""
     sel = selection(tmp_path, CATALOG_IDS)
     out = sh(f"tools_bins_plan {posix(sel)!r}", strict=True)
     assert out.returncode == 0, out.stderr
     planned = out.stdout.split()
     assert len(planned) == len(set(planned))
-    assert set(planned) == {b for t in CATALOG_IDS for b in bins_of(t)}
+    assert set(planned) == {b for t in RUNNABLE for b in bins_of(t)}
+    orphans = {b for t in PACKED_ONLY for b in bins_of(t)} - set(planned)
+    assert orphans == {"testdisk", "photorec", "scalpel", "foremost", "extundelete",
+                       "magicrescue", "recoverjpeg", "ddrescue", "safecopy"}, orphans
+    assert sorted(out.stderr.split("(#1104):")[1].split("\n")[0].split()) == PACKED_ONLY
+
+
+@pytest.mark.parametrize("tool_id", CATALOG_IDS)
+def test_an_id_alone_is_packed_only_when_a_module_runs_it(tmp_path, tool_id):
+    """‏#1104: מזהה שנבחר לבדו נארז אם ורק אם מודול בתחנה מריץ אותו. בלי
+    מודול — כלום ב-stdout, rc 0 (הבחירה תקינה), והמזהה נקוב ב-stderr."""
+    sel = selection(tmp_path, [tool_id])
+    out = sh(f"tools_bins_plan {posix(sel)!r}", strict=True)
+    assert out.returncode == 0, out.stderr
+    if tool_id in RUNNABLE:
+        assert out.stdout.split() == bins_of(tool_id)
+        assert "not packed" not in out.stderr
+    else:
+        assert out.stdout.split() == []
+        assert f"(#1104): {tool_id}\n" in out.stderr
+
+
+def test_the_runner_table_matches_the_real_station_modules(tmp_path):
+    """‏`tools_has_runner` מול מה שהמודולים האמיתיים מציגים כשכל הקטלוג נבחר.
+    מי שמממש מודול לאחד השמונה ושוכח את הטבלה — או מוסיף מזהה לקטלוג בלי
+    מודול ובלי לרשום אותו כאן — נופל כאן, ולא נארז בשקט."""
+    shown = set(listed(station(tmp_path, CATALOG_IDS)))
+    assert {t for t in CATALOG_IDS if has_runner(t)} == shown, \
+        {t for t in CATALOG_IDS if has_runner(t)} ^ shown
 
 
 def test_an_empty_build_list_plans_nothing_and_is_not_an_error(tmp_path):
@@ -168,10 +208,10 @@ def test_an_unknown_id_stops_the_plan_loudly_and_packs_nothing(tmp_path):
 def test_the_file_the_server_writes_is_parsed_with_its_real_whitespace(tmp_path):
     """‏json.dump עם indent, ‏\\r\\n של ווינדוס, ורווחים — כולם אותו קובץ."""
     sel = tmp_path / "sel.json"
-    sel.write_bytes(b'{\r\n "schema": 1,\r\n "build": [\r\n  "testdisk",\r\n  "photorec"\r\n ],\r\n "student": []\r\n}\r\n')
+    sel.write_bytes(b'{\r\n "schema": 1,\r\n "build": [\r\n  "tpm-clear",\r\n  "win-users"\r\n ],\r\n "student": []\r\n}\r\n')
     out = sh(f"tools_bins_plan {posix(sel)!r}", strict=True)
     assert out.returncode == 0, out.stderr
-    assert out.stdout.split() == ["testdisk", "photorec"]
+    assert out.stdout.split() == ["tpm2_clear", "chntpw"]
 
 
 # --- the builder text ---------------------------------------------------------------
@@ -230,7 +270,8 @@ def listed(out: subprocess.CompletedProcess) -> list[str]:
     return [l.split("|")[0] for l in out.stdout.splitlines() if "|" in l]
 
 
-# #1104: the remaining packed-only tools need a wizard or a recovery destination.
+# #1104: the remaining eight need a wizard or a recovery destination; until a
+# module runs them they are not packed either (tools_has_runner, toolbins.sh).
 RUNNABLE = ["disk-blkdiscard", "disk-hdparm-erase", "disk-nvme-format", "disk-dd-zero",
             "disk-wipefs-all", "win-users", "win-blank-password", "esp-fsck-repair", "tpm-clear",
             "nvme-sanitize", "nvme-sanitize-status", "zap-partition-table", "nwipe",

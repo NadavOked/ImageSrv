@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from conftest import hello_body
+from console_src import console_js
 
 pytest.importorskip("fastapi")
 
@@ -155,7 +156,7 @@ def test_room_poweroff_confirmation_marks_every_request_confirmed(room_server):
 
 def test_the_console_asks_over_a_local_copy_and_only_then_confirms():
     from pathlib import Path
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     sheet_at = js.index("function localCopyPowerSheet(")
     body = js[sheet_at:js.index("\nfunction ", sheet_at + 10)]
     # ‏#2240 (נדב 31/10, המוקאפ): "דיסק יעד שעדיין לא הושלם" — יעד שהושלם נשאר שלם (#2090)

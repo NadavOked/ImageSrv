@@ -31,7 +31,7 @@ enum { LCR_SKIP, LCR_SOURCE, LCR_TARGET };
 typedef struct { int has; long long done, total, rate; char verdict[12]; } RbBar;
 void rb_set(RbBar *r, const char *done, const char *total, const char *verdict, const char *rate);
 
-/* lc_disk=port|dev|model|serial|size|smart|smart_reason|os|nparts|used|need|usable|why|drawer|conn|mark|hw|name */
+/* lc_disk=port|dev|model|serial|size|smart|smart_reason|os|nparts|used|need|usable|why|drawer|conn|mark|hw|name|hwwords */
 typedef struct {
     int port; char dev[16], model[64], serial[64];
     unsigned long long size; char smart[16], smart_reason[48], os[64];
@@ -40,7 +40,14 @@ typedef struct {
     char mark[12];   /* #1798: incomplete|unchecked; "" = clean or not a GPT */
     char hw[240];    /* #1921: the drawer's hardware note (hw-issues.tsv); "" = none -- never the disk's colour */
     char name[104];  /* #2001: the name of its connection (the USB stick's mapping window); "" = "דיסק N" */
+    int sata_bad;    /* #2848 (Nadav 11/11): field 19 has link_slow, link_reset or drawer_gone -- red: never a
+                      * target, still a source. An older agent without the field = 0 (as before) */
+    int link_slow, sata_issue;   /* #2848: of those, link_slow; link_reset / drawer_gone */
 } LcDisk;
+#include "disk_rule.h"
+DiskRule lc_rule(const LcDisk *d);   /* #2848: the one rule (disk_rule.c) on this drawer */
+int lc_red(const LcDisk *d);         /* #2848: not a target -- SMART failed, a bad SATA link */
+int lc_source_ok(const LcDisk *d);   /* #2848: usable, and not yellow (failed the last clone / a cut write) */
 /* lc_fit=dev|verdict|need|reason */
 typedef struct { char dev[16]; int verdict; long long need; char reason[240]; } LcFit;
 /* lc_part=idx|label|fs|bytes|size|state|in -- bytes -1 = used not measured (#1440) */

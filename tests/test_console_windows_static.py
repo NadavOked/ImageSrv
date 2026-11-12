@@ -7,6 +7,8 @@
 import re
 from pathlib import Path
 
+from console_src import console_files, console_js
+
 STATIC = Path(__file__).resolve().parent.parent / "server" / "static"
 INDEX = (STATIC / "index.html").read_text(encoding="utf-8")
 CSS = (STATIC / "console.css").read_text(encoding="utf-8")
@@ -37,10 +39,10 @@ def test_three_widths_by_kind():
 def test_every_window_goes_through_one_of_the_three_entry_points():
     # אף קובץ אחר לא כותב ישירות ל-#modalBody / #sheet / #drawerBody
     for name, text in JS.items():
-        if name == "console.js":
+        if name in console_files():
             continue
         assert not re.search(r'getElementById\("(modalBody|drawerBody|sheet)"\)\.innerHTML', text), name
-    js = JS["console.js"]
+    js = console_js()
     assert len(re.findall(r"\bsheet\(\{", js)) + len(re.findall(r"confirmSheet\(", js)) >= 40
     for fn in ("function sheet(", "function openModalContent(", "function openDrawer("):
         assert fn in js, fn

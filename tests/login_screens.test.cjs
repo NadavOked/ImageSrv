@@ -1,5 +1,6 @@
 // #1085 שלב ב': חמשת מסכי הכניסה מ-JSON קבוע + כללי נוהל חיים + 6 תאים +
 // "המשך" נעול עד ☐. בלי דפדפן — console.js ב-vm.
+const {consoleFiles} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -39,7 +40,7 @@ function setup() {
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
     fetch: async () => ({status: 401, ok: false, headers: {get: () => null}, json: async () => ({})}),
   });
-  vm.runInContext(fs.readFileSync(path.join(root, 'console.js'), 'utf8'), ctx);
+  for (const f of consoleFiles()) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   // codeql[js/hardcoded-data-interpreted-as-code] false positive: the test harness runs console.js expressions with visible JSON fixtures in a vm sandbox (#291)
   const run = (s) => vm.runInContext(s, ctx);
   return {ctx, run, node};

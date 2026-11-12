@@ -1,6 +1,7 @@
 // apple-pending-4 · 2: הלשונית היא המקור והעץ עוקב אחריה. בלי דפדפן: console.js ב-vm מול עץ מזויף.
 // היום (לפני התיקון): בלשונית "חיבורים פיזיים" העץ אמר "רשת" בלבד. עכשיו: הצומת של הלשונית מסומן
 // (active), והאב — "רשת" — מקבל סימון רך (anc). לחיצה על צומת או על לשונית מעדכנת את שניהם.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -34,7 +35,7 @@ function setup() {
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,encodeURIComponent,decodeURIComponent,
     document:doc,window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},fetch:async()=>({status:200,ok:true,headers:{get:()=>null},json:async()=>({})})});
-  for(const f of ['progress.js','console.js','net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=(s)=>vm.runInContext(s,ctx);
   run('wireNetPage=()=>{}; wireRestoredPage=()=>{}; layout=()=>"x"; pageAllowed=()=>true; closeSidebar=()=>{};');
   const state=()=>Object.fromEntries(Object.entries(nodes).map(([k,n])=>[k,n.cls.has('active')?'active':n.cls.has('anc')?'anc':'']));

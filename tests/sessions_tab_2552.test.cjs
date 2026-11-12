@@ -1,6 +1,7 @@
 // ‏#2552 — לשונית "סשנים" ב"משתמשים והרשאות", לפי המוקאפ המאושר (נדב 06/11): רשימה לפי משתמש, ניתוק סשן בודד,
 // "צא מכל המכשירים" עם האזהרה לעצמך, הסשן הנוכחי לא ניתן לניתוק בשורה, ובלי הקלדת מילה לאישור (#1270).
 // בלי דפדפן: progress.js + console.js + net.js + sessions.js ב-vm מול DOM מזערי ו-fetch מזויף.
+const {consoleFiles} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -40,7 +41,7 @@ function setup(fixtures={}) {
       if(f && f.__status) return {status:f.__status,ok:false,json:async()=>({detail:f.detail})};
       return {status:200,ok:true,json:async()=>f ?? {}};
     }});
-  for(const f of ['progress.js','console.js','net.js','sessions.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
+  for(const f of ['progress.js',...consoleFiles(),'net.js','sessions.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"nadav",role:"admin",version:"v0.78.0",capabilities:{}}; USERS=[]; current="permissions"; currentTab=1; globalThis.sheets=[]; globalThis.toasts=[]; globalThis.loggedOut=false;'
     +'sheet=o=>{sheets.push(o);}; toast=(m,ms,kind)=>{toasts.push([m,kind]);}; renderCurrent=()=>{globalThis.rendered=(globalThis.rendered||0)+1;}; showLogin=()=>{loggedOut=true;};');

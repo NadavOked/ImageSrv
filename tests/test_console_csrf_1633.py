@@ -21,6 +21,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from conftest import complete_console_login
+from console_src import console_js
 from server.app import create_agent_app, create_console_app
 
 
@@ -68,7 +69,7 @@ def test_console_iframe_is_same_origin_and_not_denied_2642(server):
     בדיוק, כך שדף זר עדיין נחסם."""
     srcs = _console_iframe_srcs()
     assert srcs, "no <iframe> found in the console sources — the test lost its subject"
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     for name, src in srcs:
         if src == "${q}":   # console.js: the one viewer iframe, built from `const q = `monitor.html?...``
             assert re.search(r"const q = `monitor\.html\?", js), "the viewer src is no longer a relative monitor.html"

@@ -1,10 +1,11 @@
 // #1858 (mockup 10, approved by Nadav 24/10): "המכונה לא הגיעה", and F1 only when the server knows of a disk that stops.
+const {consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const js = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8');
+const js = consoleJs();
 
 function fn(name) {
   const lines = js.split('\n');

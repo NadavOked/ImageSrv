@@ -320,7 +320,7 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "sgdisk", "sgdisk", "blockdev", "mkfs.vfat", "mkfs.ext4",
         "mkdir", "mount", "mkdir", "mount", "debootstrap", "mkdir",
         "mount", "mount", "mount", "mount", "write-target", "rm",
-        "chroot", "chroot", "cp", "mkdir", "cp", "cp", "chmod", "cp", "chroot", "chroot",
+        "chroot", "chroot", "cp", "mkdir", "cp", "cp", "chmod", "install", "chroot", "chroot",   # #2854: the unit is installed 0644
         "install", "install", "install", "chroot",   # #1569: the boot screen
         "install",        # #2517: the GUI binary to the target
         "mkdir", "cp", "cp", "verify-package-pool", "write-target",
@@ -962,3 +962,19 @@ def test_an_empty_root_password_stops_the_engine_before_any_disk_command(tmp_pat
     assert got.returncode == 2 and "[invalid-root-password]" in got.stderr, got.stderr
     assert not calls.exists(), calls.read_text(encoding="utf-8") if calls.exists() else ""
     assert "error=invalid-root-password:" in box["state"].read_text(encoding="utf-8")
+
+
+@LINUX_ONLY
+def test_no_installed_unit_is_executable_even_from_a_cdrom_that_shows_every_file_executable_2854(tmp_path):
+    """#2854: a mounted ISO presents files as rwxr-xr-x; `cp` carried that mode to
+    /etc/systemd/system/imagesrv-firstboot.service and systemd warned 'marked executable'
+    on every daemon-reload (21 times in one boot). The unit is 0644 whatever the medium says."""
+    box, _calls = _full_install_box(tmp_path)
+    unit = Path(box["env"]["CDROM"]) / "imagesrv" / "imagesrv-firstboot.service"
+    unit.chmod(0o755)
+    got = _run(box, _answers(tmp_path / "answers"))
+    assert got.returncode == 0, got.stderr[-3000:]
+    units = sorted((box["target"] / "etc" / "systemd" / "system").glob("*.service"))
+    assert any(u.name == "imagesrv-firstboot.service" for u in units)
+    assert [u.name for u in units if u.stat().st_mode & 0o111] == []
+    assert (box["target"] / "etc" / "systemd" / "system" / "imagesrv-firstboot.service").stat().st_mode & 0o777 == 0o644
