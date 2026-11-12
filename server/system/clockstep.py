@@ -113,6 +113,8 @@ def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[
         f"SELECT session_id, mac, updated_at FROM session_members WHERE session_id IN ({marks})"
         " AND state NOT IN ('done', 'failed', 'partial', 'lost')", ids).fetchall() if ids else []
     devices = conn.execute("SELECT mac, last_seen FROM net_devices").fetchall()
+    # ‏#2905: ‏`silent_tasks` מודד שקט של משימה מ-`updated_at` שלה.
+    tasks = conn.execute("SELECT id, updated_at FROM tasks WHERE state = 'running'").fetchall()
     now_epoch = store.now()
     with writing(conn):
         for s in sessions:
@@ -136,6 +138,11 @@ def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[
             if new is not None:
                 conn.execute("UPDATE net_devices SET last_seen = ? WHERE mac = ? AND last_seen = ?",
                              (new, d["mac"], d["last_seen"]))
+        for t in tasks:
+            new = _shift(t["updated_at"], step, now)
+            if new is not None:
+                conn.execute("UPDATE tasks SET updated_at = ? WHERE id = ? AND updated_at = ?",
+                             (new, t["id"], t["updated_at"]))
     return ids
 
 

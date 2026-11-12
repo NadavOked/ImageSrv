@@ -266,12 +266,33 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         return {"state": state, "interface_in_conf": in_conf,
                 "service_active": svc_active, "checked": True, "detail": ""}
 
+    def expected_conf() -> str | None:
+        """#2913: הקובץ שה-DB **היה** כותב עכשיו (אותו render של ההחלה ושל עליית
+        השרת). None = ה-render נכשל (רשומה פסולה) — "לא ידוע", לא "תואם"."""
+        try:
+            return render_dnsmasq(ctx, deploy)[0]
+        except ValueError as exc:
+            log.warning("dhcp expected conf could not be rendered: %s", exc)
+            return None
+
     def view(cfg: dhcp.InterfaceConfig, live: dict | None,
-             conf_text: str | None = None, svc_active: bool | None = None) -> dict:
+             conf_text: str | None = None, svc_active: bool | None = None,
+             expected: str | None = None) -> dict:
         dhcp_live = dhcp_live_state(cfg.name, cfg, conf_text, svc_active)
+        # #2913: ההשוואה לפי שם הכרטיס בלבד לא ראתה שינוי טווח/שער/server_ip שה-restart
+        # שלו נכשל — הקובץ הישן הוחזר, והכרטיס נשאר בו. לכן גם **התוכן** של הקטע
+        # של הכרטיס נשווה למה שה-DB מרנדר; render שלא רץ = `content_checked: false`.
+        dhcp_live["content_checked"] = expected is not None and dhcp_live["checked"]
+        content_drift = (expected is not None and cfg.enabled
+                         and dhcp_live["checked"] and dhcp_live["interface_in_conf"]
+                         and dhcp.interface_block(conf_text, cfg.name)
+                         != dhcp.interface_block(expected, cfg.name))
+        if expected is None and dhcp_live["checked"]:
+            dhcp_live["detail"] = "לא ניתן לרנדר את ההגדרה השמורה — תוכן הקובץ הפעיל לא נבדק"
         diverged = (dhcp_live["checked"]
                     and (cfg.enabled != dhcp_live["interface_in_conf"]
-                         or (cfg.enabled and dhcp_live["state"] != "serving")))
+                         or (cfg.enabled and dhcp_live["state"] != "serving")
+                         or content_drift))
         data = {
             "name": cfg.name, "enabled": cfg.enabled, "proxy": cfg.proxy,
             "trunk": cfg.trunk, "range_start": cfg.range_start,
@@ -307,7 +328,9 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         # לכל ממשק — כדי שכל השורות בטבלה יסכימו על אותה תמונה.
         conf_text = hooks["read_active_conf"]()
         svc_active = hooks["service_active"](DNSMASQ_UNIT)
-        return [view(load(n), live.get(n), conf_text, svc_active) for n in names]
+        expected = expected_conf()
+        return [view(load(n), live.get(n), conf_text, svc_active, expected)
+                for n in names]
 
     @router.get("/interfaces/{name}/probe")
     def probe(name: str, user=Depends(admin_only)):
@@ -588,7 +611,8 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         out = {"ok": error is None,
                "interface": view(cfg, live.get(name),
                                  hooks["read_active_conf"](),
-                                 hooks["service_active"](DNSMASQ_UNIT)),
+                                 hooks["service_active"](DNSMASQ_UNIT),
+                                 expected_conf()),
                "apply_error": error}
         if result is not None:
             # מכאן הקובץ של הקונסולה נושא `interface=<הפצה>` גם כשה-DHCP

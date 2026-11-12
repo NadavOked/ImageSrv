@@ -364,7 +364,7 @@ def test_ui_unknown_stays_on_the_screen(tmp_path, uefi):
     r, _ = _ui_unknown(tmp_path, hold=4, gui=True, uefi=uefi)
     assert "STILL-ON-SCREEN" in r["out"] and "TEST-REBOOT" not in r["out"], r["out"]
     recs = r["recs"]
-    assert values(recs, "fail") == ["inf|0|המחשב הזה לא רשום|הקונסולה קיבלה התראה על מחשב חדש|"]
+    assert values(recs, "fail") == ["inf|0|המחשב הזה לא רשום|הקונסולה קיבלה התראה על מחשב חדש|unknown"]
     assert values(recs, "fail_btn") == [f"reboot|{F2_LABEL}"]
     assert values(recs, "fail_at") == [], "ספירה לאחור כשההגדרה כבויה"
     assert values(recs, "fail_why") == ["השרת לא מכיר את המחשב הזה, ולכן אין לו משימה."]
@@ -476,3 +476,27 @@ def test_the_unknown_screen_renders_a_blue_badge_not_a_red_one(tmp_path):
     assert _count_color(px, ch, _token("--clr-action-soft"), tol=4) > 1500, "אין תג כחול"
     assert _count_color(px, ch, _token("--clr-danger-soft"), tol=4) < 1500, "תג אדום על מסך שאינו כישלון"
     assert _count_color(px, ch, _token("--clr-action"), tol=4) > 3000, "אין כפתור F2 ראשי"
+
+
+
+def _header_pill_pixels(tmp_path, binary, record_edit):
+    """Pixels of the role pill (white at .14 over the header, 37,51,61 -> ~68,80,88) in the header band."""
+    r = run_agent(tmp_path, f'ui_unknown_records {shlex.quote(STRANGER)} 0 > "$RUN_DIR/fail.state"')
+    text = record_edit((r["run"] / "fail.state").read_text(encoding="utf-8"))
+    state = tmp_path / "state.txt"
+    state.write_text(text + "message=x|y\nhello_age=4\nhello_rc=200\n", encoding="utf-8", newline="\n")
+    _png(binary, tmp_path / "card", state)
+    w, h, ch, px = _png_rgb(tmp_path / "card-failure-light.png")
+    band = px[: 50 * w * ch]   # the header is 48 px high
+    return _count_color(band, ch, (68, 80, 88), tol=3)
+
+
+@GUI_BUILD
+def test_unregistered_machine_header_draws_no_role_pill_2879(tmp_path):
+    """#2879: an unregistered machine has no known role -- the header must not say "מחשב בנייה"."""
+    binary = _build_gui(tmp_path)
+    none = _header_pill_pixels(tmp_path, binary, lambda t: t)
+    # the same screen with the role field empty (what the agent wrote before) draws the pill
+    old = _header_pill_pixels(tmp_path, binary, lambda t: t.replace("|unknown\n", "|\n", 1))
+    assert old > 500, f"the control (no role field) draws no pill: {old}"
+    assert none < old / 10, f"role pill drawn for an unregistered machine: {none} px (control {old})"

@@ -143,6 +143,8 @@ def runtimes() -> dict[str, Runtime]:
         # #1412: installed from a --lab ISO, and from one whose manifest did not answer
         "17-lab-iso": _runtime(replace(PRIMARY, lab_iso="lab"), PRIMARY_EXTRAS),
         "17b-lab-iso-unchecked": _runtime(replace(PRIMARY, lab_iso="unchecked"), PRIMARY_EXTRAS),
+        # #2865: "גיבוי אוטומטי" off in the console -- the orange bar, the hero still green
+        "18-backup-off": _runtime(replace(PRIMARY, backup_off=True), PRIMARY_EXTRAS),
     }
 
 

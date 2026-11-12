@@ -21,6 +21,7 @@ from pathlib import Path
 from server.paths import REPO_ROOT
 
 from server.net import deploy_net
+from server.console import server_power
 from server.rounds import drive_rates
 from server.agent import identity
 
@@ -646,6 +647,9 @@ def main() -> None:
                              # ומאותו טעם: ברירת מחדל ב-create_runtime הייתה
                              # קוראת את קובץ המכונה בכל הרצת pytest.
                              identity_hooks={"leases": identity.LeaseFile(args.dhcp_leases)},
+                             # ‏#2843: הפעלה מחדש/כיבוי מהקונסולה — כאן בלבד, ומאותו טעם:
+                             # בלי hook הנתיב עונה 503, ואף הרצת בדיקות לא מכבה מכונה.
+                             host_hooks={"power": server_power.schedule_later},
                              extra_cmdline=tuple(args.extra_cmdline.split()),
                              repo_dir=args.repo_dir,
                              console_tls=console_tls,

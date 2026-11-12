@@ -42,6 +42,7 @@ NTP_SERVERS=""         # #2144: --ntp-servers; ריק = אוטומטי (ההגד
 NTP_MANUAL_AT=""       # #2765: --ntp-manual-at (UTC ISO); שעה ידנית בלי שרת זמן — ההגדרה ntp_manual + מועד הקביעה
 BACKUP_TIME=""         # #1956: --backup-time; ריק = 02:00 (ההגדרה לא נכתבת)
 BACKUP_RESERVE_GB=""   # #1956: --backup-reserve-gb; ריק = 5 (ההגדרה לא נכתבת)
+BACKUP_OFF=0           # #2865: --backup-off — "בלי גיבוי כרגע" במתקין: ההגדרה backup:enabled=false
 ADMIN_PASS=""
 ADMIN_PASS_FD=""
 # Storage Nodes (#655/#723): תפקיד ההתקנה. standalone (ברירת מחדל) או
@@ -317,6 +318,7 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
   --ntp-manual-at ISO  שעה ידנית בלי שרת זמן (#2765): ISO ב-UTC של הרגע שהמתקין קבע אותה; לא עם --ntp-servers
   --backup-time HH:MM  שעת גיבוי המסד היומי — ההגדרה של הקונסולה (#1956)
   --backup-reserve-gb N המקום השמור לגיבויים ב-GB — ההגדרה של הקונסולה (#1956)
+  --backup-off         בלי גיבוי המסד (מתג "גיבוי אוטומטי" בקונסולה כבוי) (#2865)
   --tftp-root PATH     ברירת מחדל /srv/tftp
   --http-root PATH     ברירת מחדל /srv/imagesrv/boot; מועבר לשרת כ---boot-dir
   --storage-role ROLE  standalone (ברירת מחדל) או secondary (#655/#723)
@@ -352,6 +354,7 @@ while [[ $# -gt 0 ]]; do
         --ntp-manual-at) NTP_MANUAL_AT="${2:?}"; shift 2 ;;
         --backup-time) BACKUP_TIME="${2:?}"; shift 2 ;;
         --backup-reserve-gb) BACKUP_RESERVE_GB="${2:?}"; shift 2 ;;
+        --backup-off) BACKUP_OFF=1; shift ;;
         --tftp-root)   TFTP_ROOT="${2:?}"; shift 2 ;;
         --http-root)   HTTP_ROOT="${2:?}"; shift 2 ;;
         --storage-role) STORAGE_ROLE="${2:?}"; shift 2 ;;
@@ -1038,6 +1041,21 @@ for key, env, check in ((backup_job.TIME_SETTING, "BACKUP_TIME", backup_job.pars
     set_setting(conn, key, value)
     if get_setting(conn, key) != value:
         sys.exit(f"ההגדרה {key} לא נקראה בחזרה כפי שנכתבה")
+PYEOF
+fi
+
+# ‏#2865: "בלי גיבוי כרגע" במתקין — המתג בקונסולה כבוי. נקרא בחזרה; ערך אחר = כשל בשמו.
+if (( BACKUP_OFF )) && (( ! DRY_RUN )); then
+    say "גיבוי המסד: כבוי (אפשר להדליק בקונסולה ← הגדרות)"
+    python3 - <<PYEOF
+import sys
+sys.path.insert(0, "$APP_DIR")
+from server.system import backup_job
+from server.db import connect, get_setting, set_setting
+conn = connect("$DATA_DIR/imagesrv.db")
+set_setting(conn, backup_job.ENABLED_SETTING, "false")
+if get_setting(conn, backup_job.ENABLED_SETTING) != "false":
+    sys.exit(f"ההגדרה {backup_job.ENABLED_SETTING} לא נקראה בחזרה כפי שנכתבה")
 PYEOF
 fi
 

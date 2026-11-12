@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import threading
 import time
@@ -560,6 +561,61 @@ def test_a_failed_save_keeps_the_disk_for_another_boot(lab, reason):
     assert status["error"]["reason"] == reason and status["disk_ready"] is True
     engine.boot("noc")
     assert wait_for(engine, "running")["error"] is None
+
+
+def test_2915_an_oserror_writing_the_manifest_keeps_the_disk_for_another_boot(lab):
+    """‏#2915: ‏`OSError` בכתיבת `manifest.json` (דיסק הספרייה מלא) אינו `DiskError`,
+    אבל דיסק העבודה לא נגע בו — ‏`disk_ready` נשאר, ו"הדלק"/"שמור" מותרים. לפני
+    התיקון כל חריגה אחרת סימנה אותו לא-מוכן, והיציאה היחידה הייתה "בטל" = מחיקת
+    כל העבודה."""
+    real = vmupdate.write_atomic
+
+    def disk_full(path, *args, **kw):
+        if Path(path).name == "manifest.json":       # state.json is not the library disk
+            raise OSError(28, "No space left on device")
+        return real(path, *args, **kw)
+    lab["monkeypatch"].setattr(vmupdate, "write_atomic", disk_full)
+    engine = run_to_stopped(lab)
+    before = (engine.workdir / "disk.raw").read_bytes()
+    engine.save("noc", "Office 2024 v2")
+    status = wait_for(engine, "failed")
+    assert status["error"]["reason"] == "internal" and status["disk_ready"] is True
+    assert (engine.workdir / "disk.raw").read_bytes() == before
+    engine.boot("noc")
+    assert wait_for(engine, "running")["error"] is None
+
+
+def _rewrite_same_size(disk: Path) -> None:
+    disk.write_bytes(b"\x01" * disk.stat().st_size)
+    stat = disk.stat()
+    os.utime(disk, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+
+
+def _grow(disk: Path) -> None:
+    with disk.open("ab") as fh:
+        fh.write(b"\x01" * 512)
+
+
+def _delete(disk: Path) -> None:
+    disk.unlink()
+
+
+@pytest.mark.parametrize("touch", [_rewrite_same_size, _grow, _delete],
+                         ids=["rewritten-same-size", "grown", "gone"])
+def test_2915_a_non_disk_error_after_the_work_disk_changed_is_not_ready(lab, touch):
+    """השומר של #2915: חריגה שאינה `DiskError` אחרי שדיסק העבודה **ייתכן** שנכתב
+    (mtime/גודל השתנו, או שהקובץ נעלם) נשארת `disk_ready=False` — לא מניחים."""
+    def broken_after_touching(host, workdir, *_a, **_k):
+        touch(workdir / "disk.raw")
+        raise RuntimeError("capture died after touching the disk")
+    lab["monkeypatch"].setattr(vmdisk, "capture_disk", broken_after_touching)
+    engine = run_to_stopped(lab)
+    engine.save("noc", "Office 2024 v2")
+    status = wait_for(engine, "failed")
+    assert status["error"]["reason"] == "internal" and status["disk_ready"] is False
+    with pytest.raises(vmupdate.Refusal) as caught:
+        engine.boot("noc")
+    assert caught.value.reason == "state"
 
 
 def test_the_new_version_name_is_validated_not_cleaned(lab):

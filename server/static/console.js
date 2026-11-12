@@ -2462,7 +2462,7 @@ function home(tab = 0) {
   if (tab === 1) body = homeNowCard(true);
   else if (tab === 2 && isAdmin()) body = homeEvents(50);
   else if (!o && !overviewError) body = `<div class="c12">${pagePlaceholder()}</div>`;
-  else body = (isAdmin() ? homeAttention() : "") + homeKpis() + homeRoundCard() + (isAdmin() ? homeServerCard() : "");
+  else body = backupOffBarHtml(backupOffFromHealth()) + (isAdmin() ? homeAttention() : "") + homeKpis() + homeRoundCard() + (isAdmin() ? homeServerCard() : "");   // #2865: the bar first
   homeDockAuto();
   return `<div class="page aligned">${header}<div class="body">${stale}${body}</div></div>`;
 }
@@ -5615,8 +5615,12 @@ function marketedDiskSize(bytes) {
   const sizes = [[120e9, "120GB"], [128e9, "128GB"], [240e9, "240GB"],
     [250e9, "250GB"], [256e9, "256GB"], [480e9, "480GB"], [500e9, "500GB"],
     [512e9, "512GB"], [1e12, "1TB"], [2e12, "2TB"], [4e12, "4TB"]];
-  const match = sizes.find(([size]) => n <= size * 1.01);
-  return match ? match[1] : fitsDisk(n).replace(" ", "");
+  /* #2873: a rung names the drive only when the drive is really near it (firmware may report up to 1%
+     above, and a drive is sold a few percent under its label). A 40 GiB disk is not a "120GB" drive:
+     below the band the real size is said, never the next rung up. */
+  const match = sizes.find(([size]) => n <= size * 1.01 && n >= size * 0.95);
+  if (match) return match[1];
+  return n >= 1e12 ? `${(n / 1e12).toFixed(1)}TB` : `${(n / 1e9).toFixed(1)}GB`;
 }
 /* ‏#1049 שלב ב': "בריאות המכונה" — מה שהסוכן מדד ב-hello (probe). כל שדה
    בשלושה מצבים (עיקרון 5): נמדד · null = "לא נבדק" (אפור, לא "תקין") ·
@@ -8171,6 +8175,9 @@ const SETTING_ROWS = [
   { key: "auto_reboot", card: "update", label: "הפעלה מחדש אוטומטית", type: "reboot", more: "כבוי / כל יום / פעם בשבוע; בזמן עבודה ההפעלה נדחית" },
   // ‏#1895/#1956 (נדב 06/11): המסד מגובה ביום בשעה שנבחרה ובכל שינוי אימג', אל כונן השרת או תיקייה מעוגנת.
   // ‏SMB/NFS הם לאחסון האימג'ים. השרת כותב וקורא בחזרה קובץ בדיקה לפני שהוא שומר (‏POST /backup-target).
+  // ‏#2865 (מוקאפ 2865-backup-off, נדב 11/11): המתג. ‏POST /backup-policy {enabled}; כבוי — פס כתום בבית ובהגדרות.
+  { key: "backup_enabled", card: "update", label: "גיבוי אוטומטי", type: "backupswitch",
+    sub: "כשהוא כבוי אין גיבוי יומי ואין גיבוי בשינוי אימג׳. הגיבויים הקיימים נשארים." },
   { key: "backup_target", card: "update", label: "יעד גיבוי המסד", type: "backuptarget",
     more: "כונן השרת, או תיקייה מעוגנת על כונן אחר. גיבוי שעבר עליו יותר מיום מסומן 'ישן' בבריאות" },
   { key: "backup_policy", card: "update", label: "מדיניות גיבוי המסד", type: "backuppolicy",
@@ -8293,6 +8300,7 @@ function settingDd(r) {
   if (r.type === "backup") return ghostBtn("הורדה…", "confirmSettingsBackup()");
   if (r.type === "backuptarget") return backupTargetRowHtml();   // #1956
   if (r.type === "backuppolicy") return backupPolicyRowHtml();   // #1956
+  if (r.type === "backupswitch") return backupSwitchHtml(r);   // #2865
   const v = settingCurrent(r.key), learned = typeof learningChip === "function" ? learningChip(r.key) : "";   // #2028
   return `<span class="sv">${r.type === "number" ? settingNumberText(r, v) : (v ? esc(v) : `<span class="muted">לא נקבע</span>`)}${learned}</span> ${ghostBtn("שינוי…", `settingsValueSheet('${r.key}')`)}`;
 }
@@ -8415,11 +8423,42 @@ function backupTargetFolderSheet(t) {
     fields: [{ id: "path", label: "נתיב התיקייה", value: t.dest || "", placeholder: "/mnt/backup", dir: "ltr", help: "תיקייה קיימת על כונן מעוגן; לא שורש מערכת הקבצים" }],
     submitLabel: "בדיקה ושמירה", onSubmit: async (v) => { await backupTargetSave("local", v); } });
 }
-/* ‏#1956: השעה והמקום השמור. התקרה (20% מהכונן) נקבעת בשרת לפי כונן היעד; "לא נקראה" נאמר, לא מוסתר. */
+/* ‏#1956: השעה והמקום השמור. התקרה (20% מהכונן) נקבעת בשרת לפי כונן היעד; "לא נקראה" נאמר, לא מוסתר.
+   ‏#2865: כשהגיבוי כבוי השורה אפורה — הערכים נשמרים להדלקה. */
 function backupPolicyRowHtml() {
   const p = SETTINGS && SETTINGS.backup_policy;
   if (!p || !p.time) return settingUnreadHtml("מדיניות הגיבוי לא הגיעה מהשרת");
-  return `<span class="sv">יומי ב-<bdi dir="ltr">${esc(p.time)}</bdi> ובכל שינוי אימג' · ${esc(p.reserve_gb)} GB שמורים</span> ${ghostBtn("שינוי…", "backupPolicySheet()")}`;
+  return `<span class="sv${p.enabled === false ? " muted" : ""}">יומי ב-<bdi dir="ltr">${esc(p.time)}</bdi> ובכל שינוי אימג' · ${esc(p.reserve_gb)} GB שמורים</span> ${ghostBtn("שינוי…", "backupPolicySheet()")}`;
+}
+/* ‏#2865: המתג "גיבוי אוטומטי". ‏enabled חסר בתשובה = שרת שלא מכיר את המתג — "לא נקרא", לא "דלוק". */
+function backupSwitchHtml(r) {
+  const p = SETTINGS && SETTINGS.backup_policy;
+  if (!p || typeof p.enabled !== "boolean") return settingUnreadHtml("מצב הגיבוי לא הגיע מהשרת");
+  return `<label class="msw" id="srow-${r.key}"><input type="checkbox" role="switch" aria-label="${esc(r.label)}"${p.enabled ? " checked" : ""}${isAdmin() ? "" : " disabled"} onchange="backupSwitch(this)"><span class="track"></span><span class="sv">${p.enabled ? "דלוק" : "כבוי"}</span></label>`;
+}
+async function backupSwitch(input) {
+  const want = !!(input && input.checked);
+  if (!isAdmin()) return;
+  try {
+    await post("/backup-policy", { enabled: want });
+    toast(`גיבוי אוטומטי: ${want ? "דלוק" : "כבוי"} — נשמר ונרשם ביומן`);
+  } catch (e) { toast("השמירה נכשלה: " + e.message); }
+  await loadSettingsData();
+  loadHealth();   // the home bar reads /health
+}
+/* ‏#2865: הפס הכתום "הגיבוי כבוי" — בדף הבית (מ-/health, שורת backup במצב off) ובהגדרות (מ-/settings).
+   מנהל בלבד: רק הוא יכול להדליק. */
+function backupOffBarHtml(off) {
+  if (!off || !isAdmin()) return "";
+  return `<div class="c12"><div class="bar-warn" role="status"><b>הגיבוי כבוי</b><span>תקלת כונן תמחק את רשימת המחשבים וההגדרות.</span>`
+    + `<button class="btn sm" type="button" onclick="backupTurnOnInSettings()">הדלקה בהגדרות</button></div></div>`;
+}
+function backupOffFromHealth() { return Array.isArray(HEALTH) && HEALTH.some((c) => c.id === "backup" && c.state === "off"); }
+function backupOffFromSettings() { return !!(SETTINGS && SETTINGS.backup_policy && SETTINGS.backup_policy.enabled === false); }
+async function backupTurnOnInSettings() {
+  if (current !== "settings") { currentTab = 0; await selectPageById("settings"); }
+  const row = document.getElementById("srow-backup_enabled");
+  if (row) { row.scrollIntoView({ block: "center" }); const i = row.querySelector("input"); if (i) i.focus(); }
 }
 function backupPolicyHelp(p) {
   const cap = p.cap_gb == null ? "גודל הכונן לא נקרא" : `עד ${p.cap_gb} GB`;
@@ -8604,7 +8643,7 @@ function settings() {
     ? UI.note("err", `לא הצלחתי לקרוא את ההגדרות: ${esc(settingsError)}`)
     : tabs[tab] === "שרתי משנה" ? settingsSecondariesTab()
     : tabs[tab] === "התראות במייל" ? emailAlertsTab()
-    : `<div class="set-col">${SETTING_GROUPS.map(settingsGroupHtml).join("")}</div>`;
+    : `${backupOffBarHtml(backupOffFromSettings())}<div class="set-col">${SETTING_GROUPS.map(settingsGroupHtml).join("")}</div>`;   // #2865
   return `<div class="page aligned settings">${header}<div class="body">${body}</div></div>`;
 }
 async function loadSettingsData() {
@@ -9919,6 +9958,68 @@ function gsKeydown(e) {
 
 function openUserMenu() { document.getElementById("userMenu").classList.toggle("open"); }
 function closeUserMenu() { document.getElementById("userMenu").classList.remove("open"); }
+
+/* ‏#2843 (נדב 11/11, מוקאפ mockups-1112/2843-server-power): הפעלה מחדש וכיבוי של השרת מתפריט המשתמש — למנהל
+   בלבד (הפריטים data-admin; השרת מחזיר 403 לשאר). כפתור אדום בלי הקלדה (#1270). המכונות שבאמצע עבודה נקראות
+   מחדש בפתיחת החלון (‏/room, ‏/overview, ‏/tasks); השרת הוא שמכריע (409 power_busy) — רשימה שלא נקראה אינה "אין עבודה". */
+function serverPowerWork(room, overview, tasks) {
+  const out = [];
+  const pct = (d) => (d.bytes_total > 0 ? Math.round(100 * (d.bytes_written || 0) / d.bytes_total) + "%" : "—");
+  for (const m of (room && room.machines) || []) {
+    const writing = (m.joined && m.drawer_list || []).filter((d) => d.state === "writing");
+    if (writing.length) out.push({ name: m.name || m.mac, what: ["שיכפול", ...writing.map((d, i) =>
+      `${d.slot_name || "דיסק " + (Number.isInteger(d.drawer) ? d.drawer : i + 1)}: ${pct(d)}`)].join(" · ") });
+    else if (m.local_copy) out.push({ name: m.name || m.mac, what: "שיכפול מקומי" });
+  }
+  const s = overview && overview.session;
+  if (s && s.state !== "closed" && s.state !== "failed") for (const m of s.members || [])
+    if (m.state !== "done" && m.state !== "failed") out.push({ name: m.hostname || m.name || m.mac, what: "הפצה · " + Progress.view(m).label });
+  for (const p of (overview && overview.pulls) || []) for (const m of p.members || [])
+    out.push({ name: m.hostname || m.name || m.mac, what: "משיכה · " + Progress.view(m).label });
+  for (const t of tasks || []) if (captureInFlight(t))
+    out.push({ name: t.machine || t.mac || t.name, what: "קליטה · " + Progress.view(t).label, capture: true });
+  return out;
+}
+async function openServerPower(action) {
+  closeUserMenu();
+  if (!isAdmin()) return;
+  if (SERVER_CTX) { toast("הפעלה מחדש וכיבוי — רק לשרת שהקונסולה מחוברת אליו. חזרו לשרת הראשי."); return; }
+  const off = action === "poweroff";
+  const what = off ? "כיבוי השרת" : "הפעלה מחדש של השרת";
+  const [room, overview, tasks] = await Promise.allSettled([api("/room"), api("/overview"), api("/tasks")]);
+  const unread = [room, overview, tasks].some((r) => r.status !== "fulfilled");
+  const work = serverPowerWork(room.value, overview.value, Array.isArray(tasks.value) ? tasks.value : []);
+  const n = work.length;
+  let force = n > 0;   // המנהל רואה את הרשימה, והכפתור אומר מה ייקטע
+  const warn = (title, body) => `<div class="nw-alert spw-alert" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>${title}</b><span>${body}</span></div></div>`;
+  // מוקאפ 2843: "סבב הפצה פעיל" כשיש סבב/שיכפול/משיכה; כשרק קליטה רצה אין סבב — "קליטה פעילה"
+  const head = work.length && work.every((w) => w.capture) ? "קליטה פעילה" : "סבב הפצה פעיל";
+  const alert = n ? warn(`${head}: ${n === 1 ? "מכונה אחת" : `${n} מכונות`} באמצע עבודה`,
+      `${off ? "הכיבוי יקטע" : "ההפעלה מחדש תקטע"} ${n === 1 ? "אותה" : "אותן"}. הדיסקים ${n === 1 ? "שלה" : "שלהן"} יישארו לא שלמים.`)
+      + `<ul class="spw-list">${work.map((w) => `<li><b>${esc(w.name)}</b><span>${esc(w.what)}</span></li>`).join("")}</ul>`
+    : unread ? warn("לא ניתן היה לקרוא מה רץ עכשיו", "השרת בודק בעצמו, ועוצר אם יש עבודה פעילה.") : "";
+  sheet({
+    title: off ? "לכבות את השרת?" : "להפעיל מחדש את השרת?",
+    sub: `${ME.server_name || "השרת"} · ${off ? "הקונסולה תתנתק, וכדי להדליק צריך גישה פיזית או WoL." : "הקונסולה תתנתק עד שהשרת יעלה בחזרה."}`,
+    size: n ? "mid" : "narrow", danger: true,
+    note: alert + `<ul class="spw-impact">${[
+      off ? "כל המכונות במעבדה מאבדות את השרת ועולות מהדיסק המקומי." : "עד שהשרת יעלה בחזרה, מכונות במעבדה לא ימצאו אותו.",
+      `הפעולה נרשמת ביומן על שם ${esc(ME.username)}.`].map((t) => `<li><span aria-hidden="true">•</span><span>${t}</span></li>`).join("")}</ul>`,
+    submitLabel: n ? `${what} וקטיעת ${n === 1 ? "מכונה אחת" : `${n} מכונות`}` : what,
+    busy: { label: off ? "מתזמן את הכיבוי…" : "מתזמן את ההפעלה מחדש…" },
+    onSubmit: async () => {
+      try { await post("/server-power", { action, force }); }
+      catch (e) {
+        if (e.code !== "power_busy") throw e;
+        force = true;   // השרת מצא עבודה שלא הייתה ברשימה; המנהל רואה עכשיו את הסיבה, והלחיצה הבאה היא ההחלטה
+        $("#sf-submit").textContent = `${what} וקטיעת העבודה`;
+        throw new Error(`${e.message}. לחיצה נוספת תקטע אותה.`);
+      }
+      toast(off ? "השרת ייכבה בעוד כמה שניות — הקונסולה תתנתק" : "השרת יופעל מחדש בעוד כמה שניות — הקונסולה תתנתק עד שיעלה");
+    },
+  });
+  $("#sheet").classList.add("spw-sheet");   // רק לחלון הזה: בלי קו מעל הכפתורים (מוקאפ 2843)
+}
 
 /* ‏#915: המגירה מציגה בדיוק את מה שהתג בסרגל סופר (updateAlertBadge):
    מכונות שנכשלו ובדיקות בריאות במצב אזהרה/תקלה. תג בלי רשימה שמסבירה

@@ -33,7 +33,7 @@ from starlette.concurrency import run_in_threadpool
 
 from server.rounds import drive_rates, prompt_hold, room, room_drivers, sender as sender_module
 from server.agent import registry
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.library.images import restore_refusal
 from server.rounds.sessions import SessionError
 from server.core.tasks import (ORIGIN_CONSOLE, OPEN_STATES, TOKEN_HEADER, active_task, claim_task,
@@ -396,6 +396,34 @@ def source_view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict:
     }
 
 
+#: ‏#2906 — הסיבה על שורת הסבב כשמחשב הבנייה שלח מניפסט חי שהשרת דחה.
+MANIFEST_REJECTED = "מחשב הבנייה שלח מניפסט שנדחה"
+
+
+def fail_round_of_task(conn: sqlite3.Connection, store, task_id: str,
+                       reason: str) -> bool:
+    """‏#2906: משימת המקור נכשלה — הסבב שלה והגל שלו נכשלים באותה טרנזאקציה.
+
+    בלי זה: `tasks=failed`, ‏`room_rounds=active`, ‏`sessions=open` לעד — `tick`
+    ממתין למניפסט שלא יגיע (`source_ready`), החריץ תפוס והמשכפלים ממתינים.
+    החברים שעוד לא סיימו מקבלים `failed` עם הסיבה (`SessionStore.fail`).
+    גל שכבר אינו open/running (נכשל או נסגר) לא נוגעים בו כאן: ה-`tick`
+    מטפל בו. מחזיר האם הקריאה הזו היא שהפילה אותו."""
+    round_row = round_for_task(conn, task_id)
+    if (round_row is None or round_row["state"] != "active"
+            or not round_row["wave_session_id"]):
+        return False
+    wave_id = round_row["wave_session_id"]
+    failed = store.fail(
+        wave_id, reason,
+        related=lambda: room.fail_wave(conn, wave_id, reason, commit=False))
+    if failed:
+        journal(conn, "room_failed", f'{round_row["id"]} {wave_id} {reason}'
+                f' written={round_row["written_drives"]}/{round_row["target_drives"]}',
+                round_id=round_row["id"])
+    return failed
+
+
 def cancel_source_task(conn: sqlite3.Connection, round_row: sqlite3.Row,
                        user: str) -> None:
     """הסבב נעצר — המשימה של המקור נסגרת איתו, כדי שמחשב הבנייה יפסיק
@@ -487,11 +515,18 @@ def create_direct_router(ctx) -> APIRouter:
         return {"ok": True, "image_id": row["image_id"]}
 
     def _fail(task_id: str, message: str, mac: str) -> None:
+        # ‏#2916 §2: רק משימה פתוחה נכשלת — ביטול (או סגירת הסבב) שהקדים אותנו נשאר.
         with _write_lock, writing(ctx.conn):
-            ctx.conn.execute(
-                "UPDATE tasks SET state = 'failed', error = ?, updated_at = ? WHERE id = ?",
+            failed = update_one(
+                ctx.conn,
+                "UPDATE tasks SET state = 'failed', error = ?, updated_at = ? WHERE id = ?"
+                " AND state IN ('pending', 'running')",
                 (message, now_iso(), task_id),
             )
-        journal(ctx.conn, "direct_failed", f"{task_id} {message}", machine=mac)
+        if failed:
+            journal(ctx.conn, "direct_failed", f"{task_id} {message}", machine=mac)
+            # ‏#2906: המשימה כבר נכשלה — והסבב והגל שלה לא נכשלים איתה בלי זה.
+            # release/v0.92.0 (#2916 §2): only when this call failed it -- a cancel that came first stays.
+            fail_round_of_task(ctx.conn, ctx.store, task_id, f"{MANIFEST_REJECTED}: {message}")
 
     return router

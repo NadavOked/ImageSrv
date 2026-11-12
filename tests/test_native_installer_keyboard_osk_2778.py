@@ -59,7 +59,12 @@ static int W = 1280, H = 800;
 static const struct { const char *name; int id; } NAMES[] = {
     { "primary_url", HIT_INSTALL_PRIMARY_URL }, { "address", HIT_INSTALL_ADDRESS }, { "netmask", HIT_INSTALL_NETMASK },
     { "gateway", HIT_INSTALL_GATEWAY }, { "dns", HIT_INSTALL_DNS }, { "hostname", HIT_INSTALL_HOSTNAME },
-    { "timezone", HIT_INSTALL_TIMEZONE }, { "ntp_servers", HIT_INSTALL_NTP_SERVERS }, { "manual_time", HIT_INSTALL_MANUAL_TIME },
+    { "timezone", HIT_INSTALL_TIMEZONE }, { "ntp_servers", HIT_INSTALL_NTP_SERVERS },
+#ifdef HIT_INSTALL_MT_BASE
+    { "manual_time", HIT_INSTALL_MT_BASE },   /* #2866: the year's box, the first of the five */
+#else
+    { "manual_time", HIT_INSTALL_MANUAL_TIME },
+#endif
     { "backup_other", HIT_INSTALL_BACKUP_OTHER_GB }, { "backup_time", HIT_INSTALL_BACKUP_TIME },
     { "admin_user", HIT_INSTALL_ADMIN_USER }, { "current_password", HIT_INSTALL_CURRENT_PASSWORD },
     { "password", HIT_INSTALL_PASSWORD }, { "confirm", HIT_INSTALL_CONFIRM },

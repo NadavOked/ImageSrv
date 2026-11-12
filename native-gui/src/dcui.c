@@ -77,6 +77,8 @@ int dcui_feed(DcuiFrame *f, char *line) {
     } else if (!strcmp(k, "hero")) {
         COPY(f->hero_kind, c[1]); COPY(f->hero_title, c[2]); COPY(f->hero_sub_m, c[3]);
         COPY(f->meta_label, c[4]); COPY(f->meta_value, c[5]);
+    } else if (!strcmp(k, "banner")) {          /* #2865: banner kind title text */
+        COPY(f->banner_kind, c[1]); COPY(f->banner_title, c[2]); COPY(f->banner_text, c[3]);
     } else if (!strcmp(k, "prob") && f->nprobs < DCUI_MAX_PROBS) {
         DcuiProb *p = &f->probs[f->nprobs++];
         COPY(p->sev, c[1]); COPY(p->n, c[2]); COPY(p->title, c[3]); COPY(p->what, c[4]);

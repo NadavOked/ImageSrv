@@ -60,18 +60,25 @@ def _stored(conn) -> dict | None:
     return target if isinstance(target, dict) else None
 
 
+#: ‏#2916 §5: יעד רשת ישן שהפירוק שלו לא הושלם. נשמר בתוך `backup_target` החדש עד שפירוק מצליח.
+LEFTOVER = "legacy_left"
+
+
 def load(conn) -> dict:
     """היעד בתוקף. ‏`backup_dest` בלי `backup_target` (נבחר לפני #1956) = תיקייה שלא נבדק אם היא על
-    כונן המסד (`same_disk: None`), לא "תקין". יעד SMB/NFS שנשמר — כונן השרת, והישן ב-`legacy`."""
+    כונן המסד (`same_disk: None`), לא "תקין". יעד SMB/NFS שנשמר — כונן השרת, והישן ב-`legacy`
+    (גם יעד שנבחר מאז אבל הפירוק של הישן נכשל — `LEFTOVER`, ‏#2916)."""
     dest = (get_setting(conn, backup_job.SETTING) or "").strip()
     target = _stored(conn) or {}
     if target.get("type") in backup_job.LEGACY_KINDS:
         return {"type": "default", "dest": "", "legacy": target}
+    left = target.get(LEFTOVER)
+    left = {"legacy": left} if isinstance(left, dict) and left.get("type") in backup_job.LEGACY_KINDS else {}
     if not dest:
-        return {"type": "default", "dest": ""}
+        return {"type": "default", "dest": "", **left}
     if target.get("type") != "local":
         target = {"type": "local", "path": dest, "same_disk": None}
-    return {**target, "dest": dest}
+    return {**target, "dest": dest, **left}
 
 
 def legacy_display(legacy: dict) -> str:
@@ -249,7 +256,16 @@ def configure(conn, data_dir: Path, body: object, hooks: dict, user: str = "") -
     warning = disk_warning(load(conn))
     warnings = [warning] if warning else []
     if legacy:
-        warnings += _leave_network(conn, data_dir, hooks)
+        failed = _leave_network(conn, data_dir, hooks)
+        warnings += failed
+        if failed:
+            # ‏#2916 §5: ההגדרה כבר הוחלפה, ו-`load` לא היה מסמן `legacy` — העיגון וקובץ ה-
+            # credentials נשארו בלי דרך לנסות שוב. הכשל נשמר עם היעד החדש ומוצג עד שפירוק מצליח
+            # (בחירת יעד פעם נוספת מנסה שוב).
+            try:
+                set_settings(conn, {SETTING: json.dumps({**target, LEFTOVER: legacy}, ensure_ascii=False)})
+            except Exception as exc:  # noqa: BLE001 — לא נשמר שהפירוק נכשל: נאמר, לא נבלע
+                warnings.append(f"לא נשמר שפירוק היעד הישן נכשל — לא תוצג הבקשה לנסות שוב: {exc}")
     journal(conn, "setting_change", f"{SETTING}={kind} — {dest or KIND_LABELS[kind]}", user)
     return {"target": describe(conn), "warnings": warnings}
 
@@ -268,9 +284,15 @@ def _cap_gb(conn, data_dir: Path | None) -> int | None:
         return None
 
 
+def enabled(conn) -> bool:
+    """‏#2865: המתג "גיבוי אוטומטי" (חסר = דלוק)."""
+    return backup_job.parse_enabled(get_setting(conn, backup_job.ENABLED_SETTING))
+
+
 def policy(conn, data_dir: Path | None) -> dict:
     """מה שהקונסולה רואה (‏`GET /settings` → `backup_policy`): הערכים שבתוקף, והתקרה לפי הכונן."""
-    return {"time": backup_job.parse_time(get_setting(conn, backup_job.TIME_SETTING)) or backup_job.DEFAULT_TIME,
+    return {"enabled": enabled(conn),
+            "time": backup_job.parse_time(get_setting(conn, backup_job.TIME_SETTING)) or backup_job.DEFAULT_TIME,
             "reserve_gb": backup_job.parse_reserve(get_setting(conn, backup_job.RESERVE_SETTING))
             or backup_job.DEFAULT_RESERVE_GB,
             "min_gb": backup_job.MIN_RESERVE_GB, "cap_gb": _cap_gb(conn, data_dir),
@@ -278,9 +300,19 @@ def policy(conn, data_dir: Path | None) -> dict:
 
 
 def set_policy(conn, data_dir: Path, body: object, user: str = "") -> dict:
-    """‏`POST /api/console/backup-policy`. סירוב — `TargetError`, ושום דבר לא נשמר."""
+    """‏`POST /api/console/backup-policy`. סירוב — `TargetError`, ושום דבר לא נשמר.
+
+    ‏#2865: ‏`enabled` (בוליאני) הוא המתג. גוף עם `enabled` בלבד משנה רק אותו; עם `time`/`reserve_gb`
+    — שניהם נבדקים כמו תמיד, וכולם נשמרים יחד."""
     if not isinstance(body, dict):
         raise TargetError(400, "מדיניות הגיבוי: נדרש אובייקט")
+    on = body.get("enabled")
+    if "enabled" in body and not isinstance(on, bool):
+        raise TargetError(400, "גיבוי אוטומטי: נדרש true או false")
+    if "enabled" in body and "time" not in body and "reserve_gb" not in body:
+        set_settings(conn, {backup_job.ENABLED_SETTING: "true" if on else "false"})
+        journal(conn, "setting_change", f"{backup_job.ENABLED_SETTING}={'true' if on else 'false'}", user)
+        return {"policy": policy(conn, Path(data_dir))}
     at = backup_job.parse_time(body.get("time"))
     if at is None:
         raise TargetError(400, "שעת הגיבוי: נדרש HH:MM")
@@ -292,6 +324,10 @@ def set_policy(conn, data_dir: Path, body: object, user: str = "") -> dict:
         raise TargetError(409, "לא הצלחנו לקרוא את גודל הכונן — לא נשמר")
     if reserve > cap:
         raise TargetError(400, f"מקום שמור: לא יותר מ-{backup_job.CAP_PERCENT}% מהכונן (עד {cap} GB)")
-    set_settings(conn, {backup_job.TIME_SETTING: at, backup_job.RESERVE_SETTING: str(reserve)})
-    journal(conn, "setting_change", f"backup_policy={at}, {reserve} GB", user)
+    values = {backup_job.TIME_SETTING: at, backup_job.RESERVE_SETTING: str(reserve)}
+    if "enabled" in body:
+        values[backup_job.ENABLED_SETTING] = "true" if on else "false"
+    set_settings(conn, values)
+    journal(conn, "setting_change", f"backup_policy={at}, {reserve} GB"
+            + (f", {backup_job.ENABLED_SETTING}={values[backup_job.ENABLED_SETTING]}" if "enabled" in body else ""), user)
     return {"policy": policy(conn, Path(data_dir))}

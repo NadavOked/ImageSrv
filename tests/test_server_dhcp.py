@@ -798,7 +798,8 @@ def test_dhcp_not_diverged_when_stored_matches_live(dhcp_server):
     admin, fake = dhcp_server["admin"], dhcp_server["fake"]
     assert admin.put("/api/console/net/interfaces/eth0",
                      json={**GOOD, "confirm": "eth0"}).status_code == 200
-    fake["active_conf"] = "interface=eth0\n"
+    # #2913: "תואם" = הקובץ הפעיל הוא מה שנכתב — לא שורת `interface=` בודדת.
+    fake["active_conf"] = fake["applied"][-1]
     fake["service_active"] = True
     row = _row(admin.get("/api/console/net/interfaces").json(), "eth0")
     assert row["dhcp_diverged"] is False

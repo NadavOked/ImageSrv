@@ -98,7 +98,8 @@ def test_every_installer_screen_renders_with_visible_ink_at_both_target_sizes(tm
              "install-5b-apply-failed", "install-6-done", "install-6b-done-unsynced",
              "install-6c-done-unchecked", "install-0c-disk-lab", "install-0d-disk-lab-unknown",
              "install-4b-admin-lab", "install-5d-summary-lab",   # #1412: the lab strip
-             "install-3f-time-manual", "install-6d-done-manual")   # #2765
+             "install-3f-time-manual", "install-6d-done-manual",   # #2765
+             "install-3g-backup-off", "install-5e-summary-backup-off")   # #2865
     env = dict(os.environ)
     if (GUI / "fonts.conf").exists():
         env["FONTCONFIG_FILE"] = str(GUI / "fonts.conf")

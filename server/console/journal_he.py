@@ -97,6 +97,7 @@ EVENTS_HE = {
     # ‏#1386: "בטל דיסק זה" — הבקשה, ואחריה הראיה מהסוכן (המגירה דיווחה cancelled).
     "room_drawer_cancel_requested": "התבקש ביטול הכתיבה לדיסק אחד בגל",
     "room_drawer_cancelled": "הכתיבה לדיסק בוטלה — טבלת המחיצות נמחקה, שאר הדיסקים ממשיכים",
+    "room_drawer_cancel_refused": "ביטול הכתיבה לדיסק לא בוצע — הדיסק כבר לא כותב (הסיבה בשורה)",   # #2916
     # ‏#105: כונן בלי serial שסיים — לא הוחלף, פשוט אין זהות לספור.
     "room_drawer_unidentified": "לא ניתן לזהות את הכונן (אין serial) — הכתיבה לא נספרה",
     "room_drawer_serial_conflict": "אותו serial במכונה אחרת — הכתיבה לא נספרה, כדי לא לסמן 'נכתב' מגירה שלא נכתבה",   # #2421
@@ -313,6 +314,8 @@ EVENTS_HE = {
     "dcui_net_confirm_refused": "אישור שינוי רשת ממסך השרת נדחה — אין שינוי ממתין",
     "dcui_net_rollback_requested": "התבקשה החזרת רשת ממסך השרת",
     "dcui_power_action": "כיבוי/הפעלה מחדש ממסך השרת",
+    "server_power": "הפעלה מחדש/כיבוי של השרת מהקונסולה",   # #2843
+    "server_power_failed": "הפעלה מחדש/כיבוי של השרת מהקונסולה לא תוזמנו",
     "dcui_advertised_url": "הכתובת שהראשי רואה נשמרה במסך השרת",       # 16/10
     "dcui_power_refused": "כיבוי/הפעלה מחדש ממסך השרת נדחו — שם השרת לא תאם",
     "dcui_reset_failure": "ניסיון כושל לאפס את סיסמת המנהל ממסך השרת (DCUI)",
@@ -362,6 +365,7 @@ EVENTS_HE = {
     "room_role_denied": "פעולה בחדר המשכפלים נדחתה — התפקיד אינו רשאי",
     "room_tick_failed": "שעון חדר המשכפלים נכשל — החדר אינו מתקדם",
     "pull_sweep_failed": "סגירת משיכות ברקע נכשלה — משיכה תקועה עלולה לחסום",
+    "task_sweep_failed": "סגירת משימות שהמכונה שלהן שקטה נכשלה — קליטה תקועה עלולה לחסום",   # #2905
     "session_dedupe": "סבב כפול אוחד",
     "session_role_denied": "פעולה בסבב נדחתה — התפקיד אינו רשאי",
     "shrink_cleared": "רשומת כיווץ נוקתה",
@@ -452,7 +456,7 @@ _SEVERITY_ERR = {
     "login_failed", "login_refused_console", "login_lockout", "login_account_lockout",
     "mfa_backup_codes_failed",   # #2470
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
-    "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
+    "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "task_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
     "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure",
     "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "storage_location_disconnect_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
@@ -462,6 +466,7 @@ _SEVERITY_ERR = {
     "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
     "peer_unreachable", "email_alert_gave_up", "email_alerts_step_failed", "email_oauth_failed",   # #1751
     "smart_red",   # #1751
+    "server_power_failed",   # #2843
 }
 _SEVERITY_WARN = {
     "mfa_clock_skew",   # #1814
@@ -485,6 +490,7 @@ _SEVERITY_WARN = {
     "ups_on_battery", "ups_work_stopped",
     "update_available", "email_alert_failed", "email_alert_refused", "low_space",   # #1751
     "email_alert_requeued", "email_alerts_password_cleared",
+    "server_power",   # #2843
 }
 _SEVERITY_OK = {
     "login", "capture_done", "client_done", "pull_done", "room_done",
@@ -544,6 +550,7 @@ SETTINGS_HE = {
     "cloner_beep": "צלילי המשכפל ומחשב הבנייה",   # #1967, as in console.js
     "backup_target": "יעד גיבוי המסד",   # #1956: הסוג, ואחריו היעד (בלי סיסמה)
     "backup_policy": "מדיניות גיבוי המסד",   # #1956: השעה והמקום השמור
+    "backup:enabled": "גיבוי אוטומטי",   # #2865: המתג בהגדרות ← גיבוי המסד
     # ‏#1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
     "identity_check": "אימות מחשבים לפי כתובת ה-DHCP",
     "readback_full": "אימות מלא אחרי הכתיבה",

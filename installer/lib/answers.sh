@@ -21,6 +21,7 @@ answer_set() {
         clock_manual) ANSWER_CLOCK_MANUAL=$_as_value ;;   # #2765: optional, "YYYY-MM-DD HH:MM[:SS]" = no time server, this is the time
         backup_time) ANSWER_BACKUP_TIME=$_as_value ;;   # #1956: optional, absent/empty = 02:00
         backup_reserve_gb) ANSWER_BACKUP_RESERVE_GB=$_as_value ;;   # #1956: optional, absent/empty = 5
+        backup_enabled) ANSWER_BACKUP_ENABLED=$_as_value ;;   # #2865: optional, absent/empty = on, false = no backup
         *) fail unknown-key "unknown answer: $_as_key" ;;
     esac
 }
@@ -28,7 +29,7 @@ answer_set() {
 parse_answers() {
     _pa_file=$1; [ -r "$_pa_file" ] || fail answers-unreadable "cannot read answers file: $_pa_file"
     ANSWER_KEYS=; ANSWER_RAID_LEVEL=none; ANSWER_RAID_DISKS=; ANSWER_RAID_SPARES=0; ANSWER_NTP_SERVERS=; ANSWER_CLOCK_MANUAL=
-    ANSWER_BACKUP_TIME=; ANSWER_BACKUP_RESERVE_GB=
+    ANSWER_BACKUP_TIME=; ANSWER_BACKUP_RESERVE_GB=; ANSWER_BACKUP_ENABLED=
     while IFS= read -r _pa_line || [ -n "$_pa_line" ]; do
         case "$_pa_line" in *=*) ;; *) fail invalid-line "answer line has no '='" ;; esac
         _pa_key=${_pa_line%%=*}; _pa_value=${_pa_line#*=}

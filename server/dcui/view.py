@@ -862,6 +862,9 @@ def _main_body(frame: Frame, snapshot: Snapshot, extras: Extras, today: datetime
     if snapshot.pre_install:
         _preinstall(frame, snapshot)
         return
+    if snapshot.backup_off:   # #2865 (mockup 2865-backup-off): a choice, not a problem -- above the hero, which stays green
+        frame.add("banner", "warn", "הגיבוי כבוי",
+                  "תקלת כונן תמחק את רשימת המחשבים וההגדרות. להדלקה: קונסולה ← הגדרות ← גיבוי.")
     _hero(frame, snapshot, extras, problems(snapshot, extras, today), today)
     _tiles(frame, snapshot, extras, today)
 

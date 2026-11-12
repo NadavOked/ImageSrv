@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
     a->install.view = INSTALL_BACKUP; refocus(a);
     if (!strcmp(argv[2], "default")) key(a, &b, KEYSYM_ENTER);
     else if (!strcmp(argv[2], "pick") && argc > 3) { for (int i = 0; i < atoi(argv[3]); i++) key(a, &b, KEYSYM_DOWN); key(a, &b, KEYSYM_ENTER); }
-    else if (!strcmp(argv[2], "other") && argc > 3) { for (int i = 0; i < 4; i++) key(a, &b, KEYSYM_DOWN); type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER); }
+    else if (!strcmp(argv[2], "other") && argc > 3) { for (int i = 0; i < 5; i++) key(a, &b, KEYSYM_DOWN); type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER); }   /* #2865: past "בלי גיבוי כרגע" (not chosen on the way) */
     else if (!strcmp(argv[2], "other-empty")) { choose(a, &b, HIT_INSTALL_BACKUP_BASE + 3); key(a, &b, KEYSYM_ENTER); }
     else if (!strcmp(argv[2], "hour") && argc > 3) { a->focus = HIT_INSTALL_BACKUP_TIME; for (int i = 0; i < 5; i++) key(a, &b, KEYSYM_BACKSPACE); type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER); }
     else if (!strcmp(argv[2], "summary")) {

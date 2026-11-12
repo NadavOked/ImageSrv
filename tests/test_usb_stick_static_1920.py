@@ -51,7 +51,7 @@ def test_the_icon_is_one_and_the_same_in_the_tree_the_page_header_and_the_device
 def test_the_script_loads_after_console_js_with_the_same_version_as_every_include():
     html = _read("index.html")
     assert html.index('src="console.js?v=') < html.index('src="usbstick.js?v=')
-    assert set(re.findall(r'\?v=(\d+\.\d+)"', html)) == {"13.00"}   # round/1107c: one value for every include
+    assert set(re.findall(r'\?v=(\d+\.\d+)"', html)) == {"13.05"}   # round/1107c: one value for every include
 
 
 def test_the_page_is_registered_and_the_settings_download_row_moved_out():

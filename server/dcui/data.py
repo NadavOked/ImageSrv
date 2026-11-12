@@ -22,6 +22,7 @@ from server.console import tls as console_tls
 from server.net import deploy_net, ifaddr, netcfg, netcfg_host, netcfg_rollback
 from server.interserver import storage_nodes
 from server.db import connect, get_setting
+from server.system import backup_job
 
 DATA_DIR = Path("/var/lib/imagesrv")
 STATUS_FILE = Path("/etc/imagesrv/firstboot.status")
@@ -122,6 +123,9 @@ class Snapshot:
     #: #1412: the installing ISO's lab_overlay -- LAB_ISO_LAB / LAB_ISO_CLEAN /
     #: LAB_ISO_UNCHECKED; "" = no ISO manifest (not installed from an ISO)
     lab_iso: str = ""
+    #: #2865: the console's "גיבוי אוטומטי" is off (setting backup:enabled=false) -- an orange bar
+    #: above the hero; the server stays "תקין"
+    backup_off: bool = False
 
 
 def _command_text(result: CommandResult) -> str:
@@ -544,6 +548,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
         first_boot_running=first_boot_running(status_file),
         clock=clock, clock_server=clock_server,
         lab_iso=lab_iso_state(manifest_file),
+        backup_off=not backup_job.parse_enabled(get_setting(conn, backup_job.ENABLED_SETTING)),
     )
 
 

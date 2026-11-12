@@ -1080,6 +1080,29 @@ def _lost_before_result(conn: sqlite3.Connection, members: list[sqlite3.Row],
             f" — {total}/{target} נכתבו")
 
 
+def _failed_before_write(conn: sqlite3.Connection, members: list[sqlite3.Row],
+                         total: int, target: int, cancelled) -> str | None:
+    """‏#2907: אף מגירה לא נכתבה, ומשכפל דיווח (או נרשם) `failed` — הסיבה בשמה,
+    או ``None``. הסדר של #2841: משכפל שאבד קודם (`_lost_before_result`).
+
+    מדיסק חי אין גל שני, ולכן גל שנסגר כך **הוא** הסבב. בלי סיבה הוא נסגר
+    `closed` 0/N ונעלם מהמסך כאילו הסתיים — כשכל המגירות נכשלו, או כשהשרת עלה
+    מחדש באמצע (‏`reconcile` מכשיל את החברים בשם `RESTARTED_SESSION`).
+    מגירה שמפעיל ביטל אינה כשל: ‏`cancelled` לא ריק → ``None``."""
+    if total or cancelled:
+        return None
+    failed = [m for m in members if m["state"] == "failed"]
+    if not failed:
+        return None
+    parts = []
+    for m in failed:
+        row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (m["mac"],)).fetchone()
+        name = row["suffix"] if row and row["suffix"] else m["mac"]
+        why = (m["error"] or "").strip()
+        parts.append(f"{name} ({why})" if why else name)
+    return f"כל המגירות נכשלו: {', '.join(parts)} — {total}/{target} נכתבו"
+
+
 def _rebase_future(conn: sqlite3.Connection, wave: sqlite3.Row,
                    future: list[sqlite3.Row], now: datetime) -> None:
     """‏#1947: חותמות הגל שבעתיד (קפיצה שלא נצפתה) נקבעות ל-`now` — מותנה
@@ -1129,7 +1152,9 @@ def _unseen(conn: sqlite3.Connection, store: SessionStore,
         row = conn.execute("SELECT last_seen FROM net_devices WHERE mac = ?",
                            (mac,)).fetchone()
         seen = _iso_or_none(row["last_seen"]) if row else None
-        if seen is None or seen < opened:
+        # ‏#2909: משכפל שמחזיק תוצאות (#2031) עוד שולח hello לא-מצטרף — ה-beat של מסכי
+        # השיכפול המקומי — ו-`last_seen` הטרי שלו אינו "חזר לתור": הוא לא יצטרף עד "כבה".
+        if seen is None or seen < opened or held.is_held(conn, mac):
             unseen.append(mac)
     return unseen
 
@@ -1238,6 +1263,11 @@ def tick(conn: sqlite3.Connection, store: SessionStore) -> None:
             warned = precheck_now(conn, store, round_row)     # #432
             store.start_auto(wave["id"])
             journal_precheck(conn, round_row, warned, "")
+        elif ready == 0 and round_row["target_drives"] > 0 and _remaining(round_row) <= 0:
+            # ‏#2908: היעד הושג — `wake_check` (#1954) הוריד אותו לכמה שכבר נכתב. זו סגירה
+            # מוצלחת ולא "כל המגירות אדומות": אדום מופחת מהיתרה רק למעלה, ב-`remaining`.
+            if _close_target_met(conn, store, round_row):
+                direct.cancel_source_task(conn, round_row, "")
         elif ready == 0 and remaining <= 0:
             # כל מה שהגל ממתין לו אדום: אין מה לכתוב — נסגר בגלוי, לא `open` לנצח.
             if _fail_round(conn, store, round_row, NOTHING_TO_WRITE_REASON):
@@ -1685,6 +1715,7 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
     total, written = round_row["written_drives"], _written(round_row)
     skipped, cancelled = _skipped(round_row), _cancelled(round_row)
     no_disk = _no_disk_count(round_row)
+    members: list[sqlite3.Row] = []
     if wave is not None:
         members = store.members(wave["id"])
         drive_rates.record_wave(conn, wave["id"], members)      # ‏#447
@@ -1713,6 +1744,22 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
     from server.rounds import direct                 # noqa: PLC0415
     if (total + len(skipped) + len(cancelled) + no_disk >= target
             or direct.is_build_disk(round_row)):
+        # ‏#2907: מדיסק חי, גל שנסגר מתחת לסבב (עלייה מחדש של השרת: חבריו `failed`)
+        # בלי שאף מגירה נכתבה — הסבב נכשל בשמו, לא `closed` 0/N בלי סיבה.
+        why = ((_lost_before_result(conn, members, total, target)
+                or _failed_before_write(conn, members, total, target, cancelled))
+               if direct.is_build_disk(round_row) else None)
+        if why:
+            conn.execute(
+                "UPDATE room_rounds SET state = 'failed', failed_reason = ?, closed_at = ?"
+                " WHERE id = ? AND state = 'active'",
+                (why, now_iso(), round_row["id"]),
+            )
+            conn.commit()
+            journal(conn, "room_failed", f'{round_row["id"]} {why} written={total}/{target}',
+                    round_id=round_row["id"])
+            direct.cancel_source_task(conn, round_row, "")
+            return
         conn.execute(
             "UPDATE room_rounds SET state = 'closed', closed_at = ? WHERE id = ?",
             (now_iso(), round_row["id"]),
@@ -1826,6 +1873,31 @@ def _fail_round(conn: sqlite3.Connection, store: SessionStore,
         )
 
 
+def _close_target_met(conn: sqlite3.Connection, store: SessionStore,
+                      round_row: sqlite3.Row) -> bool:
+    """‏#2908: הגל הפתוח ממתין למגירה שהסבב כבר אינו צריך — היעד ירד (`wake_check`, #1954:
+    הדיסק בחריץ הוחלף) לכמה שכבר נכתב. הסבב נסגר `room_done`, לא `room_failed`: הסגירה היא
+    התביעה (#177), והיומן אומר כמה חריצים דולגו בהעירה (`wake_skipped=N`). מחזיר האם
+    הקריאה הזו היא שסגרה."""
+    if not store.close(round_row["wave_session_id"], ""):
+        return False
+    with writing(conn):                  # #54: a failed commit leaves no orphan lock
+        closed = update_one(
+            conn,
+            "UPDATE room_rounds SET state = 'closed', closed_at = ?"
+            " WHERE id = ? AND state = 'active' AND wave_session_id = ?",
+            (now_iso(), round_row["id"], round_row["wave_session_id"]),
+        )
+    if closed:
+        woken = sum(len(item.get("wake_skipped") or [])
+                    for item in json.loads(round_row["target_slots_json"] or "[]"))
+        journal(conn, "room_done",
+                f'{round_row["id"]} written={round_row["written_drives"]}/{round_row["target_drives"]}'
+                + _skipped_note(_skipped(round_row), _cancelled(round_row), _no_disk_count(round_row))
+                + (f" wake_skipped={woken}" if woken else ""), round_id=round_row["id"])
+    return closed
+
+
 def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
                  round_row: sqlite3.Row, members: list[sqlite3.Row]) -> None:
     """הגל הסתיים: סופרים לפי serial אילו מגירות נכתבו, וממשיכים."""
@@ -1860,7 +1932,10 @@ def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
     from server.rounds import direct                 # noqa: PLC0415
     # ‏#2841: מדיסק חי אין גל שני — משכפל שנעלם לפני שדיווח, ושום מגירה לא
     # נכתבה: הסבב נכשל בשמו, לא `room_done written=0/N` שנראה כמו סיום.
-    lost_why = (_lost_before_result(conn, members, total, round_row["target_drives"])
+    # ‏#2907: וכך גם כשכל המגירות דיווחו `failed` (בלי שאיש אבד).
+    lost_why = ((_lost_before_result(conn, members, total, round_row["target_drives"])
+                 or _failed_before_write(conn, members, total, round_row["target_drives"],
+                                         cancelled))
                 if direct.is_build_disk(round_row) else None)
     if lost_why:
         if _fail_round(conn, store, round_row, lost_why):

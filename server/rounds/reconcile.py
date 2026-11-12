@@ -12,7 +12,8 @@
 לא טעה: פשוט לא היה משדר. ומשימות קליטה `running` נשארו כך לנצח.
 
 המעברים כאן הם כולם **מצב + יומן בלבד — לא מוחקים דבר**. ‏(שלישי, ‏#2373:
-העברה בין אתרים פעילה → ‏`failed` בשם; ראו בגוף הפונקציה.)
+העברה בין אתרים פעילה → ‏`failed` בשם; רביעי, ‏#2904: סבב חדר
+`closing` — "עצור סבב" שנקטע — → ‏`closed`; ראו בגוף הפונקציה.)
 
 * **משימת קליטה `running`** — ההעלאה היא בקשת HTTP אחת שמתה עם
   התהליך, ולכן אין "staging חי" אחרי עלייה. אבל `capture.py` עושה
@@ -24,9 +25,9 @@
   `running` (‏sessions.py `on_running`), ומצב המשדר חי בזיכרון בלבד.
   אחרי עלייה אין משדר לאף סבב, אלא אם המנוע אומר במפורש שהוא משדר את
   הסבב הזה (‏`sender.status()` — ראיה חיובית, לא היעדר סימן). סבב בלי
-  משדר: החברים שלא הגיעו למצב סופי → `failed` בשם, הסבב → `closed`
-  (מכונת המצבים של `sessions` מכירה `open/running/closed` בלבד), ויומן
-  `session_orphaned`. ‏**גל של חדר השיכפולים** הוא סבב כזה בדיוק; הסבב
+  משדר: החברים שלא הגיעו למצב סופי → `failed` בשם, והסבב → `failed` עם
+  `failed_reason` (‏#2907; ה-`closed` שכאן עד #2907 נשא "0/N" בלי סיבה), ויומן
+  `session_orphaned`. **גל של חדר השיכפולים** נשאר `closed` (ראו מיד). ‏**גל של חדר השיכפולים** הוא סבב כזה בדיוק; הסבב
   המצטבר (`room_rounds`) נשאר `active` — הדופק הבא (`room._resume`)
   רואה גל סגור תחת סבב פעיל, סופר את המגירות שכן נכתבו (לפי serial)
   ופותח את הגל הבא, כפי שהוא עושה אחרי `_mark_lost`. זה אינו "המשך
@@ -55,14 +56,15 @@ RESTARTED_TASK = "השרת עלה מחדש — הקליטה אבדה"
 RESTARTED_VERIFY = "השרת עלה מחדש — קבצי הקליטה לא נמצאו לאימות; האימג' לא נכנס לספרייה"
 RESTARTED_SESSION = "השרת עלה מחדש — המשדר אבד"
 RESTARTED_TRANSFER = "נקטעה בהפעלה מחדש של השרת"
+RESTARTED_CLOSING = "השרת אותחל באמצע עצירת הסבב; העצירה הושלמה בעלייה"
 
 
 def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
                        sending: dict | None = None) -> dict:
     """מסמן את מה שנשאר `running` מהריצה הקודמת. מחזיר מה סומן, ליומן
     ולבדיקות: ``{"tasks_done": [...], "tasks_failed": [...],
-    "tasks_reverify": [...], "sessions_closed": [...], "transfers_failed": [...]}``
-    (‏#2373). ‏``tasks_reverify``
+    "tasks_reverify": [...], "sessions_closed": [...], "transfers_failed": [...],
+    "rounds_closed": [...]}`` (‏#2373, ‏#2904). ‏``tasks_reverify``
     (‏#1470) — קליטות `verifying` שהאימות שלהן צריך לרוץ מחדש; מי שקורא
     (‏`create_runtime`) מפעיל אותו.
 
@@ -71,7 +73,7 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
     """
     root = Path(library_root)
     out: dict = {"tasks_done": [], "tasks_failed": [], "tasks_reverify": [],
-                 "sessions_closed": [], "transfers_failed": []}
+                 "sessions_closed": [], "transfers_failed": [], "rounds_closed": []}
 
     for row in conn.execute(
         "SELECT id, mac, image_id, name, created_by FROM tasks"
@@ -174,20 +176,28 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
 
     live = sending["session_id"] if sending else None
     for row in conn.execute(
-        "SELECT id FROM sessions WHERE state = 'running' AND kind = 'multicast'"
+        "SELECT s.id, g.role FROM sessions s LEFT JOIN groups g ON g.id = s.group_id"
+        " WHERE s.state = 'running' AND s.kind = 'multicast'"
     ).fetchall():
         if row["id"] == live:
             continue
         stamp = now_iso()
+        # ‏#2907: שידור שאינו של חדר השיכפולים (כיתה) נכשל **בשם** — `failed`
+        # עם `failed_reason`, כמו `SessionStore.fail`; בלי זה הסקירה
+        # (`latest_failed_broadcast`) לא הראתה כשל, ונשאר רק `session_orphaned`
+        # ביומן. גל של חדר נשאר `closed`: `room._resume` הוא שמחליט עליו
+        # (גל הבא לסבב מהספרייה, או כישלון הסבב כולו לסבב מדיסק חי).
+        room_wave = row["role"] == "cloner"
         # התביעה על הסבב קודם (‏`update_one` — מותנה, ומשחרר את הנעילה
         # כשלא תאם); החברים באותה טרנזאקציה, כדי שסבב `closed` עם חברים
         # שעדיין `writing` לא יהיה מצב שאפשר לקרוא.
         with _write_lock, writing(conn):
             if not update_one(
                 conn,
-                "UPDATE sessions SET state = 'closed', closed_at = ?"
+                "UPDATE sessions SET state = ?, closed_at = ?, failed_reason = ?"
                 " WHERE id = ? AND state = 'running'",
-                (stamp, row["id"]),
+                ("closed" if room_wave else "failed", stamp,
+                 None if room_wave else RESTARTED_SESSION, row["id"]),
             ):
                 failed = None
             else:
@@ -205,4 +215,39 @@ def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
         out["sessions_closed"].append(row["id"])
         journal(conn, "session_orphaned",
                 f'{row["id"]} {RESTARTED_SESSION}; failed={failed}', round_id=row["id"])
+
+    # ‏#2904: "עצור סבב" נקטע. ‏`close_round` עושה commit ל-`closing` **לפני** שהוא
+    # סוגר את הגל ועוצר את המשדר, ושני המעברים החוצה ממנו רצים רק באותה קריאה —
+    # בלי זה הסבב `closing` לנצח, ו-`busy_db` עוצר גיבוי, אתחול מתוזמן ועדכון.
+    # ‏`closed` ולא `active` (המפעיל ביקש לעצור) ולא `failed` (שהיה מחזיר אותו
+    # למסך כדורש טיפול): אחרי עלייה אין משדר, וזה מה שהעצירה הייתה משיגה.
+    # הגל `running` כבר נסגר בלולאה למעלה; גל `open` — ש-#411 משאיר במכוון —
+    # נסגר כאן, אחרת הוא נשאר פתוח תחת סבב סגור. גל שהמנוע מעיד שהוא משדר
+    # (‏`live`) אינו יתום, ואז גם הסבב שלו אינו נוגע.
+    for row in conn.execute(
+        "SELECT id, wave_session_id, written_drives, target_drives FROM room_rounds"
+        " WHERE state = 'closing'"
+    ).fetchall():
+        if row["wave_session_id"] and row["wave_session_id"] == live:
+            continue
+        stamp = now_iso()
+        with _write_lock, writing(conn):
+            changed = update_one(
+                conn,
+                "UPDATE room_rounds SET state = 'closed', closed_at = ?"
+                " WHERE id = ? AND state = 'closing'",
+                (stamp, row["id"]),
+            )
+            if changed and row["wave_session_id"]:
+                conn.execute(
+                    "UPDATE sessions SET state = 'closed', closed_at = ?"
+                    " WHERE id = ? AND state = 'open'",
+                    (stamp, row["wave_session_id"]),
+                )
+        if not changed:
+            continue
+        out["rounds_closed"].append(row["id"])
+        journal(conn, "room_close",
+                f'{row["id"]} written={row["written_drives"]}/{row["target_drives"]}'
+                f' — {RESTARTED_CLOSING}', round_id=row["id"])
     return out

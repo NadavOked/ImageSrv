@@ -503,6 +503,11 @@ class NicServices:
                 marker["apply_error"] = " · ".join(errors)
                 set_setting(self.conn, PENDING_KEY, json.dumps(marker, ensure_ascii=False))
                 self._revert(marker, "apply_failed", None)
+                return
+            # #2914: מכאן אפשר לאשר. `applied_at` הוא הראיה שההחלה רצה -- עד אז
+            # `confirm` מסורב, אחרת "השאר" בתוך השנייה מוחק את הסמן וההחלה לא רצה.
+            marker["applied_at"] = _now_iso(self.hooks["now"]())
+            set_setting(self.conn, PENDING_KEY, json.dumps(marker, ensure_ascii=False))
 
     def confirm(self, user_id="") -> dict:
         with self._lock:
@@ -515,6 +520,11 @@ class NicServices:
                 raise ServiceError(409, "סמן ההמתנה פגום — השתמש ב'החזר עכשיו'", "corrupt")
             if now >= float(marker["deadline"]):
                 raise ServiceError(409, "חלון האישור נסגר — ההגדרה הקודמת חוזרת", "expired")
+            if not marker.get("applied_at"):
+                # #2914: אישור הוא ראיה שהקונסולה נגישה **אחרי** השינוי. לפני שההחלה
+                # הדחויה רצה השינוי עוד לא קרה, ומחיקת הסמן הייתה מבטלת אותה.
+                raise ServiceError(409, "ההחלה עוד לא רצה — נסו שוב בעוד רגע",
+                                   "not_applied")
             set_settings(self.conn, {}, remove=(PENDING_KEY,))
             if self.pending() is not None:
                 raise ServiceError(500, "סמן ההמתנה לא נמחק — השינוי לא אושר ויחזור "
@@ -587,6 +597,11 @@ class NicServices:
             self._revert(marker, reason, None, apply=False)
             self.reverted_at_startup = True
             return reason
+        if not marker.get("applied_at"):
+            # #2914: הטיימר של ההחלה הדחויה אבד באתחול, אבל המאזינים נקשרים מהרגע
+            # הזה מה-DB -- השינוי בתוקף. בלי הסימון הסמן הזה לא היה ניתן לאישור.
+            marker["applied_at"] = _now_iso(now)
+            set_setting(self.conn, PENDING_KEY, json.dumps(marker, ensure_ascii=False))
         self.hooks["schedule"](max(0.0, float(marker["deadline"]) - now) + 0.5, self.tick)
         return None
 

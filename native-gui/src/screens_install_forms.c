@@ -45,6 +45,27 @@ static void admin_screen(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a-
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_password_ready(s)&&(!s->rerun||s->current_password[0]));
 }
 
+/* #2866 (mockup 2866-manual-time, Nadav 11/11): the manual time as five boxes -- right to left
+ * year, month, day, then minute ":" hour, so the time reads 21:47 -- each with ▲ above and ▼ below
+ * (drawn, not glyphs: the font need not have them) and its name under it. Returns the height. */
+static void mt_arrow(App *a,cairo_t *cr,Rect r,int up,int id){const Theme *t=a->theme;draw_fill_rrect(cr,r,t->radius_sm,t->surface);draw_border_rrect(cr,r,t->radius_sm,t->hair,1);
+    double cx=r.x+r.w/2,cy=r.y+r.h/2;cairo_move_to(cr,cx-5,up?cy+3:cy-3);cairo_line_to(cr,cx+5,up?cy+3:cy-3);cairo_line_to(cr,cx,up?cy-4:cy+4);cairo_close_path(cr);draw_set(cr,t->ink);cairo_fill(cr);hit_add(a,r,id);}
+static double mt_boxes(App *a,cairo_t *cr,double x,double y,double w){InstallState *s=&a->install;const Theme *t=a->theme;
+    static const char *names[MT_BOXES]={"שנה","חודש","יום","שעה","דקה"};static const int order[MT_BOXES]={MT_YEAR,MT_MONTH,MT_DAY,MT_MINUTE,MT_HOUR};   /* right to left */
+    int v[MT_BOXES];install_mt_values(s,v);double right=x+w;
+    for(int k=0;k<MT_BOXES;k++){int i=order[k];double bw=i==MT_YEAR?92:64,bx=right-bw;int id=HIT_INSTALL_MT_BASE+i,focus=a->focus==id;
+        mt_arrow(a,cr,(Rect){bx,y,bw,22},1,HIT_INSTALL_MT_UP_BASE+i);
+        Rect f={bx,y+26,bw,40};draw_field_box(cr,t,f,focus);hit_add(a,f,id);
+        char shown[16];int typed=focus&&s->mt_buf[0]&&atoi(s->mt_buf)!=v[i];   /* a year typed half-way shows its digits */
+        if(typed)snprintf(shown,sizeof shown,"%s",s->mt_buf);else snprintf(shown,sizeof shown,i==MT_YEAR?"%04d":"%02d",v[i]);
+        Text n=text_make(cr,FONT_MONO,20,600,shown,0,DIR_LTR);text_draw(cr,&n,f.x+(f.w-n.w)/2,f.y+(f.h-n.h)/2,t->ink);text_free(&n);
+        if(focus){s->osk_field=1;snprintf(s->osk_label,sizeof s->osk_label,"%s",names[i]);snprintf(s->osk_shown,sizeof s->osk_shown,"%s",shown);}   /* #2778: the keyboard's preview row shows the focused box (v0.91.11 replaced osk_fy/osk_fh; release/v0.91.12) */
+        mt_arrow(a,cr,(Rect){bx,y+70,bw,22},0,HIT_INSTALL_MT_DOWN_BASE+i);
+        Text c=text_make(cr,FONT_SANS,12,400,names[i],0,DIR_RTL);text_draw(cr,&c,bx+(bw-c.w)/2,y+95,t->muted);text_free(&c);
+        right=bx-(k==2?30:k==3?32:16);
+        if(k==3){Text colon=text_make(cr,FONT_MONO,20,600,":",0,DIR_LTR);text_draw(cr,&colon,bx-16-colon.w/2,y+26+(40-colon.h)/2,t->ink);text_free(&colon);}}
+    return 112;}   /* compact: with the zone above, the step fits 800 px high */
+
 /* #2144 (mockup 2144-time, Nadav 04/11): step 5, the console's choice (#1773,
  * הגדרות ← מקור השעה) -- automatic or the organisation's server -- and the time
  * the server has now, from its hardware clock; the sync is checked at the end.
@@ -62,9 +83,13 @@ void install_draw_time(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->i
     if(s->ntp_org){install_field_draw(a,cr,(Rect){x,y,w,56},"כתובות (IP או שם, מופרדות ברווח)",s->ntp_servers,0,HIT_INSTALL_NTP_SERVERS,1);y+=62;
         if(s->field_error[17][0]){install_text_r(cr,t,s->field_error[17],12,600,x+w,y,w,t->danger_fg);y+=28;}else y+=8;}
     install_radio(a,cr,(Rect){x,y,w,70},"ידני — בלי שרת זמן","לשרת בלי אינטרנט. השעה נקבעת כאן ביד, ואין מי שיתקן אותה אחר כך.",s->ntp_manual,HIT_INSTALL_NTP_MANUAL);y+=80;
-    if(s->ntp_manual){install_field_draw(a,cr,(Rect){x,y,w,56},"תאריך ושעה (לפי אזור הזמן שלמעלה)",s->manual_time,0,HIT_INSTALL_MANUAL_TIME,1);y+=62;
-        if(s->field_error[20][0]){install_text_r(cr,t,s->field_error[20],12,600,x+w,y,w,t->danger_fg);y+=28;}
-        else{install_text_r(cr,t,"אימות דו-שלבי (±30 שניות) ותעודת TLS נשענים על השעה הזו, ושעון ידני מתרחק עם הזמן.",12,400,x+w,y,w,t->muted);y+=28;}}
+    if(s->ntp_manual){install_text_r(cr,t,"תאריך ושעה (לפי אזור הזמן שלמעלה)",12,500,x+w,y,w,t->ink);y+=22;   /* #2866: five boxes, no format to type */
+        y+=mt_boxes(a,cr,x,y,w)+4;
+        char dmy[40],at[64],hint[400];install_clock_dmy(s,dmy,sizeof dmy);bidi_isolate(dmy,at,sizeof at);
+        if(dmy[0])snprintf(hint,sizeof hint,"מתמלא מראש בשעון החומרה (%s). לחצו ↑ ↓ או חיצי המקלדת כדי לתקן, בלי להקליד פורמט. אימות דו-שלבי ותעודת TLS נשענים על השעה הזו, ושעון ידני מתרחק עם הזמן.",at);
+        else snprintf(hint,sizeof hint,"אזור הזמן שנבחר אינו מוכר כאן, ולכן התיבות לפי שעון החומרה ב-UTC. שנו ערך אחד לפחות כדי לאשר את השעה. אימות דו-שלבי ותעודת TLS נשענים על השעה הזו.");   /* nothing is taken until a box changes */
+        Text h=text_make(cr,FONT_SANS,12,s->field_error[20][0]?600:400,s->field_error[20][0]?s->field_error[20]:hint,(int)w,DIR_RTL);pango_layout_set_alignment(h.layout,PANGO_ALIGN_RIGHT);
+        text_draw_r(cr,&h,x+w,y,s->field_error[20][0]?t->danger_fg:t->muted);y+=h.h+6;text_free(&h);   /* ↑ ↓, not the mockup's ▲ ▼: the installer's font has no ▲▼ (they drew as boxes, 11/11) */}
     char when[64],zone[64];install_clock_now(s,when,sizeof when,zone,sizeof zone);
     Rect card={x,y,w,92};install_card(cr,t,card);
     Text lab=text_make(cr,FONT_SANS,12.5,400,"השעה עכשיו בשרת",0,DIR_RTL);text_draw_r(cr,&lab,x+w-16,y+18,t->muted);
@@ -80,21 +105,28 @@ void install_draw_time(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->i
  * operator's. The rules (20% of the drive, HH:MM) are the engine's -- backup.sh
  * answers through the bridge, and its line takes the hint's place. */
 static double note(App *a,cairo_t *cr,double x,double y,double w,const char *markup,Rgb fill,Rgb line,Rgb ink,int mark){const Theme *t=a->theme;double inset=mark?44:16;
-    Text m=text_make_markup(cr,FONT_SANS,12.5,400,markup,(int)(w-inset-16),DIR_RTL);double h=m.h+18;Rect box={x,y,w,h};draw_fill_rrect(cr,box,t->radius,fill);draw_border_rrect(cr,box,t->radius,line,1);
+    Text m=text_make_markup(cr,FONT_SANS,12.5,400,markup,(int)(w-inset-16),DIR_RTL);pango_layout_set_alignment(m.layout,PANGO_ALIGN_RIGHT);double h=m.h+18;   /* #2865: a wrapped or second line on the right edge, as the first */Rect box={x,y,w,h};draw_fill_rrect(cr,box,t->radius,fill);draw_border_rrect(cr,box,t->radius,line,1);
     if(mark){cairo_arc(cr,x+w-24,y+h/2,9,0,6.283);draw_set(cr,line);cairo_fill(cr);Text e=text_make(cr,FONT_SANS,12,700,"!",0,DIR_RTL);text_draw(cr,&e,x+w-24-e.w/2,y+h/2-e.h/2,t->on_ink);text_free(&e);}
     text_draw_r(cr,&m,x+w-inset,y+9,ink);text_free(&m);return h;}
 static void size_option(App *a,cairo_t *cr,Rect r,const char *title,const char *desc,int selected,int id){const Theme *t=a->theme;draw_fill_rrect(cr,r,t->radius,selected?t->indigo_soft:t->surface);draw_border_rrect(cr,r,t->radius,selected?t->indigo:t->hair,selected?2:1);double cx=r.x+r.w-21,cy=r.y+18;cairo_arc(cr,cx,cy,8,0,2*M_PI);draw_set(cr,selected?t->indigo:t->hair);cairo_set_line_width(cr,2);cairo_stroke(cr);if(selected){cairo_arc(cr,cx,cy,4,0,2*M_PI);draw_set(cr,t->indigo);cairo_fill(cr);}install_text_r(cr,t,title,13,600,r.x+r.w-38,r.y+9,r.w-52,t->ink);install_text_r(cr,t,desc,12,400,r.x+r.w-38,r.y+29,r.w-52,t->muted);install_focus_ring(a,cr,r,id);hit_add(a,r,id);}
 void install_draw_backup(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y,fw=w/2-10;char at[32],when[320];
-    bidi_isolate(s->backup_time[0]&&!strpbrk(s->backup_time,"<&>")?s->backup_time:"—",at,sizeof at);
-    snprintf(when,sizeof when,"<b>מתי מגבים:</b> פעם ביום ב-%s (אפשר לשנות מתחת), ובנוסף מיד בכל העלאה של אימג׳ חדש ובכל מחיקה של אימג׳ מהשרת.",at);
-    y+=note(a,cr,x,y,w,when,t->indigo_soft,t->indigo,t->ink,0)+12;
-    int other=s->backup_pick==INSTALL_BACKUP_OTHER;
+    int other=s->backup_pick==INSTALL_BACKUP_OTHER,off=s->backup_pick==INSTALL_BACKUP_OFF;
+    if(!off){bidi_isolate(s->backup_time[0]&&!strpbrk(s->backup_time,"<&>")?s->backup_time:"—",at,sizeof at);   /* #2865: with no backup there is no "when" */
+        snprintf(when,sizeof when,"<b>מתי מגבים:</b> פעם ביום ב-%s (אפשר לשנות מתחת), ובנוסף מיד בכל העלאה של אימג׳ חדש ובכל מחיקה של אימג׳ מהשרת.",at);
+        y+=note(a,cr,x,y,w,when,t->indigo_soft,t->indigo,t->ink,0)+12;}
     size_option(a,cr,(Rect){x,y,w,54},"5 GB",other?"מוצע.":"מוצע. מספיק לגיבויים רבים של המסד, ומשאיר כמעט את כל הכונן לאימג׳ים.",s->backup_pick==0,HIT_INSTALL_BACKUP_BASE);y+=63;
     size_option(a,cr,(Rect){x,y,w,54},"10 GB","יותר היסטוריה.",s->backup_pick==1,HIT_INSTALL_BACKUP_BASE+1);y+=63;
     size_option(a,cr,(Rect){x,y,w,54},"20 GB","היסטוריה ארוכה.",s->backup_pick==2,HIT_INSTALL_BACKUP_BASE+2);y+=63;
-    size_option(a,cr,(Rect){x,y,w,54},"גודל אחר","הקלידו מספר ב-GB.",other,HIT_INSTALL_BACKUP_BASE+3);y+=66;
-    if(other){install_field_draw(a,cr,(Rect){x+w-fw,y,fw,56},"מקום שמור (GB)",s->backup_other,0,HIT_INSTALL_BACKUP_OTHER_GB,1);y+=68;}
-    install_field_draw(a,cr,(Rect){x+w-fw,y,fw,56},"שעת הגיבוי היומי",s->backup_time,0,HIT_INSTALL_BACKUP_TIME,1);y+=62;
+    size_option(a,cr,(Rect){x,y,w,54},"גודל אחר","הקלידו מספר ב-GB.",other,HIT_INSTALL_BACKUP_BASE+3);y+=63;
+    /* #2865 (mockup 2865-backup-off, Nadav 11/11): the fifth option, and while it is chosen the orange
+     * note says what is lost and where it is turned on again -- the default stays 5 GB */
+    size_option(a,cr,(Rect){x,y,w,54},"בלי גיבוי כרגע","הגיבוי לא ירוץ, ואין מקום שמור בכונן.",off,HIT_INSTALL_BACKUP_OFF);y+=66;
+    if(off){note(a,cr,x,y,w,"<b>אפשר להדליק אחר כך בקונסולה ← הגדרות ← גיבוי</b>\nבלי גיבוי, תקלת כונן מוחקת את רשימת המחשבים וההגדרות. בדף הבית ובמסך השרת יופיע פס כתום \"הגיבוי כבוי\" עד שתדליקו.",t->warning_bg,t->warning_line,t->warning_ink,1);
+        install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_backup_ready(s));return;}
+    /* the fields after the five options, in one row -- "גודל אחר"'s size at the right, the hour beside it -- so
+     * the keyboard on the screen, open on one of them, leaves the other to be clicked */
+    if(other)install_field_draw(a,cr,(Rect){x+w-fw,y,fw,56},"מקום שמור (GB)",s->backup_other,0,HIT_INSTALL_BACKUP_OTHER_GB,1);
+    install_field_draw(a,cr,(Rect){other?x:x+w-fw,y,fw,56},"שעת הגיבוי היומי",s->backup_time,0,HIT_INSTALL_BACKUP_TIME,1);y+=62;
     if(s->field_error[19][0])install_text_r(cr,t,s->field_error[19],12,600,x+w,y,w,t->danger_fg);else install_text_r(cr,t,"מוצע 02:00: שעה בלי סבבים. אם רץ סבב באותה שעה, הגיבוי מחכה לסיומו.",12,400,x+w,y,w,t->muted);y+=26;
     const InstallDisk *d=s->disk>=0&&s->disk<s->ndisks?&s->disks[s->disk]:NULL;double disk_gb=d?(double)d->size_bytes/1e9:0,gb=atof(install_backup_gb(s));
     double share=disk_gb>0?fmin(1,fmax(.01,gb/disk_gb)):.01;Rect bar={x,y,w,12};draw_fill_rrect(cr,bar,6,t->track);cairo_rectangle(cr,x+w*(1-.01-share),y,w*share,12);draw_set(cr,t->warning_line);cairo_fill(cr);cairo_rectangle(cr,x+w*.99,y,w*.01,12);draw_set(cr,t->indigo);cairo_fill(cr);y+=20;

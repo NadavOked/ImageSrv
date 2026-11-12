@@ -98,6 +98,8 @@ def render_main(snapshot: Snapshot, message: str = "") -> list[str]:
     lab = LAB_ISO_TEXT.get(snapshot.lab_iso)   # #1412: the graphical screen's orange card
     if lab:
         canvas.put(3, 2, lab, 76)
+    elif snapshot.backup_off:   # #2865: the graphical screen's orange bar, in the same line
+        canvas.put(3, 2, "Database backup is OFF - turn it on: console > Settings > Backup", 76)
     canvas.put(4, 4, "Hostname:")
     canvas.put(4, 23, snapshot.hostname)
     canvas.put(5, 4, "Console:")

@@ -137,9 +137,25 @@ def test_a_gui_direct_send_is_cancelled_with_its_round_and_wave(kiosk_env):
     _boot(kiosk_env)
     task = _q(kiosk_env, "SELECT state, error FROM tasks WHERE id = ?", opened["task_id"])
     assert (task["state"], task["error"]) == ("cancelled", REASON)
-    assert _q(kiosk_env, "SELECT state FROM room_rounds WHERE id = ?", opened["id"])["state"] == "closed"
-    assert _q(kiosk_env, "SELECT state FROM sessions WHERE id = ?",
-              opened["wave_session_id"])["state"] == "closed"
+    # ‏#2907: נכשלים בשם, לא `closed` בלי סיבה — והמשכפל שהצטרף אינו נשאר `waiting` תחת גל סגור.
+    rnd = _q(kiosk_env, "SELECT state, failed_reason FROM room_rounds WHERE id = ?", opened["id"])
+    assert rnd["state"] == "failed" and "אותחל" in rnd["failed_reason"]
+    wave = _q(kiosk_env, "SELECT state, failed_reason FROM sessions WHERE id = ?",
+              opened["wave_session_id"])
+    assert (wave["state"], wave["failed_reason"]) == ("failed", rnd["failed_reason"])
+
+
+def test_a_cloner_that_joined_the_cancelled_wave_sees_the_failure_by_name(kiosk_env):
+    """‏#2907: `store.close` לא נגע בחברים — המשכפל שהצטרף נשאר `waiting` לעד."""
+    _, gui = _env(kiosk_env)
+    opened = _direct(gui, kiosk_env)
+    cloner_hello(kiosk_env["anon"], CLONER, ["S1"])          # מצטרף לגל הפתוח
+    assert _q(kiosk_env, "SELECT state FROM session_members WHERE session_id = ?",
+              opened["wave_session_id"])["state"] == "waiting"
+    _boot(kiosk_env)
+    member = _q(kiosk_env, "SELECT state, error FROM session_members WHERE session_id = ?",
+                opened["wave_session_id"])
+    assert member["state"] == "failed" and "אותחל" in member["error"]
 
 
 def test_a_console_direct_send_keeps_its_round_through_the_boot(kiosk_env):
@@ -188,9 +204,9 @@ def test_boot_cancel_requires_the_macs_lease_1629(kiosk_env, tmp_path, kind, lea
         assert task["error"] == REASON
     if opened:
         assert _q(kiosk_env, "SELECT state FROM room_rounds WHERE id = ?",
-                  opened["id"])["state"] == ("closed" if matched else "active")
+                  opened["id"])["state"] == ("failed" if matched else "active")
         assert _q(kiosk_env, "SELECT state FROM sessions WHERE id = ?",
-                  opened["wave_session_id"])["state"] == ("closed" if matched else "open")
+                  opened["wave_session_id"])["state"] == ("failed" if matched else "open")
 
     refusals = rt.conn.execute(
         "SELECT event, detail FROM journal WHERE event IN (?, ?)",

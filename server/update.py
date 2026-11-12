@@ -30,7 +30,7 @@ from typing import Callable, NamedTuple
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from .db import get_setting, journal, now_iso, set_setting
+from .db import get_setting, journal, now_iso, set_setting, set_settings
 
 log = logging.getLogger("imagesrv.update")
 
@@ -551,6 +551,23 @@ def status_with_verification(conn, hooks: Hooks, repo_dir: str | Path,
     return result
 
 
+_UNSET = object()
+
+
+def _restore_previous(conn, kept) -> None:
+    """‏#2916: מחזיר את `update_previous` למה שהיה לפני ההפעלה שנכשלה (`_UNSET` — לא נכתב
+    כלום, אין מה להחזיר; `None` — לא היה ערך, והוא נמחק). כשל בשחזור נאמר ביומן השרת."""
+    if kept is _UNSET:
+        return
+    try:
+        if kept is None:
+            set_settings(conn, {}, remove=(PREVIOUS_KEY,))
+        else:
+            set_setting(conn, PREVIOUS_KEY, kept)
+    except Exception:                                    # noqa: BLE001
+        log.warning("update: previous version not restored to %r (db)", kept, exc_info=True)
+
+
 def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
                          user: str, forced: str | None = None) -> bool:
     """‏``False`` = יחידת שדרוג כבר רצה (#1273): הסטטוס הקודם חוזר כמו שהיה,
@@ -558,9 +575,12 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
     כל כשל אחר בהפעלה: ``failed`` נכתב ו-``UpgradeLaunchError`` נזרק (#2160)."""
     prior = get_status(conn)
     previous = current_version(hooks, repo_dir)
+    kept = _UNSET
     if previous:
         try:
+            before = get_setting(conn, PREVIOUS_KEY)
             set_setting(conn, PREVIOUS_KEY, previous)
+            kept = before
         except Exception:                                # noqa: BLE001
             log.warning("update: previous version %s not recorded (db)", previous, exc_info=True)
 
@@ -575,8 +595,16 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
     if forced:
         # ‏#1891: המנהל אישר מעל חסימה — הסקריפט קורא את זה ואינו מסרב שוב.
         doc["forced"] = forced
-    _set_status(conn, doc)
-    ok, err = hooks["run_upgrade"](repo_dir, tag)
+    try:
+        _set_status(conn, doc)
+        ok, err = hooks["run_upgrade"](repo_dir, tag)
+    except Exception:
+        _restore_previous(conn, kept)
+        raise
+    if not ok:
+        # ‏#2916: השדרוג לא התחיל — "חזור לגרסה קודמת" ממשיך להצביע על הגרסה שהייתה
+        # לפני השדרוג האחרון **שכן התחיל**, לא על הגרסה שרצה כשהכשל קרה.
+        _restore_previous(conn, kept)
     if not ok and unit_already_exists(err):
         _set_status(conn, prior or {"state": "idle"})
         journal(conn, "update_apply_busy", f"{tag}: {err}", user)

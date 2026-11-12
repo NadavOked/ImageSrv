@@ -118,7 +118,7 @@ def test_the_manual_source_is_sent_as_its_own_answer_and_gates_next():
     control = _c("install.c")
     assert 'json_pair(&p, &n, "clock_manual", cm, 1);' in control
     assert '"ntp_servers","backup_reserve_gb","backup_time","clock_manual"' in control
-    assert "case HIT_INSTALL_MANUAL_TIME:return 20;" in control
+    assert "s->manual_seeded=0;s->field_error[20][0]=0;}" in control, "#2866: a box changed clears the engine's line"
     assert "if(!s->ntp_org&&!s->ntp_manual)return 1;" in control, "a manual time must not be empty"
     assert "char field_error[21][256];" in _c("install_state.h")
     # the done screen's manual verdict is information (calm chip), not the orange alert
@@ -155,7 +155,7 @@ static App app;
 static void key(App *a, InstallBridge *b, int k) { Event e = {0}; e.type = UIEV_KEY; e.key = k; install_handle(a, b, &e); }
 static void type(App *a, InstallBridge *b, const char *s) { for (; *s; s++) { Event c = {0}; c.type = UIEV_CHAR; c.ch = *s; install_handle(a, b, &c); } }
 
-/* argv: BRIDGE MODE [TEXT [AGE]] -- auto | org-empty | org TEXT | manual TEXT | summary | report TEXT | sent TEXT AGE */
+/* argv: BRIDGE MODE [TEXT [AGE|ZONE]] -- auto | org-empty | org TEXT | manual TEXT [ZONE] | summary | report TEXT | sent TEXT AGE */
 int main(int argc, char **argv) {
     if (argc < 3) return 2;
     App *a = &app;
@@ -165,10 +165,14 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[2], "auto")) key(a, &b, KEYSYM_ENTER);
     else if (!strcmp(argv[2], "org-empty")) { key(a, &b, KEYSYM_DOWN); key(a, &b, KEYSYM_ENTER); }
     else if (!strcmp(argv[2], "org") && argc > 3) { key(a, &b, KEYSYM_DOWN); key(a, &b, KEYSYM_DOWN); type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER); }
-    else if (!strcmp(argv[2], "manual") && argc > 3) {   /* Down x4: org, its field, the manual radio, its field */
+    else if (!strcmp(argv[2], "manual") && argc > 3) {   /* Down x4: org, its field, the manual radio, the year's box */
+        if (argc > 4) snprintf(a->install.timezone, sizeof a->install.timezone, "%%s", argv[4]);   /* #2866: a zone not known here */
         for (int i = 0; i < 4; i++) key(a, &b, KEYSYM_DOWN);
-        for (int i = 0; i < 40; i++) key(a, &b, KEYSYM_BACKSPACE);
-        type(a, &b, argv[3]); key(a, &b, KEYSYM_ENTER);
+        if (argv[3][0]) {   /* #2866: "YYYY-MM-DD HH:MM" typed into the five boxes, Tab between them */
+            int v[5] = {0}; sscanf(argv[3], "%%d-%%d-%%d %%d:%%d", &v[0], &v[1], &v[2], &v[3], &v[4]);
+            for (int i = 0; i < 5; i++) { char t[8]; snprintf(t, sizeof t, i ? "%%02d" : "%%04d", v[i]); type(a, &b, t); if (i < 4) key(a, &b, KEYSYM_TAB); }
+        }
+        key(a, &b, KEYSYM_ENTER);
     } else if (!strcmp(argv[2], "sent") && argc > 4) {   /* install_manual_sent: the text, typed AGE seconds ago */
         InstallState *s = &a->install; char out[64];
         s->ntp_manual = 1; snprintf(s->manual_time, sizeof s->manual_time, "%%s", argv[3]);
@@ -247,7 +251,7 @@ def test_a_refused_address_keeps_the_person_on_the_step(driver, tmp_path):
 
 @NATIVE
 def test_the_manual_time_is_sent_as_typed_and_no_time_server_goes_with_it(driver, tmp_path):
-    """#2765: the radio, its field (reached by the arrow keys in screen order), and what the bridge gets."""
+    """#2765: the radio, its boxes (#2866; reached by the arrow keys in screen order), and what the bridge gets."""
     state, sent = _drive(driver, tmp_path, "manual", "2026-11-09 14:32")
     assert state["ntp_manual"] == "1" and state["ntp_org"] == "0" and state["moved_on"] == "1"
     assert sent["clock_manual"] == "2026-11-09 14:32:00" and sent["ntp_servers"] == "" and sent["step"] == 6
@@ -255,16 +259,17 @@ def test_the_manual_time_is_sent_as_typed_and_no_time_server_goes_with_it(driver
 
 @NATIVE
 def test_manual_without_a_time_keeps_next_off(driver, tmp_path):
-    state, sent = _drive(driver, tmp_path, "manual", "")
-    assert state["ntp_manual"] == "1" and state["moved_on"] == "0"
+    """#2866: a zone not known here leaves manual_time empty (the boxes show the clock in UTC) -- nothing is taken."""
+    state, sent = _drive(driver, tmp_path, "manual", "", "Nowhere/Zone")
+    assert state["ntp_manual"] == "1" and state["moved_on"] == "0" and state["manual_time"] == ""
     assert sent is None, "an empty time is not even sent to the bridge"
 
 
 @NATIVE
 def test_a_refused_manual_time_keeps_the_person_on_the_step(driver, tmp_path):
-    state, sent = _drive(driver, tmp_path, "manual", "2026-02-31 10:00", manual_error="התאריך והשעה אינם תקינים")
+    state, sent = _drive(driver, tmp_path, "manual", "2026-02-28 10:00", manual_error="התאריך והשעה אינם תקינים")
     assert state["moved_on"] == "0"
-    assert sent["clock_manual"] == "2026-02-31 10:00", "a date that does not exist is sent as typed, never 'fixed' into March"
+    assert sent["clock_manual"] == "2026-02-28 10:00:00"   # #2866: the boxes cannot make 31/2 -- the engine's word still holds
 
 
 @NATIVE

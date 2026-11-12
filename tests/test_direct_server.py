@@ -217,6 +217,74 @@ def test_a_manifest_bound_to_another_machine_is_refused(room_server):
         f"/api/v1/images/{opened['image_id']}/manifest").status_code == 404
 
 
+def _joined_then(room_server, manifest=None, raw=None):
+    """סבב ישיר, המשכפל הצטרף, ואז PUT של מניפסט שהשרת דוחה (‏#2906)."""
+    opened = _setup(room_server)
+    anon, conn = room_server["anon"], room_server["ctx"].conn
+    cloner_hello(anon, CLONER1, ["S1", "S2"])
+    if raw is not None:
+        head = {TOKEN_HEADER: _token(room_server, opened["task_id"])}
+        r = anon.put(f"/api/v1/direct/{opened['task_id']}/manifest",
+                     content=raw, headers=head)
+    else:
+        r = _put_manifest(room_server, opened["task_id"], manifest=manifest)
+    assert r.status_code == 400, r.text
+    return opened, conn, r.json()["detail"]
+
+
+def _assert_round_and_wave_failed(room_server, opened, conn, detail):
+    """‏#2906: המשימה, הסבב והגל נכשלים יחד — והמשכפל שהצטרף רואה כשל בשם הסיבה."""
+    assert conn.execute("SELECT state FROM tasks WHERE id = ?",
+                        (opened["task_id"],)).fetchone()["state"] == "failed"
+    rr = conn.execute("SELECT state, failed_reason FROM room_rounds"
+                      " WHERE source_task_id = ?", (opened["task_id"],)).fetchone()
+    assert rr["state"] == "failed"
+    assert "מניפסט שנדחה" in rr["failed_reason"] and detail in rr["failed_reason"]
+    wave = conn.execute("SELECT state, failed_reason FROM sessions WHERE id = ?",
+                        (opened["wave_session_id"],)).fetchone()
+    assert wave["state"] == "failed" and wave["failed_reason"] == rr["failed_reason"]
+    member = conn.execute("SELECT state, error FROM session_members WHERE session_id = ?",
+                          (opened["wave_session_id"],)).fetchone()
+    assert member["state"] == "failed" and member["error"] == rr["failed_reason"]
+    view = room(room_server["admin"])["round"]
+    assert view["state"] == "failed" and view["failed_reason"] == rr["failed_reason"]
+
+
+def test_a_rejected_manifest_fails_the_round_and_the_wave_too(room_server):
+    """‏#2906: מניפסט עם sha256 פגום — לא רק המשימה: הסבב `failed` והמשכפל שהצטרף
+    אינו ממתין לעד (קודם: `tasks=failed`, ‏`room_rounds=active`, ‏`sessions=open`)."""
+    opened, conn, detail = _joined_then(room_server, _live_manifest(sha="not-a-sha"))
+    _assert_round_and_wave_failed(room_server, opened, conn, detail)
+
+
+def test_malformed_json_fails_the_round_and_the_wave_too(room_server):
+    opened, conn, detail = _joined_then(room_server, raw=b"{not json")
+    _assert_round_and_wave_failed(room_server, opened, conn, detail)
+
+
+def test_a_manifest_the_restore_refuses_fails_the_round_and_the_wave_too(room_server):
+    bound = {**_live_manifest(), "machine_mac": "aa:bb:cc:00:00:99"}
+    opened, conn, detail = _joined_then(room_server, bound)
+    _assert_round_and_wave_failed(room_server, opened, conn, detail)
+
+
+def test_a_failed_round_frees_the_slot_for_a_new_round(room_server):
+    """הסבב שנכשל משחרר את חריץ המולטיקאסט: סבב חדש נפתח, בלי "עצור סבב" ידני."""
+    _joined_then(room_server, _live_manifest(sha="not-a-sha"))
+    r = _open_direct(room_server["admin"], [{"mac": CLONER1, "ports": [1, 2]}])
+    assert r.status_code == 200, r.json()
+
+
+def test_a_good_manifest_does_not_fail_the_round(room_server):
+    """שומר נגד תיקון-יתר: מניפסט תקין משאיר את הסבב `active` והגל `open`."""
+    opened = _setup(room_server)
+    cloner_hello(room_server["anon"], CLONER1, ["S1", "S2"])
+    assert _put_manifest(room_server, opened["task_id"]).status_code == 200
+    conn = room_server["ctx"].conn
+    assert conn.execute("SELECT state FROM room_rounds WHERE source_task_id = ?",
+                        (opened["task_id"],)).fetchone()["state"] == "active"
+
+
 # --- הסיום: סבב יחיד, המשימה נסגרת עם הסבב --------------------------------------
 
 

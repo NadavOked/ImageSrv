@@ -221,6 +221,7 @@ ntp_servers=$ANSWER_NTP_SERVERS
 ntp_manual_at=$CLOCK_MANUAL_AT
 backup_time=$ANSWER_BACKUP_TIME
 backup_reserve_gb=$ANSWER_BACKUP_RESERVE_GB
+backup_enabled=${ANSWER_BACKUP_ENABLED:-}
 admin_user=$ANSWER_ADMIN_USER
 raid_level=${RAID_LEVEL:-none}
 raid_disks=${ANSWER_RAID_DISKS:-}

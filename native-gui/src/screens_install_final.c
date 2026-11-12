@@ -54,7 +54,9 @@ static void summary(App *a,cairo_t *cr,InstallLayout l){
         if(s->ntp_manual){bidi_isolate(s->manual_time,when,sizeof when);snprintf(src,sizeof src,"ידני, בלי שרת זמן · %s · %s",when,zone);}
         else{char servers[300];bidi_isolate(s->ntp_servers,servers,sizeof servers);snprintf(src,sizeof src,"%s · %s",s->ntp_org?servers:"אוטומטי",zone);}
         summary_row(a,cr,(Rect){x+1,y+193+dy,w-2,48},"שעון השרת",src,4);}   /* #2144: "שינוי" -> step 5 */
-    char at[32],size[32],kept[48];bidi_isolate(s->backup_time,at,sizeof at);snprintf(size,sizeof size,"%s GB",install_backup_gb(s));bidi_isolate(size,kept,sizeof kept);snprintf(value,sizeof value,RLM "%s שמורים על כונן השרת · יומי ב-%s ובכל שינוי אימג׳",kept,at);summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"גיבוי המסד",value,5);   /* #1956: "שינוי" -> step 6 */
+    if(s->backup_pick==INSTALL_BACKUP_OFF){Rect r={x+1,y+241+dy,w-2,48};draw_fill_rrect(cr,(Rect){r.x+8,r.y+4,r.w-16,r.h-9},6,t->warning_bg);   /* #2865: no backup -- the row says so, in the note's orange */
+        summary_row(a,cr,r,"גיבוי המסד","כבוי",5);Text off=text_make(cr,FONT_SANS,13,500,"כבוי",0,DIR_RTL);install_text_r(cr,t,"· אפשר להדליק בקונסולה",13,500,r.x+r.w-180-off.w-6,r.y+12,r.w-286-off.w,t->warning_ink);text_free(&off);}
+    else{char at[32],size[32],kept[48];bidi_isolate(s->backup_time,at,sizeof at);snprintf(size,sizeof size,"%s GB",install_backup_gb(s));bidi_isolate(size,kept,sizeof kept);snprintf(value,sizeof value,RLM "%s שמורים על כונן השרת · יומי ב-%s ובכל שינוי אימג׳",kept,at);summary_row(a,cr,(Rect){x+1,y+241+dy,w-2,48},"גיבוי המסד",value,5);}   /* #1956: "שינוי" -> step 6 */
     snprintf(value,sizeof value,"%s · הסיסמה הוגדרה",s->admin_user);summary_row(a,cr,(Rect){x+1,y+289+dy,w-2,48},"משתמש הניהול",value,6);
     summary_row(a,cr,(Rect){x+1,y+337+dy,w-2,48},"סיסמת root","נקבעה",6);   /* #1632: that it was set, never the value; "שינוי" -> the admin step */
     console_guess(s,url,sizeof url);install_text_r(cr,t,"הקונסולה תהיה ב־",12,500,x+w-16,y+402+dy,160,t->muted);install_text_ltr(cr,url,13,500,x+24,y+402+dy,w-210,t->indigo);y+=436+dy;

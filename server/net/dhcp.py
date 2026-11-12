@@ -199,6 +199,25 @@ def parse_served_interfaces(text: str) -> set[str]:
     return served
 
 
+def interface_block(text: str | None, name: str) -> str | None:
+    """#2913: הקטע של כרטיס אחד בקובץ ש-`render` כותב — מהשורה `# --- <שם> ---`
+    ועד השורה הריקה שסוגרת אותו (טווח, אפשרויות, `server_ip`, boot).
+
+    פרסר טהור, כמו `parse_served_interfaces`: `None` = אין קטע לכרטיס הזה (או
+    שאין טקסט). הוא מאפשר להשוות **מה שה-DB מרנדר** מול **מה שעל הדיסק**
+    לכל כרטיס בנפרד, בלי שסטייה בכרטיס אחד תצבע את כולם."""
+    marker = f"# --- {name} ---"
+    lines = (text or "").splitlines()
+    if marker not in lines:
+        return None
+    block: list[str] = []
+    for line in lines[lines.index(marker):]:
+        if not line.strip():
+            break
+        block.append(line)
+    return "\n".join(block)
+
+
 # --- רינדור dnsmasq ---------------------------------------------------------
 
 

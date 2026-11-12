@@ -18,6 +18,8 @@ enum {
 
 /* #1956: the reserved space's options on the "גיבוי" step; the last is "גודל אחר" */
 #define INSTALL_BACKUP_OTHER 3
+/* #2865 (mockup 2865-backup-off, Nadav 11/11): "בלי גיבוי כרגע" -- no backup, and no space kept */
+#define INSTALL_BACKUP_OFF 4
 
 /* #2144: what the engine's clock check found (installer/lib/clock.sh) */
 enum { INSTALL_CLOCK_UNCHECKED = 0, INSTALL_CLOCK_SYNCED, INSTALL_CLOCK_UNSYNCED, INSTALL_CLOCK_MANUAL };   /* #2765: MANUAL = no time server, by the operator's choice */
@@ -64,7 +66,8 @@ typedef struct {
     char manual_time[32];   /* "YYYY-MM-DD HH:MM[:SS]" as shown in the field */
     double manual_edit_at;  /* monotonic moment it was typed or seeded: the install starts later, and the time goes on */
     int manual_seeded;      /* the text is the clock's own, not typed -- a new zone re-seeds it */
-    int backup_pick;     /* #1956: 0..2 = 5/10/20 GB, INSTALL_BACKUP_OTHER = typed; zero is the mockup's default */
+    char mt_buf[8];         /* #2866: the digits typed into the focused box so far (a year needs four) */
+    int backup_pick;     /* #1956: 0..2 = 5/10/20 GB, INSTALL_BACKUP_OTHER = typed, #2865: INSTALL_BACKUP_OFF = none; zero is the mockup's default */
     char backup_other[8], backup_time[8];
     int clock;           /* #2144: INSTALL_CLOCK_* -- unchecked until the bridge says otherwise */
     int lab;             /* #1412: INSTALL_LAB_* -- the banner above every step unless CLEAN */

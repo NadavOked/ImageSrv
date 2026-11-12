@@ -181,10 +181,16 @@ def _fail(conn, library_root: Path, task_id: str, message: str) -> None:
     ‏#1915: עד כאן האזור נשאר עד הסחיפה הבאה (‏`work_areas`, עד 24 שעות),
     וכשהסיבה הייתה דיסק מלא (507) — השרת שמר בדיוק את מה שמילא אותו.
     אזור של משימה במצב סופי הוא שטח של השרת, לא נתונים של אדם."""
-    conn.execute(
-        "UPDATE tasks SET state = 'failed', error = ?, updated_at = ? WHERE id = ?",
+    # ‏#2916 §2: רק משימה שעוד פתוחה נכשלת (כמו #535). ביטול שהגיע בין השער לכאן הוא
+    # הסוף שנבחר — אסור להפוך אותו ל-`failed` עם סיבה מטעה ("קובץ חסר", כי הביטול
+    # מחק את התיקייה). לא נכשלה = לא נמחק האזור ולא נרשם "capture_failed".
+    if not update_one(
+        conn,
+        "UPDATE tasks SET state = 'failed', error = ?, updated_at = ? WHERE id = ?"
+        " AND state IN ('pending', 'running')",
         (message, now_iso(), task_id),
-    )
+    ):
+        return
     conn.commit()
     shutil.rmtree(staging_dir(library_root, task_id), ignore_errors=True)
     journal(conn, "capture_failed", f"{task_id} {message}", machine=_task_mac(conn, task_id))

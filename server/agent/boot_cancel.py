@@ -11,9 +11,13 @@
 לכך שהאתחול יביא אותה.
 
 הפצה ישירה היא משימה **וגם** סבב חדר עם גל פתוח, שהמשכפלים ממתינים בו:
-ביטול המשימה לבדה היה משאיר גל שאיש לא ישדר בו. לכן הסבב נסגר והגל נסגר
-באותו מקום -- אותה תוצאה כמו סגירת הסבב מהקונסולה (‏room.close_round),
-בלי עצירת משדר: המקור הוא מחשב הבנייה, ואין udp-sender בשרת.
+ביטול המשימה לבדה היה משאיר גל שאיש לא ישדר בו. לכן הסבב והגל נסגרים
+באותו מקום, בלי עצירת משדר: המקור הוא מחשב הבנייה, ואין udp-sender בשרת.
+
+‏#2907: **נכשלים, לא נסגרים.** סגירה (`closed`) היא "המפעיל עצר" (‏room.close_round);
+כאן המפעיל לא עצר דבר — מחשב הבנייה אותחל לפני שהתחיל. סבב `closed` בלי סיבה נעלם
+מהמסך, והמשכפל שהצטרף נשאר `waiting` תחת גל סגור. ‏`SessionStore.fail` מכשיל את הגל
+וגם את החברים שהצטרפו, בשם הסיבה.
 """
 
 from __future__ import annotations
@@ -30,6 +34,9 @@ log = logging.getLogger("imagesrv.boot_cancel")
 
 #: הסיבה, כפי שהיא נשמרת ב-`tasks.error` ומוצגת לצד המשימה.
 REASON = "בוטלה: המכונה אותחלה לפני תחילת המשימה"
+
+#: ‏#2907 — הסיבה על שורת הסבב ועל הגל, שהמשכפלים רואים.
+ROUND_REASON = "מחשב הבנייה אותחל לפני שההפצה הישירה התחילה — הסבב בוטל"
 
 
 def cancel_gui_tasks_on_boot(conn: sqlite3.Connection, store, mac: str) -> list[str]:
@@ -57,13 +64,16 @@ def cancel_gui_tasks_on_boot(conn: sqlite3.Connection, store, mac: str) -> list[
                 ).fetchone()
                 if round_row is not None:
                     conn.execute(
-                        "UPDATE room_rounds SET state = 'closed', closed_at = ?"
-                        " WHERE id = ? AND state = 'active'", (now_iso(), round_row["id"]),
+                        "UPDATE room_rounds SET state = 'failed', failed_reason = ?,"
+                        " closed_at = ? WHERE id = ? AND state = 'active'",
+                        (ROUND_REASON, now_iso(), round_row["id"]),
                     )
                     wave = round_row["wave_session_id"]
         if wave and store is not None:
             try:
-                store.close(wave, "")
+                # ‏#2907: `fail` (לא `close`) — גם החברים שהצטרפו נכשלים בשם הסיבה.
+                if not store.fail(wave, ROUND_REASON):
+                    log.warning("boot cancel of %s: its wave %s was no longer open", row["id"], wave)
             except SessionError:
                 log.warning("boot cancel of %s: its wave %s was already gone", row["id"], wave)
         journal(conn, "task_boot_cancel", f"{row['id']} {mac} ({row['type']}): {REASON}",

@@ -77,7 +77,7 @@ ui_unknown_records() {
     # (fail_btn reboot), and fail_at only when the setting counts down (UEFI).
     # The MAC in capitals: the GUI draws a value of capitals and digits mono, LTR.
     _uu_mac=$(printf '%s' "$1" | tr 'a-f' 'A-F')
-    printf 'fail=inf|0|המחשב הזה לא רשום|הקונסולה קיבלה התראה על מחשב חדש|\n'
+    printf 'fail=inf|0|המחשב הזה לא רשום|הקונסולה קיבלה התראה על מחשב חדש|unknown\n'   # #2879: role unknown, no pill
     if [ "$2" -gt 0 ]; then
         printf 'fail_why=השרת לא מכיר את המחשב הזה, ולכן אין לו משימה. הוא יעלה כרגיל מהדיסק המקומי.\n'
         printf 'fail_step=אין צורך לעשות דבר — האתחול ימשיך בעוד %s שניות.\n' "$2"

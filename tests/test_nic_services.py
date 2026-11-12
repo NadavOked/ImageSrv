@@ -241,6 +241,7 @@ def test_not_confirmed_in_time_reverts_by_itself(rig):
 
 def test_confirm_keeps_the_change(rig):
     svc, _out = handoff(rig)
+    rig["scheduled"][0][1]()                      # ההחלה הדחויה רצה (#2914)
     rig["clock"].t += 30
     assert svc.confirm("noc")["ok"]
     assert svc.pending() is None
@@ -248,6 +249,43 @@ def test_confirm_keeps_the_change(rig):
     assert svc.tick() is None
     assert json.loads(get_setting(rig["conn"], "nicsvc:ens33"))["services"] == ["monitor", "interserver"]
     assert svc.view()["last"]["event"] == "kept"
+
+
+def test_confirm_before_the_deferred_apply_is_refused_not_kept(rig):
+    """#2914: "השאר" בתוך שנייה ההשהיה מחק את הסמן, וההחלה הדחויה ראתה "אין סמן"
+    ולא רצה -- ה-DB אמר "קונסולה כבויה" והמאזין נשאר פתוח. אישור הוא ראיה
+    שהקונסולה נגישה **אחרי** השינוי, ולכן לפני ההחלה הוא מסורב, והסמן נשאר."""
+    svc, _out = handoff(rig)
+    with pytest.raises(ServiceError) as exc:
+        svc.confirm("noc")
+    assert exc.value.status == 409 and exc.value.code == "not_applied"
+    assert svc.pending() is not None, "a refused confirm must not clear the marker"
+    assert rig["calls"] == []
+
+    rig["scheduled"][0][1]()                      # ההחלה הדחויה עדיין רצה
+    assert rig["calls"], "the deferred apply must still run after a refused confirm"
+    assert rig["calls"][0][1]["hosts"]["http_console"] == ["10.20.0.8"]
+    assert svc.confirm("noc")["ok"] and svc.pending() is None
+    assert svc.view()["last"]["event"] == "kept"
+
+
+def test_a_confirm_refused_before_the_apply_does_not_extend_the_window(rig):
+    svc, _out = handoff(rig)
+    with pytest.raises(ServiceError):
+        svc.confirm("noc")
+    rig["clock"].t += 61
+    assert svc.tick() == "expired"                # בלי אישור -- חוזר כמו תמיד
+    assert get_setting(rig["conn"], "nicsvc:ens33") is None
+
+
+def test_confirm_after_a_restart_inside_the_window_is_not_stuck(rig):
+    """הטיימר של ההחלה הדחויה אובד באתחול, אבל המאזינים נקשרים אז מה-DB --
+    ההחלה קרתה. סמן ששרד אתחול חייב להיות ניתן לאישור, אחרת הוא רק יחזור."""
+    svc, _out = handoff(rig)
+    rig["scheduled"].clear()
+    rig["clock"].t += 20
+    assert svc.startup() is None
+    assert svc.confirm("noc")["ok"]
 
 
 def test_confirm_after_the_window_is_refused(rig):

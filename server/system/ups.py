@@ -372,6 +372,16 @@ def default_hooks() -> dict:
             "read": read_vars, "sleep": time.sleep}
 
 
+def _switch(hooks: dict, mode: str, old_mode: str) -> None:
+    """קובצי NUT והשירות ל-`mode` (ממצב `old_mode`). ‏`net` ו-`none` אינם נוגעים בהם."""
+    if mode == "usb":
+        hooks["write"](render_usb())
+        hooks["start_usb"]()
+    elif old_mode == "usb":
+        hooks["write"]({"nut.conf": "# Managed by ImageSrv (#1973)\nMODE=none\n"})
+        hooks["stop_usb"]()
+
+
 def apply(conn, mode: str, target_text: object, hooks: dict, user: str) -> dict:
     """מאמת, מחיל (USB: קובצי NUT ושירות), שומר ורושם. מחזיר את הקריאה שאחרי.
 
@@ -380,12 +390,18 @@ def apply(conn, mode: str, target_text: object, hooks: dict, user: str) -> dict:
         raise ValueError("UPS: מצב לא מוכר — none, usb או net")
     target = parse_target(target_text) if mode == "net" else None
     old_mode, _ = configured(conn)
-    if mode == "usb":
-        hooks["write"](render_usb())
-        hooks["start_usb"]()
-    elif old_mode == "usb":
-        hooks["write"]({"nut.conf": "# Managed by ImageSrv (#1973)\nMODE=none\n"})
-        hooks["stop_usb"]()
+    try:
+        _switch(hooks, mode, old_mode)
+    except Exception as exc:  # noqa: BLE001 — ההחלה נכשלה: הקבצים חוזרים למה שה-DB אומר
+        # ‏#2916 §4: "לא נשמר" חייב לשרת גם את הקבצים. ‏usb → none ש-`systemctl disable`
+        # שלו נכשל השאיר `MODE=none` בקובץ מול `ups_mode=usb` ב-DB, והמנטר ממשיך לפי ה-DB.
+        if old_mode != mode:
+            try:
+                _switch(hooks, old_mode, mode)
+            except Exception as back:  # noqa: BLE001
+                raise RuntimeError(f"{exc}; ושחזור המצב הקודם ({MODES_HE[old_mode]}) "
+                                   f"נכשל גם הוא: {back}") from exc
+        raise
     set_settings(conn, {MODE: mode, TARGET: str(target) if target else ""})
     journal(conn, "ups_config_changed",
             f"{MODES_HE[old_mode]} → {MODES_HE[mode]}" + (f" ({target})" if target else ""), user)

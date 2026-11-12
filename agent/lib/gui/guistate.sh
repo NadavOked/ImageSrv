@@ -267,12 +267,25 @@ gui_shrink_state() {
         [ ! -e "$GUI_DIR/shrink-request" ]
 }
 
+gui_fail_local() {
+    # #2912: the failure screen is local -- its records, its buttons, and the
+    # fail.action the hold reads need no server. A server that does not answer
+    # must not take it off the screen: that is when "reboot" is what is needed.
+    # The hello's age/code ride along (the status line says "אין קשר עם השרת"),
+    # and one step says why the rest of the state is missing -- never "all well"
+    # (principle 5). No fail.state, or one that cannot be read: nothing added.
+    [ -s "$RUN_DIR/fail.state" ] || return 0
+    { gui_hello_state || cat "$RUN_DIR/fail.state"; } &&
+        printf 'fail_step=מצב התחנה לא אומת: כנראה השרת לא עונה. הכפתורים כאן פועלים בלעדיו\n'
+    return 0
+}
+
 gui_state_loop() {
     while :; do
         if ! gui_state; then
             printf 'native-gui: state could not be verified\n' >&2
             { printf 'message=לא ניתן לאמת את מצב התחנה|בדקו את החיבור לשרת. הפרטים ביומן הסוכן\n' &&
-                gui_server_addr && gui_shrink_state && gui_ask_state; } > "$GUI_DIR/state.next" &&
+                gui_server_addr && gui_shrink_state && gui_ask_state && gui_fail_local; } > "$GUI_DIR/state.next" &&
                 mv "$GUI_DIR/state.next" "$GUI_DIR/state" || return 1
         fi
         sleep 2

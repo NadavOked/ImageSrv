@@ -348,6 +348,9 @@ def ingest(conn: sqlite3.Connection, payload: dict,
         elif t.get("state") == "cancelled" and isinstance(t.get("dev"), str)                 and t["dev"] not in was_cancelled:
             named = slot_names.label(conn, mac, dev=t["dev"]) or t["dev"]
             drawer_cancel.confirmed(conn, session_id, mac, t["dev"], f"{mac} {named}")
+    # ‏#2916 §3: בקשת ביטול שהסוכן כבר לא יכול לקיים (המגירה סיימה לכתוב) נסגרת בשמה,
+    # לפני ש-`pending` שולח אותה שוב.
+    drawer_cancel.close_moot(conn, session_id, mac, targets)
     # ‏#1386: בקשות "בטל דיסק זה" מהקונסולה/מחשב הבנייה נמסרות בתשובה הזו.
     # ‏#2657: ‏`session_id` חוזר **רק כאן** — הדיווח נרשם לחבר פעיל בסבב פתוח.
     # זו הראיה ששער הכתיבה של הסוכן (`opengate.sh`) דורש לפני שהוא נוגע

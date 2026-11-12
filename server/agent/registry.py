@@ -70,6 +70,22 @@ def normalize_mac(text: str) -> str | None:
     return ":".join(hexonly[i : i + 2] for i in range(0, 12, 2))
 
 
+_NOT_A_HOST_MAC = "MAC לא תקין — לא כתובת של מחשב"
+
+
+def host_mac_refusal(mac: str | None) -> str | None:
+    """#2877: MAC קנוני שאינו כתובת של מחשב (אפסים, שידור, multicast) → הודעת סירוב.
+
+    ‏None = תקין. רק נתיבי הרישום קוראים לזה; חיפוש לפי MAC נשאר רחב.
+    """
+    if mac is None:
+        return None
+    raw = bytes.fromhex(mac.replace(":", ""))
+    if not any(raw) or raw == b"\xff" * 6 or raw[0] & 1:
+        return _NOT_A_HOST_MAC
+    return None
+
+
 def normalize_suffix(text: str) -> str | None:
     """"5" → "05", "ins" → "INS", כל דבר אחר → None."""
     if not isinstance(text, str):
@@ -130,6 +146,8 @@ def parse_paste(text: str, role: str = "classroom") -> list[ImportLine]:
             item.suffix = normalize_name(role, name)
             if item.mac is None:
                 item.error = "MAC לא תקין"
+            elif host_mac_refusal(item.mac):
+                item.error = host_mac_refusal(item.mac)
             elif item.suffix is None:
                 item.error = name_error(role, name)
             elif item.mac in seen:
@@ -194,6 +212,8 @@ def add_machine(
     mac = normalize_mac(mac_raw)
     if mac is None:
         raise ValueError("MAC לא תקין")
+    if host_mac_refusal(mac):
+        raise ValueError(host_mac_refusal(mac))
     name = normalize_name(role, name_raw)
     if name is None:
         raise ValueError(name_error(role, name_raw))
@@ -257,6 +277,8 @@ def change_mac(conn: sqlite3.Connection, mac_raw: str, new_raw: object,
     new = normalize_mac(new_raw) if isinstance(new_raw, str) else None
     if new is None:
         raise ValueError("MAC לא תקין")
+    if new != mac and host_mac_refusal(new):
+        raise ValueError(host_mac_refusal(new))
     if new == mac:
         return mac, False
     if conn.execute("SELECT 1 FROM machines WHERE mac = ?", (new,)).fetchone():

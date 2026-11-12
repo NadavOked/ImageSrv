@@ -1054,6 +1054,9 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     if (power_modal(a, e)) return 0;               /* #1918: before every screen's own keys */
     if (end_modal(a, e)) return 0;                 /* #1560: before the local clone's own keys */
     if (a->screen == SCREEN_LCBOOT || a->screen == SCREEN_LOCAL) {   /* #1322: its own keys and clicks */
+        /* #2911: a question drawn over it takes the input first, as over the failure
+         * screen (#2743) -- #2017's "עצור" went to lc_handle, and the copy went on */
+        if (shrink_modal(a, e) || ask_modal(a, e)) return 0;
         if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
         if (e->type == UIEV_MOVE) a->ptr_visible = !e->is_touch;
         lc_handle(a, e);

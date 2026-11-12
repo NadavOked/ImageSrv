@@ -47,6 +47,7 @@ from server.console.api import create_console_router
 from server.console.fetch_guard import ConsoleFetchGuard   # #1633
 from server.console.data import create_console_data_router   # #1882-#1889
 from server.console.hostcfg import create_hostcfg_router
+from server.console.server_power import create_server_power_router
 from server.console.timezone import create_timezone_router
 from server.console.timesync import create_timesync_router
 from server.console.ups import create_ups_router
@@ -60,6 +61,7 @@ from server.console.storage_locations import create_storage_locations_router
 from server.storage import locations as storage_locations
 from server.interserver import storage_heartbeat
 from server.system import housekeeping   # #1737
+from server.system import clockstep, silent_tasks   # #2905
 from server.system import grub_password   # #2437
 from .db import journal
 from server.net import wol
@@ -282,11 +284,16 @@ async def _room_clock(rt: ServerRuntime, interval: float) -> None:
     # ‏#2123: מיקום שסומן "לא נבדק" בעלייה נבדק כבר בפעימה הראשונה, לא אחרי דקה.
     elapsed = storage_every if storage_locations.has_unchecked(rt.conn) else 0.0
     chores = housekeeping.Schedule(rt.housekeeping_first, rt.housekeeping_every)
+    up_since = clockstep._mono()   # ‏#2905: שקט של השרת עצמו אינו שקט של המכונה
     while True:
         await asyncio.sleep(interval)
         await asyncio.to_thread(room.sweep, rt.conn, rt.store)
         # ‏#1573: משיכה שנכשלה או שתקה נסגרת גם כשאיש אינו צופה.
         await asyncio.to_thread(pulls.background_sweep, rt.store)
+        # ‏#2905: משימה `running` שהמכונה שלה שקטה (קליטה שנעזבה, מקור של סבב ישיר שנסגר)
+        # נסגרת `failed` בשמה — אחרת היא מחזיקה את השרת "עסוק" לנצח (‏busy_db).
+        await asyncio.to_thread(silent_tasks.background_sweep, rt.conn, rt.store,
+                                rt.library.root, up_since)
         # ‏#1847: שליחה חוזרת מוקדמת להערה שעברה פי 2 מהזמן הטיפוסי, והתראה על רצף.
         await asyncio.to_thread(learn_wol.sweep, rt.conn, rt.wol_send)
         # ‏#1887: מה ש-dnsmasq ראה (קריאת journal בלבד) — כל `pxe_log.EVERY_S`. לעולם אינו זורק.
@@ -1145,6 +1152,8 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
         busy_source=rt))   # #1891
     include(create_hostcfg_router(ctx, rt.data_dir, rt.console_tls, rt.host_hooks,
                                   busy_source=rt))   # #153, #1891
+    include(create_server_power_router(
+        ctx, (rt.host_hooks or {}).get("power"), busy_source=rt))   # #2843
     include(create_timezone_router(ctx, rt.host_hooks))   # #1447
     include(create_timesync_router(ctx, rt.host_hooks))   # #1773
     include(create_ups_router(ctx, (rt.host_hooks or {}).get("ups")))   # #1973

@@ -553,6 +553,7 @@ typedef struct State {
      * fail_info (#1802): tone inf -- not a failure (ui_unknown, mockup case 8). */
     char fail_title[128], fail_sub[160], fail_why[400], fail_safe[240];
     int fail_warn, fail_info, fail_hold, fail_cloner; long long fail_at;   /* fail_cloner: field 5 = cloner (the header's role) */
+    int fail_unknown;  /* #2879: field 5 = unknown -- an unregistered machine: no role is known, so no role pill */
     int fail_server;   /* #1741: field 5 = server (1) or installer (2) -- the server's own screen (installer/lib/failgui.sh) */
     struct { char label[48], value[96]; } fail_ctx[MAX_FAIL_CTX]; int nfail_ctx;
     struct { char label[96], sub[240], kind[8], pill[32]; } fail_rows[MAX_FAIL_ROWS]; int nfail_rows;

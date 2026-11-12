@@ -123,9 +123,9 @@ do_restore_drawers() {
     # shellcheck disable=SC2086 # the disk list is a word list on purpose
     _all=$_disks; _disks=$(drawers_bound $_disks); _disks=$(smart_gate "$2" $_disks); _gr=$?   # #1760: _all = the end count's, red skips included; #2434: identity first (drawerselect.sh)
     # #1560: a round where every drawer was skipped ended too -- reported, the count, power-off
-    [ "$_gr" = 0 ] || { round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }
+    [ "$_gr" = 0 ] || { echo failed > "$RUN_DIR/state"; round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }   # #2910: job_reset left 'waiting' -- the report says what is the case
     _disks=$(EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") drawer_gates $_disks)   # #1808 old RAID metadata, #1898 the split: asked (drawergate.sh)
-    [ -n "$_disks" ] || { round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }
+    [ -n "$_disks" ] || { echo failed > "$RUN_DIR/state"; round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }   # #2910
     log "writing $(echo "$_disks" | wc -w) drawers: $_disks"
 
     # shellcheck disable=SC2086 # the disk list is a word list on purpose

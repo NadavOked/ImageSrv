@@ -653,9 +653,25 @@ static void tile(G *g, const DcuiTile *tl, Rect r) {
     cairo_restore(g->cr);
 }
 
+/* #2865 (mockup 2865-backup-off): the orange bar above the hero -- the title in the
+ * warning ink, then the sentence; a choice of the operator, so the hero stays green */
+static double banner(G *g, const DcuiFrame *f, double x, double y, double w) {
+    const Theme *t = g->t;
+    Text ti = rtl(g, 14, 700, f->banner_title, 0);
+    Text tx = rtl(g, 14, 400, f->banner_text, fmax(120, w - 32 - ti.w - 12));
+    double h = fmax(ti.h, tx.h) + 20;
+    draw_fill_rrect(g->cr, (Rect){ x, y, w, h }, 8, t->warning_line);
+    draw_fill_rrect(g->cr, (Rect){ x + 1, y + 1, w - 2, h - 2 }, 7, t->warning_bg);
+    put_r(g, &ti, x + w - 16, y + 10, t->warning_ink);
+    put_r(g, &tx, x + w - 16 - ti.w - 12, y + 10, t->ink);
+    text_free(&ti); text_free(&tx);
+    return h;
+}
+
 static void main_body(G *g, const DcuiFrame *f, Rect page) {
     const double gap = g->sm ? 12 : 16;
     double y = page.y;
+    if (f->banner_title[0]) y += banner(g, f, page.x, y, page.w) + gap - 4;
     if (f->hero_kind[0]) y += hero(g, f, page.x, y, page.w, 1) + gap;
     double th = page.y + page.h - y, tw = (page.w - gap) / 2, avail = th - gap;
     double rh[2] = { avail / 2, avail / 2 };

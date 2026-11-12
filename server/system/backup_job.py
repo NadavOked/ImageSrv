@@ -60,6 +60,9 @@ SETTING = "backup_dest"
 TARGET_SETTING = "backup_target"
 TIME_SETTING = "backup_time"
 RESERVE_SETTING = "backup_reserve_gb"
+#: ‏#2865 (נדב 11/11): המתג "גיבוי אוטומטי". רק "false" מכבה; חסר — וכל ערך אחר — דלוק, כי גיבוי הוא
+#: ברירת המחדל: ערך משובש לא יכבה גיבוי בשקט.
+ENABLED_SETTING = "backup:enabled"
 STATUS_NAME = "last-backup.json"
 #: התיקייה הקבועה, תחת `data_dir`: כתיבה מותרת בשתי היחידות (`ReadWritePaths` של השרת ו-
 #: ‏`ProtectSystem=full` של הגיבוי). ‏`backup.SKIP_DIRS`, ‏`backup-server.sh` ו-`DATA_DIR_RESERVED`
@@ -358,11 +361,16 @@ def effective_dest(stored: str | None, raw_target: str | None, data_dir: Path) -
     return stored
 
 
+def parse_enabled(value: object) -> bool:
+    """‏#2865: כבוי רק כשנשמר "false" במפורש."""
+    return value != "false"
+
+
 def _config(data_dir: Path) -> dict:
     """מה שהריצה צריכה מהמסד, בקריאה בלבד. מסד שלא נקרא — חריגה, לא "אין מה לעשות"."""
     conn = sqlite3.connect(f"file:{(data_dir / 'imagesrv.db').as_posix()}?mode=ro", uri=True)
     try:
-        keys = (SETTING, TARGET_SETTING, TIME_SETTING, RESERVE_SETTING)
+        keys = (SETTING, TARGET_SETTING, TIME_SETTING, RESERVE_SETTING, ENABLED_SETTING)
         rows = dict(conn.execute(f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(keys))})",
                                  keys).fetchall())
         changed = conn.execute(f"SELECT max(ts) FROM journal WHERE event IN ({','.join('?' * len(IMAGE_EVENTS))})",
@@ -374,6 +382,7 @@ def _config(data_dir: Path) -> dict:
             "other_disk": expects_other_disk(rows.get(SETTING), rows.get(TARGET_SETTING)),
             "time": parse_time(rows.get(TIME_SETTING)) or DEFAULT_TIME,
             "reserve_gb": parse_reserve(rows.get(RESERVE_SETTING)) or DEFAULT_RESERVE_GB,
+            "enabled": parse_enabled(rows.get(ENABLED_SETTING)),
             "changed": changed, "busy": busy}
 
 
@@ -436,6 +445,18 @@ def main(argv: list[str] | None = None) -> int:
                                  "error": f"המסד לא נקרא: {type(exc).__name__}: {exc}"})
         print(f"backup_job: FAILED to read the database: {exc}", file=sys.stderr)
         return 1
+    if not args.now and not config["enabled"]:
+        # ‏#2865: כבוי בקונסולה — לא יומי ולא בשינוי אימג'. נאמר פעם אחת (‏`disabled` בקובץ הסטטוס),
+        # לא כל דקה; ‏`at` נשאר, ולכן בהדלקה `due` מחליט כרגיל (יומי שהוחמץ = גיבוי מיד).
+        if not (previous or {}).get("disabled"):
+            _write_status(data_dir, {**(previous or {}), "disabled": True,
+                                     "disabled_since": now.isoformat(timespec="seconds")})
+            print(f"backup_job: backups are off (setting {ENABLED_SETTING}=false): "
+                  "no daily backup and no backup on an image change, until it is turned on")
+        return 0
+    if previous and "disabled" in previous:     # הודלק שוב: הסימון יורד, והריצה ממשיכה כרגיל
+        previous = {k: v for k, v in previous.items() if not k.startswith("disabled")}
+        _write_status(data_dir, previous)
     if not args.now:
         if due(previous, config, now) is None:
             if previous and "waiting" in previous:      # השעה הוזזה בזמן ההמתנה: אין למה לחכות, והבריאות לא תאמר ש"ממתין"
@@ -478,6 +499,9 @@ def health_check(conn: sqlite3.Connection, data_dir: Path | None, timer_state: s
     now = now or datetime.now(timezone.utc)
     if data_dir is None:
         return row("unknown", "תיקיית הנתונים אינה ידועה — לא נבדק")
+    if not parse_enabled(get_setting(conn, ENABLED_SETTING)):
+        # ‏#2865: בחירת המפעיל, לא תקלה — ‏"off" כמו שאר המתגים; הפס הכתום בבית וב-DCUI אומר את זה.
+        return row("off", "כבוי בהגדרות — אין גיבוי יומי ואין גיבוי בשינוי אימג'. הגיבויים הקיימים נשארים")
     dest = effective_dest(get_setting(conn, SETTING), get_setting(conn, TARGET_SETTING), data_dir)
     if timer_state and timer_state != "active":
         return row("bad", f"הגיבוי אינו מתוזמן ({TIMER_UNIT}: {timer_state}) — "

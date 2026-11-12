@@ -130,7 +130,7 @@
   - **יעד שאינו רשימה ידועה הוא סירוב, לא היתר.** כיתה שלמה בלי בחירת מחשבים, ומגירות בחדר השיכפולים שיותקנו במכונות שאיש עוד אינו יודע מי הן — שתיהן `macs=None`, ואימג' קשור נדחה בהן. ההיתר דורש רשימת יעדים שאין בה איש מלבד הבעלים.
   - **הקליטה עצמה מותרת מ-`build` ומ-`classroom` בלבד** (`server/library/capture.py:CAPTURE_ROLES`) — רשימת היתר מפורשת, לא "כל מי שאינו build". ‏`cloner` נשאר בחוץ: אין לו מערכת מקומית שיש מה לקלוט ממנה (#17).
   - **תיקיית יעד חובה בקליטה חדשה** (‏#1251, נדב 10/10): `POST /api/console/tasks/capture` בלי `folder` (חסר, ריק) → **400** "צריך תיקיית יעד — אימג' חדש נשמר תמיד בתיקייה…". האכיפה בשרת, ולכן אף מסך — קונסולה, קיוסק, גואי נייטיב — אינו מציע "ללא תיקייה"; כשאין אף תיקייה, הקונסולה אומרת איפה ליצור אחת, והקיוסק/הגואי יוצרים אחת באותו מסך ("+ חדשה"). (תפריט הטקסט של הסוכן הוסר ב-11/10.) **אימג'ים ישנים בלי תיקייה ממשיכים להופיע ולשחזר** (`folder: ""` = שורש הספרייה), וגם העברת אימג' קיים לשורש (`PUT /images/{id}`) לא השתנתה — ההכרעה היא על קליטה חדשה.
-  - **`tasks.origin` — מאיפה הוזמנה המשימה** (‏#1576, נדב 17/10; גם ל-`POST /api/console/room` עם `source.kind = build_disk`): **השרת קובע לפי הערוץ, לא הלקוח** — הזמנה שנכנסה בראוטר הקיוסק על פורט הסוכן (‎:8080, ‏`kiosk.mark_build_gui`) = `"build_gui"`; מהקונסולה (‎:8081) = `"console"` (גם ברירת המחדל לשורה קיימת). אין שדה בגוף. **משימת `build_gui` שעדיין `pending` מבוטלת כשהמכונה מבקשת את תפריט האתחול** (‏`server/agent/boot_cancel.py`, מתוך `hello.make_resolver` — אותו תנאי "אתחול שנספר" כמו #75): ‏`state=cancelled`, ‏`error` = "בוטלה: המכונה אותחלה לפני תחילת המשימה", יומן `task_boot_cancel`; בהפצה ישירה נסגרים גם הסבב והגל. משימה מהקונסולה, ומשימה `running`, אינן נוגעות. (האפליקציה המשולבת `create_app`, לבדיקות בלבד, אינה מסמנת: שם נתיבי הקיוסק מאפילים על נתיבי הקונסולה.)
+  - **`tasks.origin` — מאיפה הוזמנה המשימה** (‏#1576, נדב 17/10; גם ל-`POST /api/console/room` עם `source.kind = build_disk`): **השרת קובע לפי הערוץ, לא הלקוח** — הזמנה שנכנסה בראוטר הקיוסק על פורט הסוכן (‎:8080, ‏`kiosk.mark_build_gui`) = `"build_gui"`; מהקונסולה (‎:8081) = `"console"` (גם ברירת המחדל לשורה קיימת). אין שדה בגוף. **משימת `build_gui` שעדיין `pending` מבוטלת כשהמכונה מבקשת את תפריט האתחול** (‏`server/agent/boot_cancel.py`, מתוך `hello.make_resolver` — אותו תנאי "אתחול שנספר" כמו #75): ‏`state=cancelled`, ‏`error` = "בוטלה: המכונה אותחלה לפני תחילת המשימה", יומן `task_boot_cancel`; בהפצה ישירה הסבב והגל **נכשלים** (‏#2907: `failed_reason` "מחשב הבנייה אותחל לפני שההפצה הישירה התחילה — הסבב בוטל"; גם חבר שהצטרף לגל נכשל, לא נשאר `waiting`). משימה מהקונסולה, ומשימה `running`, אינן נוגעות. (האפליקציה המשולבת `create_app`, לבדיקות בלבד, אינה מסמנת: שם נתיבי הקיוסק מאפילים על נתיבי הקונסולה.)
 - **Linux GPT types** (#2586): capture maps `0FC63DAF-8483-4772-8E79-3D69D8477DE4` (8300) and `4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709` (8304, Linux root x86-64) to `role: "linux"`, in both the agent and `server/vm/vmdisk.py`. Filesystem type alone never grants this role: 8302 (/home) stays `data`, and 0700 (Basic Data) without Windows evidence stays `data`. `system: true` still requires `_linux_system` to find `etc/os-release` or `etc/fstab` read-only, including one level down for btrfs. A Linux partition without that evidence has no system mark; without `/etc`, hostname returns `no_etc` and identity reset skips it. Existing captured manifests are not reclassified or rewritten; recapture is required to obtain the corrected role and derived fields.
 - **`role`** — `esp` / `msr` / `windows` / `recovery` / `linux` / `swap` / `data`. מי שכותב שם מחשב מחפש את `windows`, ובהיעדרו את `linux`. **`windows` ניתן על ראיה ולא על ה-GUID** (‏#1369): ה-GUID של Basic Data (`EBD0A0A2-…`) משותף למחיצת המערכת ולכל מחיצת נתונים/OEM, ולכן הסוכן מעגן כל מחיצה כזו **לקריאה בלבד** (‏`ntfs-3g -o ro`) ונותן `windows` רק למחיצה ש-`Windows\System32` יושבת בה; כל השאר `data` (ומערכת קבצים שאינה NTFS — `data` בלי עיגון, כי Windows עולה רק מ-NTFS). עיגון שנכשל אינו `data` ואינו `windows`: הקליטה נעצרת עם הסיבה (`agent/lib/capture/manifest.sh:_system_role`). **מניפסט ישן** עם כמה מחיצות `windows` ממשיך לעבוד: כתיבת השם והתקנת הדרייברים (`hostname.sh:_mount_windows`) בוחרות את הראשונה שיש בה `Windows\System32`, ובהיעדר כזו — את הראשונה, כמו קודם (`no_hive`). **ההשלכה על `expandable`:** בדיסק C:+D: (שתיהן NTFS עם אותו GUID) ‏D: היא עכשיו `data`, ולכן C: היא המורחבת בשחזור ו-D: עוברת לזנב הכונן בגודל שהמניפסט מצהיר — עד #1369 D: הייתה ה-`windows` האחרונה ונמתחה, ו-C: נשארה בגודלה.
 - **`system`** (‏#1875, אופציונלי) — `true` על המחיצה שכוורת `Windows/System32/config/SYSTEM` יושבת בה, נבדק באותו עיגון לקריאה בלבד של `_system_role` (‏`agent/lib/capture/manifest.sh:_system_json`). השדה **מושמט** בכל מחיצה אחרת, ובכל מניפסט שנקלט לפני #1875; ערך שאינו בוליאני נדחה בקליטה (‏`server/library/images.py`). **מחיצת המערכת** — מה שכלל המקום הפנוי (‏`min_free_gb`, סעיף 2), כתיבת השם והתקנת הדרייברים שואלים עליו — נקבעת בכלל **אחד**, בסוכן (‏`system_part` / `system_partition` ב-`agent/lib/restore/diskfit.sh`) ובשרת (‏`server/library/minfree.py:system_partition`): (1) המסומנת `system: true`; (2) בלי סימון — מחיצת ה-`windows` **הגדולה ביותר** (מחיצת OEM/כלים קטנה, ‏C: מחזיקה את המערכת; ‏Vm: ‏3GB לפני 223GB); שתיים בגודל העליון, או אחת בלי `size_bytes`, הן **ספק**: הכלל מדווח "לא נבדק" ולא "לא נכנס" שגוי (עיקרון 5); (3) אין `windows` — ה-`linux` הראשונה על הפלטה. עד #1875 min-free בחר את ה-`windows` **הראשונה** על הפלטה, וה-`expand` את האחרונה — ו-Vm נדחה בכל דיסק ("יישארו רק 2.0 GB"). ‏`_mount_windows` מעגן את מחיצת המערכת ראשונה, ועדיין בודק `Windows\System32` לפני שהוא כותב (הראיה בשחזור); עד #1875 הוא עיגן לכתיבה (‏`remove_hiberfile`) את מחיצת ה-OEM לפני C:. **הכלל אינו משנה את `expandable`/`_expand_candidate`:** מה שנמתח נשאר כפי שהיה, ו-min-free מגדיל את מחיצת המערכת רק כשהיא זו שנמתחת (או, מאז #1898, מחיצה מכווצת שחולקת במקום — סעיף `shrunk_from_bytes`).
@@ -2057,7 +2057,7 @@
   "ttl_s": 120}` — בקשה נרשמה, לא "כובתה". יומן `room_missing_poweroff` (‏`<mac>
   (<שם>)`, עם המשתמש). כיבוי **כל** החדר (`POST /room/poweroff`) נשאר בקונסולה בלבד.
 - **`GET /api/console/room/history?limit=N`** (‏#980, כל מחובר; קונסולה בלבד) — סבבי החדר שהסתיימו (‏`state` ‏`closed`/`failed`) מטבלת `room_rounds`, מהחדש לישן; **בלי** הסבב שמוצג עכשיו ב-`GET /room` (פעיל, או כושל שטרם נסגר). ‏`limit` ברירת מחדל 10, תקרה 50, ‏`<1` → ‏`400`. כל שורה: `{"id", "state", "image_id", "image_name", "source_kind", "target_drives", "written_drives", "opened_by", "created_at", "closed_at", "failed_reason"}` — ‏`image_name` כמו ב-`GET /room` (שם האימג', ‏`image_id` כשכבר אינו בספרייה, `<מכונה>:<דיסק>` לסבב מדיסק הבנייה). רשימה ריקה = אין סבבים קודמים; הקונסולה מציגה קריאה שנכשלה כ"לא נקראה", לא כרשימה ריקה. **אין כאן מספר גלים** — ממתין להכרעת נדב (‏#989 §3).
-- **`POST /api/console/room/drawer/cancel`** (‏#1386, "בטל דיסק זה") — מגירה אחת יוצאת מגל שכותב; שאר המגירות ממשיכות באותו זרם. גוף `{"mac": "<mac>", "dev": "<dev>"}` — המגירה כפי שהיא ב-`drawer_list`. הרשאה: ‏`ROOM_OPERATOR_ROLES` (admin + deploy, ‏`room_operator`), כמו `/room/wake`; הראוטר יושב גם על פורט הסוכן (הקיוסק של מחשב הבנייה), ושם הבקשה נרשמת כ-`build` ("ממחשב הבנייה"), בקונסולה כ-`console` ("על ידי"). בלי הקלדת שם (‏#1270): חלון האישור הוא האישור. **‏400** — גוף שאינו אובייקט, ‏MAC לא תקין, או `dev` שאינו אלפאנומרי; **‏409** (עם הסיבה בעברית) — אין סבב פעיל, הגל עוד לא יצא (`open` — אין כתיבה לבטל), המחשב אינו בגל, הדיסק כבר בוטל (הסיבה אומרת על ידי מי), או שהדיווח האחרון של המגירה אינו `writing` (רק לשורה שכותבת יש כפתור). ‏**200** `{"ok": true}` = **הבקשה נרשמה** (טבלת `drawer_cancels`), לא "בוטל": היא נמסרת לסוכן בתשובת הדיווח הבא (~2 ש', סעיף 4), והיומן רושם `room_drawer_cancel_requested` עם המשתמש. ב-`GET /room`, ‏**`drawer_list[].cancel`** — ‏`null`, או `{"by", "source", "requested_at", "done_at", "done", "text_he"}`: ‏`done` = הסוכן דיווח `cancelled`; בקשה בלי `done` על מגירה שכותבת מוצגת "מבטל…"; ‏`text_he` = "בוטל על ידי nadav · 16:06" (השעה באזור הזמן של השרת). הגואי הנייטיב של מחשב הבנייה מקבל את `dev` כשדה 18 של `room_drawer=`, את `text_he` כשדה 19 ואת `done` (‏1/0) כשדה 20, ושולח `room-drawer-cancel` עם `cloner=` ו-`dev=` (‏`roomflow.sh:room_drawer_cancel`); מחשב השיכפול מקבל ב-`drawer=` את מי ביטל (שדה 11, ריק = אף אחד) ומתי בוצע (שדה 12, epoch), ושולח `drawer-cancel|<dev>`.
+- **`POST /api/console/room/drawer/cancel`** (‏#1386, "בטל דיסק זה") — מגירה אחת יוצאת מגל שכותב; שאר המגירות ממשיכות באותו זרם. גוף `{"mac": "<mac>", "dev": "<dev>"}` — המגירה כפי שהיא ב-`drawer_list`. הרשאה: ‏`ROOM_OPERATOR_ROLES` (admin + deploy, ‏`room_operator`), כמו `/room/wake`; הראוטר יושב גם על פורט הסוכן (הקיוסק של מחשב הבנייה), ושם הבקשה נרשמת כ-`build` ("ממחשב הבנייה"), בקונסולה כ-`console` ("על ידי"). בלי הקלדת שם (‏#1270): חלון האישור הוא האישור. **‏400** — גוף שאינו אובייקט, ‏MAC לא תקין, או `dev` שאינו אלפאנומרי; **‏409** (עם הסיבה בעברית) — אין סבב פעיל, הגל עוד לא יצא (`open` — אין כתיבה לבטל), המחשב אינו בגל, הדיסק כבר בוטל (הסיבה אומרת על ידי מי), או שהדיווח האחרון של המגירה אינו `writing` (רק לשורה שכותבת יש כפתור). ‏**200** `{"ok": true}` = **הבקשה נרשמה** (טבלת `drawer_cancels`), לא "בוטל": היא נמסרת לסוכן בתשובת הדיווח הבא (~2 ש', סעיף 4), והיומן רושם `room_drawer_cancel_requested` עם המשתמש. ב-`GET /room`, ‏**`drawer_list[].cancel`** — ‏`null`, או `{"by", "source", "requested_at", "done_at", "done", "text_he"}`: ‏`done` = הסוכן דיווח `cancelled`; בקשה בלי `done` על מגירה שכותבת מוצגת "מבטל…"; ‏`text_he` = "בוטל על ידי nadav · 16:06" (השעה באזור הזמן של השרת). הגואי הנייטיב של מחשב הבנייה מקבל את `dev` כשדה 18 של `room_drawer=`, את `text_he` כשדה 19 ואת `done` (‏1/0) כשדה 20, ושולח `room-drawer-cancel` עם `cloner=` ו-`dev=` (‏`roomflow.sh:room_drawer_cancel`); מחשב השיכפול מקבל ב-`drawer=` את מי ביטל (שדה 11, ריק = אף אחד) ומתי בוצע (שדה 12, epoch), ושולח `drawer-cancel|<dev>`. **בקשה שהסוכן כבר לא יכול לקיים** (‏#2916: הדיווח הבא אומר שהמגירה `verifying`/`done`/`failed` — הסוכן מקבל ביטול רק על `writing`) נמחקת מ-`drawer_cancels` ביומן `room_drawer_cancel_refused` עם הסיבה ("הכתיבה כבר הסתיימה — באימות"), ו-`cancel` של המגירה חוזר `null` — לא "מבטל…" עד סוף הסבב, ולא "בוטל".
 - **`POST /api/console/room/close`** — עצירת סבב פעיל **או שנכשל** (וסגירת הגל הפעיל). פעולה הרסנית מאחורי הקלדת שם (עיקרון 7): הגוף הוא `{"confirm_name": "<image_name>"}`, ומה שמוקלד הוא **בדיוק ה-`image_name` שה-`GET` מחזיר** — כלומר שם האימג' מהמניפסט, או ה-`image_id` כשהאימג' כבר אינו בספרייה. אישור חסר או שגוי = 400, והסבב ממשיך לשדר. לפני עצירת המשדר השרת שומר `room_round.state = closing`; דופק החדר מתעלם ממצב זה ואינו יכול לפתוח גל בחלון שבין `sender.stop()` ל-`closed`. כשל עצירה מחזיר את המצב הקודם במקום לדווח הצלחה.
 
 #### סבב שהמקור שלו הוא מחשב הבנייה (‏#715)
@@ -2084,7 +2084,9 @@
   ממלא). השרת מאמת: `schema` 1, מחיצות, ולכל מחיצה עם `file` — ‏`sha256`
   בן 64 ספרות הקסה; ‏`total_compressed_bytes` מספר; ומניפסט שנושא
   `machine_mac` (‏#381) מסורב אלא אם היעד הנבחר הוא בדיוק אותה מכונה.
-  פגום → 400 והמשימה `failed` עם הסיבה; תקין → המשימה `running`, ‏`manifest_ready: true`,
+  פגום → 400 והמשימה `failed` עם הסיבה — **וגם הסבב והגל** (‏#2906: `room_rounds.state=failed`,
+  ‏`failed_reason` = "מחשב הבנייה שלח מניפסט שנדחה: <הסיבה>", הגל `failed`, והחברים שהצטרפו
+  `failed` באותה סיבה; יומן `room_failed`) — אין סבב `active` שממתין למניפסט שלא יגיע; תקין → המשימה `running`, ‏`manifest_ready: true`,
   ו-`GET /api/v1/images/<image_id>/manifest` מגיש אותו. 404 למשימה שאינה
   `direct_send` פתוחה, 401 בלי אסימון, 403 אסימון זר.
 - **הגל אינו יוצא לפני המניפסט**: לא אוטומטית (‏`tick`) ולא ב-`/start`
@@ -2131,10 +2133,15 @@
   בזיכרון בלבד, ולכן סבב (`sessions`) שנשאר `running` אחרי אתחול הוא
   סבב בלי משדר. ‏`server/rounds/reconcile.py` רץ ב-`create_runtime`, אחרי
   ה-sweep ולפני שהקונסולה עונה: כל חבר שלא הגיע למצב סופי → `failed`
-  עם `error: "השרת עלה מחדש — המשדר אבד"`, הסבב → `closed`, יומן
+  עם `error: "השרת עלה מחדש — המשדר אבד"`, הסבב → `failed` עם
+  `failed_reason` (‏#2907; גל של חדר השיכפולים נשאר `closed`, ראו להלן), יומן
   `session_orphaned`. **לא נמחק דבר.** גל של החדר הוא סבב כזה; הסבב
   המצטבר נשאר `active` והדופק הבא (`_resume`) סופר את המגירות שכן
-  נכתבו ופותח גל חדש (`room_wave_lost`) — הגל שנפל נכשל, לא נמשך. סבב
+  נכתבו ופותח גל חדש (`room_wave_lost`) — הגל שנפל נכשל, לא נמשך.
+  **סבב מדיסק חי** (הפצה ישירה) אין לו גל שני: ‏`_resume` שרואה אותו עם
+  גל סגור, אף מגירה שלא נכתבה וחברים `failed` — מכשיל את הסבב
+  (`failed_reason` = "כל המגירות נכשלו: …"; יומן `room_failed`), ולא סוגר
+  `closed` 0/N. כך גם `_finish_wave` כשכל המגירות דיווחו `failed` (‏#2907) סבב
   `open` (ממתין למצטרפים) אינו נוגע. באותו מעבר: משימת קליטה `running`
   → `failed` (`"השרת עלה מחדש — הקליטה אבדה"`, יומן `capture_failed`),
   אלא אם `<library>/<image_id>/manifest.json` כבר קיים — ה-`rename`
@@ -2146,7 +2153,23 @@
   (‏`tasks_reverify`, ‏`create_runtime` מפעיל, יומן `capture_verifying`), והאימג'
   בחוץ עד שהוא עובר; אחרת → `failed` (`"השרת עלה מחדש — קבצי הקליטה לא נמצאו
   לאימות; האימג' לא נכנס לספרייה"`). ה-sweep משאיר את אזור הביניים של משימה
-  ‏`verifying`.
+  ‏`verifying`. **סבב חדר `closing`** (‏#2904 — "עצור סבב" עושה commit ל-`closing`
+  לפני שהוא סוגר את הגל ועוצר את המשדר, והשרת מת בחלון) → ‏`closed` עם `closed_at`,
+  יומן `room_close` (‏`"השרת אותחל באמצע עצירת הסבב; העצירה הושלמה בעלייה"`); גל
+  ‏`open` שלו נסגר איתו (גל `running` כבר נסגר למעלה). לא `active` — המפעיל ביקש
+  לעצור. גל שהמנוע מעיד שהוא משדר — הסבב שלו אינו נוגע.
+- **משימה `running` שהמכונה שלה שקטה נסגרת `failed`** (‏#2905, ‏`server/system/silent_tasks.py`,
+  משעון החדר — לא רק בעלייה). שקט = אין דיווח (‏`tasks.updated_at`, זז בכל דיווח
+  ובסוף כל העלאה) **ואין בייט חדש** (ה-mtime של קבצי אזור הביניים, בקליטה) מעל
+  `SILENT_SECONDS` (600). ‏`error` = "המכונה הפסיקה לדווח — אין דיווח ואין בייטים
+  חדשים מאז HH:MM (מעל 10 דקות)", יומן `capture_failed` (ואזור הביניים נמחק) או
+  `direct_failed`. חל על קליטה ועל `direct_send` — גם מקור של סבב ישיר שהגל שלו
+  כבר נגמר: ‏`_finish_wave` אינו סוגר אותו (הדיווח הסופי של המקור סוגר), וזה מה
+  שסוגר מקור שלא ידווח עוד. ‏`pending` ו-`verifying` אינם נוגעים; חותמת שאינה
+  נקראת = לא נמדד, לא נסגר; קפיצת שעון מזיזה גם את `updated_at` של משימות
+  `running` (‏`clockstep.rebase`, ‏#1947). **השקט נמדד מ-`max(updated_at, עליית השרת)`**:
+  עד `SILENT_SECONDS` אחרי שהשרת עלה שום משימה אינה נסגרת כאן — שרת שהיה למטה לא שמע
+  איש, וזה אינו שקט של המכונה (העלייה בשעון מונוטוני). כשל של הסחיפה עצמה — יומן `task_sweep_failed`.
 
 ---
 
@@ -2419,6 +2442,21 @@ carrier, or an unchecked/positive second probe is a 409 like any other, and
 every refusal before the address is applied sets the card back down.
 The explicit `ignore_existing` override is unchanged. The raw-socket probe
 does not bind UDP port 68, so address-in-use errors do not imply that port is busy.
+
+### DHCP live state and divergence (#762, #2913)
+
+`GET /api/console/net/interfaces` returns, per card, `dhcp_live`
+(`state`, `interface_in_conf`, `service_active`, `checked`, `content_checked`,
+`detail`) and `dhcp_diverged`. `dhcp_diverged` is true only on positive
+evidence that what runs differs from the DB: the card is enabled but not in the
+active file (or the reverse), the unit is not active, **or the card's block
+(`# --- <name> ---`: range, options, `server_ip`, boot lines) in the active file
+differs from the block the DB renders now** (#2913: a save whose `restart` failed
+restores the old file, and the card stays in it). `content_checked=false` means
+the content comparison did not run (the stored records could not be rendered, or
+the file/unit could not be read); it is not "no divergence". The same fields are
+in `PUT /api/console/net/interfaces/{name}` -> `interface`, so a failed save shows
+the drift in its own reply. The proxy instance file is not compared.
 
 ## 7. פורמט הזרם
 
@@ -3019,7 +3057,10 @@ uses its name, and udp-sender receives the same name as `--interface`.
 #### `POST …/confirm` · `POST …/revert`
 
 ‏`confirm` — "השאר את השינוי", מהכתובת האחרת, לפני תום החלון (409 `none_pending`
-/ `expired` / `corrupt`). ‏`revert` — "החזר עכשיו". בלי אישור: ‏`WINDOW_SECONDS`
+/ `expired` / `corrupt` / **`not_applied`** — #2914: ההחלה הדחויה, שנייה אחרי
+התשובה, עוד לא רצה; הסמן נשאר, והאישור נשאר אפשרי ברגע שהיא רצה. הסמן נושא
+`applied_at` רק אחרי שהאכיפה הצליחה, ואחרי אתחול בתוך החלון — שאז המאזינים
+נקשרים מה-DB). ‏`revert` — "החזר עכשיו". בלי אישור: ‏`WINDOW_SECONDS`
 (60, אותו קבוע של #56) ואז ההגדרה הקודמת חוזרת **בתהליך השרת** (טיימר), ובעלייה
 — לפני שמאזין אחד נקשר — שינוי שפג או ששרד אתחול (`boot_id`, ‏`netcfg_rollback.decide`)
 חוזר מיד. לא דרך `imagesrv-netrollback.service`: היחידה ההיא אינה נוגעת ב-DB
@@ -3461,7 +3502,7 @@ uses its name, and udp-sender receives the same name as `--interface`.
     כותרת בצבע הטקסט); ‏hold ‏1 = המחשב
     מחזיק ("המחשב מחכה — לא יכבה לבד"), ‏0 = לא; ‏title ו-sub בעברית (נדב
     17/10: אין אנגלית במסך — "קליטת אימג׳ חדש · ‹שם›"); ‏role = ‏`D_ROLE`
-    (‏`cloner` מצייר "מחשב שיכפול" בכותרת). ‏#1741: ‏`server` / ‏`installer` =
+    (‏`cloner` מצייר "מחשב שיכפול" בכותרת; ‏`unknown` = מחשב לא רשום, #2879: בלי תג תפקיד). ‏#1741: ‏`server` / ‏`installer` =
     המסך של השרת עצמו (‏`installer/lib/failgui.sh`): הכותרת אומרת "שרת ImageSrv"
     / "התקנת שרת" בלי מכונה, שרת וגרסאות של תחנה; שורת המצב בלי hello/MAC/IP
     ובלי "הסוכן לא מעדכן מצב" (הקובץ נכתב פעם אחת), ומילת המצב היא הכותרת
@@ -5916,6 +5957,31 @@ set-hostname`, ‏`restart_server` = `deploy_net.restart_server_later`).
 - ‏`/me.tls.mode` הוא `self-signed` (מנפיק = נושא) או `ca-signed`; שורת
   הסטטוס אומרת "תעודה עצמית"/"תעודה חתומה" בהתאם.
 
+### הפעלה מחדש וכיבוי של השרת מהקונסולה (‏#2843)
+
+`server/console/server_power.py`. מנהל בלבד (deploy → 403), ‏CSRF דרך שומר הקונסולה (‏#1633). בקונסולה:
+שני פריטים בתפריט המשתמש, בין "פרטי session" ל"התנתקות" (`data-admin`), וחלון `sheet()` עם כפתור אדום בלי
+הקלדה (#1270). את אותה פעולה אפשר לעשות גם ב-F12 במסך השרת (`dcui_power_action`).
+
+- **`POST /api/console/server-power`** `{"action": "reboot"|"poweroff", "force"?: true}` →
+  `{"ok": true, "action", "in_seconds", "interrupted"}`. ‏`interrupted` = הסיבה שנקטעה, או `null`.
+  - **400** — ‏`action` שאינו אחד מהשניים. שום hook לא נקרא.
+  - **409** `{detail, code: "power_busy", busy}` — השרת עסוק לפי `update.restart_blocker`, אותה הגדרה כמו
+    ‏`/update/apply` (סבב, סבב חדר גם בין גלים, קליטה, העברה בין אתרים, העלאה, עדכון VM, שיכפול מקומי; DB שלא
+    נקרא = עסוק). ‏`force: true`, בוליאני בלבד, הוא הכפתור "…וקטיעת N מכונות" שהמנהל ראה. הסיבה נרשמת ביומן.
+  - **503** — אין hook מותקן. זה המצב בכל `create_app` שלא קיבל `host_hooks["power"]`: בדיקות והרצה ישירה.
+    יומן `server_power_failed`, ושום דבר לא בוצע.
+  - **500** — ה-hook החזיר שגיאה. יומן `server_power_failed` עם השגיאה, ובלי `server_power`.
+  - הצלחה — יומן `server_power` (`<action>` או `<action> · נקטע: <סיבה>`) על שם המשתמש.
+- **ה-hook:** `host_hooks["power"](action) -> str | None`. ‏`server.main` מתקין את `server_power.schedule_later`,
+  ורק הוא: `systemd-run --on-active=3 --unit=imagesrv-power-<uuid> --collect systemctl <action>`. התשובה יוצאת
+  לפני שהשרת יורד, כמו `deploy_net.restart_server_later`. **הרשאה:** היחידה `imagesrv-server` רצה כ-root (אין
+  `User=`), כמו `systemctl restart dnsmasq` ו-`auto_reboot`. לכן אין sudoers ואין polkit.
+- **רשימת המכונות בחלון** נקראת מחדש בפתיחתו (`/room`, `/overview`, `/tasks`): מגירות `writing` של מכונה
+  שהצטרפה לסבב, שיכפול מקומי, חברי הפצה ומשיכה, וקליטה רצה. הרשימה היא פירוט. **השרת הוא שמכריע**: עבודה
+  שלא הייתה ברשימה (למשל העברה בין אתרים) מחזירה 409, הסיבה מוצגת בחלון, והלחיצה הבאה שולחת `force`.
+  כשהרשימה לא נקראה, החלון אומר את זה ולא מציג "אין עבודה".
+
 ### מה שאסור
 
 - להגיש HTTP על 8081 "בינתיים" או להפנות ממנו — זו הדלת שהתעודה סוגרת.
@@ -6460,6 +6526,14 @@ last_ok, last_good, waiting?, waiting_since?}`, ‏0600.
   שבתוקף; ‏`cap_gb` ‏`null` = גודל הכונן לא נקרא.
 - **יומן:** `setting_change` ‏`backup_policy=<שעה>, <n> GB`.
 - **בקונסולה:** הגדרות ← עדכונים ותחזוקה ← "מדיניות גיבוי המסד".
+- **‏#2865 — `enabled` (בוליאני), המתג "גיבוי אוטומטי":** `{"enabled": false}` לבדו משנה רק את המתג (בלי
+  `time`/`reserve_gb`); עם `time`/`reserve_gb` — כולם נבדקים ונשמרים יחד. ערך שאינו `true`/`false` — **400**.
+  ההגדרה `backup:enabled`: רק `"false"` מכבה; חסרה או כל ערך אחר = דלוק (גיבוי הוא ברירת המחדל, וערך משובש
+  אינו מכבה בשקט). ‏`GET /settings` → `backup_policy.enabled`. כבוי: `backup_job` אינו מגבה — לא יומי ולא
+  בשינוי אימג' (‏`--now` הידני כן) — וכותב פעם אחת `disabled: true`, ‏`disabled_since` ל-`last-backup.json`
+  ושורה ליומן המערכת; בהדלקה הסימון יורד ו-`due` מחליט כרגיל. שורת הבריאות `backup` — **`off`**. בקונסולה: פס
+  כתום "הגיבוי כבוי" עם "הדלקה בהגדרות" בדף הבית (מ-`/health`) ובהגדרות (מ-`/settings`); ב-DCUI — רשומת
+  `banner` מעל ה-hero, וה-hero נשאר "השרת תקין". יומן: `setting_change` ‏`backup:enabled=<true|false>`.
 
 
 ## 26. ערכת נושא לפי משתמש (‏#1093)
@@ -6836,7 +6910,7 @@ MFA, בקיוסק, ובהחלפה כפויה — הסיסמה הנכונה מא�
 | `vm_host` (‏#1372) | תמיד בשרת (‏`main`; לא בבדיקות) | `ok` ‏"QEMU, ‏OVMF, ‏guestfs והמשתמש imagesrv-vm — מוכנים" · `warn` מה חסר (‏`VmUpdate.host_problem`) ומה קרה להכנה ברקע — `systemd-run --unit=imagesrv-vmhost` של `deploy/vmupdate-host.sh` בעליית השרת · `warn` ‏"מצב המארח לא נבדק (…)" |
 | `servers_nic` | רק כש-`--console-host` הוא שם כרטיס | `ok` ‏"כתובת השרתים (eth0): 10.1.2.3 (DHCP, פג ב-18/09 12:00; שם: imagesrv)" · `ok` ‏"(סטטי או ללא קובץ חכירות)" · `warn` אין כתובת / החכירה שנקראה היא לכתובת אחרת · `unknown` הבדיקה נכשלה |
 | `db_space` (‏#1892) | תמיד | `bad` כשכתיבה ל-DB נכשלה ב-SQLITE_FULL (עד הכתיבה המוצלחת הבאה), או כשנותר פחות מ-1 GiB במחיצת `data_dir` · `warn` מתחת לרזרבת המערכת (‏10 GiB, ‏#1737) · `unknown` לא נמדד · `ok` אחרת. ‏`POST /api/v1/agent/hello` שצריך לכתוב כשהמחיצה מלאה — **503** `db_full` במקום 500; מכונה לא רשומה עונה `known:false` |
-| `backup` (‏#1895, ‏#1956) | תמיד | גיבוי המסד: יומי בשעה שנבחרה ובכל שינוי אימג'. **`warn`** — עוד לא רץ גיבוי ליעד הזה; "ישן" — ההצלחה האחרונה לפני יותר מ-26 שעות (יום ושעתיים: גיבוי יומי בן 23 שעות תקין, ו-`STALE_SECONDS` הישן של שעתיים היה צובע את רוב היום); המקום השמור קטן מעותק אחד; כונן השרת או תיקייה על כונן המסד ("אותו כונן, לא מגן מתקלת כונן"), או שלא נבדק; יעד SMB/NFS ישן שעוד לא הוחלף. גיבוי שמחכה לסבב — "ממתין: <סיבה>" בפירוט. **`bad`** — `imagesrv-backup.timer` אינו active, הגיבוי האחרון נכשל (השגיאה בפירוט), או שקובץ הסטטוס לא נקרא. **`ok`** — גובה בזמן, אל תיקייה על כונן אחר. **`unknown`** — תיקיית הנתונים אינה ידועה. |
+| `backup` (‏#1895, ‏#1956) | תמיד | גיבוי המסד: יומי בשעה שנבחרה ובכל שינוי אימג'. **`warn`** — עוד לא רץ גיבוי ליעד הזה; "ישן" — ההצלחה האחרונה לפני יותר מ-26 שעות (יום ושעתיים: גיבוי יומי בן 23 שעות תקין, ו-`STALE_SECONDS` הישן של שעתיים היה צובע את רוב היום); המקום השמור קטן מעותק אחד; כונן השרת או תיקייה על כונן המסד ("אותו כונן, לא מגן מתקלת כונן"), או שלא נבדק; יעד SMB/NFS ישן שעוד לא הוחלף. גיבוי שמחכה לסבב — "ממתין: <סיבה>" בפירוט. **`bad`** — `imagesrv-backup.timer` אינו active, הגיבוי האחרון נכשל (השגיאה בפירוט), או שקובץ הסטטוס לא נקרא. **`ok`** — גובה בזמן, אל תיקייה על כונן אחר. **`off`** (‏#2865) — "גיבוי אוטומטי" כבוי בהגדרות; אינו נספר כאזהרה. **`unknown`** — תיקיית הנתונים אינה ידועה. |
 | `deploy_nic` (‏#1810) | כשרשת ההפצה מוגדרת עם שם כרטיס | `ok` הכרטיס קיים · `bad` ‏"כרטיס ההפצה X לא קיים במערכת (יש: …)" · `unknown` רשימת הכרטיסים ריקה. ובאותה הזדמנות `firewall` (וגם השורה ב-`/ports`): `bad` כשכלל `iifname` בטבלת imagesrv מפנה לכרטיס שאינו קיים — לא "פעילה" |
 
 החכירה נקראת מ-`/var/lib/dhcp/dhclient.<if>.leases` (ifupdown/dhclient);
@@ -7259,6 +7333,7 @@ Pango markup, וכל ערך דינמי בתוכם עובר `esc`; ערך לטי�
 | `hdr` | role, host, url, version, clock, admin (ריק = אין שבב מנהל), clock_chip (‏#2144: "השעון לא מסונכרן" / "השעון לא נבדק" — תג כתום ליד השעון; ריק = שעון מסונכרן, או בתוך `CLOCK_SYNC_GRACE_S` מהאתחול) |
 | `hero` | kind (`ok`\|`bad`\|`warn`\|`wait`), title, sub_m, meta_label, meta_value. ‏#2144 (נדב 04/11): עם בעיות — `bad` (אדום) רק כשאחת מהן **חוסמת** (`prob` עם sev `bad`), אחרת `warn` (כתום, אותו פריסה ואותן רשומות `prob`); שורת המצב (`sb`) באותו צבע. ‏`warn` בלי `prob` הוא משני בלי מגע טרי, כמו קודם |
 | `prob` | sev (`bad`\|`warn`), n, title, what, todo_m, keycap, keylabel |
+| `banner` | ‏#2865: kind (`warn`), title, text — פס כתום מעל ה-hero במסך הראשי ("הגיבוי כבוי"). אינו בעיה: לא נספר ב-`prob` ולא צובע את ה-hero או את `sb`. בלעדיו — אין פס |
 | `tile` | title, pill_kind, pill — השורות שאחריה שייכות לו |
 | `row` / `prow` | label, label_style, value, value_style (`mono`\|`strong-mono`), sub, pill_kind, pill, tone (`bad`\|`warn`) |
 | `fprow` | label, sublabel, fp1, fp2, sub, pill_kind, pill, tone |
@@ -7503,6 +7578,10 @@ root_pass=...
 `[invalid-backup-reserve]` על `backup_reserve_gb`, וגודל דיסק שלא נקרא — `[backup-disk-size]`. ‏firstboot מעביר
 ערך לא ריק ל-`setup-boot-server.sh --backup-time`/`--backup-reserve-gb`, ההגדרות של `POST /backup-policy`.
 אין מפתח יעד: הגיבוי הראשון נכתב ל-`<data_dir>/backups`, ותיקייה מעוגנת נבחרת אחר כך בקונסולה.
+‏`backup_enabled` (‏#2865, "בלי גיבוי כרגע" באותו שלב): ריק או חסר = דלוק; `false` = בלי גיבוי, ואז
+`backup_reserve_gb` חייב להיות ריק (אין מקום שמור); כל ערך אחר, או מקום שמור יחד עם `false` →
+`[invalid-backup-enabled]` על השדה `backup_reserve_gb`. נכתב ל-`/etc/imagesrv/answers`, ו-firstboot מעביר
+`false` ל-`setup-boot-server.sh --backup-off`, שכותב `backup:enabled=false` וקורא אותה בחזרה.
 `ntp_servers` (‏#2144, שלב 5 "שעון השרת"): ריק = אוטומטי (ה-pools של Debian); אחרת עד ארבע
 כתובות IPv4 או שמות מופרדים ברווח (`installer/lib/clock.sh` — הכלל של `timesync.validate`
 בלי IPv6, כדי שכל ערך שהמתקין מקבל השרת יקבל); אחר → `[invalid-ntp-servers]` על השדה

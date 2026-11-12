@@ -75,6 +75,11 @@ def test_handoff_flow_from_the_nic_you_are_on(rig):
     assert r.json()["pending"]["seconds_left"] == 60 and r.json()["go"] == ["https://10.20.0.8:8081"]
     on35 = rig["via"]("10.20.0.8")
     assert on35.get(URL).json()["pending"]["interface"] == "ens33"
+    # #2914: "השאר" לפני ההחלה הדחויה מסורב -- הסמן נשאר, וההחלה עוד תרוץ.
+    early = on35.post(f"{URL}/confirm")
+    assert early.status_code == 409 and early.json()["code"] == "not_applied"
+    assert on35.get(URL).json()["pending"]["interface"] == "ens33"
+    rig["scheduled"][0]()                           # ההחלה הדחויה (APPLY_DELAY)
     assert on35.post(f"{URL}/confirm").json()["ok"] is True
     assert on35.get(URL).json()["pending"] is None
     assert on35.post(f"{URL}/confirm").status_code == 409

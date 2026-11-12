@@ -558,6 +558,40 @@ def test_a_launch_failure_answers_with_the_real_error_not_the_409_of_a_running_u
     assert admin.get("/api/console/update/status").json()["state"] == "failed"
 
 
+BUS_DOWN = "Failed to connect to bus: No such file or directory"
+
+
+@pytest.mark.parametrize("err", [BUS_DOWN, UNIT_EXISTS], ids=["launch-failed", "unit-already-runs"])
+def test_2916_a_launch_that_did_not_start_keeps_the_revert_target(update_server, err):
+    """‏#2916 §1: השרת על v0.24.0 ו-`update_previous=v0.23.0`. "החל v0.25.0" והשיגור
+    נכשל — `update_previous` נכתב לפני `systemd-run` והפך ל-v0.24.0, ו"חזור לגרסה קודמת"
+    היה מחיל את הגרסה **הנוכחית**. הדרך חזרה ל-v0.23.0 אבדה."""
+    from server.db import set_setting
+    admin = update_server["admin"]
+    _enable(admin)
+    set_setting(update_server["app"].state.ctx.conn, update_mod.PREVIOUS_KEY, "v0.23.0")
+    update_server["state"]["run_ok"] = False
+    update_server["state"]["run_err"] = err
+    admin.post("/api/console/update/apply", json={"tag": "v0.25.0"})
+    assert update_server["calls"]["run"] == 1
+    assert admin.get("/api/console/update").json()["previous"] == "v0.23.0"
+    # וכשהשדרוג הבא כן מתחיל — `update_previous` הוא הגרסה שממנה עלינו, כמו תמיד.
+    update_server["state"]["run_ok"] = True
+    assert admin.post("/api/console/update/apply", json={"tag": "v0.25.0"}).status_code == 200
+    assert admin.get("/api/console/update").json()["previous"] == "v0.24.0"
+
+
+def test_2916_a_launch_that_did_not_start_leaves_no_revert_target_when_there_was_none(update_server):
+    admin = update_server["admin"]
+    _enable(admin)
+    assert admin.get("/api/console/update").json()["previous"] is None
+    update_server["state"]["run_ok"] = False
+    update_server["state"]["run_err"] = BUS_DOWN
+    admin.post("/api/console/update/apply", json={"tag": "v0.25.0"})
+    assert admin.get("/api/console/update").json()["previous"] is None
+    assert admin.post("/api/console/update/revert", json={}).status_code == 404
+
+
 def test_two_simultaneous_applies_start_the_script_once(update_server):
     """שתי בקשות שמגיעות יחד (thread pool): השומר והכתיבה של running אטומיים —
     השנייה ממתינה ומקבלת 409, ולא עוברת את השומר לפני שהראשונה כתבה."""

@@ -671,6 +671,10 @@ button:focus-visible,[role="button"]:focus-visible,.inventory-node:focus-visible
 .page .note{padding:9px 12px;border:1px solid var(--hair);background:var(--porcelain);border-radius:var(--rp);font-size:var(--t-base);display:flex;gap:8px;align-items:flex-start;color:var(--ink)}
 .page .note > span:last-child{min-width:0;overflow-wrap:anywhere}
 .page .note.warn{border-color:color-mix(in srgb,var(--warn-ink) 40%,var(--surface));background:color-mix(in srgb,var(--warn-ink) 10%,var(--surface));color:var(--warn-ink)}
+/* #2865 (mockup 2865-backup-off): "הגיבוי כבוי" -- the orange bar on the home and settings pages; the button at the far end */
+.page .bar-warn{display:flex;align-items:center;gap:12px;background:var(--warn-soft);border:1px solid var(--clr-warning);border-radius:var(--r-sm);padding:10px 16px;margin-bottom:16px;font-size:var(--t-base);color:var(--ink)}
+.page .bar-warn b{color:var(--warn-ink)}
+.page .bar-warn .btn{margin-inline-start:auto}
 .page .note.err{border-color:color-mix(in srgb,var(--danger) 40%,var(--surface));background:color-mix(in srgb,var(--danger) 10%,var(--surface));color:var(--clr-danger-fg)}
 .page .note.info{border-color:color-mix(in srgb,var(--indigo) 40%,var(--surface));background:var(--indigo-soft);color:var(--ink)}
 .page .empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--hair);border-radius:var(--rp);font-size:var(--t-base)}
@@ -2032,3 +2036,18 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 /* ‏#2781: כפתור "נקה משימות שהסתיימו" בראש פאנל המשימות — צמוד לצד הסגירה */
 .task-panel-head .btn{height:26px;font-size:var(--t-xs);margin-inline-end:8px}
 .task-panel-head #allTasksLink{margin-inline-start:auto}
+/* ‏#2843: תפריט המשתמש — מפריד לפני פריטי השרת ולפני "התנתקות"; חלון הכיבוי — רשימת המכונות שייקטעו (המוקאפ .dlg-list). */
+.user-menu-sep{height:1px;background:var(--hair);margin:4px 0}
+.spw-list{list-style:none;margin:0 0 14px;padding:0;border:1px solid color-mix(in srgb,var(--clr-warning) 35%,transparent);background:var(--warn-soft);border-radius:var(--r-sm)}
+.spw-list li{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:8px 12px;font-size:var(--t-base)}
+.spw-list li b{font-weight:600}
+.spw-list li+li{border-top:1px solid color-mix(in srgb,var(--clr-warning) 35%,transparent)}
+.spw-list li span{color:var(--clr-muted);font-size:var(--t-sm)}
+.spw-alert>div>span{font-size:var(--t-base)}
+/* מוקאפ 2843 (.dlg-impact): נקודות רגילות, גופן 13, שורה = 4px מעלה ומטה, 12px מעל; בלי קו מעל הכפתורים (.dlg-foot) */
+.spw-impact{list-style:none;margin:12px 0 0;padding:0;font-size:var(--t-base)}
+.spw-impact li{display:flex;gap:8px;padding:4px 0}
+.win.spw-sheet.n-mid{--w:620px}   /* מוקאפ: 620 */
+.win.spw-sheet .n-b{padding-bottom:4px}   /* 4 + שורת הנקודה 4 + ריפוד הפס 14 = 22: הרווח של .dlg-foot (18) מעל הכפתורים */
+/* הרסני בקצה ההתחלה, ביטול לידו — כמו .dlg-foot */
+.win.spw-sheet .n-f-bar{border-top:0;flex-direction:row-reverse;padding-bottom:20px}

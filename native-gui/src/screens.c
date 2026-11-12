@@ -122,7 +122,8 @@ static double draw_header(App *a, cairo_t *cr, double W) {
         ||(a->screen==SCREEN_FAILURE&&a->st.fail_cloner);   /* #1569: the failure record says whose failure it is */
     const int server=a->screen==SCREEN_FAILURE&&a->st.fail_server;   /* #1741: the server's own screen (failgui.sh) */
     const char *role=server?(a->st.fail_server==2?"התקנת שרת":"שרת ImageSrv"):clone?"מחשב שיכפול":"מחשב בנייה";   /* #1252: the "2" was the mockup's */
-    if(server||strcmp(a->st.screen,"boot")){   /* #1709: before the hello the role is not known -- no pill, not a guess */
+    /* #2879: an unregistered machine has no known role either -- the failure record says so (field 5 = unknown) */
+    if((server||strcmp(a->st.screen,"boot"))&&!(a->screen==SCREEN_FAILURE&&a->st.fail_unknown)){   /* #1709: before the hello the role is not known -- no pill, not a guess */
         Text rt=text_make(cr,FONT_SANS,12,400,role,0,DIR_RTL);
         Rect pill={right-rt.w-18,(N_HEADER_H-20)/2,rt.w+18,20};
         draw_set_a(cr,t->header_text,.14); draw_rrect_path(cr,pill,10); cairo_fill(cr);

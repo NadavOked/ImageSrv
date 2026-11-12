@@ -121,3 +121,36 @@ def confirmed(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
     who = _who_he(row["source"], row["requested_by"]) if row else ""
     journal(conn, "room_drawer_cancelled", f"{where} in {session_id} — בוטל {who}",
             (row["requested_by"] or "") if row else "", machine=mac, round_id=session_id)
+
+
+#: ‏#2916 §3: מצבי מגירה שבהם ביטול כבר אינו יכול לחול. הסוכן מקבל ביטול רק על מגירה
+#: ש-`writing` (`cancel_request`, ‏cancel.sh) ו-`cancel_drawer` מסרב ל-`failed`/`cancelled`
+#: — מי שכבר ב-`verifying` או `done` סיימה לכתוב, ומי ש-`failed` נפלה. המצב שנאמר כאן הוא
+#: מה שהסוכן דיווח אחרי שהבקשה נרשמה, ולכן הוא ראיה, לא ניחוש.
+MOOT = {"verifying": "הכתיבה כבר הסתיימה — באימות",
+        "done": "הכתיבה כבר הסתיימה",
+        "failed": "הדיסק כבר נכשל בכתיבה"}
+
+
+def close_moot(conn: sqlite3.Connection, session_id: str, mac: str, targets: list) -> None:
+    """בקשת ביטול שהסוכן **סירב לה בשקט** נסגרת בשמה.
+
+    השרת מקבל ביטול לפי מצב המגירה בדיווח האחרון, והסוכן יכול כבר להיות הלאה (הדיווח
+    נשלח כל ~2 ש'). בלי זה השורה נשארה בלי `done_at` לעד, `pending` שלח אותה בכל תשובה,
+    והמסכים הציגו "מבטל…" עד סוף הסבב. כאן: הדיווח הבא שאומר שהמגירה לא תכתוב יותר
+    מוחק את הבקשה (אין "בוטל" — זה שקר, עיקרון 5) ורושם ביומן למה."""
+    moot = {t.get("dev"): MOOT[t["state"]] for t in targets
+            if isinstance(t, dict) and isinstance(t.get("dev"), str) and t.get("state") in MOOT}
+    if not moot:
+        return
+    open_devs = {r["dev"]: r["requested_by"] for r in conn.execute(
+        "SELECT dev, requested_by FROM drawer_cancels"
+        " WHERE session_id = ? AND mac = ? AND done_at IS NULL", (session_id, mac)).fetchall()}
+    for dev in sorted(open_devs.keys() & moot.keys()):
+        with _write_lock, writing(conn):
+            cur = conn.execute(
+                "DELETE FROM drawer_cancels WHERE session_id = ? AND mac = ? AND dev = ?"
+                " AND done_at IS NULL", (session_id, mac, dev))
+        if cur.rowcount == 1:
+            journal(conn, "room_drawer_cancel_refused", f"{mac} {dev} in {session_id} — {moot[dev]}",
+                    open_devs[dev] or "", machine=mac, round_id=session_id)

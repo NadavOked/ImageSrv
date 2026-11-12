@@ -16,7 +16,7 @@ def test_the_summary_apply_button_is_danger():
 
 
 def test_next_and_reboot_keep_the_primary_footer():
-    for name, count in (("screens_install_setup.c", 3), ("screens_install_forms.c", 4)):
+    for name, count in (("screens_install_setup.c", 3), ("screens_install_forms.c", 5)):   # #2865: the backup step has two (with and without "בלי גיבוי כרגע")
         source = _c(name)
         assert source.count('install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,') == count
         assert not re.search(r'install_footer_style\([^;]*"הבא"', source)

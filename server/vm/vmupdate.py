@@ -1215,9 +1215,18 @@ class VmUpdate:
         self._spawn(self._save, user, name, description, user_ids)
         return self.status(user)
 
+    def _disk_signature(self) -> tuple[int, int] | None:
+        """‏(גודל, ‏mtime) של דיסק העבודה, או None כשלא ניתן לקרוא אותו."""
+        try:
+            stat = (self.workdir / "disk.raw").stat()
+        except OSError:
+            return None
+        return stat.st_size, stat.st_mtime_ns
+
     def _save(self, user: str, name: str, description: str, ids: vmdisk.VmUser) -> None:
         out = self.workdir / "out"
         shutil.rmtree(out, ignore_errors=True)
+        signature = self._disk_signature()
         try:
             source = json.loads((self.workdir / "source-manifest.json").read_text(encoding="utf-8"))
             self._check_save_space(source)
@@ -1266,7 +1275,11 @@ class VmUpdate:
         except Exception as exc:   # noqa: BLE001
             log.exception("vmupdate save failed")
             shutil.rmtree(out, ignore_errors=True)
-            self._fail("internal", f"השמירה נכשלה: {exc}", disk_ready=False, user=user)
+            # ‏#2915: גם כשל שאינו `DiskError` (למשל `OSError` בכתיבת המניפסט
+            # לספרייה) לא נגע בדיסק העבודה — אבל לא מניחים: מוכן רק כשהגודל וה-mtime
+            # זהים למה שהיו כשהשמירה התחילה. לא נקרא/השתנה = לא מוכן.
+            intact = signature is not None and self._disk_signature() == signature
+            self._fail("internal", f"השמירה נכשלה: {exc}", disk_ready=intact, user=user)
 
     def _check_save_space(self, source: dict) -> None:
         """‏#1737: בין הפתיחה לשמירה עוברים ימים — דיסק העבודה גדל, קליטות נכנסו.

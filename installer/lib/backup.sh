@@ -7,6 +7,11 @@
 # on the same values). Empty or absent = the server's defaults, 02:00 and 5 GB;
 # firstboot hands a value to the server's settings (setup-boot-server
 # --backup-time, --backup-reserve-gb).
+#
+# #2865 (Nadav 11/11): backup_enabled=false is "בלי גיבוי כרגע" -- no backup and
+# no space kept, so a reserved size with it is refused by name; firstboot turns
+# the console's setting off (setup-boot-server --backup-off). Empty or absent =
+# on, the default. Any other value is refused: not a guess at "off".
 
 BACKUP_CAP_PERCENT=20
 
@@ -30,6 +35,12 @@ backup_cap_gb() {
 
 validate_backup() {
     ANSWER_BACKUP_TIME=${ANSWER_BACKUP_TIME:-}; ANSWER_BACKUP_RESERVE_GB=${ANSWER_BACKUP_RESERVE_GB:-}
+    ANSWER_BACKUP_ENABLED=${ANSWER_BACKUP_ENABLED:-}
+    case "$ANSWER_BACKUP_ENABLED" in
+        '') ;;
+        false) [ -z "$ANSWER_BACKUP_RESERVE_GB" ]                    || fail invalid-backup-enabled "backup_enabled=false keeps no space: backup_reserve_gb must be empty" ;;
+        *) fail invalid-backup-enabled "backup_enabled must be empty (on) or false" ;;
+    esac
     if [ -n "$ANSWER_BACKUP_TIME" ]; then
         valid_backup_time "$ANSWER_BACKUP_TIME" || fail invalid-backup-time "backup_time must be HH:MM"
     fi
@@ -39,5 +50,5 @@ validate_backup() {
         [ "$ANSWER_BACKUP_RESERVE_GB" -le "$_vb_cap" ] \
             || fail invalid-backup-reserve "backup_reserve_gb is above $BACKUP_CAP_PERCENT% of the disk ($_vb_cap GB)"
     fi
-    export ANSWER_BACKUP_TIME ANSWER_BACKUP_RESERVE_GB
+    export ANSWER_BACKUP_TIME ANSWER_BACKUP_RESERVE_GB ANSWER_BACKUP_ENABLED
 }
